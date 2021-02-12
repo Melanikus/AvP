@@ -10,7 +10,7 @@ Right now to compile the code you need:
 
 2 - DirectX 9 SDK - Can be found around the web, you want the June 2010 version. 
 
-Note: It is likely that it'll throw S1023 error because you have a newer redistributable VS2010 than the ones it's trying to install it's installing, if you get that refer to https://docs.microsoft.com/pt-br/troubleshoot/windows/win32/s1023-error-when-you-install-directx-sdk (run both commands in the doc and try again)
+Note: It is likely that it'll throw S1023 error because you have a newer redistributable VS2010 than the ones it's trying to install, if you get that refer to https://docs.microsoft.com/pt-br/troubleshoot/windows/win32/s1023-error-when-you-install-directx-sdk (run both commands in the doc and try again)
 
 3 - AV Playback libraries 
 
