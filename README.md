@@ -1,6 +1,6 @@
 # AvP
 
-Hosting AvP 2000 DirectX 9 renderer from by Barry Duncan: http://homepage.eircom.net/~duncandsl/avp/ in Github, thank you for rescuing the game from Abandonware status.
+Hosting AvP 2000 DirectX 9 renderer by Barry Duncan: http://homepage.eircom.net/~duncandsl/avp/ in Github, thank you for rescuing the game from Abandonware status.
 
 I've updated a couple headers that changed over the years/versions of Platform/Windows SDK/DirectX to get the code to compile in VS2019 community edition. 
 
