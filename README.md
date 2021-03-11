@@ -12,7 +12,11 @@ Right now to compile the code you need:
 
 Note: It is likely that it'll throw S1023 error because you have a newer redistributable VS2010 than the ones it's trying to install, if you get that refer to https://docs.microsoft.com/pt-br/troubleshoot/windows/win32/s1023-error-when-you-install-directx-sdk (run both commands in the doc and try again)
 
-3 - AV Playback libraries 
+3 - OpenAL 
+
+Barry and team implemented AvP's audio using OpenAL, you can get the precompiled Win32 binaries here: https://openal-soft.org/#download 
+
+4 - AV Playback libraries 
 
 Note: Original AVP source had all in-game videos disabled as the code was proprietary from RAD which made the Bink and Smack formats to run intro and in-game videos back in the day. Thanks to Barry & Team this functionality was completely re-implemented with open-source libraries! To get those to work you'll need:
 
@@ -26,4 +30,4 @@ Decoding
 
 http://homepage.eircom.net/~duncandsl/avp/ libsmackerdec and libbinkdec 
 
-You need Ogg/Vorbis for Theora and you need Ogg for Vorbis and you need all of the for AvP, Barry's decoders have the .libs and .dlls but you'll need to compile and link the playback libraries, remember to set all of them as multi-threaded DLLs and to copy the DLLs to your output directory (game) when testing your exe. The process is pretty smooth as long as you know how to reference include and lib output directories in the projects. 
+You need Ogg/Vorbis for Theora and you need Ogg for Vorbis and you need all of the for AvP, Barry's decoders have the .libs and .dlls but I believe you'll need to compile and link the playback libraries, remember to set all of them as multi-threaded DLLs and to copy the DLLs to your output directory (game). The process is pretty smooth as long as you know how to reference include and lib directories in the VS C++ projects. 
