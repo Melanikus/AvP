@@ -23,8 +23,9 @@ extern DISPLAYBLOCK *Player;
 
 struct KItem KItemList[maxpolyptrs];
 
-static struct KObject VisibleModules[MAX_NUMBER_OF_VISIBLE_MODULES];
-static struct KObject VisibleModules2[MAX_NUMBER_OF_VISIBLE_MODULES];
+// one entry more than MAX_NUMBER_OF_VISIBLE_MODULES: KRenderItems draws up to MAX + 1 modules (see its limit test)
+static struct KObject VisibleModules[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
+static struct KObject VisibleModules2[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
 static struct KObject *SortedModules;
 static struct KObject VisibleObjects[maxobjects];
 
@@ -221,9 +222,9 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 		/* if it's a module, which isn't inside another module */
 		if (modulePtr && !(modulePtr->m_flags & m_flag_slipped_inside))
 		{
-			/* checked before VisibleModules[numVisMods] is written: the old test (numVisMods > MAX, after the write)
-			let entries 400 and 401 be written past the array */
-			if (numVisMods >= MAX_NUMBER_OF_VISIBLE_MODULES)
+			/* the original test (numVisMods > MAX), checked before VisibleModules[numVisMods] is written: MAX + 1 modules
+			are drawn as they always were, the arrays have MAX + 1 entries for them, and the MAX + 2nd returns */
+			if (numVisMods > MAX_NUMBER_OF_VISIBLE_MODULES)
 			{
 				/* outside the environment! */
 				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);
