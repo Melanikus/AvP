@@ -1,0 +1,38 @@
+Delete a disabled log block from two pthreads4w tests.
+
+Our own patch (AvP), for 2 Snyk Code findings: code inside #if 0, so it is never
+compiled, in test files that this port never builds. It opened a log file
+without checking that fopen worked.
+
+--- a/tests/exception3.c
++++ b/tests/exception3.c
+@@ -105,13 +105,6 @@
+ {
+   assert(pthread_mutex_lock(&caughtLock) == 0);
+   caught++;
+-#if 0
+-  {
+-     FILE * fp = fopen("pthread.log", "a");
+-     fprintf(fp, "Caught = %d\n", caught);
+-     fclose(fp);
+-  }
+-#endif
+   assert_e(pthread_mutex_unlock(&caughtLock), ==, 0);
+ 
+   /*
+--- a/tests/exception3_0.c
++++ b/tests/exception3_0.c
+@@ -105,13 +105,6 @@
+ {
+   EnterCriticalSection(&caughtLock);
+   caught++;
+-#if 0
+-  {
+-     FILE * fp = fopen("pthread.log", "a");
+-     fprintf(fp, "Caught = %d\n", caught);
+-     fclose(fp);
+-  }
+-#endif
+   LeaveCriticalSection(&caughtLock);
+ 
+   /*

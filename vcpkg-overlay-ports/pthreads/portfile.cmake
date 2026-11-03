@@ -28,6 +28,7 @@ vcpkg_from_sourceforge(
     fix-pthread_getname_np.patch
     fix-install.patch
     whitespace_in_path.patch
+    remove-disabled-log-blocks-from-tests.patch # our own fix
     ${PATCH_FILES}
 )
 
