@@ -128,6 +128,9 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 	}
 
 	_frameRate = Smacker_GetFrameRate(_handle);
+	if (!(_frameRate >= 1.0f)) {
+		Con_PrintError("Smacker file " + _fileName + " has a frame rate below 1, playing it at 1 frame per second");
+	}
 
 	_fmvPlaying = true;
 	_audioStarted = false;
@@ -212,6 +215,23 @@ void *SmackerDecodeThread(void *args)
 
 	uint32_t nFrames = Smacker_GetNumFrames(fmv->_handle);
 
+	// frame time in ms, 1000 / (int32_t)_frameRate as before. The rate comes from the file: one below 1 (or NaN) made
+	// that an integer division by zero, so treat it as 1 frame per second; a rate too big for an int32_t (undefined
+	// conversion) gives 0 ms, like every rate above 1000. (SmackerPlayback::Open logs such a rate.)
+	int32_t frameTime;
+	if (!(fmv->_frameRate >= 1.0f))
+	{
+		frameTime = 1000;
+	}
+	else if (fmv->_frameRate >= 2147483648.0f)
+	{
+		frameTime = 0;
+	}
+	else
+	{
+		frameTime = 1000 / (int32_t)fmv->_frameRate;
+	}
+
 	while (fmv->_currentFrame < nFrames)
 	{
 		// check if we should still be playing or not
@@ -258,7 +278,7 @@ void *SmackerDecodeThread(void *args)
 		uint32_t endTime = ::timeGetTime();
 
 		// sleep for frame time minus time to decode frame
-		int32_t timeToSleep = (1000 / (int32_t)fmv->_frameRate) - (endTime - startTime);
+		int32_t timeToSleep = frameTime - (endTime - startTime);
 		if (timeToSleep < 0) {
 			timeToSleep = 1;
 		}
