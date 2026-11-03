@@ -57,6 +57,7 @@
  *   SM-P11: fail Open on a truncated header; skip frames once the stream has failed
  *   SM-P12: no signed overflow in FILL and audio deltas; reject INT32_MIN frame rate, fps >= 1
  *   SM-P13: check the handle in every export, and the audio track index
+ *   SM-P14: audio early returns skip their chunk; decode SMKA tracks only; check tree results
  */
 
 #include "SmackerDecoder.h"
@@ -557,8 +558,8 @@ bool SmackerDecoder::Open(const std::string &fileName)
 	{
 		if (frameFlag & 1) 
 		{
-			// skip size
-			file.Skip(4);
+			// the chunk size counts the whole chunk: itself, the unpacked size and the data
+			uint32_t chunkSize = file.ReadUint32LE();
 			
 			uint32_t unpackedSize = file.ReadUint32LE();
 
@@ -571,6 +572,13 @@ bool SmackerDecoder::Open(const std::string &fileName)
 
 			audioTracks[i].bufferSize = unpackedSize;
 			audioTracks[i].buffer = new uint8_t[unpackedSize];
+
+			// skip the rest of this chunk, so the next track's size is read from its own chunk
+			if (chunkSize > 8)
+			{
+				uint32_t rest = chunkSize - 8;
+				file.Skip((rest > 0x7FFFFFFF) ? 0x7FFFFFFF : (int32_t)rest);
+			}
 		}	
 		frameFlag >>= 1;
 	}
@@ -727,7 +735,8 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
 	// low byte tree
 	if (bits.GetBit()) // 1: Read Tag
 	{
-		DecodeTree(bits, &tmp1, 0, 0);
+		if (DecodeTree(bits, &tmp1, 0, 0) < 0)
+			return -1;
 
 		bits.SkipBits(1);
 
@@ -741,7 +750,8 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
 	// high byte tree
 	if (bits.GetBit())
 	{
-		DecodeTree(bits, &tmp2, 0, 0);
+		if (DecodeTree(bits, &tmp2, 0, 0) < 0)
+			return -1;
 
 		uint32_t end = bits.GetPosition();
 
@@ -1172,17 +1182,29 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
 
 	int buf_size = track.bufferSize;
 
+	// every return below first skips the rest of the chunk (SkipToEnd),
+	// so the next chunk is read from its start
+	SmackerCommon::BitReader bits(file, size);
+
+	// only Smacker-compressed tracks can be decoded here: skip raw PCM and Bink audio,
+	// and tracks without a sample rate (Open did not set them up)
+	if (!(track.flags & 0xFFFFFF) || !(track.flags & SMK_AUD_PACKED)
+		|| (track.flags & (SMK_AUD_BINKAUD | SMK_AUD_USEDCT))) {
+		bits.SkipToEnd();
+		return -1;
+	}
+
     if (buf_size <= 4) {
 		SmackerCommon::LogError("packet is too small");
+		bits.SkipToEnd();
 		return -1;
     }
-
-	SmackerCommon::BitReader bits(file, size);
 
     unpackedSize = bits.GetBits(32);
 
     if (!bits.GetBit()) {
 		// no sound data
+		bits.SkipToEnd();
         return 1;
     }
 
@@ -1199,6 +1221,13 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
 
     if (stereo ^ (track.nChannels != 1)) {
 		SmackerCommon::LogError("channels mismatch");
+		bits.SkipToEnd();
+		return -1;
+    }
+
+    if (sampleBits != ((track.bitsPerSample == 16) ? 1 : 0)) {
+		SmackerCommon::LogError("sample format mismatch");
+		bits.SkipToEnd();
 		return -1;
     }
 
@@ -1214,7 +1243,10 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
         h[i].values.resize(256);
 
         bits.SkipBits(1);
-		DecodeTree(bits, &h[i], 0, 0);
+		if (DecodeTree(bits, &h[i], 0, 0) < 0) {
+			bits.SkipToEnd();
+			return -1;
+		}
         bits.SkipBits(1);
 
         if (h[i].current > 1) {
