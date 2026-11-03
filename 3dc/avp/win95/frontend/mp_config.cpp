@@ -1,5 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   copies into buffers sized from the same string use memcpy with that length
+//   the file name lists' copies come from NewStringCopy / NewNameWithoutExtension;
+//   ClearMultiplayerLevelNameArray frees every custom level name
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -31,6 +33,26 @@ char* LastDescriptionFile = 0;
 char* LastDescriptionText = 0;
 
 AVPMENU_ELEMENT* AvPMenu_Multiplayer_LoadConfig=0;
+
+// a new[] copy of str; the file name lists below own these copies and delete[] them
+static char* NewStringCopy(const char* str)
+{
+	size_t const size = strlen(str) + 1;
+	char* copy = new char[size];
+	memcpy(copy, str, size);
+	return copy;
+}
+
+// a new[] copy of a found file's name, cut at its first '.'
+static char* NewNameWithoutExtension(const char* fileName)
+{
+	char* name = NewStringCopy(fileName);
+	char* dotpos = strchr(name, '.');
+	if (dotpos) {
+		*dotpos = 0;
+	}
+	return name;
+}
 
 BOOL BuildLoadMPConfigMenu()
 {
@@ -94,12 +116,7 @@ BOOL BuildLoadMPConfigMenu()
 				// not a directory, hidden or system file
 		)
 		{
-			char *name = new char[strlen(wfd.cFileName)+1];
-			strcpy(name, wfd.cFileName);
-			char *dotpos = strchr(name,'.');
-			if (dotpos) {
-				*dotpos = 0;
-			}
+			char *name = NewNameWithoutExtension(wfd.cFileName);
 
 			ConfigurationFilenameList.add_entry(name);
 
@@ -524,12 +541,7 @@ BOOL BuildLoadIPAddressMenu()
 				// not a directory, hidden or system file
 		)
 		{
-			char *name = new char[strlen(wfd.cFileName)+1];
-			strcpy(name, wfd.cFileName);
-			char *dotpos = strchr(name,'.');
-			if (dotpos) {
-				*dotpos = 0;
-			}
+			char *name = NewNameWithoutExtension(wfd.cFileName);
 			IPAddFilenameList.add_entry(name);
 		}
 	
@@ -612,7 +624,8 @@ List<char*> CustomLevelNameList;
 
 void ClearMultiplayerLevelNameArray()
 {
-	for (int i = 0; i < CustomLevelNameList.size(); i++)
+	// (the old `for (i = 0; i < size(); i++)` shrank the list as i grew, so it freed only about half the names)
+	while (CustomLevelNameList.size())
 	{
 		delete[] CustomLevelNameList.first_entry();
 		CustomLevelNameList.delete_first_entry();
@@ -659,8 +672,7 @@ void BuildMultiplayerLevelNameArray()
 				strcat(buffer,custom_string);
 				strcat(buffer,")");
 
-				char *name = new char[strlen(buffer)+1];
-				strcpy(name, buffer);
+				char *name = NewStringCopy(buffer);
 
 				CustomLevelNameList.add_entry(name);
 			}
