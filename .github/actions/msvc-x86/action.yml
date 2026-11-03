@@ -1,0 +1,55 @@
+# Gives a job what Visual Studio's "x86 developer command prompt" gives a person.
+#
+# A compiler needs to be told where the standard headers are (stdlib.h, windows.h, d3d9.h, ...), and Visual Studio's
+# setup script does that by filling in environment variables such as INCLUDE. CodeQL's build mode none doesn't run that
+# script. It finds the compiler by itself and starts it with no headers, so a scan still appears to work, but CodeQL can't
+# tell what fread or strcpy are, and its most useful checks have nothing to work with.
+#
+# So we run the script first and keep what it sets for the rest of the job. CodeQL looks for "cl" on the PATH before
+# searching anywhere else, so this also makes it use the x86 compiler, the one the game is really built with. Without
+# this it picks the 64-bit one, where a pointer is 8 bytes instead of the game's 4.
+name: Set up the x86 compiler
+description: Runs Visual Studio's setup script for x86 and keeps its settings for the rest of the job.
+
+runs:
+  using: composite
+  steps:
+    - name: Load Visual Studio's x86 settings
+      shell: pwsh
+      run: |
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+        $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if (-not $vs) { throw 'No Visual Studio with the C++ tools was found' }
+
+        # The script must run inside cmd.exe, so a small batch file runs it and then prints every setting.
+        $batch = Join-Path $env:RUNNER_TEMP 'x86-settings.cmd'
+        Set-Content -LiteralPath $batch -Encoding ascii -Value @(
+          "@call `"$(Join-Path $vs 'Common7\Tools\VsDevCmd.bat')`" -no_logo -arch=x86 -host_arch=amd64",
+          '@if errorlevel 1 exit /b 1',
+          '@set'
+        )
+        $settings = & $batch
+        if ($LASTEXITCODE -ne 0) { throw 'The Visual Studio setup script failed' }
+
+        # Keep only what the script changed. Later steps get these through GITHUB_ENV.
+        foreach ($line in $settings) {
+          if ($line -match '^([^=]+)=(.*)$') {
+            $name = $Matches[1]
+            $value = $Matches[2]
+            if ([Environment]::GetEnvironmentVariable($name) -cne $value) {
+              "$name=$value" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+            }
+          }
+        }
+
+        # Check the result here, with a clear message: a scan without these would run and look normal.
+        $include = ($settings | Where-Object { $_ -match '^INCLUDE=' }) -replace '^INCLUDE=', ''
+        if ([string]::IsNullOrEmpty($include)) { throw 'The setup script set no INCLUDE' }
+        foreach ($header in 'stdlib.h', 'windows.h', 'd3d9.h') {
+          $found = $include -split ';' | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ $header)) }
+          if (-not $found) { throw "The compiler can't find $header" }
+        }
+        $path = ($settings | Where-Object { $_ -match '^Path=' }) -replace '^Path=', ''
+        $compiler = $path -split ';' | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'cl.exe')) } | Select-Object -First 1
+        if ($compiler -notmatch '\\Hostx64\\x86\\?$') { throw "The first compiler on the PATH is not the x86 one: $compiler" }
+        "x86 compiler: $compiler"
