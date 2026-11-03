@@ -13,8 +13,6 @@ on:
     branches: [avpx_main]
   pull_request:
     branches: [avpx_main]
-  schedule:
-    - cron: '23 6 * * 1'   # Mondays 06:23 UTC
   workflow_dispatch:
 
 permissions:
@@ -23,7 +21,7 @@ permissions:
 jobs:
   snyk:
     name: Snyk Code (SAST) and Open Source (SCA)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     permissions:
       contents: read
       security-events: write   # upload SARIF to code scanning
