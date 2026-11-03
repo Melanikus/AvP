@@ -30,7 +30,7 @@ void LogCameraPosForModuleLinking()
 
 	char Filename[MAX_PATH];
 
-	// bounded: the name is LevelName, which holds up to MAX_PATH - 1 characters for a custom level
+	// LevelName can hold up to 259 characters for a custom level, so the whole path may not fit. If so, stop here.
 	if (_snprintf(Filename, sizeof(Filename) - 1, "avp_rifs/%s.mlf", Env_List[AvP.CurrentEnv]->main) < 0)
 	{
 		LogErrorString(std::string("module link file path too long: avp_rifs/") + Env_List[AvP.CurrentEnv]->main + ".mlf");

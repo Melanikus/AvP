@@ -2929,8 +2929,8 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				{
 					// copy the session name, leaving of the player count information
 					char *bracket_pos;
-					// bounded: Name comes from any machine on the LAN and holds up to 39 characters, MP_SessionName is
-					// 33 bytes (same bytes as strcpy for a name that fits, nothing written past the NUL)
+					// The game's name comes from another computer on the LAN and can be up to 39 characters long, but MP_SessionName
+					// holds only 33 bytes, so the copy stops there. A name that fits is copied exactly as before.
 					size_t nameLength = strnlen(SessionData[s].Name, sizeof(MP_SessionName) - 1);
 					memcpy(MP_SessionName, SessionData[s].Name, nameLength);
 					MP_SessionName[nameLength] = '\0';
@@ -4655,8 +4655,8 @@ static void UpdateMultiplayerConfigurationMenu()
 	}
 
 	//also need to fill in customLevelName
-	// (bounded: customLevelName is 40 bytes, a custom level's name is its file name, up to MAX_PATH - 1 characters;
-	// same bytes as strcpy for a name that fits, nothing written past the NUL)
+	// (A custom level's name is its file name, up to 259 characters, but customLevelName holds only 40 bytes, so the
+	// copy stops there. A name that fits is copied exactly as before.)
 	{
 		const char *levelName = GetCustomMultiplayerLevelName(netGameData.levelNumber,netGameData.gameType);
 		size_t nameLength = strnlen(levelName, sizeof(netGameData.customLevelName) - 1);

@@ -36,10 +36,10 @@ char* LastDescriptionText = 0;
 
 AVPMENU_ELEMENT* AvPMenu_Multiplayer_LoadConfig=0;
 
-// "<folder><dir>/<name><extension>" into a MAX_PATH buffer, with one _snprintf bounded to the buffer plus an explicit
-// NUL (the form LoadRifFile uses). The name is a file name found in the folder (up to 259 characters) or one the player
-// typed, so the path can be longer than the buffer: then one line is logged and FALSE returned, and the caller acts as
-// if the file were missing.
+// Builds a settings file's path, "<folder><dir>/<name><extension>", in a buffer of MAX_PATH (260) bytes.
+// The name is one found in the folder, up to 259 characters long, or one the player typed, so the whole path may not
+// fit. A path cut short could name a different file, so in that case nothing is used: one line goes to the log, the
+// buffer is left empty, FALSE comes back, and the caller acts as if the file were missing.
 static BOOL BuildConfigPath(char *buffer, const char *folder, const char *dir, const char *name, const char *extension)
 {
 	if (_snprintf(buffer, MAX_PATH - 1, "%s%s/%s%s", folder, dir, name, extension) < 0)
@@ -52,7 +52,7 @@ static BOOL BuildConfigPath(char *buffer, const char *folder, const char *dir, c
 	return TRUE;
 }
 
-// a new[] copy of str; the file name lists below own these copies and delete[] them
+// Makes a copy of a text in new memory. The file name lists below keep these copies and free them later.
 static char* NewStringCopy(const char* str)
 {
 	size_t const size = strlen(str) + 1;
@@ -95,7 +95,7 @@ BOOL BuildLoadMPConfigMenu()
 		load_name = SKIRMISH_CONFIG_WILDCARD;
 	}
 
-	// (bounded: a save folder path that leaves no room for the wildcard finds nothing, like an empty folder)
+	// (A save folder path too long to hold the search pattern finds nothing, as if the folder were empty.)
 	if (_snprintf(filePath, sizeof(filePath) - 1, "%s%s", GetSaveFolderPath(), load_name) < 0)
 	{
 		LogErrorString(std::string("configuration search path too long: ") + GetSaveFolderPath() + load_name);
@@ -265,9 +265,9 @@ const char* GetMultiplayerConfigDescription(int index)
 		description_length = 0;
 	}
 	
-	// bounded like LoadMultiplayerConfiguration's read (ReadConfigString): the length comes from the file, and
-	// SaveMultiplayerConfiguration writes strlen + 1 of the 202-byte MP_Config_Description. A negative length is no
-	// description; a longer one keeps the first 202 bytes; the text always ends with a 0 after the bytes read.
+	// The length comes from the file, so it cannot be trusted. A normal file holds the description (up to 202 bytes) with
+	// its end marker, the zero byte that marks where a text stops. A length of zero or less means no description, a longer
+	// one keeps the first 202 bytes, and the text always gets an end marker after the bytes read.
 	if (description_length > 0)
 	{
 		size_t toRead = ((size_t)description_length < sizeof(MP_Config_Description)) ? (size_t)description_length : sizeof(MP_Config_Description);
@@ -280,11 +280,10 @@ const char* GetMultiplayerConfigDescription(int index)
 	return LastDescriptionText;
 }
 
-// Reads a string of the configuration file: length bytes (SaveMultiplayerConfiguration writes strlen + 1, the NUL
-// included) into a buffer of bufferSize bytes. A length that fits the buffer is read exactly as before. A longer one
-// (only from a damaged or edited file) keeps the first bufferSize bytes and skips the rest, so the fields after it are
-// read from the same place. The last byte of the buffer is always set to 0, which is past the NUL of any string that
-// fits.
+// Reads a text from a settings file. length is how many bytes the file says the text takes, with its end marker (the
+// zero byte that marks where a text stops). A text that fits in buffer is read as it was written. A longer one, which
+// only a damaged or edited file has, keeps the first bufferSize bytes and the rest is skipped, so that the values after
+// it are still read from the right place. The last byte of buffer is always set to 0, so the text ends inside it.
 static void ReadConfigString(FileStream &file, char *buffer, size_t bufferSize, int length)
 {
 	if (length > 0)
@@ -371,7 +370,7 @@ void LoadMultiplayerConfiguration(const char* name)
 
 	netGameData.gameSpeed = file.GetInt32LE();
 
-	// bounded: the length comes from the file, MP_Config_Description is 202 bytes
+	// the length comes from the file, so the read stops at the 202 bytes of MP_Config_Description
 	int description_length = file.GetInt32LE();
 	ReadConfigString(file, MP_Config_Description, sizeof(MP_Config_Description), description_length);
 
@@ -388,7 +387,7 @@ void LoadMultiplayerConfiguration(const char* name)
 	netGameData.specialistPistols  = file.GetInt32LE();
 #endif
 
-	// read the custom level name (bounded: the length comes from the file, customLevelName is 40 bytes)
+	// read the custom level name: the length comes from the file, so the read stops at customLevelName's 40 bytes
 	int length = file.GetInt32LE();
 	if (length > 0) {
 		ReadConfigString(file, netGameData.customLevelName, sizeof(netGameData.customLevelName), length);
@@ -670,7 +669,8 @@ List<char*> CustomLevelNameList;
 
 void ClearMultiplayerLevelNameArray()
 {
-	// (the old `for (i = 0; i < size(); i++)` shrank the list as i grew, so it freed only about half the names)
+	// (This goes by the list's size because each step takes a name off the list. Counting up to the size instead would
+	// stop halfway, and leave about half the names in memory.)
 	while (CustomLevelNameList.size())
 	{
 		delete[] CustomLevelNameList.first_entry();
@@ -680,8 +680,8 @@ void ClearMultiplayerLevelNameArray()
 
 void BuildMultiplayerLevelNameArray()
 {
-	// a custom level's file name (up to MAX_PATH-1 characters) plus " (<custom level text>)", or a stock level name plus
-	// " (<new level text>)", both from language.txt; every write into it below is bounded to it
+	// Holds a level's name for the menu: a custom level's file name (up to 259 characters) or a stock level's name, then a
+	// note in brackets from language.txt. Every write into it below stops at its end.
 	char buffer[MAX_PATH + 64];
 
 	// only want to do this once
@@ -834,8 +834,8 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 {
 	char buffer[256];
 	// tack ( custom) onto the end of the name, before doing the string compare
-	// (bounded: the names passed in are at most 39 characters, but the custom level text comes from language.txt; if
-	// the result does not fit, the level is reported as not found)
+	// (The names passed in are at most 39 characters, but the note in brackets comes from language.txt and could be long.
+	// If the result does not fit, the level counts as not found.)
 	char *custom_string = GetTextString(TEXTSTRING_CUSTOM_LEVEL); 
 	if (_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", name, custom_string) < 0) {
 		return -1;
@@ -888,8 +888,8 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 {
 	bool isCustom = false;
 
-	// as large as the names BuildMultiplayerLevelNameArray makes (it used to be 100 bytes, overflowed by a custom
-	// level file name of about 90 characters or more); the copies are bounded
+	// Big enough for any name BuildMultiplayerLevelNameArray makes, and every copy into it stops at its end.
+	// (At 100 bytes, a custom level file name of about 90 characters or more would not fit.)
 	static char return_string[MAX_PATH + 64];
 	return_string[0] = 0;
 	

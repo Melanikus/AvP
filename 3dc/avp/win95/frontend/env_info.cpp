@@ -5151,8 +5151,8 @@ void SetLevelToLoadForMarine(int episode)
 	SetBuiltInLevelName(RifNamesForEnvironments[MarineEpisodes[episode]]);
 }
 
-// "Custom/<name>" into LevelName, bounded (a custom level name is a file name from avp_rifs/custom; LevelName used to be
-// 32 bytes, so any name longer than 24 characters overflowed it)
+// Puts "Custom/<name>" into LevelName. The name is a file name from avp_rifs/custom and may be long, so the copy
+// stops at the end of LevelName, and a name that gets cut short goes to the log.
 static void SetCustomLevelName(const char *name)
 {
 	if (_snprintf(LevelName, sizeof(LevelName) - 1, "Custom/%s", name) < 0)

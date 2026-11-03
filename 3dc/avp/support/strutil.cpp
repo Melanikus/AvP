@@ -208,7 +208,7 @@ ProjChar* STRUTIL_SC_StrCpy
 	GLOBALASSERT(pProjCh_Dst);
 	GLOBALASSERT(pProjCh_Src);
 
-	// every caller sizes pProjCh_Dst with STRUTIL_SC_NumBytes(pProjCh_Src)
+	// every caller makes pProjCh_Dst exactly STRUTIL_SC_NumBytes(pProjCh_Src) bytes big, so this copy always fits
 	memcpy(pProjCh_Dst, pProjCh_Src, STRUTIL_SC_NumBytes(pProjCh_Src));
 	return pProjCh_Dst;
 }

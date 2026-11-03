@@ -65,7 +65,7 @@ extern BOOL ForceLoad_SentryGun;
 BOOL UseMouseCentreing = FALSE;
 BOOL KeepMainRifFile = FALSE;
 
-// room for "Custom/" + any custom level file name (it was the 32 bytes of "predbit6\0QuiteALongNameActually")
+// The name of the level to load. MAX_PATH (260) bytes leaves room for "Custom/" and any custom level's file name.
 char LevelName[MAX_PATH] = {"predbit6"};
 
 int VideoModeNotAvailable = 0;
@@ -453,7 +453,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		#if !(PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO)
 		if (instr = strstr(command_line, "-n"))
 		{
-			sscanf(instr, "-n %259s", LevelName); // bounded: LevelName is char[MAX_PATH]
+			sscanf(instr, "-n %259s", LevelName); // reads at most 259 characters: LevelName holds 260 bytes
 		}
 		#endif
 

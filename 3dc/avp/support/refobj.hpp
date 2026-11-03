@@ -179,8 +179,10 @@
 		}
 	};
 
-	// Holds the one reference a new reference-counted object starts with, and releases it when the holder goes
-	// out of scope:   RefHolder<SCString> pSCString(new SCString("TEXT")); pSCString -> SendToScreen();
+	// A shared object counts who is using it, and deletes itself when the count reaches zero. A new object starts with a
+	// count of one. RefHolder looks after that one count: it gives it back by itself when the code holding it ends,
+	// on every way out. For example:
+	//     RefHolder<SCString> pSCString(new SCString("TEXT")); pSCString -> SendToScreen();
 	template <class RC> class RefHolder
 	{
 	public:
@@ -194,7 +196,7 @@
 	private:
 		RC* pRC;
 
-		// not copyable: each holder releases its one reference once
+		// a holder cannot be copied: two copies would each give the same count back, once too often
 		RefHolder(const RefHolder&);
 		RefHolder& operator=(const RefHolder&);
 	};

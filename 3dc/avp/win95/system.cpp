@@ -474,8 +474,8 @@ void LoadRifFile()
 	LevelDir[0] = '\0';
 
 	// Set up the dirname for the Rif load
-	// (bounded: the name is LevelName, which holds up to MAX_PATH - 1 characters for a custom level; a path that does
-	// not fit is treated like a missing file)
+	// (LevelName can hold up to 259 characters for a custom level, so the whole path may not fit. A path cut short could
+	// name a different file, so a path that does not fit counts as a missing file.)
 	if (_snprintf(file_and_path, sizeof(file_and_path) - 1, "%s/%s%s", GameDataDirName, Env_List[AvP.CurrentEnv]->main, FileNameExtension) < 0)
 	{
 		LogErrorString(std::string("level file path too long: ") + GameDataDirName + "/" + Env_List[AvP.CurrentEnv]->main + FileNameExtension);
