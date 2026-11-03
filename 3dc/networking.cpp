@@ -56,6 +56,17 @@ PlayerDetails thisClientPlayer;
 const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;
 static uint8_t packetBuffer[kPacketBufferSize];
 
+// For a log line that any peer or LAN machine can cause once per packet or datagram: counts the event in count and
+// says whether to log this one. The first kDropsLoggedInFull are logged, then only the 8th, 16th, 32nd, ... (each
+// power of two), so a flood adds a few dozen lines to avp_log.txt at most, each with the running total.
+static const unsigned long long kDropsLoggedInFull = 5;
+
+static bool LogThisDrop(unsigned long long &count)
+{
+	count++;
+	return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);
+}
+
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
 
@@ -158,7 +169,13 @@ static void Net_AddSession(SessionDescription &session)
 	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
 	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
 	{
-		Con_PrintError("Net_AddSession - session list is full, ignoring session info");
+		static unsigned long long ignoredSessions = 0;
+		if (LogThisDrop(ignoredSessions))
+		{
+			std::stringstream sstream;
+			sstream << "Net_AddSession - session list is full, ignoring session info (" << ignoredSessions << " so far)";
+			Con_PrintError(sstream.str());
+		}
 		return;
 	}
 
@@ -655,13 +672,19 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					NewOnScreenMessage("Enet received a packet!\n");
 
 					// the caller's buffer holds NET_MESSAGEBUFFERSIZE bytes (every message we send fits in it, see
-					// Net_Send). ENet accepts packets of up to 32 MB, so drop a larger one instead of overrunning it.
+					// Net_Send). The hosts are created with maximumPacketSize = NET_MESSAGEBUFFERSIZE, so ENet should
+					// not hand us a larger packet; drop one anyway instead of overrunning the buffer.
 					if (eEvent.packet->dataLength > (size_t)NET_MESSAGEBUFFERSIZE)
 					{
-						std::stringstream sstream;
-						sstream << "Net_Receive - dropped a packet of " << eEvent.packet->dataLength
-						        << " bytes (larger than the " << NET_MESSAGEBUFFERSIZE << " byte message buffer)";
-						Con_PrintError(sstream.str());
+						static unsigned long long droppedPackets = 0;
+						if (LogThisDrop(droppedPackets))
+						{
+							std::stringstream sstream;
+							sstream << "Net_Receive - dropped a packet of " << eEvent.packet->dataLength
+							        << " bytes (larger than the " << NET_MESSAGEBUFFERSIZE << " byte message buffer; "
+							        << droppedPackets << " so far)";
+							Con_PrintError(sstream.str());
+						}
 						enet_packet_destroy(eEvent.packet);
 						break;
 					}
