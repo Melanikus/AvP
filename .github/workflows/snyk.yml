@@ -238,6 +238,18 @@ jobs:
           set -o pipefail
           mkdir -p results
           failed=0
+          # Snyk exits 0 for clean, 1 for findings, 2 or more for an error such as an API timeout. Only an error is
+          # retried, and it still fails if it never clears: a scan that didn't finish is not a clean scan.
+          code_scan() {
+            local attempt rc
+            for attempt in 1 2 3; do
+              if snyk code test "$1" --sarif-file-output="$2"; then return 0; else rc=$?; fi
+              if [ "$rc" -eq 1 ]; then return 1; fi
+              echo "Snyk Code error (exit $rc) on attempt $attempt"
+              sleep 30
+            done
+            return "$rc"
+          }
           for lib in enet fmt libogg libvorbis openal-soft pthreads; do
             echo "================ $lib"
             dirs=$(find "libsrc/$lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
@@ -251,7 +263,7 @@ jobs:
                 echo "::error::$lib has a comment that suppresses a scanner"
                 failed=1
               fi
-              if ! snyk code test "$d" --sarif-file-output="results/$lib.code.sarif"; then failed=1; fi
+              if ! code_scan "$d" "results/$lib.code.sarif"; then failed=1; fi
               if ! (cd "$d" && snyk test --unmanaged --print-dep-paths) | tee sca.log; then failed=1; fi
               tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
               if [ "$tested" -lt 1 ]; then
