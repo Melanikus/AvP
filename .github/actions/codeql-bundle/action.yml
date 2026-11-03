@@ -1,0 +1,37 @@
+# Gets the CodeQL tools for our security gate, and checks them before they are used.
+#
+# The workflow pins the CodeQL Action to one exact commit, but the tools themselves are a separate download of about
+# 700 MB made fresh on every run, and the Action does not check that download. So we do it here: every file has a
+# fingerprint (SHA-256), a long number that changes completely if even one byte of the file changes. If the download's
+# fingerprint isn't the one written below, the run stops and the tools are never used.
+#
+# To move to a newer CodeQL: change the version in BUNDLE_URL and the fingerprint in BUNDLE_SHA256. Take the fingerprint
+# from the "digest" of codeql-bundle-win64.tar.gz on the GitHub release, and use the version the pinned Action names in
+# its src/defaults.json.
+name: Get the pinned CodeQL tools
+description: Downloads CodeQL and refuses to use it unless its fingerprint matches the one written here.
+
+outputs:
+  path:
+    description: Where the checked download was saved.
+    value: ${{ steps.download.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download CodeQL and check its fingerprint
+      id: download
+      shell: pwsh
+      env:
+        BUNDLE_URL: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.4/codeql-bundle-win64.tar.gz
+        BUNDLE_SHA256: d67fead75936c55a241d26c25342747b07f94664b104f719dfe291b665508c4d
+      run: |
+        $file = Join-Path $env:RUNNER_TEMP 'codeql-bundle-win64.tar.gz'
+        curl.exe --fail --silent --show-error --location --retry 5 --output $file $env:BUNDLE_URL
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $actual = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+        if ($actual -ne $env:BUNDLE_SHA256) {
+          Write-Output "::error::The CodeQL download does not match its pinned fingerprint (got $actual)"
+          exit 1
+        }
+        "path=$file" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
