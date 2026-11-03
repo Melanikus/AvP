@@ -924,12 +924,12 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 		 		case 6:
  	    	{
- 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(rand & 255)-PREDALIEN_ATTACK_PITCH);
+ 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(int)(rand & 255)-PREDALIEN_ATTACK_PITCH);
  	    		break;
  	    	}
 				case 7:
  	    	{
- 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(rand & 255)-PREDALIEN_ATTACK_PITCH);
+ 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(int)(rand & 255)-PREDALIEN_ATTACK_PITCH);
  	    		break;
  	    	}
 			 	default:
@@ -961,7 +961,7 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 				case 3:
  	    	{
- 	    		Sound_Play(SID_TAIL,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_TAIL,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 				case 4:
@@ -976,12 +976,12 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 		 		case 6:
  	    	{
- 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 				case 7:
  	    	{
- 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 			 	default:
