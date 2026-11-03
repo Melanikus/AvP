@@ -1,7 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
 //   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
-//   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name
+//   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name; the fixed part read only inside the chunk
 //   CalculateID builds the hashed name in a std::string instead of a fixed char[100]
 //   fill_data_block copies strings with memcpy of their measured length
 
@@ -408,6 +408,13 @@ flags(0), version_no (0), associated_shape (0)
 {
 	Object_Chunk* parent_object = (Object_Chunk*) parent;
 
+	// the 60-byte fixed part below is read from a copy that is never longer than the chunk: a chunk shorter than 60
+	// bytes (only a damaged or crafted one) reads as if padded with zeros; the name after it is read from the chunk
+	char const * const name_data = hsize > 60 ? hdata + 60 : hdata;
+	alignas(int) char fixed_part[60] = { 0 };
+	memcpy (fixed_part, hdata, hsize < sizeof(fixed_part) ? hsize : sizeof(fixed_part));
+	hdata = fixed_part;
+
 	flags = *((int *) hdata);
 
 	if (flags & OBJECT_FLAG_BASE_OBJECT)
@@ -441,11 +448,11 @@ flags(0), version_no (0), associated_shape (0)
 	// past the chunk (a stock level, hadleyshope.rif, has a 53-character name)
 	size_t const name_room = hsize > 60 ? hsize - 60 : 0;
 	size_t name_length = 0;
-	while (name_length < name_room && name_length < sizeof(parent_object->object_data_store->o_name) - 1 && hdata[name_length])
+	while (name_length < name_room && name_length < sizeof(parent_object->object_data_store->o_name) - 1 && name_data[name_length])
 	{
 		name_length++;
 	}
-	memcpy (parent_object->object_data_store->o_name, hdata, name_length);
+	memcpy (parent_object->object_data_store->o_name, name_data, name_length);
 	parent_object->object_data_store->o_name[name_length] = '\0';
 	parent_object->object_data_store->ID.id1=0;
 	parent_object->object_data_store->ID.id2=0;
