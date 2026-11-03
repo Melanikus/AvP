@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares SaveBlockArrayFits, the shared check that a counted list from a save file fits its block and array
 #ifndef savegame_h_
 #define savegame_h_ 1
 

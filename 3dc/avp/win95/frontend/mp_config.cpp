@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   multiplayer level and settings names and paths have size limits, a path that does not fit counts as
-//   a missing file, a name with dots in it stays whole, and the custom level name list is freed in full
+//   a missing file, a name with dots in it stays whole, and the custom level name list is freed in full;
+//   a negative level number in a settings file counts as 0
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

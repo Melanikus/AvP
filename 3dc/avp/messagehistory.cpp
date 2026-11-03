@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the message history text, which comes from the language file, is written with a size limit, so it always fits
+//   the message history text, which comes from the language file, is written with a size limit, so it always fits;
+//   the message history read from a save file is checked, and an unknown message shows as empty text
 #include "3dc.h"
 #include "3dc.h"
 #include "module.h"

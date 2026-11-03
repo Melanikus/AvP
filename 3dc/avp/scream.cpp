@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the folder name for voice sounds is copied with a size limit, so it can never overflow
+//   the character sound files are read only inside their size, and one that is too large or cannot be loaded
+//   is refused; the folder and sound names are copied with size limits, so they can never overflow
 #include "3dc.h"
 #include "ourasert.h"
 #include "psndplat.h"
