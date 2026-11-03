@@ -154,10 +154,27 @@ static void Net_AddSession(SessionDescription &session)
 	uint16_t gameStyle = session.gameStyle;
 	uint16_t level     = session.level;
 
+	// the session description comes from any machine on the LAN: SessionData (and the session menu,
+	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
+	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
+	{
+		Con_PrintError("Net_AddSession - session list is full, ignoring session info");
+		return;
+	}
+
+	// the host sends both names NUL-terminated (Net_CreateSession); make sure of it
+	session.levelName[kLevelNameSize - 1]     = '\0';
+	session.sessionName[kSessionNameSize - 1] = '\0';
+
+	char *name = SessionData[NumberOfSessionsFound].Name;
+	const size_t nameSize = sizeof(SessionData[NumberOfSessionsFound].Name);
+
 	SessionData[NumberOfSessionsFound].host = session.host;
 	SessionData[NumberOfSessionsFound].port = session.port;
 
-	sprintf(SessionData[NumberOfSessionsFound].Name,"%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
+	// bounded: a long session name used to overflow Name (40 bytes) into host/port
+	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
+	name[nameSize - 1] = '\0';
 
 	SessionData[NumberOfSessionsFound].Guid	= session.guidInstance;
 
@@ -173,7 +190,8 @@ static void Net_AddSession(SessionDescription &session)
 	{
 		float version = 1.0f + session.version / 100.0f;
 		SessionData[NumberOfSessionsFound].AllowedToJoin = false;
- 		sprintf(SessionData[NumberOfSessionsFound].Name, "%s (V %.2f)", session.sessionName, version);
+ 		_snprintf(name, nameSize - 1, "%s (V %.2f)", session.sessionName, version);
+		name[nameSize - 1] = '\0';
 	}
 	else
 	{
