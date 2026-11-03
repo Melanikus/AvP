@@ -1,0 +1,95 @@
+Limit the memory one file's codebooks can claim.
+
+Our own patch (AvP). It closes what patch 0016 left open: a few bytes of a crafted
+setup header could make the decoder claim gigabytes while opening a file. Upstream's
+main limits this in its unreleased codebook rewrite (e99e46ed5c). Each book now takes
+its worst-case cost from a 64 MB budget per file, before anything is allocated.
+
+--- a/lib/codebook.c
++++ b/lib/codebook.c
+@@ -145,7 +145,8 @@
+ 
+ /* unpacks a codebook from the packet buffer into the codebook struct,
+    readies the codebook auxiliary structures for decode *************/
+-static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
++static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb,
++                                          long *memory_left){
+   long i,j;
+   static_codebook *s=_ogg_calloc(1,sizeof(*s));
+   if(s==NULL)return(NULL);
+@@ -161,6 +162,25 @@
+ 
+   if(ov_ilog(s->dim)+ov_ilog(s->entries)>24)goto _eofout;
+ 
++  /* A few bytes of a crafted setup header can describe a huge codebook, and
++     a file can have 256 of them, so a tiny file could make the decoder claim
++     gigabytes of memory while it is being opened. So each book first takes
++     what it will need from this file's budget, and the file is refused if
++     the budget runs out, before anything is allocated. Valid files are
++     nowhere near the limit (see VORBIS_BOOK_MEMORY_LIMIT).
++
++     A book needs at most, for each of its entries: 2 bytes for its length
++     (one while reading it, one for decoding), 16 for its codeword, sorted
++     position, place in the code list and entry number (4 each), 8 for a
++     pointer used while sorting, and 4 for each of its 'dim' values. That
++     makes 26 bytes and 4 for each dim. The check above keeps entries*dim
++     below 2^24, so this cannot overflow a long. */
++  {
++    long cost=s->entries*(26+4*s->dim);
++    if(cost>*memory_left)goto _errout;
++    *memory_left-=cost;
++  }
++
+   /* codeword ordering.... length ordered or unordered? */
+   switch((int)oggpack_read(opb,1)){
+   case 0:{
+@@ -202,9 +222,9 @@
+       long length=oggpack_read(opb,5)+1;
+       if(length==0)goto _eofout;
+       /* Unlike the unordered case above, this size is not limited by the
+-         size of the packet: a few bytes of a crafted setup header can ask for
+-         16 MB, and for up to 256 books. If the memory is not there, refuse
+-         the file instead of writing through a null pointer. */
++         size of the packet, only by the budget checked above. If the memory
++         is not there, refuse the file instead of writing through a null
++         pointer. */
+       s->lengthlist=_ogg_malloc(sizeof(*s->lengthlist)*s->entries);
+       if(s->lengthlist==NULL)goto _errout;
+ 
+--- a/lib/codebook.h
++++ b/lib/codebook.h
+@@ -97,7 +97,14 @@
+ 
+ 
+ extern int vorbis_staticbook_pack(const static_codebook *c,oggpack_buffer *b);
+-extern static_codebook *vorbis_staticbook_unpack(oggpack_buffer *b);
++/* The most memory, in bytes, that all the codebooks of one file may ask for
++   (see vorbis_staticbook_unpack). Real files need far less: the largest of 289
++   files measured needs about 0.6 MB, and all 812 books built into the encoder
++   added together need about 15 MB. */
++#define VORBIS_BOOK_MEMORY_LIMIT (64L*1024L*1024L)
++
++extern static_codebook *vorbis_staticbook_unpack(oggpack_buffer *b,
++                                                 long *memory_left);
+ 
+ extern int vorbis_book_encode(codebook *book, int a, oggpack_buffer *b);
+ 
+--- a/lib/info.c
++++ b/lib/info.c
+@@ -275,12 +275,15 @@
+ static int _vorbis_unpack_books(vorbis_info *vi,oggpack_buffer *opb){
+   codec_setup_info     *ci=vi->codec_setup;
+   int i;
++  /* how much memory this file's codebooks may still ask for: every book takes
++     its share from this, so that together they cannot pass the limit */
++  long book_memory_left=VORBIS_BOOK_MEMORY_LIMIT;
+ 
+   /* codebooks */
+   ci->books=oggpack_read(opb,8)+1;
+   if(ci->books<=0)goto err_out;
+   for(i=0;i<ci->books;i++){
+-    ci->book_param[i]=vorbis_staticbook_unpack(opb);
++    ci->book_param[i]=vorbis_staticbook_unpack(opb,&book_memory_left);
+     if(!ci->book_param[i])goto err_out;
+   }
+ 

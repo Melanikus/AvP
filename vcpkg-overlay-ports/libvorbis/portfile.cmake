@@ -24,6 +24,7 @@ vcpkg_from_github(
         0014-reject-value-mapped-books-with-zero-dimensions.patch
         0015-check-fopen-and-bound-buffer-in-disabled-dumps.patch
         0016-check-codebook-allocations.patch
+        0017-limit-codebook-memory-per-file.patch
 )
 
 # Delete source files that are never built, so that nothing we do not ship stays in the tree.
