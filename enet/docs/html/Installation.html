@@ -57,7 +57,7 @@ Microsoft Windows</h1>
 <p>You may simply use the included "enet.lib" or "enet64.lib" static libraries. However, if you wish to build the library yourself, then the following instructions apply:</p>
 <p>There is an included MSVC 6 project (enet.dsp) which you may use to build a suitable library file. Alternatively, you may simply drag all the ENet source files into your main project.</p>
 <p>You will have to link to the Winsock2 libraries, so make sure to add ws2_32.lib and winmm.lib to your library list (Project Settings | Link | Object/library modules).</p>
-<h2><a class="anchor" id=""></a>
+<h2><a class="anchor"></a>
 </h2>
 <p>Load the included enet.dsp. MSVC may ask you to convert it if you are on a newer version of MSVC - just allow the conversion and save the resulting project as "enet" or similar. After you build this project, it will output an "enet.lib" file to either the "Debug/" or "Release/" directory, depending on which configuration you have selected to build. By default, it should produce "Debug/enet.lib".</p>
 <p>You may then copy the resulting "enet.lib" file and the header files found in the "include/" directory to your other projects and add it to their library lists. Make sure to also link against "ws2_32.lib" and "winmm.lib" as described above.</p>
