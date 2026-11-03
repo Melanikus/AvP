@@ -11,6 +11,7 @@
 #include "user_profile.h"
 #include "mp_config.h"
 #include "pldnet.h"
+#include "logString.h"
 
 static enum AVP_ENVIRONMENT_ID MarineEpisodes[] =
 {
@@ -207,7 +208,7 @@ static char *RifNamesForEnvironments[] =
 	"CompoundCoop",//AVP_ENVIRONMENT_COMPOUND_COOP,
 };
 
-extern char LevelName[];
+extern char LevelName[MAX_PATH];
 
 AvP_Level_Target_Desc LevelStatsTargets[I_MaxDifficulties][AVP_ENVIRONMENT_END_OF_LIST] = {
 {
@@ -5144,6 +5145,17 @@ void SetLevelToLoadForMarine(int episode)
 	SetBuiltInLevelName(RifNamesForEnvironments[MarineEpisodes[episode]]);
 }
 
+// "Custom/<name>" into LevelName, bounded (a custom level name is a file name from avp_rifs/custom; LevelName used to be
+// 32 bytes, so any name longer than 24 characters overflowed it)
+static void SetCustomLevelName(const char *name)
+{
+	if (_snprintf(LevelName, sizeof(LevelName) - 1, "Custom/%s", name) < 0)
+	{
+		LogErrorString(std::string("custom level name too long, truncated: ") + name);
+	}
+	LevelName[sizeof(LevelName) - 1] = '\0';
+}
+
 void SetLevelToLoadForMultiplayer(int episode)
 {
 	//is this a custom level?
@@ -5151,7 +5163,7 @@ void SetLevelToLoadForMultiplayer(int episode)
 	{
 		//it certainly is
 		//(the game type sent passed to the function doesn't really matter , as long as it isn't NGT_COOP)
-		sprintf(LevelName,"Custom/%s",GetCustomMultiplayerLevelName(episode,NGT_Individual));
+		SetCustomLevelName(GetCustomMultiplayerLevelName(episode,NGT_Individual));
 	}
 	else
 	{
@@ -5164,7 +5176,7 @@ void SetLevelToLoadForCooperative(int episode)
 	if(episode>=MAX_NO_OF_COOPERATIVE_EPISODES)
 	{
 		//it certainly is
-		sprintf(LevelName,"Custom/%s",GetCustomMultiplayerLevelName(episode,NGT_Coop));
+		SetCustomLevelName(GetCustomMultiplayerLevelName(episode,NGT_Coop));
 	}
 	else
 	{

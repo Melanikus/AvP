@@ -63,7 +63,8 @@ extern BOOL ForceLoad_SentryGun;
 BOOL UseMouseCentreing = FALSE;
 BOOL KeepMainRifFile = FALSE;
 
-char LevelName[] = {"predbit6\0QuiteALongNameActually"};
+// room for "Custom/" + any custom level file name (it was the 32 bytes of "predbit6\0QuiteALongNameActually")
+char LevelName[MAX_PATH] = {"predbit6"};
 
 int VideoModeNotAvailable = 0;
 int QuickStartMultiplayer = 1;
@@ -450,7 +451,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		#if !(PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO)
 		if (instr = strstr(command_line, "-n"))
 		{
-			sscanf(instr, "-n %s", LevelName);
+			sscanf(instr, "-n %259s", LevelName); // bounded: LevelName is char[MAX_PATH]
 		}
 		#endif
 
