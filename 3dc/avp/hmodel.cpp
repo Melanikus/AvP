@@ -5415,6 +5415,17 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 			return;
 		}
 
+		//DecalDescription[DecalID] is read when each decal is drawn: the same for a decal id the game cannot have saved
+		for (i = 0; i < block->NumberOfDecals; i++)
+		{
+			if ((int)block->Decals[i].DecalID < 0 || (int)block->Decals[i].DecalID >= MAX_NO_OF_DECAL_IDS)
+			{
+				section->NumberOfDecals = 0;
+				section->NextDecalToUse = 0;
+				return;
+			}
+		}
+
 		COPYELEMENT_LOAD(NumberOfDecals);
 		COPYELEMENT_LOAD(NextDecalToUse);
 
