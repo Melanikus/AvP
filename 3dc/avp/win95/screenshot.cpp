@@ -7,6 +7,7 @@
 #include "ourasert.h"
 #include "renderer.h"
 #include "pheromone.h"
+#include "logString.h"
 
 #include "frontend\menus.h"
 
@@ -23,10 +24,15 @@ void LogCameraPosForModuleLinking()
 	if (!playerPherModule) return;
 	if (!playerPherModule->name) return;
 
-	char Filename[MAX_PATH]={"avp_rifs/"};
+	char Filename[MAX_PATH];
 
-	strcat(Filename, Env_List[AvP.CurrentEnv]->main);
-	strcat(Filename, ".mlf");
+	// bounded: the name is LevelName, which holds up to MAX_PATH - 1 characters for a custom level
+	if (_snprintf(Filename, sizeof(Filename) - 1, "avp_rifs/%s.mlf", Env_List[AvP.CurrentEnv]->main) < 0)
+	{
+		LogErrorString(std::string("module link file path too long: avp_rifs/") + Env_List[AvP.CurrentEnv]->main + ".mlf");
+		return;
+	}
+	Filename[sizeof(Filename) - 1] = '\0';
 
 	FILE* file = avp_open_userfile(Filename, "ab");
 	if (!file )return;

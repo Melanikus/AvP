@@ -25,6 +25,7 @@ New sound system
 #include "bh_rubberduck.h"
 #include "game_statistics.h"
 #include "MusicPlayer.h"
+#include "logString.h"
 
 
 // EXTERNS
@@ -469,12 +470,18 @@ void LoadRifFile()
 	LevelDir[0] = '\0';
 
 	// Set up the dirname for the Rif load
-	strcpy(file_and_path, GameDataDirName);
-	strcat(file_and_path, "/");
-	strcat(file_and_path, Env_List[AvP.CurrentEnv]->main);
-	strcat(file_and_path, FileNameExtension);
-
-	env_rif = avp_load_rif((const char*)&file_and_path[0]);
+	// (bounded: the name is LevelName, which holds up to MAX_PATH - 1 characters for a custom level; a path that does
+	// not fit is treated like a missing file)
+	if (_snprintf(file_and_path, sizeof(file_and_path) - 1, "%s/%s%s", GameDataDirName, Env_List[AvP.CurrentEnv]->main, FileNameExtension) < 0)
+	{
+		LogErrorString(std::string("level file path too long: ") + GameDataDirName + "/" + Env_List[AvP.CurrentEnv]->main + FileNameExtension);
+		env_rif = INVALID_RIFFHANDLE;
+	}
+	else
+	{
+		file_and_path[sizeof(file_and_path) - 1] = '\0';
+		env_rif = avp_load_rif((const char*)&file_and_path[0]);
+	}
 	Set_Progress_Bar_Position(PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4);
 	
 	if (INVALID_RIFFHANDLE == env_rif)
