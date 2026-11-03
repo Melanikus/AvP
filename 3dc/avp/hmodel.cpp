@@ -4782,6 +4782,12 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		const char *Hierarchy_Name;
 		HIERARCHY_SAVE_BLOCK *block = (HIERARCHY_SAVE_BLOCK *) header;
 
+		//the block and both names after it must lie inside the block's size (it comes from the save file)
+		if (header->size < (int)sizeof(*block))
+		{
+			return;
+		}
+
 		//make sure the block is the correct size
 		if (block->structure_size != sizeof(*block))
 		{
@@ -4791,9 +4797,20 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		//get the names from just after the block
 		{
 			char *buffer = (char *) header;
+			char *blockEnd = buffer + header->size;
+			char *nameEnd;
 			buffer += sizeof(*block);
+			nameEnd = (char *) memchr(buffer, 0, blockEnd - buffer);
+			if (!nameEnd)
+			{
+				return;
+			}
 			Hierarchy_Name = buffer;
-			buffer += strlen(Hierarchy_Name) + 1;
+			buffer = nameEnd + 1;
+			if (!memchr(buffer, 0, blockEnd - buffer))
+			{
+				return;
+			}
 			Rif_Name = buffer;
 		}
 		{
@@ -4974,6 +4991,13 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		DELTA_CONTROLLER *delta;
 		HIERARCHY_DELTA_SAVE_BLOCK *block = (HIERARCHY_DELTA_SAVE_BLOCK *) header;
 		char *name = (char *)(block + 1);
+
+		//the block and the name after it must lie inside the block's size (it comes from the save file)
+		if (header->size <= (int)sizeof(*block) || !memchr(name, 0, header->size - sizeof(*block)))
+		{
+			return;
+		}
+
 		delta = Get_Delta_Sequence(controller, name);
 
 		if (!delta)
@@ -5377,6 +5401,20 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	{
 		int i;
 		HIERARCHY_DECAL_SAVE_BLOCK *block = (HIERARCHY_DECAL_SAVE_BLOCK *) header;
+
+		//the counts come from the save file: NumberOfDecals decals are copied into section->Decals[] and
+		//NextDecalToUse is the next index written there (decal.cpp), so both must fit the array, and the block
+		//must hold the decals it claims; otherwise load the section without decals, as if none had been saved
+		if (header->size < (int)(sizeof(*block) - sizeof(block->Decals))
+		    || block->NumberOfDecals < 0 || block->NumberOfDecals > MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION
+		    || block->NextDecalToUse < 0 || block->NextDecalToUse >= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION
+		    || header->size < (int)(sizeof(*block) - sizeof(block->Decals) + block->NumberOfDecals * sizeof(OBJECT_DECAL)))
+		{
+			section->NumberOfDecals = 0;
+			section->NextDecalToUse = 0;
+			return;
+		}
+
 		COPYELEMENT_LOAD(NumberOfDecals);
 		COPYELEMENT_LOAD(NextDecalToUse);
 
@@ -5434,6 +5472,14 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 
 		if (!block)
 		{
+			return;
+		}
+
+		//the whole block is read, so it must all be there (its size comes from the save file); otherwise load the
+		//section without tweening, as if none had been saved
+		if (header->size < (int)sizeof(*block))
+		{
+			section->Tweening = 0;
 			return;
 		}
 
