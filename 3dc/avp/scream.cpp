@@ -59,9 +59,9 @@ static CharacterSoundEffects QueenSounds={0,0,0,SID_NOSOUND};
 #define ScreamFilePath "sound/"
 #endif
 
-// far above the stock files (a few KB), and small enough that no count bounded by the file size below can overflow an
-// allocation size
-static const uint32_t kMaxScreamFileSize = 0x10000000;
+// far above the stock files (422 to 7,372 bytes), and small enough that no count bounded by the file size below can
+// overflow an allocation size, and that the buffer for the whole file is a small allocation
+static const uint32_t kMaxScreamFileSize = 0x100000;
 
 // reads an int of a character sound file at pos, if 4 bytes are left before end
 static bool ReadScreamInt(const char *&pos, const char *end, int &value)
@@ -158,7 +158,13 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 		LogErrorString(std::string("LoadSounds - cannot read or too large, no sounds loaded from it: ") + path);
 		return;
 	}
-	buffer = new char[file_size+1];
+	buffer = new(std::nothrow) char[file_size+1];
+	if (!buffer)
+	{
+		CloseHandle(file);
+		LogErrorString(std::string("LoadSounds - out of memory, no sounds loaded from it: ") + path);
+		return;
+	}
 	if (!ReadFile(file,buffer, file_size, &bytes_read, 0))
 	{
 		bytes_read = 0;
