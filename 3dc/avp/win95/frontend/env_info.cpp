@@ -1,4 +1,6 @@
-#include "3dc.h"		 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the built-in level names are copied into LevelName by SetBuiltInLevelName (memcpy of the measured length)
+#include "3dc.h"
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -5121,17 +5123,23 @@ AvP_Level_Target_Desc LevelStatsTargets[I_MaxDifficulties][AVP_ENVIRONMENT_END_O
 
 };
 
+// copies one of the built-in level names (RifNamesForEnvironments, at most 18 characters) into LevelName
+static void SetBuiltInLevelName(const char *name)
+{
+	memcpy(LevelName, name, strlen(name) + 1);
+}
+
 void SetLevelToLoadForAlien(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[AlienEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[AlienEpisodes[episode]]);
 }
 void SetLevelToLoadForPredator(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[PredatorEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[PredatorEpisodes[episode]]);
 }
 void SetLevelToLoadForMarine(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[MarineEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[MarineEpisodes[episode]]);
 }
 
 void SetLevelToLoadForMultiplayer(int episode)
@@ -5145,7 +5153,7 @@ void SetLevelToLoadForMultiplayer(int episode)
 	}
 	else
 	{
-		strcpy(LevelName,RifNamesForEnvironments[MultiplayerEpisodes[episode]]);
+		SetBuiltInLevelName(RifNamesForEnvironments[MultiplayerEpisodes[episode]]);
 	}
 }
 void SetLevelToLoadForCooperative(int episode)
@@ -5158,13 +5166,13 @@ void SetLevelToLoadForCooperative(int episode)
 	}
 	else
 	{
-		strcpy(LevelName,RifNamesForEnvironments[CooperativeEpisodes[episode]]);
+		SetBuiltInLevelName(RifNamesForEnvironments[CooperativeEpisodes[episode]]);
 	}
 }
 
 void SetLevelToLoad(enum AVP_ENVIRONMENT_ID env)
 {
-	strcpy(LevelName,RifNamesForEnvironments[env]);
+	SetBuiltInLevelName(RifNamesForEnvironments[env]);
 }
 
 void SetLevelToLoadForCheatMode(int environment)
