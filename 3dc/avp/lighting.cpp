@@ -630,6 +630,10 @@ void Load_LightElements(SAVE_BLOCK_HEADER* header)
 	LIGHTELEMENT* saved_light_element = (LIGHTELEMENT*) (block+1);
 	int expected_size;
 
+	//the light elements are read from the block: the count must fit the block and
+	//LightElementStorage[MAX_NO_OF_LIGHTELEMENTS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveLightElements, sizeof(LIGHTELEMENT), MAX_NO_OF_LIGHTELEMENTS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(LIGHTELEMENT) * block->NumActiveLightElements;
