@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   ChunkShape copies the texture file names with memcpy of their measured length
+//   the texture file names of a shape are copied using their exact measured length, so they always fit
 
 #include "chunk.hpp"
 #include <math.h>

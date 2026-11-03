@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   fill_data_block copies strings with memcpy of their measured length
+//   text is copied using its exact measured length, so it always fits
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"

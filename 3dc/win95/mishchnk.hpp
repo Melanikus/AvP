@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declaration of File_Chunk::assign_index_to_object (level-editor code: the game itself never calls it)
+//   removed the declarations of code only the level editor used: the game itself never runs it
 
 #ifndef _miscchunk_hpp
 #define _miscchunk_hpp 1

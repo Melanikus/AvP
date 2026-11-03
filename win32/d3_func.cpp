@@ -23,7 +23,7 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   PrintD3DMatrix formats into its buffer with a size limit (_snprintf, not sprintf)
+//   the debug text that prints a matrix is written with a size limit, so it always fits
 
 #include "d3_func.h"
 #include "fmvCutscenes.h"

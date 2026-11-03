@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   textprint and its variants format into their buffers with a size limit (_vsnprintf, not vsprintf)
+//   the debug text shown on screen is written with a size limit, so it always fits
 
 #include "3dc.h"
 #include <sys\stat.h>

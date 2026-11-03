@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the PC, Saturn and PlayStation sprite chunks share one child loader, whose factory returns each new child
+//   the PC, Saturn and PlayStation sprite parts of a level file are read by one shared loader, not three
+//   identical loops
 
 #include "chunk_sprites.hpp"
 #include "mishchnk.hpp"

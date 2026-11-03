@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declaration of unused RIF-authoring code
+//   removed the declarations of code only the level editor used: the game itself never runs it
 
 #ifndef _ltchunk_hpp
 #define _ltchunk_hpp 1

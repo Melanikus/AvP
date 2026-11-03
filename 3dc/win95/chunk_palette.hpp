@@ -1,7 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted unused RIF-authoring code (ExpandedIdentifier, add_rif_entry, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
-//   BMP_Flags::operator= copies the file name with memcpy of its measured length
-//   Environment_Game_Mode_Header_Chunk keeps its rif file names in a std::vector<std::string>
+//   text is copied using its exact measured length, level file names are kept in a list that grows as
+//   needed, and the declarations of code only the level editor used were removed
 
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_

@@ -5,6 +5,7 @@
  * to the view frustum and clipping
  *
  */
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the polygon clipping is one whole macro (Clip_Polygon) instead of a start and an end macro, so code scanners
 //   can read it; the compiled code is the same

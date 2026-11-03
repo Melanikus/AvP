@@ -23,7 +23,8 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the disabled (#if 0) body of Net_ConnectToAddress; the "connect" console command still does nothing
+//   deleted the switched-off (#if 0) code inside Net_ConnectToAddress; the "connect" console command still
+//   does nothing
 
 #include "3dc.h"
 #include "enet\enet.h"

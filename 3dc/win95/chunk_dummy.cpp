@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Dummy_Object_Data_Chunk and Dummy_Object_Text_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
-//   deleted unused RIF-authoring code (a Dummy_Object_Chunk constructor, Dummy_Object_Chunk::set_text)
+//   removed code only the level editor used: the game itself never runs it
 
 #include "chunk_dummy.hpp"
 

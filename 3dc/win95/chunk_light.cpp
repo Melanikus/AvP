@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Light_Set_Header_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
-//   deleted unused RIF-authoring code (the Light_Set_Chunk name constructor)
+//   removed code only the level editor used: the game itself never runs it
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"

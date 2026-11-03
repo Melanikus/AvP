@@ -23,7 +23,7 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   VorbisPlayback::Open closes the file when it is not a valid Ogg Vorbis stream
+//   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open
 
 #include <stdio.h>
 #include "VorbisPlayer.h"

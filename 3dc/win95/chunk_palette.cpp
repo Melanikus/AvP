@@ -1,9 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted unused RIF-authoring code (ExpandedIdentifier, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
-//   TLT_Config_Chunk: parse the TLTCONFG chunk only inside its size
-//   copies into buffers sized from the same string use memcpy with that length
-//   fill_data_block copies strings with memcpy of their measured length
-//   Environment_Game_Mode_Header_Chunk keeps its rif file names in a std::vector<std::string>
+//   the TLTCONFG data in a level file is read without going past its end, text is copied using its exact
+//   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"

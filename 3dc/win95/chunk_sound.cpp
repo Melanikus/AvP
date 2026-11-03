@@ -1,8 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Sound_Object_Extra_Name_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
-//   deleted unused RIF-authoring code (create_alternate_locations_chunk, create_extra_data_chunk and the
-//   Sound_Object_Extra_Data_Chunk constructor only they used)
-//   fill_data_block copies strings with memcpy of their measured length
+//   removed code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"

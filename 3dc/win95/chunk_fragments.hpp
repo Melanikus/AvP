@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declaration of the Fragment_Type_Data_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
-//   deleted unused RIF-authoring code (the Fragment_Type_Chunk name constructor)
+//   removed code and declarations only the level editor used: the game itself never runs them
 
 #ifndef _fragchnk_hpp_
 #define _fragchnk_hpp_

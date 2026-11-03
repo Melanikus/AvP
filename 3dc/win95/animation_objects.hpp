@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Object_Animation_Sequence_Header/Frame/Flags_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
-//   deleted the declarations of unused RIF-authoring code
+//   removed code and declarations only the level editor used: the game itself never runs them
 
 #ifndef _animobs_hpp
 #define _animobs_hpp 1

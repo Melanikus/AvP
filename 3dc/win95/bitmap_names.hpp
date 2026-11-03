@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declaration of the Bitmap_MD5_Chunk constructor that builds the chunk from a bitmap (level-editor code: the game itself never calls it)
-//   deleted the declarations of unused RIF-authoring code (SetMD5Val, CreateMD5Chunk)
+//   removed the declarations of code only the level editor used: the game itself never runs it
 
 #ifndef _bmpnames_hpp_
 #define _bmpnames_hpp_

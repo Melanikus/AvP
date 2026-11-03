@@ -1,13 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Shape_External_Filename_Chunk, Anim_Shape_Sequence_Data_Chunk and Anim_Shape_Frame_Data_Chunk
-//   constructors that build a chunk from values (level-editor code: the game itself never calls them)
-//   deleted unused RIF-authoring code: the Shape_Chunk / Shape_Sub_Shape_Chunk "from ChunkShape" constructors,
-//   make_copy_of_chunk and update_my_chunkshape (also Console_Shape_Chunk's), the Shape_External_File_Chunk name
-//   constructor, the Anim_Shape_Sequence_Chunk interface constructors with update_my_sequencedata and
-//   RegenerateChildChunks, the Anim_Shape_Frame_Chunk "from frame" constructor, CreateNewSubShape and the
-//   Console_Shape_Chunk type constructor
-//   copies into buffers sized from the same string use memcpy with that length
-//   fill_data_block copies strings with memcpy of their measured length
+//   removed a large amount of code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
 
 #include <math.h>
 

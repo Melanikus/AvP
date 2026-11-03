@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   FlushOut writes and clears the std::vector<std::string> of lines not yet written
+//   the log lines not yet written are kept in a list that cleans up after itself
 
 #include <string.h>
 #include <stdlib.h>

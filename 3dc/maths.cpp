@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the degree signs in comments are plain text now, and four calls are split so each #if branch is a whole
 //   statement; both let code scanners read the file (the compiled code is the same)

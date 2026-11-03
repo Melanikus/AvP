@@ -1,8 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted File_Chunk::assign_index_to_object (level-editor code: the game itself never calls it)
-//   File_Chunk::update_file keeps the file name in a std::string, not a char[256]
-//   File_Chunk::write_file builds its temporary file name with memcpy of measured lengths
-//   fill_data_block copies strings with memcpy of their measured length
+//   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
+//   names and other text are copied using their exact measured length; level-editor code was removed
 
 #include <string>
 #include "chunk.hpp"

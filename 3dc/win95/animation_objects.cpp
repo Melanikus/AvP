@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted unused RIF-authoring code (a sequence-from-template constructor, set_sequence_flags)
+//   removed code only the level editor used: the game itself never runs it
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"

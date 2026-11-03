@@ -1,7 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Console_Type_Chunk, Shape_Header_Chunk and Shape_Sub_Shape_Header_Chunk constructors that build
-//   a chunk from values (level-editor code: the game itself never calls them)
-//   deleted the declarations of unused RIF-authoring code (see chunk_shape.cpp)
+//   removed code and declarations only the level editor used: the game itself never runs them
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1

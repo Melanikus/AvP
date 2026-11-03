@@ -1,7 +1,8 @@
 // Chunk library
 
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the unused CHUNK_WITH_CHILDREN_LOADER_INIT / _FOR / _END macro family
+//   removed a group of helper macros that nothing used
 
 #ifndef _chunk_hpp
 #define _chunk_hpp

@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   DrawSmallMenuCharacter draws nothing when the font texture has a zero width or height
+//   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
+//   broken picture coordinates
 
 #include "console.h"
 #include "OnScreenKeyboard.h"

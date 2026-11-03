@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted the hand-written assembly versions of these maths functions, which were never compiled; the C
 //   versions the game uses are unchanged

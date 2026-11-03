@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted unused RIF-authoring code (the empty AllSprites_Chunk constructor)
+//   removed code only the level editor used: the game itself never runs it
 
 #include "chunk_gsprites.hpp"
 

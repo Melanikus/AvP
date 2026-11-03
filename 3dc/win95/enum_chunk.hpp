@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Enum_Header_Chunk constructor that builds the chunk from its parent (level-editor code: the game itself never calls it)
-//   deleted the declaration of unused RIF-authoring code
+//   removed code and declarations only the level editor used: the game itself never runs them
 
 #ifndef _included_enumchnk_hpp_
 #define _included_enumchnk_hpp_

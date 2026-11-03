@@ -1,7 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the lines not yet written are a std::vector<std::string> (was a List<char *> of new[] copies, which a
-//   failed final reopen leaked and the copy constructor / operator= shared); the fallback formatting into
-//   buf[4096] is bounded (_vsnprintf, not vsprintf)
+//   the log lines not yet written are kept in a list that cleans up after itself (the old list could lose
+//   memory, and two copies of a log could share it by mistake); the fallback log text is written with a size limit
 
 #ifndef _included_debuglog_hpp_
 #define _included_debuglog_hpp_

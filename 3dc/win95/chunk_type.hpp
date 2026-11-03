@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   ChunkObject::o_name is 64 bytes (was 50): room for 63 characters plus the 0 byte that ends them, so the longest
-//   stock object name (53 characters) fits
+//   an object's name can now be 63 characters long (it was 49), so the longest name in the stock levels,
+//   53 characters, fits
 
 #ifndef _chnktype_hpp
 #define _chnktype_hpp 1

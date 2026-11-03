@@ -1,6 +1,6 @@
 /***** HModel.c *****/
 /***** CDF 21/10/97 *****/
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the shape-animation set-up is written as whole if-blocks in each #if branch, so code scanners can read it;
 //   the game runs the same code as before

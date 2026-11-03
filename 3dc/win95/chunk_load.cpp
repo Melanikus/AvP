@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   load_rif / load_rif_non_env build the "Error loading" message in a std::string, not a char[200]
-//   copies into buffers sized from the same string use memcpy with that length
+//   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
+//   text is copied using its exact measured length, so it always fits
 
 #include <stdlib.h>
 #include <string>

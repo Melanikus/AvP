@@ -1,11 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Object_Header_Chunk and Object_Alternate_Locations_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
-//   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
-//   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
-//   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name; the fixed part read only inside the chunk
-//   CalculateID builds the hashed name in a std::string instead of a fixed char[100]
-//   fill_data_block copies strings with memcpy of their measured length
-//   OBJHEAD1: the lock-user name is copied with a plain counted loop (same result as before)
+//   object headers in level files are read without going past their end, and names and other text are
+//   copied using their exact measured length, so they always fit; code only the level editor used was removed
 
 #include <string>
 #include "chunk.hpp"

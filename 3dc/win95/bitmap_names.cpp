@@ -1,8 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the Bitmap_MD5_Chunk constructor that builds the chunk from a bitmap (level-editor code: the game itself never calls it)
-//   deleted unused RIF-authoring code (SetMD5Val and the CreateMD5Chunk overrides)
-//   copies into buffers sized from the same string use memcpy with that length
-//   fill_data_block copies strings with memcpy of their measured length
+//   removed code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
 
 #include <string.h>
 #include "bitmap_names.hpp"

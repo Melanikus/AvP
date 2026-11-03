@@ -23,7 +23,7 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed the USE_D3D_XBOX include of xbox/src/d3_func.h (the xbox/ port was deleted)
+//   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
 
 #ifndef _renderer_h_
 #define _renderer_h_

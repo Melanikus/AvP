@@ -23,7 +23,8 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   Config_Load builds each key without its spaces in a plain loop (was erase + std::remove)
+//   when the settings file is read, the spaces in each setting's name are taken out by a simple loop
+//   (it works the same as before)
 
 #include <string>
 #include <fstream>
