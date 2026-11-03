@@ -50,6 +50,7 @@
  *   BK-P7: allocate the bundles without throwing; report failure
  *   BK-P10: log a constant string for an out-of-bounds DC value
  *   BK-P13: FFmpeg 3f5d6a665a, 62ad08cef9, 7a072fbcc4 (no signed shift or overflow UB)
+ *   BK-P14: build the shared VLC tables only once
  */
 
 #include "BinkDecoder.h"
@@ -130,6 +131,11 @@ uint8_t BinkDecoder::GetHuffSymbol(BinkCommon::BitReader &bits, Tree &tree)
 // codes for each symbol in an array sorted by code length and search for a match every time a bit is read in." 
 void BinkDecoder::InitTrees()
 {
+	// the tables are shared by all decoders: build them once (as FFmpeg does), so a
+	// later Open neither grows them nor reallocates them while another handle decodes
+	if (!bink_trees[kNumTrees - 1].empty())
+		return;
+
 	for (uint32_t i = 0; i < kNumTrees; i++)
 	{
 		// get max code length
