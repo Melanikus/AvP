@@ -2054,7 +2054,7 @@ void MaintainZoomingLevel(void)
 	float requestedZoomScale;
 
 	i = 0;
-	while (CameraZoomScale<=ZoomLevels[++i]);
+	while (i < 3 && CameraZoomScale<=ZoomLevels[++i]); // stops at the last entry (3): at full zoom it used to read ZoomLevels[4]
 
 	assert(i < 4);
 
