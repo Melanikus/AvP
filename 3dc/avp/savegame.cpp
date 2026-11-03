@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the "saves left" message, which holds words from the language file, is written with a size
+//   limit, so it always fits
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -1317,7 +1321,13 @@ extern void DisplaySavesLeft()
 {
 	char text [100];
 
-	sprintf(text, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), NumberOfSavesLeft);
+	// text holds 100 bytes. The words come from the game's language text file on
+	// disk, so _snprintf stops at 99 characters, and we write the end marker (the
+	// zero byte that ends a text) into the last byte ourselves, because _snprintf
+	// leaves it out when it has to cut the text short. Text that fits comes out
+	// exactly as before.
+	_snprintf(text, sizeof(text) - 1, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), NumberOfSavesLeft);
+	text[sizeof(text) - 1] = '\0';
 
 	NewOnScreenMessage(text);
 }

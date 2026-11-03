@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   chat lines and multiplayer console messages are written with size limits, so no name, chat line or
-//   language-file text can ever run past the end of the 300-byte message box
+//   chat lines, multiplayer console messages and the lives, score and time texts are written with
+//   size limits, so no name, chat line or language-file text can run past the end of its buffer
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -11311,6 +11311,13 @@ void DoMultiplayerEndGameScreen(void)
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
 	int i, j;
 	int x, y;
+	// text holds 100 bytes: up to 99 characters (letters, digits, spaces and so
+	// on), then a zero byte that marks where the text stops (the "end marker").
+	// The "lives left" line below holds words from the game's language text file on
+	// disk, so it uses _snprintf, which stops at 99 characters, and then writes the
+	// end marker into the last byte itself, because _snprintf leaves it out when it
+	// has to cut the text short. Text that fits is shown exactly as before. (The
+	// other lines here only write numbers, which always fit.)
 	char text[100];
 
 	if (netGameData.myGameState == NGS_EndGameScreen) {
@@ -11507,7 +11514,9 @@ void DoMultiplayerEndGameScreen(void)
 			}
 
 			//display remaining lives
-			sprintf(text, "%s: %d", GetTextString(TEXTSTRING_MULTIPLAYER_LIVES_LEFT), CountMultiplayerLivesLeft());
+			// size-limited: see the note where text is declared
+			_snprintf(text, sizeof(text) - 1, "%s: %d", GetTextString(TEXTSTRING_MULTIPLAYER_LIVES_LEFT), CountMultiplayerLivesLeft());
+			text[sizeof(text) - 1] = '\0';
 			RenderStringCentred(text, ScreenDescriptorBlock.SDB_Width / 2, y, 0xffffffff);
 		}
 	}
@@ -11624,6 +11633,12 @@ static BOOL IsItPossibleToScore()
 void DoMultiplayerSpecificHud()
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
+	// text holds 200 bytes: up to 199 characters (letters, digits, spaces and so
+	// on), then a zero byte that marks where the text stops (the "end marker").
+	// The score and time lines below hold words from the game's language text file
+	// on disk, so they use _snprintf, which stops at 199 characters, and then write
+	// the end marker into the last byte themselves, because _snprintf leaves it out
+	// when it has to cut the text short. Text that fits is shown exactly as before.
 	char text[200];
 
 	// Show score table if either
@@ -11655,7 +11670,9 @@ void DoMultiplayerSpecificHud()
 
 		if (score || IsItPossibleToScore())
 		{
-			sprintf(text, "%s : %d", GetTextString(TEXTSTRING_MULTIPLAYER_SCORE), score);
+			// size-limited: see the note where text is declared
+			_snprintf(text, sizeof(text) - 1, "%s : %d", GetTextString(TEXTSTRING_MULTIPLAYER_SCORE), score);
+			text[sizeof(text) - 1] = '\0';
 			RenderString(text, 5, 0, 0xffffffff);
 		}
 	}
@@ -11675,7 +11692,9 @@ void DoMultiplayerSpecificHud()
 		minutesLeft = (secondsLeft / 60) % 60;
 		secondsLeft %= 60;
 		// display time left as hh:mm:ss
-		sprintf(text, "%s : %02d:%02d:%02d", GetTextString(TEXTSTRING_MULTIPLAYER_TIME), hoursLeft, minutesLeft, secondsLeft);
+		// size-limited: see the note where text is declared
+		_snprintf(text, sizeof(text) - 1, "%s : %02d:%02d:%02d", GetTextString(TEXTSTRING_MULTIPLAYER_TIME), hoursLeft, minutesLeft, secondsLeft);
+		text[sizeof(text) - 1] = '\0';
 		RenderString(text, 5, 20, 0xffffffff);
 	}
 }

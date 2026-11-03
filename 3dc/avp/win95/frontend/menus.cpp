@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   menu texts (the multiplayer setup description, a number shown in a menu, the save-slot file name, the
-//   joined LAN game's name and the custom level name) are copied or written with size limits, so they fit
+//   menu texts (the multiplayer setup, a menu number, the load-game list, the save-slot file name,
+//   the joined LAN game's name and the custom level name) are copied or written with size limits
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -1776,6 +1776,15 @@ static void RenderLoadGameMenu(void)
 
 	for (e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
+		// buffer holds 100 bytes: up to 99 characters (letters, digits, spaces and so
+		// on), then a zero byte that marks where the text stops (the "end marker").
+		// The lines below that put words from the game's language text file on disk
+		// into buffer use _snprintf, which stops at 99 characters, and then write the
+		// end marker into the last byte themselves, because _snprintf leaves it out
+		// when it has to cut the text short. So a line made very long in that file is
+		// cut short on screen instead of writing past the end of buffer. Text that
+		// fits is shown exactly as before. (The slot number line only writes a
+		// number, which always fits.)
 		char buffer[100];
 		SAVE_SLOT_HEADER *slotPtr = &SaveGameSlot[e];
 		int targetBrightness;
@@ -1836,22 +1845,32 @@ static void RenderLoadGameMenu(void)
 				}
 			}
 
-			sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE + slotPtr->Species)));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE + slotPtr->Species)));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_LEFTXEDGE+30, y, elementPtr->Brightness, AVPMENUFORMAT_LEFTJUSTIFIED);
 			
-			sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(textID+slotPtr->Episode)));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(textID+slotPtr->Episode)));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_CENTREX, y, elementPtr->Brightness, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 			if (numberOfBasicEpisodes > slotPtr->Episode)
 			{
-				sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_DIFFICULTY_EASY + slotPtr->Difficulty)));
+				// size-limited: see the note where buffer is declared
+				_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_DIFFICULTY_EASY + slotPtr->Difficulty)));
+				buffer[sizeof(buffer) - 1] = '\0';
 				RenderText(buffer, MENU_RIGHTXEDGE-30, y, elementPtr->Brightness, AVPMENUFORMAT_RIGHTJUSTIFIED);
 			}
 
-			sprintf(buffer, "%s %02d:%02d:%02d", GetTextString(TEXTSTRING_GAMESTATS_TIMEELAPSED), slotPtr->ElapsedTime_Hours, slotPtr->ElapsedTime_Minutes, slotPtr->ElapsedTime_Seconds);
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s %02d:%02d:%02d", GetTextString(TEXTSTRING_GAMESTATS_TIMEELAPSED), slotPtr->ElapsedTime_Hours, slotPtr->ElapsedTime_Minutes, slotPtr->ElapsedTime_Seconds);
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_LEFTXEDGE+30, y+HUD_FONT_HEIGHT+1, elementPtr->Brightness, AVPMENUFORMAT_LEFTJUSTIFIED);
 
-			sprintf(buffer, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), slotPtr->SavesLeft);
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), slotPtr->SavesLeft);
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_CENTREX, y+HUD_FONT_HEIGHT+1, elementPtr->Brightness, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 			{

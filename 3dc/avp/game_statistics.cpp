@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   texts on the statistics screen that hold words from the language file, or the player's profile
+//   name, are written with a size limit, so they always fit
 /* KJL 99/2/12 - Statistics of current game */
 #include "3dc.h"
 #include "inline.h"
@@ -828,6 +832,15 @@ extern void DoStatisticsScreen(int completed_level)
 {
 	// content to be finalised. Language localisation issues: time formats etc.
 	int y;
+	// buffer holds 100 bytes: up to 99 characters (letters, digits, spaces and so
+	// on), then a zero byte that marks where the text stops (the "end marker").
+	// The lines below that put words from the game's language text file on disk,
+	// or the player's profile name, into buffer use _snprintf, which stops at 99
+	// characters, and then write the end marker into the last byte themselves,
+	// because _snprintf leaves it out when it has to cut the text short. So a line
+	// made very long in that file is cut short on screen instead of writing past
+	// the end of buffer. Text that fits is shown exactly as before. (The other
+	// lines here only write numbers, which always fit.)
 	char buffer[100];
 	int level_num;
 	int colour_to_draw, best;
@@ -913,7 +926,9 @@ extern void DoStatisticsScreen(int completed_level)
 	targets = 0;
 	targetspassed = 0;
 	/* Print their name. */
-	sprintf(buffer, "%s", UserProfilePtr->Name);
+	// size-limited: see the note where buffer is declared
+	_snprintf(buffer, sizeof(buffer) - 1, "%s", UserProfilePtr->Name);
+	buffer[sizeof(buffer) - 1] = '\0';
 	RenderString(buffer, TABPOINT1, 20, COLOUR_WHITE);
 
 	if (completed_level) {
@@ -1137,7 +1152,9 @@ extern void DoStatisticsScreen(int completed_level)
 					}
 				}
 
-				sprintf(buffer, "%s %s", GetTextString(TemporaryNameStore[i]), GetTextString(TEXTSTRING_GAMESTATS_KILLED));
+				// size-limited: see the note where buffer is declared
+				_snprintf(buffer, sizeof(buffer) - 1, "%s %s", GetTextString(TemporaryNameStore[i]), GetTextString(TEXTSTRING_GAMESTATS_KILLED));
+				buffer[sizeof(buffer) - 1] = '\0';
 				RenderString(buffer, TABPOINT1, y, colour_to_draw);
 				sprintf(buffer, "%d", CurrentGameStatistics.Killed[i]);
 				RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
@@ -1199,7 +1216,9 @@ extern void DoStatisticsScreen(int completed_level)
 							}
 						}
 
-						sprintf(buffer, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_TROPHIESCOLLECTED));
+						// size-limited: see the note where buffer is declared
+						_snprintf(buffer, sizeof(buffer) - 1, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_TROPHIESCOLLECTED));
+						buffer[sizeof(buffer) - 1] = '\0';
 						RenderString(buffer, TABPOINT1, y, colour_to_draw);
 						sprintf(buffer, "%d", CurrentGameStatistics.Trophies[i]);
 						RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
@@ -1264,7 +1283,9 @@ extern void DoStatisticsScreen(int completed_level)
 							}
 						}
 
-						sprintf(buffer, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_LIVEHEADBITES));
+						// size-limited: see the note where buffer is declared
+						_snprintf(buffer, sizeof(buffer) - 1, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_LIVEHEADBITES));
+						buffer[sizeof(buffer) - 1] = '\0';
 						RenderString(buffer, TABPOINT1, y, colour_to_draw);
 						sprintf(buffer, "%d", CurrentGameStatistics.LiveHeadBites[i]);
 						RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
@@ -1320,7 +1341,9 @@ extern void DoStatisticsScreen(int completed_level)
 							}
 						}
 
-						sprintf(buffer, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_DEADHEADBITES));
+						// size-limited: see the note where buffer is declared
+						_snprintf(buffer, sizeof(buffer) - 1, "%s %s", GetTextString(TemporaryNameStore2[i]), GetTextString(TEXTSTRING_GAMESTATS_DEADHEADBITES));
+						buffer[sizeof(buffer) - 1] = '\0';
 						RenderString(buffer, TABPOINT1, y, colour_to_draw);
 						sprintf(buffer, "%d", CurrentGameStatistics.DeadHeadBites[i]);
 						RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
@@ -1800,7 +1823,9 @@ extern void DoStatisticsScreen(int completed_level)
 			GLOBALASSERT(preferred_slot != -1);
 			weaponPtr = &(PlayerStatusPtr->WeaponSlot[preferred_slot]);
 			RenderString(GetTextString(TEXTSTRING_GAMESTATS_PREFERREDWEAPON), TABPOINT1, y, colour_to_draw);
-			sprintf(buffer, "%s\n", GetTextString(TemplateWeapon[weaponPtr->WeaponIDNumber].Name));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s\n", GetTextString(TemplateWeapon[weaponPtr->WeaponIDNumber].Name));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
 			RenderStringCentred("---", TABPOINT3, y, colour_to_draw);
 			RenderStringCentred("---", TABPOINT4, y, COLOUR_WHITE);
@@ -2145,7 +2170,9 @@ extern void DoStatisticsScreen(int completed_level)
 			GLOBALASSERT(preferred_slot != -1);
 			weaponPtr = &(PlayerStatusPtr->WeaponSlot[preferred_slot]);
 			RenderString(GetTextString(TEXTSTRING_GAMESTATS_PREFERREDWEAPON), TABPOINT1, y, colour_to_draw);
-			sprintf(buffer, "%s", GetTextString(TemplateWeapon[weaponPtr->WeaponIDNumber].Name));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(TemplateWeapon[weaponPtr->WeaponIDNumber].Name));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
 			RenderStringCentred("---", TABPOINT3, y, colour_to_draw);
 			RenderStringCentred("---", TABPOINT4, y, COLOUR_WHITE);
@@ -2169,7 +2196,9 @@ extern void DoStatisticsScreen(int completed_level)
 
 		GLOBALASSERT(preferred_slot != -1);
 		RenderString(GetTextString(TEXTSTRING_GAMESTATS_PREFERREDVISIONMODE), TABPOINT1, y, colour_to_draw);
-		sprintf(buffer, "%s\n", GetTextString(VisionModeNames[preferred_slot]));
+		// size-limited: see the note where buffer is declared
+		_snprintf(buffer, sizeof(buffer) - 1, "%s\n", GetTextString(VisionModeNames[preferred_slot]));
+		buffer[sizeof(buffer) - 1] = '\0';
 		RenderStringCentred(buffer, TABPOINT2, y, colour_to_draw);
 		RenderStringCentred("---", TABPOINT3, y, colour_to_draw);
 		RenderStringCentred("---", TABPOINT4, y, COLOUR_WHITE);
