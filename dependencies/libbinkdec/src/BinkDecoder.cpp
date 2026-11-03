@@ -54,6 +54,7 @@
  *   BK-P9: reject a zero frame rate numerator or denominator
  *   BK-P11: skip a frame whose audio packet is larger than the frame
  *   BK-P15: free the bundle buffers in the destructor
+ *   BK-P16: check handles and track indexes in the exports; stop at the last frame
  */
 
 #include "BinkDecoder.h"
@@ -61,6 +62,15 @@
 #include "FFmpeg_includes.h"
 
 std::vector<class BinkDecoder*> classInstances;
+
+// the decoder a handle refers to, or 0 for an invalid or closed handle
+static BinkDecoder *GetDecoder(const BinkHandle &handle)
+{
+	if (handle.instanceIndex < 0 || (size_t)handle.instanceIndex >= classInstances.size())
+		return 0;
+
+	return classInstances[handle.instanceIndex];
+}
 
 BinkHandle Bink_Open(const char* fileName)
 {
@@ -98,7 +108,7 @@ BinkHandle Bink_Open(const char* fileName)
 
 void Bink_Close(BinkHandle &handle)
 {
-	if (!classInstances.at(handle.instanceIndex))
+	if (!GetDecoder(handle))
 	{
 		// invalid handle
 		return;
@@ -114,15 +124,23 @@ void Bink_Close(BinkHandle &handle)
 
 uint32_t Bink_GetNumAudioTracks(BinkHandle &handle)
 {
-	if (handle.instanceIndex == -1)
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
 		return 0;
 	else
-		return classInstances[handle.instanceIndex]->GetNumAudioTracks();
+		return decoder->GetNumAudioTracks();
 }
 
 AudioInfo Bink_GetAudioTrackDetails(BinkHandle &handle, uint32_t trackIndex)
 {
-	return classInstances[handle.instanceIndex]->GetAudioTrackDetails(trackIndex);
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder || trackIndex >= decoder->GetNumAudioTracks())
+	{
+		AudioInfo none = { 0, 0, 0 };
+		return none;
+	}
+
+	return decoder->GetAudioTrackDetails(trackIndex);
 }
 
 /* Get a frame's worth of audio data. 
@@ -133,28 +151,50 @@ AudioInfo Bink_GetAudioTrackDetails(BinkHandle &handle, uint32_t trackIndex)
  */
 uint32_t Bink_GetAudioData(BinkHandle &handle, uint32_t trackIndex, int16_t *data)
 {
-	return classInstances[handle.instanceIndex]->GetAudioData(trackIndex, data);
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder || trackIndex >= decoder->GetNumAudioTracks())
+		return 0;
+
+	return decoder->GetAudioData(trackIndex, data);
 }
 
 uint32_t Bink_GetNumFrames(BinkHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetNumFrames();
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetNumFrames();
 }
 
 void Bink_GetFrameSize(BinkHandle &handle, uint32_t &width, uint32_t &height)
 {
-	width  = classInstances[handle.instanceIndex]->frameWidth;
-	height = classInstances[handle.instanceIndex]->frameHeight;
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+	{
+		width  = 0;
+		height = 0;
+		return;
+	}
+
+	width  = decoder->frameWidth;
+	height = decoder->frameHeight;
 }
 
 uint32_t Bink_GetCurrentFrameNum(BinkHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetCurrentFrameNum();
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetCurrentFrameNum();
 }
 
 uint32_t Bink_GetNextFrame(BinkHandle &handle, YUVbuffer yuv)
 {
-	BinkDecoder *decoder = classInstances[handle.instanceIndex];
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
 
 	uint32_t frameIndex = decoder->GetCurrentFrameNum();
 
@@ -165,12 +205,20 @@ uint32_t Bink_GetNextFrame(BinkHandle &handle, YUVbuffer yuv)
 
 float Bink_GetFrameRate(BinkHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetFrameRate();
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0.0f;
+
+	return decoder->GetFrameRate();
 }
 
 void Bink_GotoFrame(BinkHandle &handle, uint32_t frameNum)
 {
-	classInstances[handle.instanceIndex]->GotoFrame(frameNum);
+	BinkDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return;
+
+	decoder->GotoFrame(frameNum);
 }
 
 BinkDecoder::BinkDecoder()
@@ -453,6 +501,10 @@ bool BinkDecoder::Open(const std::string &fileName)
 
 void BinkDecoder::GetNextFrame(YUVbuffer yuv)
 {
+	// past the last frame (GotoFrame takes any number): nothing to decode
+	if (currentFrame >= nFrames)
+		return;
+
 	// seek to fame offset
 	file.Seek(frames[currentFrame].offset);
 	uint32_t frameSize = frames[currentFrame].size;
