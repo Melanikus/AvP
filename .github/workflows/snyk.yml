@@ -2,8 +2,10 @@
 # Neither needs a build: Snyk Code analyses the source, and `--unmanaged` identifies
 # vendored open-source code (enet/, dependencies/) by file hashes. vcpkg libraries are
 # downloaded at build time, so they are not in the repository and not scanned here.
-# Results go to the repository's Security tab (code scanning). Report-only for now:
-# the scans never fail the workflow until the existing findings are triaged.
+# Results go to the repository's Security tab (code scanning). ENFORCING (AvP Tao #1, security
+# is paramount): ANY finding or scan error fails this job, and the job is a required check on
+# avpx_main, so nothing merges without passing. The SARIF uploads still run when a scan fails.
+# A finding is resolved only by fixing it, or by a justified .snyk ignore that the owner approves.
 name: Snyk
 
 on:
@@ -35,13 +37,11 @@ jobs:
         uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
 
       - name: Snyk Code (SAST)
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk code test --sarif-file-output=snyk-code.sarif
 
       - name: Snyk Open Source (SCA, vendored C/C++)
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk test --unmanaged --sarif-file-output=snyk-open-source.sarif
@@ -62,7 +62,6 @@ jobs:
 
       - name: Snapshot vendored dependencies in the Snyk dashboard
         if: github.event_name == 'push' && github.ref == 'refs/heads/avpx_main'
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk monitor --unmanaged --project-name=Melanikus/AvP
