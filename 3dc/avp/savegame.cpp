@@ -627,7 +627,7 @@ void LoadSavedGame()
 			//go to the next header
 			LoadInfo.BufferPos += header->size;
 			LoadInfo.BufferSpaceLeft -= header->size;
-
+	
 			switch(header->type)
 			{
 				case SaveBlock_MainHeader :

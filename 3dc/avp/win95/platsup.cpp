@@ -221,7 +221,7 @@ char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 	FILE *fp;
 
 	fp = avp_fopen(filename,"rb");
-
+	
 	if (!fp) goto error;
 
 	save_pos = ftell(fp);
@@ -246,7 +246,7 @@ char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 	if (sizePtr) {
 		*sizePtr = (size_t)size_of_file;
 	}
-
+			
 	fclose(fp);
 	return bufferPtr;
 	
