@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   DrawSmallMenuCharacter draws nothing when the font texture has a zero width or height
+
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -1049,6 +1052,11 @@ void DrawSmallMenuCharacter(uint32_t topX, uint32_t topY, uint32_t texU, uint32_
 	uint32_t textureHeight = 0;
 
 	Tex_GetDimensions(AAFontImageNumber, textureWidth, textureHeight);
+
+	// the font texture is missing or empty: draw nothing rather than inf/NaN texture coordinates
+	if (textureWidth == 0 || textureHeight == 0) {
+		return;
+	}
 
 	float RecipW = 1.0f / textureWidth; // 0.00390625
 	float RecipH = 1.0f / textureHeight;
