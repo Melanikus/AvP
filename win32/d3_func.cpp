@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   PrintD3DMatrix formats into its buffer with a size limit (_snprintf, not sprintf)
+
 #include "d3_func.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
@@ -861,7 +864,7 @@ void ToggleFrustumCull()
 void PrintD3DMatrix(const char* name, D3DXMATRIX &mat)
 {
 	char buf[300];
-	sprintf(buf, "Printing D3D Matrix: - %s\n"
+	_snprintf(buf, sizeof(buf) - 1, "Printing D3D Matrix: - %s\n"
 	"\t %f \t %f \t %f \t %f\n"
 	"\t %f \t %f \t %f \t %f\n"
 	"\t %f \t %f \t %f \t %f\n"
@@ -870,6 +873,7 @@ void PrintD3DMatrix(const char* name, D3DXMATRIX &mat)
 	mat._21, mat._22, mat._23, mat._24,
 	mat._31, mat._32, mat._33, mat._34,
 	mat._41, mat._42, mat._43, mat._44);
+	buf[sizeof(buf) - 1] = '\0';
 
 	OutputDebugString(buf);
 }

@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   textprint and its variants format into their buffers with a size limit (_vsnprintf, not vsprintf)
+
 #include "3dc.h"
 #include <sys\stat.h>
 #include <string.h>
@@ -678,7 +681,8 @@ int textprint(const char* t, ...)
 			va_list ap;
 		
 			va_start(ap, t);
-			vsprintf(&TextprintBuffer[0], t, ap);
+			_vsnprintf(&TextprintBuffer[0], TEXTPRINT_BUFFER_SIZE - 1, t, ap);
+			TextprintBuffer[TEXTPRINT_BUFFER_SIZE - 1] = '\0';
 			va_end(ap);
 		}
 
@@ -711,7 +715,8 @@ int PrintDebuggingText(const char* t, ...)
 		va_list ap;
 	
 		va_start(ap, t);
-		vsprintf(&TextprintBuffer[0], t, ap);
+		_vsnprintf(&TextprintBuffer[0], TEXTPRINT_BUFFER_SIZE - 1, t, ap);
+		TextprintBuffer[TEXTPRINT_BUFFER_SIZE - 1] = '\0';
 		va_end(ap);
 	}
 
@@ -734,7 +739,8 @@ int ReleasePrintDebuggingText(const char* t, ...)
 		va_list ap;
 	
 		va_start(ap, t);
-		vsprintf(&TextprintBuffer[0], t, ap);
+		_vsnprintf(&TextprintBuffer[0], TEXTPRINT_BUFFER_SIZE - 1, t, ap);
+		TextprintBuffer[TEXTPRINT_BUFFER_SIZE - 1] = '\0';
 		va_end(ap);
 	}
 
@@ -764,7 +770,8 @@ int textprintXY(int x, int y, const char* t, ...)
 			va_list ap;
 		
 			va_start(ap, t);
-			vsprintf(&TextprintBuffer[0], t, ap);
+			_vsnprintf(&TextprintBuffer[0], TEXTPRINT_BUFFER_SIZE - 1, t, ap);
+			TextprintBuffer[TEXTPRINT_BUFFER_SIZE - 1] = '\0';
 			va_end(ap);
 		}
 
@@ -860,7 +867,8 @@ int textprint(const char* t, ...)
 
 	va_start(ap, t);
 
-	vsprintf(&message[0], t, ap);
+	_vsnprintf(&message[0], MaxMsgChars - 1, t, ap);
+	message[MaxMsgChars - 1] = '\0';
 
 	va_end(ap);
 
@@ -928,7 +936,8 @@ int textprintXY(int x, int y, const char* t, ...)
 
 	va_start(ap, t);
 
-	vsprintf(&message[0], t, ap);
+	_vsnprintf(&message[0], MaxMsgChars - 1, t, ap);
+	message[MaxMsgChars - 1] = '\0';
 
 	va_end(ap);
 
