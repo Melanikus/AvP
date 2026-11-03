@@ -5098,6 +5098,27 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		(since they will have been blown off the original hierarchy)
 		*/
 
+		/*
+		The first saved section is always the root: SaveHierarchy writes controller->section_data first
+		(SaveHierarchySectionRecursion), and LoadHierarchy only gets here once the controller's root has the saved
+		root_section_id. If that block is missing, the wrong size or for another section (a damaged or edited file),
+		return before the loops below prune the root, which the controller still points at.
+		*/
+		if (section)
+		{
+			if (!header)
+			{
+				return;
+			}
+
+			block = (HIERARCHY_SECTION_SAVE_BLOCK *) header;
+
+			if (block->header.size != sizeof(*block) || block->IDnumber != section->sempai->IDnumber)
+			{
+				return;
+			}
+		}
+
 		while (header && section)
 		{
 			block = (HIERARCHY_SECTION_SAVE_BLOCK *) header;
