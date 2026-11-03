@@ -1,6 +1,6 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the Debug build's console output is closed properly when the game exits
+//   the Debug build's console output is closed properly on every way the game exits
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -125,6 +125,28 @@ extern bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinIn
 STICKYKEYS startupStickyKeys = {sizeof(STICKYKEYS), 0};
 STICKYKEYS skOff;
 
+#ifdef _ALLOC_CONSOLE
+// The Debug build opens a console window and sends the game's printed text
+// (printf) to it. This is that text stream, kept here so it can be closed.
+static FILE *debugConsole = 0;
+#endif
+
+// Closes the Debug build's console text stream, if it is open. WinMain calls
+// this on each of its own ways out: its normal end and its three early exit()
+// calls. Nothing in the game prints after that point, so no text is lost. Code
+// elsewhere that stops the game with exit() leaves the stream to the C runtime,
+// which closes every open stream when the program ends.
+static void CloseDebugConsole(void)
+{
+#ifdef _ALLOC_CONSOLE
+	if (debugConsole)
+	{
+		fclose(debugConsole);
+		debugConsole = 0;
+	}
+#endif
+}
+
 // entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
@@ -138,7 +160,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 #ifdef _ALLOC_CONSOLE
 	AllocConsole();
-	FILE *debugConsole = freopen("CONOUT$", "wb", stdout);
+	debugConsole = freopen("CONOUT$", "wb", stdout);
 #endif
 
 	skOff = startupStickyKeys;
@@ -282,6 +304,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LobbiedGame = LobbiedGame_Server;
 		if (!Net_InitLobbiedGame())
 		{
+			CloseDebugConsole();
 			exit(0x6364);
 		}
 	}
@@ -291,6 +314,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LobbiedGame = LobbiedGame_Client;
 		if (!Net_InitLobbiedGame())
 		{
+			CloseDebugConsole();
 			exit(0x6364);
 		}
 	}
@@ -359,6 +383,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 		std::string error = "Failed to initialise Direct3D backend.\n" + GetLastErrorMessage();
 		MessageBox(hWndMain, error.c_str(), "Couldn't create render device!", MB_OK | MB_ICONSTOP);
+		CloseDebugConsole();
 		exit(-1);
 	}
 
@@ -695,11 +720,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		FinishCentreMouseThread();
 	}
 
-#ifdef _ALLOC_CONSOLE
-	// the Debug build's console stream, opened at the top of WinMain (the exit() paths leave it to the C runtime)
-	if (debugConsole)
-		fclose(debugConsole);
-#endif
+	CloseDebugConsole();
 
 	return 0;
 }
