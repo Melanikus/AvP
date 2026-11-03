@@ -20,6 +20,8 @@ vcpkg_from_github(
         0011-upstream-28965ede-sharedbook-replace-alloca.patch
         0012-upstream-a629068d-sharedbook-check-allocations.patch
         0013-upstream-1b75110b-page-seek-use-after-free.patch
+        # Our own fixes.
+        0014-reject-value-mapped-books-with-zero-dimensions.patch
 )
 
 vcpkg_cmake_configure(
