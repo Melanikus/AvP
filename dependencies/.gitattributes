@@ -1,0 +1,2 @@
+# Vendored third-party code: keep every file byte-identical to its upstream archive (no line-ending conversion)
+* -text
