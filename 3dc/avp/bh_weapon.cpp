@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
+//   so code scanners can read the file; the game runs the same code as before
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -233,23 +237,12 @@ int FrisbeeSight_FrustumReject(STRATEGYBLOCK *sbPtr,VECTORCH *localOffset,STRATE
 
 	fixed_offset=*localOffset;
 
-	#if 0
-	if ((fixed_offset.vx <0) && (
-		((fixed_offset.vy) < (-fixed_offset.vx))&&(fixed_offset.vy>=0))
- 		||((fixed_offset.vy<0)&&((-fixed_offset.vy) < (-fixed_offset.vx))
- 		)&&(
-		((fixed_offset.vz) < (-fixed_offset.vx))&&(fixed_offset.vz>=0))
- 		||((fixed_offset.vz<0)&&((-fixed_offset.vz) < (-fixed_offset.vx))
- 		)) {
-		/* 90 horizontal, 90 vertical? */
-	#else
 	if (((fixed_offset.vx <0) && (
 		((fixed_offset.vy) < (-fixed_offset.vx))&&(fixed_offset.vy>=0)))
  		|| (((fixed_offset.vy<0)&&((-fixed_offset.vy) < (-fixed_offset.vx))
  		)&&((fixed_offset.vz>0))
  		)) {
 		/* 90 horizontal, 90 vertical? */
-	#endif
 		return(1);
 	} else {
 		return(0);
