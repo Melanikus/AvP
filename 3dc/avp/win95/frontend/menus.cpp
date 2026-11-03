@@ -2907,7 +2907,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				{
 					// copy the session name, leaving of the player count information
 					char *bracket_pos;
-					strcpy(MP_SessionName, SessionData[s].Name);
+					// bounded: Name comes from any machine on the LAN and holds up to 39 characters, MP_SessionName is
+					// 33 bytes (same bytes as strcpy for a name that fits, nothing written past the NUL)
+					size_t nameLength = strnlen(SessionData[s].Name, sizeof(MP_SessionName) - 1);
+					memcpy(MP_SessionName, SessionData[s].Name, nameLength);
+					MP_SessionName[nameLength] = '\0';
 
 					bracket_pos = strrchr(MP_SessionName,'(');
 					if (bracket_pos) {
