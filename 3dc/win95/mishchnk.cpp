@@ -1,3 +1,7 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   File_Chunk::update_file keeps the file name in a std::string, not a char[256]
+
+#include <string>
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
@@ -1024,8 +1028,8 @@ BOOL File_Chunk::update_file()
 	#if DisableLock
 	if (!filename) return FALSE;
 
-	char tempname [256];
-	strcpy (tempname, filename);
+	// a copy, because write_file frees filename before it uses its argument; a level path can be 259 characters
+	std::string tempname (filename);
 
 	List<Shape_Chunk *> slist;
 	list_shapes(&slist);
@@ -1048,7 +1052,7 @@ BOOL File_Chunk::update_file()
 		}
 	}
 
-	return(write_file(tempname));
+	return(write_file(tempname.c_str()));
 
 	#else
 

@@ -1,4 +1,8 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   load_rif / load_rif_non_env build the "Error loading" message in a std::string, not a char[200]
+
 #include <stdlib.h>
+#include <string>
 #include <avp_string.hpp>
 
 #include "list_tem.hpp"
@@ -572,10 +576,10 @@ RIFFHANDLE load_rif(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		char message[200];
-		sprintf(message, "Error loading %s", fname);
+		// fname can be a long custom level path: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message, MB_OK + MB_SYSTEMMODAL);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
 		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
@@ -605,10 +609,10 @@ RIFFHANDLE load_rif_non_env(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		char message[200];
-		sprintf(message, "Error loading %s", fname);
+		// fname can come from a level's RIFCHILD chunk: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message, MB_OK + MB_SYSTEMMODAL);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
 		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
