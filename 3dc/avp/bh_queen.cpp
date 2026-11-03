@@ -35,6 +35,10 @@
 #include "bh_track.h"
 #include "scream.h"
 
+// logString.cpp; declared here rather than by including logString.h, whose C++ headers would change which sqrt
+// overload this file's float code calls
+extern void LogErrorStringC(const char *errorString);
+
 /* external global variables used in this file */
 extern int ModuleArraySize;
 extern char *ModuleCurrVisArray;
@@ -2755,7 +2759,8 @@ void FindQueenObjects()
 		{	
 			if(strstr(sbPtr->name,"QueenAmmo"))
 			{
-				if(NumQueenObjects<QUEEN_MAX_OBJECT)
+				//the queen moves these through their DynPtr (GLOBALASSERT is empty in Release): skip one without
+				if(NumQueenObjects<QUEEN_MAX_OBJECT && sbPtr->DynPtr)
 				{
 					QueenObjectList[NumQueenObjects++]=sbPtr;	
 					GLOBALASSERT(sbPtr->DynPtr);
@@ -2764,13 +2769,21 @@ void FindQueenObjects()
 			}
 			else if(!strcmp(sbPtr->name,"a1door"))
 			{
-				UpperAirlockDoorSbptr=sbPtr;	
-				UpperAirlockDoorStart=sbPtr->DynPtr->Position;
+				//the airlock code reads the door's position: a door without a DynPtr is left out
+				//(HandleHangarAirlock then skips the airlock)
+				if(sbPtr->DynPtr)
+				{
+					UpperAirlockDoorSbptr=sbPtr;
+					UpperAirlockDoorStart=sbPtr->DynPtr->Position;
+				}
 			}
 			else if(!strcmp(sbPtr->name,"a3door"))
 			{
-				LowerAirlockDoorSbptr=sbPtr;	
-				LowerAirlockDoorStart=sbPtr->DynPtr->Position;
+				if(sbPtr->DynPtr)
+				{
+					LowerAirlockDoorSbptr=sbPtr;
+					LowerAirlockDoorStart=sbPtr->DynPtr->Position;
+				}
 			}
 			else if(!strcmp(sbPtr->name,"locker door"))
 			{
@@ -4506,13 +4519,26 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 static BOOL LockerDoorIsClosed()
 {
 	TRACK_OBJECT_BEHAV_BLOCK* door;
+	static BOOL logged = FALSE;
 	GLOBALASSERT(LockerDoorSbptr);
+	//GLOBALASSERT is empty in Release: with no "locker door" in the level (or one without its track data) there is
+	//no closed locker door, instead of a NULL dereference
+	if(!LockerDoorSbptr)
+	{
+		if(!logged) { LogErrorStringC("LockerDoorIsClosed - the level has no \"locker door\""); logged = TRUE; }
+		return FALSE;
+	}
 	if(LockerDoorSbptr->SBflags.destroyed_but_preserved) return FALSE;
 	GLOBALASSERT(LockerDoorSbptr->SBdataptr);
 	
 	door=(TRACK_OBJECT_BEHAV_BLOCK*)LockerDoorSbptr->SBdataptr;
 
 	GLOBALASSERT(door->to_track);
+	if(!door || !door->to_track)
+	{
+		if(!logged) { LogErrorStringC("LockerDoorIsClosed - the \"locker door\" has no track"); logged = TRUE; }
+		return FALSE;
+	}
 
 	if(door->to_track->reverse && !door->to_track->playing) return TRUE;
 
@@ -4532,6 +4558,15 @@ void HandleHangarAirlock()
 		GLOBALASSERT(LowerAirlockDoorSbptr);
 		GLOBALASSERT(LowerAirlockDoorSbptr->DynPtr);
 		
+		//GLOBALASSERT is empty in Release: without both airlock doors ("a1door", "a3door") there is no airlock to
+		//handle, instead of a NULL dereference (the doors stay "closed", as FindQueenObjects left them)
+		if(!UpperAirlockDoorSbptr || !UpperAirlockDoorSbptr->DynPtr || !LowerAirlockDoorSbptr || !LowerAirlockDoorSbptr->DynPtr)
+		{
+			static BOOL logged = FALSE;
+			if(!logged) { LogErrorStringC("HandleHangarAirlock - the level has no airlock doors a1door / a3door"); logged = TRUE; }
+			return;
+		}
+
 
 		//check to see which of the airlock doors are open
 		{
