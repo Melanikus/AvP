@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   Config_Load builds each key without its spaces in a plain loop (was erase + std::remove)
+
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -92,9 +95,13 @@ bool Config_Load()
 				continue;
 			}
 
-			// get the variable part and remove any spaces
-			std::string variable = tempLine.substr(0, equalsPosition);
-			variable.erase(std::remove(variable.begin(), variable.end(),' '), variable.end());
+			// get the variable part, without its spaces
+			std::string variable;
+			for (size_t i = 0; i < equalsPosition; i++) {
+				if (tempLine[i] != ' ') {
+					variable += tempLine[i];
+				}
+			}
 
 			// get the value part, skipping the = character and a single space after that if present. we dont want to remove any spaces after that (as they may be part of a file path)
 			std::string value = tempLine.substr(equalsPosition + 1, std::string::npos);
