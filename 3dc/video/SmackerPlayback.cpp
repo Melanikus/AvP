@@ -251,7 +251,12 @@ void *SmackerDecodeThread(void *args)
 
 		pthread_mutex_unlock(&fmv->_frameCriticalSection);
 
-		uint32_t audioSize = Smacker_GetAudioData(fmv->_handle, trackIndex, (int16_t*)fmv->_audioDataBuffer);
+		// without an audio track there is no audio buffer, ring buffer or stream (Open only makes them for
+		// _nAudioTracks > 0), so only ask for audio data when there is a track
+		uint32_t audioSize = 0;
+		if (fmv->_nAudioTracks) {
+			audioSize = Smacker_GetAudioData(fmv->_handle, trackIndex, (int16_t*)fmv->_audioDataBuffer);
+		}
 
 		if (audioSize)
 		{
