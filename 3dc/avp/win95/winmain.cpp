@@ -1,4 +1,5 @@
-
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   WinMain closes the Debug build's console stream when it returns
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -136,7 +137,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 #ifdef _ALLOC_CONSOLE
 	AllocConsole();
-	freopen("CONOUT$", "wb", stdout);
+	FILE *debugConsole = freopen("CONOUT$", "wb", stdout);
 #endif
 
 	skOff = startupStickyKeys;
@@ -692,6 +693,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	{
 		FinishCentreMouseThread();
 	}
+
+#ifdef _ALLOC_CONSOLE
+	// the Debug build's console stream, opened at the top of WinMain (the exit() paths leave it to the C runtime)
+	if (debugConsole)
+		fclose(debugConsole);
+#endif
 
 	return 0;
 }
