@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P19: sticky overread flag instead of assert (port of libsmackerdec SM-P10)
+ */
+
 #ifndef _BinkBitReader_h_
 #define _BinkBitReader_h_
 
@@ -46,6 +51,7 @@ class BitReader
 
 		uint8_t cache;
 		uint32_t nCachedBits;
+		bool overread; // set (and kept) once a read went past totalSize
 
 		void FillCache();
 };

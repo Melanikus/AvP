@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P19: sticky overread flag instead of assert (port of libsmackerdec SM-P10)
+ */
+
 #include <assert.h>
 #include "BitReader.h"
 
@@ -29,6 +34,8 @@ BitReader::BitReader(BinkCommon::FileStream &file, uint32_t size)
 	this->nCachedBits = 0;
 	this->currentOffset = 0;
 	this->bytesRead = 0;
+	this->cache = 0;
+	this->overread = false;
 
 	FillCache();
 }
@@ -48,8 +55,11 @@ void BitReader::FillCache()
 	}
 	else
 	{
-		// TODO: handle this case?
-		assert(0);
+		// past the end: read nothing more from the file, and return 0 bits from now on
+		// (nCachedBits must not wrap below 0 in GetBit)
+		overread = true;
+		this->cache = 0;
+		nCachedBits = 8;
 	}
 }
 
