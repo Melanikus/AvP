@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   fill_data_block copies strings with memcpy of their measured length
 #include "avp_chunk.hpp"
 #include "md5.h"
 
@@ -40,7 +42,7 @@ void AVP_Generator_Chunk::fill_data_block (char * data_start)
 	*(data_start) = extra2;
 	data_start ++;
 	
-	strcpy (data_start, name);
+	memcpy (data_start, name, strlen(name) + 1);
 }
 
 size_t AVP_Generator_Chunk::size_chunk ()
@@ -246,7 +248,7 @@ void AVP_Generator_Extra_Name_Chunk::fill_data_block(char* data_start)
 	*((int *) data_start) = chunk_size;
 	data_start += 4;
 
-	strcpy(data_start,name);
+	memcpy(data_start,name,strlen(name)+1);
 }
 
 
@@ -516,7 +518,7 @@ void AVP_Power_Cable_Chunk::fill_data_block(char* data)
 
 	if(name)
 	{
-		strcpy(data,name);
+		memcpy(data,name,strlen(name)+1);
 	}
 	else
 	{

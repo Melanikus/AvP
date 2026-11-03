@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   fill_data_block copies strings with memcpy of their measured length
 #include "hierplace.hpp"
 #include "md5.h"
 
@@ -117,7 +119,7 @@ void Placed_Hierarchy_Data_Chunk::fill_data_block(char* data)
 
 	if(name)
 	{
-		strcpy(data,name);
+		memcpy(data,name,strlen(name)+1);
 	}
 	else
 	{
