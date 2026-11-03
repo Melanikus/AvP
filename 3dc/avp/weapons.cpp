@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed four switched-off (#if 0) weapon messages that could never run, and could not even
-//   be built (they wrote into a "tempstring" this file never declares)
+//   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
+//   this file never declares, and a never-compiled #else branch
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -6271,7 +6271,6 @@ void PredPistol_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 	/* Are we running? */
 
-	#if 1
 	if ( (Player->ObStrategyBlock->DynPtr->LinVelocity.vx!=0)
 		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vy!=0)
 		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vz!=0) ) {
@@ -6287,9 +6286,6 @@ void PredPistol_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 			}
 		}
 	} else {
-	#else
-	{
-	#endif
 		TEMPLATE_WEAPON_DATA *twPtr;
 
 		twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
