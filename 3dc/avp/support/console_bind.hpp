@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   key bindings are made by a small function that hands them back (it works the same as before)
+//   key bindings are made by a small function that hands them back (it works the same as before);
+//   a comment now says correctly who frees them
 /*
 	
 	consbind.hpp
@@ -117,7 +118,8 @@
 		);
 		~KeyBinding();
 
-		// creates a binding; it adds itself to List_pKeyBindings, which deletes it (UnbindAll, WriteToConfigFile)
+		// creates a binding, which adds itself to List_pKeyBindings. The list only holds a pointer and frees nothing:
+		// ParseUnbindCommand, UnbindAll and WriteToConfigFile each delete the bindings they remove
 		static KeyBinding* Make
 		(
 			BindableKey theKey_ToUse,

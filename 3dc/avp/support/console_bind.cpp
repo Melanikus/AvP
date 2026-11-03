@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code; temporary text objects are let go automatically, not by hand;
-//   key bindings are made by a small function that hands them back (it works the same as before)
+//   key bindings are made by a small function that hands them back (it works the same as before);
+//   UNBIND now really frees the key bindings it removes
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbind.cpp
@@ -212,7 +213,12 @@ KeyBinding :: ParseUnbindCommand
 				GLOBALASSERT(oi());
 				if ( oi() -> theKey == theKey_ToUnbind )
 				{
-					oi . delete_current();
+					// the list only holds a pointer to each binding, so taking it off the list would not free it.
+					// Step past it first, then delete it: its destructor takes it off the list and lets go of its text.
+					// (A key bound to UNBIND itself is safe: Maintain keeps its own hold on the text while it runs.)
+					KeyBinding* pKeyBinding = oi();
+					oi . next();
+					delete pKeyBinding;
 				}
 				else
 				{
