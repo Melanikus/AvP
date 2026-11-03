@@ -325,6 +325,11 @@ void LoadMultiplayerConfiguration(const char* name)
 
 	netGameData.gameType    = (NETGAME_TYPE)file.GetUint32LE();
 	netGameData.levelNumber = file.GetInt32LE();
+	// (bounded: the number indexes the level name and episode arrays, and the menu only reduces it with %=, which
+	// keeps a negative number negative; SaveMultiplayerConfiguration never writes a negative one)
+	if (netGameData.levelNumber < 0) {
+		netGameData.levelNumber = 0;
+	}
 	netGameData.scoreLimit  = file.GetInt32LE();
 	netGameData.timeLimit   = file.GetInt32LE();
 	netGameData.invulnerableTime = file.GetInt32LE();
