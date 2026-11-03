@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (ExpandedIdentifier, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
+//   TLT_Config_Chunk: parse the TLTCONFG chunk only inside its size
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
@@ -402,24 +403,51 @@ RIF_IMPLEMENT_DYNCREATE("TLTCONFG",TLT_Config_Chunk)
 
 TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * sdata, size_t ssize)
 : Chunk (parent, "TLTCONFG")
-, num_shades_white(*(unsigned int const *)sdata)
-, table_size(*(unsigned int const *)(sdata+4))
-, palette_size(*(unsigned int const *)(sdata+12))
-, flags(*(unsigned int const *)(sdata+8))
+, srcrifname(0)
+, num_shades_white(0)
+, table_size(256)
+, palette_size(0)
+, flags(0)
 {
+	reserved[0] = reserved[1] = reserved[2] = 0;
+
+	// sdata is ssize bytes of a .rif file (level data, possibly a custom level): read nothing past it.
+	// A chunk too short for a field keeps the defaults, or the blocks that fit.
+	char const * const sdata_end = sdata + ssize;
+
+	if (ssize < 28) {
+		return;
+	}
+
+	num_shades_white = *(unsigned int const *)sdata;
+	table_size       = *(unsigned int const *)(sdata+4);
+	flags            = TLTCC_Flags(*(unsigned int const *)(sdata+8));
+	palette_size     = *(unsigned int const *)(sdata+12);
 	if (!table_size) table_size = 256;
 
 	sdata+=16;
 
 	for (int i=0; i<3; ++i, sdata+=4) reserved[i] = *(int *)sdata;
-	
-	unsigned int const len = strlen(sdata)+4&~3;
+
+	// the name, its NUL and its padding must all be inside the chunk (a name with no NUL gives len > room)
+	size_t const room = sdata_end - sdata;
+	unsigned int const len = strnlen(sdata, room)+4&~3;
+	if (len > room) {
+		return;
+	}
 	srcrifname = new char[len];
 	memcpy(srcrifname,sdata,len);
 	sdata += len;
-	
+
+	if (sdata_end - sdata < 4) {
+		return;
+	}
 	unsigned int listsize = *(int *)sdata;
 	sdata += 4;
+
+	// keep only the blocks that fit (TLTConfigBlock::Size() is 48)
+	size_t const blocks_that_fit = (sdata_end - sdata) / 48;
+	if (listsize > blocks_that_fit) listsize = (unsigned int)blocks_that_fit;
 
 	while (listsize)
 	{
