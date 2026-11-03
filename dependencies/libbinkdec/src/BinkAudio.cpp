@@ -43,6 +43,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P4: never copy past the audio buffer; count only the bytes copied
+ */
+
 #include "BinkDecoder.h"
 #include "BinkAudio.h"
 #include "Util.h"
@@ -213,8 +218,6 @@ void BinkDecoder::AudioPacket(uint32_t trackIndex, uint32_t packetSize)
 
 	AudioTrack *track = audioTracks[trackIndex];
 
-	uint8_t *bufferPtr = track->buffer;
-
 	// each call to DecodeAudioBlock should produce this many bytes
 	uint32_t bytesDone = track->blockSize * 2;
 
@@ -222,10 +225,17 @@ void BinkDecoder::AudioPacket(uint32_t trackIndex, uint32_t packetSize)
 	{
 		DecodeAudioBlock(trackIndex, bits);
 
-		memcpy(bufferPtr, track->blockBuffer, std::min(track->bufferSize - track->bytesReadThisFrame, bytesDone));
-		bufferPtr += bytesDone;
+		// copy only what still fits in the buffer, but keep decoding the whole
+		// packet so the file position stays in step with the stream
+		uint32_t room = 0;
+		if (track->buffer && track->bytesReadThisFrame < track->bufferSize)
+			room = track->bufferSize - track->bytesReadThisFrame;
 
-		track->bytesReadThisFrame += bytesDone;
+		uint32_t bytesCopied = std::min(room, bytesDone);
+		if (bytesCopied)
+			memcpy(track->buffer + track->bytesReadThisFrame, track->blockBuffer, bytesCopied);
+
+		track->bytesReadThisFrame += bytesCopied;
 
 		// align to a 32 bit boundary
 		int n = (-(int)bits.GetPosition()) & 31;
