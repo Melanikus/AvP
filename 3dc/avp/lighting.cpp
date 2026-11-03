@@ -240,7 +240,7 @@ void LightBlockDeallocation(void)
 *      LIGHT ELEMENT CODE         *
 *                                 *
 ******************************KJL*/
-#define MAX_NO_OF_LIGHTELEMENTS 500
+// MAX_NO_OF_LIGHTELEMENTS (500) is in lighting.h
 LIGHTELEMENT LightElementStorage[MAX_NO_OF_LIGHTELEMENTS];
 int NumActiveLightElements;
 
