@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   LevelName has room for any custom level name and the "-n" name from the command line is limited to
-//   it; the Debug build's console output is closed properly on every way the game exits
+//   it; the Debug build's console output is closed properly on every way the game exits; the "-ip" address
+//   from the command line is limited to its buffer
 
 #include "3dc.h"
 #include "module.h"
@@ -328,8 +329,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	if (instr = strstr(command_line, "-ip"))
 	{
-		char buffer[100];
-		sscanf(instr, "-ip %s", buffer);
+		// buffer starts empty, in case nothing follows "-ip"; %99s stops after 99 characters, which leaves room for
+		// the end marker, so a long command line cannot run past the end of buffer
+		char buffer[100] = "";
+		sscanf(instr, "-ip %99s", buffer);
 		strncpy(CommandLineIPAddressString,buffer,15);
 		CommandLineIPAddressString[15] = 0;
 	}
