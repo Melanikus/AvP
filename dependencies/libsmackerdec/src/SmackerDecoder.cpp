@@ -48,6 +48,7 @@
  *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
  *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
  *   SM-P4: fail Open on a bad header tree; default tables and 'last' indexes
+ *   SM-P5: limit tree recursion depth (CVE-2017-16803); unsigned prefix shift
  */
 
 #include "SmackerDecoder.h"
@@ -245,6 +246,9 @@ const int kFlagRingFrame = 0x01;
 
 const int kTreeBits = 9;
 const int kSMKnode = 0x80000000;
+
+const int kTreeDecodeMaxRecursion    = 32;  // longest code DecodeTree accepts
+const int kTreeDecodeBigMaxRecursion = 500; // deepest node DecodeBigTree accepts
 
 const int kSMK2iD = 'SMK2';
 const int kSMK4iD = 'SMK4';
@@ -475,6 +479,13 @@ bool SmackerDecoder::Open(const std::string &fileName)
 // static int smacker_decode_tree(GetBitContext *gb, HuffContext *hc, uint32_t prefix, int length)
 int SmackerDecoder::DecodeTree(SmackerCommon::BitReader &bits, HuffContext *hc, uint32_t prefix, int length)
 {
+	// each node recurses once: bound the code length, and with it the stack depth
+	if (length > kTreeDecodeMaxRecursion)
+	{
+		SmackerCommon::LogError("Maximum tree recursion level exceeded");
+		return -1;
+	}
+
     if (!bits.GetBit()) // Leaf
 	{
         if (hc->current >= 256){
@@ -500,15 +511,22 @@ int SmackerDecoder::DecodeTree(SmackerCommon::BitReader &bits, HuffContext *hc, 
         r = DecodeTree(bits, hc, prefix, length);
         if (r)
             return r;
-        return DecodeTree(bits, hc, prefix | (1 << (length - 1)), length);
+        return DecodeTree(bits, hc, prefix | (1U << (length - 1)), length);
     }
 }
 
 /**
  * Decode header tree
  */
-int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *hc, DBCtx *ctx)
+int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *hc, DBCtx *ctx, int depth)
 {
+	// a deeper tree could overflow the stack
+	if (depth > kTreeDecodeBigMaxRecursion)
+	{
+		SmackerCommon::LogError("Maximum bigtree recursion level exceeded");
+		return -1;
+	}
+
 	// nodes and leaves alike: only the first 'length' entries hold tree entries,
 	// the 3 after them are reserved for the 'last' indexes (DecodeHeaderTree)
 	if (hc->current >= hc->length){
@@ -559,12 +577,12 @@ int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *h
         int r = 0, r_new, t;
 
         t = hc->current++;
-        r = DecodeBigTree(bits, hc, ctx);
+        r = DecodeBigTree(bits, hc, ctx, depth + 1);
         if (r < 0)
             return r;
         hc->values[t] = kSMKnode | r;
         r++;
-        r_new = DecodeBigTree(bits, hc, ctx);
+        r_new = DecodeBigTree(bits, hc, ctx, depth + 1);
         if (r_new < 0)
             return r_new;
         return r + r_new;
@@ -657,7 +675,7 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
     huff.current = 0;
 	huff.values.resize(huff.length + 3);
 
-	if (DecodeBigTree(bits, &huff, &ctx) < 0)
+	if (DecodeBigTree(bits, &huff, &ctx, 0) < 0)
 		err = -1;
 
     bits.SkipBits(1);

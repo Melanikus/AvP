@@ -42,6 +42,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P5: DecodeBigTree takes a recursion depth (CVE-2017-16803)
+ */
+
 #ifndef _SmackerDecoder_h_
 #define _SmackerDecoder_h_
 
@@ -157,7 +162,7 @@ class SmackerDecoder
 		bool DecodeHeaderTrees();
 		int DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector<int> &recodes, int *last, int size);
 		int DecodeTree(SmackerCommon::BitReader &bits, HuffContext *hc, uint32_t prefix, int length);
-		int DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *hc, DBCtx *ctx);
+		int DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *hc, DBCtx *ctx, int depth);
 		int GetCode(SmackerCommon::BitReader &bits, std::vector<int> &recode, int *last);
 		int ReadPacket();
 		int DecodeFrame(uint32_t frameSize);
