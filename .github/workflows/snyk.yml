@@ -93,21 +93,31 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
+          mkdir -p results
           for d in libsrc/*/*/; do
             d=${d%/}
+            lib=$(basename "$(dirname "$d")")
             echo "================ $d ($(find "$d" -type f | wc -l) files)"
-            snyk code test "$d" --sarif-file-output=code.sarif > /dev/null 2>&1 || true
-            if [ -f code.sarif ]; then
-              echo "-- SAST coverage: $(jq -c '.runs[0].properties.coverage // "none"' code.sarif)"
+            snyk code test "$d" --sarif-file-output="results/$lib.code.sarif" > /dev/null 2>&1 || true
+            if [ -f "results/$lib.code.sarif" ]; then
+              echo "-- SAST coverage: $(jq -c '.runs[0].properties.coverage // "none"' "results/$lib.code.sarif")"
               echo "-- SAST results by rule:"
-              jq -r '.runs[0].results[].ruleId' code.sarif | sort | uniq -c
-              rm -f code.sarif
+              jq -r '.runs[0].results[].ruleId' "results/$lib.code.sarif" | sort | uniq -c
             else
               echo "-- SAST: no SARIF written"
             fi
             echo "-- SCA (--unmanaged):"
-            (cd "$d" && snyk test --unmanaged --print-dep-paths 2>&1 | grep -E 'Dependencies:|@|confidence|Tested|issues|✗' | head -20) || true
+            (cd "$d" && snyk test --unmanaged --json > "$GITHUB_WORKSPACE/results/$lib.sca.json" 2>/dev/null) || true
+            jq -r '.vulnerabilities[]? | "  " + .severity + "  " + .id + "  " + .title + "  CVE: " + ((.identifiers.CVE // []) | join(",")) + "  fixed in: " + ((.fixedIn // []) | join(","))' "results/$lib.sca.json" 2>/dev/null | sort -u
           done
+
+      - name: Keep the full reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-scan-results
+          path: results
+          retention-days: 7
 
   parse-probe:
     name: Find the files Snyk Code cannot parse
