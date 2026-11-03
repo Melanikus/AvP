@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the disabled (#if 0) body of Net_ConnectToAddress; the "connect" console command still does nothing
+
 #include "3dc.h"
 #include "enet\enet.h"
 #include "console.h"
@@ -520,136 +523,6 @@ uint32_t Net_JoinGame()
 // called from the console
 void Net_ConnectToAddress()
 {
-#if 0
-	if (Con_GetNumArguments() == 0)
-	{
-		Con_PrintMessage("usage: connect <ip>:<port>, eg 192.168.0.1:1234");
-		return;
-	}
-
-	// make sure we're not already connected
-	//Net_Disconnect();
-
-	if (host)
-	{
-		// TODO
-		Con_PrintError("already connected to something!");
-	}
-
-	// parse the argument list
-	std::string addressString = Con_GetArgument(0);
-	std::string tempString;
-	static ENetAddress connectionAddress;
-	size_t colonPos = 0;
-	ENetEvent eEvent;
-
-	colonPos = addressString.find(":");
-	tempString = addressString.substr(0, colonPos);
-
-	Con_PrintMessage(tempString);
-
-	enet_address_set_host(&connectionAddress, tempString.c_str());
-	connectionAddress.port = (uint16_t)Util::StringToInt(addressString.substr(colonPos + 1));
-
-	// try connect
-	host = enet_host_create(NULL,           // create a client host
-					1,                      // only allow 1 outgoing connection
-					0,                      // channel limit
-					incomingBandwidth,      // 57600 / 8 - 56K modem with 56 Kbps downstream bandwidth
-					outgoingBandwidth);     // 14400 / 8 - 56K modem with 14 Kbps upstream bandwidth
-
-	if (NULL == host)
-	{
-		Con_PrintError("Net_ConnectToAddress - Failed to create Enet client");
-		return;
-	}
-	
-	ServerPeer = enet_host_connect(host, &connectionAddress, 2, 0);
-	if (NULL == ServerPeer)
-	{
-		Con_PrintError("Net_ConnectToAddress - Failed to init connection to server host");
-		return;
-	}
-
-	// Wait up to 3 seconds for the connection attempt to succeed.
-	if ((enet_host_service(host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_CONNECT))
-	{	
-		Con_PrintDebugMessage("Net_ConnectToAddress - we connected to server!");
-	}
-	else
-	{
-		Con_PrintError("Net_ConnectToAddress - failed to connect to server!");
-		return;
-	}
-
-	// ask for session info
-	Net_SendSystemMessage(AVP_REQUEST_SESSION_INFO, 0, 0, NULL, 0);
-
-	if ((enet_host_service (host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_RECEIVE))
-	{
-		Con_PrintDebugMessage("Net_ConnectToAddress - we got something from the server!");
-		MemoryReadStream rs(eEvent.packet->data, eEvent.packet->dataLength);
-
-		MessageHeader newHeader;
-		rs.GetBytes(&newHeader, kMessageHeaderSize);
-
-		if (newHeader.messageType == AVP_SESSION_DATA)
-		{
-			// get the hosts ip address for later use
-//			enet_address_get_host_ip(&eEvent.peer->address, SessionData[NumberOfSessionsFound].hostAddress, 16);
-
-			SessionDescription tempSession;
-
-			// grab the session description struct
-			rs.GetBytes(&tempSession, sizeof(SessionDescription));
-
-			uint16_t gameStyle = tempSession.gameStyle;
-			uint16_t level     = tempSession.level;
-
-			sprintf(SessionData[NumberOfSessionsFound].Name,"%s (%d/%d)", tempSession.sessionName, tempSession.nPlayers, tempSession.maxPlayers);
-
-			SessionData[NumberOfSessionsFound].Guid	= tempSession.guidInstance;
-
-			if (tempSession.nPlayers < tempSession.maxPlayers) {
-				SessionData[NumberOfSessionsFound].AllowedToJoin = true;
-			}
-			else {
-				SessionData[NumberOfSessionsFound].AllowedToJoin = false;
-			}
-
-			// multiplayer version number (possibly)
-			if (tempSession.version != kMultiplayerVersion)
-			{
-				float version = 1.0f + tempSession.version / 100.0f;
-				SessionData[NumberOfSessionsFound].AllowedToJoin = false;
-				sprintf(SessionData[NumberOfSessionsFound].Name, "%s (V %.2f)", tempSession.sessionName, version);
-			}
-			else
-			{
-				// get the level number in our list of levels (assuming we have the level)
-				int local_index = GetLocalMultiplayerLevelIndex(level, tempSession.levelName, gameStyle); // bjd - CHECKME
-
-				if (local_index < 0)
-				{
-					// we don't have the level, so ignore this session
-					//return;
-				}
-
-				SessionData[NumberOfSessionsFound].levelIndex = local_index;
-			}
-/*
-			if (!Net_CreatePlayer("TestName"))
-				return;
-*/
-			InitAVPNetGameForJoin();
-
-			netGameData.levelNumber = SessionData[NumberOfSessionsFound].levelIndex;
-			netGameData.joiningGameStatus = JOINNETGAME_WAITFORSTART;
-		}
-
-		enet_packet_destroy(eEvent.packet);
-	}
-#endif
 }
 
 int Net_InitLobbiedGame()
