@@ -2,17 +2,18 @@
 #
 # Snyk (snyk.yml) can't parse a lot of modern C++. CodeQL reads C and C++ the way a compiler does, so it reaches code
 # Snyk can't, and two different readers miss different things. It runs in two ways:
-#   - "Build mode none" reads files straight from disk, guessing the compiler's settings. It reaches every file, even
-#     ones the build never uses, but the guesses make it less exact.
 #   - "Traced" watches the real compiler while it builds. It's the most exact way to read code, but it only sees what
 #     the build compiles.
+#   - "Build mode none" reads files straight from disk, guessing the compiler's settings. It reaches every file, even
+#     ones the build never uses, but the guesses make it less exact. So it only adds to a traced scan, it never replaces one.
 #
 # The jobs:
+#   - CodeQL (SAST) on our code watches the real build of the game (Release, x86), which also proves that the game
+#     builds on a clean machine.
 #   - Get the vcpkg libraries for CodeQL builds our open-source dependencies once and hands their source and headers to
-#     the jobs below. It finds nothing by itself, but those jobs can't run without it.
-#   - CodeQL (SAST) on our code reads every C/C++ file in git with build mode none. It can't be traced yet because this
-#     branch has no project that builds with Visual Studio 2026. That comes with the BUILD-1 pull request, and a traced
-#     job for our code joins this file then.
+#     the two build mode none jobs. It finds nothing by itself, but those jobs can't run without it.
+#   - CodeQL (SAST) on every file of ours reads every C/C++ file in git with build mode none, including what the game's
+#     projects never compile (enet/, for one).
 #   - CodeQL (SAST) on the vcpkg libraries watches vcpkg build the libraries, with the same flags and patches the game
 #     uses. Tracing matters most here: only a real build creates files such as openal-soft's generated headers.
 #   - CodeQL (SAST) on all library source reads every file of those libraries with build mode none, including tests,
@@ -42,6 +43,93 @@ env:
   CODEQL_OVERLAY_DATABASE_MODE: none
 
 jobs:
+  codeql-own:
+    name: CodeQL (SAST) on our code
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    permissions:
+      contents: read
+      security-events: write   # upload the report to code scanning
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
+      # bootstrap-vcpkg validates the signature of the vcpkg tool it downloads.
+      - name: Get vcpkg at the manifest's baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $root checkout -q FETCH_HEAD
+          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # Done before CodeQL starts watching: this job is about our code, and the job after it scans the libraries. The
+      # game's project looks for them in this same folder, so its own vcpkg step then has nothing left to build.
+      - name: Build the libraries the game needs
+        shell: pwsh
+        run: |
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows `
+            --x-install-root="$env:GITHUB_WORKSPACE\vcpkg_installed" --disable-metrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Get the pinned CodeQL tools
+        id: tools
+        uses: ./.github/actions/codeql-bundle
+
+      - name: Start CodeQL
+        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          tools: ${{ steps.tools.outputs.path }}
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality,./.github/codeql/read-problems
+          trap-caching: false
+
+      # The same command we build with by hand. If the game doesn't build, this job fails here.
+      - name: Build the game while CodeQL watches
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' |
+            Select-Object -First 1
+          if (-not $msbuild) { throw 'MSBuild was not found' }
+          & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Analyse our code
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          category: codeql-own
+          output: ${{ runner.temp }}/codeql-sarif
+          upload: always
+          upload-database: false
+
+      - name: Fail on any finding, or any code CodeQL could not read
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: >-
+          ./.github/scripts/codeql-gate.ps1 -Kind own -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
+          -SourceRoot "$env:GITHUB_WORKSPACE" -ReportFolder "$env:RUNNER_TEMP\codeql-report"
+
+      - name: Keep the reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codeql-own-report
+          path: |
+            ${{ runner.temp }}/codeql-report
+            ${{ runner.temp }}/codeql-sarif
+            ${{ runner.temp }}/codeql_databases/*/log
+            ${{ runner.temp }}/codeql_databases/*/diagnostic
+          retention-days: 7
+
   codeql-prepare:
     name: Get the vcpkg libraries for CodeQL
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
@@ -108,8 +196,8 @@ jobs:
           path: ${{ runner.temp }}/installed/x86-windows/include
           retention-days: 1
 
-  codeql-own:
-    name: CodeQL (SAST) on our code
+  codeql-own-all:
+    name: CodeQL (SAST) on every file of ours
     needs: codeql-prepare
     # A required check that's skipped counts as passed, so this job always runs. If the job above failed, the download
     # below finds nothing and this job fails too, which keeps the gate closed.
@@ -130,6 +218,9 @@ jobs:
           name: codeql-library-headers
           path: vcpkg_installed/x86-windows/include
 
+      - name: Set up the x86 compiler
+        uses: ./.github/actions/msvc-x86
+
       - name: Get the pinned CodeQL tools
         id: tools
         uses: ./.github/actions/codeql-bundle
@@ -143,10 +234,10 @@ jobs:
           queries: security-and-quality,./.github/codeql/read-problems
           trap-caching: false
 
-      - name: Analyse our code
+      - name: Analyse every file of ours
         uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
-          category: codeql-own
+          category: codeql-own-all
           output: ${{ runner.temp }}/codeql-sarif
           upload: always
           upload-database: false
@@ -155,14 +246,14 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: >-
-          ./.github/scripts/codeql-gate.ps1 -Kind own -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
+          ./.github/scripts/codeql-gate.ps1 -Kind own-all -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
           -SourceRoot "$env:GITHUB_WORKSPACE" -ReportFolder "$env:RUNNER_TEMP\codeql-report"
 
       - name: Keep the reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: codeql-own-report
+          name: codeql-own-all-report
           path: |
             ${{ runner.temp }}/codeql-report
             ${{ runner.temp }}/codeql-sarif
@@ -292,6 +383,9 @@ jobs:
         with:
           name: codeql-library-headers
           path: libsrc/installed-include
+
+      - name: Set up the x86 compiler
+        uses: ./.github/actions/msvc-x86
 
       - name: Get the pinned CodeQL tools
         id: tools
