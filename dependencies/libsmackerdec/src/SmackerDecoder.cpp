@@ -47,6 +47,7 @@
  *   SM-P1: bound each audio chunk by the audio buffer; cap frame 0's audio size
  *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
  *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
+ *   SM-P4: fail Open on a bad header tree; default tables and 'last' indexes
  */
 
 #include "SmackerDecoder.h"
@@ -171,6 +172,17 @@ SmackerDecoder::SmackerDecoder()
 	for (int i = 0; i < kMaxAudioTracks; i++)
 	{
 		audioTracks[i].buffer = 0;
+	}
+
+	// start with the 2-entry "skipped" tables, so DecodeFrame never sees an empty table
+	mmap_tbl.resize(2);
+	mclr_tbl.resize(2);
+	full_tbl.resize(2);
+	type_tbl.resize(2);
+
+	for (int i = 0; i < 3; i++)
+	{
+		mmap_last[i] = mclr_last[i] = full_last[i] = type_last[i] = 1;
 	}
 }
 
@@ -410,7 +422,11 @@ bool SmackerDecoder::Open(const std::string &fileName)
 
 	memset(palette, 0, 768);
 	
-	DecodeHeaderTrees();
+	if (!DecodeHeaderTrees())
+	{
+		SmackerCommon::LogError("Can't decode the header trees");
+		return false;
+	}
 
 	// set nextPos to where we are now, as next data is frame 1
 	nextPos = file.GetPosition();
@@ -684,7 +700,8 @@ bool SmackerDecoder::DecodeHeaderTrees()
 	}
 	else
 	{
-		DecodeHeaderTree(bits, mmap_tbl, mmap_last, mMapSize);
+		if (DecodeHeaderTree(bits, mmap_tbl, mmap_last, mMapSize) < 0)
+			return false;
 	}
 
 	if (!bits.GetBit())
@@ -696,7 +713,8 @@ bool SmackerDecoder::DecodeHeaderTrees()
 	}
 	else
 	{
-		DecodeHeaderTree(bits, mclr_tbl, mclr_last, MClrSize);
+		if (DecodeHeaderTree(bits, mclr_tbl, mclr_last, MClrSize) < 0)
+			return false;
 	}
 
 	if (!bits.GetBit())
@@ -708,7 +726,8 @@ bool SmackerDecoder::DecodeHeaderTrees()
 	}
 	else
 	{
-		DecodeHeaderTree(bits, full_tbl, full_last, fullSize);
+		if (DecodeHeaderTree(bits, full_tbl, full_last, fullSize) < 0)
+			return false;
 	}
 
 	if (!bits.GetBit())
@@ -720,7 +739,8 @@ bool SmackerDecoder::DecodeHeaderTrees()
 	}
 	else
 	{
-		DecodeHeaderTree(bits, type_tbl, type_last, typeSize);
+		if (DecodeHeaderTree(bits, type_tbl, type_last, typeSize) < 0)
+			return false;
 	}
 
 	/* FIXME - we don't seems to read/use EVERY bit we 'load' into the bit reader
