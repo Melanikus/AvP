@@ -1,10 +1,13 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (ExpandedIdentifier, add_rif_entry, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
 //   BMP_Flags::operator= copies the file name with memcpy of its measured length
+//   Environment_Game_Mode_Header_Chunk keeps its rif file names in a std::vector<std::string>
 
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
 
+#include <string>
+#include <vector>
 #include "chunk.hpp"
 #include "bitmap_names.hpp"
 
@@ -577,9 +580,9 @@ public:
 	{
 		if (flags & GameModeFlag_Editable)
 			return "this.rif";
-		if (!rif_files.size())
+		if (rif_files.empty())
 			return "unknown.rif";
-		return rif_files.first_entry();
+		return rif_files[0].c_str();
 	}
 	
 private:
@@ -590,7 +593,7 @@ private:
 	friend class GameModeDlg;
 	friend class GameModeRifDlg;
 
-	List<char *> rif_files; // where the game mode goes to or comes from
+	std::vector<std::string> rif_files; // where the game mode goes to or comes from
 	
 	#define ChunkGMod_NumReserved 3
 	int reserved[ChunkGMod_NumReserved];

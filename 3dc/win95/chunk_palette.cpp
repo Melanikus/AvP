@@ -3,6 +3,7 @@
 //   TLT_Config_Chunk: parse the TLTCONFG chunk only inside its size
 //   copies into buffers sized from the same string use memcpy with that length
 //   fill_data_block copies strings with memcpy of their measured length
+//   Environment_Game_Mode_Header_Chunk keeps its rif file names in a std::vector<std::string>
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
@@ -581,9 +582,7 @@ Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_Wit
 	{
 		size_t len = strlen(pdata)+1;
 
-		char * riffn = new char[len];
-		strcpy(riffn,pdata);
-		rif_files.add_entry(riffn);
+		rif_files.push_back(pdata);
 
 		pdata += len;
 	}
@@ -595,12 +594,6 @@ Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_Wit
 Environment_Game_Mode_Header_Chunk::~Environment_Game_Mode_Header_Chunk()
 {
 	delete[] mode_identifier;
-
-	while (rif_files.size())
-	{
-		delete[] rif_files.first_entry();
-		rif_files.delete_first_entry();
-	}
 }
 	
 
@@ -629,11 +622,11 @@ void Environment_Game_Mode_Header_Chunk::fill_data_block ( char * data_start)
 
 	data_start += strlen(mode_identifier) + 1;
 
-	for (LIF<char *> li(&rif_files); !li.done(); li.next())
+	for (size_t i = 0; i < rif_files.size(); ++i)
 	{
-		memcpy(data_start,li(),strlen(li())+1);
+		memcpy(data_start,rif_files[i].c_str(),rif_files[i].size()+1);
 
-		data_start += strlen(li())+1;
+		data_start += rif_files[i].size()+1;
 	}
 
 	*data_start = 0; // double 0-byte terminator
@@ -644,9 +637,9 @@ size_t Environment_Game_Mode_Header_Chunk::size_chunk ()
 {
 	chunk_size = 12+20+(strlen(mode_identifier)+1);
 
-	for (LIF<char *> li(&rif_files); !li.done(); li.next())
+	for (size_t i = 0; i < rif_files.size(); ++i)
 	{
-		chunk_size += strlen(li())+1;
+		chunk_size += rif_files[i].size()+1;
 	}
 
 	chunk_size += 4; // 1 byte terminator, 3(max) to pad
