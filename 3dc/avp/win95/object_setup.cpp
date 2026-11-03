@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   copies into buffers sized from the same string use memcpy with that length
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -3716,8 +3718,9 @@ void setup_sounds (Environment_Data_Chunk *envd)
 			else
 				stt->loop=1;
 
-			stt->sound_name = (char*) PoolAllocateMem(strlen (snd->wav_name) + 1);
-			strcpy(stt->sound_name, snd->wav_name);
+			size_t const sound_name_size = strlen (snd->wav_name) + 1;
+			stt->sound_name = (char*) PoolAllocateMem(sound_name_size);
+			memcpy(stt->sound_name, snd->wav_name, sound_name_size);
 			stt->sound_loaded = GetSoundForMainRif(snd->wav_name);
 
 			AddToBehaviourList(snd->snd_name,snd->CalculateID(), I_BehaviourPlacedSound, (void *) stt);

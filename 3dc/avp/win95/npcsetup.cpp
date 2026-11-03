@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   copies into buffers sized from the same string use memcpy with that length
 #include "npcsetup.h"
 #include "ourasert.h"
 #include "list_tem.hpp"
@@ -132,8 +134,9 @@ LoadedNPC::LoadedNPC(RIF_Child_Chunk const * rcc)
 			strcpy(filename,DIRECTORY_FOR_RIFS);
 			strcat(filename,fnptr);
 
-			rifname = new char[strlen(rcc->rifname)+1];
-			strcpy(rifname,rcc->rifname);
+			size_t const rifname_size = strlen(rcc->rifname)+1;
+			rifname = new char[rifname_size];
+			memcpy(rifname,rcc->rifname,rifname_size);
 		}
 	}
 }

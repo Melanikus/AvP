@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   copies into buffers sized from the same string use memcpy with that length
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -190,8 +192,10 @@ const char* GetMultiplayerConfigDescription(int index)
 		if (name[6] >= '1' && name[6] <= '7' && name[7] == '\0')
 		{
 			TEXTSTRING_ID string_index = (TEXTSTRING_ID)(TEXTSTRING_MPCONFIG1_DESCRIPTION+(name[6]-'1'));
-			LastDescriptionText = new char[strlen(GetTextString(string_index))+1];
-			strcpy(LastDescriptionText,GetTextString(string_index));
+			const char *descriptionText = GetTextString(string_index);
+			size_t const descriptionSize = strlen(descriptionText)+1;
+			LastDescriptionText = new char[descriptionSize];
+			memcpy(LastDescriptionText,descriptionText,descriptionSize);
 			
 			return LastDescriptionText;
 		}

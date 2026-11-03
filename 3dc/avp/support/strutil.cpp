@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   STRUTIL_SC_StrCpy copies with memcpy of STRUTIL_SC_NumBytes, the size its callers allocate
 /*
 
 	STRUTIL.C
@@ -205,7 +207,9 @@ ProjChar* STRUTIL_SC_StrCpy
 	GLOBALASSERT(pProjCh_Dst);
 	GLOBALASSERT(pProjCh_Src);
 
-	return (strcpy(pProjCh_Dst,pProjCh_Src));
+	// every caller sizes pProjCh_Dst with STRUTIL_SC_NumBytes(pProjCh_Src)
+	memcpy(pProjCh_Dst, pProjCh_Src, STRUTIL_SC_NumBytes(pProjCh_Src));
+	return pProjCh_Dst;
 }
 
 void STRUTIL_SC_FastCat

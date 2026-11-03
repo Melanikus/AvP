@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   copies into buffers sized from the same string use memcpy with that length
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -408,8 +410,9 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 
 	GLOBALASSERT (rnc);
 
-	riffname = (char*) PoolAllocateMem(strlen (rnc->rif_name)+1);
-	strcpy (riffname, rnc->rif_name);
+	size_t const riffname_size = strlen (rnc->rif_name)+1;
+	riffname = (char*) PoolAllocateMem(riffname_size);
+	memcpy (riffname, rnc->rif_name, riffname_size);
 
 	rif_hand=h;
 
@@ -582,8 +585,9 @@ void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp
 	Object_Hierarchy_Name_Chunk * ohnc = ohc->get_name();
 	if (ohnc)
 	{
-		hd->hierarchy_name = (char*)PoolAllocateMem(strlen (ohnc->hierarchy_name) + 1);
-		strcpy (hd->hierarchy_name, ohnc->hierarchy_name);
+		size_t const hierarchy_name_size = strlen (ohnc->hierarchy_name) + 1;
+		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_size);
+		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_size);
 	}
 	else
 	{ // throw back from old system, no new hierarchies should be created with no name
@@ -621,10 +625,11 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 
 		Hierarchy_Alternate_Shape_Set* hass=(Hierarchy_Alternate_Shape_Set*) PoolAllocateMem(sizeof(Hierarchy_Alternate_Shape_Set));
 		
-		hass->shape_set_name=(char*) PoolAllocateMem(strlen(ohassc->Shape_Set_Name)+1);
+		size_t const shape_set_name_size=strlen(ohassc->Shape_Set_Name)+1;
+		hass->shape_set_name=(char*) PoolAllocateMem(shape_set_name_size);
 		hass->index=ohassc->Shape_Set_Num;
 		hass->num_replaced_shapes=ohassc->Replaced_Shape_List.size();
-		strcpy(hass->shape_set_name,ohassc->Shape_Set_Name);
+		memcpy(hass->shape_set_name,ohassc->Shape_Set_Name,shape_set_name_size);
 
 		hass->flags=ohassc->flags;
 
@@ -633,8 +638,9 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 		HIERARCHY_SHAPE_REPLACEMENT* hsr=hass->replaced_shapes;
 		for(LIF<Replaced_Shape_Details*> rlif(&ohassc->Replaced_Shape_List);!rlif.done();rlif.next(),hsr++)
 		{
-			hsr->replaced_section_name=(char*) PoolAllocateMem(strlen(rlif()->old_object_name)+1);
-			strcpy(hsr->replaced_section_name,rlif()->old_object_name);
+			size_t const section_name_size=strlen(rlif()->old_object_name)+1;
+			hsr->replaced_section_name=(char*) PoolAllocateMem(section_name_size);
+			memcpy(hsr->replaced_section_name,rlif()->old_object_name,section_name_size);
 
 			hsr->replacement_id = 0;
 
@@ -823,8 +829,9 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 	currsection->Hierarchy_Name=hierarchy_name;
 	currsection->Rif_Name=riffname;
 
-	currsection->Section_Name = (char *)PoolAllocateMem (strlen (ohdc->ob_name) + 1);
-	strcpy (currsection->Section_Name, ohdc->ob_name);
+	size_t const section_name_size = strlen (ohdc->ob_name) + 1;
+	currsection->Section_Name = (char *)PoolAllocateMem (section_name_size);
+	memcpy (currsection->Section_Name, ohdc->ob_name, section_name_size);
 
 	if (ohdc->object)
 	{
