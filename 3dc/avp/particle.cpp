@@ -3476,6 +3476,19 @@ void HandleRainInTrench(int numberOfRaindrops)
 	while (--i);
 }
 
+// FastRandom()%range, except that a range of 0 (the module bounds HandleRainShaft uses are equal) gives 0 instead of
+// dividing by zero. FastRandom() is still called once, as before.
+static int RainShaftRandomOffset(int range)
+{
+	int r = FastRandom();
+
+	if (range == 0) {
+		return 0;
+	}
+
+	return r % range;
+}
+
 void HandleRainShaft(MODULE *modulePtr, int bottomY, int topY, int numberOfRaindrops)
 {
 	int i = numberOfRaindrops;
@@ -3506,8 +3519,8 @@ void HandleRainShaft(MODULE *modulePtr, int bottomY, int topY, int numberOfRaind
 		if (particlePtr->LifeTime<=0)
 		{
 			particlePtr->Position.vy = topY;
-			particlePtr->Position.vx = modulePtr->m_world.vx+modulePtr->m_minx+(FastRandom()%(modulePtr->m_maxz-modulePtr->m_minx));
-			particlePtr->Position.vz = modulePtr->m_world.vz+modulePtr->m_minz+(FastRandom()%(modulePtr->m_maxz-modulePtr->m_minz));
+			particlePtr->Position.vx = modulePtr->m_world.vx+modulePtr->m_minx+RainShaftRandomOffset(modulePtr->m_maxz-modulePtr->m_minx);
+			particlePtr->Position.vz = modulePtr->m_world.vz+modulePtr->m_minz+RainShaftRandomOffset(modulePtr->m_maxz-modulePtr->m_minz);
 			particlePtr->Velocity.vy = (FastRandom()&8191)+15000;
 			particlePtr->Velocity.vx = (FastRandom()&1023)-512;
 			particlePtr->Velocity.vz = (FastRandom()&1023)-512;
