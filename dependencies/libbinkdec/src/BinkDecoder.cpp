@@ -43,6 +43,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P1: reject frame sizes of 0 or above 7680 x 4800 in Open
+ */
+
 #include "BinkDecoder.h"
 #include "LogError.h"
 #include "FFmpeg_includes.h"
@@ -254,6 +259,14 @@ bool BinkDecoder::Open(const std::string &fileName)
 
 	frameWidth  = file.ReadUint32LE();
 	frameHeight = file.ReadUint32LE();
+
+	// reject sizes the plane and bundle buffers are not sized for (FFmpeg's limit is 7680 x 4800)
+	if (!frameWidth || !frameHeight || frameWidth > 7680 || frameHeight > 4800)
+	{
+		BinkCommon::LogError("Invalid frame size");
+		return false;
+	}
+
 	fpsDividend = file.ReadUint32LE();
 	fpsDivider  = file.ReadUint32LE();
 	videoFlags  = file.ReadUint32LE();
