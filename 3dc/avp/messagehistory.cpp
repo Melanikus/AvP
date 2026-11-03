@@ -110,11 +110,22 @@ void Load_MessageHistory(SAVE_BLOCK_HEADER* header)
 
 	int expected_size;
 
+	//the entries are copied into MessageHistoryStore[MAX_NO_OF_MESSAGES_IN_HISTORY]: the count must fit it and the block
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumberOfEntriesInMessageHistory, sizeof(MessageHistory), MAX_NO_OF_MESSAGES_IN_HISTORY)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(MessageHistory) * block->NumberOfEntriesInMessageHistory;
 	if(header->size != expected_size) return;
 	
+	//EntryToNextShow indexes the entries (MessageHistory_DisplayPrevious shows entry EntryToNextShow-1), and each
+	//entry's StringID goes to GetTextString: reject a block whose values could not have been saved
+	if(block->EntryToNextShow < 0 || block->EntryToNextShow > block->NumberOfEntriesInMessageHistory) return;
+	for(i=0;i<block->NumberOfEntriesInMessageHistory;i++)
+	{
+		if((int)saved_message[i].StringID < 0 || (int)saved_message[i].StringID >= MAX_NO_OF_TEXTSTRINGS) return;
+	}
+
 	//load the stuff then
 	NumberOfEntriesInMessageHistory = block->NumberOfEntriesInMessageHistory;
 	EntryToNextShow = block->EntryToNextShow;
