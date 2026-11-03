@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the mouse, pad and trackerball speeds read from a saved profile are kept within their menu sliders'
+//   range right where they are used, so a broken profile cannot make the look or turn amounts overflow
 /*------------------------------- Patrick 21/10/96 ------------------------------
   Source for reading player inputs.
   Note that whilst ReadUserInput() reads raw input data, the functions in this
@@ -1458,6 +1462,20 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 
 	if (GotMouse)
 	{
+		// The mouse speeds (sensitivities) come from the player's saved profile, a
+		// file on disk. A broken or edited file could hold a huge speed, and a
+		// mouse movement multiplied by it would overflow: go past the largest number
+		// an int can hold and wrap round, which would swing the view wildly. So each
+		// speed is kept here, where it is used, within its menu slider's range (0 to
+		// 3 times the default). Loading a profile already keeps them in that range
+		// (user_profile.cpp), so for every profile this changes nothing.
+		unsigned int mouseXSensitivity = ControlMethods.MouseXSensitivity;
+		if (mouseXSensitivity > DEFAULT_MOUSEX_SENSITIVITY*3)
+			mouseXSensitivity = DEFAULT_MOUSEX_SENSITIVITY*3;
+		unsigned int mouseYSensitivity = ControlMethods.MouseYSensitivity;
+		if (mouseYSensitivity > DEFAULT_MOUSEY_SENSITIVITY*3)
+			mouseYSensitivity = DEFAULT_MOUSEY_SENSITIVITY*3;
+
 		if (ControlMethods.HAxisIsTurning)
 		{
 #if 1 // REVERT - turning left and right
@@ -1466,7 +1484,7 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnLeft = 1;
 				playerStatusPtr->Mvt_AnalogueTurning = 1;
 //				playerStatusPtr->Mvt_TurnIncrement = ((int)MouseVelX)*ControlMethods.MouseXSensitivity;
-				playerStatusPtr->Mvt_TurnIncrement = MouseVelX * ControlMethods.MouseXSensitivity;
+				playerStatusPtr->Mvt_TurnIncrement = MouseVelX * mouseXSensitivity;
 //				playerStatusPtr->Mvt_TurnIncrement = -50; //MouseVelX;
 			   
 			}
@@ -1475,7 +1493,7 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnRight = 1;
 				playerStatusPtr->Mvt_AnalogueTurning = 1;
 //				playerStatusPtr->Mvt_TurnIncrement = ((int)MouseVelX)*ControlMethods.MouseXSensitivity;
-				playerStatusPtr->Mvt_TurnIncrement = MouseVelX * ControlMethods.MouseXSensitivity;
+				playerStatusPtr->Mvt_TurnIncrement = MouseVelX * mouseXSensitivity;
 //				playerStatusPtr->Mvt_TurnIncrement = 50; //MouseVelX;
 			}
 
@@ -1494,12 +1512,12 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 			if (MouseVelX < 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_SideStepLeft = 1;
-				playerStatusPtr->Mvt_SideStepIncrement = ((int)MouseVelX)*ControlMethods.MouseXSensitivity;
+				playerStatusPtr->Mvt_SideStepIncrement = ((int)MouseVelX)*mouseXSensitivity;
 			}
 			else if (MouseVelX > 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_SideStepRight = 1;
-				playerStatusPtr->Mvt_SideStepIncrement = ((int)MouseVelX)*ControlMethods.MouseXSensitivity;
+				playerStatusPtr->Mvt_SideStepIncrement = ((int)MouseVelX)*mouseXSensitivity;
 			}
 	   		
 	   		if (playerStatusPtr->Mvt_SideStepIncrement < -ONE_FIXED)
@@ -1513,12 +1531,12 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 			if (MouseVelY < 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_Forward = 1;
-			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*ControlMethods.MouseYSensitivity;
+			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
 			}
 			else if (MouseVelY > 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_Backward = 1;
-			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*ControlMethods.MouseYSensitivity;
+			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
 			}
 	   	
 	   		if (playerStatusPtr->Mvt_MotionIncrement < -ONE_FIXED)
@@ -1542,7 +1560,7 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookUp = 1;
 				playerStatusPtr->Mvt_AnaloguePitching = 1;
-				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY * ControlMethods.MouseYSensitivity;
+				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY * mouseYSensitivity;
 //				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY;
 //				playerStatusPtr->Mvt_PitchIncrement = -50;
 			}
@@ -1550,7 +1568,7 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookDown = 1;
 				playerStatusPtr->Mvt_AnaloguePitching = 1;
-				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY * ControlMethods.MouseYSensitivity;
+				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY * mouseYSensitivity;
 //				playerStatusPtr->Mvt_PitchIncrement = newMouseVelY;
 //				playerStatusPtr->Mvt_PitchIncrement = 50;
 			}
@@ -1574,18 +1592,25 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 //		sprintf(buf, "pad y: %d\n", xPadLookY);
 //		OutputDebugString(buf);
 
+		// The pad's look speed (it uses the trackerball's vertical speed) comes from
+		// the saved profile too: kept within its slider's range here for the same
+		// reason as the mouse speeds above.
+		unsigned int padLookSensitivity = JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+		if (padLookSensitivity > DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3)
+			padLookSensitivity = DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3;
+
 		/* looking up and down */
 		if (xPadLookY < 0)
 		{
 			playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookUp = 1;
 			playerStatusPtr->Mvt_AnaloguePitching = 1;
-			playerStatusPtr->Mvt_PitchIncrement = xPadLookY * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+			playerStatusPtr->Mvt_PitchIncrement = xPadLookY * padLookSensitivity;
 		}
 		else if (xPadLookY > 0)
 		{
 			playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookDown = 1;
 			playerStatusPtr->Mvt_AnaloguePitching = 1;
-			playerStatusPtr->Mvt_PitchIncrement = xPadLookY * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+			playerStatusPtr->Mvt_PitchIncrement = xPadLookY * padLookSensitivity;
 		}
 
 		/* looking left and right */
@@ -1593,13 +1618,13 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 		{
 			playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnLeft = 1;
 			playerStatusPtr->Mvt_AnaloguePitching = 1;
-			playerStatusPtr->Mvt_TurnIncrement = xPadLookX * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+			playerStatusPtr->Mvt_TurnIncrement = xPadLookX * padLookSensitivity;
 		}
 		else if (xPadLookX > 0)
 		{
 			playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnRight = 1;
 			playerStatusPtr->Mvt_AnaloguePitching = 1;
-			playerStatusPtr->Mvt_TurnIncrement = xPadLookX * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+			playerStatusPtr->Mvt_TurnIncrement = xPadLookX * padLookSensitivity;
 		}
 
 		if (JoystickControlMethods.JoystickFlipVerticalAxis) 
@@ -1829,31 +1854,40 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 				trackerballV = -trackerballV;
 			}
 
+			// The trackerball speeds come from the saved profile too: kept within their
+			// sliders' range here for the same reason as the mouse speeds above.
+			unsigned int trackerballHSensitivity = JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity;
+			if (trackerballHSensitivity > DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3)
+				trackerballHSensitivity = DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3;
+			unsigned int trackerballVSensitivity = JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+			if (trackerballVSensitivity > DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3)
+				trackerballVSensitivity = DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3;
+
 			if (trackerballH < 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnLeft = 1;
 				playerStatusPtr->Mvt_AnalogueTurning = 1;
-				playerStatusPtr->Mvt_TurnIncrement = trackerballH * JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity;
+				playerStatusPtr->Mvt_TurnIncrement = trackerballH * trackerballHSensitivity;
 			   
 			}
 			else if (trackerballH > 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_TurnRight = 1;
 				playerStatusPtr->Mvt_AnalogueTurning = 1;
-				playerStatusPtr->Mvt_TurnIncrement = trackerballH * JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity;
+				playerStatusPtr->Mvt_TurnIncrement = trackerballH * trackerballHSensitivity;
 
 			}
 			if (trackerballV < 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookUp = 1;
 				playerStatusPtr->Mvt_AnaloguePitching = 1;
-				playerStatusPtr->Mvt_PitchIncrement = trackerballV * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;
+				playerStatusPtr->Mvt_PitchIncrement = trackerballV * trackerballVSensitivity;
 			}
 			else if (trackerballV > 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_LookDown = 1;
 				playerStatusPtr->Mvt_AnaloguePitching = 1;
-				playerStatusPtr->Mvt_PitchIncrement = trackerballV * JoystickControlMethods.JoystickTrackerBallVerticalSensitivity;;
+				playerStatusPtr->Mvt_PitchIncrement = trackerballV * trackerballVSensitivity;
 			}
 		}
 					   
