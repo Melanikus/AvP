@@ -198,7 +198,8 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		int i = NumActiveLightElements;
 		LIGHTELEMENT *lightElementPtr = LightElementStorage;
-		while (i--)
+		// same bound as the object lights above: LightSourcesForObject holds MaxLightsPerObject entries
+		while (i-- && NumLightSourcesForObject < MaxLightsPerObject)
 		{
 			LIGHTBLOCK *lptr = &(lightElementPtr->LightBlock);
 			VECTORCH vertexToLight;
