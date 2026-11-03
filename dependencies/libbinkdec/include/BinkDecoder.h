@@ -46,6 +46,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   BK-P2: pad the plane buffers for 16x16 blocks and zero-fill them
+ *   BK-P7: allocate planes and bundles without throwing; report failure
  */
 
 #ifndef _BinkDecoder_h_
@@ -53,6 +54,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <new>
 #include "FileStream.h"
 #include "BinkAudio.h"
 #include "BinkVideo.h"
@@ -125,13 +127,13 @@ struct Plane
 		uint32_t paddedHeight = ((height + 15) & ~15u) + 16;
 
 		// zero-filled, so a frame never shows uninitialised memory
-		current = new uint8_t[paddedWidth * paddedHeight]();
-		last    = new uint8_t[paddedWidth * paddedHeight]();
+		current = new (std::nothrow) uint8_t[paddedWidth * paddedHeight]();
+		last    = new (std::nothrow) uint8_t[paddedWidth * paddedHeight]();
 		this->width  = width;
 		this->height = height;
 		this->pitch  = paddedWidth;
 
-		return true;
+		return current != 0 && last != 0;
 	}
 
 	void Swap()
@@ -198,7 +200,7 @@ class BinkDecoder
 		uint8_t GetHuffSymbol(BinkCommon::BitReader &bits, Tree &tree);
 
 		// video related functions
-		void InitBundles();
+		bool InitBundles();
 		void FreeBundles();
 		void InitLengths(int width, int bw);
 		void ReadBundle(BinkCommon::BitReader &bits, int bundle_num);

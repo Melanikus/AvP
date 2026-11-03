@@ -47,6 +47,7 @@
  * Modified 2026-11-03 for the AvP port:
  *   BK-P2: zero-fill the bundle buffers
  *   BK-P3: size the bundle lengths from the frame width
+ *   BK-P7: allocate the bundles without throwing; report failure
  */
 
 #include "BinkDecoder.h"
@@ -94,7 +95,7 @@ void BinkDecoder::InitLengths(int width, int bw)
 }
 
 // Allocate memory for bundles.
-void BinkDecoder::InitBundles()
+bool BinkDecoder::InitBundles()
 {
 	int bw = (frameWidth  + 7) >> 3;
 	int bh = (frameHeight + 7) >> 3;
@@ -103,9 +104,13 @@ void BinkDecoder::InitBundles()
 	for (int i = 0; i < BINK_NB_SRC; i++)
 	{
 		// zero-filled, so values read past a short bundle are not heap contents
-		bundle[i].data = new uint8_t[blocks * 64]();
+		bundle[i].data = new (std::nothrow) uint8_t[blocks * 64]();
+		if (!bundle[i].data)
+			return false;
 		bundle[i].data_end = bundle[i].data + blocks * 64;
 	}
+
+	return true;
 }
 
 void BinkDecoder::FreeBundles()

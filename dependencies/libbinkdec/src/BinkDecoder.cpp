@@ -49,6 +49,7 @@
  *   BK-P2: give the alpha plane the full frame size
  *   BK-P5: return at most the 3 planes a YUVbuffer holds
  *   BK-P6: reject more than 256 audio tracks
+ *   BK-P7: cap the audio buffer size; fail Open when an allocation fails
  */
 
 #include "BinkDecoder.h"
@@ -342,11 +343,23 @@ bool BinkDecoder::Open(const std::string &fileName)
 			// size in bytes of largest decoded audio
 			uint32_t reportedSize = file.ReadUint32LE();
 
+			// 4 MB is over 20 seconds of 48 kHz 16-bit stereo (the stock videos ask for 138,240 bytes)
+			if (reportedSize > (1u << 22))
+			{
+				BinkCommon::LogError("Invalid audio buffer size");
+				return false;
+			}
+
 			AudioTrack *track = audioTracks[trackIndex];
 
 			// size in bytes
+			track->buffer = new (std::nothrow) uint8_t[reportedSize];
+			if (!track->buffer)
+			{
+				BinkCommon::LogError("Can't allocate audio buffer");
+				return false;
+			}
 			track->bufferSize = reportedSize;
-			track->buffer = new uint8_t[reportedSize];
 
 			// skip to next audio track (and -4 for reportedSize int we read) 
 			file.Skip(audioPacketSize-4);
@@ -360,7 +373,11 @@ bool BinkDecoder::Open(const std::string &fileName)
 	hasAlpha = videoFlags & kFlagAlpha;
 	swapPlanes = signature >= kBIKhID;
 
-	InitBundles();
+	if (!InitBundles())
+	{
+		BinkCommon::LogError("Can't allocate bundle memory");
+		return false;
+	}
 	InitTrees();
 
 	uint32_t width  = frameWidth;
@@ -390,6 +407,15 @@ bool BinkDecoder::Open(const std::string &fileName)
 	{
 		planes.push_back(newPlane);
 		planes.back().Init(frameWidth, frameHeight);
+	}
+
+	for (uint32_t i = 0; i < planes.size(); i++)
+	{
+		if (!planes[i].current || !planes[i].last)
+		{
+			BinkCommon::LogError("Can't allocate plane memory");
+			return false;
+		}
 	}
 
 	return true;
