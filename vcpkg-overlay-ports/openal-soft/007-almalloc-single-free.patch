@@ -1,0 +1,60 @@
+Free aligned memory in one place only.
+
+Our own patch (AvP). This code is only built for macOS older than 10.13. The
+six functions each freed a different block, so nothing was ever freed twice,
+but only one needs to call free: the others can pass the request on, the way
+the operator new functions above them do.
+
+diff --git a/common/almalloc.cpp b/common/almalloc.cpp
+index 68b5b63..3e9034e 100644
+--- a/common/almalloc.cpp
++++ b/common/almalloc.cpp
+@@ -1,3 +1,5 @@
++// Modified 2026-11-03 by Melanikus for the AvP port:
++//   only one of the old macOS "give memory back" functions below calls free now, and the others call that one
+ 
+ #include "almalloc.h"
+ 
+@@ -30,22 +32,30 @@ auto operator new(std::size_t const len, std::align_val_t const align) -> gsl::o
+ auto operator new[](std::size_t const len, std::align_val_t const align) -> gsl::owner<void*>
+ { return operator new(len, align); }
+ 
++/* These are all the ways C++ can ask to give aligned memory back. Each one is
++ * called once per block of memory. Only the first really frees it, and the
++ * others pass the request on to it, the same way the "new" functions above do.
++ * With just one place that gives memory back, there is only one line to get
++ * right, and no way for two of them to disagree.
++ */
+ auto operator delete(gsl::owner<void*> const ptr, std::align_val_t) noexcept -> void
+ { free(ptr); }
+-auto operator delete[](gsl::owner<void*> const ptr, std::align_val_t) noexcept -> void
+-{ free(ptr); }
+-
+-auto operator delete(gsl::owner<void*> const ptr, std::size_t, std::align_val_t) noexcept -> void
+-{ free(ptr); }
+-auto operator delete[](gsl::owner<void*> const ptr, std::size_t, std::align_val_t) noexcept -> void
+-{ free(ptr); }
++auto operator delete[](gsl::owner<void*> const ptr, std::align_val_t const align) noexcept -> void
++{ operator delete(ptr, align); }
+ 
+-auto operator delete(gsl::owner<void*> const ptr, std::align_val_t, std::nothrow_t const&) noexcept
+-    -> void
+-{ free(ptr); }
+-auto operator delete[](gsl::owner<void*> const ptr, std::align_val_t, std::nothrow_t const&)
++auto operator delete(gsl::owner<void*> const ptr, std::size_t, std::align_val_t const align)
+     noexcept -> void
+-{ free(ptr); }
++{ operator delete(ptr, align); }
++auto operator delete[](gsl::owner<void*> const ptr, std::size_t, std::align_val_t const align)
++    noexcept -> void
++{ operator delete(ptr, align); }
++
++auto operator delete(gsl::owner<void*> const ptr, std::align_val_t const align,
++    std::nothrow_t const&) noexcept -> void
++{ operator delete(ptr, align); }
++auto operator delete[](gsl::owner<void*> const ptr, std::align_val_t const align,
++    std::nothrow_t const&) noexcept -> void
++{ operator delete(ptr, align); }
+ 
+ #endif
+ #endif

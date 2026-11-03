@@ -1,0 +1,141 @@
+Harden the settings file reader.
+
+Our own patch (AvP). Upstream master at 2959d5c2 still has the code this
+replaces. See the comments in the code.
+
+- Trim a setting's name one character at a time, not with a sum that relies
+  on a number wrapping around past zero.
+- Give isspace and isalnum a value from 0 to 255. An accented letter in a
+  settings file used to reach them as a negative number.
+- Check the folders from HOME and XDG_CONFIG_HOME the way XDG_CONFIG_DIRS is
+  checked already: tidy the path up, and ignore one that is not complete.
+
+diff --git a/alc/alconfig.cpp b/alc/alconfig.cpp
+index fe82573..13b5663 100644
+--- a/alc/alconfig.cpp
++++ b/alc/alconfig.cpp
+@@ -17,6 +17,9 @@
+  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+  * Or go to http://www.gnu.org/copyleft/lgpl.html
+  */
++// Modified 2026-11-03 by Melanikus for the AvP port:
++//   the settings file reader now opens files the way the rest of this file does, checks the folders it is
++//   given by environment variables, and handles odd characters and key names without any risky arithmetic
+ 
+ #include "config.h"
+ 
+@@ -135,7 +138,13 @@ auto validate_utf8(const std::string_view str) -> bool
+ 
+ auto lstrip(std::string &line) -> std::string&
+ {
+-    auto iter = std::ranges::find_if_not(line, [](const char c) { return std::isspace(c); });
++    /* The "is this a space?" check only accepts letters as numbers from 0 to
++     * 255. On Windows an accented letter in a settings file is stored as a
++     * negative number, which that check must never be given (a debug build
++     * stops with an error). as_unsigned turns it into its 0 to 255 value first.
++     */
++    auto iter = std::ranges::find_if_not(line,
++        [](const char c) { return std::isspace(as_unsigned(c)); });
+     line.erase(line.begin(), iter);
+     return line;
+ }
+@@ -171,8 +180,11 @@ auto expdup(std::string_view str) -> std::string
+         const auto hasbraces = bool{str.front() == '{'};
+         if(hasbraces) str.remove_prefix(1);
+ 
++        /* Same care as in lstrip: an accented letter must reach this check as
++         * a number from 0 to 255, never as a negative one.
++         */
+         const auto envenditer = std::ranges::find_if_not(str,
+-            [](const char c) { return c == '_' || std::isalnum(c); });
++            [](const char c) { return c == '_' || std::isalnum(as_unsigned(c)); });
+ 
+         if(hasbraces && (envenditer == str.end() || *envenditer != '}'))
+             continue;
+@@ -296,7 +308,14 @@ void LoadConfigFromFile(std::istream &f)
+             continue;
+         }
+         auto keypart = std::string_view{buffer}.substr(0, sep++);
+-        keypart.remove_suffix(keypart.size() - (keypart.find_last_not_of(whitespace_chars)+1));
++        /* Remove any spaces between the setting's name and the '=' sign, one
++         * character at a time from the end. Doing it this way needs no sums,
++         * so a line in a broken settings file has no number it could push past
++         * its limit. If the name was nothing but spaces, nothing is left, and
++         * the check just below reports the line as malformed.
++         */
++        while(!keypart.empty() && whitespace_chars.find(keypart.back()) != std::string_view::npos)
++            keypart.remove_suffix(1);
+         if(keypart.empty())
+         {
+             ERR(" config parse error on line {}: malformed option \"{}\"", linenum, buffer);
+@@ -430,6 +449,34 @@ void ReadALConfig()
+ 
+ #else
+ 
++namespace {
++
++/* Gets a folder from an environment variable, ready for looking up a settings
++ * file in it. An environment variable can hold anything, so the path is tidied
++ * up first (a part like "x/../" is worked out and removed) and it must be a
++ * complete path that starts at the top of the disk, the same rule used for the
++ * XDG folders below. A partial path would mean something different depending on
++ * the folder the program happens to be started from, so it is ignored. That is
++ * also what the XDG standard says to do with one. An unset variable or an
++ * ignored path gives back an empty path.
++ */
++auto GetEnvConfigDir(gsl::czstring const envname) -> fs::path
++{
++    auto dir = fs::path{};
++    if(auto value = al::getenv(envname))
++    {
++        dir = fs::path{*value}.lexically_normal();
++        if(!dir.is_absolute())
++        {
++            WARN("Ignoring {} dir: {}", envname, al::u8_as_char(dir.u8string()));
++            dir.clear();
++        }
++    }
++    return dir;
++}
++
++} // namespace
++
+ void ReadALConfig()
+ {
+     auto path = fs::path{"/etc/openal/alsoft.conf"};
+@@ -486,9 +533,9 @@ void ReadALConfig()
+     }
+ #endif
+ 
+-    if(auto homedir = al::getenv("HOME"))
++    path = GetEnvConfigDir("HOME");
++    if(!path.empty())
+     {
+-        path = *homedir;
+         path /= ".alsoftrc";
+ 
+         TRACE("Loading config {}...", al::u8_as_char(path.u8string()));
+@@ -496,19 +543,14 @@ void ReadALConfig()
+             LoadConfigFromFile(f);
+     }
+ 
+-    if(auto configdir = al::getenv("XDG_CONFIG_HOME"))
+-    {
+-        path = *configdir;
++    path = GetEnvConfigDir("XDG_CONFIG_HOME");
++    if(!path.empty())
+         path /= "alsoft.conf";
+-    }
+     else
+     {
+-        path.clear();
+-        if(auto homedir = al::getenv("HOME"))
+-        {
+-            path = *homedir;
++        path = GetEnvConfigDir("HOME");
++        if(!path.empty())
+             path /= ".config/alsoft.conf";
+-        }
+     }
+     if(!path.empty())
+     {

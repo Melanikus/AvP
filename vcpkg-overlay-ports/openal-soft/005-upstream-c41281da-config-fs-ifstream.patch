@@ -1,0 +1,56 @@
+Open the settings files through fs::ifstream.
+
+The alc/alconfig.cpp lines of upstream commit c41281da, "Add a module for
+filesystem.h" (2026-09-27), the only part of it we need:
+https://github.com/kcat/openal-soft/commit/c41281dae201e50d08d68d81a714d9d1d550974c
+The rest of that commit moves code into a C++ module, which this port does
+not build.
+
+diff --git a/alc/alconfig.cpp b/alc/alconfig.cpp
+index 7925c18..fe82573 100644
+--- a/alc/alconfig.cpp
++++ b/alc/alconfig.cpp
+@@ -480,7 +480,7 @@ void ReadALConfig()
+         auto fileName = std::array<unsigned char,PATH_MAX>{};
+         if(configURL && CFURLGetFileSystemRepresentation(configURL, true, fileName.data(), fileName.size()))
+         {
+-            if(auto f = std::ifstream{reinterpret_cast<char*>(fileName.data())}; f.is_open())
++            if(auto f = fs::ifstream{reinterpret_cast<char*>(fileName.data())}; f.is_open())
+                 LoadConfigFromFile(f);
+         }
+     }
+@@ -492,7 +492,7 @@ void ReadALConfig()
+         path /= ".alsoftrc";
+ 
+         TRACE("Loading config {}...", al::u8_as_char(path.u8string()));
+-        if(auto f = std::ifstream{path}; f.is_open())
++        if(auto f = fs::ifstream{path}; f.is_open())
+             LoadConfigFromFile(f);
+     }
+ 
+@@ -513,7 +513,7 @@ void ReadALConfig()
+     if(!path.empty())
+     {
+         TRACE("Loading config {}...", al::u8_as_char(path.u8string()));
+-        if(auto f = std::ifstream{path}; f.is_open())
++        if(auto f = fs::ifstream{path}; f.is_open())
+             LoadConfigFromFile(f);
+     }
+ 
+@@ -523,14 +523,14 @@ void ReadALConfig()
+         path /= "alsoft.conf";
+ 
+         TRACE("Loading config {}...", al::u8_as_char(path.u8string()));
+-        if(auto f = std::ifstream{path}; f.is_open())
++        if(auto f = fs::ifstream{path}; f.is_open())
+             LoadConfigFromFile(f);
+     }
+ 
+     if(auto confname = al::getenv("ALSOFT_CONF"))
+     {
+         TRACE("Loading config {}...", *confname);
+-        if(auto f = std::ifstream{*confname}; f.is_open())
++        if(auto f = fs::ifstream{*confname}; f.is_open())
+             LoadConfigFromFile(f);
+     }
+ }

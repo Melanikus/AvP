@@ -9,6 +9,12 @@ vcpkg_from_github(
         002-fix-non-blocking.patch
         003-fix-fmt-header.patch
         004-fix-libcxx-compatibility.patch
+        # A fix from upstream's master branch, after the 1.25.2 release. The file names its
+        # upstream commit. https://github.com/kcat/openal-soft/commit/<hash in the file name>
+        005-upstream-c41281da-config-fs-ifstream.patch
+        # Our own fixes.
+        006-config-file-hardening.patch
+        007-almalloc-single-free.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
