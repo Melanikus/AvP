@@ -1,5 +1,9 @@
 /***** HModel.c *****/
 /***** CDF 21/10/97 *****/
+// AvP port by Barry Duncan (Bawy).
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the shape-animation set-up is written as whole if-blocks in each #if branch, so code scanners can read it;
+//   the game runs the same code as before
 
 #include "3dc.h"
 #include "io.h"
@@ -438,25 +442,24 @@ SECTION_DATA *Create_New_Section(SECTION * this_section)
 	this_section_data->Next_Sibling = NULL;
 	this_section_data->replacement_id = 0;
 	/* Init shape animations... */
+	// each #if branch is one whole if-block, so the brackets balance in both (a code scanner reads both branches)
 #if AUTODETECT
-
 	if (this_section->Shape)
 	{
 		if (this_section->Shape->animation_header)
 		{
-#else
-
-	if (this_section->flags & section_has_shape_animation)
-	{
-#endif
 			GLOBALASSERT(this_section->Shape->animation_header);
 			this_section_data->sac_ptr = (SHAPEANIMATIONCONTROLLER *)AllocateMem(sizeof(SHAPEANIMATIONCONTROLLER));
 			InitShapeAnimationController(this_section_data->sac_ptr, this_section->Shape);
 		}
-
-#if AUTODETECT
 	}
-
+#else
+	if (this_section->flags & section_has_shape_animation)
+	{
+		GLOBALASSERT(this_section->Shape->animation_header);
+		this_section_data->sac_ptr = (SHAPEANIMATIONCONTROLLER *)AllocateMem(sizeof(SHAPEANIMATIONCONTROLLER));
+		InitShapeAnimationController(this_section_data->sac_ptr, this_section->Shape);
+	}
 #endif
 	/* Init texture animations. */
 	this_section_data->tac_ptr = 0;
