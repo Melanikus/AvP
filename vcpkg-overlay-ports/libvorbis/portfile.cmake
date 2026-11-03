@@ -9,6 +9,17 @@ vcpkg_from_github(
         0002-Fixup-pkgconfig-libs.patch
         0003-def-mingw-compat.patch
         0004-ogg-find-dependency.patch
+        # Security fixes from upstream's main branch, after the 1.3.7 release. Each file keeps its
+        # upstream commit header. https://github.com/xiph/vorbis/commit/<hash in the file name>
+        0005-upstream-bb4047de-sharedbook-undefined-shift.patch
+        0006-upstream-315da9cc-psy-half-octave-bounds.patch
+        0007-upstream-2d79800b-left-shift-of-negative.patch
+        0008-upstream-2868f93c-encode-cap-base-setting-delta.patch
+        0009-upstream-c9b52fc1-encode-stereo-point-truncation.patch
+        0010-upstream-7ef6726d-crosslap-large-alloca.patch
+        0011-upstream-28965ede-sharedbook-replace-alloca.patch
+        0012-upstream-a629068d-sharedbook-check-allocations.patch
+        0013-upstream-1b75110b-page-seek-use-after-free.patch
 )
 
 vcpkg_cmake_configure(
