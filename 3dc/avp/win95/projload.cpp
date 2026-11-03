@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
-//   fills its new data block in a small function (it works the same as before)
+//   makes its new chunk from data laid out as in a level file, removing any old chunks first
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -3188,14 +3188,14 @@ static void MakeBackupFile(File_Chunk* fc)
 #endif
 }
 
-// Copies the level's pre-placed (fixed) decals, kept in FixedDecalStorage,
-// into a new AVPDECAL chunk, ready to be saved in the level file.
-static void Fill_Decal_Chunk(AVP_Decal_Chunk* decal_chunk, List<Object_Chunk*>& ob_list)
+// Copies the level's pre-placed (fixed) decals, kept in FixedDecalStorage, into the decals array,
+// in the form they have in a level file.
+static void Fill_Decal_Data(AVP_Decal* decals, List<Object_Chunk*>& ob_list)
 {
-	for(int i=0;i<decal_chunk->num_decals;i++)
+	for(int i=0;i<NumFixedDecals;i++)
 	{
 		FIXED_DECAL* fd=&FixedDecalStorage[i];
-		AVP_Decal * ad=&decal_chunk->decals[i];
+		AVP_Decal * ad=&decals[i];
 
 		ad->DecalID=(int)fd->DecalID;
 		for(int j=0;j<4;j++)
@@ -3209,6 +3209,14 @@ static void Fill_Decal_Chunk(AVP_Decal_Chunk* decal_chunk, List<Object_Chunk*>& 
 
 		ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
 	}
+}
+
+// Makes a new AVPDECAL chunk from decal data laid out as in a level file. The chunk adds itself to its parent, soc, as
+// it is made (every chunk does), and soc deletes it later along with the rest of the level file's chunks, so the caller
+// has nothing to free.
+static AVP_Decal_Chunk* Make_Decal_Chunk(Special_Objects_Chunk* soc, const char* data, size_t size)
+{
+	return new AVP_Decal_Chunk(soc, data, size);
 }
 
 void save_preplaced_decals()
@@ -3252,16 +3260,16 @@ void save_preplaced_decals()
 		List<Object_Chunk*> ob_list;
 		env_rif->fc->list_objects(&ob_list);
 
-		// Use soc's AVPDECAL chunk, or make one if it has none. It never has one at
-		// this point (the old ones were all deleted above), so this always makes a
-		// new one. Like every chunk, the new one adds itself to its parent, soc, as
-		// it is made, and soc deletes it later along with the rest of the level
-		// file's chunks; that is why it is not deleted here. This "use it or make
-		// it" form is the one used for soc itself just above, and it lets
-		// code-checking tools see that the parent keeps the new chunk.
-		AVP_Decal_Chunk* decal_chunk=(AVP_Decal_Chunk*) soc->lookup_single_child("AVPDECAL");
-		if(!decal_chunk) decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
-		Fill_Decal_Chunk(decal_chunk, ob_list);
+		// Lay the decals out as a level file holds them: how many there are, the size
+		// of one, then the decals themselves. This is the form the chunk reads when a
+		// level loads, so a chunk made here is the same as one loaded from a file.
+		const size_t headerSize = 2 * sizeof(int);
+		std::vector<char> data(headerSize + NumFixedDecals * sizeof(AVP_Decal));
+		((int*)&data[0])[0] = NumFixedDecals;
+		((int*)&data[0])[1] = sizeof(AVP_Decal);
+		Fill_Decal_Data((AVP_Decal*)&data[headerSize], ob_list);
+
+		Make_Decal_Chunk(soc, &data[0], data.size());
 	}
 
 	if(!env_rif->fc->update_file())
