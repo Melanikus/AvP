@@ -28,7 +28,7 @@ name: CodeQL
 
 on:
   push:
-    branches: [avpx_main, ci-codeql]
+    branches: [avpx_main, ci-codeql-run2]
   pull_request:
     branches: [avpx_main]
   workflow_dispatch:
