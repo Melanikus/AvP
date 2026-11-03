@@ -118,13 +118,10 @@ void Load_MessageHistory(SAVE_BLOCK_HEADER* header)
 	expected_size += sizeof(MessageHistory) * block->NumberOfEntriesInMessageHistory;
 	if(header->size != expected_size) return;
 	
-	//EntryToNextShow indexes the entries (MessageHistory_DisplayPrevious shows entry EntryToNextShow-1), and each
-	//entry's StringID goes to GetTextString: reject a block whose values could not have been saved
+	//EntryToNextShow indexes the entries (MessageHistory_DisplayPrevious shows entry EntryToNextShow-1): reject a block
+	//whose value could not have been saved. Each entry's StringID only goes to GetTextString, which gives "" for an id
+	//outside the text table, so an entry with a bad id shows an empty message and the rest of the history is kept.
 	if(block->EntryToNextShow < 0 || block->EntryToNextShow > block->NumberOfEntriesInMessageHistory) return;
-	for(i=0;i<block->NumberOfEntriesInMessageHistory;i++)
-	{
-		if((int)saved_message[i].StringID < 0 || (int)saved_message[i].StringID >= MAX_NO_OF_TEXTSTRINGS) return;
-	}
 
 	//load the stuff then
 	NumberOfEntriesInMessageHistory = block->NumberOfEntriesInMessageHistory;
