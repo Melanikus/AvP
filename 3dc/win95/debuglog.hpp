@@ -1,6 +1,13 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the lines not yet written are a std::vector<std::string> (was a List<char *> of new[] copies, which a
+//   failed final reopen leaked and the copy constructor / operator= shared); the fallback formatting into
+//   buf[4096] is bounded (_vsnprintf, not vsprintf)
+
 #ifndef _included_debuglog_hpp_
 #define _included_debuglog_hpp_
 
+#include <string>
+#include <vector>
 //#include <stdio.h>
 #include "utilities.h"
 #include "debuglog.h"
@@ -33,7 +40,7 @@ struct LogFile : public R_DumpContext
 {
 private:
 	char * fname;
-	List<char *> unwritten;
+	std::vector<std::string> unwritten;
 	int ever_written;
 	void FlushOut(FILE * fp);
 
@@ -51,9 +58,7 @@ public:
 		if (!fp)
 		{
 			if (!ever_written) return EOF;
-			char * newtxt = new char [strlen(buf)+1];
-			strcpy(newtxt,buf);
-			unwritten.add_entry_end(newtxt);
+			unwritten.push_back(buf);
 			return 0;
 		}
 		if (unwritten.size()) FlushOut(fp);
@@ -80,10 +85,9 @@ public:
 		else
 		{
 			char buf[4096];
-			rv = vsprintf(buf,format,ap);
-			char * newtxt = new char [strlen(buf)+1];
-			strcpy(newtxt,buf);
-			unwritten.add_entry_end(newtxt);
+			rv = _vsnprintf(buf,sizeof(buf)-1,format,ap);
+			buf[sizeof(buf)-1] = '\0';
+			unwritten.push_back(buf);
 		}
 		va_end(ap);
 		if (fp) fclose(fp);
@@ -107,10 +111,9 @@ public:
 		else
 		{
 			char buf[4096];
-			rv = vsprintf(buf,format,ap);
-			char * newtxt = new char [strlen(buf)+1];
-			strcpy(newtxt,buf);
-			unwritten.add_entry_end(newtxt);
+			rv = _vsnprintf(buf,sizeof(buf)-1,format,ap);
+			buf[sizeof(buf)-1] = '\0';
+			unwritten.push_back(buf);
 		}
 		return rv;
 	}
@@ -139,10 +142,9 @@ public:
 		else
 		{
 			char buf[4096];
-			rv = vsprintf(buf,format,ap);
-			char * newtxt = new char [strlen(buf)+1];
-			strcpy(newtxt,buf);
-			unwritten.add_entry_end(newtxt);
+			rv = _vsnprintf(buf,sizeof(buf)-1,format,ap);
+			buf[sizeof(buf)-1] = '\0';
+			unwritten.push_back(buf);
 		}
 		va_end(ap);
 		if (fp) fclose(fp);
@@ -166,10 +168,9 @@ public:
 		else
 		{
 			char buf[4096];
-			rv = vsprintf(buf,format,ap);
-			char * newtxt = new char [strlen(buf)+1];
-			strcpy(newtxt,buf);
-			unwritten.add_entry_end(newtxt);
+			rv = _vsnprintf(buf,sizeof(buf)-1,format,ap);
+			buf[sizeof(buf)-1] = '\0';
+			unwritten.push_back(buf);
 		}
 		return rv;
 	}
