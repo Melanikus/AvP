@@ -49,7 +49,7 @@ GAMEOBJECT GameObjects[] =
 	0x5caeb020,0x88620,
 
 	GOT_DATALOG_1,
-	0xbbfbd11a,0x1d34bf,
+	(int)0xbbfbd11a,0x1d34bf,
 
 	GOT_DATALOG_2,
 	0x68045d04,0x69092e,
