@@ -1,0 +1,5 @@
+# Our one extra CodeQL query. See ReadProblems.ql for what it does and why it exists.
+name: avp/read-problems
+version: 1.0.0
+dependencies:
+  codeql/cpp-all: "*"
