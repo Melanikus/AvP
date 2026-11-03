@@ -1,8 +1,8 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   mouse and trackball look speeds read from a saved profile are kept within the menu sliders' range,
-//   and the profile folder path is written with a size limit
+//   a saved profile is loaded only when complete and its name always ends inside its box; its look
+//   speeds are kept within the menu sliders' range; the profile folder path has a size limit
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -298,13 +298,24 @@ static int LoadUserProfiles(void)
 			AVP_USER_PROFILE *profilePtr = new AVP_USER_PROFILE;
 			DWORD bytes_read;
 
-			if (!ReadFile(rif_file, profilePtr, sizeof(AVP_USER_PROFILE), &bytes_read, 0))
+			// A profile file is copied straight into the profile in memory. A broken or
+			// edited file could be shorter than a whole profile, which would leave the
+			// rest of it as leftover memory, so such a file is skipped like an unreadable
+			// one. Every profile the game saved is complete, so it still loads.
+			if (!ReadFile(rif_file, profilePtr, sizeof(AVP_USER_PROFILE), &bytes_read, 0) || bytes_read != sizeof(AVP_USER_PROFILE))
 			{
 				CloseHandle (rif_file);
 				delete[] pszFullPath;
 				delete profilePtr;
 				continue;
 			}
+
+			// The name box holds MAX_SIZE_OF_USERS_NAME (15) characters and then a zero
+			// byte that marks where the name stops. The game never saves a longer name
+			// (its text field stops at 15), but the file might not have that zero byte,
+			// so we always put one in the last place. Without it, code that reads the
+			// name would run on past the end of the box.
+			profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
 
 			FILETIME ftLocal;
 			FileTimeToLocalFileTime(&wfd.ftLastWriteTime, &ftLocal);
