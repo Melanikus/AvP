@@ -1,12 +1,15 @@
-# Snyk security scanning: Snyk Code (SAST) and Snyk Open Source (SCA) for C/C++, as two parallel jobs.
-# Neither needs a build: Snyk Code analyses the source, and `--unmanaged` identifies
-# vendored open-source code (enet/, dependencies/) by file hashes. vcpkg libraries are
-# downloaded at build time, so they are not in the repository and not scanned here.
-# Results go to the repository's Security tab (code scanning). ENFORCING (AvP Tao #1, security
-# is paramount): ANY finding or scan error fails its job, and BOTH jobs are required checks on
-# avpx_main, so nothing merges unless both pass. The SARIF uploads still run when a scan fails.
-# A finding is resolved only by fixing it in the code. The goal is zero vulnerabilities, so we don't ignore, park or
-# exclude findings.
+# Security gate for this repository (AvP Tao #1: security is paramount, the goal is zero vulnerabilities).
+#
+# Three jobs run for every pull request into avpx_main. All must pass before anything can merge:
+#   - Snyk Code (SAST) reads our own source. It also fails if Snyk skipped even one C/C++ file, because a file the
+#     scanner could not read is a blind spot, not a pass.
+#   - Snyk Open Source (SCA) recognises vendored open-source code (enet/, dependencies/) by file hashes and reports
+#     known vulnerabilities. It also fails if precompiled code (DLLs, libraries, executables) is in the repository.
+#   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
+#     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
+#     it is not scanned.
+# ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
+# or exclude findings. If Snyk or GitHub Actions is unavailable, the checks fail and nothing merges.
 name: Snyk
 
 on:
@@ -40,6 +43,20 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk code test --sarif-file-output=snyk-code.sarif
 
+      # Snyk reports how many files it read in the SARIF. A file it could not parse is silently skipped and the scan
+      # still passes, so we compare its count with what git tracks. A missing report fails here too.
+      - name: Fail if Snyk Code skipped any C/C++ file
+        if: ${{ !cancelled() }}
+        run: |
+          tracked=$(git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' | wc -l)
+          analysed=$(jq '[.runs[0].properties.coverage[]? | select(.type == "SUPPORTED" and (.lang | IN(".c",".cc",".cpp",".cxx",".h",".hh",".hpp",".hxx"))) | .files] | add // 0' snyk-code.sarif)
+          unparsed=$(jq '[.runs[0].properties.coverage[]? | select(.type == "FAILED_PARSING") | .files] | add // 0' snyk-code.sarif)
+          echo "C/C++ files tracked by git: $tracked, analysed by Snyk: $analysed, failed to parse: $unparsed"
+          if [ "$unparsed" != "0" ] || [ "$analysed" != "$tracked" ]; then
+            echo "::error::Snyk Code did not analyse every C/C++ file"
+            exit 1
+          fi
+
       - name: Upload Snyk Code results
         if: ${{ !cancelled() && hashFiles('snyk-code.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
@@ -59,13 +76,25 @@ jobs:
         with:
           persist-credentials: false
 
+      # We build our open-source dependencies from source, so nothing precompiled belongs here. Images and other
+      # resources are fine; this looks only for compiled code.
+      - name: Fail if precompiled code is in the repository
+        run: |
+          found=$(git ls-files | grep -iE '\.(dll|lib|exp|exe|obj|o|a|so|dylib|pdb|ilk|ocx|sys)$' || true)
+          if [ -n "$found" ]; then
+            echo "$found"
+            echo "::error::Precompiled code is in the repository"
+            exit 1
+          fi
+          echo "No precompiled code found."
+
       - name: Install the Snyk CLI
         uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
 
       - name: Snyk Open Source (SCA, vendored C/C++)
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --unmanaged --sarif-file-output=snyk-open-source.sarif
+        run: snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif
 
       - name: Upload Snyk Open Source results
         if: ${{ !cancelled() && hashFiles('snyk-open-source.sarif') != '' }}
@@ -79,3 +108,108 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk monitor --unmanaged --project-name=Melanikus/AvP
+
+  # The two jobs below scan what the game is really built from: vcpkg fetches each library (every download is checked
+  # against the SHA512 in its port), applies its patches and ours, and compiles it. That needs Windows, so Windows
+  # collects the patched sources and Linux scans them with the same pinned Snyk setup as above.
+  vcpkg-sources:
+    name: Build the vcpkg libraries
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
+      # bootstrap-vcpkg validates the signature of the vcpkg tool it downloads.
+      - name: Get vcpkg at the manifest's baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $root checkout -q FETCH_HEAD
+          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Build the pinned libraries, keeping their sources
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows `
+            --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Skips D3DX: Microsoft's binary package, with no source to scan.
+      - name: Collect each library's patched source
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          $out = Join-Path $env:RUNNER_TEMP 'libsrc'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          foreach ($port in Get-ChildItem $bt -Directory) {
+            if ($port.Name -eq 'dxsdk-d3dx') { continue }
+            $src = Join-Path $port.FullName 'src'
+            if (-not (Test-Path $src)) { continue }
+            foreach ($d in Get-ChildItem $src -Directory) {
+              Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
+              "$($port.Name)/$($d.Name)"
+            }
+          }
+
+      - name: Hand the sources to the scan job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-library-sources
+          path: ${{ runner.temp }}/libsrc
+          retention-days: 1
+
+  vcpkg-scan:
+    name: Snyk on the vcpkg libraries
+    needs: vcpkg-sources
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    steps:
+      - name: Download the collected sources
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vcpkg-library-sources
+          path: libsrc
+
+      - name: Install the Snyk CLI
+        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+
+      # Every library is scanned even if an earlier one fails, so one run shows everything; the job fails at the end
+      # if any scan found anything. Zero libraries found also fails, so a broken hand-over can't pass as clean.
+      - name: SAST and SCA on each library's source
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          mkdir -p results
+          failed=0
+          count=0
+          for d in libsrc/*/*/; do
+            d=${d%/}
+            lib=$(basename "$(dirname "$d")")
+            count=$((count + 1))
+            echo "================ $lib"
+            if ! snyk code test "$d" --sarif-file-output="results/$lib.code.sarif"; then failed=1; fi
+            if ! (cd "$d" && snyk test --unmanaged --print-dep-paths); then failed=1; fi
+          done
+          echo "libraries scanned: $count"
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No library sources were scanned"
+            exit 1
+          fi
+          exit $failed
+
+      - name: Keep the reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-scan-results
+          path: results
+          retention-days: 7
