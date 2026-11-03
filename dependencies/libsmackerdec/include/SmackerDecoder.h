@@ -44,7 +44,8 @@
 
 /*
  * Modified 2026-11-03 for the AvP port:
- *   SM-P5: DecodeBigTree takes a recursion depth (CVE-2017-16803)
+ *   SM-P5: DecodeBigTree takes a recursion depth (bigtree depth limit, stack overflow)
+ *   SM-P17: SM-P5 line corrected (CVE-2017-16803 is the DecodeTree length limit)
  */
 
 #ifndef _SmackerDecoder_h_

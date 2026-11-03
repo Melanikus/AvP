@@ -48,7 +48,7 @@
  *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
  *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
  *   SM-P4: fail Open on a bad header tree; default tables and 'last' indexes
- *   SM-P5: limit tree recursion depth (CVE-2017-16803); unsigned prefix shift
+ *   SM-P5: code length <= 32 (CVE-2017-16803), bigtree depth <= 500; unsigned prefix shift
  *   SM-P6: reject a palette copy that would read past the old palette
  *   SM-P7: check palette and audio chunk sizes; advance frames by the frame table
  *   SM-P8: keep allocation failures inside the DLL; cap header-tree table sizes
@@ -59,12 +59,14 @@
  *   SM-P13: check the handle in every export, and the audio track index
  *   SM-P14: audio early returns skip their chunk; decode SMKA tracks only; check tree results
  *   SM-P15: no memset over HuffContext objects (they hold std::vector members)
+ *   SM-P17: catch only std::bad_alloc at the DLL boundary; fail Open on a failed frame-0 probe
  */
 
 #include "SmackerDecoder.h"
 #include "HuffmanVLC.h"
 #include "LogError.h"
 #include <assert.h>
+#include <new>
 
 std::vector<class SmackerDecoder*> classInstances;
 
@@ -92,13 +94,14 @@ SmackerHandle Smacker_Open(const char* fileName)
 		if (!newDecoder->Open(fileName))
 		{
 			delete newDecoder;
+			newDecoder = 0;
 			return newHandle;
 		}
 
 		// add instance to global instance vector
 		classInstances.push_back(newDecoder);
 	}
-	catch (...)
+	catch (const std::bad_alloc&)
 	{
 		delete newDecoder;
 		return newHandle;
@@ -207,7 +210,7 @@ uint32_t Smacker_GetNextFrame(SmackerHandle &handle)
 	{
 		decoder->GetNextFrame();
 	}
-	catch (...)
+	catch (const std::bad_alloc&)
 	{
 	}
 
@@ -582,6 +585,13 @@ bool SmackerDecoder::Open(const std::string &fileName)
 			}
 		}	
 		frameFlag >>= 1;
+	}
+
+	// the probe read frame 0's chunk headers: a short read or failed seek means a broken file
+	if (file.Is_Failed())
+	{
+		SmackerCommon::LogError("Unexpected end of file in frame 0");
+		return false;
 	}
 
 	return true;
