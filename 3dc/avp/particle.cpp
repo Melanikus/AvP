@@ -5092,6 +5092,15 @@ void Load_Particles(SAVE_BLOCK_HEADER* header)
 	expected_size += sizeof(PARTICLE) * block->NumActiveParticles;
 	if(header->size != expected_size) return;
 
+	//ParticleDescription[ParticleID] is read for every active particle: skip a block with an id the game cannot have
+	//saved. PARTICLE_NULL is let through: MakeParticle can be given it in play (exit wounds when GetBloodType finds no
+	//blood type), so a valid save can hold it
+	for(int i=0;i<block->NumActiveParticles;i++)
+	{
+		int id = (int)saved_particle[i].ParticleID;
+		if((id < 0 || id >= MAX_NO_OF_PARTICLE_IDS) && id != PARTICLE_NULL) return;
+	}
+
 	//right copy the stuff then
 	NumActiveParticles = block->NumActiveParticles;
 	NumberOfBloodParticles = block->NumberOfBloodParticles;
