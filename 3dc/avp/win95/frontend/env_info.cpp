@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   built-in level names are copied by their measured length, and the level file name is written with a
-//   size limit, so both always fit
+//   built-in and custom level names are copied into LevelName with a size limit and always end inside
+//   it, and the level file name is written with a size limit, so they always fit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -5126,10 +5126,16 @@ AvP_Level_Target_Desc LevelStatsTargets[I_MaxDifficulties][AVP_ENVIRONMENT_END_O
 
 };
 
-// copies one of the built-in level names (RifNamesForEnvironments, at most 18 characters) into LevelName
+// Copies one of the built-in level names (RifNamesForEnvironments, at most 18
+// characters) into LevelName, which holds MAX_PATH (260) bytes, so they always
+// fit. The copy still stops at the last byte of LevelName, and the name is
+// always followed by the end marker (the zero byte that marks where a text
+// stops), written here on its own line so that it is plain to see.
 static void SetBuiltInLevelName(const char *name)
 {
-	memcpy(LevelName, name, strlen(name) + 1);
+	size_t const length = strnlen(name, sizeof(LevelName) - 1);
+	memcpy(LevelName, name, length);
+	LevelName[length] = '\0';
 }
 
 void SetLevelToLoadForAlien(int episode)
