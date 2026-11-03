@@ -435,12 +435,15 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 
 	// the name, its NUL and its padding must all be inside the chunk (a name with no NUL gives len > room)
 	size_t const room = sdata_end - sdata;
-	unsigned int const len = strnlen(sdata, room)+4&~3;
+	size_t const name_length = strnlen(sdata, room);
+	unsigned int const len = name_length+4&~3;
 	if (len > room) {
 		return;
 	}
 	srcrifname = new char[len];
 	memcpy(srcrifname,sdata,len);
+	// len > name_length, so the copy holds the name's NUL; the last byte (that NUL or padding after it) is 0 as well
+	srcrifname[len-1] = 0;
 	sdata += len;
 
 	if (sdata_end - sdata < 4) {
@@ -462,8 +465,7 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 	}
 	
 	// hmm, size_chunk was wrong so allow sizes which were wrong in that way to pass
-	size_t srcrifname_length = strlen(srcrifname);
-	assert (ssize + 12 == size_chunk() || ssize + 12 + (44+srcrifname_length+4&~3) - (44+srcrifname_length+4&~4) == size_chunk());
+	assert (ssize + 12 == size_chunk() || ssize + 12 + (44+name_length+4&~3) - (44+name_length+4&~4) == size_chunk());
 }
 
 size_t TLT_Config_Chunk::size_chunk()
