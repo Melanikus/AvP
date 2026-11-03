@@ -50,6 +50,7 @@
  *   SM-P4: fail Open on a bad header tree; default tables and 'last' indexes
  *   SM-P5: limit tree recursion depth (CVE-2017-16803); unsigned prefix shift
  *   SM-P6: reject a palette copy that would read past the old palette
+ *   SM-P7: check palette and audio chunk sizes; advance frames by the frame table
  */
 
 #include "SmackerDecoder.h"
@@ -791,6 +792,17 @@ int SmackerDecoder::ReadPacket()
 	uint32_t frameSize = frameSizes[currentFrame] & (~3);
 	uint8_t frameFlag  = frameFlags[currentFrame];
 
+	// the next frame starts frameSize bytes after this one, however much of this one
+	// the decoders below consume; a frame with invalid chunk sizes is skipped
+	nextPos = (int32_t)((uint32_t)nextPos + frameSize);
+	currentFrame++;
+
+	// no audio this frame unless a chunk below is decoded
+	for (int i = 0; i < kMaxAudioTracks; i++)
+	{
+		audioTracks[i].bytesReadThisFrame = 0;
+	}
+
 	// handle palette change
 	if (frameFlag & kSMKpal)
 	{
@@ -801,6 +813,10 @@ int SmackerDecoder::ReadPacket()
         memcpy(oldpal, pal, 768);
         size = file.ReadByte();
         size = size * 4 - 1;
+        if (size < 0 || (uint32_t)size + 1 > frameSize) {
+			SmackerCommon::LogError("Invalid palette size");
+			return -1;
+        }
         frameSize -= size;
         frameSize--;
         sz = 0;
@@ -845,27 +861,24 @@ int SmackerDecoder::ReadPacket()
 	// check for and handle audio
 	for (int i = 0; i < kMaxAudioTracks; i++) 
 	{
-		audioTracks[i].bytesReadThisFrame = 0;
-
 		if (frameFlag & 1) 
 		{
-			uint32_t size = file.ReadUint32LE() - 4;
+			// the size field counts the whole chunk: itself, the unpacked size and the data
+			uint32_t size = file.ReadUint32LE();
+			if (size < 8 || size > frameSize)
+			{
+				SmackerCommon::LogError("Invalid audio part size");
+				return -1;
+			}
 			frameSize -= size;
-			frameSize -= 4;
+			size -= 4;
 
 			DecodeAudio(size, audioTracks[i]);
 		}
 		frameFlag >>= 1;
 	}
 
-	if (frameSize < 0)
-		return -1;
-
 	DecodeFrame(frameSize);
-
-	currentFrame++;
-
-	nextPos = file.GetPosition();
 
 	return 0;
 }
