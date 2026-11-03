@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (the empty Enum_Chunk constructor)
+
 #include "enum_chunk.hpp"
 //#include "enumsch.hpp"
 
@@ -16,15 +19,6 @@ Children for Enum_Chunk :
 "BMPENUMS"	BMP_Enums_Chunk
 */
 
-
-
-// empty constructor
-Enum_Chunk::Enum_Chunk (Chunk_With_Children  * parent)
-:Lockable_Chunk_With_Children (parent, "REBENUMS")
-{
-	// as necessary, generated automatically
-	new Enum_Header_Chunk (this);
-}
 
 
 BOOL Enum_Chunk::file_equals (HANDLE & /*rif_file*/)

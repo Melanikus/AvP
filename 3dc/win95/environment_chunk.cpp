@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (the empty Environment_Data_Chunk constructor)
+
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
 
@@ -38,15 +41,6 @@ Children for Enviornment_Data_Chunk :
 */
 
 
-
-
-// empty constructor
-Environment_Data_Chunk::Environment_Data_Chunk (Chunk_With_Children  * parent)
-:Lockable_Chunk_With_Children (parent, "REBENVDT")
-{
-	// as necessary, generated automatically
-	new Environment_Data_Header_Chunk (this);
-}
 
 
 BOOL Environment_Data_Chunk::file_equals (HANDLE & /*rif_file*/)

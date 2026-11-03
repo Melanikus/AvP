@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (the Light_Set_Chunk name constructor)
+
 #include "chunk.hpp"
 #include "chunk_light.hpp"
 
@@ -20,13 +23,6 @@ Children for Light_Set_Chunk :
 "LITSCALE"		Light_Scale_Chunk
 "AVPSTRAT"		AVP_Strategy_Chunk
 */
-
-Light_Set_Chunk::Light_Set_Chunk (Chunk_With_Children * parent, char * light_set_name)
-: Chunk_With_Children (parent, "LIGHTSET")
-{
-	new Light_Set_Header_Chunk (this, light_set_name);
-}
-
 
 
 ////////////////////////////////////////////////////////////////////////////////////

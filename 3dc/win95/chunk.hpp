@@ -1,5 +1,8 @@
 // Chunk library
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the unused CHUNK_WITH_CHILDREN_LOADER_INIT / _FOR / _END macro family
+
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
@@ -337,60 +340,9 @@ protected:
 };
 
 /////////////////////////////////////////////
-// macros to save typing for chunk with children loader
+// the file chunk being loaded, for the loaders' error codes
 
 extern Chunk * Parent_File;
-
-#define CHUNK_WITH_CHILDREN_LOADER_PARENT __parent
-
-#define CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-chunkclass::chunkclass(Chunk_With_Children * const CHUNK_WITH_CHILDREN_LOADER_PARENT, char const * __data, size_t const __size) \
-:Chunk_With_Children(CHUNK_WITH_CHILDREN_LOADER_PARENT,id)
-
-#define CHUNK_WITH_CHILDREN_LOADER_INIT_PT2 { \
-	const char * const __buffer_ptr = __data; \
-	while (__data - __buffer_ptr < (signed)__size){ \
-		if (*(int *)(__data + 8) + (__data-__buffer_ptr) > (signed)__size){ \
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED; \
-			break;}
-
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-chunkclass::chunkclass(Chunk_With_Children * const CHUNK_WITH_CHILDREN_LOADER_PARENT, char const * __data, size_t const __size) \
-:Lockable_Chunk_With_Children(CHUNK_WITH_CHILDREN_LOADER_PARENT,id)
-
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT2 { \
-	const char * const __buffer_ptr = __data; \
-	while (__data - __buffer_ptr < (signed) __size){ \
-		if (*(int *)(__data + 8) + (__data-__buffer_ptr) > (signed) __size){ \
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED; \
-			break;}
-
-#define CHUNK_WITH_CHILDREN_LOADER_INIT(id,chunkclass) \
-	CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-	CHUNK_WITH_CHILDREN_LOADER_INIT_PT2
-
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT(id,chunkclass) \
-	LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-	LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT2
-
-#define CHUNK_WITH_CHILDREN_LOADER_FOR(id,chunkclass) \
-		else if (!strncmp(__data,id,8)){ \
-			new chunkclass(this,__data+12,*(int *)(__data+8)-12); \
-			__data += *(int *)(__data+8);}
-
-#define CHUNK_WITH_CHILDREN_LOADER_END \
-		else { \
-			new Miscellaneous_Chunk (this, __data, (__data + 12), (*(int *) (__data + 8)) -12 ); \
-			__data += *(int *)(__data + 8);}}}
-
-// example:
-//
-// CHUNK_WITH_CHILDREN_LOADER_INIT("GAMEMODE",Environment_Game_Mode_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("ENVPALET",Environment_Palette_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("ENVTXLIT",Environment_TLT_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("CLRLOOKP",Coloured_Polygons_Lookup_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("RIFCHILD",RIF_Name_Chunk)
-// CHUNK_WITH_CHILDREN_LOADER_END
 
 ///////////////////////////////////////////////
 //macros for use in chunk construction from buffer, assume buffer is called data

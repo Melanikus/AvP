@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declarations of unused RIF-authoring code (see chunk_shape.cpp)
+
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
 
@@ -65,9 +68,6 @@ public:
 	// constructor from buffer
 	Shape_Chunk (Chunk_With_Children * parent, const char *, size_t);
 
-	// constructor from data (public so that other shape tools can call)
-	Shape_Chunk (Chunk_With_Children * parent, ChunkShape &shp_dat);
-
 	// I want the external file load to be as transparent as possible
 	// i.e. we have a shape which is loaded as usaul - it should then
 	// load the shape which is its main copy and copy itself over !!!
@@ -82,8 +82,6 @@ public:
 	const ChunkShape shape_data;
 
 	Shape_Header_Chunk * get_header();
-
-	Shape_Chunk* make_copy_of_chunk();
 
 	List<Object_Chunk *> const & list_assoc_objs();
 
@@ -110,8 +108,6 @@ public:
 	BOOL same_and_updated(Shape_Chunk &);
 
 	BOOL assoc_with_object_list(File_Chunk *);
-
-	BOOL update_my_chunkshape (ChunkShape & cshp);
 
 	// THIS IS A HACK, DO NOT USE AFTER AVP AUGUST DEMO
 
@@ -149,19 +145,12 @@ public:
 	// constructor from buffer
 	Shape_Sub_Shape_Chunk (Chunk_With_Children * parent, const char *, size_t);
 
-	// constructor from data (public so that other shape tools can call)
-	Shape_Sub_Shape_Chunk (Chunk_With_Children * parent, ChunkShape &shp_dat);
-
 	// destructor
 	virtual ~Shape_Sub_Shape_Chunk();
 
 	const ChunkShape shape_data;
 
 	Shape_Sub_Shape_Header_Chunk * get_header();
-
-	Shape_Sub_Shape_Chunk* make_copy_of_chunk();
-
-	BOOL update_my_chunkshape (ChunkShape & cshp);
 
 	const char * get_shape_name();
 
@@ -246,14 +235,10 @@ class Anim_Shape_Sequence_Chunk :public Chunk_With_Children
 //if the first constructor is used then the vertex normals and extents won't be calculated
 //unless the post_input_processing function is called
 	Anim_Shape_Sequence_Chunk(Chunk_With_Children* const parent,const char*,size_t const);
-	Anim_Shape_Sequence_Chunk(Chunk_With_Children* const parent,int sequencenum,const char* name);
-	Anim_Shape_Sequence_Chunk(Chunk_With_Children* const parent,ChunkAnimSequence const* cas);
 
 	virtual void post_input_processing();
 
 	const ChunkAnimSequence sequence_data;
-
-	void update_my_sequencedata (ChunkAnimSequence &);
 
 	void set_sequence_flags(int flags);
 	void set_frame_flags(int frameno,int flags);
@@ -264,7 +249,6 @@ class Anim_Shape_Sequence_Chunk :public Chunk_With_Children
 	ChunkAnimSequence *sequence_data_store;
 
 	int ConstructSequenceDataFromChildren();//copies everyting into the sequence_data
-	void RegenerateChildChunks();
 };
 
 ///////////////////////////////////////////////
@@ -291,7 +275,6 @@ class Anim_Shape_Frame_Chunk : public Chunk_With_Children
 {
 	public:
 	Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char*,size_t const);
-	Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk * const parent,ChunkAnimFrame* caf,int frameno);
 };
 
 ///////////////////////////////////////////////
@@ -321,8 +304,6 @@ class Anim_Shape_Alternate_Texturing_Chunk : public Chunk_With_Children
 	Anim_Shape_Alternate_Texturing_Chunk(Chunk_With_Children* const parent)
 	:Chunk_With_Children(parent,"ASALTTEX")
 	{}
-
-	Shape_Sub_Shape_Chunk* CreateNewSubShape(const char* name);
 };
 ///////////////////////////////////////////////
 class Poly_Not_In_Bounding_Box_Chunk : public Chunk
@@ -363,13 +344,11 @@ class Console_Shape_Chunk : public Chunk_With_Children
 {
 	public :
 	Console_Shape_Chunk(Chunk_With_Children* const  parent,const char*,size_t);
-	Console_Shape_Chunk(Chunk_With_Children* const  parent,Console_Type ct);
 
 	const ChunkShape shape_data;
 
 	void generate_console_chunkshape();//needs parent's chunkshape to be set up first
 
-	void update_my_chunkshape(ChunkShape&);
 	private:
 	friend class Shape_Polygon_Chunk;
 	friend class Shape_UV_Coord_Chunk;
@@ -762,7 +741,6 @@ class Shape_External_File_Chunk : public Chunk_With_Children
 {
 public:
 
-	Shape_External_File_Chunk (Chunk_With_Children * parent, const char * fname);
 	Shape_External_File_Chunk (Chunk_With_Children * const parent, const char *, size_t const);
 
 	void post_input_processing();

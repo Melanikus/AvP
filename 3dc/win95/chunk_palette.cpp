@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (ExpandedIdentifier, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
+
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
 
@@ -519,24 +522,6 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 	}
 }
 
-char * Environment_Game_Mode_Chunk::ExpandedIdentifier() const
-{
-	char const * full_fname = header->flags & GameModeFlag_Editable ? ((File_Chunk *)GetRootChunk())->filename : header->get_safe_source();
-	char const * skip = strrchr(full_fname,'/');
-	if (skip) full_fname = skip+1;
-	skip = strrchr(full_fname,'/');
-	if (skip) full_fname = skip+1;
-	skip = strrchr(full_fname,':');
-	if (skip) full_fname = skip+1;
-	char * retp = new char[strlen(full_fname)+strlen(header->mode_identifier)+3];
-	strcpy(retp,full_fname);
-	char * dotpos = strrchr(retp,'.');
-	if (dotpos) *dotpos = 0;
-	strcat(retp,"::");
-	strcat(retp,header->mode_identifier);
-	return retp;
-}
-
 // header chunk
 RIF_IMPLEMENT_DYNCREATE("GMODHEAD",Environment_Game_Mode_Header_Chunk)
 
@@ -723,22 +708,6 @@ void RIF_Child_Chunk::RemoveMD5Val(char const * bname)
 		delete md5c;
 }
 
-void RIF_Child_Chunk::SetMD5Val(BMP_Flags const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = GetMD5Chunk(rcbmp.filename);
-	if (md5c)
-	{
-		if (rcbmp.version_num == md5c->version_num)
-		{
-			memcpy(md5c->md5_val,md5id,16);
-			return;
-		}
-		else
-			delete md5c;
-	}
-	CreateMD5Chunk(rcbmp,md5id);
-}
-
 Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 {
 	List<Chunk *> chlst;
@@ -755,11 +724,6 @@ Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void RIF_Child_Chunk::CreateMD5Chunk(BMP_Flags const & rcbmp, int const * md5id)
-{
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rifname);
 }
 
 RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const /*ssize*/)

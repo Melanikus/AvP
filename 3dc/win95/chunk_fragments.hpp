@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (the Fragment_Type_Chunk name constructor)
+
 #ifndef _fragchnk_hpp_
 #define _fragchnk_hpp_
 
@@ -64,10 +67,6 @@ public:
 class Fragment_Type_Chunk : public Chunk_With_Children
 {
 public :
-	Fragment_Type_Chunk(Chunk_With_Children * parent,const char* name)
-	: Chunk_With_Children (parent, "FRAGTYPE")
-	{new Fragment_Type_Data_Chunk(this,name);}
-	
 	Fragment_Type_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
 	const char* get_name();

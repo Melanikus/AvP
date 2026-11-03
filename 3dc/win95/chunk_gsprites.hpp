@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of unused RIF-authoring code
+
 #ifndef _included_gsprchnk_hpp_
 #define _included_gsprchnk_hpp_
 
@@ -10,8 +13,6 @@ class AllSprites_Chunk : public Lockable_Chunk_With_Children
 {
 public:
 
-	// empty constructor
-	AllSprites_Chunk (Chunk_With_Children * parent);
 	// constructor from buffer
 	AllSprites_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 

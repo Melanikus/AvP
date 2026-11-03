@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (SetMD5Val and the CreateMD5Chunk overrides)
+
 #include <string.h>
 #include "bitmap_names.hpp"
 #include "mishchnk.hpp"
@@ -323,22 +326,6 @@ void Chunk_With_BMPs::RemoveMD5Val(char const * bname)
 		delete md5c;
 }
 
-void Chunk_With_BMPs::SetMD5Val(BMP_Name const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = GetMD5Chunk(rcbmp.filename);
-	if (md5c)
-	{
-		if (rcbmp.version_num == md5c->version_num)
-		{
-			memcpy(md5c->md5_val,md5id,16);
-			return;
-		}
-		else
-			delete md5c;
-	}
-	CreateMD5Chunk(rcbmp,md5id);
-}
-
 
 /////////////////////////////////////
 // Global_BMP_Name_Chunk
@@ -360,11 +347,6 @@ Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void Global_BMP_Name_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp);
 }
 
 /////////////////////////////////////
@@ -396,18 +378,6 @@ Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void Bitmap_List_Store_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	List<Chunk *> rnlst;
-	parent->lookup_child("RIFFNAME",rnlst);
-	char const * rname = 0;
-	if (rnlst.size())
-	{
-		rname = ((RIF_Name_Chunk *)rnlst.first_entry())->rif_name;
-	}
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rname);
 }
 
 
@@ -573,12 +543,6 @@ Bitmap_MD5_Chunk * External_Shape_BMPs_Store_Chunk::GetMD5Chunk(char const * bna
 	}
 
 	return 0;
-}
-
-void External_Shape_BMPs_Store_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rifname,shapename);
-	md5c->flags = flags & GBF_SPRITE ? BMD5F_SPRITE : BMD5F_0;
 }
 
 

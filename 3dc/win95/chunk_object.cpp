@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
+
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
@@ -54,27 +57,6 @@ Object_Chunk::Object_Chunk(Chunk_With_Children * parent, const char *data, size_
 
 	program_object_index=-1;
 
-}
-
-// from data
-Object_Chunk::Object_Chunk (Chunk_With_Children * parent, ChunkObject &obj)
-: Lockable_Chunk_With_Children (parent, "RBOBJECT"), 
-	object_data (obj)
-{
-	object_data_store = (ChunkObject *) &object_data;
-	object_data_store->index_num=-1;
-
-	new Object_Header_Chunk(this);
-	new Object_Interface_Data_Chunk(this);
-
-	//if the parent is a file_chunk get an object index
-	if(!strcmp(parent->identifier,"REBINFF2"))
-	{
-		((File_Chunk*)parent)->assign_index_to_object(this);
-	}
-	program_object_index=-1;
-
-	CalculateID();
 }
 
 Object_Chunk::~Object_Chunk()
@@ -563,12 +545,6 @@ Object_Interface_Data_Chunk::Object_Interface_Data_Chunk(Chunk_With_Children * p
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
-}
-
-Object_Interface_Data_Chunk::Object_Interface_Data_Chunk (Object_Chunk * parent)
-: Chunk_With_Children (parent, "OBINTDT")
-{
-	new Object_Notes_Chunk (this, "Enter notes here", strlen("Enter notes here") + 1);
 }
 
 

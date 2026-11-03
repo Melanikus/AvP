@@ -1,3 +1,7 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (create_alternate_locations_chunk, create_extra_data_chunk and the
+//   Sound_Object_Extra_Data_Chunk constructor only they used)
+
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
 #include "chunk_sound.hpp"
@@ -142,29 +146,12 @@ Sound_Object_Extra_Data_Chunk* Sound_Object_Chunk::get_extra_data_chunk()
 	return 0;
 
 }
-Sound_Object_Extra_Data_Chunk* Sound_Object_Chunk::create_extra_data_chunk()
-{
-	Sound_Object_Extra_Data_Chunk* soedc=get_extra_data_chunk();
-	if(soedc)return soedc;
-	
-	return new Sound_Object_Extra_Data_Chunk(parent,this);
-}
 
 Object_Alternate_Locations_Chunk* Sound_Object_Chunk::get_alternate_locations_chunk()
 {
 	Sound_Object_Extra_Data_Chunk* soedc=get_extra_data_chunk();
 	if(!soedc) return 0;
 	return (Object_Alternate_Locations_Chunk*)soedc->lookup_single_child("ALTLOCAT");
-}
-
-Object_Alternate_Locations_Chunk* Sound_Object_Chunk::create_alternate_locations_chunk()
-{
-	Sound_Object_Extra_Data_Chunk* soedc=create_extra_data_chunk();
-	
-	Object_Alternate_Locations_Chunk* loc_chunk=(Object_Alternate_Locations_Chunk*)soedc->lookup_single_child("ALTLOCAT");
-	if(loc_chunk) return loc_chunk;
-
-	return new Object_Alternate_Locations_Chunk(soedc);
 }
 
 
@@ -181,12 +168,6 @@ Children for Sound_Object_Extra_Data_Chunk :
 "ALTLOCAT"		Object_Alternate_Locations_Chunk
 */
 
-
-Sound_Object_Extra_Data_Chunk::Sound_Object_Extra_Data_Chunk(Chunk_With_Children* parent,Sound_Object_Chunk* soc)
-:Chunk_With_Children(parent,"SOUNDEXD")
-{
-	new Sound_Object_Extra_Name_Chunk(this,soc->snd_name);	
-}
 
 Sound_Object_Chunk* Sound_Object_Extra_Data_Chunk::get_sound_chunk()
 {

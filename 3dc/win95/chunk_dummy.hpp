@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declarations of unused RIF-authoring code
 
 #ifndef _DummyObjectChunk_hpp
 #define _DummyObjectChunk_hpp 1
@@ -12,16 +14,13 @@ class Dummy_Object_Chunk : public Chunk_With_Children
 {
 public:
 
-	Dummy_Object_Chunk(Chunk_With_Children* parent,const char* _name ,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient);
-
 	// constructor from buffer
 	Dummy_Object_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
 	Dummy_Object_Data_Chunk * get_data_chunk();//gets data chunk (name and location)
 
 	const char* get_text(); //get text attached to a dummy object
-	void set_text(const char* text); //change the text attached to a dummy object
-	
+
 };
 
 //chunk containing  name and location of dummy object

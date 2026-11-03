@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declarations of unused RIF-authoring code
+
 #ifndef _sndchunk_hpp
 #define _sndchunk_hpp 1
 #include "chunk_type.hpp"
@@ -56,10 +59,8 @@ public:
 	ObjectID CalculateID();
 
 	Sound_Object_Extra_Data_Chunk* get_extra_data_chunk();
-	Sound_Object_Extra_Data_Chunk* create_extra_data_chunk(); //gets chunk if it exists , otherwise creates a new one
 
 	Object_Alternate_Locations_Chunk* get_alternate_locations_chunk();
-	Object_Alternate_Locations_Chunk* create_alternate_locations_chunk(); //gets chunk if it exists , otherwise creates a new one
 
 private:
 
@@ -74,8 +75,7 @@ class Sound_Object_Extra_Data_Chunk : public Chunk_With_Children
 {
 public:
 	Sound_Object_Extra_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
-	Sound_Object_Extra_Data_Chunk (Chunk_With_Children * parent,Sound_Object_Chunk*);
-	
+
 	Sound_Object_Chunk* get_sound_chunk();
 };
 	

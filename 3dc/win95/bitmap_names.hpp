@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declarations of unused RIF-authoring code (SetMD5Val, CreateMD5Chunk)
+
 #ifndef _bmpnames_hpp_
 #define _bmpnames_hpp_
 
@@ -312,12 +315,10 @@ public:
 	virtual BMP_Names_ExtraData * GetExtendedData(void);
 
 	virtual int const * GetMD5Val(BMP_Name const & rcbmp);
-	virtual void SetMD5Val(BMP_Name const & rcbmp, int const * md5id);
 	virtual void RemoveMD5Val(char const * bname);
 
 protected:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname) = 0;
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id) = 0;
 
 	virtual size_t size_chunk ();
 	virtual void fill_data_block (char * data_start);
@@ -339,7 +340,6 @@ public:
 	: Chunk_With_BMPs (parent, "BMPNAMES", sdata, ssize) {}
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	friend class Environment_Data_Chunk;
 };
@@ -360,7 +360,6 @@ public:
 
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	friend class Shape_External_File_Chunk;
 };
@@ -478,7 +477,6 @@ public:
 
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	int version_num;
 

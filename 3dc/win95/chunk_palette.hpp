@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted unused RIF-authoring code (ExpandedIdentifier, add_rif_entry, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
+
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
 
@@ -496,8 +499,6 @@ public:
 															
 	Environment_Game_Mode_Header_Chunk * header;
 	Environment_Data_Chunk * const envd_parent;
-	
-	char * ExpandedIdentifier() const; // must delete return value
 
 	inline BOOL operator == (Environment_Game_Mode_Chunk const & m) const;
 	inline BOOL operator != (Environment_Game_Mode_Chunk const & m) const;
@@ -571,12 +572,6 @@ public:
 	int flags;
 	char * mode_identifier;
 
-	inline void add_rif_entry(char const * f)
-	{
-		char * n = new char[strlen(f)+1];
-		strcpy(n,f);
-		rif_files.add_entry(n);
-	}
 	inline const char * get_safe_source(void)
 	{
 		if (flags & GameModeFlag_Editable)
@@ -728,11 +723,9 @@ public:
 	virtual void fill_data_block (char * data_start);
 	
 	int const * GetMD5Val(BMP_Flags const & rcbmp);
-	void SetMD5Val(BMP_Flags const & rcbmp, int const * md5id);
 	void RemoveMD5Val(char const * bname);
 	Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	void CreateMD5Chunk(BMP_Flags const & rcbmp, int const * md5id);
-	
+
 	Environment_Game_Mode_Chunk * const egm_parent;
 	
    	int version_num;

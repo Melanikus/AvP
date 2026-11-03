@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of unused RIF-authoring code
+
 #ifndef _ltchunk_hpp
 #define _ltchunk_hpp 1
 
@@ -80,9 +83,6 @@ class Light_Set_Chunk : public Chunk_With_Children
 {
 public:
 
-	// for user
-
-	Light_Set_Chunk (Chunk_With_Children * parent, char * light_set_name);
 	Light_Set_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 	
 private:
