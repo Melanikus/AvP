@@ -5134,6 +5134,10 @@ void Load_VolumetricExplosions(SAVE_BLOCK_HEADER* header)
 	VOLUMETRIC_EXPLOSION* saved_explosion = (VOLUMETRIC_EXPLOSION*) (block+1);
 	int expected_size;
 
+	//the explosions are read from the block (AllocateVolumetricExplosion never fails, it reuses the ring): the count
+	//must fit the block and ExplosionStorage[MAX_NO_OF_EXPLOSIONS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveExplosions, sizeof(VOLUMETRIC_EXPLOSION), MAX_NO_OF_EXPLOSIONS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(VOLUMETRIC_EXPLOSION) * block->NumActiveExplosions;
