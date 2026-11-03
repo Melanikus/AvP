@@ -14,11 +14,23 @@ vcpkg_from_github(
         "${FMT_BACKPORT_4813_PATCH}"
 )
 
+# Delete source folders that are never built, so that nothing we do not ship stays in the tree,
+# and no code sits where a scanner that follows the build could not reach it.
+# - test/: the tests and the fuzzing programs, only used under FMT_TEST and FMT_FUZZ, which are
+#   both OFF below.
+# - support/python/: the plugin that builds the documentation, only used under FMT_DOC, which is
+#   OFF below. The build still needs the rest of support/.
+file(REMOVE_RECURSE
+    "${SOURCE_PATH}/test"
+    "${SOURCE_PATH}/support/python"
+)
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DFMT_CMAKE_DIR=share/fmt
         -DFMT_TEST=OFF
+        -DFMT_FUZZ=OFF
         -DFMT_DOC=OFF
 )
 
