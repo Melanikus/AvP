@@ -656,8 +656,8 @@ static void DoMotionTracker(void)
 	{
 		DYNAMICSBLOCK *playerDynPtr = Player->ObStrategyBlock->DynPtr;
 		int phi = playerDynPtr->OrientEuler.EulerY;
-		int cosPhi = MUL_FIXED(GetCos(phi),MOTIONTRACKER_SCALE);
-		int sinPhi = MUL_FIXED(GetSin(phi),MOTIONTRACKER_SCALE);
+		int cosPhi = MUL_FIXED(GetCos(phi & wrap360),MOTIONTRACKER_SCALE);
+		int sinPhi = MUL_FIXED(GetSin(phi & wrap360),MOTIONTRACKER_SCALE);
     	int i;
     	/* made more awkward because we want to draw the brightest last */
 		i=0;
@@ -770,8 +770,8 @@ static int DoMotionTrackerBlips(void)
 	int nearestDistance=MOTIONTRACKER_RANGE;
 	{
 		int phi = playerDynPtr->OrientEuler.EulerY;
-		cosPhi = MUL_FIXED(GetCos(phi),MOTIONTRACKER_SCALE);
-		sinPhi = MUL_FIXED(GetSin(phi),MOTIONTRACKER_SCALE);
+		cosPhi = MUL_FIXED(GetCos(phi & wrap360),MOTIONTRACKER_SCALE);
+		sinPhi = MUL_FIXED(GetSin(phi & wrap360),MOTIONTRACKER_SCALE);
 	}
 
 	while (numberOfObjects--)

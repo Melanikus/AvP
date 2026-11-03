@@ -1066,8 +1066,8 @@ AIMODULE *FarNPC_GetTargetAIModuleForWander(STRATEGYBLOCK *sbPtr, AIMODULE *exce
 	if (!dynPtr) return targetModule;
 
 	/* get npc 2d directional vector */
-	npcDirn.vx = GetSin(dynPtr->OrientEuler.EulerY);
-	npcDirn.vz = GetCos(dynPtr->OrientEuler.EulerY);
+	npcDirn.vx = GetSin(dynPtr->OrientEuler.EulerY & wrap360);
+	npcDirn.vz = GetCos(dynPtr->OrientEuler.EulerY & wrap360);
 	npcDirn.vy = 0;
 	Normalise(&npcDirn);
 
