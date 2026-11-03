@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of unused RIF-authoring code
+
 #ifndef _hierplace_hpp
 #define _hierplace_hpp 1
 
@@ -10,7 +13,6 @@ class Placed_Hierarchy_Chunk : public Chunk_With_Children
 {
 public :
 
-	Placed_Hierarchy_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation);
 	Placed_Hierarchy_Chunk(Chunk_With_Children * const parent,const char* ,const size_t);
 
 

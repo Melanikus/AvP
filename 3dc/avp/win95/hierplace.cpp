@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   fill_data_block copies strings with memcpy of their measured length
+//   deleted unused RIF-authoring code (the Placed_Hierarchy_Chunk "from data" constructor)
 #include "hierplace.hpp"
 #include "md5.h"
 
@@ -23,12 +24,6 @@ Children for Placed_Hiearchy_Chunk :
 */
 
 
-
-Placed_Hierarchy_Chunk::Placed_Hierarchy_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation)
-:Chunk_With_Children(parent,"PLACHIER")
-{
-	new Placed_Hierarchy_Data_Chunk(this,_name,_hierarchy_index,_location,_orientation);
-}
 
 ///////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("PLACHIDT",Placed_Hierarchy_Data_Chunk)

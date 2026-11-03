@@ -1,6 +1,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   fill_data_block copies strings with memcpy of their measured length
 //   AVP_Generator_Chunk::CalculateID builds the hashed name in a std::string instead of a fixed char[100]
+//   deleted unused RIF-authoring code (create_extra_data_chunk, create_extended_settings and the
+//   AVP_Generator_Extra_Data_Chunk / AVP_Particle_Generator_Chunk constructors only authoring used)
 #include <string>
 #include "avp_chunk.hpp"
 #include "md5.h"
@@ -138,14 +140,6 @@ AVP_Generator_Extra_Data_Chunk* AVP_Generator_Chunk::get_extra_data_chunk()
 	return 0;
 }
 
-AVP_Generator_Extra_Data_Chunk* AVP_Generator_Chunk::create_extra_data_chunk()
-{
-	AVP_Generator_Extra_Data_Chunk* agedc=get_extra_data_chunk();
-	if(agedc)return agedc;
-	
-	return new AVP_Generator_Extra_Data_Chunk(parent,this);
-}
-
 AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::get_extended_settings()
 {
 	if(flags & AVPGENFLAG_ADVANCEDGENERATOR)
@@ -155,17 +149,6 @@ AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::get_extended_setting
 		return (AVP_Generator_Extended_Settings_Chunk*)agedc->lookup_single_child("GENEXSET");
 	}
 	return 0;
-}
-
-AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::create_extended_settings()
-{
-	flags|=AVPGENFLAG_ADVANCEDGENERATOR;
-	AVP_Generator_Extra_Data_Chunk* agedc=create_extra_data_chunk();
-
-	AVP_Generator_Extended_Settings_Chunk* setting=(AVP_Generator_Extended_Settings_Chunk*)agedc->lookup_single_child("GENEXSET");
-	if(setting) return setting;
-
-	return new AVP_Generator_Extended_Settings_Chunk(agedc);
 }
 
 Object_Alternate_Locations_Chunk* AVP_Generator_Chunk::get_alternate_locations_chunk()
@@ -192,12 +175,6 @@ children for AVP_Generator_Extra_Data_Chunk :
 "ALTLOCAT"		Object_Alternate_Locations_Chunk)
 */
 
-
-AVP_Generator_Extra_Data_Chunk::AVP_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,AVP_Generator_Chunk* agc)
-:Chunk_With_Children(parent,"AVPGENEX")
-{
-	new AVP_Generator_Extra_Name_Chunk(this,agc->name);	
-}
 
 AVP_Generator_Chunk* AVP_Generator_Extra_Data_Chunk::get_generator_chunk()
 {
@@ -710,12 +687,6 @@ Object_Alternate_Locations_Chunk	"ALTLOCAT"
 Indexed_Sound_Chunk					"INDSOUND"
 */
 
-
-AVP_Particle_Generator_Chunk::AVP_Particle_Generator_Chunk(Chunk_With_Children* parent , const char* name,ObjectID & id)
-:Chunk_With_Children(parent,"PARGENER")
-{
-	new AVP_Particle_Generator_Data_Chunk(this,name,id); 
-}
 
 AVP_Particle_Generator_Data_Chunk* AVP_Particle_Generator_Chunk::get_data_chunk()
 {

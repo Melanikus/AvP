@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declarations of unused RIF-authoring code
+
 #ifndef _avpchunk_hpp_
 #define _avpchunk_hpp_
 
@@ -70,10 +73,8 @@ public:
 	virtual size_t size_chunk ();
 
 	AVP_Generator_Extra_Data_Chunk* get_extra_data_chunk();
-	AVP_Generator_Extra_Data_Chunk* create_extra_data_chunk();
 
 	AVP_Generator_Extended_Settings_Chunk* get_extended_settings();
-	AVP_Generator_Extended_Settings_Chunk* create_extended_settings();
 
 	Object_Alternate_Locations_Chunk* get_alternate_locations_chunk();
 	AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t size);
@@ -94,7 +95,6 @@ public:
 	{}
 	
 	AVP_Generator_Extra_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
-	AVP_Generator_Extra_Data_Chunk (Chunk_With_Children * parent,AVP_Generator_Chunk*);
 	
 	AVP_Generator_Chunk* get_generator_chunk();
 };
@@ -332,7 +332,6 @@ class AVP_Particle_Generator_Chunk : public Chunk_With_Children
 {
 public :
 
-	AVP_Particle_Generator_Chunk(Chunk_With_Children* parent,const char* name,ObjectID& id);
 	AVP_Particle_Generator_Chunk(Chunk_With_Children * const parent,const char *, size_t const);
 
 	AVP_Particle_Generator_Data_Chunk* get_data_chunk();
