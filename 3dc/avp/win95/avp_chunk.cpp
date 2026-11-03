@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   names saved into level data are copied by their measured length, an ID's name is built in text that
 //   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed

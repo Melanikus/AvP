@@ -7,7 +7,7 @@
 	Reference-counted base class to be used by e.g. strings
 
 */
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   added RefHolder, a helper that lets go of a shared object automatically when the code using it ends
 

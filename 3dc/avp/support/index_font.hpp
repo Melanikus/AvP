@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   fonts are made by a small function that hands them back (it works the same as before)
 /*

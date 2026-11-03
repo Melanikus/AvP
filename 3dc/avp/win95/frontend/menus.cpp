@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   menu texts (the multiplayer setup, a menu number, the load-game list, the save-slot file name,
 //   the joined LAN game's name and the custom level name) are copied or written with size limits

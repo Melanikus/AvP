@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   texts on the statistics screen that hold words from the language file, or the player's profile
 //   name, are written with a size limit, so they always fit

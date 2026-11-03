@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   temporary text objects are let go automatically when the code using them ends, instead of by hand;
 //   the message font is made by a small function that hands it back (it works the same as before)

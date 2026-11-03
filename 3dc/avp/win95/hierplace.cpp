@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   names saved into level data are copied, and stepped past, by the length measured from the name
 //   itself, and unused code for making new level files was removed

@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed four switched-off (#if 0) weapon messages that could never run, and could not even
 //   be built (they wrote into a "tempstring" this file never declares)

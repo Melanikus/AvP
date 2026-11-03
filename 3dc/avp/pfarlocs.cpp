@@ -2,7 +2,7 @@
   Source file for FAR AI alien module locations, as used by far alien
   behaviours....
   --------------------------------------------------------------------*/
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
 #include "3dc.h"

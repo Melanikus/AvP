@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer

@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
 //   fills its new data block in a small function (it works the same as before)

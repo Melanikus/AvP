@@ -1,5 +1,5 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a saved profile is loaded only when complete and its name always ends inside its box; its look
 //   speeds are kept within the menu sliders' range; the profile folder path has a size limit

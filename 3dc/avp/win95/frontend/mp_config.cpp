@@ -1,4 +1,4 @@
-// AvP port by Barry Duncan (Bawy).
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   multiplayer level and settings names, and the settings file paths, are copied or written with size
 //   limits so they always fit; the list of custom level names is now freed in full
