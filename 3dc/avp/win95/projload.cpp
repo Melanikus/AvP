@@ -2947,7 +2947,8 @@ void LoadModuleData()
 	int pos=0;
 	unsigned long bytesread;
 	{
-		char name[60];
+		// the 60-byte name field; one spare byte, always 0, ends the scans below
+		char name[61] = { 0 };
 		ReadFile(file,name,60,&bytesread,0);
 		
 		int i=0;
