@@ -432,7 +432,7 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 	sdata+=16;
 
 	for (int i=0; i<3; ++i, sdata+=4) reserved[i] = *(int *)sdata;
-
+	
 	// the name, its NUL and its padding must all be inside the chunk (a name with no NUL gives len > room)
 	size_t const room = sdata_end - sdata;
 	size_t const name_length = strnlen(sdata, room);
@@ -445,7 +445,7 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 	// len > name_length, so the copy holds the name's NUL; the last byte (that NUL or padding after it) is 0 as well
 	srcrifname[len-1] = 0;
 	sdata += len;
-
+	
 	if (sdata_end - sdata < 4) {
 		return;
 	}

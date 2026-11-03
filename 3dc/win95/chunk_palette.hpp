@@ -730,7 +730,7 @@ public:
 	int const * GetMD5Val(BMP_Flags const & rcbmp);
 	void RemoveMD5Val(char const * bname);
 	Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-
+	
 	Environment_Game_Mode_Chunk * const egm_parent;
 	
    	int version_num;

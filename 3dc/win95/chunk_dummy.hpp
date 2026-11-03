@@ -20,7 +20,7 @@ public:
 	Dummy_Object_Data_Chunk * get_data_chunk();//gets data chunk (name and location)
 
 	const char* get_text(); //get text attached to a dummy object
-
+	
 };
 
 //chunk containing  name and location of dummy object

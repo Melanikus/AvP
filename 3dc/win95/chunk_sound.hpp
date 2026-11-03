@@ -75,7 +75,7 @@ class Sound_Object_Extra_Data_Chunk : public Chunk_With_Children
 {
 public:
 	Sound_Object_Extra_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
-
+	
 	Sound_Object_Chunk* get_sound_chunk();
 };
 	
