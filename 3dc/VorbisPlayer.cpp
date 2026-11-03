@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   VorbisPlayback::Open closes the file when it is not a valid Ogg Vorbis stream
+
 #include <stdio.h>
 #include "VorbisPlayer.h"
 #include <vector>
@@ -68,6 +71,9 @@ bool VorbisPlayback::Open(const std::string &fileName)
 
 	if (ov_open_callbacks(_vorbisFile, &_oggFile, NULL, 0, OV_CALLBACKS_DEFAULT) < 0) {
 		Con_PrintError("File " + fileName + "is not a valid OGG Vorbis file");
+		// a failed open leaves the file to us: libvorbis clears its datasource before ov_clear
+		fclose(_vorbisFile);
+		_vorbisFile = NULL;
 		return false;
 	}
 
