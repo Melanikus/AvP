@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   ChunkObject::o_name is 64 characters (was 50), so the longest stock object name fits
+
 #ifndef _chnktype_hpp
 #define _chnktype_hpp 1
 
@@ -204,7 +207,7 @@ struct ChunkObject
 
 	BOOL is_base_object;
 
-	char o_name[50];
+	char o_name[64]; // was 50; a stock level (hadleyshope.rif) has a 53-character object name
 
 	int index_num; //this won't get changed by update_my_chunkobject
 

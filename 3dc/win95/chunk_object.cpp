@@ -1,6 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
 //   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
+//   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -399,7 +400,7 @@ ObjectID Object_Chunk::CalculateID()
 RIF_IMPLEMENT_DYNCREATE("OBJHEAD1",Object_Header_Chunk)
 
 // from buffer
-Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t /*hsize*/)
+Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t hsize)
 : Chunk (parent, "OBJHEAD1"), object_data (((Object_Chunk*)parent)->object_data_store),
 flags(0), version_no (0), associated_shape (0)
 {
@@ -434,7 +435,16 @@ flags(0), version_no (0), associated_shape (0)
 	shape_id_no = *((int *) hdata);
 	hdata+=4;
 
-	strcpy (parent_object->object_data_store->o_name, hdata);
+	// the name fills the rest of the chunk (after the 60 bytes above): copy what fits in o_name, and never read
+	// past the chunk (a stock level, hadleyshope.rif, has a 53-character name)
+	size_t const name_room = hsize > 60 ? hsize - 60 : 0;
+	size_t name_length = 0;
+	while (name_length < name_room && name_length < sizeof(parent_object->object_data_store->o_name) - 1 && hdata[name_length])
+	{
+		name_length++;
+	}
+	memcpy (parent_object->object_data_store->o_name, hdata, name_length);
+	parent_object->object_data_store->o_name[name_length] = '\0';
 	parent_object->object_data_store->ID.id1=0;
 	parent_object->object_data_store->ID.id2=0;
 }
