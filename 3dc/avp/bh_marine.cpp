@@ -2689,10 +2689,10 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 				if(marineStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) {
 					Sound_Update3d(marineStatusPointer->soundHandle,&(sbPtr->DynPtr->Position));
 				} else {
-					if (ActiveSounds[marineStatusPointer->soundHandle].soundIndex!=SID_FIRE) {
-						Sound_Stop(marineStatusPointer->soundHandle);
-					 	Sound_Play(SID_FIRE,"dlev",&(sbPtr->DynPtr->Position),&marineStatusPointer->soundHandle,127);
-					}
+					/* No sound on the handle: start the fire sound. (This used to test
+					ActiveSounds[soundHandle].soundIndex!=SID_FIRE first, i.e. ActiveSounds[-1], and call
+					Sound_Stop(-1), which returns at once for a negative handle.) */
+				 	Sound_Play(SID_FIRE,"dlev",&(sbPtr->DynPtr->Position),&marineStatusPointer->soundHandle,127);
 				}
 			}
 		}
