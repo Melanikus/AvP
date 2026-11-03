@@ -47,6 +47,9 @@ typedef struct
 
 } LIGHTELEMENT;
 
+// size of LightElementStorage (lighting.cpp); view.cpp sizes an object's light list with it
+#define MAX_NO_OF_LIGHTELEMENTS 500
+
 
 void InitialiseLightElementSystem(void);
 void MakeLightElement(VECTORCH *positionPtr, enum LIGHTELEMENT_BEHAVIOUR_ID behaviourID);

@@ -62,7 +62,9 @@ VECTORCH LocalView;
 
 /* KJL 11:16:37 06/06/97 - lights */
 int NumLightSourcesForObject;
-LIGHTBLOCK *LightSourcesForObject[MaxLightsPerObject];
+// room for every light that can reach an object: up to MaxLightsPerObject lights attached to objects (the first loop
+// of LightSourcesInRangeOfObject stops there) plus every light element (at most MAX_NO_OF_LIGHTELEMENTS are active)
+LIGHTBLOCK *LightSourcesForObject[MaxLightsPerObject + MAX_NO_OF_LIGHTELEMENTS];
 int GlobalAmbience;
 int LightScale = ONE_FIXED;
 int DrawingAReflection;
@@ -198,8 +200,9 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		int i = NumActiveLightElements;
 		LIGHTELEMENT *lightElementPtr = LightElementStorage;
-		// same bound as the object lights above: LightSourcesForObject holds MaxLightsPerObject entries
-		while (i-- && NumLightSourcesForObject < MaxLightsPerObject)
+		// bounded by the size of LightSourcesForObject, which has room for every active light element after the
+		// object lights, so no light in range is left out
+		while (i-- && NumLightSourcesForObject < (int)(sizeof(LightSourcesForObject) / sizeof(LightSourcesForObject[0])))
 		{
 			LIGHTBLOCK *lptr = &(lightElementPtr->LightBlock);
 			VECTORCH vertexToLight;
