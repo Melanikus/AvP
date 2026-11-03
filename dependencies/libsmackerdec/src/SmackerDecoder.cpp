@@ -55,6 +55,7 @@
  *   SM-P9: reject a file with no frames
  *   SM-P10: skip the unread rest of a bit reader with a seek, not bit by bit
  *   SM-P11: fail Open on a truncated header; skip frames once the stream has failed
+ *   SM-P12: no signed overflow in FILL and audio deltas; reject INT32_MIN frame rate, fps >= 1
  */
 
 #include "SmackerDecoder.h"
@@ -371,12 +372,23 @@ bool SmackerDecoder::Open(const std::string &fileName)
 
 	int32_t frameRate = file.ReadUint32LE();
 
+	// -frameRate below would be undefined
+	if (frameRate == INT32_MIN)
+	{
+		SmackerCommon::LogError("Invalid frame rate");
+		return false;
+	}
+
 	if (frameRate > 0)
 		fps = 1000 / frameRate;
 	else if (frameRate < 0)
 		fps = 100000 / (-frameRate);
 	else
 		fps = 10;
+
+	// the caller divides by the frame rate: never return 0
+	if (fps == 0)
+		fps = 1;
 
 	uint32_t flags = file.ReadUint32LE();
 
@@ -1070,7 +1082,7 @@ int SmackerDecoder::DecodeFrame(uint32_t frameSize)
 			{
                 uint32_t col;
                 out = picture + (blk / bw) * (stride * 4) + (blk % bw) * 4;
-                col = mode * 0x01010101;
+                col = mode * 0x01010101U;
                 for (i = 0; i < 4; i++) {
                     *((uint32_t*)out) = col;
                     out += stride;
@@ -1176,7 +1188,7 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
                 else
                     res = 0;
                 val |= h[3].values[res] << 8;
-                pred[1] += (int16_t)val;
+                pred[1] += (unsigned)(int16_t)val;
                 *samples++ = pred[1];
             } else {
 				if (VLC_GetSize(vlc[0]))
@@ -1189,7 +1201,7 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
                 else
                     res = 0;
                 val |= h[1].values[res] << 8;
-                pred[0] += val;
+                pred[0] += (unsigned)val;
                 *samples++ = pred[0];
             }
         }
@@ -1205,14 +1217,14 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
 					res = VLC_GetCodeBits(bits, vlc[1]);
                 else
                     res = 0;
-                pred[1] += (int8_t)h[1].values[res];
+                pred[1] += (unsigned)(int8_t)h[1].values[res];
                 *samples8++ = pred[1];
             } else {
 				if (VLC_GetSize(vlc[0]))
 				res = VLC_GetCodeBits(bits, vlc[0]);
                 else
                     res = 0;
-                pred[0] += (int8_t)h[0].values[res];
+                pred[0] += (unsigned)(int8_t)h[0].values[res];
                 *samples8++ = pred[0];
             }
         }
