@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the message history text, which comes from the language file, is written with a size limit, so it always fits
 #include "3dc.h"
 #include "3dc.h"
 #include "module.h"
@@ -51,9 +54,12 @@ void MessageHistory_DisplayPrevious(void)
 		char buffer[1024];
 
 		EntryToNextShow--;
-		sprintf
+		// both texts come from the language file, which can hold a line of any length: _snprintf stops at the end of
+		// buffer, and because it leaves out the end marker when it has to cut the text short, we write that ourselves
+		_snprintf
 		(
 			buffer,
+			sizeof(buffer) - 1,
 			"%s %d (%02dh%02dm%02ds) \n \n%s",
 			GetTextString(TEXTSTRING_INGAME_MESSAGENUMBER),
 			EntryToNextShow+1,
@@ -62,6 +68,7 @@ void MessageHistory_DisplayPrevious(void)
 			MessageHistoryStore[EntryToNextShow].Seconds,
 			GetTextString(MessageHistoryStore[EntryToNextShow].StringID)
 		);
+		buffer[sizeof(buffer) - 1] = '\0';
 		NewOnScreenMessage(buffer);
 		MessageHistoryAccessedTimer = 65536*4;
 
