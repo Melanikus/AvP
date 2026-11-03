@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	missions.cpp
@@ -448,11 +450,10 @@ void MissionObjective :: TestCompleteNext(void)
 			{
 				#if UseGadgets
 
-				SCString* pSCString_Temp = new SCString("TESTING MISSION COMPLETION HOOK:");
+				RefHolder<SCString> pSCString_Temp(new SCString("TESTING MISSION COMPLETION HOOK:"));
 
 				pSCString_Temp -> SendToScreen();
 
-				pSCString_Temp -> R_Release();
 				#endif // UseGadgets
 
 			}
@@ -465,11 +466,10 @@ void MissionObjective :: TestCompleteNext(void)
 			{
 				#if UseGadgets
 
-				SCString* pSCString_Temp = new SCString("NO INCOMPLETE OBJECTIVES");
+				RefHolder<SCString> pSCString_Temp(new SCString("NO INCOMPLETE OBJECTIVES"));
 
 				pSCString_Temp -> SendToScreen();
 
-				pSCString_Temp -> R_Release();
 				#endif // UseGadgets
 			}
 		}

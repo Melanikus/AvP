@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	conscmnd.cpp
@@ -278,12 +280,11 @@
 
 /*static*/ void ConsoleCommand :: ListAll(void)
 {
-	SCString* pSCString_Temp = new SCString("LIST OF ALL CONSOLE COMMANDS:");
+	RefHolder<SCString> pSCString_Temp(new SCString("LIST OF ALL CONSOLE COMMANDS:"));
 		// LOCALISEME()
 
 	pSCString_Temp -> SendToScreen();
 
-	pSCString_Temp ->R_Release();
 
 	for
 	(
@@ -309,20 +310,19 @@ void ConsoleCommand :: Display(void) const
 	SCString* pSCString_Temp1 = new SCString("\"");
 	SCString* pSCString_Temp2 = new SCString("\" ");
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_Temp1,
 		pSCString_Symbol,
 		pSCString_Temp2,
 		pSCString_Description
-	);
+	));
 
 	pSCString_Temp2 -> R_Release();
 	pSCString_Temp1 -> R_Release();
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 }
 
 
@@ -341,9 +341,8 @@ ConsoleCommand :: ConsoleCommand
 
 void ConsoleCommand :: EchoResult(int Result)
 {
-	SCString* pSCString_Feedback = new SCString(Result);
+	RefHolder<SCString> pSCString_Feedback(new SCString(Result));
 	pSCString_Feedback -> SendToScreen();
-	pSCString_Feedback -> R_Release();
 }
 
 int ConsoleCommand :: GetArg(ProjChar* pProjCh_Arg)

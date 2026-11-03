@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	ahudgadg.cpp
@@ -272,9 +274,8 @@ void AlienHUDGadget :: Jitter(int FixP_Magnitude)
 
 void AlienHUDGadget :: SetString(const char* text)
 {
-	SCString* string = new SCString(text);
+	RefHolder<SCString> string(new SCString(text));
 	pTextEntryGadg -> SetString(*string);
-	string->R_Release();
 }
 
 void BringDownConsoleWithSayTypedIn()

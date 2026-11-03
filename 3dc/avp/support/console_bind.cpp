@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted the disabled (#if 0) KeyBinding::AttemptToBind / AttemptToUnbind
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbind.cpp
@@ -105,17 +106,16 @@ KeyBinding :: ParseBindCommand
 				theKey
 			);
 
-			SCString* pSCString_Feedback = new SCString
+			RefHolder<SCString> pSCString_Feedback(new SCString
 			(
 				pSCString_1,
 				pSCString_ToBind,
 				pSCString_2,
 				pSCString_3
-			);
+			));
 
 			pSCString_Feedback -> SendToScreen();
 
-			pSCString_Feedback -> R_Release();
 			pSCString_3 -> R_Release();
 			pSCString_2 -> R_Release();
 			pSCString_1 -> R_Release();
@@ -228,12 +228,11 @@ KeyBinding :: ParseUnbindCommand
 void
 KeyBinding :: UnbindAll(void)
 {
-	SCString* pSCString_Feedback = new SCString("DESTROYING ALL KEY BINDINGS");
+	RefHolder<SCString> pSCString_Feedback(new SCString("DESTROYING ALL KEY BINDINGS"));
 		// LOCALISEME
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 
 	while
 	(
@@ -250,12 +249,11 @@ KeyBinding :: UnbindAll(void)
 void
 KeyBinding :: ListAllBindings(void)
 {
-	SCString* pSCString_Feedback = new SCString("LIST OF ALL KEY BINDINGS:");
+	RefHolder<SCString> pSCString_Feedback(new SCString("LIST OF ALL KEY BINDINGS:"));
 		// LOCALISEME
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 
 	for
 	(
@@ -552,16 +550,15 @@ KeyBinding :: ErrorDontRecogniseKey( SCString* pSCString_Key )
 	SCString* pSCString_2 = new SCString("\"");
 		// LOCALISEME
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_1,
 		pSCString_Key,
 		pSCString_2
-	);
+	));
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 	pSCString_2 -> R_Release();
 	pSCString_1 -> R_Release();
 }
@@ -575,17 +572,16 @@ KeyBinding :: ListThis(void) const
 		// LOCALISEME
 	SCString* pSCString_3 = new SCString("\"");
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_1,
 		pSCString_2,
 		pSCString_ToOutput,
 		pSCString_3
-	);
+	));
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 	pSCString_3 -> R_Release();
 	pSCString_2 -> R_Release();
 	pSCString_1 -> R_Release();

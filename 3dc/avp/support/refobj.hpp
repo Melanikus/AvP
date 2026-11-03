@@ -7,6 +7,8 @@
 	Reference-counted base class to be used by e.g. strings
 
 */
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   added RefHolder, which releases a new reference-counted object's reference at the end of its scope
 
 #ifndef _refobj
 #define _refobj 1
@@ -174,6 +176,26 @@
 			Track_Destroy();
 			#endif
 		}
+	};
+
+	// Holds the one reference a new reference-counted object starts with, and releases it when the holder goes
+	// out of scope:   RefHolder<SCString> pSCString(new SCString("TEXT")); pSCString -> SendToScreen();
+	template <class RC> class RefHolder
+	{
+	public:
+		explicit RefHolder(RC* pRC_New) : pRC(pRC_New) {}
+		~RefHolder() { if (pRC) pRC -> R_Release(); }
+
+		RC* operator->() const { return pRC; }
+		RC& operator*() const { return *pRC; }
+		operator RC*() const { return pRC; }
+
+	private:
+		RC* pRC;
+
+		// not copyable: each holder releases its one reference once
+		RefHolder(const RefHolder&);
+		RefHolder& operator=(const RefHolder&);
 	};
 
 

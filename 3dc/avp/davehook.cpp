@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	davehook.cpp
@@ -399,18 +401,16 @@ void Testing :: DumpRefCounts(void)
 {
 	#if TrackReferenceCounted
 	{
-		SCString* pSCString_Feedback = new SCString("DUMPING REFCOUNT INFO");
+		RefHolder<SCString> pSCString_Feedback(new SCString("DUMPING REFCOUNT INFO"));
 		pSCString_Feedback -> SendToScreen();
-		pSCString_Feedback -> R_Release();
 
 		LogFile tempLog("REFDUMP.TXT");
 		RefCountObject :: DumpAll(tempLog);
 	}
 	#else
 	{
-		SCString* pSCString_Feedback = new SCString("REFCOUNT INFO DISABLED AT COMPILE-TIME");
+		RefHolder<SCString> pSCString_Feedback(new SCString("REFCOUNT INFO DISABLED AT COMPILE-TIME"));
 		pSCString_Feedback -> SendToScreen();
-		pSCString_Feedback -> R_Release();
 	}
 	#endif
 }

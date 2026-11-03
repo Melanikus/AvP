@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbtch.cpp
@@ -91,14 +93,13 @@ BatchFileProcessing :: Run(char* Filename)
 						GLOBALASSERT(CharsReadInLine<=MaxBatchFileLineLength);
 						LineBuffer[CharsReadInLine] = '\0';
 
-						SCString* pSCString_Line = new SCString(&LineBuffer[0]);
+						RefHolder<SCString> pSCString_Line(new SCString(&LineBuffer[0]));
 						
 						PendingList . AddToEnd
 						(
 							*pSCString_Line
 						);
 
-						pSCString_Line -> R_Release();
 
 						CharsReadInLine = 0;
 					}
@@ -118,14 +119,13 @@ BatchFileProcessing :: Run(char* Filename)
 				GLOBALASSERT(CharsReadInLine<=MaxBatchFileLineLength);
 				LineBuffer[CharsReadInLine] = '\0';
 				
-				SCString* pSCString_Line = new SCString(&LineBuffer[0]);
+				RefHolder<SCString> pSCString_Line(new SCString(&LineBuffer[0]));
 				
 				PendingList . AddToEnd
 				(
 					*pSCString_Line
 				);
 
-				pSCString_Line -> R_Release();
 			}
 		}
 
@@ -137,15 +137,14 @@ BatchFileProcessing :: Run(char* Filename)
 		SCString* pSCString_1 = new SCString("EXECUTING BATCH FILE ");
 			// LOCALISEME
 		SCString* pSCString_2 = new SCString(Filename);
-		SCString* pSCString_Feedback = new SCString
+		RefHolder<SCString> pSCString_Feedback(new SCString
 		(
 			pSCString_1,
 			pSCString_2
-		);
+		));
 
 		pSCString_Feedback -> SendToScreen();
 
-		pSCString_Feedback -> R_Release();
 		pSCString_2 -> R_Release();
 		pSCString_1 -> R_Release();
 

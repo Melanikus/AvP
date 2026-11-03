@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
 /*******************************************************************
  *
  *    DESCRIPTION: 	string.cpp
@@ -554,11 +556,11 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2		
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -617,7 +619,6 @@ SCString :: SCString
 			);
 		}
 
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 
@@ -652,12 +653,12 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2,
 			pStringObj_3
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -720,7 +721,6 @@ SCString :: SCString
 			);
 		}
 
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 
@@ -758,13 +758,13 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2,
 			pStringObj_3,
 			pStringObj_4
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -831,7 +831,6 @@ SCString :: SCString
 			);
 		}
 		
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 
