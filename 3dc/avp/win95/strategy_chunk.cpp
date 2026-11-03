@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   Virtual_Object_Properties_Chunk::CalculateID builds the hashed name in a std::string instead of a fixed char[100]
+#include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
 
@@ -310,15 +313,14 @@ ObjectID Virtual_Object_Properties_Chunk::CalculateID()
 {
 	ID.id1=ID.id2=0;
 	
-	char Name[100];
-
 	/*Add on a few extra letters so that I don't have to worry about having the same name
 	as any normal objects etc*/
-	strcpy(Name,"VirtOb");
-	strcat(Name,name);
-	
+	// name comes from the .rif with no length limit: no fixed-size buffer
+	std::string Name("VirtOb");
+	Name += name;
+
 	char buffer[16];
-	md5_buffer(Name, strlen(Name), &buffer[0]);
+	md5_buffer(Name.c_str(), (unsigned int)Name.size(), &buffer[0]);
 	buffer[7]=0;
 	ID = *(ObjectID*)&buffer[0];
 	return ID;

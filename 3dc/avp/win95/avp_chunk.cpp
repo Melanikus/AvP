@@ -1,5 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   fill_data_block copies strings with memcpy of their measured length
+//   AVP_Generator_Chunk::CalculateID builds the hashed name in a std::string instead of a fixed char[100]
+#include <string>
 #include "avp_chunk.hpp"
 #include "md5.h"
 
@@ -101,13 +103,12 @@ ObjectID AVP_Generator_Chunk::CalculateID()
 	List<Chunk*> chlist;
 	cwc->lookup_child("RIFFNAME",chlist);
 	if(!chlist.size()) return retval;
-	char Name[100];
+	// rif name + generator name, hashed; both come from the .rif and have no length limit (stock max 91 characters)
+	std::string Name(((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
 
-	strcpy(Name,((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
-
-	strcat(Name,name);
+	Name += name;
 	char buffer[16];
-	md5_buffer(Name,strlen(Name),&buffer[0]);
+	md5_buffer(Name.c_str(),(unsigned int)Name.size(),&buffer[0]);
 	buffer[7]=0;
 	retval = *(ObjectID*)&buffer[0];
 	return retval;
