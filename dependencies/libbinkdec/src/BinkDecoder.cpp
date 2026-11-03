@@ -51,6 +51,7 @@
  *   BK-P6: reject more than 256 audio tracks
  *   BK-P7: cap the audio buffer size; fail Open when an allocation fails
  *   BK-P8: reject 0 frames and a frame index that does not increase
+ *   BK-P9: reject a zero frame rate numerator or denominator
  */
 
 #include "BinkDecoder.h"
@@ -280,6 +281,13 @@ bool BinkDecoder::Open(const std::string &fileName)
 
 	fpsDividend = file.ReadUint32LE();
 	fpsDivider  = file.ReadUint32LE();
+
+	if (fpsDividend == 0 || fpsDivider == 0)
+	{
+		BinkCommon::LogError("Invalid header, invalid frame rate");
+		return false;
+	}
+
 	videoFlags  = file.ReadUint32LE();
 	
 	nAudioTracks = file.ReadUint32LE();
