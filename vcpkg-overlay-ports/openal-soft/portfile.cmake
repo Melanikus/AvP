@@ -35,6 +35,48 @@ file(REMOVE_RECURSE
     "${SOURCE_PATH}/fmt-11.2.0"
 )
 
+# Delete the library code that this port never compiles on any platform.
+# - modules/, alsoft-modules/ and the other .cppm files: C++ modules, only used under
+#   HAVE_CXXMODULES, which needs ALSOFT_ENABLE_MODULES, which is OFF below.
+# - router/: only used under ALSOFT_BUILD_ROUTER, which is OFF below.
+# - common/win_main_utf8.h: only the deleted examples and tools included it.
+file(REMOVE_RECURSE
+    "${SOURCE_PATH}/modules"
+    "${SOURCE_PATH}/alsoft-modules"
+    "${SOURCE_PATH}/alc/context.cppm"
+    "${SOURCE_PATH}/common/alformattypes.cppm"
+    "${SOURCE_PATH}/core/logging.cppm"
+    "${SOURCE_PATH}/router"
+    "${SOURCE_PATH}/common/win_main_utf8.h"
+)
+
+# On x86 Windows, the only build we ship, also delete what only other platforms compile. Other
+# platforms do need these files, so they stay there.
+# - The audio backends for other systems. Each is only used if its ALSOFT_BACKEND_ option is on,
+#   and the options below (or if(NOT WIN32) in CMakeLists.txt) turn all of these off. We keep
+#   base, loopback, null, dsound, wasapi and wave.
+# - core/rtkit: Linux realtime support, only used under if(NOT WIN32).
+# - core/mixer/mixer_neon.cpp: for ARM processors, only used under HAVE_NEON.
+# - common/ghc_filesystem.h: a stand-in for compilers with no std::filesystem. Ours has it, so
+#   common/filesystem.h never includes this. If that ever changed, the build would stop with an
+#   error, so this cannot go wrong quietly.
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_UWP AND VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
+    foreach(backend IN ITEMS alsa coreaudio jack oboe opensl oss pipewire portaudio pulseaudio sdl2
+            sdl3 sndio solaris winmm)
+        file(REMOVE
+            "${SOURCE_PATH}/alc/backends/${backend}.cpp"
+            "${SOURCE_PATH}/alc/backends/${backend}.h"
+            "${SOURCE_PATH}/alc/backends/${backend}.hpp"
+        )
+    endforeach()
+    file(REMOVE
+        "${SOURCE_PATH}/core/rtkit.cpp"
+        "${SOURCE_PATH}/core/rtkit.h"
+        "${SOURCE_PATH}/core/mixer/mixer_neon.cpp"
+        "${SOURCE_PATH}/common/ghc_filesystem.h"
+    )
+endif()
+
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES
         pipewire    ALSOFT_BACKEND_PIPEWIRE
@@ -107,7 +149,10 @@ vcpkg_cmake_configure(
         -DALSOFT_BACKEND_OPENSL=${VCPKG_TARGET_IS_ANDROID}
         -DALSOFT_REQUIRE_OPENSL=${VCPKG_TARGET_IS_ANDROID}
         -DALSOFT_BACKEND_PORTAUDIO=OFF
+        -DALSOFT_BACKEND_SDL3=OFF
+        -DALSOFT_BACKEND_SDL2=OFF
         -DALSOFT_BACKEND_WAVE=ON
+        -DALSOFT_BUILD_ROUTER=OFF
         -DALSOFT_RTKIT=OFF
     MAYBE_UNUSED_VARIABLES
         # NOT WIN32
@@ -118,6 +163,7 @@ vcpkg_cmake_configure(
         ALSOFT_BACKEND_SNDIO
         ALSOFT_RTKIT
         # WIN32
+        ALSOFT_BUILD_ROUTER
         ALSOFT_BACKEND_WINMM
         ALSOFT_BACKEND_DSOUND
         ALSOFT_REQUIRE_DSOUND
