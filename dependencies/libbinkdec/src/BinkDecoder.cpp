@@ -53,6 +53,7 @@
  *   BK-P8: reject 0 frames and a frame index that does not increase
  *   BK-P9: reject a zero frame rate numerator or denominator
  *   BK-P11: skip a frame whose audio packet is larger than the frame
+ *   BK-P15: free the bundle buffers in the destructor
  */
 
 #include "BinkDecoder.h"
@@ -176,6 +177,10 @@ BinkDecoder::BinkDecoder()
 {
 	nFrames = 0;
 	currentFrame = 0;
+
+	// so the destructor's FreeBundles is safe when Open fails before InitBundles
+	for (int i = 0; i < BINK_NB_SRC; i++)
+		bundle[i].data = 0;
 }
 
 BinkDecoder::~BinkDecoder()
@@ -185,6 +190,8 @@ BinkDecoder::~BinkDecoder()
 		delete[] planes[i].current;
 		delete[] planes[i].last;
 	}
+
+	FreeBundles();
 
 	for (uint32_t i = 0; i < audioTracks.size(); i++)
 	{
