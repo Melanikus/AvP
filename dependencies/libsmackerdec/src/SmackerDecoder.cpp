@@ -53,6 +53,7 @@
  *   SM-P7: check palette and audio chunk sizes; advance frames by the frame table
  *   SM-P8: keep allocation failures inside the DLL; cap header-tree table sizes
  *   SM-P9: reject a file with no frames
+ *   SM-P10: skip the unread rest of a bit reader with a seek, not bit by bit
  */
 
 #include "SmackerDecoder.h"
@@ -800,8 +801,7 @@ bool SmackerDecoder::DecodeHeaderTrees()
 	 * the file read position to where the code expects it to be when this function returns (ie 
 	 * 'treeSize' number of bytes must be read
 	 */
-	uint32_t left = bits.GetSize() - bits.GetPosition();
-	bits.SkipBits(left);
+	bits.SkipToEnd();
 
 	return true;
 }
@@ -1072,8 +1072,7 @@ int SmackerDecoder::DecodeFrame(uint32_t frameSize)
 	 * the file read position to where the code expects it to be when this function returns (ie 
 	 * 'frameSize' number of bytes must be read
 	 */
-	uint32_t left = bits.GetSize() - bits.GetPosition();
-	bits.SkipBits(left);
+	bits.SkipToEnd();
 
 	return 0;
 }
@@ -1113,7 +1112,7 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
     // and skip the rest of it, so the next chunk is read from the right place
     if (unpackedSize < 0 || (uint32_t)unpackedSize > track.bufferSize) {
 		SmackerCommon::LogError("Frame is too large to fit in buffer");
-		bits.SkipBits(bits.GetSize() - bits.GetPosition());
+		bits.SkipToEnd();
 		return -1;
     }
 
@@ -1206,8 +1205,7 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
 
 	track.bytesReadThisFrame = unpackedSize;
 
-	uint32_t left = bits.GetSize() - bits.GetPosition();
-	bits.SkipBits(left);
+	bits.SkipToEnd();
 
 	return 0;
 }

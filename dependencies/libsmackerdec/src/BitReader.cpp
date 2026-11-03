@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P10: sticky overread flag instead of assert; SkipToEnd seeks past unread bytes
+ */
+
 #include "BitReader.h"
 #include <assert.h>
 
@@ -29,6 +34,8 @@ BitReader::BitReader(SmackerCommon::FileStream &file, uint32_t size)
 	this->nCachedBits = 0;
 	this->currentOffset = 0;
 	this->bytesRead = 0;
+	this->cache = 0;
+	this->overread = false;
 
 	FillCache();
 }
@@ -48,7 +55,11 @@ void BitReader::FillCache()
 	}
 	else
 	{
-		assert(0);
+		// past the end: read nothing more from the file, and return 0 bits from now on
+		// (nCachedBits must not wrap below 0 in GetBit)
+		overread = true;
+		this->cache = 0;
+		nCachedBits = 8;
 	}
 }
 
@@ -104,6 +115,23 @@ uint32_t BitReader::GetBits(uint32_t n)
 void BitReader::SkipBits(uint32_t n)
 {
 	GetBits(n);
+}
+
+// Skip whatever part of the totalSize bytes has not been read yet with a seek,
+// instead of reading it bit by bit; counted in bytes, so nothing overflows
+void BitReader::SkipToEnd()
+{
+	uint32_t left = totalSize - bytesRead;
+
+	while (left)
+	{
+		uint32_t step = (left > 0x7FFFFFFF) ? 0x7FFFFFFF : left;
+		file->Skip((int32_t)step);
+		left -= step;
+	}
+
+	bytesRead = totalSize;
+	nCachedBits = 0;
 }
 
 } // close namespace SmackerCommon

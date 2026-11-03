@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P10: sticky overread flag instead of assert; SkipToEnd seeks past unread bytes
+ */
+
 #ifndef _SmackerBitReader_h_
 #define _SmackerBitReader_h_
 
@@ -33,6 +38,7 @@ class BitReader
 		uint32_t GetBit();
 		uint32_t GetBits(uint32_t n);
 		void SkipBits(uint32_t n);
+		void SkipToEnd();
 
 		uint32_t GetSize();
 		uint32_t GetPosition();
@@ -46,6 +52,7 @@ class BitReader
 
 		uint8_t cache;
 		uint32_t nCachedBits;
+		bool overread; // set (and kept) once a read went past totalSize
 
 		void FillCache();
 };
