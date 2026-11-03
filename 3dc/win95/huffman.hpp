@@ -16,6 +16,8 @@ extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length);
 
 /* KJL 16:53:53 19/09/98 - Decompression */
 extern char *HuffmanDecompress(const HuffmanPackage *inpackage);
+/* for untrusted data (save games): packageSize = bytes available from inpackage on; NULL if not safely decodable */
+extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packageSize);
 
 #define COMPRESSED_RIF_IDENTIFIER "REBCRIF1"
 
