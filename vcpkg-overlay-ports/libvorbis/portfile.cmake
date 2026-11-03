@@ -22,6 +22,21 @@ vcpkg_from_github(
         0013-upstream-1b75110b-page-seek-use-after-free.patch
         # Our own fixes.
         0014-reject-value-mapped-books-with-zero-dimensions.patch
+        0015-check-fopen-and-bound-buffer-in-disabled-dumps.patch
+)
+
+# Delete source files that are never built, so that nothing we do not ship stays in the tree.
+# The library is built from the source lists in lib/CMakeLists.txt, and the top-level
+# CMakeLists.txt only adds lib/. None of these is in those lists:
+# - vq/: command-line tools for designing codebooks;
+# - examples/: sample programs;
+# - lib/psytune.c: a command-line tool for tuning the encoder;
+# - lib/misc.c: a debug memory tracker, only for builds with DEBUG_MALLOC, which needs pthread.h.
+file(REMOVE_RECURSE
+    "${SOURCE_PATH}/vq"
+    "${SOURCE_PATH}/examples"
+    "${SOURCE_PATH}/lib/psytune.c"
+    "${SOURCE_PATH}/lib/misc.c"
 )
 
 vcpkg_cmake_configure(
