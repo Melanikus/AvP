@@ -171,6 +171,9 @@ jobs:
   vcpkg-scan:
     name: Snyk on the vcpkg libraries
     needs: vcpkg-sources
+    # GitHub counts a skipped job as a passing check, so without this a failed library build would skip this job and
+    # let the pull request through unscanned. always() makes it run anyway: with no sources to download, it fails.
+    if: ${{ always() }}
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     steps:
       - name: Download the collected sources
