@@ -61,7 +61,7 @@ void InitTextStrings(void)
 		// have to quit if this file isn't available
 		char message[100];
 		_snprintf(message, sizeof(message) - 1, "Unable to load language file: %s\n", filenamePtr);
-	message[sizeof(message) - 1] = '\0';
+		message[sizeof(message) - 1] = '\0';
 
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message, MB_OK);
@@ -85,7 +85,7 @@ void InitTextStrings(void)
 	{
 		char message[100];
 		_snprintf(message, sizeof(message) - 1, "File %s is not compatible with Gold Edition\n", filenamePtr);
-	message[sizeof(message) - 1] = '\0';
+		message[sizeof(message) - 1] = '\0';
 
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message, MB_OK+MB_SYSTEMMODAL);
