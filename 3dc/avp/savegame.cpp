@@ -610,7 +610,13 @@ void LoadSavedGame()
 		//read the next header
 		SAVE_BLOCK_HEADER* header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
 
-		if(header->size>LoadInfo.BufferSpaceLeft)
+		//the header must fit in the file before it is read, and its size must at least cover it
+		if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER) || header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+		{
+			LogErrorString("LoadSavedGame - invalid level header (file size " + Util::IntToString(LoadInfo.BufferSize) + ")");
+			terminal_error = TRUE;
+		}
+		else if(header->size>LoadInfo.BufferSpaceLeft)
 		{
 			//oh dear, dodgy file
 			GLOBALASSERT("Invalid save game header size"==0);
@@ -621,7 +627,7 @@ void LoadSavedGame()
 			//go to the next header
 			LoadInfo.BufferPos += header->size;
 			LoadInfo.BufferSpaceLeft -= header->size;
-	
+
 			switch(header->type)
 			{
 				case SaveBlock_MainHeader :
@@ -830,8 +836,19 @@ SAVE_BLOCK_HEADER* GetNextBlockIfOfType(SAVE_BLOCK_TYPE type)
 		return 0;
 	}
 	
-	//look at the next header in the buffer
+	//look at the next header in the buffer (it must fit in what is left, and a block must at least hold its header:
+	//a size of 0 would be returned again and again by the loops that call this)
+	if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER))
+	{
+		LogErrorString("GetNextBlockIfOfType - save data ends inside a block header");
+		return 0;
+	}
 	header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
+	if(header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+	{
+		LogErrorString("GetNextBlockIfOfType - invalid save block size " + Util::IntToString(header->size));
+		return 0;
+	}
 	if(header->size>LoadInfo.BufferSpaceLeft)
 	{
 		//oh dear, dodgy file
@@ -1077,6 +1094,9 @@ static void SaveStrategies()
 
 static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
+	//the behaviour type and the name are read from the block, so the whole strategy header must be there
+	if(header->size < (int)sizeof(SAVE_BLOCK_STRATEGY_HEADER)) return;
+
 	switch(header->bhvr_type)
 	{
 		case I_BehaviourMarinePlayer :
@@ -1298,6 +1318,9 @@ static void SaveDeadStrategies()
 static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 {
 	DEAD_STRATEGY_SAVE_BLOCK* block = (DEAD_STRATEGY_SAVE_BLOCK*) header;
+
+	//the name is read from the block, so it must be all there
+	if(header->size < (int)sizeof(*block)) return;
 
 	STRATEGYBLOCK* sbPtr = FindSBWithName(block->SBname);
 	if(sbPtr)
