@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P11: short reads return 0 instead of stack garbage; add Is_Failed()
+ */
+
 #include "FileStream.h"
 #include <stdlib.h>
 
@@ -61,38 +66,50 @@ int32_t FileStream::ReadBytes(uint8_t *data, uint32_t nBytes)
 	return static_cast<int32_t>(file.gcount());
 }
 
+// a short read (end of file or failed stream) returns 0, never a partial or stale value
+
 uint32_t FileStream::ReadUint32LE()
 {
-	uint32_t value;
+	uint32_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 4);
+	if (file.gcount() != 4)
+		return 0;
 	return value;
 }
 
 uint32_t FileStream::ReadUint32BE()
 {
-	uint32_t value;
+	uint32_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 4);
+	if (file.gcount() != 4)
+		return 0;
 	return _byteswap_ulong(value);
 }
 
 uint16_t FileStream::ReadUint16LE()
 {
-	uint16_t value;
+	uint16_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 2);
+	if (file.gcount() != 2)
+		return 0;
 	return value;
 }
 
 uint16_t FileStream::ReadUint16BE()
 {
-	uint16_t value;
+	uint16_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 2);
+	if (file.gcount() != 2)
+		return 0;
 	return _byteswap_ushort(value);
 }
 
 uint8_t FileStream::ReadByte()
 {
-	uint8_t value;
+	uint8_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 1);
+	if (file.gcount() != 1)
+		return 0;
 	return value;
 }
 
@@ -129,6 +146,12 @@ bool FileStream::Skip(int32_t offset)
 bool FileStream::Is_Eos()
 {
 	return file.eof();
+}
+
+// true once a read came up short or a seek failed (the stream stays failed)
+bool FileStream::Is_Failed()
+{
+	return file.fail();
 }
 
 int32_t FileStream::GetPosition()

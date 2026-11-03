@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P11: Is_Failed() reports a failed read or seek
+ */
+
 #ifndef _SmackerFileStream_h_
 #define _SmackerFileStream_h_
 
@@ -56,6 +61,7 @@ class FileStream
 
 		int32_t GetPosition();
 		bool Is_Eos();
+		bool Is_Failed();
 
 	private:
 		std::ifstream file;

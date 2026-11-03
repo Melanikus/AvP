@@ -54,6 +54,7 @@
  *   SM-P8: keep allocation failures inside the DLL; cap header-tree table sizes
  *   SM-P9: reject a file with no frames
  *   SM-P10: skip the unread rest of a bit reader with a seek, not bit by bit
+ *   SM-P11: fail Open on a truncated header; skip frames once the stream has failed
  */
 
 #include "SmackerDecoder.h"
@@ -463,6 +464,13 @@ bool SmackerDecoder::Open(const std::string &fileName)
 		return false;
 	}
 
+	// a truncated header (fields, frame tables, header trees) reads as zeros: fail instead
+	if (file.Is_Failed())
+	{
+		SmackerCommon::LogError("Unexpected end of file in the header");
+		return false;
+	}
+
 	// set nextPos to where we are now, as next data is frame 1
 	nextPos = file.GetPosition();
 
@@ -832,6 +840,13 @@ int SmackerDecoder::ReadPacket()
 	for (int i = 0; i < kMaxAudioTracks; i++)
 	{
 		audioTracks[i].bytesReadThisFrame = 0;
+	}
+
+	// the seek failed, or an earlier read ran past the end of the file: nothing to decode
+	if (file.Is_Failed())
+	{
+		SmackerCommon::LogError("Unexpected end of file");
+		return -1;
 	}
 
 	// handle palette change
