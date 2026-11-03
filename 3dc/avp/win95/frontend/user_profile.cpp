@@ -1,4 +1,6 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   GetSettingsFromUserProfile keeps the look sensitivities read from a profile in their menu sliders' range
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -373,6 +375,18 @@ extern void GetSettingsFromUserProfile(void)
 	AlienInputSecondaryConfig     = UserProfilePtr->AlienInputSecondaryConfig;
 	ControlMethods                = UserProfilePtr->ControlMethods;
 	JoystickControlMethods        = UserProfilePtr->JoystickControlMethods;
+
+	// the profile is read from a .prf file as raw bytes: keep the look sensitivities in their menu sliders' range
+	// (0 to 3 x the default, menu_data.cpp), since they multiply the mouse / pad deltas every frame (user_io.cpp)
+	if (ControlMethods.MouseXSensitivity > DEFAULT_MOUSEX_SENSITIVITY*3)
+		ControlMethods.MouseXSensitivity = DEFAULT_MOUSEX_SENSITIVITY*3;
+	if (ControlMethods.MouseYSensitivity > DEFAULT_MOUSEY_SENSITIVITY*3)
+		ControlMethods.MouseYSensitivity = DEFAULT_MOUSEY_SENSITIVITY*3;
+	if (JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity > DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3)
+		JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity = DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3;
+	if (JoystickControlMethods.JoystickTrackerBallVerticalSensitivity > DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3)
+		JoystickControlMethods.JoystickTrackerBallVerticalSensitivity = DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3;
+
 	MenuDetailLevelOptions        = UserProfilePtr->DetailLevelSettings;
 	FmvSoundVolume                = UserProfilePtr->FmvSoundVolume;
 	EffectsSoundVolume            = UserProfilePtr->EffectsSoundVolume;
