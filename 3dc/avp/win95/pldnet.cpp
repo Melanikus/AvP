@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the chat lines are formatted with _snprintf, bounded to OnScreenMessageBuffer and the name field
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -4231,7 +4233,24 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 		}
 		while (*ptr++);
 	}
-	sprintf(OnScreenMessageBuffer, "%s: %s", netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	// Show our own chat line on our screen as "NAME: message".
+	// OnScreenMessageBuffer holds 300 bytes: up to 299 characters (letters,
+	// digits, spaces and so on), then a zero byte that marks where the text
+	// stops (the "end marker").
+	// The check near the top of this function turns away a message of 254
+	// characters or more, and a player's name is kept in a 13-byte box (at
+	// most 12 characters and its end marker). So today the line is at most
+	// 12 + 2 + 253 = 267 characters long and always fits.
+	// The limits are also put right here, so the line can never run past the
+	// end of the buffer, even if one of those checks is changed one day:
+	// - "%.*s" with NET_PLAYERNAMELENGTH reads no more than the 13 bytes of
+	//   the name box, even if its end marker were missing;
+	// - _snprintf writes at most 299 characters. When it has to cut the text
+	//   short it leaves out the end marker, so we always write one ourselves
+	//   into the last byte.
+	// A line that fits comes out exactly as before.
+	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
 
@@ -7191,7 +7210,20 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 			}
 		}
 
-		sprintf(OnScreenMessageBuffer, "%s: %s", netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		// Another player's computer sent us this chat line over the network.
+		// We show it as "NAME: message" in OnScreenMessageBuffer, which holds 300
+		// bytes: up to 299 characters, then the end marker (the zero byte that
+		// marks where the text stops).
+		// The check at the top of this function refuses a line of 254 characters
+		// or more, and the sender's name is kept in a 13-byte box, so the line
+		// fits today. A broken or hostile computer must never be able to push it
+		// past the end of the buffer, so the limits are also right here: at most
+		// the 13 bytes of the name box ("%.*s"), at most 299 characters in all
+		// (_snprintf), and the end marker written by us into the last byte,
+		// because _snprintf leaves it out when it cuts the text short.
+		// A line that fits comes out exactly as before.
+		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 		NewOnScreenMessage(OnScreenMessageBuffer);
 
 		/* KJL 99/2/5 - play 'incoming message' sound */
