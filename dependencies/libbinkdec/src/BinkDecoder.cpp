@@ -48,6 +48,7 @@
  *   BK-P1: reject frame sizes of 0 or above 7680 x 4800 in Open
  *   BK-P2: give the alpha plane the full frame size
  *   BK-P5: return at most the 3 planes a YUVbuffer holds
+ *   BK-P6: reject more than 256 audio tracks
  */
 
 #include "BinkDecoder.h"
@@ -274,6 +275,13 @@ bool BinkDecoder::Open(const std::string &fileName)
 	videoFlags  = file.ReadUint32LE();
 	
 	nAudioTracks = file.ReadUint32LE();
+
+	// FFmpeg's limit (BINK_MAX_AUDIO_TRACKS)
+	if (nAudioTracks > 256)
+	{
+		BinkCommon::LogError("Invalid header, more than 256 audio tracks");
+		return false;
+	}
 
 	// audio is available
 	if (nAudioTracks)
