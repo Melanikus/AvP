@@ -1,0 +1,68 @@
+# Snyk security scanning: Snyk Code (SAST) and Snyk Open Source (SCA) for C/C++.
+# Neither needs a build: Snyk Code analyses the source, and `--unmanaged` identifies
+# vendored open-source code (enet/, dependencies/) by file hashes. vcpkg libraries are
+# downloaded at build time, so they are not in the repository and not scanned here.
+# Results go to the repository's Security tab (code scanning). Report-only for now:
+# the scans never fail the workflow until the existing findings are triaged.
+name: Snyk
+
+on:
+  push:
+    branches: [avpx_main]
+  pull_request:
+    branches: [avpx_main]
+  schedule:
+    - cron: '23 6 * * 1'   # Mondays 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snyk:
+    name: Snyk Code (SAST) and Open Source (SCA)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to code scanning
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the Snyk CLI
+        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+
+      - name: Snyk Code (SAST)
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --sarif-file-output=snyk-code.sarif
+
+      - name: Snyk Open Source (SCA, vendored C/C++)
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --unmanaged --sarif-file-output=snyk-open-source.sarif
+
+      - name: Upload Snyk Code results
+        if: always() && hashFiles('snyk-code.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+      - name: Upload Snyk Open Source results
+        if: always() && hashFiles('snyk-open-source.sarif') != ''
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: snyk-open-source.sarif
+          category: snyk-open-source
+
+      - name: Snapshot vendored dependencies in the Snyk dashboard
+        if: github.event_name == 'push' && github.ref == 'refs/heads/avpx_main'
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk monitor --unmanaged --project-name=Melanikus/AvP
