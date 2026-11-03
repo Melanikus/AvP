@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P12: return 0, not stack garbage, when a read fails
+ */
+
 #include "FileStream.h"
 #include <stdlib.h>
 
@@ -63,35 +68,35 @@ int32_t FileStream::ReadBytes(uint8_t *data, uint32_t nBytes)
 
 uint32_t FileStream::ReadUint32LE()
 {
-	uint32_t value;
+	uint32_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 4);
 	return value;
 }
 
 uint32_t FileStream::ReadUint32BE()
 {
-	uint32_t value;
+	uint32_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 4);
 	return _byteswap_ulong(value);
 }
 
 uint16_t FileStream::ReadUint16LE()
 {
-	uint16_t value;
+	uint16_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 2);
 	return value;
 }
 
 uint16_t FileStream::ReadUint16BE()
 {
-	uint16_t value;
+	uint16_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 2);
 	return _byteswap_ushort(value);
 }
 
 uint8_t FileStream::ReadByte()
 {
-	uint8_t value;
+	uint8_t value = 0;
 	file.read(reinterpret_cast<char*>(&value), 1);
 	return value;
 }
