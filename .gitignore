@@ -27,6 +27,8 @@ x86/
 # AvP keeps its Windows platform sources and VS projects in these win32/ folders; they are not build output
 !/win32/
 !/enet/win32/
+!/dependencies/libbinkdec/win32/
+!/dependencies/libsmackerdec/win32/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
 bld/

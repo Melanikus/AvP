@@ -1,0 +1,166 @@
+/*
+ * libbinkdec - Bink video decoder
+ * Copyright (C) 2011 Barry Duncan
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ */
+
+/*
+ * Modified 2026-11-03 by Melanikus for the AvP port:
+ *   BK-P12: return 0, not stack garbage, when a read fails
+ *   BK-P21: add GetFileSize
+ */
+
+#include "FileStream.h"
+#include <stdlib.h>
+
+namespace BinkCommon {
+
+bool FileStream::Open(const std::string &fileName)
+{
+	file.open(fileName.c_str(), std::ifstream::in | std::ifstream::binary);
+	if (!file.is_open())
+	{
+		// log error
+		return false;
+	}
+
+	return true;
+}
+
+bool FileStream::Is_Open()
+{
+	return file.is_open();
+}
+
+void FileStream::Close()
+{
+	file.close();
+}
+
+int32_t FileStream::ReadBytes(uint8_t *data, uint32_t nBytes)
+{
+	file.read(reinterpret_cast<char*>(data), nBytes);
+
+	if (file.eof()) {
+		return 0;
+	}
+	else if (file.fail()) {
+		return 0;
+	}
+	else if (file.bad()) {
+		return 0;
+	}
+
+	return static_cast<int32_t>(file.gcount());
+}
+
+uint32_t FileStream::ReadUint32LE()
+{
+	uint32_t value = 0;
+	file.read(reinterpret_cast<char*>(&value), 4);
+	return value;
+}
+
+uint32_t FileStream::ReadUint32BE()
+{
+	uint32_t value = 0;
+	file.read(reinterpret_cast<char*>(&value), 4);
+	return _byteswap_ulong(value);
+}
+
+uint16_t FileStream::ReadUint16LE()
+{
+	uint16_t value = 0;
+	file.read(reinterpret_cast<char*>(&value), 2);
+	return value;
+}
+
+uint16_t FileStream::ReadUint16BE()
+{
+	uint16_t value = 0;
+	file.read(reinterpret_cast<char*>(&value), 2);
+	return _byteswap_ushort(value);
+}
+
+uint8_t FileStream::ReadByte()
+{
+	uint8_t value = 0;
+	file.read(reinterpret_cast<char*>(&value), 1);
+	return value;
+}
+
+bool FileStream::Seek(int32_t offset, SeekDirection direction)
+{
+	if (kSeekStart == direction) {
+		file.seekg(offset, std::ios::beg);
+	}
+	else if (kSeekCurrent == direction) {
+		file.seekg(offset, std::ios::cur);
+	}
+
+	// TODO - end seek
+
+	if (file.bad())
+	{
+		// todo
+		return false;
+	}
+	if (file.fail())
+	{
+		// todo
+		return false;
+	}
+
+	return true;
+}
+
+bool FileStream::Skip(int32_t offset)
+{
+	return Seek(offset, kSeekCurrent);
+}
+
+bool FileStream::Is_Eos()
+{
+	return file.eof();
+}
+
+int32_t FileStream::GetPosition()
+{
+	return static_cast<int32_t>(file.tellg());
+}
+
+// size of the open file in bytes, keeping the read position: 0 if it can't be
+// told, 0xFFFFFFFF for 4 GB or more
+uint32_t FileStream::GetFileSize()
+{
+	std::streamoff pos = file.tellg();
+	if (pos < 0)
+		return 0;
+
+	file.seekg(0, std::ios::end);
+	std::streamoff end = file.tellg();
+	file.seekg(pos, std::ios::beg);
+
+	if (end < 0)
+		return 0;
+	if (end > (std::streamoff)0xFFFFFFFF)
+		return 0xFFFFFFFF;
+
+	return static_cast<uint32_t>(end);
+}
+
+} // close namespace BinkCommon
+
