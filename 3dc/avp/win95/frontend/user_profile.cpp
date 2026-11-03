@@ -1,8 +1,8 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   a saved profile is loaded only when complete and its name always ends inside its box; its look
-//   speeds are kept within the menu sliders' range; the profile folder path has a size limit
+//   a saved profile is loaded only when complete, its name ends inside its box and cannot lead outside
+//   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -101,8 +101,21 @@ void EmptyUserProfilesList()
 	}
 }
 
+// A profile's name becomes part of file paths: its .prf file and its .sav files. A name with a folder separator or a
+// drive colon in it, such as ..\..\x, would reach files outside the profile folder. A broken or edited profile file
+// could hold such a name, and it can be typed in the menu, but the file of a real profile cannot be named that way.
+// So those names are never used in a path.
+extern BOOL UserProfileNameIsSafe(const char *name)
+{
+	return (strpbrk(name, "/\\:") == NULL);
+}
+
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
 {
+	if (!UserProfileNameIsSafe(profilePtr->Name)) {
+		return 0;
+	}
+
 	// avp_open_userfile will add SaveFolderPath for us
 	char *filename = new char [strlen(USER_PROFILES_PATH) + strlen(profilePtr->Name) + strlen(USER_PROFILES_SUFFIX) + 1];
 
@@ -131,6 +144,10 @@ extern void DeleteUserProfile(int number)
 	AVP_USER_PROFILE *profilePtr = GetFirstUserProfile();
 
 	for (int i=0; i<number; i++) profilePtr = GetNextUserProfile();
+
+	if (!UserProfileNameIsSafe(profilePtr->Name)) {
+		return;
+	}
 
 	char *savePath = GetSaveFolderPath();
 	size_t savePathLength = strlen(savePath);
@@ -323,6 +340,15 @@ static int LoadUserProfiles(void)
 			// so we always put one in the last place. Without it, code that reads the
 			// name would run on past the end of the box.
 			profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
+
+			// a name that could reach outside the profile folder: skip the file, like an unreadable one
+			if (!UserProfileNameIsSafe(profilePtr->Name))
+			{
+				CloseHandle (rif_file);
+				delete[] pszFullPath;
+				delete profilePtr;
+				continue;
+			}
 
 			FILETIME ftLocal;
 			FileTimeToLocalFileTime(&wfd.ftLastWriteTime, &ftLocal);

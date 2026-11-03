@@ -5069,10 +5069,12 @@ extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr)
 	// A very long save folder path may leave no room for the whole name. It must not be cut short then: the slot
 	// number is near the end of the name, so a cut could make every slot the same file, and saving to one slot would
 	// silently overwrite another. Instead the name is left empty and FALSE comes back. No file has an empty name, so
-	// the slot looks unused when the slots are scanned, and SaveGame refuses to save.
-	if (_snprintf(filenamePtr, MAX_PATH - 1, "%s%s%s_%d.sav", GetSaveFolderPath(), USER_PROFILES_PATH, UserProfilePtr->Name, i+1) < 0)
+	// the slot looks unused when the slots are scanned, and SaveGame refuses to save. The same goes for a profile name
+	// that could lead outside the profile folder (see UserProfileNameIsSafe).
+	if (!UserProfileNameIsSafe(UserProfilePtr->Name) ||
+		_snprintf(filenamePtr, MAX_PATH - 1, "%s%s%s_%d.sav", GetSaveFolderPath(), USER_PROFILES_PATH, UserProfilePtr->Name, i+1) < 0)
 	{
-		LogErrorString(std::string("save file path too long for profile ") + UserProfilePtr->Name);
+		LogErrorString(std::string("cannot make a save file path for profile ") + UserProfilePtr->Name);
 		filenamePtr[0] = '\0';
 		return FALSE;
 	}
