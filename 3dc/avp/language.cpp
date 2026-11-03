@@ -63,7 +63,7 @@ void InitTextStrings(void)
 	// the buffer ends with an extra 0 byte (LoadTextFileWithSize)
 	TextBufferPtr = LoadTextFileWithSize(filenamePtr, &textSize);
 
-	if (TextBufferPtr == NULL)
+	if (TextBufferPtr == NULL) 
 	{
 		// have to quit if this file isn't available
 		char message[100];
