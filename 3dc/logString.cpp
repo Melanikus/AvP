@@ -178,6 +178,12 @@ void LogErrorString(const std::string &errorString)
 	lastError = temp;
 }
 
+// the same for a C string, for callers that do not include <string>
+void LogErrorStringC(const char *errorString)
+{
+	LogErrorString(std::string(errorString ? errorString : ""));
+}
+
 void LogDebugString(const std::string &debugString, int LINE, const char* FILE)
 {
 	std::string temp = "Debug message: " + debugString + " Line: " + Util::IntToString(LINE) + " File: " + FILE + "\n";
