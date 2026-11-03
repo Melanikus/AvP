@@ -643,13 +643,23 @@ void LoadSavedGame()
 	
 	if (!terminal_error)
 	{
-		if (!strncmp (LoadInfo.BufferPos, "REBCRIF1", 8))
+		//the rest of the file is one Huffman package; it must at least hold the package header
+		if (LoadInfo.BufferSpaceLeft >= (int)sizeof(HuffmanPackage) && !strncmp (LoadInfo.BufferPos, "REBCRIF1", 8))
 		{
-			char *uncompressedBufferPtr = (char*)HuffmanDecompress((HuffmanPackage*)(LoadInfo.BufferPos)); 		
-			LoadInfo.BufferSpaceLeft = ((HuffmanPackage*)LoadInfo.BufferPos)->UncompressedDataSize;
-			DeallocateMem(LoadInfo.BufferStart);
-			LoadInfo.BufferStart=uncompressedBufferPtr;
-			LoadInfo.BufferPos = LoadInfo.BufferStart;
+			//checked decompression: rejects sizes and code tables that would overrun, never reads past the file
+			char *uncompressedBufferPtr = HuffmanDecompressChecked((HuffmanPackage*)(LoadInfo.BufferPos), LoadInfo.BufferSpaceLeft);
+			if (uncompressedBufferPtr)
+			{
+				LoadInfo.BufferSpaceLeft = ((HuffmanPackage*)LoadInfo.BufferPos)->UncompressedDataSize;
+				DeallocateMem(LoadInfo.BufferStart);
+				LoadInfo.BufferStart=uncompressedBufferPtr;
+				LoadInfo.BufferPos = LoadInfo.BufferStart;
+			}
+			else
+			{
+				LogErrorString("LoadSavedGame - the compressed save data is invalid");
+				terminal_error = TRUE;
+			}
 		}
 		else
 		{
