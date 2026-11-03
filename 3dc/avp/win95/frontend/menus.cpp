@@ -4626,7 +4626,14 @@ static void UpdateMultiplayerConfigurationMenu()
 	}
 
 	//also need to fill in customLevelName
-	strcpy(netGameData.customLevelName,GetCustomMultiplayerLevelName(netGameData.levelNumber,netGameData.gameType));
+	// (bounded: customLevelName is 40 bytes, a custom level's name is its file name, up to MAX_PATH - 1 characters;
+	// same bytes as strcpy for a name that fits, nothing written past the NUL)
+	{
+		const char *levelName = GetCustomMultiplayerLevelName(netGameData.levelNumber,netGameData.gameType);
+		size_t nameLength = strnlen(levelName, sizeof(netGameData.customLevelName) - 1);
+		memcpy(netGameData.customLevelName, levelName, nameLength);
+		netGameData.customLevelName[nameLength] = '\0';
+	}
 }
 
 static void TestValidityOfCheatMenu(void)
