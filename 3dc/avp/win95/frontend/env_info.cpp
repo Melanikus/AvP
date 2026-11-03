@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the built-in level names are copied into LevelName by SetBuiltInLevelName (memcpy of the measured length)
+//   DoesNamedLevelExist formats the level file name with a bound (_snprintf)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -5213,7 +5214,8 @@ static BOOL DoesNamedLevelExist(const char* level_name)
 
 	OutputDebugString("DoesNamedLevelExist\n");
 
-	sprintf(filename, "avp_rifs/%s.rif", level_name);
+	_snprintf(filename, sizeof(filename) - 1, "avp_rifs/%s.rif", level_name);
+	filename[sizeof(filename) - 1] = '\0';
 
 	file_handle = avp_CreateFile(filename,GENERIC_READ,0,0,OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 	if(file_handle == INVALID_HANDLE_VALUE)	return FALSE;

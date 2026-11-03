@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the voice directory is copied into wavpath with a bound (strnlen + memcpy)
 #include "3dc.h"
 #include "ourasert.h"
 #include "psndplat.h"
@@ -94,8 +96,10 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	voice_types = (ScreamVoiceType*) PoolAllocateMem(num_voice_types * sizeof(ScreamVoiceType));
 	
 	char wavpath[MAX_PATH];
-	strcpy(wavpath, directory);
-	char* wavname = &wavpath[strlen(wavpath)];
+	size_t const directory_length = strnlen(directory, MAX_PATH - 1);
+	memcpy(wavpath, directory, directory_length);
+	wavpath[directory_length] = '\0';
+	char* wavname = &wavpath[directory_length];
 	
 	for (int i=0;i<num_voice_types;i++)	
 	{

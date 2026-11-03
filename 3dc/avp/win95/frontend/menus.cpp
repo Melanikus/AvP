@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   bounded copies / formatting into MP_Config_Description, NumberString and the save-slot file name
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -2853,7 +2855,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
 				// save the 'Previous Game' multiplayer configuration
-				strcpy(MP_Config_Description,GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
+				{
+					const char *previousGame = GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME);
+					size_t const descriptionLength = strnlen(previousGame, sizeof(MP_Config_Description) - 1);
+					memcpy(MP_Config_Description, previousGame, descriptionLength);
+					MP_Config_Description[descriptionLength] = '\0';
+				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
 				
 				AvP.Difficulty = I_Medium; //bjd - was 1;
@@ -3488,13 +3495,16 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				static char NumberString[50];
 				if(*elementPtr->NumberPtr!=0 || elementPtr->NumberFieldZeroString==TEXTSTRING_BLANK)
 				{
-					sprintf(NumberString,"%d",*elementPtr->NumberPtr);
 					if(elementPtr->NumberFieldUnitsString!=TEXTSTRING_BLANK)
 					{
-						//add the text for the unit type	
-						strcat(NumberString," ");
-						strcat(NumberString, GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->NumberFieldUnitsString)));
+						//add the text for the unit type
+						_snprintf(NumberString,sizeof(NumberString)-1,"%d %s",*elementPtr->NumberPtr,GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->NumberFieldUnitsString)));
 					}
+					else
+					{
+						_snprintf(NumberString,sizeof(NumberString)-1,"%d",*elementPtr->NumberPtr);
+					}
+					NumberString[sizeof(NumberString)-1] = '\0';
 				}
 				else
 				{
@@ -5015,11 +5025,9 @@ void ScanSaveSlots(void)
 
 extern void GetFilenameForSaveSlot(int i, char *filenamePtr)
 {
-	char filePath[MAX_PATH];
-
-	strcpy(filePath, GetSaveFolderPath());
-
-	sprintf(filenamePtr, "%s%s%s_%d.sav", filePath, USER_PROFILES_PATH, UserProfilePtr->Name, i+1);
+	// filenamePtr is a MAX_PATH buffer at every caller (ScanSaveSlots, savegame.cpp)
+	_snprintf(filenamePtr, MAX_PATH - 1, "%s%s%s_%d.sav", GetSaveFolderPath(), USER_PROFILES_PATH, UserProfilePtr->Name, i+1);
+	filenamePtr[MAX_PATH - 1] = '\0';
 }
 
 

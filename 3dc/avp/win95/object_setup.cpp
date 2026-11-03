@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   copies into buffers sized from the same string use memcpy with that length
+//   GetSoundForMainRif formats the sound path with a bound (_snprintf)
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -112,7 +113,8 @@ LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 	static char filename[200];
 	if (Rif_Sound_Directory)
 	{
-		sprintf(filename, "%s/%s", Rif_Sound_Directory, wav_name);
+		_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name);
+		filename[sizeof(filename) - 1] = '\0';
 		return GetSound(filename);
 	}
 	else

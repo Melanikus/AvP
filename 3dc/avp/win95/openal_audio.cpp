@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the default device message is formatted with a bound (_snprintf)
 
 #ifdef USE_OPENAL
 
@@ -533,7 +535,8 @@ int PlatStartSoundSys()
 	SoundConfig.env_index		= 1000;
 
 	char *defaultDevice = (char*)alcGetString(NULL, ALC_DEFAULT_DEVICE_SPECIFIER);
-	sprintf(buf, "Using default device \"%s\" for OpenAL", defaultDevice);
+	_snprintf(buf, sizeof(buf) - 1, "Using default device \"%s\" for OpenAL", defaultDevice);
+	buf[sizeof(buf) - 1] = '\0';
 	Con_PrintMessage(buf);
 
 	alGetError(); // clear error stack

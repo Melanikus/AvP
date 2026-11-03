@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the teleport request message is formatted with a bound (_snprintf)
 /*******************************************************************
  *
  *    DESCRIPTION: 	modcmds.cpp
@@ -167,12 +169,14 @@ void ModuleCommands :: TryToTeleport(char* UpperCasePotentialModuleName)
 		char Msg[256];
 
 		{
-			sprintf
+			_snprintf
 			(
 				Msg,
+				sizeof(Msg) - 1,
 				"TELEPORT REQUEST TO MODULE \"%s\"",
 				UpperCasePotentialModuleName
 			);
+			Msg[sizeof(Msg) - 1] = '\0';
 			
 			GADGET_NewOnScreenMessage( Msg );
 		}

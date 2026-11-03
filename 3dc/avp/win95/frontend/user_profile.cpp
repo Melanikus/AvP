@@ -1,6 +1,7 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   GetSettingsFromUserProfile keeps the look sensitivities read from a profile in their menu sliders' range
+//   LoadUserProfiles builds the profile search path with a bound (_snprintf)
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -230,8 +231,8 @@ static int LoadUserProfiles(void)
 
 	TCHAR strPath[MAX_PATH];
 
-	strcpy(strPath, GetSaveFolderPath());
-	strcat(strPath, USER_PROFILES_WILDCARD_NAME);
+	_snprintf(strPath, MAX_PATH - 1, "%s%s", GetSaveFolderPath(), USER_PROFILES_WILDCARD_NAME);
+	strPath[MAX_PATH - 1] = '\0';
 
 	const char* load_name = &strPath[0];
 

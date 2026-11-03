@@ -1,6 +1,8 @@
 /*KJL***************************************
 *    Language Internationalization Code    *
 ***************************************KJL*/
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the language file error messages are formatted with a bound (_snprintf)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -58,7 +60,8 @@ void InitTextStrings(void)
 	{
 		// have to quit if this file isn't available
 		char message[100];
-		sprintf(message, "Unable to load language file: %s\n", filenamePtr);
+		_snprintf(message, sizeof(message) - 1, "Unable to load language file: %s\n", filenamePtr);
+	message[sizeof(message) - 1] = '\0';
 
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message, MB_OK);
@@ -81,7 +84,8 @@ void InitTextStrings(void)
 	if (strncmp(textPtr, "REBINFF2", 8))
 	{
 		char message[100];
-		sprintf(message,"File %s is not compatible with Gold Edition\n",filenamePtr);
+		_snprintf(message, sizeof(message) - 1, "File %s is not compatible with Gold Edition\n", filenamePtr);
+	message[sizeof(message) - 1] = '\0';
 
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message, MB_OK+MB_SYSTEMMODAL);
