@@ -18,6 +18,7 @@
 #include "pldnet.h"
 #include <time.h>
 #include "utilities.h"
+#include "logString.h"
 
 static int LoadUserProfiles(void);
 
@@ -232,7 +233,13 @@ static int LoadUserProfiles(void)
 
 	TCHAR strPath[MAX_PATH];
 
-	_snprintf(strPath, MAX_PATH - 1, "%s%s", GetSaveFolderPath(), USER_PROFILES_WILDCARD_NAME);
+	// A save folder path too long to hold the search pattern is not cut short, which could search the wrong
+	// place: it goes to the log, and the game carries on as if there were no profiles.
+	if (_snprintf(strPath, MAX_PATH - 1, "%s%s", GetSaveFolderPath(), USER_PROFILES_WILDCARD_NAME) < 0)
+	{
+		LogErrorString("the path for finding user profiles is too long");
+		return 0;
+	}
 	strPath[MAX_PATH - 1] = '\0';
 
 	const char* load_name = &strPath[0];

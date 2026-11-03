@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the "saves left" message, which holds words from the language file, is written with a size
-//   limit, so it always fits
+//   the "saves left" message is written with a size limit, and a game whose save file path cannot be made
+//   is not saved, instead of overwriting another slot, and that does not cost the player a save
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -38,7 +38,7 @@
 #include <assert.h>
 
 extern void NewOnScreenMessage(char *messagePtr);
-extern void GetFilenameForSaveSlot(int i, char *filenamePtr);
+extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
 void ScanSaveSlots(void);
 void RestartLevel();
 extern void StartFMVAtFrame(int number, int frame);
@@ -413,6 +413,15 @@ void SaveGame()
 		return;
 	}
 
+	//Work out the save file's name first. If it cannot be made, nothing can be saved, so the
+	//player is told, and this comes before the check below so that it does not cost them a save.
+	if(!GetFilenameForSaveSlot(SaveGameRequest,filename))
+	{
+		SaveGameRequest = SAVELOAD_REQUEST_NONE;
+		NewOnScreenMessage("GAME NOT SAVED: ITS FILE PATH CANNOT BE USED");
+		return;
+	}
+
 	//check that we are allowed to save at this point
 	if(!SaveGameAllowed())
 	{
@@ -451,8 +460,6 @@ void SaveGame()
 	Save_WeaponsCGlobals();
 
 
-	//get the filename
-	GetFilenameForSaveSlot(SaveGameRequest,filename);
 	
 	//clear the save request
 	SaveGameRequest = SAVELOAD_REQUEST_NONE;

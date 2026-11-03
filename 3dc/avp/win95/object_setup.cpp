@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   text is copied using the exact length measured when its space was made, and the level's sound
-//   file path is written with a size limit, so both always fit
+//   text is copied using the exact length measured when its space was made, and a sound file path
+//   too long for its buffer is skipped, like a missing sound
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -62,6 +62,7 @@
 #include "mempool.h"
 #include "pldnet.h"
 #include "3dc.h"
+#include "logString.h"
 
 extern MAPSETVDB chnk_playcam_vdb;
 extern int GlobalAmbience;
@@ -114,7 +115,13 @@ LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 	static char filename[200];
 	if (Rif_Sound_Directory)
 	{
-		_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name);
+		// filename holds 200 bytes. A path too long for it is not cut short, which could load the wrong sound:
+		// it goes to the log, and the game carries on with no sound here, as it does when a sound is missing.
+		if (_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name) < 0)
+		{
+			LogErrorString(std::string("sound file path too long: ") + wav_name);
+			return 0;
+		}
 		filename[sizeof(filename) - 1] = '\0';
 		return GetSound(filename);
 	}
