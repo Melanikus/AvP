@@ -45,6 +45,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   SM-P1: bound each audio chunk by the audio buffer; cap frame 0's audio size
+ *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
  */
 
 #include "SmackerDecoder.h"
@@ -316,6 +317,14 @@ bool SmackerDecoder::Open(const std::string &fileName)
 	frameWidth  = file.ReadUint32LE();
 	frameHeight = file.ReadUint32LE();
 	nFrames = file.ReadUint32LE();
+
+	// reject empty or implausible sizes, so frameWidth * frameHeight cannot wrap
+	if (!frameWidth || !frameHeight || frameWidth > 32768 || frameHeight > 32768
+		|| (uint64_t)frameWidth * frameHeight > (1U << 24))
+	{
+		SmackerCommon::LogError("Invalid frame size");
+		return false;
+	}
 
 	picture = new uint8_t[frameWidth * frameHeight];
 
