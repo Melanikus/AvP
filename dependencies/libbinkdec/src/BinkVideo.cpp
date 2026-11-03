@@ -48,6 +48,7 @@
  *   BK-P2: zero-fill the bundle buffers
  *   BK-P3: size the bundle lengths from the frame width
  *   BK-P7: allocate the bundles without throwing; report failure
+ *   BK-P10: log a constant string for an out-of-bounds DC value
  */
 
 #include "BinkDecoder.h"
@@ -463,7 +464,7 @@ int BinkDecoder::ReadDCs(BinkCommon::BitReader &bits, Bundle *b, int start_bits,
                 v += v2;
                 *dst++ = v;
                 if (v < -32768 || v > 32767) {
-					BinkCommon::LogError("DC value went out of bounds" + v);
+					BinkCommon::LogError("DC value went out of bounds");
                     return -1;
                 }
             }
