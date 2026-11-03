@@ -49,6 +49,7 @@
  *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
  *   SM-P4: fail Open on a bad header tree; default tables and 'last' indexes
  *   SM-P5: limit tree recursion depth (CVE-2017-16803); unsigned prefix shift
+ *   SM-P6: reject a palette copy that would read past the old palette
  */
 
 #include "SmackerDecoder.h"
@@ -812,8 +813,15 @@ int SmackerDecoder::ReadPacket()
                 sz  += (t & 0x7F)  + 1;
                 pal += ((t & 0x7F) + 1) * 3;
             } else if (t & 0x40){ /* copy with offset */
-                off = file.ReadByte() * 3;
+                off = file.ReadByte();
                 j = (t & 0x3F) + 1;
+                if (off + j > 256) {
+                    // the copy would read past oldpal[]: drop this palette update
+                    SmackerCommon::LogError("Invalid palette update");
+                    memcpy(palette, oldpal, 768);
+                    break;
+                }
+                off *= 3;
                 while (j-- && sz < 256) {
                     *pal++ = oldpal[off + 0];
                     *pal++ = oldpal[off + 1];
