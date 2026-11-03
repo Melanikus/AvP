@@ -34,6 +34,8 @@
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
     <VcpkgTriplet Condition="'$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgAutoLink>false</VcpkgAutoLink>
+    <VcpkgConfiguration Condition="'$(Configuration)'=='Debug'">Debug</VcpkgConfiguration>
+    <VcpkgConfiguration Condition="'$(Configuration)'=='Release'">Release</VcpkgConfiguration>
     <VcpkgInstalledDir>$(MSBuildProjectDirectory)\..\..\vcpkg_installed\</VcpkgInstalledDir>
     <VcpkgRoot Condition="'$(VcpkgRoot)'=='' and '$(VCPKG_ROOT)'!=''">$(VCPKG_ROOT)</VcpkgRoot>
     <VcpkgRoot Condition="'$(VcpkgRoot)'==''">$(VsInstallRoot)\VC\vcpkg</VcpkgRoot>
@@ -100,7 +102,6 @@
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <PrecompiledHeaderOutputFile>
       </PrecompiledHeaderOutputFile>
-      <ExpandAttributedSource>true</ExpandAttributedSource>
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <ObjectFileName>$(IntDir)</ObjectFileName>
