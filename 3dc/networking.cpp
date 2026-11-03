@@ -441,6 +441,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
+			// no packet the game sends is larger than its message buffer (Net_Send builds each one in
+			// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
+			host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
+
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
 			if (IsCustomLevel(level, gameStyle))
@@ -814,6 +818,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		Con_PrintError("Net_ConnectToSession - Failed to create Enet client");
 		return NET_FAIL;
 	}
+
+	// no packet the game sends is larger than its message buffer (Net_Send builds each one in
+	// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
+	host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
 
 	ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);
 	if (ServerPeer == NULL)
