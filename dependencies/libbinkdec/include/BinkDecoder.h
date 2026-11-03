@@ -47,6 +47,7 @@
  * Modified 2026-11-03 for the AvP port:
  *   BK-P2: pad the plane buffers for 16x16 blocks and zero-fill them
  *   BK-P7: allocate planes and bundles without throwing; report failure
+ *   BK-P20: add DropFrame for a frame lost to a C++ exception
  */
 
 #ifndef _BinkDecoder_h_
@@ -157,6 +158,7 @@ class BinkDecoder
 		uint32_t GetCurrentFrameNum();
 		float GetFrameRate();
 		void GetNextFrame(YUVbuffer yuv);
+		void DropFrame(YUVbuffer yuv);
 		void GotoFrame(uint32_t frameNum);
 
 		AudioInfo GetAudioTrackDetails(uint32_t trackIndex);

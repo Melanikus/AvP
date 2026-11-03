@@ -47,6 +47,7 @@
  * Modified 2026-11-03 for the AvP port:
  *   BK-P4: never copy past the audio buffer; count only the bytes copied
  *   BK-P17: fail CreateAudioTrack when the transform init fails
+ *   BK-P20: register a new audio track at once, so nothing leaks when creating it fails
  */
 
 #include "BinkDecoder.h"
@@ -108,6 +109,23 @@ float BinkDecoder::GetAudioFloat(BinkCommon::BitReader &bits)
 bool BinkDecoder::CreateAudioTrack(uint32_t sampleRate, uint16_t flags)
 {
 	AudioTrack *track = new AudioTrack;
+
+	// hand the track to audioTracks at once, with no buffers and a zeroed transform
+	// (FFmpeg's init failure paths free the context's pointers), so the destructor
+	// frees it whatever fails below: an init error or a C++ exception
+	track->blockBuffer = 0;
+	track->buffer      = 0;
+	track->transformType = (flags & kAudioUseDCT) ? kTransformTypeDCT : kTransformTypeRDFT;
+	memset(&track->trans, 0, sizeof(track->trans));
+	try
+	{
+		audioTracks.push_back(track);
+	}
+	catch (...)
+	{
+		delete track;
+		throw;
+	}
 
 	// determine frame length
 	uint32_t frameLenBits, nChannels;
@@ -182,19 +200,14 @@ bool BinkDecoder::CreateAudioTrack(uint32_t sampleRate, uint16_t flags)
 
 	int ret = -1;
 
-	// FFmpeg's init failure paths free the context's pointers, so start from a zeroed one
-	memset(&track->trans, 0, sizeof(track->trans));
-
 	if (kTransformTypeRDFT == track->transformType)
 		ret = ff_rdft_init(&track->trans.rdft, frameLenBits, DFT_C2R);
 	else if (kTransformTypeDCT == track->transformType)
 		ret = ff_dct_init(&track->trans.dct, frameLenBits, DCT_III);
 
+	// the track is already in audioTracks: the destructor frees it
 	if (ret < 0)
-	{
-		delete track;
 		return false;
-	}
 
 	track->blockBufferSize = frameLength * nChannels * sizeof(int16_t);
 	track->blockBuffer     = new int16_t[track->blockBufferSize];
@@ -214,9 +227,6 @@ bool BinkDecoder::CreateAudioTrack(uint32_t sampleRate, uint16_t flags)
 	track->bufferSize = 0;
 	track->buffer     = 0;
 	track->bytesReadThisFrame = 0;
-	
-	// add the track to the track vector
-	audioTracks.push_back(track);
 
 	return true;
 }

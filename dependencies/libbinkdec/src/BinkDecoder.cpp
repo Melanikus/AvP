@@ -56,6 +56,7 @@
  *   BK-P15: free the bundle buffers in the destructor
  *   BK-P16: check handles and track indexes in the exports; stop at the last frame
  *   BK-P17: fail Open when an audio track can't be created
+ *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame
  */
 
 #include "BinkDecoder.h"
@@ -79,8 +80,23 @@ BinkHandle Bink_Open(const char* fileName)
 	newHandle.isValid = false;
 	newHandle.instanceIndex = -1;
 
-	BinkDecoder *newDecoder = new BinkDecoder();
-	if (!newDecoder->Open(fileName))
+	BinkDecoder *newDecoder = 0;
+
+	// no C++ exception may leave the DLL: a failed allocation fails the open, and the
+	// decoder (never registered) is deleted together with whatever Open created
+	try
+	{
+		newDecoder = new BinkDecoder();
+		if (!newDecoder->Open(fileName))
+		{
+			delete newDecoder;
+			return newHandle;
+		}
+
+		// add instance to global instance vector
+		classInstances.push_back(newDecoder);
+	}
+	catch (...)
 	{
 		delete newDecoder;
 		return newHandle;
@@ -98,8 +114,6 @@ BinkHandle Bink_Open(const char* fileName)
 		}
 	}
 #endif
-	// add instance to global instance vector
-	classInstances.push_back(newDecoder);
 
 	// get a handle ID
 	newHandle.instanceIndex = classInstances.size() - 1;
@@ -199,7 +213,18 @@ uint32_t Bink_GetNextFrame(BinkHandle &handle, YUVbuffer yuv)
 
 	uint32_t frameIndex = decoder->GetCurrentFrameNum();
 
-	decoder->GetNextFrame(yuv);
+	// no C++ exception may leave the DLL: a failed allocation loses this frame, and the
+	// frame count still moves on so the caller's loop ends
+	try
+	{
+		decoder->GetNextFrame(yuv);
+	}
+	catch (...)
+	{
+		decoder->DropFrame(yuv);
+		if (decoder->GetCurrentFrameNum() == frameIndex)
+			decoder->GotoFrame(frameIndex + 1);
+	}
 
 	return frameIndex;
 }
@@ -563,4 +588,21 @@ void BinkDecoder::GetNextFrame(YUVbuffer yuv)
 
 	// frame done
 	currentFrame++;
+}
+
+// after a C++ exception lost the frame being decoded: hand out the last complete
+// picture (the zero-filled planes before the first one), so the caller never keeps
+// unset pointers, and no audio for the lost frame
+void BinkDecoder::DropFrame(YUVbuffer yuv)
+{
+	for (uint32_t i = 0; i < planes.size() && i < 3; i++)
+	{
+		yuv[i].width  = planes[i].width;
+		yuv[i].height = planes[i].height;
+		yuv[i].pitch  = planes[i].pitch;
+		yuv[i].data   = planes[i].last;
+	}
+
+	for (uint32_t i = 0; i < audioTracks.size(); i++)
+		audioTracks[i]->bytesReadThisFrame = 0;
 }

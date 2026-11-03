@@ -51,6 +51,7 @@
  *   BK-P10: log a constant string for an out-of-bounds DC value
  *   BK-P13: FFmpeg 3f5d6a665a, 62ad08cef9, 7a072fbcc4 (no signed shift or overflow UB)
  *   BK-P14: build the shared VLC tables only once
+ *   BK-P20: mark the VLC tables built only when complete, so a failed build is redone
  */
 
 #include "BinkDecoder.h"
@@ -133,7 +134,8 @@ void BinkDecoder::InitTrees()
 {
 	// the tables are shared by all decoders: build them once (as FFmpeg does), so a
 	// later Open neither grows them nor reallocates them while another handle decodes
-	if (!bink_trees[kNumTrees - 1].empty())
+	static bool treesBuilt = false; // set only once every table is complete
+	if (treesBuilt)
 		return;
 
 	for (uint32_t i = 0; i < kNumTrees; i++)
@@ -141,8 +143,12 @@ void BinkDecoder::InitTrees()
 		// get max code length
 		const int maxBits = bink_tree_lens[i][15];
 
+		// a build cut short by an exception (failing that Open) starts again from empty
+		bink_trees[i].clear();
 		VLC_InitTable(bink_trees[i], maxBits, 16, &bink_tree_lens[i][0], &bink_tree_bits[i][0]);
 	}
+
+	treesBuilt = true;
 }
 
 /**
