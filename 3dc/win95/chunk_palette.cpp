@@ -2,6 +2,7 @@
 //   deleted unused RIF-authoring code (ExpandedIdentifier, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
 //   TLT_Config_Chunk: parse the TLTCONFG chunk only inside its size
 //   copies into buffers sized from the same string use memcpy with that length
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
@@ -358,7 +359,7 @@ void Environment_TLT_Chunk::fill_data_block (char * data_start)
 	if (flags & ChunkTLTFlag_ExternalFile)
 	{
 		if (filename)
-			strcpy(data_start,filename);
+			memcpy(data_start,filename,strlen(filename)+1);
 		else
 			*data_start = 0;
 	}
@@ -630,7 +631,7 @@ void Environment_Game_Mode_Header_Chunk::fill_data_block ( char * data_start)
 
 	for (LIF<char *> li(&rif_files); !li.done(); li.next())
 	{
-		strcpy(data_start,li());
+		memcpy(data_start,li(),strlen(li())+1);
 
 		data_start += strlen(li())+1;
 	}
@@ -703,7 +704,7 @@ void RIF_Child_Chunk::fill_data_block(char * data_start)
 
 	data_start += 4;
 
-	strcpy(data_start,filename);
+	memcpy(data_start,filename,strlen(filename)+1);
 	data_start += strlen(filename)+1 +3 &~3;
 
 	*((int *) data_start) = bmps.size();
@@ -716,7 +717,7 @@ void RIF_Child_Chunk::fill_data_block(char * data_start)
 		*((int *) data_start) = li().version_num & BMPFLAGS_VERSION_NUM_MASK | li().enum_id << BMPFLAGS_ENUMID_SHIFT;
 		data_start += 4;
 
-		strcpy(data_start, li().filename);
+		memcpy(data_start, li().filename, strlen(li().filename)+1);
 		data_start += strlen(li().filename)+1 +3 &~3;
 	}
 
@@ -968,7 +969,7 @@ void Coloured_Polygons_Lookup_Chunk::fill_data_block (char * data_start)
 	if (flags & ChunkCPLUFlag_ExternalFile)
 	{
 		if (filename)
-			strcpy(data_start,filename);
+			memcpy(data_start,filename,strlen(filename)+1);
 		else // escape
 			*data_start = 0;
 	}

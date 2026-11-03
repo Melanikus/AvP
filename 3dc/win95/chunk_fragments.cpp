@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   fill_data_block copies strings with memcpy of their measured length
+
 #include "chunk_fragments.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -216,7 +219,7 @@ void Fragment_Type_Sound_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=pad;
 	data_start+=4;
 
-	strcpy(data_start,wav_name);
+	memcpy(data_start,wav_name,strlen(wav_name)+1);
 
 }
 

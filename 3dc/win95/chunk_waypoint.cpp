@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   fill_data_block copies strings with memcpy of their measured length
+
 #include "chunk_waypoint.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -206,7 +209,7 @@ void Module_Waypoint_Chunk::fill_data_block(char* data_start)
 		for(int j=0;j<cw->NumModLinks;j++)
 		{
 			ModuleLink* ml=&cw->ModLinks[j];
-			strcpy(data_start,ml->module_name);
+			memcpy(data_start,ml->module_name,strlen(ml->module_name)+1);
 			data_start+=(strlen(ml->module_name)+4)&~3;
 			*(int*)data_start=ml->flags;
 			data_start+=4;

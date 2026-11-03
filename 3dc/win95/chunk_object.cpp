@@ -3,6 +3,7 @@
 //   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
 //   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name
 //   CalculateID builds the hashed name in a std::string instead of a fixed char[100]
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include <string>
 #include "chunk.hpp"
@@ -522,7 +523,7 @@ void Object_Header_Chunk::fill_data_block ( char * data_start)
 	*((int *) data_start) = shape_id_no;
 	data_start+=4;
 
-	strcpy (data_start, object_data->o_name);
+	memcpy (data_start, object_data->o_name, strlen(object_data->o_name) + 1);
 }
 
 void Object_Header_Chunk::prepare_for_output()
@@ -1075,7 +1076,7 @@ void Object_Track_Sound_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=index;
 	data_start+=4;
 
-	strcpy(data_start,wav_name);
+	memcpy(data_start,wav_name,strlen(wav_name)+1);
 
 }
 

@@ -5,6 +5,7 @@
 //   RegenerateChildChunks, the Anim_Shape_Frame_Chunk "from frame" constructor, CreateNewSubShape and the
 //   Console_Shape_Chunk type constructor
 //   copies into buffers sized from the same string use memcpy with that length
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include <math.h>
 
@@ -1195,7 +1196,7 @@ void Shape_Header_Chunk::fill_data_block(char * data_start)
 
 	for (LIF<char *> ons(&object_names_store); !ons.done(); ons.next())
 	{
-		strcpy (data_start, ons());
+		memcpy (data_start, ons(), strlen(ons()) + 1);
 		data_start += (strlen(ons())+1);
 	}
 }
@@ -1395,7 +1396,7 @@ void Shape_External_Filename_Chunk::fill_data_block (char *data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, file_name);
+	memcpy (data_start, file_name, strlen(file_name) + 1);
 }
 
 ///////////////////////////////////////
@@ -1467,7 +1468,7 @@ void Shape_External_Object_Name_Chunk::fill_data_block (char *data_start)
 
 	data_start+=4;
 
-	strcpy (data_start, object_name);
+	memcpy (data_start, object_name, strlen(object_name) + 1);
 }
 
 ///////////////////////////////////////
@@ -2013,7 +2014,7 @@ void Shape_Name_Chunk::fill_data_block (char * data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, shape_name);
+	memcpy (data_start, shape_name, strlen(shape_name) + 1);
 }
 
 /////////////////////////////////////////

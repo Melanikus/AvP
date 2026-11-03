@@ -1,6 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (SetMD5Val and the CreateMD5Chunk overrides)
 //   copies into buffers sized from the same string use memcpy with that length
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -199,7 +200,7 @@ void Chunk_With_BMPs::fill_data_block (char * data_start)
 		*((int *) data_start) = bl().transparency_colour_union;
 		data_start += 4;
 		
-		strcpy (data_start, bl().filename);
+		memcpy (data_start, bl().filename, strlen(bl().filename) + 1);
 		data_start += (4-strlen(bl().filename)%4) + strlen(bl().filename);
 	}
 }

@@ -1,6 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (create_alternate_locations_chunk, create_extra_data_chunk and the
 //   Sound_Object_Extra_Data_Chunk constructor only they used)
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -220,7 +221,7 @@ void Sound_Object_Extra_Name_Chunk::fill_data_block(char* data_start)
 	*((int *) data_start) = chunk_size;
 	data_start += 4;
 
-	strcpy(data_start,name);
+	memcpy(data_start,name,strlen(name)+1);
 }
 
 

@@ -1,6 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   File_Chunk::update_file keeps the file name in a std::string, not a char[256]
 //   File_Chunk::write_file builds its temporary file name with memcpy of measured lengths
+//   fill_data_block copies strings with memcpy of their measured length
 
 #include <string>
 #include "chunk.hpp"
@@ -1681,7 +1682,7 @@ void RIF_Name_Chunk::fill_data_block (char * data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, rif_name);
+	memcpy (data_start, rif_name, strlen(rif_name) + 1);
 }
 
 
