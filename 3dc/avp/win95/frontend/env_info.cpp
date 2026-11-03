@@ -5162,6 +5162,17 @@ static void SetCustomLevelName(const char *name)
 	LevelName[sizeof(LevelName) - 1] = '\0';
 }
 
+// "Custom/<name>" into LevelName, bounded (a custom level name is a file name from avp_rifs/custom; LevelName used to be
+// 32 bytes, so any name longer than 24 characters overflowed it)
+static void SetCustomLevelName(const char *name)
+{
+	if (_snprintf(LevelName, sizeof(LevelName) - 1, "Custom/%s", name) < 0)
+	{
+		LogErrorString(std::string("custom level name too long, truncated: ") + name);
+	}
+	LevelName[sizeof(LevelName) - 1] = '\0';
+}
+
 void SetLevelToLoadForMultiplayer(int episode)
 {
 	//is this a custom level?
