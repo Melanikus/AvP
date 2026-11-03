@@ -19,6 +19,7 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "menus.h"
+#include "logString.h"
 
 void ChangeWindowsSize(uint32_t width, uint32_t height);
 
@@ -56,9 +57,13 @@ void InitTextStrings(void)
 	filenamePtr = "language.txt";
 	#endif
 
-	TextBufferPtr = LoadTextFile(filenamePtr);
+	size_t textSize = 0;
+	char *textEnd;
 
-	if (TextBufferPtr == NULL) 
+	// the buffer ends with an extra 0 byte (LoadTextFileWithSize)
+	TextBufferPtr = LoadTextFileWithSize(filenamePtr, &textSize);
+
+	if (TextBufferPtr == NULL)
 	{
 		// have to quit if this file isn't available
 		char message[100];
@@ -73,13 +78,32 @@ void InitTextStrings(void)
 
 	if (!strncmp(TextBufferPtr, "REBCRIF1", 8))
 	{
-		textPtr = (char*)HuffmanDecompress((HuffmanPackage*)(TextBufferPtr));
+		// checked decompression: bounded by the file's size, NULL for a package that cannot be decoded safely
+		// (a truncated file); for a complete file the result is the same as HuffmanDecompress's
+		int uncompressedSize = (textSize >= sizeof(HuffmanPackage)) ? ((HuffmanPackage*)TextBufferPtr)->UncompressedDataSize : 0;
+		textPtr = HuffmanDecompressChecked((HuffmanPackage*)(TextBufferPtr), (textSize > 0x7fffffff) ? 0x7fffffff : (int)textSize);
 		DeallocateMem(TextBufferPtr);
 		TextBufferPtr = textPtr;
+
+		if (textPtr == NULL)
+		{
+			char message[100];
+			sprintf(message, "Unable to load language file: %s\n", filenamePtr);
+
+			ChangeWindowsSize(1, 1);
+			avp_MessageBox(message, MB_OK);
+			avp_exit(1);
+			return;
+		}
+
+		// the decompressed buffer has 16 spare bytes after the data (HuffmanDecompressChecked): end it with a 0
+		textEnd = textPtr + uncompressedSize;
+		*textEnd = 0;
 	}
 	else
 	{
 		textPtr = TextBufferPtr;
+		textEnd = textPtr + textSize;
 	}
 
 	// check if language file is not from Gold version
@@ -96,24 +120,53 @@ void InitTextStrings(void)
 
 	AddToTable(EmptyString);
 
+	// both scans stop at textEnd (the 0 byte after the data): a truncated file used to run them past the buffer
+	// and write the terminator there. Ids for which the file has no (complete) string get EmptyString, like id 0.
+	bool truncated = false;
 	for (int i = 1; i < MAX_NO_OF_TEXTSTRINGS; i++)
 	{
 		// scan for a quote mark
-		while (*textPtr++ != '"');
+		while ((textPtr < textEnd) && (*textPtr != '"'))
+		{
+			textPtr++;
+		}
+
+		if (textPtr >= textEnd)
+		{
+			// no more strings in the file (every later id ends up here too)
+			truncated = true;
+			TextStringPtr[i] = EmptyString;
+			AddToTable(TextStringPtr[i]);
+			continue;
+		}
+		textPtr++;
 
 		// now pointing to a text string after quote mark
 		TextStringPtr[i] = textPtr;
 
 		// scan for a quote mark
-		while (*textPtr != '"')
+		while ((textPtr < textEnd) && (*textPtr != '"'))
 		{
 			textPtr++;
 		}
 
-		// change quote mark to zero terminator
-		*textPtr = 0;
+		if (textPtr < textEnd)
+		{
+			// change quote mark to zero terminator
+			*textPtr = 0;
+		}
+		else
+		{
+			// no closing quote: the string runs to the end of the data, where the 0 byte ends it
+			truncated = true;
+		}
 
 		AddToTable(TextStringPtr[i]);
+	}
+
+	if (truncated)
+	{
+		LogErrorString(std::string("language file ") + filenamePtr + " ends before all the text strings; the missing ones are empty");
 	}
 }
 

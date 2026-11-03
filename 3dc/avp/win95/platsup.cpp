@@ -205,21 +205,30 @@ int IDemandChangeEnvironment()
 /* KJL 15:53:52 05/04/97 - 
 Loaders/Unloaders for language internationalization code in language.c */
 
+char *LoadTextFileWithSize(const char *filename, size_t *sizePtr); // declared in language.h
+
 char *LoadTextFile(const char *filename)
+{
+	return LoadTextFileWithSize(filename, NULL);
+}
+
+// the buffer is one byte longer than the file and that byte is 0, so the text parsers (InitTextStrings,
+// RollCreditsText) can stop at the end of a short or truncated file instead of reading past the block
+char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 {
 	char *bufferPtr;
 	long int save_pos, size_of_file;
 	FILE *fp;
 
 	fp = avp_fopen(filename,"rb");
-	
+
 	if (!fp) goto error;
 
 	save_pos = ftell(fp);
 	fseek(fp, 0L, SEEK_END);
 	size_of_file = ftell(fp);
 
-	bufferPtr = (char*)AllocateMem(size_of_file);
+	bufferPtr = (char*)AllocateMem(size_of_file + 1);
 	if (!bufferPtr)
 	{
 		memoryInitialisationFailure = 1;
@@ -233,7 +242,11 @@ char *LoadTextFile(const char *filename)
 		fclose(fp);
 		goto error;
 	}
-			
+	bufferPtr[size_of_file] = 0;
+	if (sizePtr) {
+		*sizePtr = (size_t)size_of_file;
+	}
+
 	fclose(fp);
 	return bufferPtr;
 	

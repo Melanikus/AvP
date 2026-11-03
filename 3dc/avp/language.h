@@ -30,6 +30,10 @@ extern char *LoadTextFile(const char *filename);
 * Platform specific function, which loads the named file *
 * and returns a pointer to the start of the file's data. *
 *****************************************************KJL*/
+/* The buffer holds the file's bytes followed by one extra 0 byte, so a scan of it can stop at the end. */
+
+extern char *LoadTextFileWithSize(const char *filename, size_t *sizePtr);
+/* The same, also returning the file's size in bytes (the 0 byte after it not counted). */
 
 extern void UnloadTextFile(const char *filename, char *bufferPtr);
 /*KJL**********************************************************
