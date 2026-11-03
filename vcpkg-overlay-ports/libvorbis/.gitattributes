@@ -1,0 +1,2 @@
+# Keep patch files byte for byte: their line endings must not be converted on checkout.
+*.patch -text
