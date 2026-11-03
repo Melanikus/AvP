@@ -632,6 +632,18 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				{
 					NewOnScreenMessage("Enet received a packet!\n");
 
+					// the caller's buffer holds NET_MESSAGEBUFFERSIZE bytes (every message we send fits in it, see
+					// Net_Send). ENet accepts packets of up to 32 MB, so drop a larger one instead of overrunning it.
+					if (eEvent.packet->dataLength > (size_t)NET_MESSAGEBUFFERSIZE)
+					{
+						std::stringstream sstream;
+						sstream << "Net_Receive - dropped a packet of " << eEvent.packet->dataLength
+						        << " bytes (larger than the " << NET_MESSAGEBUFFERSIZE << " byte message buffer)";
+						Con_PrintError(sstream.str());
+						enet_packet_destroy(eEvent.packet);
+						break;
+					}
+
 					// copy it in, header and all
 					memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);
 					dataSize = eEvent.packet->dataLength;

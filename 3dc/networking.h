@@ -52,7 +52,7 @@ void      Net_FindAvPSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
-NetResult Net_Receive(uint8_t *messageData, size_t &dataSize);
+NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();
