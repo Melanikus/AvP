@@ -454,7 +454,8 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 
 	// keep only the blocks that fit (TLTConfigBlock::Size() is 48)
 	size_t const blocks_that_fit = (sdata_end - sdata) / 48;
-	if (listsize > blocks_that_fit) listsize = (unsigned int)blocks_that_fit;
+	bool const blocks_dropped = listsize > blocks_that_fit;
+	if (blocks_dropped) listsize = (unsigned int)blocks_that_fit;
 
 	while (listsize)
 	{
@@ -465,7 +466,8 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 	}
 	
 	// hmm, size_chunk was wrong so allow sizes which were wrong in that way to pass
-	assert (ssize + 12 == size_chunk() || ssize + 12 + (44+name_length+4&~3) - (44+name_length+4&~4) == size_chunk());
+	// (and a chunk whose last blocks were dropped above, such as one of those old short chunks, cannot match its size)
+	assert (blocks_dropped || ssize + 12 == size_chunk() || ssize + 12 + (44+name_length+4&~3) - (44+name_length+4&~4) == size_chunk());
 }
 
 size_t TLT_Config_Chunk::size_chunk()
