@@ -469,8 +469,8 @@ void InteriorType_Body()
 void UpdateCamera(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
-	int cos = GetCos(playerStatusPtr->ViewPanX); // the looking up/down value that used to be in displayblock
-	int sin = GetSin(playerStatusPtr->ViewPanX);
+	int cos = GetCos(playerStatusPtr->ViewPanX & wrap360); // the looking up/down value that used to be in displayblock
+	int sin = GetSin(playerStatusPtr->ViewPanX & wrap360);
 
 	DISPLAYBLOCK *dptr_s = Player;
 

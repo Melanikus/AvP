@@ -4328,7 +4328,7 @@ static void HandleVolumetricExplosion(VOLUMETRIC_EXPLOSION *expPtr)
 	if (expPtr->ExplosionPhase)
 	{
 		int v = (DIV_FIXED(SPHERE_VERTICES, expPtr->NumberVerticesMoving+1)+ONE_FIXED);
-		velocityModifier = MUL_FIXED(GetSin(expPtr->LifeTime/64)/16,v);
+		velocityModifier = MUL_FIXED(GetSin((expPtr->LifeTime/64) & 4095)/16,v);
 		
 		for(int i=0; i<SPHERE_VERTICES; i++)
 		{
