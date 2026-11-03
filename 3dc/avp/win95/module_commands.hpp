@@ -3,6 +3,9 @@
 	modcmds.hpp
 
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the module list command, which nothing could reach
 
 #ifndef _modcmds
 #define _modcmds 1
@@ -24,8 +27,6 @@
 /* Function prototypes **************************************************/
 	namespace ModuleCommands
 	{
-		void ListModules(void);
-		
 		void TryToTeleport(char* UpperCasePotentialModuleName);
 
 		MODULE* FindModule(char* UpperCasePotentialModuleName);

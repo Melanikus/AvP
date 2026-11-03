@@ -212,12 +212,6 @@
 	#if 0
 	Make
 	(
-		"LISTMOD",
-		"LIST ALL MODULES",
-		ModuleCommands :: ListModules
-	);
-	Make
-	(
 		"C-KILL",
 		"CLEAR TEXT REPORT QUEUE",
 		TextReportGadget :: ClearTheQueue
