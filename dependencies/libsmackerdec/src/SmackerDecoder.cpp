@@ -51,6 +51,7 @@
  *   SM-P5: limit tree recursion depth (CVE-2017-16803); unsigned prefix shift
  *   SM-P6: reject a palette copy that would read past the old palette
  *   SM-P7: check palette and audio chunk sizes; advance frames by the frame table
+ *   SM-P8: keep allocation failures inside the DLL; cap header-tree table sizes
  */
 
 #include "SmackerDecoder.h"
@@ -66,15 +67,26 @@ SmackerHandle Smacker_Open(const char* fileName)
 	newHandle.isValid = false;
 	newHandle.instanceIndex = -1;
 
-	SmackerDecoder *newDecoder = new SmackerDecoder();
-	if (!newDecoder->Open(fileName))
+	SmackerDecoder *newDecoder = 0;
+
+	// no C++ exception may leave the DLL: a failed allocation fails the open
+	try
+	{
+		newDecoder = new SmackerDecoder();
+		if (!newDecoder->Open(fileName))
+		{
+			delete newDecoder;
+			return newHandle;
+		}
+
+		// add instance to global instance vector
+		classInstances.push_back(newDecoder);
+	}
+	catch (...)
 	{
 		delete newDecoder;
 		return newHandle;
 	}
-
-	// add instance to global instance vector
-	classInstances.push_back(newDecoder);
 
 	// get a handle ID
 	newHandle.instanceIndex = classInstances.size() - 1;
@@ -145,7 +157,14 @@ uint32_t Smacker_GetNextFrame(SmackerHandle &handle)
 
 	uint32_t frameIndex = decoder->GetCurrentFrameNum();
 
-	decoder->GetNextFrame();
+	// no C++ exception may leave the DLL: a failed allocation loses this frame
+	try
+	{
+		decoder->GetNextFrame();
+	}
+	catch (...)
+	{
+	}
 
 	return frameIndex;
 }
@@ -673,6 +692,9 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
 
 	// 'length' entries for the tree, plus 3 reserved for the 'last' indexes below
 	huff.length = (size + 3) >> 2;
+	// every entry takes at least one bit of tree data: no table needs more entries than that
+	if ((uint64_t)huff.length > (uint64_t)treeSize * 8)
+		huff.length = (int)((uint64_t)treeSize * 8);
     huff.maxlength = 0;
     huff.current = 0;
 	huff.values.resize(huff.length + 3);
