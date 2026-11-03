@@ -1830,12 +1830,7 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 
 	    	playerStatusPtr->SwapToWeaponSlot = requestedSlot;
 		  	return 1;
-    	} else if( (requestedSlot != playerStatusPtr->SelectedWeaponSlot)
-          &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
-		{
-			// Switched-off (#if 0) code for a "<weapon> NOT AVAILABLE IN DEMO" message
-			// was here. It has been removed, so nothing happens here.
-		}
+    	}
     }
 
    	return 0;
@@ -2098,12 +2093,7 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
 
 	    	playerStatusPtr->SwapToWeaponSlot = requestedSlot;
 			return 1;
-    	} else if( (requestedSlot != currentSlot)
-          &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
-        {
-			// Switched-off (#if 0) code for a "<weapon> NOT AVAILABLE IN DEMO" message
-			// was here. It has been removed, so nothing happens here.
-		}
+    	}
     }
 
    	return 0;

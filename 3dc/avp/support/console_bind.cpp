@@ -89,7 +89,7 @@ KeyBinding :: ParseBindCommand
 		SCString* pSCString_ToBind = new SCString(pProjCh_FollowingTheKey);
 
 		// Create the KeyBinding object:
-		KeyBinding* pNewBinding = Make
+		Make
 		(
 			theKey,
 			pSCString_ToBind
