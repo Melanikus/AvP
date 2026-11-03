@@ -1495,7 +1495,7 @@ static void VertexIntensity_Pred_Thermal(RENDERVERTEX *renderVertexPtr)
 		int a = (renderVertexPtr->Z - 5000);
 
 		if (a > 4096) {
-			blueI = (blueI * 80192) / a;
+			blueI = (blueI * 4096) / a;
 		}
 	}
 
