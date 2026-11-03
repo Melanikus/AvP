@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   copies into buffers sized from the same string use memcpy with that length
+//   the debug decal save builds its AVPDECAL chunk in Make_Decal_Chunk, which returns it
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -3186,6 +3187,30 @@ static void MakeBackupFile(File_Chunk* fc)
 #endif
 }
 
+// the AVPDECAL chunk for the fixed decals; like every chunk it belongs to its parent, soc
+static AVP_Decal_Chunk* Make_Decal_Chunk(Special_Objects_Chunk* soc, List<Object_Chunk*>& ob_list)
+{
+	AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
+	for(int i=0;i<decal_chunk->num_decals;i++)
+	{
+		FIXED_DECAL* fd=&FixedDecalStorage[i];
+		AVP_Decal * ad=&decal_chunk->decals[i];
+
+		ad->DecalID=(int)fd->DecalID;
+		for(int j=0;j<4;j++)
+		{
+			ad->Vertices[j].x=fd->Vertices[j].vx;
+			ad->Vertices[j].y=fd->Vertices[j].vy;
+			ad->Vertices[j].z=fd->Vertices[j].vz;
+		}
+
+		ad->UOffset=fd->UOffset;
+
+		ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
+	}
+	return decal_chunk;
+}
+
 void save_preplaced_decals()
 {
 	GLOBALASSERT(env_rif);
@@ -3223,24 +3248,7 @@ void save_preplaced_decals()
 		List<Object_Chunk*> ob_list;
 		env_rif->fc->list_objects(&ob_list);
 
-		AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
-		for(int i=0;i<decal_chunk->num_decals;i++)
-		{
-			FIXED_DECAL* fd=&FixedDecalStorage[i];
-			AVP_Decal * ad=&decal_chunk->decals[i];
-
-			ad->DecalID=(int)fd->DecalID;
-			for(int j=0;j<4;j++)
-			{
-				ad->Vertices[j].x=fd->Vertices[j].vx;
-				ad->Vertices[j].y=fd->Vertices[j].vy;
-				ad->Vertices[j].z=fd->Vertices[j].vz;
-			}
-
-			ad->UOffset=fd->UOffset;
-
-			ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
-		}
+		Make_Decal_Chunk(soc, ob_list);
 	}
 
 	if(!env_rif->fc->update_file())
