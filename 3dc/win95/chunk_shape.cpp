@@ -4,6 +4,7 @@
 //   constructor, the Anim_Shape_Sequence_Chunk interface constructors with update_my_sequencedata and
 //   RegenerateChildChunks, the Anim_Shape_Frame_Chunk "from frame" constructor, CreateNewSubShape and the
 //   Console_Shape_Chunk type constructor
+//   copies into buffers sized from the same string use memcpy with that length
 
 #include <math.h>
 
@@ -1221,8 +1222,9 @@ void Shape_Header_Chunk::prepare_for_output()
 		if (aosl()->get_header())
 			aosl()->get_header()->shape_id_no = file_id_num;
 
-		str = new char [strlen(aosl()->object_data.o_name) + 1];
-		strcpy(str, aosl()->object_data.o_name);
+		size_t const name_size = strlen(aosl()->object_data.o_name) + 1;
+		str = new char [name_size];
+		memcpy(str, aosl()->object_data.o_name, name_size);
 		object_names_store.add_entry(str);
 	}
 

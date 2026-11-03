@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (SetMD5Val and the CreateMD5Chunk overrides)
+//   copies into buffers sized from the same string use memcpy with that length
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -505,10 +506,10 @@ External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Chi
 	sdata += Chunk_With_BMPs::size_chunk() -12;
 	unsigned int const l1 = strlen(sdata)+1;
 	rifname = new char [l1];
-	strcpy(rifname,sdata);
+	memcpy(rifname,sdata,l1);
 	unsigned int const l2 = strlen(sdata+l1)+1;
 	shapename = new char [l2];
-	strcpy(shapename,sdata+l1);
+	memcpy(shapename,sdata+l1,l2);
 
 	sdata += l1+l2 +3&~3;
 

@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (ExpandedIdentifier, add_rif_entry, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
+//   BMP_Flags::operator= copies the file name with memcpy of its measured length
 
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
@@ -672,8 +673,9 @@ public:
 		delete[] filename;
 		if (c.filename)
 		{
-			filename = new char[strlen(c.filename)+1];
-			strcpy(filename,c.filename);
+			size_t const filename_size = strlen(c.filename)+1;
+			filename = new char[filename_size];
+			memcpy(filename,c.filename,filename_size);
 		}
 		else
 			filename = 0;

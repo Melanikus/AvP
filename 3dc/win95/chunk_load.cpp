@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   load_rif / load_rif_non_env build the "Error loading" message in a std::string, not a char[200]
+//   copies into buffers sized from the same string use memcpy with that length
 
 #include <stdlib.h>
 #include <string>
@@ -2685,8 +2686,9 @@ BOOL copy_to_shapeheader(
 	{
 		for (i = 0; i < cshp_ptr->num_texfiles; i++)
 		{
-			shphd->sh_localtextures[i] = (char *) PoolAllocateMem(sizeof(char) * (strlen(cshp_ptr->texture_fns[i]) + 1));
-			strcpy(shphd->sh_localtextures[i], cshp_ptr->texture_fns[i]);
+			size_t const texture_fn_size = strlen(cshp_ptr->texture_fns[i]) + 1;
+			shphd->sh_localtextures[i] = (char *) PoolAllocateMem(sizeof(char) * texture_fn_size);
+			memcpy(shphd->sh_localtextures[i], cshp_ptr->texture_fns[i], texture_fn_size);
 		}
 
 		shphd->sh_localtextures[i] = 0;

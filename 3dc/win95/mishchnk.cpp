@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   File_Chunk::update_file keeps the file name in a std::string, not a char[256]
+//   File_Chunk::write_file builds its temporary file name with memcpy of measured lengths
 
 #include <string>
 #include "chunk.hpp"
@@ -528,10 +529,12 @@ BOOL File_Chunk::write_file (const char * fname)
 	}
 	if(!fname[filename_start_pos]) return FALSE;
 	
-	char* temp_name=new char[strlen(fname)+7];
-	strcpy(temp_name,fname);
-	strcpy(&temp_name[filename_start_pos],"~temp~");
-	strcpy(&temp_name[filename_start_pos+6],&fname[filename_start_pos]);
+	// temp_name = the directory part of fname + "~temp~" + the file name part + NUL
+	size_t const fname_length = strlen(fname);
+	char* temp_name=new char[fname_length+7];
+	memcpy(temp_name,fname,filename_start_pos);
+	memcpy(&temp_name[filename_start_pos],"~temp~",6);
+	memcpy(&temp_name[filename_start_pos+6],&fname[filename_start_pos],fname_length-filename_start_pos+1);
 
 	prepare_for_output();
 

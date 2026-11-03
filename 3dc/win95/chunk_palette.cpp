@@ -1,6 +1,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (ExpandedIdentifier, RIF_Child_Chunk::SetMD5Val / CreateMD5Chunk)
 //   TLT_Config_Chunk: parse the TLTCONFG chunk only inside its size
+//   copies into buffers sized from the same string use memcpy with that length
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
@@ -288,8 +289,9 @@ Environment_TLT_Chunk::Environment_TLT_Chunk (Chunk_With_Children * parent, cons
 
 	if (flags & ChunkTLTFlag_ExternalFile)
 	{
-		filename = new char[strlen(sdata+32)+1];
-		strcpy(filename,sdata+32);
+		size_t const filename_size = strlen(sdata+32)+1;
+		filename = new char[filename_size];
+		memcpy(filename,sdata+32,filename_size);
 	}
 	else if ((signed) ssize >= 32 + width*num_levels)
 	{
@@ -901,8 +903,9 @@ Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Child
 
 	if (flags & ChunkCPLUFlag_ExternalFile)
 	{
-		filename = new char[strlen(sdata+32)+1];
-		strcpy(filename,sdata+32);
+		size_t const filename_size = strlen(sdata+32)+1;
+		filename = new char[filename_size];
+		memcpy(filename,sdata+32,filename_size);
 	}
 	else
 	{
