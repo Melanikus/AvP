@@ -40,19 +40,20 @@ jobs:
         run: snyk code test --sarif-file-output=snyk-code.sarif
 
       - name: Snyk Open Source (SCA, vendored C/C++)
+        if: ${{ !cancelled() }}   # run even when Snyk Code failed; the job still fails if either scan fails
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk test --unmanaged --sarif-file-output=snyk-open-source.sarif
 
       - name: Upload Snyk Code results
-        if: always() && hashFiles('snyk-code.sarif') != ''
+        if: ${{ !cancelled() && hashFiles('snyk-code.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
 
       - name: Upload Snyk Open Source results
-        if: always() && hashFiles('snyk-open-source.sarif') != ''
+        if: ${{ !cancelled() && hashFiles('snyk-open-source.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           sarif_file: snyk-open-source.sarif
