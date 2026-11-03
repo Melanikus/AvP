@@ -13,11 +13,12 @@
 [CmdletBinding()]
 param(
     # Which scan this is. It sets the list of files we expect to see in the report:
-    #   own         = every C/C++ file in git;
+    #   own         = every source file the game's Visual Studio projects compile;
+    #   own-all     = every C/C++ file in git, compiled or not;
     #   libs        = the libraries as really compiled: each one must have at least one source file in the report;
     #   all-sources = every C/C++ file of the libraries, compiled or not;
     #   other       = workflows and scripts: there is no list to compare with, but it must have read something.
-    [Parameter(Mandatory)] [ValidateSet('own', 'libs', 'all-sources', 'other')] [string] $Kind,
+    [Parameter(Mandatory)] [ValidateSet('own', 'own-all', 'libs', 'all-sources', 'other')] [string] $Kind,
 
     # The folder CodeQL wrote its report (.sarif) into.
     [Parameter(Mandatory)] [string] $SarifFolder,
@@ -29,7 +30,10 @@ param(
     [Parameter(Mandatory)] [string] $ReportFolder,
 
     # The list of libraries the game depends on.
-    [string] $Manifest = 'vcpkg.json'
+    [string] $Manifest = 'vcpkg.json',
+
+    # The Visual Studio solution that builds the game.
+    [string] $Solution = 'win32/VS2026/AvP.sln'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -133,6 +137,25 @@ if ($seen.Count -eq 0) {
 
 $expected = @()
 if ($Kind -eq 'own') {
+    # The project files say exactly what the build compiles, and they don't depend on CodeQL. So if CodeQL lost sight of
+    # part of the build, the files it missed show up here even though the build itself worked. A solution file lists its
+    # projects with a line per project, and each project lists its files as <ClCompile Include="...">, relative to the
+    # project's own folder.
+    $root = (Resolve-Path -LiteralPath $SourceRoot).Path.TrimEnd('\', '/')
+    $solutionFile = Join-Path $root $Solution
+    $projects = @(Select-String -LiteralPath $solutionFile -Pattern '^Project\(.*\) = "[^"]+", "([^"]+\.vcxproj)"' |
+        ForEach-Object { $_.Matches[0].Groups[1].Value })
+    if ($projects.Count -eq 0) { $failures.Add("No projects found in $Solution") }
+    $expected = @(foreach ($relativeProject in $projects) {
+            $projectFile = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $solutionFile) $relativeProject))
+            $project = [xml] (Get-Content -LiteralPath $projectFile -Raw)
+            foreach ($item in $project.SelectNodes("//*[local-name()='ClCompile'][@Include]")) {
+                $file = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $projectFile) $item.GetAttribute('Include')))
+                $file.Substring($root.Length + 1).Replace('\', '/')
+            }
+        })
+    if ($expected.Count -eq 0) { $failures.Add("The projects in $Solution list no source files") }
+} elseif ($Kind -eq 'own-all') {
     # Git's list of our files is the truth: anything tracked must have been read. We ask for every file and pick out the
     # C/C++ ones ourselves, because git's own filter would miss a name in capitals like OLDFILE.CPP.
     $tracked = @(git -C $SourceRoot ls-files)
