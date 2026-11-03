@@ -52,6 +52,7 @@
  *   SM-P6: reject a palette copy that would read past the old palette
  *   SM-P7: check palette and audio chunk sizes; advance frames by the frame table
  *   SM-P8: keep allocation failures inside the DLL; cap header-tree table sizes
+ *   SM-P9: reject a file with no frames
  */
 
 #include "SmackerDecoder.h"
@@ -404,6 +405,14 @@ bool SmackerDecoder::Open(const std::string &fileName)
 	if (nFrames > 0xFFFFFF)
 	{
 		SmackerCommon::LogError("Too many frames!");
+		return false;
+	}
+
+	// checked after the ring-frame increment, which wraps 0xFFFFFFFF to 0;
+	// Open reads frame 0's size and flags below
+	if (nFrames == 0)
+	{
+		SmackerCommon::LogError("No frames!");
 		return false;
 	}
 
