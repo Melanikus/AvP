@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the chat lines are formatted with _snprintf, bounded to OnScreenMessageBuffer and the name field
+//   NetworkGameConsoleMessage forwards to one bounded message builder
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -10608,84 +10609,68 @@ void ChangeNetGameType_PredatorTag()
 */
 static void NetworkGameConsoleMessage(enum TEXTSTRING_ID stringID, const char *name1, const char *name2)
 {
-	char *messageptr = &OnScreenMessageBuffer[0];
-	char *string = GetTextString(stringID);
-
-	if (!string) {
-		return;
-	}
-
-	while (*string)
-	{
-		if (string[0] == '%')
-		{
-			if (string[1] >= '1' && string[1] <= '9')
-			{
-				if (string[1] == '1' && name1)
-				{
-					strcpy(messageptr, name1);
-					messageptr += strlen(name1);
-				}
-
-				if (string[1] == '2' && name2)
-				{
-					strcpy(messageptr, name2);
-					messageptr += strlen(name2);
-				}
-
-				string += 2;
-				continue;
-			}
-		}
-
-		*messageptr++ = *string++;
-	}
-
-	*messageptr = 0;
-	NewOnScreenMessage(OnScreenMessageBuffer);
+	// This is the same job as the weapon-icon version below, without a weapon
+	// icon, so it hands the work over to that one.
+	NetworkGameConsoleMessageWithWeaponIcon(stringID, name1, name2, 0);
 }
 
 static void NetworkGameConsoleMessageWithWeaponIcon(enum TEXTSTRING_ID stringID, const char *name1, const char *name2, const char *weaponSymbol)
 {
+	// We build the message in OnScreenMessageBuffer, which holds 300 bytes:
+	// up to 299 characters (letters, digits, spaces and so on), then a zero
+	// byte that marks where the text stops (the "end marker").
+	// The message pattern, such as "%1 was killed by %2", comes from the
+	// game's language text file on disk. Without the limits below, a pattern
+	// line made very long in that file would make this code write past the
+	// end of the buffer and damage other memory. Every copy below stops at
+	// the 299th character instead, so a message that is too long is cut
+	// short. A message that fits comes out exactly as before.
 	char *messageptr = &OnScreenMessageBuffer[0];
-	char *string = GetTextString(stringID);
+	char * const messageend = &OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1]; // the last byte is kept for the end marker
+	const char *string = GetTextString(stringID);
 
 	if (!string) {
 		return;
 	}
 
-	while (*string)
+	while (*string && messageptr < messageend)
 	{
-		if (string[0] == '%')
+		// "%1" means "put the first name here" and "%2" the second one.
+		// "%3" to "%9" have no name to put in, so they are left out, as before.
+		if (string[0] == '%' && string[1] >= '1' && string[1] <= '9')
 		{
-			if (string[1] >= '1' && string[1] <= '9')
+			const char *name = (string[1] == '1') ? name1 : ((string[1] == '2') ? name2 : 0);
+
+			if (name)
 			{
-				if (string[1] == '1' && name1)
-				{
-					strcpy(messageptr, name1);
-					messageptr += strlen(name1);
-				}
-
-				if (string[1] == '2' && name2)
-				{
-					strcpy(messageptr, name2);
-					messageptr += strlen(name2);
-				}
-
-				string += 2;
-				continue;
+				// Every caller passes a player's name from netGameData, which is
+				// kept in a 13-byte box (NET_PLAYERNAMELENGTH). We read no more
+				// than that box, and copy no more than still fits in the buffer.
+				size_t const nameBox = NET_PLAYERNAMELENGTH;
+				size_t const room = messageend - messageptr;
+				size_t const nameLength = strnlen(name, (room < nameBox) ? room : nameBox);
+				memcpy(messageptr, name, nameLength);
+				messageptr += nameLength;
 			}
+
+			string += 2;
+			continue;
 		}
 
 		*messageptr++ = *string++;
 	}
 
-	*messageptr = 0;
-
-	if (weaponSymbol) {
-		strcat(OnScreenMessageBuffer, weaponSymbol);
+	// A kill message can end with the weapon that was used: a space and one
+	// special character that the console font draws as a small picture of
+	// the weapon. It is added only as far as it still fits.
+	if (weaponSymbol)
+	{
+		size_t const symbolLength = strnlen(weaponSymbol, messageend - messageptr);
+		memcpy(messageptr, weaponSymbol, symbolLength);
+		messageptr += symbolLength;
 	}
 
+	*messageptr = 0;
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
 
