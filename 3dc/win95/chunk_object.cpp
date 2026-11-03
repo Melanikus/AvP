@@ -2,7 +2,9 @@
 //   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
 //   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
 //   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name
+//   CalculateID builds the hashed name in a std::string instead of a fixed char[100]
 
+#include <string>
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
@@ -381,13 +383,12 @@ ObjectID Object_Chunk::CalculateID()
 	if(!chlist.size()) return retval;
 	((Environment_Data_Chunk*)chlist.first_entry())->lookup_child("RIFFNAME",chlist);
 	if(!chlist.size()) return retval;
-	char Name[100];
+	// rif name + object name, hashed; both come from the .rif and have no length limit
+	std::string Name(((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
 
-	strcpy(Name,((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
-
-	strcat(Name,object_data.o_name);
+	Name += object_data.o_name;
 	char buffer[16];
-	md5_buffer(Name,strlen(Name),&buffer[0]);
+	md5_buffer(Name.c_str(),(unsigned int)Name.size(),&buffer[0]);
 	buffer[7]=0;
 	object_data_store->ID=*(ObjectID*)&buffer[0];
 	return 	object_data_store->ID;
