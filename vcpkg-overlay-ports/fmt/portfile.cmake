@@ -20,9 +20,11 @@ vcpkg_from_github(
 #   both OFF below.
 # - support/python/: the plugin that builds the documentation, only used under FMT_DOC, which is
 #   OFF below. The build still needs the rest of support/.
+# - src/fmt.cc: the C++ module form of the library, only used under FMT_MODULE, which is OFF below.
 file(REMOVE_RECURSE
     "${SOURCE_PATH}/test"
     "${SOURCE_PATH}/support/python"
+    "${SOURCE_PATH}/src/fmt.cc"
 )
 
 vcpkg_cmake_configure(
@@ -32,6 +34,7 @@ vcpkg_cmake_configure(
         -DFMT_TEST=OFF
         -DFMT_FUZZ=OFF
         -DFMT_DOC=OFF
+        -DFMT_MODULE=OFF
 )
 
 vcpkg_cmake_install()
