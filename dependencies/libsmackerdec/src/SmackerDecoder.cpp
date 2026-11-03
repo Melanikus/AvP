@@ -56,6 +56,7 @@
  *   SM-P10: skip the unread rest of a bit reader with a seek, not bit by bit
  *   SM-P11: fail Open on a truncated header; skip frames once the stream has failed
  *   SM-P12: no signed overflow in FILL and audio deltas; reject INT32_MIN frame rate, fps >= 1
+ *   SM-P13: check the handle in every export, and the audio track index
  */
 
 #include "SmackerDecoder.h"
@@ -64,6 +65,15 @@
 #include <assert.h>
 
 std::vector<class SmackerDecoder*> classInstances;
+
+// the decoder behind a handle, or 0 if the handle is invalid, out of range or closed
+static SmackerDecoder *GetDecoder(const SmackerHandle &handle)
+{
+	if (handle.instanceIndex < 0 || (size_t)handle.instanceIndex >= classInstances.size())
+		return 0;
+
+	return classInstances[handle.instanceIndex];
+}
 
 SmackerHandle Smacker_Open(const char* fileName)
 {
@@ -103,7 +113,7 @@ SmackerHandle Smacker_Open(const char* fileName)
 
 void Smacker_Close(SmackerHandle &handle)
 {
-	if (!classInstances.at(handle.instanceIndex))
+	if (!GetDecoder(handle))
 	{
 		// invalid handle
 		return;
@@ -125,7 +135,15 @@ uint32_t Smacker_GetNumAudioTracks(SmackerHandle &handle)
 
 SmackerAudioInfo Smacker_GetAudioTrackDetails(SmackerHandle &handle, uint32_t trackIndex)
 {
-	return classInstances[handle.instanceIndex]->GetAudioTrackDetails(trackIndex);
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+	{
+		SmackerAudioInfo info;
+		memset(&info, 0, sizeof(info));
+		return info;
+	}
+
+	return decoder->GetAudioTrackDetails(trackIndex);
 }
 
 /* Get a frame's worth of audio data. 
@@ -136,28 +154,49 @@ SmackerAudioInfo Smacker_GetAudioTrackDetails(SmackerHandle &handle, uint32_t tr
  */
 uint32_t Smacker_GetAudioData(SmackerHandle &handle, uint32_t trackIndex, int16_t *data)
 {
-	return classInstances[handle.instanceIndex]->GetAudioData(trackIndex, data);
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetAudioData(trackIndex, data);
 }
 
 uint32_t Smacker_GetNumFrames(SmackerHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetNumFrames();
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetNumFrames();
 }
 
 void Smacker_GetFrameSize(SmackerHandle &handle, uint32_t &width, uint32_t &height)
 {
-	width  = classInstances[handle.instanceIndex]->frameWidth;
-	height = classInstances[handle.instanceIndex]->frameHeight;
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+	{
+		width = height = 0;
+		return;
+	}
+
+	width  = decoder->frameWidth;
+	height = decoder->frameHeight;
 }
 
 uint32_t Smacker_GetCurrentFrameNum(SmackerHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetCurrentFrameNum();
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetCurrentFrameNum();
 }
 
 uint32_t Smacker_GetNextFrame(SmackerHandle &handle)
 {
-	SmackerDecoder *decoder = classInstances[handle.instanceIndex];
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
 
 	uint32_t frameIndex = decoder->GetCurrentFrameNum();
 
@@ -175,17 +214,29 @@ uint32_t Smacker_GetNextFrame(SmackerHandle &handle)
 
 float Smacker_GetFrameRate(SmackerHandle &handle)
 {
-	return classInstances[handle.instanceIndex]->GetFrameRate();
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetFrameRate();
 }
 
 void Smacker_GetPalette(SmackerHandle &handle, uint8_t *palette)
 {
-	classInstances[handle.instanceIndex]->GetPalette(palette);
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return;
+
+	decoder->GetPalette(palette);
 }
 
 void Smacker_GetFrame(SmackerHandle &handle, uint8_t *frame)
 {
-	classInstances[handle.instanceIndex]->GetFrame(frame);
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return;
+
+	decoder->GetFrame(frame);
 }
 
 SmackerDecoder::SmackerDecoder()
@@ -1271,6 +1322,13 @@ float SmackerDecoder::GetFrameRate()
 SmackerAudioInfo SmackerDecoder::GetAudioTrackDetails(uint32_t trackIndex)
 {
 	SmackerAudioInfo info;
+
+	if (trackIndex >= (uint32_t)kMaxAudioTracks)
+	{
+		memset(&info, 0, sizeof(info));
+		return info;
+	}
+
 	SmackerAudioTrack *track = &audioTracks[trackIndex];
 
 	info.sampleRate = track->sampleRate;
@@ -1285,7 +1343,7 @@ SmackerAudioInfo SmackerDecoder::GetAudioTrackDetails(uint32_t trackIndex)
 
 uint32_t SmackerDecoder::GetAudioData(uint32_t trackIndex, int16_t *audioBuffer)
 {
-	if (!audioBuffer)
+	if (!audioBuffer || trackIndex >= (uint32_t)kMaxAudioTracks)
 		return 0;
 
 	SmackerAudioTrack *track = &audioTracks[trackIndex];
