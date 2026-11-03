@@ -50,6 +50,7 @@
  *   BK-P5: return at most the 3 planes a YUVbuffer holds
  *   BK-P6: reject more than 256 audio tracks
  *   BK-P7: cap the audio buffer size; fail Open when an allocation fails
+ *   BK-P8: reject 0 frames and a frame index that does not increase
  */
 
 #include "BinkDecoder.h"
@@ -251,6 +252,12 @@ bool BinkDecoder::Open(const std::string &fileName)
 		return false;
 	}
 
+	if (nFrames == 0)
+	{
+		BinkCommon::LogError("Invalid header, no frames");
+		return false;
+	}
+
 	largestFrameSize = file.ReadUint32LE();
 	if (largestFrameSize > fileSize)
 	{
@@ -325,6 +332,13 @@ bool BinkDecoder::Open(const std::string &fileName)
 
 		pos &= ~1;
 		nextPos &= ~1;
+
+		// each frame must end after it starts and inside the file
+		if (nextPos <= pos || nextPos > fileSize)
+		{
+			BinkCommon::LogError("Invalid frame index table");
+			return false;
+		}
 
 		frames[i].offset = pos;
 		frames[i].size   = nextPos - pos;
