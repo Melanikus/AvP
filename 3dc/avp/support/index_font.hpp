@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   factories return the objects they create (they register themselves; their lists free them)
 /*
 	
 	indexfnt.hpp
@@ -246,8 +248,14 @@
 		 : IndexedFont
 			(
 				I_Font_New
-			) 
+			)
 		{
+		}
+
+		// creates the HUD font and registers it as I_Font_New; IndexedFont::UnloadFont deletes it
+		static IndexedFont_HUD* Load(FontIndex I_Font_New)
+		{
+			return new IndexedFont_HUD(I_Font_New);
 		}
 	};
 		inline r2size IndexedFont_HUD::CalcSize

@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   factories return the objects they create (they register themselves; their lists free them)
 /*
 	
 	consbind.hpp
@@ -113,6 +115,16 @@
 			SCString* pSCString_ToBind
 		);
 		~KeyBinding();
+
+		// creates a binding; it adds itself to List_pKeyBindings, which deletes it (UnbindAll, WriteToConfigFile)
+		static KeyBinding* Make
+		(
+			BindableKey theKey_ToUse,
+			SCString* pSCString_ToBind
+		)
+		{
+			return new KeyBinding(theKey_ToUse, pSCString_ToBind);
+		}
 
 		static void ErrorDontRecogniseKey( SCString* pSCString_Key );
 

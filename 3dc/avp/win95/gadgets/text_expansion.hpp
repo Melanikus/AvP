@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   factories return the objects they create (they register themselves; their lists free them)
 /*
 	
 	textexp.hpp
@@ -62,6 +64,16 @@
 			SCString* pSCString_Short,
 			SCString* pSCString_Expansion
 		);
+
+		// creates an expansion; it adds itself to List_pTextExp, and TryToRemoveExpansion deletes it
+		static TextExpansion* Make
+		(
+			SCString* pSCString_Short,
+			SCString* pSCString_Expansion
+		)
+		{
+			return new TextExpansion(pSCString_Short, pSCString_Expansion);
+		}
 
 		static void TryToRemoveExpansion
 		(

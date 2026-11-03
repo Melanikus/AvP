@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
+//   factories return the objects they create (they register themselves; their lists free them)
 /*******************************************************************
  *
  *    DESCRIPTION: 	davehook.cpp
@@ -273,7 +274,7 @@ void DAVEHOOK_Init(void)
 //		AmmoDaemon :: Init();
 	}
 
-	new IndexedFont_HUD(DATABASE_MESSAGE_FONT);
+	IndexedFont_HUD :: Load(DATABASE_MESSAGE_FONT);
 	
 	GADGET_Init();
 

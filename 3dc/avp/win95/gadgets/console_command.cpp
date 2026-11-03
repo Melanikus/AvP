@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
+//   factories return the objects they create (they register themselves; their lists free them)
 /*******************************************************************
  *
  *    DESCRIPTION: 	conscmnd.cpp
@@ -115,7 +116,7 @@
 // public:
 
 // Various factory methods:
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -123,7 +124,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidVoid
+	return new ConsoleCommand_VoidVoid
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -131,7 +132,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -139,7 +140,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidInt
+	return new ConsoleCommand_VoidInt
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -147,7 +148,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -156,7 +157,7 @@
 
 )
 {
-	new ConsoleCommand_IntVoid
+	return new ConsoleCommand_IntVoid
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -165,7 +166,7 @@
 	);
 }
 
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -173,7 +174,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_IntInt
+	return new ConsoleCommand_IntInt
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -181,7 +182,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -189,7 +190,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidCharP
+	return new ConsoleCommand_VoidCharP
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
