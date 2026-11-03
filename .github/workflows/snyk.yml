@@ -5,7 +5,8 @@
 # Results go to the repository's Security tab (code scanning). ENFORCING (AvP Tao #1, security
 # is paramount): ANY finding or scan error fails its job, and BOTH jobs are required checks on
 # avpx_main, so nothing merges unless both pass. The SARIF uploads still run when a scan fails.
-# A finding is resolved only by fixing it, or by a justified .snyk ignore that the owner approves.
+# A finding is resolved only by fixing it in the code. The goal is zero vulnerabilities, so we don't ignore, park or
+# exclude findings.
 name: Snyk
 
 on:
