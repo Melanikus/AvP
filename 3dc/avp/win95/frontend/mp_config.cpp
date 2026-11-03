@@ -223,8 +223,11 @@ const char* GetMultiplayerConfigDescription(int index)
 		}
 	}
 
-	LastDescriptionFile = new char[strlen(name)+1];
-	strcpy(LastDescriptionFile, name);
+	// Copy the name into memory made exactly big enough for it: its length plus
+	// one byte for the end marker (the zero byte that marks where a text stops).
+	size_t const nameSize = strlen(name) + 1;
+	LastDescriptionFile = new char[nameSize];
+	memcpy(LastDescriptionFile, name, nameSize);
 	
 	// see if this is one of the default language localised configurations
 	if (!strncmp(name, "Config", 6))
@@ -745,9 +748,11 @@ void BuildMultiplayerLevelNameArray()
 			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
 			buffer[sizeof(buffer) - 1] = 0;
 
-			// allocate memory and copy the string.
-			MultiplayerLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
-			strcpy(MultiplayerLevelNames[i], buffer);
+			// Copy the name into memory made exactly big enough for it: its length plus
+			// one byte for the end marker (the zero byte that marks where a text stops).
+			size_t const nameSize = strlen(buffer) + 1;
+			MultiplayerLevelNames[i] = (char*) AllocateMem(nameSize);
+			memcpy(MultiplayerLevelNames[i], buffer, nameSize);
 		}
 		else {
 			MultiplayerLevelNames[i] = level_name;
@@ -767,9 +772,11 @@ void BuildMultiplayerLevelNameArray()
 			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
 			buffer[sizeof(buffer) - 1] = 0;
 
-			//allocate memory and copy the string.
-			CoopLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
-			strcpy(CoopLevelNames[i], buffer);
+			// Copy the name into memory made exactly big enough for it: its length plus
+			// one byte for the end marker (the zero byte that marks where a text stops).
+			size_t const nameSize = strlen(buffer) + 1;
+			CoopLevelNames[i] = (char*) AllocateMem(nameSize);
+			memcpy(CoopLevelNames[i], buffer, nameSize);
 		}
 		else {
 			CoopLevelNames[i] = level_name;
