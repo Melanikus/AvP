@@ -634,7 +634,8 @@ void ClearMultiplayerLevelNameArray()
 
 void BuildMultiplayerLevelNameArray()
 {
-	char buffer[256];
+	// a file name (up to MAX_PATH-1 characters) plus " (<custom level text>)"; the copies below are bounded to it
+	char buffer[MAX_PATH + 64];
 
 	// only want to do this once
 	if (MultiplayerLevelNames) {
@@ -663,14 +664,15 @@ void BuildMultiplayerLevelNameArray()
 					// not a directory, hidden or system file
 			)
 			{
-				strcpy(buffer, wfd.cFileName);
+				strncpy(buffer, wfd.cFileName, sizeof(buffer) - 1);
+				buffer[sizeof(buffer) - 1] = 0;
 				char *dotpos = strchr(buffer,'.');
 				if (dotpos) {
 					*dotpos = 0;
 				}
-				strcat(buffer," (");
-				strcat(buffer,custom_string);
-				strcat(buffer,")");
+				size_t used = strlen(buffer);
+				_snprintf(buffer + used, sizeof(buffer) - 1 - used, " (%s)", custom_string);
+				buffer[sizeof(buffer) - 1] = 0;
 
 				char *name = NewStringCopy(buffer);
 
@@ -828,9 +830,11 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 {
 	bool isCustom = false;
 
-	static char return_string[100];
+	// as large as the names BuildMultiplayerLevelNameArray makes (it used to be 100 bytes, overflowed by a custom
+	// level file name of about 90 characters or more); the copies are bounded
+	static char return_string[MAX_PATH + 64];
 	return_string[0] = 0;
-	
+
 	// find the index of a custom level from its name
 	if (gameType == NGT_Coop)
 	{
@@ -838,7 +842,7 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 			isCustom = true;
 		}
 
-		strcpy(return_string, CoopLevelNames[index]);
+		strncpy(return_string, CoopLevelNames[index], sizeof(return_string) - 1);
 	}
 	else
 	{
@@ -846,8 +850,9 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 			isCustom = true;
 		}
 
-		strcpy(return_string, MultiplayerLevelNames[index]);
+		strncpy(return_string, MultiplayerLevelNames[index], sizeof(return_string) - 1);
 	}
+	return_string[sizeof(return_string) - 1] = 0;
 
 	// need to remove ' (custom)' from the end of the level name
 	if (isCustom) {
