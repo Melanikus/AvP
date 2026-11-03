@@ -5068,6 +5068,9 @@ void Load_Particles(SAVE_BLOCK_HEADER* header)
 	PARTICLE* saved_particle = (PARTICLE*)(block+1);
 	int expected_size;
 
+	//the particles are copied into ParticleStorage[MAX_NO_OF_PARTICLES]: the count must fit it and the block
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveParticles, sizeof(PARTICLE), MAX_NO_OF_PARTICLES)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(PARTICLE) * block->NumActiveParticles;

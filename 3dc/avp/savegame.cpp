@@ -854,6 +854,31 @@ SAVE_BLOCK_HEADER* GetNextBlockIfOfType(SAVE_BLOCK_TYPE type)
 	}
 }
 
+//the count and the size of a "fixed part + array" block both come from the save file: the loaders' own size test
+//(fixed + count * elemSize == header->size, in int) wraps for a large count, and they copy count elements
+BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const int* countPtr, int elemSize, int capacity)
+{
+	int count;
+
+	if(!header || !countPtr || fixedSize < (int)sizeof(SAVE_BLOCK_HEADER) || elemSize <= 0) return FALSE;
+
+	//the fixed part (which holds the count) must be inside the block before the count is read
+	if(header->size < fixedSize)
+	{
+		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + " is smaller than its header");
+		return FALSE;
+	}
+
+	count = *countPtr;
+	if(count < 0 || count > capacity || count > (header->size - fixedSize) / elemSize)
+	{
+		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + ": invalid count " + Util::IntToString(count));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static void SaveStrategies()
 {
 	int i;
