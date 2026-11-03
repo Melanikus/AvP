@@ -1450,6 +1450,10 @@ void MakeParticle(VECTORCH *positionPtr, VECTORCH *velocityPtr, enum PARTICLE_ID
 {
 	PARTICLE *particlePtr;
 
+	//ParticleDescription has MAX_NO_OF_PARTICLE_IDS entries: an id outside it (PARTICLE_NULL from the exit-wound spray
+	//when GetBloodType knows no blood type) would be read past the array, and the switch below frees it again anyway
+	if ((unsigned)particleID >= (unsigned)MAX_NO_OF_PARTICLE_IDS) return;
+
 	if ((particleID == PARTICLE_ALIEN_BLOOD) || (particleID == PARTICLE_PREDATOR_BLOOD) || (particleID == PARTICLE_HUMAN_BLOOD)|| (particleID == PARTICLE_ANDROID_BLOOD))
 		if (NumberOfBloodParticles>MAX_NO_OF_BLOOD_PARTICLES)
 			return;
@@ -5093,12 +5097,12 @@ void Load_Particles(SAVE_BLOCK_HEADER* header)
 	if(header->size != expected_size) return;
 
 	//ParticleDescription[ParticleID] is read for every active particle: skip a block with an id the game cannot have
-	//saved. PARTICLE_NULL is let through: MakeParticle can be given it in play (exit wounds when GetBloodType finds no
-	//blood type), so a valid save can hold it
+	//saved. No active particle ever holds an id outside the table: MakeParticle refuses one (and before that, freed it
+	//again before returning)
 	for(int i=0;i<block->NumActiveParticles;i++)
 	{
 		int id = (int)saved_particle[i].ParticleID;
-		if((id < 0 || id >= MAX_NO_OF_PARTICLE_IDS) && id != PARTICLE_NULL) return;
+		if(id < 0 || id >= MAX_NO_OF_PARTICLE_IDS) return;
 	}
 
 	//right copy the stuff then
