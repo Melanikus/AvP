@@ -4428,7 +4428,9 @@ void DoCredits(void)
 	int position = 300*2048;
 	BOOL FinishedCredits = FALSE;
 	
-	char *creditsBufferPtr = LoadTextFile("credits.txt");
+	// the buffer ends with an extra 0 byte (LoadTextFileWithSize), which RollCreditsText stops at
+	size_t creditsSize = 0;
+	char *creditsBufferPtr = LoadTextFileWithSize("credits.txt", &creditsSize);
 
 	if (!creditsBufferPtr) {
 		return;
@@ -4438,13 +4440,26 @@ void DoCredits(void)
 
 	if (!strncmp (creditsBufferPtr, "REBCRIF1", 8))
 	{
-		creditsPtr = (char*)HuffmanDecompress((HuffmanPackage*)(creditsBufferPtr));
+		// checked decompression, bounded by the file's size; the result has 16 spare bytes after the data
+		int uncompressedSize = (creditsSize >= sizeof(HuffmanPackage)) ? ((HuffmanPackage*)creditsBufferPtr)->UncompressedDataSize : 0;
+		creditsPtr = HuffmanDecompressChecked((HuffmanPackage*)(creditsBufferPtr), (creditsSize > 0x7fffffff) ? 0x7fffffff : (int)creditsSize);
 		DeallocateMem(creditsBufferPtr);
 		creditsBufferPtr = creditsPtr;
+		if (!creditsPtr) {
+			return;
+		}
+		creditsPtr[uncompressedSize] = 0;
+		creditsSize = uncompressedSize;
 	}
 	else
 	{
 		creditsPtr = creditsBufferPtr;
+	}
+
+	// the text starts 4 bytes in (RollCreditsText(position, creditsPtr+4))
+	if (creditsSize < 4) {
+		UnloadTextFile("credits.txt", creditsPtr);
+		return;
 	}
 
 	do
@@ -4478,7 +4493,9 @@ BOOL RollCreditsText(int position, char *textPtr)
 {
 	int y=0;
 
-	while(*textPtr!='#')
+	// the text ends at the first '#'; it also stops at the 0 byte DoCredits' buffer ends with, so a credits file
+	// without the '#' no longer runs these scans past the buffer
+	while((*textPtr!='#') && (*textPtr!='\0'))
 	{
 		char buffer1[96];
 		char buffer2[96];
@@ -4522,7 +4539,7 @@ BOOL RollCreditsText(int position, char *textPtr)
 						splitText = 0;
 					}
 
-					textPtr++;
+					if (*textPtr!='\0') textPtr++;
 					while(*textPtr=='\n') textPtr++;
 				}
 				
@@ -4558,7 +4575,7 @@ BOOL RollCreditsText(int position, char *textPtr)
 			}
 			else
 			{
-				while(*textPtr++!='\n');
+				while((*textPtr!='\0') && (*textPtr++!='\n'));
 			}
 		}
 		y+=15;
