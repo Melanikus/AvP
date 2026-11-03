@@ -1265,7 +1265,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	if (FAILED(LastError))
 	{
 		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
-		LogErrorString("DX Error- " + std::string(DXGetErrorString(LastError)) + " " + std::string(DXGetErrorDescription(LastError)));
+		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
@@ -1357,7 +1357,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	if (FAILED(LastError))
 	{
 		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
-		LogErrorString("DX Error- " + std::string(DXGetErrorString(LastError)) + " " + std::string(DXGetErrorDescription(LastError)));
+		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{

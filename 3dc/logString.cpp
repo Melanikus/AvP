@@ -35,6 +35,83 @@
 
 static std::string lastError;
 
+#ifndef _XBOX
+// Replacement for the DirectX SDK's dxerr library (DXGetErrorString / DXGetErrorDescription), which is not part
+// of the Windows 10 SDK: the symbolic name of the common Direct3D 9, D3DX9 and COM results (or the hex value),
+// followed by the system's message for the code when Windows has one.
+std::string DxErrorToString(HRESULT hr)
+{
+	const char *name = 0;
+	switch (hr)
+	{
+#define DXERR_CASE(x) case x: name = #x; break;
+		DXERR_CASE(D3DERR_WRONGTEXTUREFORMAT)
+		DXERR_CASE(D3DERR_UNSUPPORTEDCOLOROPERATION)
+		DXERR_CASE(D3DERR_UNSUPPORTEDCOLORARG)
+		DXERR_CASE(D3DERR_UNSUPPORTEDALPHAOPERATION)
+		DXERR_CASE(D3DERR_UNSUPPORTEDALPHAARG)
+		DXERR_CASE(D3DERR_TOOMANYOPERATIONS)
+		DXERR_CASE(D3DERR_CONFLICTINGTEXTUREFILTER)
+		DXERR_CASE(D3DERR_UNSUPPORTEDFACTORVALUE)
+		DXERR_CASE(D3DERR_CONFLICTINGRENDERSTATE)
+		DXERR_CASE(D3DERR_UNSUPPORTEDTEXTUREFILTER)
+		DXERR_CASE(D3DERR_CONFLICTINGTEXTUREPALETTE)
+		DXERR_CASE(D3DERR_DRIVERINTERNALERROR)
+		DXERR_CASE(D3DERR_NOTFOUND)
+		DXERR_CASE(D3DERR_MOREDATA)
+		DXERR_CASE(D3DERR_DEVICELOST)
+		DXERR_CASE(D3DERR_DEVICENOTRESET)
+		DXERR_CASE(D3DERR_NOTAVAILABLE)
+		DXERR_CASE(D3DERR_OUTOFVIDEOMEMORY)
+		DXERR_CASE(D3DERR_INVALIDDEVICE)
+		DXERR_CASE(D3DERR_INVALIDCALL)
+		DXERR_CASE(D3DERR_DRIVERINVALIDCALL)
+		DXERR_CASE(D3DERR_WASSTILLDRAWING)
+		DXERR_CASE(D3DXERR_CANNOTMODIFYINDEXBUFFER)
+		DXERR_CASE(D3DXERR_INVALIDMESH)
+		DXERR_CASE(D3DXERR_CANNOTATTRSORT)
+		DXERR_CASE(D3DXERR_SKINNINGNOTSUPPORTED)
+		DXERR_CASE(D3DXERR_TOOMANYINFLUENCES)
+		DXERR_CASE(D3DXERR_INVALIDDATA)
+		DXERR_CASE(D3DXERR_LOADEDMESHASNODATA)
+		DXERR_CASE(D3DXERR_DUPLICATENAMEDFRAGMENT)
+		DXERR_CASE(D3DXERR_CANNOTREMOVELASTITEM)
+		DXERR_CASE(E_OUTOFMEMORY)
+		DXERR_CASE(E_INVALIDARG)
+		DXERR_CASE(E_NOTIMPL)
+		DXERR_CASE(E_FAIL)
+#undef DXERR_CASE
+		default:
+			break;
+	}
+
+	std::ostringstream out;
+	if (name) {
+		out << name;
+	}
+	else {
+		out << "HRESULT 0x" << std::hex << std::uppercase << (unsigned long)hr;
+	}
+
+	char *message = 0;
+	DWORD length = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+	                              NULL, (DWORD)hr, 0, (LPSTR)&message, 0, NULL);
+	if (length && message)
+	{
+		std::string text(message, length);
+		while (!text.empty() && (text[text.size() - 1] == '\r' || text[text.size() - 1] == '\n' || text[text.size() - 1] == ' ')) {
+			text.erase(text.size() - 1);
+		}
+		out << " - " << text;
+	}
+	if (message) {
+		LocalFree(message);
+	}
+
+	return out.str();
+}
+#endif
+
 const std::string& GetLastErrorMessage()
 {
 	return lastError;
@@ -71,9 +148,7 @@ void LogDxError(HRESULT hr, int LINE, const char* FILE)
 	D3DXGetErrorString(hr, LPSTR(&buffer), 60);
 	temp.append(buffer);
 #else
-	temp.append(DXGetErrorString(hr));
-	temp.append(" - ");
-	temp.append(DXGetErrorDescription(hr));
+	temp.append(DxErrorToString(hr));
 #endif
 	temp.append(" Line: ");
 	temp.append(Util::IntToString(LINE));

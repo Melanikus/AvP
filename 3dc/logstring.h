@@ -33,6 +33,7 @@
 void ClearLog();
 void WriteToLog(const std::string &logLine);
 void LogDxError(HRESULT hr, int LINE, const char* FILE);
+std::string DxErrorToString(HRESULT hr); // name + system message of a Direct3D / D3DX / COM result (replaces dxerr)
 void LogErrorString(const std::string &errorString, int LINE, const char* FILE);
 void LogErrorString(const std::string &errorString);
 void LogDebugString(const std::string &debugString, int LINE, const char* FILE);
