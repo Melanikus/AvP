@@ -47,6 +47,7 @@
  * Modified 2026-11-03 for the AvP port:
  *   BK-P1: reject frame sizes of 0 or above 7680 x 4800 in Open
  *   BK-P2: give the alpha plane the full frame size
+ *   BK-P5: return at most the 3 planes a YUVbuffer holds
  */
 
 #include "BinkDecoder.h"
@@ -417,8 +418,8 @@ void BinkDecoder::GetNextFrame(YUVbuffer yuv)
 	// get video packet
 	VideoPacket(frameSize);
 
-	// set planes data
-	for (uint32_t i = 0; i < planes.size(); i++)
+	// set planes data (YUVbuffer has 3 entries: an alpha plane is decoded but not returned)
+	for (uint32_t i = 0; i < planes.size() && i < 3; i++)
 	{
 		yuv[i].width  = planes[i].width;
 		yuv[i].height = planes[i].height;
