@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   fill_data_block copies strings with memcpy of their measured length
-//   deleted unused RIF-authoring code (the Placed_Hierarchy_Chunk "from data" constructor)
+//   names saved into level data are copied by their measured length, and unused code for making new
+//   level files was removed
 #include "hierplace.hpp"
 #include "md5.h"
 

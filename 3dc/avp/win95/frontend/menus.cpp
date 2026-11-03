@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   bounded copies / formatting into MP_Config_Description, NumberString and the save-slot file name
+//   menu texts (the multiplayer setup description, a number shown in a menu, the save-slot file name, the
+//   joined LAN game's name and the custom level name) are copied or written with size limits, so they fit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

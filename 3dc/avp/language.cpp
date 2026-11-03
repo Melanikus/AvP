@@ -1,8 +1,9 @@
 /*KJL***************************************
 *    Language Internationalization Code    *
 ***************************************KJL*/
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the language file error messages are formatted with a bound (_snprintf)
+//   the two error texts about a bad language file are written with a size limit, so they always fit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

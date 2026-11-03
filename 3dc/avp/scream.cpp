@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the voice directory is copied into wavpath with a bound (strnlen + memcpy)
+//   the folder name for voice sounds is copied with a size limit, so it can never overflow
 #include "3dc.h"
 #include "ourasert.h"
 #include "psndplat.h"

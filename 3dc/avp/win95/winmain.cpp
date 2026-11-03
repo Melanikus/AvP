@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   WinMain closes the Debug build's console stream when it returns
+//   the Debug build's console output is closed properly when the game exits
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"

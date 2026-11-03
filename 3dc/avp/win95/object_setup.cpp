@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   copies into buffers sized from the same string use memcpy with that length
-//   GetSoundForMainRif formats the sound path with a bound (_snprintf)
+//   text is copied using the exact length measured when its space was made, and the level's sound
+//   file path is written with a size limit, so both always fit
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else

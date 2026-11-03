@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the built-in level names are copied into LevelName by SetBuiltInLevelName (memcpy of the measured length)
-//   DoesNamedLevelExist formats the level file name with a bound (_snprintf)
+//   built-in level names are copied by their measured length, and the level file name is written with a
+//   size limit, so both always fit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   copies into buffers sized from the same string use memcpy with that length
+//   text is copied using the exact length measured when its space was made, so it always fits
 #include "npcsetup.h"
 #include "ourasert.h"
 #include "list_tem.hpp"

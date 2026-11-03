@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the chat lines are formatted with _snprintf, bounded to OnScreenMessageBuffer and the name field
-//   NetworkGameConsoleMessage forwards to one bounded message builder
+//   chat lines and multiplayer console messages are written with size limits, so no name, chat line or
+//   language-file text can ever run past the end of the 300-byte message box
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/

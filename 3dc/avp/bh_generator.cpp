@@ -1,8 +1,9 @@
 /*----------------Patrick 15/11/96-------------------
  Source for NPC generator behavior
  ----------------------------------------------------*/
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the disabled "logGenData" debug logging (#define logGenData 0 and its #if blocks)
+//   removed debug logging code that was switched off and could never run
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

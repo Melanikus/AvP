@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   factories return the objects they create (they register themselves; their lists free them)
+//   key bindings are made by a small function that hands them back (it works the same as before)
 /*
 	
 	consbind.hpp

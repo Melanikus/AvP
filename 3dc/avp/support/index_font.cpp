@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the disabled (#if 0) PF font load / unload hooks
+//   removed switched-off font load and unload code that could never run
 /*******************************************************************
  *
  *    DESCRIPTION: 	indexfnt.cpp

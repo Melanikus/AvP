@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the teleport request message is formatted with a bound (_snprintf)
+//   the teleport request message is written with a size limit, so it always fits
 /*******************************************************************
  *
  *    DESCRIPTION: 	modcmds.cpp

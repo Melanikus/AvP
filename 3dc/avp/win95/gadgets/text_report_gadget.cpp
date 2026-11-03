@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted two disabled (#if 0) placeholder / feedback blocks
+//   removed two switched-off blocks of placeholder code that could never run
 /*******************************************************************
  *
  *    DESCRIPTION: 	trepgadg.cpp - text report gadget

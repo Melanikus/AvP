@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   STRUTIL_SC_StrCpy copies with memcpy of STRUTIL_SC_NumBytes, the size its callers allocate
+//   the string copy helper copies exactly as many bytes as its callers made room for
 /*
 
 	STRUTIL.C

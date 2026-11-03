@@ -1,8 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   fill_data_block copies strings with memcpy of their measured length
-//   AVP_Generator_Chunk::CalculateID builds the hashed name in a std::string instead of a fixed char[100]
-//   deleted unused RIF-authoring code (create_extra_data_chunk, create_extended_settings and the
-//   AVP_Generator_Extra_Data_Chunk / AVP_Particle_Generator_Chunk constructors only authoring used)
+//   names saved into level data are copied by their measured length, an ID's name is built in text that
+//   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed
 #include <string>
 #include "avp_chunk.hpp"
 #include "md5.h"

@@ -1,7 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the disabled (#if 0) KeyBinding::AttemptToBind / AttemptToUnbind
-//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
-//   factories return the objects they create (they register themselves; their lists free them)
+//   removed switched-off code; temporary text objects are let go automatically, not by hand;
+//   key bindings are made by a small function that hands them back (it works the same as before)
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbind.cpp

@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declaration of unused RIF-authoring code
+//   removed the declaration of unused code for making new level files
 
 #ifndef _hierplace_hpp
 #define _hierplace_hpp 1

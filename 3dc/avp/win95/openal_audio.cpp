@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the default device message is formatted with a bound (_snprintf)
+//   the message naming the default sound device is written with a size limit, so it always fits
 
 #ifdef USE_OPENAL
 

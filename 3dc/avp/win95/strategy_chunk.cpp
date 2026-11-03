@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   Virtual_Object_Properties_Chunk::CalculateID builds the hashed name in a std::string instead of a fixed char[100]
+//   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"

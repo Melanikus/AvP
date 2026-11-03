@@ -1,7 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   copies into buffers sized from the same string use memcpy with that length
-//   the file name lists' copies come from NewStringCopy / NewNameWithoutExtension;
-//   ClearMultiplayerLevelNameArray frees every custom level name
+//   multiplayer level and settings names, and the settings file paths, are copied or written with size
+//   limits so they always fit; the list of custom level names is now freed in full
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

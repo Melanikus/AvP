@@ -7,8 +7,9 @@
 	Reference-counted base class to be used by e.g. strings
 
 */
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   added RefHolder, which releases a new reference-counted object's reference at the end of its scope
+//   added RefHolder, a helper that lets go of a shared object automatically when the code using it ends
 
 #ifndef _refobj
 #define _refobj 1

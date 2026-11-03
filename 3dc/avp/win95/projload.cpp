@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   copies into buffers sized from the same string use memcpy with that length
-//   the debug decal save builds its AVPDECAL chunk in Make_Decal_Chunk, which returns it
+//   text is copied using the exact length measured when its space was made, and the debug decal save
+//   makes its data block in a small function that hands it back (it works the same as before)
 #define DB_LEVEL 2
 
 #include "3dc.h"

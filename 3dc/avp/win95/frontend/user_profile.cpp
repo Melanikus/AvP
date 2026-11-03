@@ -1,7 +1,8 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   GetSettingsFromUserProfile keeps the look sensitivities read from a profile in their menu sliders' range
-//   LoadUserProfiles builds the profile search path with a bound (_snprintf)
+//   mouse and trackball look speeds read from a saved profile are kept within the menu sliders' range,
+//   and the profile folder path is written with a size limit
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"

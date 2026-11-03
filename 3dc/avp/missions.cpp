@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand
 /*******************************************************************
  *
  *    DESCRIPTION: 	missions.cpp

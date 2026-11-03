@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the level file path is written with a size limit, and a path too long to fit is treated
+//   like a missing file
 /* inits the system and controls environment and player loading */
 
 #include "3dc.h"

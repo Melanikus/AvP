@@ -1,5 +1,6 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   deleted the declarations of unused RIF-authoring code
+//   removed the declarations of unused code for making new level files
 
 #ifndef _avpchunk_hpp_
 #define _avpchunk_hpp_

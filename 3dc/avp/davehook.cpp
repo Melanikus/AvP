@@ -1,6 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the temporary SCStrings are held by RefHolder, which releases them at the end of their scope
-//   factories return the objects they create (they register themselves; their lists free them)
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   the message font is made by a small function that hands it back (it works the same as before)
 /*******************************************************************
  *
  *    DESCRIPTION: 	davehook.cpp
