@@ -117,6 +117,24 @@ static const float vol_to_gain_table[] = {
 	0.873977f, 0.891251f, 0.908866f, 0.926830f, 0.945148f, 0.962720f, 0.980618f, 1.000000f
 };
 
+// vol_to_gain_table has 128 entries (volumes 0..VOLUME_MAX), but not every caller stays in that range: the FMV
+// volume reaches 128 (FmvCutscenes.cpp: MUL_FIXED(FmvSoundVolume*256, ...)/256 with FmvSoundVolume up to 128), and
+// stream / sound volumes also come from the user profile and save files. Use the nearest entry instead of reading
+// outside the table.
+static float VolumeToGain(int volume)
+{
+	const int lastEntry = (int)(sizeof(vol_to_gain_table) / sizeof(vol_to_gain_table[0])) - 1;
+
+	if (volume < 0) {
+		volume = 0;
+	}
+	else if (volume > lastEntry) {
+		volume = lastEntry;
+	}
+
+	return vol_to_gain_table[volume];
+}
+
 // this table plots the frequency change for
 // 128/ths of a semitone for one octave (0-1535),
 // divide or multiply by 2 to subtract or add an octave
@@ -794,7 +812,7 @@ int PlatChangeGlobalVolume(int volume)
 	LOCALASSERT((volume >= VOLUME_MIN) && (volume <= VOLUME_MAX));
 
 	// set the volume
-	alListenerf(AL_GAIN, vol_to_gain_table[volume]);
+	alListenerf(AL_GAIN, VolumeToGain(volume));
 	AlCheckError();
 
 	return 1;
@@ -973,7 +991,7 @@ void PlatStopSound(int activeIndex)
 int PlatChangeSoundVolume(int activeIndex, int volume)
 {
 	if (ActiveSounds[activeIndex].source) {
-		alSourcef(ActiveSounds[activeIndex].source->_alSource, AL_GAIN, vol_to_gain_table[volume]);
+		alSourcef(ActiveSounds[activeIndex].source->_alSource, AL_GAIN, VolumeToGain(volume));
 		AlCheckError();
 	}
 	return 1;
@@ -1830,7 +1848,7 @@ uint32_t AudioStream::GetWritableBufferSize()
 
 int32_t AudioStream::SetVolume(uint32_t volume)
 {
-	alSourcef(_source->_alSource, AL_GAIN, vol_to_gain_table[volume]);
+	alSourcef(_source->_alSource, AL_GAIN, VolumeToGain((volume > (uint32_t)VOLUME_MAX) ? VOLUME_MAX + 1 : (int)volume));
 	alGetError();
 
 	return 1;
