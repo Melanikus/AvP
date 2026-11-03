@@ -1,3 +1,5 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the disabled (#if 0) KeyBinding::AttemptToBind / AttemptToUnbind
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbind.cpp
@@ -220,88 +222,6 @@ KeyBinding :: ParseUnbindCommand
 	}
 }
 
-#if 0
-// static
-void
-KeyBinding :: AttemptToBind
-(
-	SCString* pSCString_Key, // description of key
-	SCString* pSCString_ToBind // string to be bound
-)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( pSCString_Key );
-		GLOBALASSERT( pSCString_ToBind );
-	}
-
-	/* CODE */
-	{
-		BindableKey theBindableKey_ToUse;
-
-		if
-		(
-			!bGetKeyForString
-			(
-				theBindableKey_ToUse, // BindableKey& theKey_Out,
-				pSCString_Key -> pProjCh()
-			)
-		)
-		{
-			// Can't recognise which key is to be bound to;
-			// provide an error message
-			ErrorDontRecogniseKey(pSCString_Key);
-
-			return;
-		}
-
-		// Create the KeyBinding object:
-		new KeyBinding
-		(
-			theBindableKey_ToUse,
-			pSCString_ToBind
-		);
-	}
-}
-
-// static
-void
-KeyBinding :: AttemptToUnbind
-(
-	SCString* pSCString_Key // description of key
-)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( pSCString_Key );
-	}
-
-	/* CODE */
-	{
-		BindableKey theBindableKey_ToUse;
-
-		if
-		(
-			!bGetKeyForString
-			(
-				theBindableKey_ToUse, // BindableKey& theKey_Out,
-				pSCString_Key -> pProjCh()
-			)
-		)
-		{
-			// Can't recognise which key is to be bound to;
-			// provide an error message
-			ErrorDontRecogniseKey(pSCString_Key);
-
-			return;
-		}
-
-		// Find and remove any bindings to that key; note the number:
-
-		// Provide feedback:
-	}
-}
-#endif
 
 
 // static
