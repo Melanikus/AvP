@@ -18,7 +18,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   SM-P10: sticky overread flag instead of assert; SkipToEnd seeks past unread bytes
  */
 

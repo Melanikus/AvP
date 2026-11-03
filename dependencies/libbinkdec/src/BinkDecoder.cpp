@@ -44,7 +44,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P1: reject frame sizes of 0 or above 7680 x 4800 in Open
  *   BK-P2: give the alpha plane the full frame size
  *   BK-P5: return at most the 3 planes a YUVbuffer holds

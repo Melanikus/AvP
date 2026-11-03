@@ -44,7 +44,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P2: zero-fill the bundle buffers
  *   BK-P3: size the bundle lengths from the frame width
  *   BK-P7: allocate the bundles without throwing; report failure

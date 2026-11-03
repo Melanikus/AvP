@@ -18,7 +18,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P12: return 0, not stack garbage, when a read fails
  *   BK-P21: add GetFileSize
  */

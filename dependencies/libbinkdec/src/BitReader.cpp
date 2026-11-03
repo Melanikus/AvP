@@ -18,7 +18,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P19: sticky overread flag instead of assert (port of libsmackerdec SM-P10)
  */
 

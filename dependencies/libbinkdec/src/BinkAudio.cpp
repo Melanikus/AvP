@@ -44,7 +44,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P4: never copy past the audio buffer; count only the bytes copied
  *   BK-P17: fail CreateAudioTrack when the transform init fails
  *   BK-P20: register a new audio track at once, so nothing leaks when creating it fails

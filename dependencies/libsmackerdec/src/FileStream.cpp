@@ -18,7 +18,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   SM-P11: short reads return 0 instead of stack garbage; add Is_Failed()
  */
 

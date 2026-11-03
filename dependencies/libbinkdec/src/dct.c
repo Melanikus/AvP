@@ -33,7 +33,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   BK-P17: fail ff_dct_init when the csc2 allocation fails (FFmpeg 69277069dd)
  */
 

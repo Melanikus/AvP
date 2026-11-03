@@ -43,7 +43,7 @@
  */
 
 /*
- * Modified 2026-11-03 for the AvP port:
+ * Modified 2026-11-03 by Melanikus for the AvP port:
  *   SM-P1: bound each audio chunk by the audio buffer; cap frame 0's audio size
  *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
  *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
