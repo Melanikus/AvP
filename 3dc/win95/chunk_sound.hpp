@@ -84,7 +84,6 @@ class Sound_Object_Extra_Name_Chunk : public Chunk
 {
 public :	
 	Sound_Object_Extra_Name_Chunk(Chunk_With_Children* parent,const char*,size_t);
-	Sound_Object_Extra_Name_Chunk(Chunk_With_Children* parent,const char* _name);
 	~Sound_Object_Extra_Name_Chunk();
 	
 	char* name;

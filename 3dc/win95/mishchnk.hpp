@@ -1,3 +1,6 @@
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of File_Chunk::assign_index_to_object (level-editor code: the game itself never calls it)
+
 #ifndef _miscchunk_hpp
 #define _miscchunk_hpp 1
 
@@ -121,7 +124,6 @@ public:
 	Environment_Data_Chunk * get_env_data();
 
 	Object_Chunk* get_object_by_index(int index);
-	void assign_index_to_object(Object_Chunk* object);
 
 private:
 

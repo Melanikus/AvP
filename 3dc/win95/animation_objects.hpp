@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Object_Animation_Sequence_Header/Frame/Flags_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
 //   deleted the declarations of unused RIF-authoring code
 
 #ifndef _animobs_hpp
@@ -77,21 +78,6 @@ class Object_Animation_Sequence_Frame_Chunk : public Chunk
 {
 public:
 
-	Object_Animation_Sequence_Frame_Chunk (Object_Animation_Sequence_Chunk * parent)
-	: Chunk (parent, "OBASEQFR"), at_frame_no (-1), frame_ref_no (-1)
-	{
-		ChunkQuat identity = {0,0,0,1};
-		orientation = identity;
-		
-		transform.x = 0;
-		transform.y = 0;
-		transform.z = 0;
-		
-		flags =0;
-
-		num_extra_data=0;
-		extra_data=0;
-	}
 	Object_Animation_Sequence_Frame_Chunk (Chunk_With_Children * parent,const char *, size_t);
 
 	~Object_Animation_Sequence_Frame_Chunk(){ delete[] extra_data; }
@@ -131,13 +117,6 @@ class Object_Animation_Sequence_Header_Chunk : public Chunk
 {
 public:
 
-	Object_Animation_Sequence_Header_Chunk(Chunk_With_Children * parent)
-	: Chunk (parent, "OBASEQHD"), num_frames (0), sequence_number (-1), 
-		sub_sequence_number (-1), sequence_name (0)
-	{
-		num_extra_data=0;
-		extra_data=0;
-	}
 	Object_Animation_Sequence_Header_Chunk (Chunk_With_Children * parent,const char *, size_t);
 	
 	~Object_Animation_Sequence_Header_Chunk();
@@ -228,10 +207,6 @@ private:
 class Object_Animation_Sequence_Flags_Chunk : public Chunk
 {
 public :
-	Object_Animation_Sequence_Flags_Chunk(Chunk_With_Children* parent,int _flags)
-	: Chunk (parent,"OBASEQFL") , flags(_flags)
-	{
-	}
 	Object_Animation_Sequence_Flags_Chunk (Chunk_With_Children * parent,const char *, size_t);
 
 	int flags;

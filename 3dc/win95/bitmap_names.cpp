@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Bitmap_MD5_Chunk constructor that builds the chunk from a bitmap (level-editor code: the game itself never calls it)
 //   deleted unused RIF-authoring code (SetMD5Val and the CreateMD5Chunk overrides)
 //   copies into buffers sized from the same string use memcpy with that length
 //   fill_data_block copies strings with memcpy of their measured length
@@ -831,25 +832,6 @@ ImageDescriptor const & Matching_Images_Chunk::GetLoadImage(ImageDescriptor cons
 
 // Bitmap MD5 Chunk
 RIF_IMPLEMENT_DYNCREATE("BMPMD5ID",Bitmap_MD5_Chunk)
-
-Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, int const * md5id, BMP_Name const & rcbmp, char const * rname, char const * sname)
-: Chunk(parent,"BMPMD5ID"), spare(0), flags(BMD5F_0), version_num(rcbmp.version_num)
-{
-	memcpy(md5_val,md5id,16);
-
-	char const * bname = rcbmp.filename;
-	if (!bname) bname = "";
-	bmpname = new char[strlen(bname)+1];
-	strcpy(bmpname,bname);
-
-	if (!rname) rname = "";
-	rifname = new char[strlen(rname)+1];
-	strcpy(rifname,rname);
-
-	if (!sname) sname = "";
-	shapename = new char[strlen(sname)+1];
-	strcpy(shapename,sname);
-}
 
 Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t)
 : Chunk(parent,"BMPMD5ID"), spare(*(int *)datablock), flags((BMPMD5_Flags)(*(int *)(datablock+4) & BMD5F_MASK)), version_num(*(int *)(datablock+8))

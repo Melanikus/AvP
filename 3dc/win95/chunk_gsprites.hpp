@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the AllSprites_Header_Chunk constructor that builds the chunk from its parent (level-editor code: the game itself never calls it)
 //   deleted the declaration of unused RIF-authoring code
 
 #ifndef _included_gsprchnk_hpp_
@@ -69,11 +70,6 @@ private:
 	
 
 	
-	// constructor from parent
-	AllSprites_Header_Chunk (AllSprites_Chunk * parent)
-	: Chunk (parent, "ASPRHEAD"),
-	flags (0), version_no (0)
-	{}
 	
 };
 	

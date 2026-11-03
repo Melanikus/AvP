@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of the Bitmap_MD5_Chunk constructor that builds the chunk from a bitmap (level-editor code: the game itself never calls it)
 //   deleted the declarations of unused RIF-authoring code (SetMD5Val, CreateMD5Chunk)
 
 #ifndef _bmpnames_hpp_
@@ -653,7 +654,6 @@ class Bitmap_MD5_Chunk : public Chunk
 public :
 	Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t);
 private:
-	Bitmap_MD5_Chunk(Chunk_With_Children * parent, int const * md5id, BMP_Name const & rcbmp, char const * rname = 0, char const * sname = 0);
 	~Bitmap_MD5_Chunk();
 	int md5_val[4];
 	char * bmpname;

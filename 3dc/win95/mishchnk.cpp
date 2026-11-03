@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted File_Chunk::assign_index_to_object (level-editor code: the game itself never calls it)
 //   File_Chunk::update_file keeps the file name in a std::string, not a char[256]
 //   File_Chunk::write_file builds its temporary file name with memcpy of measured lengths
 //   fill_data_block copies strings with memcpy of their measured length
@@ -1561,32 +1562,6 @@ Object_Chunk* File_Chunk::get_object_by_index(int index)
 	if (!object_array) build_object_array();
 	if (index<0 || index>=object_array_size)return 0;
 	return object_array[index];
-}
-
-void File_Chunk::assign_index_to_object(Object_Chunk* object)
-{
-	assert(object);
-
-	if (!object_array) build_object_array();
-	//see if there is a free index
-
-	for (int i=0;i<object_array_size;i++)
-	{
-		if (!object_array[i])
-		{
-			object->object_data_store->index_num=i;
-			object_array[i]=object;
-			return;
-		}
-	}
-
-	//add a new entry on the end of the array
-	object_array_size++;
-
-	object_array=(Object_Chunk**) realloc(object_array,sizeof(Object_Chunk*)*object_array_size);
-
-	object->object_data_store->index_num=object_array_size-1;;
-	object_array[object_array_size-1]=object;
 }
 
 /////////////////////////////////////////

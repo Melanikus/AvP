@@ -149,8 +149,6 @@ private:
 
 
 
-	// constructor from data
-	Object_Header_Chunk (Object_Chunk * parent);
 
 };
 
@@ -453,7 +451,6 @@ class Object_Alternate_Locations_Chunk : public Chunk
 {
 public :
 	Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data, size_t);
-	Object_Alternate_Locations_Chunk(Chunk_With_Children* parent);
 	~Object_Alternate_Locations_Chunk();
 
 	void fill_data_block(char* data);

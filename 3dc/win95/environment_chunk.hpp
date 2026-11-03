@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Environment_Data_Header_Chunk constructor that builds the chunk from its parent (level-editor code: the game itself never calls it)
 //   deleted the declaration of unused RIF-authoring code
 
 #ifndef _envchunk_hpp
@@ -71,11 +72,6 @@ private:
 	char lock_user[17];
 	
 	
-	// constructor from parent
-	Environment_Data_Header_Chunk (Environment_Data_Chunk * parent)
-	: Chunk (parent, "ENDTHEAD"),
-	flags (0), version_no (0)
-	{}
 	
 };
 	

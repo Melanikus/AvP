@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Light_Set_Header_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
 //   deleted unused RIF-authoring code (the Light_Set_Chunk name constructor)
 
 #include "chunk.hpp"
@@ -28,12 +29,6 @@ Children for Light_Set_Chunk :
 ////////////////////////////////////////////////////////////////////////////////////
 
 RIF_IMPLEMENT_DYNCREATE("LTSETHDR",Light_Set_Header_Chunk)
-
-Light_Set_Header_Chunk::Light_Set_Header_Chunk (Light_Set_Chunk * parent, char l_set_name[8])
-: Chunk (parent, "LTSETHDR"), pad (0)
-{
-	strncpy (light_set_name, l_set_name, 8);
-}
 
 void Light_Set_Header_Chunk::fill_data_block ( char * data_start)
 {

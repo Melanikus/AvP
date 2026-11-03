@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Object_Header_Chunk and Object_Alternate_Locations_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
 //   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
 //   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
 //   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name; the fixed part read only inside the chunk
@@ -456,18 +457,6 @@ flags(0), version_no (0), associated_shape (0)
 	parent_object->object_data_store->o_name[name_length] = '\0';
 	parent_object->object_data_store->ID.id1=0;
 	parent_object->object_data_store->ID.id2=0;
-}
-
-//from data
-
-Object_Header_Chunk::Object_Header_Chunk (Object_Chunk * parent)
-: Chunk (parent, "OBJHEAD1"),
-object_data (parent->object_data_store), 
-flags (0), version_no (0), associated_shape(0)
-{
-	if (object_data->is_base_object) {
-		flags = OBJECT_FLAG_BASE_OBJECT;
-	}
 }
 
 
@@ -1118,14 +1107,6 @@ Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Ch
 		locations[i] = *(AltObjectLocation*) data;
 		data+=sizeof(AltObjectLocation);
 	}
-}
-
-Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent)
-:Chunk(parent,"ALTLOCAT")
-{
-	num_locations=0;
-	locations=0;
-	group=spare2=0;
 }
 
 Object_Alternate_Locations_Chunk::~Object_Alternate_Locations_Chunk()

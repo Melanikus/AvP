@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Sound_Object_Extra_Name_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
 //   deleted unused RIF-authoring code (create_alternate_locations_chunk, create_extra_data_chunk and the
 //   Sound_Object_Extra_Data_Chunk constructor only they used)
 //   fill_data_block copies strings with memcpy of their measured length
@@ -200,13 +201,6 @@ Sound_Object_Extra_Name_Chunk::Sound_Object_Extra_Name_Chunk(Chunk_With_Children
 	int length=strlen(data);
 	name=new char[length+1];
 	strcpy(name,data);
-}
-
-Sound_Object_Extra_Name_Chunk::Sound_Object_Extra_Name_Chunk(Chunk_With_Children * parent, const char * _name)
-:Chunk(parent,"SOUNDNAM")
-{
-	name=new char[strlen(_name)+1];
-	strcpy(name,_name);
 }
 
 Sound_Object_Extra_Name_Chunk::~Sound_Object_Extra_Name_Chunk()

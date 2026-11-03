@@ -1,4 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Shape_External_Filename_Chunk, Anim_Shape_Sequence_Data_Chunk and Anim_Shape_Frame_Data_Chunk
+//   constructors that build a chunk from values (level-editor code: the game itself never calls them)
 //   deleted unused RIF-authoring code: the Shape_Chunk / Shape_Sub_Shape_Chunk "from ChunkShape" constructors,
 //   make_copy_of_chunk and update_my_chunkshape (also Console_Shape_Chunk's), the Shape_External_File_Chunk name
 //   constructor, the Anim_Shape_Sequence_Chunk interface constructors with update_my_sequencedata and
@@ -1352,16 +1354,6 @@ const char* Shape_External_File_Chunk::get_shape_name()
 /////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("SHPEXTFN",Shape_External_Filename_Chunk)
 
-Shape_External_Filename_Chunk::Shape_External_Filename_Chunk(Chunk_With_Children * parent, const char * fname)
-: Chunk (parent, "SHPEXTFN")
-{
-	file_name = new char [strlen(fname)+1];
-	strcpy (file_name, fname);
-
-	rescale = 1;
-	version_no = -1;
-}
-
 Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t /*fsize*/)
 : Chunk (parent, "SHPEXTFN")
 {
@@ -2391,17 +2383,6 @@ Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequen
 	strcpy(name,data);
 }
 
-Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,ChunkAnimSequence* cas)
-: Chunk(parent, "ANISEQDT")
-{
-	SequenceNum=cas->SequenceNum;
-	name=cas->name;
-	flags=cas->flags;
-	pad2=cas->pad2;
-	pad3=cas->pad3;
-	pad4=cas->pad4;
-}
-
 void Anim_Shape_Sequence_Data_Chunk::fill_data_block(char* datastart)
 {
 	strncpy (datastart, identifier, 8);
@@ -2451,17 +2432,6 @@ Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk*
 	data+=4;
 	name=new char[strlen(data)+1];
 	strcpy(name,data);
-}
-
-Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,ChunkAnimFrame* caf,int frameno)
-: Chunk(parent, "ANIFRADT")
-{
-	FrameNum=frameno;
-	name=caf->name;
-	flags=caf->flags;
-	num_interp_frames=caf->num_interp_frames;
-	pad3=caf->pad3;
-	pad4=caf->pad4;
 }
 
 

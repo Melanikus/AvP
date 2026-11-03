@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the declaration of the Fragment_Type_Data_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
 //   deleted unused RIF-authoring code (the Fragment_Type_Chunk name constructor)
 
 #ifndef _fragchnk_hpp_
@@ -12,7 +13,6 @@ class Fragment_Type_Data_Chunk : public Chunk
 {
 public :
 	
-	Fragment_Type_Data_Chunk(Chunk_With_Children* parent,const char* name);
 	Fragment_Type_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 	~Fragment_Type_Data_Chunk();
 	

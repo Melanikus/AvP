@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Fragment_Type_Data_Chunk constructor that builds the chunk from a name (level-editor code: the game itself never calls it)
 //   fill_data_block copies strings with memcpy of their measured length
 
 #include "chunk_fragments.hpp"
@@ -32,14 +33,6 @@ const char* Fragment_Type_Chunk::get_name()
 
 ////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("FRGTYPDC",Fragment_Type_Data_Chunk)
-
-Fragment_Type_Data_Chunk::Fragment_Type_Data_Chunk(Chunk_With_Children* parent,const char* name)
-:Chunk(parent,"FRGTYPDC")
-{
-	frag_type_name=new char[strlen(name)+1];
-	strcpy(frag_type_name,name);
-	pad1=pad2=pad3=0;
-}
 
 Fragment_Type_Data_Chunk::Fragment_Type_Data_Chunk(Chunk_With_Children* const parent, const char* data, size_t const )
 :Chunk(parent,"FRGTYPDC")

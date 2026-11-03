@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Enum_Header_Chunk constructor that builds the chunk from its parent (level-editor code: the game itself never calls it)
 //   deleted the declaration of unused RIF-authoring code
 
 #ifndef _included_enumchnk_hpp_
@@ -68,11 +69,6 @@ private:
 	char lock_user[17];
 	
 	
-	// constructor from parent
-	Enum_Header_Chunk (Enum_Chunk * parent)
-	: Chunk (parent, "ENUMHEAD"),
-	flags (0), version_no (0)
-	{}
 	
 };
 	

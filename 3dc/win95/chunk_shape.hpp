@@ -1,4 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Console_Type_Chunk, Shape_Header_Chunk and Shape_Sub_Shape_Header_Chunk constructors that build
+//   a chunk from values (level-editor code: the game itself never calls them)
 //   deleted the declarations of unused RIF-authoring code (see chunk_shape.cpp)
 
 #ifndef _shpchunk_hpp
@@ -202,12 +204,6 @@ private:
 
 
 
-	// constructor from data
-	Shape_Sub_Shape_Header_Chunk (Shape_Sub_Shape_Chunk * parent)
-	: Chunk (parent, "SUBSHPHD"),
-	shape_data(parent->shape_data_store),
-	file_id_num(-1), flags(0)
-	{}
 
 };
 
@@ -256,7 +252,6 @@ class Anim_Shape_Sequence_Data_Chunk:public Chunk
 {
 	public:
 	Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char*,size_t const);
-	Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,ChunkAnimSequence* cas);
 
 	private:
 	friend class Anim_Shape_Sequence_Chunk;
@@ -282,7 +277,6 @@ class Anim_Shape_Frame_Data_Chunk : public Chunk
 {
 	public:
 	Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,const char*,size_t const);
-	Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,ChunkAnimFrame* caf,int frameno);
 
 	private:
 	friend class Anim_Shape_Frame_Chunk;
@@ -327,9 +321,6 @@ class Console_Type_Chunk: public Chunk
 	public :
 	Console_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t)
 	:Chunk(parent,"CONSTYPE"),console((Console_Type)(*(int*)data & CT_MASK))
-	{}
-	Console_Type_Chunk(Chunk_With_Children* const parent,Console_Type ct)
-	:Chunk(parent,"CONSTYPE"),console(ct)
 	{}
 
 	Console_Type console;
@@ -589,12 +580,6 @@ private:
 
 
 
-	// constructor from data
-	Shape_Header_Chunk (Shape_Chunk * parent)
-	: Chunk (parent, "SHPHEAD1"),
-	shape_data(parent->shape_data_store),
-	flags(0), version_no(0), file_id_num(-1)
-	{}
 
 };
 ///////////////////////////////////////////////
@@ -767,7 +752,6 @@ class Shape_External_Filename_Chunk : public Chunk
 {
 public:
 
-	Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char * fname);
 	Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *, size_t);
 	~Shape_External_Filename_Chunk ();
 

@@ -1,4 +1,5 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the Dummy_Object_Data_Chunk and Dummy_Object_Text_Chunk constructors that build a chunk from values (level-editor code: the game itself never calls them)
 //   deleted unused RIF-authoring code (a Dummy_Object_Chunk constructor, Dummy_Object_Chunk::set_text)
 
 #include "chunk_dummy.hpp"
@@ -43,18 +44,6 @@ const char* Dummy_Object_Chunk::get_text()
 
 RIF_IMPLEMENT_DYNCREATE("DUMOBJDT",Dummy_Object_Data_Chunk)
 
-Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Dummy_Object_Chunk* parent,const char* _name ,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient)
-:Chunk(parent,"DUMOBJDT")
-{
-	location=_location;
-	min_extents=min;
-	max_extents=max;
-	orientation=orient;
-
-	name=new char[strlen(_name)+1];
-	strcpy(name,_name);
-}
-
 
 Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"DUMOBJDT")
@@ -97,12 +86,6 @@ size_t Dummy_Object_Data_Chunk::size_chunk()
 //////////////////////////////Dummy_Object_Text_Chunk////////////////////////////////
 
 RIF_IMPLEMENT_DYNCREATE("DUMOBJTX",Dummy_Object_Text_Chunk)
-
-Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Dummy_Object_Chunk* parent,const char* _text)
-:Chunk(parent,"DUMOBJTX"),text(NULL)
-{
-	set_text(_text);	
-}
 
 Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"DUMOBJTX")

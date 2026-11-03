@@ -98,7 +98,6 @@ class Light_Set_Header_Chunk : public Chunk
 {
 public:
 
-	Light_Set_Header_Chunk (Light_Set_Chunk * parent, char l_set_name[8]);
 	Light_Set_Header_Chunk (Chunk_With_Children * parent, const char *, size_t const);
 	char light_set_name[8];
 	
