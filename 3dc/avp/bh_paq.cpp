@@ -1,6 +1,9 @@
 /*------------------------Patrick 18/2/97-----------------------------
   Source file for Predator-Alien and Queen AI behaviour functions....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   number conversions between signed and unsigned types are written out explicitly (the values are the same)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

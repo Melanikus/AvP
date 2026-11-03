@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares the text-file loader that also returns the file's size (see platsup.cpp)
 #ifndef _language_h_
 #define _language_h_ 1
 /* KJL 11:54:21 05/02/97 - language.h */

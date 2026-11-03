@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the list of visible level parts has room for one more than its limit, so 401 parts still draw without
+//   writing past the list
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

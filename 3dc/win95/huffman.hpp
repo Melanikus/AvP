@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares the checked Huffman decoder (see huffman.cpp)
 #ifndef _huffman_hpp_included
 #define _huffman_hpp_included 1
 

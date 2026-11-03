@@ -1,6 +1,10 @@
 /*KJL****************************************************************************************
 *                                         	hud.c                                           *
 ****************************************************************************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   angles read from a save file are kept between 0 and 4095 before a sine or cosine lookup, and the
+//   zoom-level search stops at the last zoom level
 
 
 /*

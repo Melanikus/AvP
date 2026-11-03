@@ -25,6 +25,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   when the settings file is read, the spaces in each setting's name are taken out by a simple loop
 //   (it works the same as before)
+//   a setting with nothing after its = sign is read as empty, instead of crashing the game at start-up
 
 #include <string>
 #include <fstream>

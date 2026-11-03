@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the degree signs in comments are plain text now, and four calls are split so each #if branch is a whole
 //   statement; both let code scanners read the file (the compiled code is the same)
+//   angles received from the network are kept between 0 and 4095 before a sine or cosine lookup
 
 #include "3dc.h"
 #include "inline.h"

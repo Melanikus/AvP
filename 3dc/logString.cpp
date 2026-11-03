@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   adds DxErrorToString, which turns a DirectX error code into readable text (it replaces an old DirectX
+//   SDK library), and LogErrorStringC, which writes a log line from code that does not use C++ strings
+
 #include "logString.h"
 #include "renderer.h"
 #include "utilities.h"

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   an angle from a save file is kept between 0 and 4095 before a sine or cosine lookup
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"

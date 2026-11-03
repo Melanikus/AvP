@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the module-link file path is written with a size limit; if it does not fit, an error is logged and
 //   no file is written
+//   the camera log file path (debug builds only) is built with a size limit
 #include "3dc.h"
 #include <avp_string.hpp>
 #include "screenshot.hpp"

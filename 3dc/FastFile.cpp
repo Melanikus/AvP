@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   every packed file's name is checked when a file is looked up, so a damaged archive cannot hand back the
+//   wrong file
+
 #include "FastFile.h"
 #include "FileStream.h"
 #include "utilities.h"

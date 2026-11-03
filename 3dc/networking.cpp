@@ -25,6 +25,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted the switched-off (#if 0) code inside Net_ConnectToAddress; the "connect" console command still
 //   does nothing
+//   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
+//   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
 
 #include "3dc.h"
 #include "enet\enet.h"

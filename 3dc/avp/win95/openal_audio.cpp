@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the message naming the default sound device is written with a size limit, so it always fits
+//   a sound volume is kept inside the volume table before the table is read
 
 #ifdef USE_OPENAL
 

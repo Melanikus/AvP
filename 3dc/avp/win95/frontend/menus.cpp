@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   menu texts (the multiplayer setup, a menu number, the load-game list, the save-slot file name,
 //   the joined LAN game's name and the custom level name) are copied or written with size limits
+//   the credits roll stops at the end of credits.txt, and LAN game names and custom level names are
+//   copied with a size limit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

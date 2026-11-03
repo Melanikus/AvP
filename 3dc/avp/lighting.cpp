@@ -1,6 +1,10 @@
 /*KJL***************************************************
 * lighting.c - a lighting interface for simple effects *
 ***************************************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the number of lights read from a save file is checked, and every light near an object gets a place in its
+//   light list
 
 #include "3dc.h"
 #include "io.h"

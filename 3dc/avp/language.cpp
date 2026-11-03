@@ -3,8 +3,8 @@
 ***************************************KJL*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the two error texts about a bad language file are written with a size limit, so they always fit;
-//   an unknown text id gives empty text
+//   the language file is read only up to its end, an unknown text id gives empty text, and the error
+//   message about a bad language file has a size limit
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
