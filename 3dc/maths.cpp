@@ -329,13 +329,13 @@ void CreateEulerMatrix(EULER *e, MATRIXCH *m1)
 	int t, sx, sy, sz, cx, cy, cz;
 
 
-	sx = GetSin(e->EulerX);
-	sy = GetSin(e->EulerY);
-	sz = GetSin(e->EulerZ);
+	sx = GetSin(e->EulerX & wrap360);
+	sy = GetSin(e->EulerY & wrap360);
+	sz = GetSin(e->EulerZ & wrap360);
 
-	cx = GetCos(e->EulerX);
-	cy = GetCos(e->EulerY);
-	cz = GetCos(e->EulerZ);
+	cx = GetCos(e->EulerX & wrap360);
+	cy = GetCos(e->EulerY & wrap360);
+	cz = GetCos(e->EulerZ & wrap360);
 
 
 	#if 0
@@ -415,13 +415,13 @@ void CreateEulerVector(EULER *e, VECTORCH *v)
 {
 	int t, sx, sy, sz, cx, cy, cz;
 
-	sx = GetSin(e->EulerX);
-	sy = GetSin(e->EulerY);
-	sz = GetSin(e->EulerZ);
+	sx = GetSin(e->EulerX & wrap360);
+	sy = GetSin(e->EulerY & wrap360);
+	sz = GetSin(e->EulerZ & wrap360);
 
-	cx = GetCos(e->EulerX);
-	cy = GetCos(e->EulerY);
-	cz = GetCos(e->EulerZ);
+	cx = GetCos(e->EulerX & wrap360);
+	cy = GetCos(e->EulerY & wrap360);
+	cz = GetCos(e->EulerZ & wrap360);
 
 	/* x = -sy*cz + sx*cy*sz */
 	v->vx  = MUL_FIXED(-sy, cz);
