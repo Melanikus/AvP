@@ -105,8 +105,9 @@ bool Config_Load()
 			}
 
 			// get the value part, skipping the = character and a single space after that if present. we dont want to remove any spaces after that (as they may be part of a file path)
+			// (a line ending in '=' has an empty value: value.at(0) threw std::out_of_range, which nothing catches)
 			std::string value = tempLine.substr(equalsPosition + 1, std::string::npos);
-			if (value.at(0) == ' ') {
+			if (!value.empty() && value.at(0) == ' ') {
 				value.erase(value.begin(), value.begin() + 1);
 			}
 
