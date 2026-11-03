@@ -57,6 +57,7 @@
  *   BK-P16: check handles and track indexes in the exports; stop at the last frame
  *   BK-P17: fail Open when an audio track can't be created
  *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame
+ *   BK-P21: reject a header that claims more data than the file has
  */
 
 #include "BinkDecoder.h"
@@ -326,6 +327,15 @@ bool BinkDecoder::Open(const std::string &fileName)
 	}
 
 	fileSize = file.ReadUint32LE() + 8;
+
+	// the header must not claim more data than the file has (fileSize < 8 means the
+	// 32-bit sum wrapped, a claim of 4 GB or more): every frame index entry below is
+	// checked against fileSize, so it then lies inside the real file too
+	if (fileSize < 8 || fileSize > file.GetFileSize())
+	{
+		BinkCommon::LogError("Invalid header, file size larger than the file");
+		return false;
+	}
 
 	nFrames = file.ReadUint32LE();
 

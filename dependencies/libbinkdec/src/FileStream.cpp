@@ -20,6 +20,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   BK-P12: return 0, not stack garbage, when a read fails
+ *   BK-P21: add GetFileSize
  */
 
 #include "FileStream.h"
@@ -139,6 +140,26 @@ bool FileStream::Is_Eos()
 int32_t FileStream::GetPosition()
 {
 	return static_cast<int32_t>(file.tellg());
+}
+
+// size of the open file in bytes, keeping the read position: 0 if it can't be
+// told, 0xFFFFFFFF for 4 GB or more
+uint32_t FileStream::GetFileSize()
+{
+	std::streamoff pos = file.tellg();
+	if (pos < 0)
+		return 0;
+
+	file.seekg(0, std::ios::end);
+	std::streamoff end = file.tellg();
+	file.seekg(pos, std::ios::beg);
+
+	if (end < 0)
+		return 0;
+	if (end > (std::streamoff)0xFFFFFFFF)
+		return 0xFFFFFFFF;
+
+	return static_cast<uint32_t>(end);
 }
 
 } // close namespace BinkCommon

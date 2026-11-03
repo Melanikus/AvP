@@ -17,6 +17,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P21: add GetFileSize
+ */
+
 #ifndef _BinkFileStream_h_
 #define _BinkFileStream_h_
 
@@ -55,6 +60,7 @@ class FileStream
 		bool Skip(int32_t offset);
 
 		int32_t GetPosition();
+		uint32_t GetFileSize();
 		bool Is_Eos();
 
 	private:
