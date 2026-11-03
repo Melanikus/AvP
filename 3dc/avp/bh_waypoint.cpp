@@ -1,4 +1,8 @@
 /***** bh_waypt.c *****/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the route search's "}" before "#if ALLOW_USE_OF_LONGER_PATHS" moved above it, so each #if branch is a whole
+//   else-if block that code scanners can read; the game runs the same code as before
 
 #include "3dc.h"
 #include "inline.h"
@@ -776,8 +780,11 @@ int NewFindThisRoute(WAYPOINT_HEADER *waypoints, WAYPOINT_ROUTE *thisroute,WAYPO
 					thisroute->first_link=link_to_next;
 					terminate=1;
 					textprint("Got a route.\n");
+				}
+				// each #if branch below is a whole "else if" block, so the brackets balance in both (a code scanner reads
+				// both branches)
 				#if ALLOW_USE_OF_LONGER_PATHS
-				}else if (next_waypoint->workspace+next_waypoint->weighting<this_waypoint->workspace) {
+				else if (next_waypoint->workspace+next_waypoint->weighting<this_waypoint->workspace) {
 					/* Add to queue. */
 					Waypoint_Route_Queue[Queue_End].wayvolume=next_waypoint;
 					Waypoint_Route_Queue[Queue_End].depth=Waypoint_Route_Queue[Queue_Exec].depth-next_waypoint->weighting;
@@ -821,7 +828,7 @@ int NewFindThisRoute(WAYPOINT_HEADER *waypoints, WAYPOINT_ROUTE *thisroute,WAYPO
 
 				}
 				#else
-				}else if (next_waypoint->workspace<this_waypoint->workspace) {
+				else if (next_waypoint->workspace<this_waypoint->workspace) {
 					/* Add to queue. */
 					Waypoint_Route_Queue[Queue_End].wayvolume=next_waypoint;
 					Waypoint_Route_Queue[Queue_End].depth=Waypoint_Route_Queue[Queue_Exec].depth-1;
