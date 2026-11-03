@@ -1,5 +1,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted unused RIF-authoring code (the Object_Chunk and Object_Interface_Data_Chunk "from data" constructors)
+//   deleted the disabled (#if 0) Adjacent_Modules_Chunk functions
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -730,75 +731,6 @@ VModule_Array_Chunk::~VModule_Array_Chunk ()
 	delete[] vmod_array;
 }
 
-///////////////////////////////////////
-#if 0
-void Adjacent_Modules_Chunk::fill_data_block (char *data_start)
-{
-	strncpy (data_start, identifier, 8);
-
-	data_start += 8;
-
-	*((int *) data_start) = chunk_size;
-
-	data_start += 4;
-
-	*((int *) data_start) = adjacent_modules_list.size();
-
-	data_start += 4;
-	
-	for (LIF<Adjacent_Module> ami(&adjacent_modules_list); !ami.done(); ami.next())
-	{
-	
-		*((int *) data_start) = 0;
-		data_start += 4;
-
-		*((int *) data_start) = 0;
-		data_start += 4;
-
-		strcpy (data_start, ami().o_name);
-		data_start += (strlen(ami().o_name) + 1) + (4-(strlen(ami().o_name) + 1)%4)%4;
-		
-	}
-	
-}
-
-size_t Adjacent_Modules_Chunk::size_chunk()
-{
-	int size = 16;
-	
-	for (LIF<Adjacent_Module> ami(&adjacent_modules_list); !ami.done(); ami.next())
-	{
-		size += 8;
-		size += (strlen(ami().o_name) + 1) + (4-(strlen(ami().o_name) + 1)%4)%4;
-	}
-
-	chunk_size = size;
-	return(size);
-		
-}
-
-Adjacent_Modules_Chunk::Adjacent_Modules_Chunk (Object_Module_Data_Chunk * parent, const char * data, size_t /*size*/)
-: Chunk (parent, "ADJMDLST")
-{
-	int num_array_items = *((int *) data);
-
-	data += 4;
-	
-	for (int i=0; i<num_array_items; i++)
-	{
-		Adjacent_Module am;
-
-		data += 8;
-
-		am.o_name = new char [strlen(data) + 1];
-		strcpy (am.o_name, data);
-		data += (strlen(am.o_name) + 1) + (4-(strlen(am.o_name) + 1)%4)%4;
-		
-		adjacent_modules_list.add_entry(am);	
-			
-	}
-}
-#endif
 ///////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("ADJMDLEP",Adjacent_Module_Entry_Points_Chunk)
 
