@@ -43,6 +43,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P2: pad the plane buffers for 16x16 blocks and zero-fill them
+ */
+
 #ifndef _BinkDecoder_h_
 #define _BinkDecoder_h_
 
@@ -113,15 +118,18 @@ struct Plane
 
 	bool Init(uint32_t width, uint32_t height)
 	{
-		// align to 16 bytes
-		width  += width  % 16;
-		height += height % 16;
+		// pad to a multiple of 16, plus 16 columns and rows: the 8x8 block grid
+		// reaches up to 8 past a chroma plane's size, and a 16x16 (scaled) block
+		// at the last block column or row writes 8 more
+		uint32_t paddedWidth  = ((width  + 15) & ~15u) + 16;
+		uint32_t paddedHeight = ((height + 15) & ~15u) + 16;
 
-		current = new uint8_t[width * height];
-		last    = new uint8_t[width * height];
+		// zero-filled, so a frame never shows uninitialised memory
+		current = new uint8_t[paddedWidth * paddedHeight]();
+		last    = new uint8_t[paddedWidth * paddedHeight]();
 		this->width  = width;
 		this->height = height;
-		this->pitch  = width;
+		this->pitch  = paddedWidth;
 
 		return true;
 	}

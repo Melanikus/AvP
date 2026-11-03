@@ -46,6 +46,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   BK-P1: reject frame sizes of 0 or above 7680 x 4800 in Open
+ *   BK-P2: give the alpha plane the full frame size
  */
 
 #include "BinkDecoder.h"
@@ -375,14 +376,11 @@ bool BinkDecoder::Open(const std::string &fileName)
 	planes.push_back(newPlane);
 	planes.back().Init(width, height);
 
-	// alpha plane
+	// alpha plane (full frame size: halving and doubling lost the last column and row of an odd size)
 	if (hasAlpha)
 	{
-		width  *= 2;
-		height *= 2;
-
 		planes.push_back(newPlane);
-		planes.back().Init(width, height);
+		planes.back().Init(frameWidth, frameHeight);
 	}
 
 	return true;

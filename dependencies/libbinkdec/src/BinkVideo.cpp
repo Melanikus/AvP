@@ -43,6 +43,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P2: zero-fill the bundle buffers
+ */
+
 #include "BinkDecoder.h"
 #include "Util.h"
 #include "LogError.h"
@@ -96,7 +101,8 @@ void BinkDecoder::InitBundles()
 
 	for (int i = 0; i < BINK_NB_SRC; i++)
 	{
-		bundle[i].data = new uint8_t[blocks * 64];
+		// zero-filled, so values read past a short bundle are not heap contents
+		bundle[i].data = new uint8_t[blocks * 64]();
 		bundle[i].data_end = bundle[i].data + blocks * 64;
 	}
 }
