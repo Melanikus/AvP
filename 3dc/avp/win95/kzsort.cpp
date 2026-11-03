@@ -221,6 +221,17 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 		/* if it's a module, which isn't inside another module */
 		if (modulePtr && !(modulePtr->m_flags & m_flag_slipped_inside))
 		{
+			/* checked before VisibleModules[numVisMods] is written: the old test (numVisMods > MAX, after the write)
+			let entries 400 and 401 be written past the array */
+			if (numVisMods >= MAX_NUMBER_OF_VISIBLE_MODULES)
+			{
+				/* outside the environment! */
+				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);
+				textprint("Possibly outside the environment!\n");
+//				LOCALASSERT(0);
+				return;
+			}
+
 			// these tests should really be done using the camera (VDB) position
 			if (playerPherModule == modulePtr)
 			{
@@ -291,15 +302,6 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 				VisibleModules[numVisMods].DispPtr = objectPtr;
 
 				VisibleModules[numVisMods].SortKey = Magnitude(&dist);
-			}
-
-			if (numVisMods>MAX_NUMBER_OF_VISIBLE_MODULES)
-			{
-				/* outside the environment! */
-				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);
-				textprint("Possibly outside the environment!\n");
-//				LOCALASSERT(0);
-				return;
 			}
 
 			numVisMods++;
