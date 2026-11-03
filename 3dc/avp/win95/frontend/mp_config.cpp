@@ -17,6 +17,7 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "..\3dc\FileStream.h"
+#include "logString.h"
 
 extern void SetDefaultMultiplayerConfig();
 extern char MP_SessionName[];
@@ -34,6 +35,22 @@ char* LastDescriptionFile = 0;
 char* LastDescriptionText = 0;
 
 AVPMENU_ELEMENT* AvPMenu_Multiplayer_LoadConfig=0;
+
+// "<folder><dir>/<name><extension>" into a MAX_PATH buffer, with one _snprintf bounded to the buffer plus an explicit
+// NUL (the form LoadRifFile uses). The name is a file name found in the folder (up to 259 characters) or one the player
+// typed, so the path can be longer than the buffer: then one line is logged and FALSE returned, and the caller acts as
+// if the file were missing.
+static BOOL BuildConfigPath(char *buffer, const char *folder, const char *dir, const char *name, const char *extension)
+{
+	if (_snprintf(buffer, MAX_PATH - 1, "%s%s/%s%s", folder, dir, name, extension) < 0)
+	{
+		LogErrorString(std::string("configuration file path too long: ") + folder + dir + "/" + name + extension);
+		buffer[0] = 0;
+		return FALSE;
+	}
+	buffer[MAX_PATH - 1] = 0;
+	return TRUE;
+}
 
 // a new[] copy of str; the file name lists below own these copies and delete[] them
 static char* NewStringCopy(const char* str)
@@ -70,7 +87,6 @@ BOOL BuildLoadMPConfigMenu()
 
 	// grab the home directory path
 	char filePath[MAX_PATH];
-	strcpy(filePath, GetSaveFolderPath());
 
 	// do a search for all the configuration in the configuration directory
 	const char *load_name = MP_CONFIG_WILDCARD;
@@ -78,7 +94,13 @@ BOOL BuildLoadMPConfigMenu()
 		load_name = SKIRMISH_CONFIG_WILDCARD;
 	}
 
-	strcat(filePath, load_name);
+	// (bounded: a save folder path that leaves no room for the wildcard finds nothing, like an empty folder)
+	if (_snprintf(filePath, sizeof(filePath) - 1, "%s%s", GetSaveFolderPath(), load_name) < 0)
+	{
+		LogErrorString(std::string("configuration search path too long: ") + GetSaveFolderPath() + load_name);
+		return FALSE;
+	}
+	filePath[sizeof(filePath) - 1] = 0;
 
 	// allow a wildcard search
 	WIN32_FIND_DATA wfd;
@@ -220,11 +242,8 @@ const char* GetMultiplayerConfigDescription(int index)
 	}
 
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s/%s.skirmish_cfg", MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s/%s.cfg", MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, "", MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return 0;
 	}
 
 	// TODO - fixme
@@ -238,12 +257,19 @@ const char* GetMultiplayerConfigDescription(int index)
 	fseek(file, 169, SEEK_SET);
 
 	int description_length = 0;
-	fread(&description_length,sizeof(int),1,file);
+	if (fread(&description_length,sizeof(int),1,file) != 1) {
+		description_length = 0;
+	}
 	
-	if (description_length)
+	// bounded like LoadMultiplayerConfiguration's read (ReadConfigString): the length comes from the file, and
+	// SaveMultiplayerConfiguration writes strlen + 1 of the 202-byte MP_Config_Description. A negative length is no
+	// description; a longer one keeps the first 202 bytes; the text always ends with a 0 after the bytes read.
+	if (description_length > 0)
 	{
-		LastDescriptionText = new char[description_length];
-		fread(LastDescriptionText, 1, description_length, file);
+		size_t toRead = ((size_t)description_length < sizeof(MP_Config_Description)) ? (size_t)description_length : sizeof(MP_Config_Description);
+		LastDescriptionText = new char[toRead + 1];
+		size_t bytesRead = fread(LastDescriptionText, 1, toRead, file);
+		LastDescriptionText[bytesRead] = 0;
 	}
 	fclose(file);
 	
@@ -281,11 +307,8 @@ void LoadMultiplayerConfigurationByIndex(int index)
 void LoadMultiplayerConfiguration(const char* name)
 {
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 
 	FileStream file;
@@ -389,11 +412,8 @@ void LoadMultiplayerConfiguration(const char* name)
 void SaveMultiplayerConfiguration(const char* name)
 {
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 	
 	::CreateDirectory(MP_CONFIG_DIR, 0);
@@ -496,11 +516,8 @@ void DeleteMultiplayerConfigurationByIndex(int index)
 	}
 
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index]);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index]);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index], netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 
 	::DeleteFile(filename);
@@ -602,7 +619,9 @@ void SaveIPAddress(const char* name, const char* address)
 	if (!strlen(address)) return;
 
 	char filename[MAX_PATH];
-	sprintf(filename, "%s/%s.IP Address", IP_ADDRESS_DIR,name);
+	if (!BuildConfigPath(filename, "", IP_ADDRESS_DIR, name, ".IP Address")) {
+		return;
+	}
 	
 	::CreateDirectory(IP_ADDRESS_DIR, 0);
 	FILE* file = avp_fopen(filename,"wb");
@@ -618,7 +637,9 @@ void LoadIPAddress(const char* name)
 	if (!name) return;
 
 	char filename[MAX_PATH];
-	sprintf(filename,"%s/%s.IP Address",IP_ADDRESS_DIR,name);
+	if (!BuildConfigPath(filename, "", IP_ADDRESS_DIR, name, ".IP Address")) {
+		return;
+	}
 
 	FILE* file = avp_fopen(filename,"rb");
 	if (!file) return;
