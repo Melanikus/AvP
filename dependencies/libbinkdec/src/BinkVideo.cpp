@@ -46,6 +46,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   BK-P2: zero-fill the bundle buffers
+ *   BK-P3: size the bundle lengths from the frame width
  */
 
 #include "BinkDecoder.h"
@@ -758,7 +759,7 @@ int BinkDecoder::DecodePlane(BinkCommon::BitReader &bits, int plane_idx, int is_
 
 	int bw = is_chroma ? (frameWidth  + 15) >> 4 : (frameWidth  + 7) >> 3;
 	int bh = is_chroma ? (frameHeight + 15) >> 4 : (frameHeight + 7) >> 3;
-	int width = planes[plane_idx].width;
+	int width = frameWidth >> is_chroma; // the frame's width, as in FFmpeg, not the plane buffer's
 	int height = planes[plane_idx].height;
 	int stride = planes[plane_idx].pitch;
 
