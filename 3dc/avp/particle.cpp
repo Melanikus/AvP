@@ -5165,6 +5165,13 @@ void Load_VolumetricExplosions(SAVE_BLOCK_HEADER* header)
 	expected_size += sizeof(VOLUMETRIC_EXPLOSION) * block->NumActiveExplosions;
 	if(header->size != expected_size) return;
 
+	//LifeTime drives GetSin(LifeTime/64) and the explosion's texture offset: skip a block with a value the game cannot
+	//have saved (it sets ONE_FIXED-1 and counts down to 0, and saves only explosions whose LifeTime is not 0)
+	for(int i=0;i<block->NumActiveExplosions;i++)
+	{
+		if(saved_explosion[i].LifeTime < 0 || saved_explosion[i].LifeTime >= ONE_FIXED) return;
+	}
+
 	for(int i=0;i<block->NumActiveExplosions;i++)
 	{
 		VOLUMETRIC_EXPLOSION* explosion = AllocateVolumetricExplosion();
