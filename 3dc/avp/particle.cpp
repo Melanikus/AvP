@@ -5206,6 +5206,9 @@ void Load_PheromoneTrails(SAVE_BLOCK_HEADER* header)
 	PHEROMONE_TRAIL* saved_trail = (PHEROMONE_TRAIL*) (block+1);
 	int expected_size;
 
+	//the trails are read from the block: the count must fit the block and TrailStorage[MAX_NO_OF_PHEROMONE_TRAILS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveTrails, sizeof(PHEROMONE_TRAIL), MAX_NO_OF_PHEROMONE_TRAILS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(PHEROMONE_TRAIL) * block->NumActiveTrails;
