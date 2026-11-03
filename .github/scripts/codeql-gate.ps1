@@ -6,7 +6,8 @@
 #   - it has no findings at all. Findings marked as "suppressed" still count, because we fix findings, we don't hide them;
 #   - CodeQL read every file it should have read;
 #   - CodeQL had no trouble reading any of them. Code it could not read was not checked, so it can't count as clean;
-#   - CodeQL really read everything, instead of taking one of its pull request shortcuts.
+#   - CodeQL really read everything, instead of taking one of its pull request shortcuts;
+#   - no comment anywhere tells CodeQL to look away.
 #
 # Every reason to fail is collected first, so one run shows the whole list instead of only the first problem.
 [CmdletBinding()]
@@ -192,6 +193,26 @@ if (-not (Test-Path -LiteralPath $actionSettings)) {
     $failures.Add('CodeQL reused part of an older scan instead of reading everything')
 }
 
+# A comment can tell CodeQL to look away from a line. We fix findings, so no such comment may exist, in our code or in a
+# library's, even on a line with no finding today. These are the forms CodeQL itself accepts (its AlertSuppression
+# library): "lgtm[...]" or "codeql[...]" anywhere in a comment, spaces allowed before the bracket, or a plain "lgtm" that
+# starts a comment or follows a semicolon. Upper and lower case both count. This looks at every line, not only comments,
+# so it can stop on something harmless, and then a person looks. The file list includes the types that C/C++ code pulls
+# in with #include, such as .inl, because a comment in one of those works the same way.
+$suppressionComment = '\b(lgtm|codeql)\s*\[[^\]]*\]|(//|/\*|#|;)\s*lgtm\b'
+$textTypes = if ($Kind -eq 'other') {
+    '.js', '.ts', '.html', '.htm', '.yml', '.yaml'
+} else {
+    $sourceTypes + $headerTypes + '.inc', '.inl', '.ipp', '.tcc'
+}
+$suppressions = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
+    Where-Object { Test-FileType $_.Name $textTypes } |
+    Select-String -Pattern $suppressionComment)
+Write-ReportList 'suppressions.txt' @($suppressions | ForEach-Object { '{0}:{1}{2}{3}' -f $_.Path, $_.LineNumber, "`t", $_.Line.Trim() })
+if ($suppressions.Count -gt 0) {
+    $failures.Add("$($suppressions.Count) comments tell CodeQL to look away (see suppressions.txt)")
+}
+
 # Report: the same few numbers in the log and on the run's summary page.
 $summary = @(
     "CodeQL gate ($Kind)",
@@ -200,7 +221,8 @@ $summary = @(
     "  sources missed:  $($missedSources.Count)",
     "  headers missed:  $($missedHeaders.Count)",
     "  findings:        $($findings.Count)",
-    "  read problems:   $($readProblems.Count)"
+    "  read problems:   $($readProblems.Count)",
+    "  look-away notes: $($suppressions.Count)"
 )
 Write-ReportList 'summary.txt' $summary
 $summary | Write-Output
