@@ -1,5 +1,6 @@
-# PROBE (temporary branch ci-coverage-probe, never merged): measure what Snyk Code and Snyk Open Source actually cover.
-# Same pinned actions and permissions as the real workflow. It reports and never uploads anything; nothing here gates.
+# PROBE (temporary branch ci-coverage-probe, never merged): build the vcpkg libraries the game uses on Windows, keep the
+# exact (patched) sources that get compiled, and run Snyk SAST + SCA on each library's source on Linux. It reports and
+# never gates; the real gating jobs are written from what this shows.
 name: Snyk coverage probe
 
 on:
@@ -9,58 +10,93 @@ permissions:
   contents: read
 
 jobs:
-  probe-code:
-    name: Probe Snyk Code coverage
-    runs-on: ubuntu-24.04
+  vcpkg-sources:
+    name: Build the vcpkg libraries and collect their sources
+    runs-on: windows-2025-vs2026
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Get vcpkg at the manifest's builtin-baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $root checkout -q FETCH_HEAD
+          "vcpkg registry commit: $(git -C $root rev-parse HEAD)"
+          "== scripts\vcpkg-tool-metadata.txt"
+          Get-Content (Join-Path $root 'scripts\vcpkg-tool-metadata.txt')
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          "== vcpkg.exe SHA512: $((Get-FileHash -Algorithm SHA512 (Join-Path $root 'vcpkg.exe')).Hash)"
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Install the pinned libraries (x86-windows), keeping their build trees
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows `
+            --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') list --x-install-root="$env:RUNNER_TEMP\installed"
+
+      - name: Collect each port's source directories
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          $out = Join-Path $env:RUNNER_TEMP 'libsrc'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          foreach ($port in Get-ChildItem $bt -Directory) {
+            $src = Join-Path $port.FullName 'src'
+            if (-not (Test-Path $src)) { "$($port.Name): no src directory (binary-only or script port)"; continue }
+            foreach ($d in Get-ChildItem $src -Directory) {
+              $dest = Join-Path $out (Join-Path $port.Name $d.Name)
+              Copy-Item -Recurse $d.FullName $dest
+              $n = (Get-ChildItem -Recurse -File $dest | Measure-Object).Count
+              "$($port.Name)/$($d.Name): $n files"
+            }
+          }
+
+      - name: Upload the collected sources for the scan job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-library-sources
+          path: ${{ runner.temp }}/libsrc
+          retention-days: 1
+
+  vcpkg-scan:
+    name: Snyk SAST + SCA on each library's source
+    needs: vcpkg-sources
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download the collected sources
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vcpkg-library-sources
+          path: libsrc
+
       - name: Install the Snyk CLI
         uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
 
-      - name: Count the C/C++ files git tracks, per top-level folder
-        run: |
-          git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' '*.inl' | cut -d/ -f1 | sort | uniq -c
-          echo "total: $(git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' '*.inl' | wc -l)"
-
-      - name: Snyk Code on the whole repository (coverage only)
+      - name: Scan each source directory
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          snyk code test --sarif-file-output=whole.sarif > /dev/null || true
-          echo "== coverage reported by Snyk Code (whole repository)"
-          jq -c '.runs[0].properties // "no run properties"' whole.sarif
-          echo "== results per top-level folder"
-          jq -r '.runs[0].results[].locations[0].physicalLocation.artifactLocation.uri' whole.sarif | cut -d/ -f1 | sort | uniq -c
-
-      - name: Snyk Code on dependencies/ and enet/ alone
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          for d in dependencies enet; do
-            snyk code test "$d" --sarif-file-output="$d.sarif" > /dev/null || true
-            echo "== $d: coverage"
-            jq -c '.runs[0].properties // "no run properties"' "$d.sarif" 2>/dev/null || echo "no SARIF written for $d"
-            echo "== $d: results by rule"
-            jq -r '.runs[0].results[].ruleId' "$d.sarif" 2>/dev/null | sort | uniq -c
+          for d in libsrc/*/*/; do
+            d=${d%/}
+            echo "================ $d ($(find "$d" -type f | wc -l) files)"
+            snyk code test "$d" --sarif-file-output=code.sarif > /dev/null 2>&1 || true
+            if [ -f code.sarif ]; then
+              echo "-- SAST coverage: $(jq -c '.runs[0].properties.coverage // "none"' code.sarif)"
+              echo "-- SAST results by rule:"
+              jq -r '.runs[0].results[].ruleId' code.sarif | sort | uniq -c
+              rm -f code.sarif
+            else
+              echo "-- SAST: no SARIF written"
+            fi
+            echo "-- SCA (--unmanaged):"
+            (cd "$d" && snyk test --unmanaged --print-dep-paths 2>&1 | grep -E 'Dependencies:|@|confidence|Tested|issues|✗' | head -20) || true
           done
-
-  probe-open-source:
-    name: Probe Snyk Open Source coverage
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install the Snyk CLI
-        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
-
-      - name: Snyk Open Source --unmanaged, with the files behind each identified library
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --unmanaged --print-dep-paths || true
