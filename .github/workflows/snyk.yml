@@ -22,6 +22,13 @@ on:
 permissions:
   contents: read
 
+# The gate's own engine is pinned too: an exact Snyk CLI release, checked against this hash before it runs. Updating it
+# is a deliberate, reviewed change here, so a bad "latest" release can never reach the gate or its token.
+# The hash is the one published for this release both on downloads.snyk.io and in snyk/cli's GitHub release.
+env:
+  SNYK_CLI_VERSION: v1.1308.3
+  SNYK_CLI_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
+
 jobs:
   snyk-code:
     name: Snyk Code (SAST)
@@ -35,8 +42,25 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install the Snyk CLI
-        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Scanners can be told to look away with a comment or a settings file. We fix findings, so none of those may exist.
+      - name: Fail if anything tells a scanner to look away
+        run: |
+          found=$(git grep -n -i -E 'deepcode ignore|snyk:ignore|lgtm\[|codeql\[' -- . ':!.github' || true)
+          files=$(git ls-files | grep -E '(^|/)\.(snyk|dcignore)$' || true)
+          if [ -n "$found$files" ]; then
+            echo "$found"
+            echo "$files"
+            echo "::error::Something in the repository suppresses a scanner"
+            exit 1
+          fi
+          echo "No scanner suppressions found."
 
       - name: Snyk Code (SAST)
         env:
@@ -88,13 +112,26 @@ jobs:
           fi
           echo "No precompiled code found."
 
-      - name: Install the Snyk CLI
-        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
+      # "Tested 0 dependencies" would pass as clean, so we also check Snyk recognised something (ENet in enet/).
       - name: Snyk Open Source (SCA, vendored C/C++)
+        shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif
+        run: |
+          set -o pipefail
+          snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif | tee sca.log
+          tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
+          if [ "$tested" -lt 1 ]; then
+            echo "::error::Snyk Open Source recognised no dependencies"
+            exit 1
+          fi
 
       - name: Upload Snyk Open Source results
         if: ${{ !cancelled() && hashFiles('snyk-open-source.sarif') != '' }}
@@ -140,7 +177,8 @@ jobs:
         shell: pwsh
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
-          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows `
+          # --binarysource=clear: always build from source. A library restored from a cache has no sources to scan.
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows --binarysource=clear `
             --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -182,31 +220,46 @@ jobs:
           name: vcpkg-library-sources
           path: libsrc
 
-      - name: Install the Snyk CLI
-        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       # Every library is scanned even if an earlier one fails, so one run shows everything; the job fails at the end
-      # if any scan found anything. Zero libraries found also fails, so a broken hand-over can't pass as clean.
+      # if any scan found anything. Each library must be present by name, so a broken hand-over can't pass as clean,
+      # and no library may carry a comment that tells a scanner to look away.
       - name: SAST and SCA on each library's source
+        shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
+          set -o pipefail
           mkdir -p results
           failed=0
-          count=0
-          for d in libsrc/*/*/; do
-            d=${d%/}
-            lib=$(basename "$(dirname "$d")")
-            count=$((count + 1))
+          for lib in enet fmt libogg libvorbis openal-soft pthreads; do
             echo "================ $lib"
-            if ! snyk code test "$d" --sarif-file-output="results/$lib.code.sarif"; then failed=1; fi
-            if ! (cd "$d" && snyk test --unmanaged --print-dep-paths); then failed=1; fi
+            dirs=$(find "libsrc/$lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
+            if [ -z "$dirs" ]; then
+              echo "::error::No source collected for $lib"
+              failed=1
+              continue
+            fi
+            for d in $dirs; do
+              if grep -rIlE 'deepcode ignore|snyk:ignore' "$d"; then
+                echo "::error::$lib has a comment that suppresses a scanner"
+                failed=1
+              fi
+              if ! snyk code test "$d" --sarif-file-output="results/$lib.code.sarif"; then failed=1; fi
+              if ! (cd "$d" && snyk test --unmanaged --print-dep-paths) | tee sca.log; then failed=1; fi
+              tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
+              if [ "$tested" -lt 1 ]; then
+                echo "::error::Snyk Open Source did not recognise $lib"
+                failed=1
+              fi
+            done
           done
-          echo "libraries scanned: $count"
-          if [ "$count" -eq 0 ]; then
-            echo "::error::No library sources were scanned"
-            exit 1
-          fi
           exit $failed
 
       - name: Keep the reports
