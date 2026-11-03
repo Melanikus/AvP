@@ -2,7 +2,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a saved profile is loaded only when complete, its name ends inside its box and cannot lead outside
-//   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused
+//   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused;
+//   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -152,12 +153,6 @@ extern void DeleteUserProfile(int number)
 	char *savePath = GetSaveFolderPath();
 	size_t savePathLength = strlen(savePath);
 
-	size_t fileNameLength = savePathLength + strlen(USER_PROFILES_PATH) + strlen(profilePtr->Name) + strlen(USER_PROFILES_SUFFIX)+1;
-	if (fileNameLength > MAX_PATH)
-	{
-
-	}
-
 	char *filename = new char[savePathLength + strlen(USER_PROFILES_PATH)+strlen(profilePtr->Name)+strlen(USER_PROFILES_SUFFIX)+1];
 	strcpy(filename, savePath);
 	strcat(filename, USER_PROFILES_PATH);
@@ -173,8 +168,13 @@ extern void DeleteUserProfile(int number)
 
 	for (int i=0; i < NUMBER_OF_SAVE_SLOTS; i++)
 	{
-		sprintf(filename, "%s%s%s_%d.sav", savePath, USER_PROFILES_PATH, profilePtr->Name, i+1);
-		::DeleteFile(filename);
+		// the save folder can be a long path: _snprintf stops at the end of filename and says so with a negative
+		// number. A name that did not fit is skipped, because a shortened name could be some other file.
+		if (_snprintf(filename, MAX_PATH - 1, "%s%s%s_%d.sav", savePath, USER_PROFILES_PATH, profilePtr->Name, i+1) >= 0)
+		{
+			filename[MAX_PATH - 1] = '\0';
+			::DeleteFile(filename);
+		}
 	}
 
 	delete[] filename;
