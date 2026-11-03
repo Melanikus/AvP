@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
-//   makes its data block in a small function that hands it back (it works the same as before)
+//   fills its new data block in a small function (it works the same as before)
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -3188,10 +3188,10 @@ static void MakeBackupFile(File_Chunk* fc)
 #endif
 }
 
-// the AVPDECAL chunk for the fixed decals; like every chunk it belongs to its parent, soc
-static AVP_Decal_Chunk* Make_Decal_Chunk(Special_Objects_Chunk* soc, List<Object_Chunk*>& ob_list)
+// Copies the level's pre-placed (fixed) decals, kept in FixedDecalStorage,
+// into a new AVPDECAL chunk, ready to be saved in the level file.
+static void Fill_Decal_Chunk(AVP_Decal_Chunk* decal_chunk, List<Object_Chunk*>& ob_list)
 {
-	AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
 	for(int i=0;i<decal_chunk->num_decals;i++)
 	{
 		FIXED_DECAL* fd=&FixedDecalStorage[i];
@@ -3209,7 +3209,6 @@ static AVP_Decal_Chunk* Make_Decal_Chunk(Special_Objects_Chunk* soc, List<Object
 
 		ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
 	}
-	return decal_chunk;
 }
 
 void save_preplaced_decals()
@@ -3249,7 +3248,11 @@ void save_preplaced_decals()
 		List<Object_Chunk*> ob_list;
 		env_rif->fc->list_objects(&ob_list);
 
-		Make_Decal_Chunk(soc, ob_list);
+		// The new chunk adds itself to its parent, soc, as it is made (every chunk
+		// does), and the parent deletes it later along with the rest of the level
+		// file's chunks. That is why it is not deleted here.
+		AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
+		Fill_Decal_Chunk(decal_chunk, ob_list);
 	}
 
 	if(!env_rif->fc->update_file())
