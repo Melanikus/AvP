@@ -3874,8 +3874,8 @@ static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORC
 	*orientation = firingOrient;
 
 	/* vector in front */
-	inFrontVec.vx = GetSin(firingOrient.EulerY);
-	inFrontVec.vz = GetCos(firingOrient.EulerY);
+	inFrontVec.vx = GetSin(firingOrient.EulerY & wrap360);
+	inFrontVec.vz = GetCos(firingOrient.EulerY & wrap360);
 	Normalise(&inFrontVec);
 
 	/* vectors in front, to side, and up */
