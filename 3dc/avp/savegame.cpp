@@ -36,6 +36,8 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include <assert.h>
+#include "logString.h"
+#include "utilities.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -653,6 +655,15 @@ void LoadSavedGame()
 	{
 		//read the next header
 		SAVE_BLOCK_HEADER* header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
+
+		//the header itself must fit in what is left, and a block must at least hold its header: a size of 0 never
+		//advances (the load hangs) and a negative one moves backwards
+		if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER) || header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+		{
+			LogErrorString("LoadSavedGame - invalid save block header (space left " + Util::IntToString(LoadInfo.BufferSpaceLeft) + ")");
+			terminal_error = TRUE;
+			break;
+		}
 
 		if(header->size>LoadInfo.BufferSpaceLeft)
 		{
