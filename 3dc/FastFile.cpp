@@ -81,24 +81,20 @@ FastFileHandle* FF_Find(const std::string &fileName)
 	}
 
 	/*
-		* We use separate chaining to resolve collisions.
-		* The first entry at a hash location won't contain the file's name as a string. If there's a collision
-		* and a new entry is added to the location, we *do* add the file name for that entry. So, search backwards 
-		* through the chain, checking for a matching string. If we've reached entry 0, we have no string to check.
-		* So, this is a possible point of failure in the system. 
+		* We use separate chaining to resolve collisions. Every entry stores its file name (FF_Open), so search
+		* backwards through the chain (the last match wins, as before) and check the name of every entry.
+		* Entry 0 used to be stored without a name and returned unchecked, so a file that is not in any
+		* fast file but hashes to a used location got entry 0, i.e. some other file.
 	*/
 	for (int i = (nEntries-1); i >= 0; i--)
 	{
-		if (i == 0) { // no string to check as first entry, just return it and assume it's ok.
-			return &fastFileHandles[hash][i];
-		}
-
 		if (fastFileHandles[hash][i].fileName == lowercaseFileName) {
 			return &fastFileHandles[hash][i];
 		}
 	}
 
-	// shouldn't get here?
+	// not in any fast file. The old code returned entry 0 here: log what it would have returned
+	Con_PrintError("FF_Find - '" + fileName + "' is not in a fast file (before, this lookup returned '" + fastFileHandles[hash][0].fileName + "' from " + FF_GetFastFileName(fastFileHandles[hash][0].fastFileIndex) + ")");
 	return NULL;
 }
 
@@ -219,12 +215,9 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 		// mod with table size
 		hash = hash % hashTableSize;
 
-		// if size > 0, we already have an item at this location, so we've got a collision
-		if (fastFileHandles[hash].size())
-		{
-			// collision detected. store file name for collision resolution
-			newHandle.fileName = requestedFile;
-		}
+		// store the file name for every entry (it used to be stored only for the 2nd and later entries of a location),
+		// so FF_Find can check the name of each one
+		newHandle.fileName = requestedFile;
 
 		fastFileHandles[hash].push_back(newHandle);
 

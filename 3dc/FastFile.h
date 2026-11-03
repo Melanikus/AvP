@@ -34,7 +34,7 @@ struct FastFileHandle
 	uint32_t fileOffset;    // nBytes offset into fast file where actual file data starts
 	uint32_t fileSize;
 
-	std::string fileName;   // this is only set if this item is part of a collision chain
+	std::string fileName;   // the file's name in the fast file (lowercase, '/' separators), checked by FF_Find
 };
 
 bool FF_Init();
