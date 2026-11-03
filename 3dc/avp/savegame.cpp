@@ -1,8 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the "saves left" message is written with a size limit, and a game whose save file path cannot be made
-//   is not saved, instead of overwriting another slot, and that does not cost the player a save; a bad block
-//   header stops the load, and a shared check tests that a counted list from a save file fits its block and array
+//   every block of a save file is checked before it is read: its header, its size and the compressed data;
+//   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
+//   saved, instead of overwriting another slot, and that does not cost the player a save
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

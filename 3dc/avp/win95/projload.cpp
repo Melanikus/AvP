@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
 //   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
-//   decals are limited to the room the game has for them, and unknown kinds of decal are skipped
+//   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
+//   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer
 #define DB_LEVEL 2
 
 #include "3dc.h"

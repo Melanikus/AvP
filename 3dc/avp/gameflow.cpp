@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a number conversion between signed and unsigned types is written out explicitly (the value is the same)
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"

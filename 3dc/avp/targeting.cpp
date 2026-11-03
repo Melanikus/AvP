@@ -1,4 +1,7 @@
 /* KJL 14:30:27 06/05/98 - weapon targeting code */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the smart gun's target filter only reads characters whose data it knows how to read
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"

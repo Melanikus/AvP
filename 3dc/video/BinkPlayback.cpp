@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a Bink video with a frame rate below 1, no sound track or an odd sound buffer size can no longer crash
+//   the game or write past its sound buffers
+
 #include "BinkPlayback.h"
 #include "FmvPlayback.h"
 #include "console.h"

@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
+//   simply skipped
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------

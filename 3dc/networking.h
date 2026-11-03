@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
+
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
 

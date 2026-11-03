@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   each packed file keeps its name, so a lookup can check it (see FastFile.cpp)
+
 #ifndef _FastFile_h_
 #define _FastFile_h_
 

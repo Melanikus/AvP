@@ -5,7 +5,8 @@
 ************************KJL*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it
+//   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it;
+//   the number of decals (marks on walls) and their ids read from a save file are checked before use
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"

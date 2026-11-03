@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   angles from a save file are kept between 0 and 4095 before a sine or cosine lookup, and an object's light
+//   list has room for every light
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

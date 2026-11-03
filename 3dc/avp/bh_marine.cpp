@@ -4,7 +4,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted old alternative versions of seven if-statements that were switched off with #if 0 (or #if 1 / #else)
-//   and never compiled, so code scanners can read the file; the game runs the same code as before
+//   and never compiled, so code scanners can read the file; the game runs the same code as before;
+//   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 #include "3dc.h"
 
 #include "inline.h"

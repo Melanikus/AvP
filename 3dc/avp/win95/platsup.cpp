@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a loaded text file always ends with a 0 byte, and a second loader also returns the file's size
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"

@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares DxErrorToString and LogErrorStringC (see logString.cpp)
+
 #ifndef LOGSTRING_H
 #define LOGSTRING_H
 

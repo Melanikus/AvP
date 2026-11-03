@@ -5,7 +5,8 @@
  */
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the particle count read from a save file is checked
+//   particle, pheromone-trail and explosion counts and ids read from a save file are checked, an unknown
+//   particle type is refused, and two table lookups are guarded
 
 #include "3dc.h"
 #include "inline.h"

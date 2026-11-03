@@ -23,7 +23,8 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the debug text that prints a matrix is written with a size limit, so it always fits
+//   the debug text that prints a matrix is written with a size limit, so it always fits;
+//   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone)
 
 #include "d3_func.h"
 #include "fmvCutscenes.h"

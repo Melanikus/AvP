@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   menu texts (the multiplayer setup, a menu number, the load-game list, the save-slot file name,
-//   the joined LAN game's name and the custom level name) are copied or written with size limits
+//   menu texts (the multiplayer setup, a menu number, the load-game list, the joined LAN game's name and the
+//   custom level name) are copied or written with size limits; a save slot whose file path does not fit is
+//   refused; the credits roll stops at the end of credits.txt
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"

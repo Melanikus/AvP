@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   adds a checked Huffman decoder for save games and text files: it refuses data that does not fit or
+//   decodes to fewer bytes than it claims
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
