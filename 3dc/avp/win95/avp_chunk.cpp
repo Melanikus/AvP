@@ -1,8 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   names saved into level data are copied by their measured length, an ID's name is built in text that
-//   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed
+//   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed;
+//   the decal list in a level file is checked against the real size of its chunk before it is read
 #include <string>
+#include <limits.h>
 #include "avp_chunk.hpp"
 #include "md5.h"
 
@@ -598,14 +600,31 @@ AVP_Environment_Settings_Chunk* GetAVPEnvironmentSettings(Environment_Data_Chunk
 //////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("AVPDECAL",AVP_Decal_Chunk)
 
-AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPDECAL")
 {
-	num_decals = *(int*)data;
-	data+=4;
+	//the chunk starts with two numbers: how many decals it holds, and how big each one is
+	num_decals = 0;
+	int loaded_decal_size = 0;
+	if (datasize >= 8)
+	{
+		num_decals = *(int*)data;
+		data+=4;
 
-	int loaded_decal_size = *(int*)data;
-	data+=4;
+		loaded_decal_size = *(int*)data;
+		data+=4;
+
+		datasize-=8;
+	}
+
+	//a broken or hand-made level file can say anything here, so the two numbers must fit what is really in the
+	//chunk, and the memory they ask for must be a size we can work out. If not, the chunk counts as holding no decals.
+	if (loaded_decal_size <= 0 || num_decals < 0 || (size_t)num_decals > datasize / loaded_decal_size ||
+		num_decals > INT_MAX / max(loaded_decal_size, (int)sizeof(AVP_Decal)))
+	{
+		num_decals = 0;
+		loaded_decal_size = sizeof(AVP_Decal);
+	}
 
 	decal_size = max(loaded_decal_size, (int)sizeof(AVP_Decal));
 

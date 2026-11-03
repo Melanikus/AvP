@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the limit on fixed decals moved here from decal.cpp, so the code that loads them from a level can use it
 #ifndef _included_decal_h_ /* Is this your first time? */
 #define _included_decal_h_ 1
 
@@ -107,6 +110,8 @@ extern DECAL_DESC DecalDescription[];
 extern THREE_LASER_DOT_DESC PredatorLaserTarget;
 
 
+// how many fixed decals FixedDecalStorage has room for
+#define MAX_NO_OF_FIXED_DECALS 1024
 extern FIXED_DECAL FixedDecalStorage[];
 extern int NumFixedDecals;
 extern int CurrentFixedDecalIndex;

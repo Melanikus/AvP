@@ -3,6 +3,9 @@
 *  D E C A L   S Y S T E M  *
 *                           *
 ************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -29,7 +32,6 @@
 #include <assert.h>
 
 #define MAX_NO_OF_DECALS 1024
-#define MAX_NO_OF_FIXED_DECALS 1024
 #define DECAL_Z_OFFSET 0
 
 THREE_LASER_DOT_DESC PredatorLaserTarget;

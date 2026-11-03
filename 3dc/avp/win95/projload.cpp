@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
-//   makes its new chunk from data laid out as in a level file, removing any old chunks first
+//   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
+//   decals are limited to the room the game has for them, and unknown kinds of decal are skipped
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -3084,14 +3085,21 @@ void setup_preplaced_decals(File_Chunk* fc,Environment_Data_Chunk* edc)
 	AVP_Decal_Chunk* decal_chunk=(AVP_Decal_Chunk*) soc->lookup_single_child("AVPDECAL");
 	if (!decal_chunk) return;
 
-	GLOBALASSERT(decal_chunk->decals);
+	//decals is 0 when each decal in the file is bigger than the decal this game knows: it cannot read them
+	if (!decal_chunk->decals) return;
 
 	NumFixedDecals=0;
 
 	for (int i = 0;i < decal_chunk->num_decals; i++)
 	{
+		//FixedDecalStorage has a fixed number of places, and a level file can ask for more: stop when it is full
+		if (NumFixedDecals >= MAX_NO_OF_FIXED_DECALS) break;
+
 		FIXED_DECAL* fd=&FixedDecalStorage[NumFixedDecals];
 		AVP_Decal * ad=&decal_chunk->decals[i];
+
+		//the decal's kind picks its entry in the DecalDescription table: skip a kind that is not in the table
+		if (ad->DecalID < 0 || ad->DecalID >= MAX_NO_OF_DECAL_IDS) continue;
 
 		//find the decal's module
 		Object_Chunk* module=fc->get_object_by_index(ad->object_index);
