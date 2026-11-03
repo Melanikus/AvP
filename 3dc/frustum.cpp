@@ -5,6 +5,9 @@
  * to the view frustum and clipping
  *
  */
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the polygon clipping is one whole macro (Clip_Polygon) instead of a start and an end macro, so code scanners
+//   can read it; the compiled code is the same
 
 #if 1
 
@@ -179,7 +182,20 @@ void SetFrustumType(enum FrustumType frustumType)
 	}
 }
 
-#define Clip_LoopStart(b) \
+/* Clip_Polygon cuts the polygon in RenderPolygon / VerticesBuffer against one plane: the near plane (Z) or one edge
+   of the screen (NX, PX, NY, PY, and the Wide versions for wide-screen). It walks round the polygon one corner at a
+   time. A corner on the visible side of the plane is copied to the output as it is; where an edge crosses the
+   plane, a new corner is made at the crossing point. What it needs to know about the plane comes in as arguments:
+     b                - the first corner of the input list (the last edge joins back to it),
+     Test             - says whether a corner is on the visible side (Clip_Z_Test and so on, below),
+     Lambda           - how far along the edge the crossing is, as a fixed-point fraction,
+     OutputXYZ        - works out the new corner's position from lambda,
+     OutputAttributes - works out its colour (Clip_OutputI), or texture position and colour (Clip_OutputUVI).
+   The calling function sets up curVertexPtr, outputVerticesPtr, verticesLeft, numberOfPointsOutputted and
+   curVertexInside first. This is one whole macro, so its brackets balance on their own: code scanners read
+   macros as written, and they could not follow the old version, which was split into a start and an end macro
+   with the brackets opened in one and closed in the other. The code it makes is exactly what the old one made. */
+#define Clip_Polygon(b, Test, Lambda, OutputXYZ, OutputAttributes) \
 	do \
 	{ \
 		RENDERVERTEX *nextVertexPtr; \
@@ -203,84 +219,84 @@ void SetFrustumType(enum FrustumType frustumType)
 		} \
  \
 		/* test if next vertex is inside the plane */ \
-			nextVertexInside =
-
-#define Clip_Z_OutputXYZ \
+			nextVertexInside = Test(nextVertexPtr); \
+ \
 		/* if one is in, and the other is out, output a clipped vertex */ \
 		if (nextVertexInside != curVertexInside) \
 		{ \
 			int lambda; \
  \
-			lambda = DIV_FIXED \
+			lambda = Lambda; \
+			OutputXYZ \
+			OutputAttributes \
+			numberOfPointsOutputted++; \
+			outputVerticesPtr++; \
+		} \
+ \
+		/* okay, now the current vertex becomes what was the next vertex */ \
+		curVertexPtr = nextVertexPtr; \
+		curVertexInside = nextVertexInside; \
+	} \
+	while(verticesLeft); \
+ \
+	RenderPolygon.NumberOfVertices = numberOfPointsOutputted
+
+#define Clip_Z_Lambda \
+			DIV_FIXED \
 			( \
 				(ZCLIPPINGVALUE - curVertexPtr->Z), \
 				(nextVertexPtr->Z - curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_Z_OutputXYZ \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X); \
 			outputVerticesPtr->Y = curVertexPtr->Y + MUL_FIXED(lambda,nextVertexPtr->Y-curVertexPtr->Y); \
 			outputVerticesPtr->Z = ZCLIPPINGVALUE;
 
-#define Clip_NX_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_NX_Lambda \
+			DIV_FIXED \
 			( \
 				(curVertexPtr->Z + curVertexPtr->X), \
 				-(nextVertexPtr->X-curVertexPtr->X) - (nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_NX_OutputXYZ \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X); \
 			outputVerticesPtr->Z = -outputVerticesPtr->X; \
 			outputVerticesPtr->Y = curVertexPtr->Y + MUL_FIXED(lambda,nextVertexPtr->Y-curVertexPtr->Y);
 
-#define Clip_PX_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_PX_Lambda \
+			DIV_FIXED \
 			( \
 				(curVertexPtr->Z - curVertexPtr->X), \
 				(nextVertexPtr->X-curVertexPtr->X) - (nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_PX_OutputXYZ \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X); \
 			outputVerticesPtr->Z = outputVerticesPtr->X; \
 			outputVerticesPtr->Y = curVertexPtr->Y + MUL_FIXED(lambda,nextVertexPtr->Y-curVertexPtr->Y);
 
-#define Clip_NY_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_NY_Lambda \
+			DIV_FIXED \
 			( \
 				(curVertexPtr->Z + curVertexPtr->Y), \
 				-(nextVertexPtr->Y-curVertexPtr->Y) - (nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_NY_OutputXYZ \
 			outputVerticesPtr->Z = curVertexPtr->Z + MUL_FIXED(lambda,nextVertexPtr->Z-curVertexPtr->Z); \
 			outputVerticesPtr->Y = -(outputVerticesPtr->Z); \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X);
 
-#define Clip_PY_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_PY_Lambda \
+			DIV_FIXED \
 			( \
 				(curVertexPtr->Z - curVertexPtr->Y), \
 				(nextVertexPtr->Y-curVertexPtr->Y) - (nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_PY_OutputXYZ \
 			outputVerticesPtr->Z = curVertexPtr->Z + MUL_FIXED(lambda,nextVertexPtr->Z-curVertexPtr->Z); \
 			outputVerticesPtr->Y = (outputVerticesPtr->Z); \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X);
@@ -298,18 +314,10 @@ void SetFrustumType(enum FrustumType frustumType)
 			outputVerticesPtr->SpecularG = curVertexPtr->SpecularG + MUL_FIXED(lambda,nextVertexPtr->SpecularG-curVertexPtr->SpecularG); \
 			outputVerticesPtr->SpecularB = curVertexPtr->SpecularB + MUL_FIXED(lambda,nextVertexPtr->SpecularB-curVertexPtr->SpecularB);
 
-#define Clip_LoopEnd(b) \
-			numberOfPointsOutputted++; \
-			outputVerticesPtr++; \
-		} \
- \
-		/* okay, now the current vertex becomes what was the next vertex */ \
-		curVertexPtr = nextVertexPtr; \
-		curVertexInside = nextVertexInside; \
-	} \
-	while(verticesLeft); \
- \
-	RenderPolygon.NumberOfVertices = numberOfPointsOutputted;
+/* the texture position and the colour, for textured polygons */
+#define Clip_OutputUVI \
+	Clip_OutputUV \
+	Clip_OutputI
 
 /* Wide screen versions of clip macros */
 
@@ -318,66 +326,50 @@ void SetFrustumType(enum FrustumType frustumType)
 #define Clip_Wide_NY_Test(v) (-(v)->Y <= (v)->Z*2)
 #define Clip_Wide_PY_Test(v) ((v)->Y <= (v)->Z*2)
 
-#define Clip_Wide_NX_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_Wide_NX_Lambda \
+			DIV_FIXED \
 			( \
 				(-2*curVertexPtr->Z - curVertexPtr->X), \
 				(nextVertexPtr->X-curVertexPtr->X) - (-2)*(nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_Wide_NX_OutputXYZ \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X); \
 			outputVerticesPtr->Z = -outputVerticesPtr->X/2; \
 			outputVerticesPtr->Y = curVertexPtr->Y + MUL_FIXED(lambda,nextVertexPtr->Y-curVertexPtr->Y);
 
-#define Clip_Wide_PX_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_Wide_PX_Lambda \
+			DIV_FIXED \
 			( \
 				(2*curVertexPtr->Z - curVertexPtr->X), \
 				(nextVertexPtr->X-curVertexPtr->X) - 2*(nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_Wide_PX_OutputXYZ \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X); \
 			outputVerticesPtr->Z = outputVerticesPtr->X/2; \
 			outputVerticesPtr->Y = curVertexPtr->Y + MUL_FIXED(lambda,nextVertexPtr->Y-curVertexPtr->Y);
 
-#define Clip_Wide_NY_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_Wide_NY_Lambda \
+			DIV_FIXED \
 			( \
 				(2*curVertexPtr->Z + curVertexPtr->Y), \
 				-(nextVertexPtr->Y-curVertexPtr->Y) - 2*(nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_Wide_NY_OutputXYZ \
 			outputVerticesPtr->Z = curVertexPtr->Z + MUL_FIXED(lambda,nextVertexPtr->Z-curVertexPtr->Z); \
 			outputVerticesPtr->Y = -(outputVerticesPtr->Z*2); \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X);
 
-#define Clip_Wide_PY_OutputXYZ \
-		/* if one is in, and the other is out, output a clipped vertex */ \
-		if (nextVertexInside != curVertexInside) \
-		{ \
-			int lambda; \
- \
-			lambda = DIV_FIXED \
+#define Clip_Wide_PY_Lambda \
+			DIV_FIXED \
 			( \
 				(2*curVertexPtr->Z - curVertexPtr->Y), \
 				(nextVertexPtr->Y-curVertexPtr->Y) - 2*(nextVertexPtr->Z-curVertexPtr->Z) \
-			); \
- \
+			)
+
+#define Clip_Wide_PY_OutputXYZ \
 			outputVerticesPtr->Z = curVertexPtr->Z + MUL_FIXED(lambda,nextVertexPtr->Z-curVertexPtr->Z); \
 			outputVerticesPtr->Y = (outputVerticesPtr->Z*2); \
 			outputVerticesPtr->X = curVertexPtr->X + MUL_FIXED(lambda,nextVertexPtr->X-curVertexPtr->X);
@@ -401,11 +393,7 @@ void GouraudPolygon_ClipWithZ(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Z_Test(nextVertexPtr);
-	Clip_Z_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Z_Test, Clip_Z_Lambda, Clip_Z_OutputXYZ, Clip_OutputI);
 }
 
 
@@ -423,11 +411,7 @@ static void GouraudPolygon_Norm_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NX_Test(nextVertexPtr);
-	Clip_NX_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NX_Test, Clip_NX_Lambda, Clip_NX_OutputXYZ, Clip_OutputI);
 }
 
 static void GouraudPolygon_Wide_ClipWithNegativeX(void)
@@ -443,11 +427,7 @@ static void GouraudPolygon_Wide_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NX_Test(nextVertexPtr);
-	Clip_Wide_NX_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NX_Test, Clip_Wide_NX_Lambda, Clip_Wide_NX_OutputXYZ, Clip_OutputI);
 }
 
 /* Clip against positive Y plane*/
@@ -464,11 +444,7 @@ static void GouraudPolygon_Norm_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PY_Test(nextVertexPtr);
-	Clip_PY_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PY_Test, Clip_PY_Lambda, Clip_PY_OutputXYZ, Clip_OutputI);
 }
 
 static void GouraudPolygon_Wide_ClipWithPositiveY(void)
@@ -484,11 +460,7 @@ static void GouraudPolygon_Wide_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PY_Test(nextVertexPtr);
-	Clip_Wide_PY_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PY_Test, Clip_Wide_PY_Lambda, Clip_Wide_PY_OutputXYZ, Clip_OutputI);
 }
 
 /* Clip against negative Y plane*/
@@ -505,11 +477,7 @@ static void GouraudPolygon_Norm_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NY_Test(nextVertexPtr);
-	Clip_NY_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NY_Test, Clip_NY_Lambda, Clip_NY_OutputXYZ, Clip_OutputI);
 }
 
 static void GouraudPolygon_Wide_ClipWithNegativeY(void)
@@ -525,11 +493,7 @@ static void GouraudPolygon_Wide_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NY_Test(nextVertexPtr);
-	Clip_Wide_NY_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NY_Test, Clip_Wide_NY_Lambda, Clip_Wide_NY_OutputXYZ, Clip_OutputI);
 }
 
 /* Clip against positive X plane */
@@ -546,11 +510,7 @@ static void GouraudPolygon_Norm_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PX_Test(nextVertexPtr);
-	Clip_PX_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PX_Test, Clip_PX_Lambda, Clip_PX_OutputXYZ, Clip_OutputI);
 }
 
 static void GouraudPolygon_Wide_ClipWithPositiveX(void)
@@ -566,11 +526,7 @@ static void GouraudPolygon_Wide_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PX_Test(nextVertexPtr);
-	Clip_Wide_PX_OutputXYZ
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PX_Test, Clip_Wide_PX_Lambda, Clip_Wide_PX_OutputXYZ, Clip_OutputI);
 }
 
 /*KJL***************
@@ -591,12 +547,7 @@ void TexturedPolygon_ClipWithZ(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Z_Test(nextVertexPtr);
-	Clip_Z_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Z_Test, Clip_Z_Lambda, Clip_Z_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against negative X plane */
@@ -613,12 +564,7 @@ static void TexturedPolygon_Norm_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NX_Test(nextVertexPtr);
-	Clip_NX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NX_Test, Clip_NX_Lambda, Clip_NX_OutputXYZ, Clip_OutputUVI);
 }
 
 static void TexturedPolygon_Wide_ClipWithNegativeX(void)
@@ -634,12 +580,7 @@ static void TexturedPolygon_Wide_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NX_Test(nextVertexPtr);
-	Clip_Wide_NX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NX_Test, Clip_Wide_NX_Lambda, Clip_Wide_NX_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against positive Y plane*/
@@ -656,12 +597,7 @@ static void TexturedPolygon_Norm_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PY_Test(nextVertexPtr);
-	Clip_PY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PY_Test, Clip_PY_Lambda, Clip_PY_OutputXYZ, Clip_OutputUVI);
 }
 
 static void TexturedPolygon_Wide_ClipWithPositiveY(void)
@@ -677,12 +613,7 @@ static void TexturedPolygon_Wide_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PY_Test(nextVertexPtr);
-	Clip_Wide_PY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PY_Test, Clip_Wide_PY_Lambda, Clip_Wide_PY_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against negative Y plane*/
@@ -699,12 +630,7 @@ static void TexturedPolygon_Norm_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NY_Test(nextVertexPtr);
-	Clip_NY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NY_Test, Clip_NY_Lambda, Clip_NY_OutputXYZ, Clip_OutputUVI);
 }
 
 static void TexturedPolygon_Wide_ClipWithNegativeY(void)
@@ -720,12 +646,7 @@ static void TexturedPolygon_Wide_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NY_Test(nextVertexPtr);
-	Clip_Wide_NY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NY_Test, Clip_Wide_NY_Lambda, Clip_Wide_NY_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against positive X plane */
@@ -742,12 +663,7 @@ static void TexturedPolygon_Norm_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PX_Test(nextVertexPtr);
-	Clip_PX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PX_Test, Clip_PX_Lambda, Clip_PX_OutputXYZ, Clip_OutputUVI);
 }
 
 static void TexturedPolygon_Wide_ClipWithPositiveX(void)
@@ -763,12 +679,7 @@ static void TexturedPolygon_Wide_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PX_Test(nextVertexPtr);
-	Clip_Wide_PX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PX_Test, Clip_Wide_PX_Lambda, Clip_Wide_PX_OutputXYZ, Clip_OutputUVI);
 }
 
 
@@ -790,12 +701,7 @@ void GouraudTexturedPolygon_ClipWithZ(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Z_Test(nextVertexPtr);
-	Clip_Z_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Z_Test, Clip_Z_Lambda, Clip_Z_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against negative X plane */
@@ -812,12 +718,7 @@ static void GouraudTexturedPolygon_Norm_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NX_Test(nextVertexPtr);
-	Clip_NX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NX_Test, Clip_NX_Lambda, Clip_NX_OutputXYZ, Clip_OutputUVI);
 }
 
 static void GouraudTexturedPolygon_Wide_ClipWithNegativeX(void)
@@ -833,12 +734,7 @@ static void GouraudTexturedPolygon_Wide_ClipWithNegativeX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NX_Test(nextVertexPtr);
-	Clip_Wide_NX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NX_Test, Clip_Wide_NX_Lambda, Clip_Wide_NX_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against positive Y plane*/
@@ -855,12 +751,7 @@ static void GouraudTexturedPolygon_Norm_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PY_Test(nextVertexPtr);
-	Clip_PY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PY_Test, Clip_PY_Lambda, Clip_PY_OutputXYZ, Clip_OutputUVI);
 }
 
 static void GouraudTexturedPolygon_Wide_ClipWithPositiveY(void)
@@ -876,12 +767,7 @@ static void GouraudTexturedPolygon_Wide_ClipWithPositiveY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PY_Test(nextVertexPtr);
-	Clip_Wide_PY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PY_Test, Clip_Wide_PY_Lambda, Clip_Wide_PY_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against negative Y plane*/
@@ -898,12 +784,7 @@ static void GouraudTexturedPolygon_Norm_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_NY_Test(nextVertexPtr);
-	Clip_NY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_NY_Test, Clip_NY_Lambda, Clip_NY_OutputXYZ, Clip_OutputUVI);
 }
 
 static void GouraudTexturedPolygon_Wide_ClipWithNegativeY(void)
@@ -919,12 +800,7 @@ static void GouraudTexturedPolygon_Wide_ClipWithNegativeY(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart((RenderPolygon.Vertices))
-	Clip_Wide_NY_Test(nextVertexPtr);
-	Clip_Wide_NY_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd(VerticesBuffer)
+	Clip_Polygon((RenderPolygon.Vertices), Clip_Wide_NY_Test, Clip_Wide_NY_Lambda, Clip_Wide_NY_OutputXYZ, Clip_OutputUVI);
 }
 
 /* Clip against positive X plane */
@@ -941,12 +817,7 @@ static void GouraudTexturedPolygon_Norm_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_PX_Test(nextVertexPtr);
-	Clip_PX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_PX_Test, Clip_PX_Lambda, Clip_PX_OutputXYZ, Clip_OutputUVI);
 }
 
 static void GouraudTexturedPolygon_Wide_ClipWithPositiveX(void)
@@ -962,12 +833,7 @@ static void GouraudTexturedPolygon_Wide_ClipWithPositiveX(void)
 	int curVertexInside = 1;
 #endif
 
-	Clip_LoopStart(VerticesBuffer)
-	Clip_Wide_PX_Test(nextVertexPtr);
-	Clip_Wide_PX_OutputXYZ
-	Clip_OutputUV
-	Clip_OutputI
-	Clip_LoopEnd((RenderPolygon.Vertices))
+	Clip_Polygon(VerticesBuffer, Clip_Wide_PX_Test, Clip_Wide_PX_Lambda, Clip_Wide_PX_OutputXYZ, Clip_OutputUVI);
 }
 
 int PolygonWithinFrustum(POLYHEADER *polyPtr)
