@@ -9,6 +9,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "pldnet.h"
+#include "menu_data.h"
 #include "mp_config.h"
 #include "env_info.h"
 #include "menus.h"
@@ -249,6 +250,25 @@ const char* GetMultiplayerConfigDescription(int index)
 	return LastDescriptionText;
 }
 
+// Reads a string of the configuration file: length bytes (SaveMultiplayerConfiguration writes strlen + 1, the NUL
+// included) into a buffer of bufferSize bytes. A length that fits the buffer is read exactly as before. A longer one
+// (only from a damaged or edited file) keeps the first bufferSize bytes and skips the rest, so the fields after it are
+// read from the same place. The last byte of the buffer is always set to 0, which is past the NUL of any string that
+// fits.
+static void ReadConfigString(FileStream &file, char *buffer, size_t bufferSize, int length)
+{
+	if (length > 0)
+	{
+		size_t toRead = ((size_t)length < bufferSize) ? (size_t)length : bufferSize;
+		file.ReadBytes((uint8_t*)buffer, toRead);
+		if ((size_t)length > toRead)
+		{
+			file.SkipBytes((int64_t)length - (int64_t)toRead);
+		}
+	}
+	buffer[bufferSize - 1] = 0;
+}
+
 void LoadMultiplayerConfigurationByIndex(int index)
 {
 	if (index < 0 || index >= ConfigurationFilenameList.size()) {
@@ -324,8 +344,9 @@ void LoadMultiplayerConfiguration(const char* name)
 
 	netGameData.gameSpeed = file.GetInt32LE();
 
+	// bounded: the length comes from the file, MP_Config_Description is 202 bytes
 	int description_length = file.GetInt32LE();
-	file.ReadBytes((uint8_t*)MP_Config_Description, description_length);
+	ReadConfigString(file, MP_Config_Description, sizeof(MP_Config_Description), description_length);
 
 	netGameData.preDestroyLights    = file.GetInt32LE();
 	netGameData.disableFriendlyFire = file.GetInt32LE();
@@ -340,10 +361,10 @@ void LoadMultiplayerConfiguration(const char* name)
 	netGameData.specialistPistols  = file.GetInt32LE();
 #endif
 
-	// read the custom level name
+	// read the custom level name (bounded: the length comes from the file, customLevelName is 40 bytes)
 	int length = file.GetInt32LE();
-	if (length) {
-		file.ReadBytes((uint8_t*)netGameData.customLevelName, length);
+	if (length > 0) {
+		ReadConfigString(file, netGameData.customLevelName, sizeof(netGameData.customLevelName), length);
 	}
 	else {
 		netGameData.customLevelName[0] = 0;
@@ -634,7 +655,8 @@ void ClearMultiplayerLevelNameArray()
 
 void BuildMultiplayerLevelNameArray()
 {
-	// a file name (up to MAX_PATH-1 characters) plus " (<custom level text>)"; the copies below are bounded to it
+	// a custom level's file name (up to MAX_PATH-1 characters) plus " (<custom level text>)", or a stock level name plus
+	// " (<new level text>)", both from language.txt; every write into it below is bounded to it
 	char buffer[MAX_PATH + 64];
 
 	// only want to do this once
@@ -699,7 +721,8 @@ void BuildMultiplayerLevelNameArray()
 		{
 			// a new level
 			char *new_string = GetTextString(TEXTSTRING_NEW_LEVEL);
-			sprintf(buffer, "%s (%s)", level_name, new_string);
+			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
+			buffer[sizeof(buffer) - 1] = 0;
 
 			// allocate memory and copy the string.
 			MultiplayerLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
@@ -720,7 +743,8 @@ void BuildMultiplayerLevelNameArray()
 		{
 			//a new level
 			char *new_string = GetTextString(TEXTSTRING_NEW_LEVEL);
-			sprintf(buffer, "%s (%s)", level_name, new_string);
+			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
+			buffer[sizeof(buffer) - 1] = 0;
 
 			//allocate memory and copy the string.
 			CoopLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
@@ -781,8 +805,13 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 {
 	char buffer[256];
 	// tack ( custom) onto the end of the name, before doing the string compare
+	// (bounded: the names passed in are at most 39 characters, but the custom level text comes from language.txt; if
+	// the result does not fit, the level is reported as not found)
 	char *custom_string = GetTextString(TEXTSTRING_CUSTOM_LEVEL); 
-	sprintf(buffer,"%s (%s)", name, custom_string);
+	if (_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", name, custom_string) < 0) {
+		return -1;
+	}
+	buffer[sizeof(buffer) - 1] = 0;
 
 	// find the index of a custom level from its name
 	if (gameType == NGT_Coop)
