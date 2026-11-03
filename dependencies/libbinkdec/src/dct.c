@@ -32,6 +32,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   BK-P17: fail ff_dct_init when the csc2 allocation fails (FFmpeg 69277069dd)
+ */
+
 /**
  * @file
  * (Inverse) Discrete Cosine Transforms. These are also known as the
@@ -204,6 +209,8 @@ av_cold int ff_dct_init(DCTContext *s, int nbits, enum DCTTransformType inverse)
         s->costab = ff_cos_tabs[nbits+2];
 
         s->csc2 = (FFTSample*)malloc(n/2 * sizeof(FFTSample));
+        if (!s->csc2)
+            return -1;
 
         if (ff_rdft_init(&s->rdft, nbits, inverse == DCT_III) < 0) {
             free(s->csc2);

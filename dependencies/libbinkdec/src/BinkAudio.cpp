@@ -46,6 +46,7 @@
 /*
  * Modified 2026-11-03 for the AvP port:
  *   BK-P4: never copy past the audio buffer; count only the bytes copied
+ *   BK-P17: fail CreateAudioTrack when the transform init fails
  */
 
 #include "BinkDecoder.h"
@@ -179,12 +180,21 @@ bool BinkDecoder::CreateAudioTrack(uint32_t sampleRate, uint16_t flags)
 		track->coeffsPtr[i] = track->coeffs + i * frameLength;
 	}
 
+	int ret = -1;
+
+	// FFmpeg's init failure paths free the context's pointers, so start from a zeroed one
+	memset(&track->trans, 0, sizeof(track->trans));
+
 	if (kTransformTypeRDFT == track->transformType)
-		ff_rdft_init(&track->trans.rdft, frameLenBits, DFT_C2R);
+		ret = ff_rdft_init(&track->trans.rdft, frameLenBits, DFT_C2R);
 	else if (kTransformTypeDCT == track->transformType)
-		ff_dct_init(&track->trans.dct, frameLenBits, DCT_III);
-	else
+		ret = ff_dct_init(&track->trans.dct, frameLenBits, DCT_III);
+
+	if (ret < 0)
+	{
+		delete track;
 		return false;
+	}
 
 	track->blockBufferSize = frameLength * nChannels * sizeof(int16_t);
 	track->blockBuffer     = new int16_t[track->blockBufferSize];

@@ -55,6 +55,7 @@
  *   BK-P11: skip a frame whose audio packet is larger than the frame
  *   BK-P15: free the bundle buffers in the destructor
  *   BK-P16: check handles and track indexes in the exports; stop at the last frame
+ *   BK-P17: fail Open when an audio track can't be created
  */
 
 #include "BinkDecoder.h"
@@ -366,7 +367,11 @@ bool BinkDecoder::Open(const std::string &fileName)
 			uint16_t sampleRate = file.ReadUint16LE();
 			uint16_t flags      = file.ReadUint16LE();
 
-			CreateAudioTrack(sampleRate, flags);
+			if (!CreateAudioTrack(sampleRate, flags))
+			{
+				BinkCommon::LogError("Can't create audio track");
+				return false;
+			}
 		}
 
 		// skip the audio track IDs
