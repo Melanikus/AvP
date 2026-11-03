@@ -46,6 +46,7 @@
  * Modified 2026-11-03 for the AvP port:
  *   SM-P1: bound each audio chunk by the audio buffer; cap frame 0's audio size
  *   SM-P2: reject frame sizes that are 0, too large or overflow 32 bits
+ *   SM-P3: keep header-tree entries and 'last' indexes inside the table (CVE-2011-3944)
  */
 
 #include "SmackerDecoder.h"
@@ -492,17 +493,19 @@ int SmackerDecoder::DecodeTree(SmackerCommon::BitReader &bits, HuffContext *hc, 
  */
 int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *hc, DBCtx *ctx)
 {
+	// nodes and leaves alike: only the first 'length' entries hold tree entries,
+	// the 3 after them are reserved for the 'last' indexes (DecodeHeaderTree)
+	if (hc->current >= hc->length){
+		SmackerCommon::LogError("Tree size exceeded!");
+		return -1;
+	}
+
 	if (!bits.GetBit()) // Leaf
 	{
 		int val, i1, i2, b1, b2;
 
 		i1 = 0;
 		i2 = 0;
-
-		if (hc->current >= hc->length){
-			SmackerCommon::LogError("Tree size exceeded!");
-            return -1;
-        }
 
         b1 = bits.GetPosition();
 
@@ -537,7 +540,7 @@ int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *h
         hc->values[hc->current++] = val;
         return 1;
     } else { //Node
-        int r = 0, t;
+        int r = 0, r_new, t;
 
         t = hc->current++;
         r = DecodeBigTree(bits, hc, ctx);
@@ -545,8 +548,10 @@ int SmackerDecoder::DecodeBigTree(SmackerCommon::BitReader &bits, HuffContext *h
             return r;
         hc->values[t] = kSMKnode | r;
         r++;
-        r += DecodeBigTree(bits, hc, ctx);
-        return r;
+        r_new = DecodeBigTree(bits, hc, ctx);
+        if (r_new < 0)
+            return r_new;
+        return r + r_new;
     }
 }
 
@@ -559,6 +564,7 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
 	HuffContext tmp1, tmp2;
 	int escapes[3];
 	DBCtx ctx;
+	int err = 0;
 
 	if (size >= UINT_MAX>>4)
 	{
@@ -629,12 +635,14 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
     ctx.recode2 = tmp2.values;
     ctx.last = last;
 
-	huff.length = ((size + 3) >> 2) + 3;
+	// 'length' entries for the tree, plus 3 reserved for the 'last' indexes below
+	huff.length = (size + 3) >> 2;
     huff.maxlength = 0;
     huff.current = 0;
-	huff.values.resize(huff.length);
+	huff.values.resize(huff.length + 3);
 
-	DecodeBigTree(bits, &huff, &ctx);
+	if (DecodeBigTree(bits, &huff, &ctx) < 0)
+		err = -1;
 
     bits.SkipBits(1);
 
@@ -642,7 +650,22 @@ int SmackerDecoder::DecodeHeaderTree(SmackerCommon::BitReader &bits, std::vector
     if (ctx.last[1] == -1) ctx.last[1] = huff.current++;
     if (ctx.last[2] == -1) ctx.last[2] = huff.current++;
 
+	// final guard: every 'last' index must point inside the table
+	for (int i = 0; i < 3; i++)
+	{
+		if ((size_t)ctx.last[i] >= huff.values.size())
+		{
+			SmackerCommon::LogError("Huffman codes out of range");
+			ctx.last[0] = ctx.last[1] = ctx.last[2] = 1;
+			err = -1;
+			break;
+		}
+	}
+
 	recodes = huff.values;
+
+	if (err < 0)
+		return err;
 
 	return true;
 }
