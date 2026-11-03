@@ -1109,10 +1109,20 @@ void Load_Decals(SAVE_BLOCK_HEADER* header)
 	DECAL* saved_decal = (DECAL*) (block+1);
 	int expected_size;
 
+	//the decals are read from the block (AllocateDecal never fails, it reuses the ring): the count must fit the block
+	//and DecalStorage[MAX_NO_OF_DECALS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveDecals, sizeof(DECAL), MAX_NO_OF_DECALS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(DECAL) * block->NumActiveDecals;
 	if(header->size != expected_size) return;
+
+	//DecalDescription[DecalID] is read when each decal is drawn: skip a block with an id the game cannot have saved
+	for(i=0;i<block->NumActiveDecals;i++)
+	{
+		if((int)saved_decal[i].DecalID < 0 || (int)saved_decal[i].DecalID >= MAX_NO_OF_DECAL_IDS) return;
+	}
 
 
 	for(i=0;i<block->NumActiveDecals;i++)
