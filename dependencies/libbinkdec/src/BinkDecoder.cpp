@@ -52,6 +52,7 @@
  *   BK-P7: cap the audio buffer size; fail Open when an allocation fails
  *   BK-P8: reject 0 frames and a frame index that does not increase
  *   BK-P9: reject a zero frame rate numerator or denominator
+ *   BK-P11: skip a frame whose audio packet is larger than the frame
  */
 
 #include "BinkDecoder.h"
@@ -448,14 +449,26 @@ void BinkDecoder::GetNextFrame(YUVbuffer yuv)
 	// seek to fame offset
 	file.Seek(frames[currentFrame].offset);
 	uint32_t frameSize = frames[currentFrame].size;
+	bool frameValid = true;
 
 	for (uint32_t trackIndex = 0; trackIndex < audioTracks.size(); trackIndex++)
 	{
 		// reset bytes read per frame (we might not get any audio for this frame)
 		audioTracks[trackIndex]->bytesReadThisFrame = 0;
 
+		if (!frameValid)
+			continue;
+
 		// check for audio
 		uint32_t audioPacketSize = file.ReadUint32LE();
+
+		// a packet bigger than the rest of the frame means a broken frame: decode nothing more of it
+		if (frameSize < 4 || audioPacketSize > frameSize - 4)
+		{
+			BinkCommon::LogError("Audio packet is larger than the frame");
+			frameValid = false;
+			continue;
+		}
 
 		frameSize -= 4 + audioPacketSize;
 			
@@ -472,7 +485,8 @@ void BinkDecoder::GetNextFrame(YUVbuffer yuv)
 	}
 
 	// get video packet
-	VideoPacket(frameSize);
+	if (frameValid)
+		VideoPacket(frameSize);
 
 	// set planes data (YUVbuffer has 3 entries: an alpha plane is decoded but not returned)
 	for (uint32_t i = 0; i < planes.size() && i < 3; i++)
