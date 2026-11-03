@@ -42,6 +42,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/*
+ * Modified 2026-11-03 for the AvP port:
+ *   SM-P1: bound each audio chunk by the audio buffer; cap frame 0's audio size
+ */
+
 #include "SmackerDecoder.h"
 #include "HuffmanVLC.h"
 #include "LogError.h"
@@ -424,6 +429,13 @@ bool SmackerDecoder::Open(const std::string &fileName)
 			file.Skip(4);
 			
 			uint32_t unpackedSize = file.ReadUint32LE();
+
+			// same limit as FFmpeg's smka_decode_frame: no frame holds more than 16 MiB of audio
+			if (unpackedSize > (1U << 24))
+			{
+				SmackerCommon::LogError("Audio buffer size too large");
+				return false;
+			}
 
 			audioTracks[i].bufferSize = unpackedSize;
 			audioTracks[i].buffer = new uint8_t[unpackedSize];
@@ -973,6 +985,14 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
     if (!bits.GetBit()) {
 		// no sound data
         return 1;
+    }
+
+    // the output buffer was sized from frame 0's chunk: reject a chunk that does not fit
+    // and skip the rest of it, so the next chunk is read from the right place
+    if (unpackedSize < 0 || (uint32_t)unpackedSize > track.bufferSize) {
+		SmackerCommon::LogError("Frame is too large to fit in buffer");
+		bits.SkipBits(bits.GetSize() - bits.GetPosition());
+		return -1;
     }
 
     stereo     = bits.GetBit();
