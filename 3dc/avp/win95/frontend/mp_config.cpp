@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   multiplayer level and settings names, and the settings file paths, are copied or written with size
-//   limits so they always fit; the list of custom level names is now freed in full
+//   multiplayer level and settings names and paths have size limits, a path that does not fit counts as
+//   a missing file, a name with dots in it stays whole, and the custom level name list is freed in full
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -61,11 +61,12 @@ static char* NewStringCopy(const char* str)
 	return copy;
 }
 
-// a new[] copy of a found file's name, cut at its first '.'
+// Makes a copy of a found file's name without its extension. It is cut at the last '.', so my.game.cfg keeps the
+// whole name "my.game", and the path built from that name later finds the same file.
 static char* NewNameWithoutExtension(const char* fileName)
 {
 	char* name = NewStringCopy(fileName);
-	char* dotpos = strchr(name, '.');
+	char* dotpos = strrchr(name, '.');
 	if (dotpos) {
 		*dotpos = 0;
 	}
@@ -712,7 +713,7 @@ void BuildMultiplayerLevelNameArray()
 			{
 				strncpy(buffer, wfd.cFileName, sizeof(buffer) - 1);
 				buffer[sizeof(buffer) - 1] = 0;
-				char *dotpos = strchr(buffer,'.');
+				char *dotpos = strrchr(buffer,'.'); // the last '.', as in NewNameWithoutExtension
 				if (dotpos) {
 					*dotpos = 0;
 				}
