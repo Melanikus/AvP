@@ -3515,7 +3515,14 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				else
 				{
 					//use the special string to represent 0
-					sprintf(NumberString,"%s",GetTextString(elementPtr->NumberFieldZeroString));
+					// The special word shown instead of 0 comes from the game's language text
+					// file on disk. NumberString holds 50 bytes, so a line made very long in that
+					// file must not be copied in whole: _snprintf writes at most 49 characters,
+					// and we always put the end marker (the zero byte that ends a text) into the
+					// last byte ourselves, because _snprintf leaves it out when it cuts the text
+					// short. A word that fits comes out exactly as before.
+					_snprintf(NumberString,sizeof(NumberString)-1,"%s",GetTextString(elementPtr->NumberFieldZeroString));
+					NumberString[sizeof(NumberString)-1] = '\0';
 				}
 				
 				if (elementPtr->TextDescription==TEXTSTRING_BLANK)
