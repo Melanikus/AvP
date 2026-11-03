@@ -5,6 +5,12 @@ name: Snyk coverage probe
 
 on:
   workflow_dispatch:
+    inputs:
+      probe:
+        description: which probe to run
+        type: choice
+        options: [vcpkg, parse]
+        default: vcpkg
 
 permissions:
   contents: read
@@ -12,6 +18,7 @@ permissions:
 jobs:
   vcpkg-sources:
     name: Build the vcpkg libraries and collect their sources
+    if: inputs.probe == 'vcpkg'
     runs-on: windows-2025-vs2026
     steps:
       - name: Check out the repository
@@ -70,6 +77,7 @@ jobs:
   vcpkg-scan:
     name: Snyk SAST + SCA on each library's source
     needs: vcpkg-sources
+    if: inputs.probe == 'vcpkg'
     runs-on: ubuntu-24.04
     steps:
       - name: Download the collected sources
@@ -99,4 +107,46 @@ jobs:
             fi
             echo "-- SCA (--unmanaged):"
             (cd "$d" && snyk test --unmanaged --print-dep-paths 2>&1 | grep -E 'Dependencies:|@|confidence|Tested|issues|✗' | head -20) || true
+          done
+
+  parse-probe:
+    name: Find the files Snyk Code cannot parse
+    if: inputs.probe == 'parse'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the Snyk CLI
+        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+
+      - name: Folder by folder, then file by file
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          failed_count() {   # $1 = a directory; prints how many files Snyk Code could not parse there
+            snyk code test "$1" --sarif-file-output=p.sarif > /dev/null 2>&1 || true
+            if [ -f p.sarif ]; then
+              jq '[.runs[0].properties.coverage[]? | select(.type == "FAILED_PARSING") | .files] | add // 0' p.sarif
+              rm -f p.sarif
+            else
+              echo "no-sarif"
+            fi
+          }
+          git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' '*.inl' > files.txt
+          total=0
+          for dir in $(xargs -n1 dirname < files.txt | sort -u); do
+            rm -rf /tmp/one && mkdir -p /tmp/one
+            grep -E "^$dir/[^/]+$" files.txt | while read -r f; do cp "$f" /tmp/one/; done
+            n=$(failed_count /tmp/one)
+            echo "folder $dir: $(ls /tmp/one | wc -l) files, failed parsing: $n"
+            if [ "$n" != "0" ]; then
+              for f in $(grep -E "^$dir/[^/]+$" files.txt); do
+                rm -rf /tmp/single && mkdir -p /tmp/single && cp "$f" /tmp/single/
+                m=$(failed_count /tmp/single)
+                if [ "$m" != "0" ]; then echo "  FAILS TO PARSE: $f ($m)"; fi
+              done
+            fi
           done
