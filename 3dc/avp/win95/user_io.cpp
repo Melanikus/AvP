@@ -1531,12 +1531,12 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 			if (MouseVelY < 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_Forward = 1;
-			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
+				playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
 			}
 			else if (MouseVelY > 0)
 			{
 				playerStatusPtr->Mvt_InputRequests.Flags.Rqst_Backward = 1;
-			 	playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
+				playerStatusPtr->Mvt_MotionIncrement = -((int)MouseVelY)*mouseYSensitivity;
 			}
 	   	
 	   		if (playerStatusPtr->Mvt_MotionIncrement < -ONE_FIXED)
