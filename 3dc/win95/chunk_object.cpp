@@ -5,6 +5,7 @@
 //   OBJHEAD1: bounded copy of the object name into the larger ChunkObject::o_name; the fixed part read only inside the chunk
 //   CalculateID builds the hashed name in a std::string instead of a fixed char[100]
 //   fill_data_block copies strings with memcpy of their measured length
+//   OBJHEAD1: the lock-user name is copied with a plain counted loop (same result as before)
 
 #include <string>
 #include "chunk.hpp"
@@ -425,8 +426,15 @@ flags(0), version_no (0), associated_shape (0)
 		parent_object->object_data_store->is_base_object = FALSE;
 	}
 
-	strncpy (lock_user, (hdata + 4), 16);
-	lock_user[16] = '\0';
+	// the lock-user name is the 16 bytes after the flags: copy it up to its first zero byte (or all 16 bytes if it
+	// has none), and fill the rest of lock_user with zeros, so it always ends with a zero byte
+	size_t lock_user_length = 0;
+	while (lock_user_length < 16 && hdata[4 + lock_user_length])
+	{
+		lock_user_length++;
+	}
+	memset (lock_user, 0, sizeof(lock_user));
+	memcpy (lock_user, hdata + 4, lock_user_length);
 
 	hdata+=20;
 
