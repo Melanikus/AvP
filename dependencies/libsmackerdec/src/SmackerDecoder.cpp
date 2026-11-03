@@ -58,6 +58,7 @@
  *   SM-P12: no signed overflow in FILL and audio deltas; reject INT32_MIN frame rate, fps >= 1
  *   SM-P13: check the handle in every export, and the audio track index
  *   SM-P14: audio early returns skip their chunk; decode SMKA tracks only; check tree results
+ *   SM-P15: no memset over HuffContext objects (they hold std::vector members)
  */
 
 #include "SmackerDecoder.h"
@@ -1231,9 +1232,7 @@ int SmackerDecoder::DecodeAudio(uint32_t size, SmackerAudioTrack &track)
 		return -1;
     }
 
-    memset(h, 0, sizeof(HuffContext) * 4);
-
-    // Initialize
+    // Initialize (no memset of h[]: its vectors start empty, and the loop sets the rest)
     for (i = 0; i < (1 << (sampleBits + stereo)); i++) {
         h[i].length = 256;
         h[i].maxlength = 0;
