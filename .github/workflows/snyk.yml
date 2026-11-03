@@ -9,7 +9,7 @@ on:
       probe:
         description: which probe to run
         type: choice
-        options: [vcpkg, parse, repro]
+        options: [vcpkg, parse, repro, nodeps]
         default: vcpkg
 
 permissions:
@@ -202,3 +202,29 @@ jobs:
           cd /tmp/vorbis
           snyk test --unmanaged --json > /tmp/sca.json || true
           jq -r '.vulnerabilities[]? | .severity + "  " + .id + "  " + .title + "  CVE: " + ((.identifiers.CVE // []) | join(",")) + "  vulnerable: " + ((.semver.vulnerable // []) | join(" ")) + "  fixedIn: " + ((.fixedIn // []) | join(","))' /tmp/sca.json | sort -u
+
+  nodeps-probe:
+    name: What SCA does when it recognises nothing
+    if: inputs.probe == 'nodeps'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out PR 4's branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ci-snyk
+          persist-credentials: false
+
+      - name: Install the Snyk CLI
+        uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master, 2026-10-07
+
+      - name: Run SCA on a tree with enet/ removed, and on an empty folder
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          rm -rf enet
+          set +e
+          snyk test --unmanaged --print-dep-paths --sarif-file-output=a.sarif; echo "exit code (tree without enet/): $?"
+          ls -la a.sarif
+          mkdir /tmp/empty; cd /tmp/empty
+          snyk test --unmanaged --print-dep-paths; echo "exit code (empty folder): $?"
+          exit 0
