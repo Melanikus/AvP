@@ -5405,10 +5405,10 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		//the counts come from the save file: NumberOfDecals decals are copied into section->Decals[] and
 		//NextDecalToUse is the next index written there (decal.cpp), so both must fit the array, and the block
 		//must hold the decals it claims; otherwise load the section without decals, as if none had been saved
-		if (header->size < (int)(sizeof(*block) - sizeof(block->Decals))
-		    || block->NumberOfDecals < 0 || block->NumberOfDecals > MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION
-		    || block->NextDecalToUse < 0 || block->NextDecalToUse >= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION
-		    || header->size < (int)(sizeof(*block) - sizeof(block->Decals) + block->NumberOfDecals * sizeof(OBJECT_DECAL)))
+		const int decalCapacity = (int)(sizeof(section->Decals) / sizeof(section->Decals[0]));
+
+		if (!SaveBlockArrayFits(header, (int)(sizeof(*block) - sizeof(block->Decals)), &block->NumberOfDecals, sizeof(OBJECT_DECAL), decalCapacity)
+		    || block->NextDecalToUse < 0 || block->NextDecalToUse >= decalCapacity)
 		{
 			section->NumberOfDecals = 0;
 			section->NextDecalToUse = 0;
