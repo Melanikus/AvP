@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan (Bawy).
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed four switched-off (#if 0) weapon messages that could never run, and could not even
+//   be built (they wrote into a "tempstring" this file never declares)
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -1781,14 +1785,7 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 			if (playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber==WEAPON_PRED_DISC) {
 				if (playerStatusPtr->WeaponSlot[requestedSlot].PrimaryRoundsRemaining==0 
 					&& playerStatusPtr->WeaponSlot[requestedSlot].PrimaryMagazinesRemaining==0) {
-					#if 0
-					sprintf(tempstring,"NO AMMO FOR %s\n",GetTextString(
-						TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-					);			
-					NewOnScreenMessage(tempstring);
-					#else
 					//NewOnScreenMessage(GetTextString(TEXTSTRING_NOAMMOFORWEAPON));
-					#endif
 					return 0;
 				}
 			}
@@ -1836,12 +1833,8 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
     	} else if( (requestedSlot != playerStatusPtr->SelectedWeaponSlot)
           &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
 		{
-			#if 0
-			sprintf(tempstring,"%s NOT AVAILABLE IN DEMO\n",GetTextString(
-				TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-			);			
-			NewOnScreenMessage(tempstring);
-			#endif
+			// Switched-off (#if 0) code for a "<weapon> NOT AVAILABLE IN DEMO" message
+			// was here. It has been removed, so nothing happens here.
 		}
     }
 
@@ -2067,14 +2060,7 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
 			if (playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber==WEAPON_PRED_DISC) {
 				if (playerStatusPtr->WeaponSlot[requestedSlot].PrimaryRoundsRemaining==0 
 					&& playerStatusPtr->WeaponSlot[requestedSlot].PrimaryMagazinesRemaining==0) {
-					#if 0
-					sprintf(tempstring,"NO AMMO FOR %s\n",GetTextString(
-						TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-					);			
-					NewOnScreenMessage(tempstring);
-					#else
 					//NewOnScreenMessage(GetTextString(TEXTSTRING_NOAMMOFORWEAPON));
-					#endif
 					return 0;
 				}
 			}
@@ -2115,12 +2101,8 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
     	} else if( (requestedSlot != currentSlot)
           &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
         {
-			#if 0
-			sprintf(tempstring,"%s NOT AVAILABLE IN DEMO\n",GetTextString(
-				TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-			);			
-			NewOnScreenMessage(tempstring);
-			#endif
+			// Switched-off (#if 0) code for a "<weapon> NOT AVAILABLE IN DEMO" message
+			// was here. It has been removed, so nothing happens here.
 		}
     }
 
