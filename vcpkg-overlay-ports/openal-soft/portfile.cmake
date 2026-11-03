@@ -14,7 +14,6 @@ vcpkg_from_github(
         005-upstream-c41281da-config-fs-ifstream.patch
         # Our own fixes.
         006-config-file-hardening.patch
-        007-almalloc-single-free.patch
         008-excommon-only-with-examples.patch
 )
 
@@ -60,6 +59,9 @@ file(REMOVE_RECURSE
 # - common/ghc_filesystem.h: a stand-in for compilers with no std::filesystem. Ours has it, so
 #   common/filesystem.h never includes this. If that ever changed, the build would stop with an
 #   error, so this cannot go wrong quietly.
+# - The code in common/almalloc.cpp: all of it is for macOS before 10.13, inside
+#   #if defined(__APPLE__), so here the file compiles to nothing. CMake's source list needs the
+#   file to exist, so it stays, without that code.
 if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_UWP AND VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     foreach(backend IN ITEMS alsa coreaudio jack oboe opensl oss pipewire portaudio pulseaudio sdl2
             sdl3 sndio solaris winmm)
@@ -75,6 +77,13 @@ if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_UWP AND VCPKG_TARGET_ARCHITEC
         "${SOURCE_PATH}/core/mixer/mixer_neon.cpp"
         "${SOURCE_PATH}/common/ghc_filesystem.h"
     )
+    file(WRITE "${SOURCE_PATH}/common/almalloc.cpp" [=[
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the memory functions for macOS before 10.13, which were all this file held. Windows never
+//   compiled them.
+
+#include "almalloc.h"
+]=])
 endif()
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
