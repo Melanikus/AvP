@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan (Bawy).
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   names saved into level data are copied by their measured length, and unused code for making new
-//   level files was removed
+//   names saved into level data are copied, and stepped past, by the length measured from the name
+//   itself, and unused code for making new level files was removed
 #include "hierplace.hpp"
 #include "md5.h"
 
@@ -113,15 +113,21 @@ void Placed_Hierarchy_Data_Chunk::fill_data_block(char* data)
 	*((int *) data) = chunk_size;
 	data += 4;
 
+	// The name is stored followed by its end marker (the zero byte that marks
+	// where a text stops), then the write position moves on by a whole number
+	// of 4-byte steps. With no name, 4 zero bytes are stored. The name is
+	// measured once, here, and that length is used both to copy it and to step
+	// past it, instead of measuring again what was just written.
+	size_t const nameLength = name ? strlen(name) : 0;
 	if(name)
 	{
-		memcpy(data,name,strlen(name)+1);
+		memcpy(data,name,nameLength+1);
 	}
 	else
 	{
 		*(int*)data=0;
 	}
-	data+=(strlen(data)+4)&~3;
+	data+=(nameLength+4)&~3;
 
 	*(int*)data=hierarchy_index;
 	data+=4;
