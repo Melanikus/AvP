@@ -88,7 +88,11 @@ void InitTextStrings(void)
 		if (textPtr == NULL)
 		{
 			char message[100];
-			sprintf(message, "Unable to load language file: %s\n", filenamePtr);
+			// Write the error text with a size limit. message holds 100 bytes: _snprintf writes at most 99 of them, and
+			// the last byte is then set to 0, the marker that ends a text. So however long the file name is, the text
+			// is cut short instead of running past the end of message (today the name is always our own short one).
+			_snprintf(message, sizeof(message) - 1, "Unable to load language file: %s\n", filenamePtr);
+			message[sizeof(message) - 1] = '\0';
 
 			ChangeWindowsSize(1, 1);
 			avp_MessageBox(message, MB_OK);
