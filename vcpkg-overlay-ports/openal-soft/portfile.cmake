@@ -15,6 +15,24 @@ vcpkg_from_github(
         # Our own fixes.
         006-config-file-hardening.patch
         007-almalloc-single-free.patch
+        008-excommon-only-with-examples.patch
+)
+
+# Delete source folders that are never built, so that nothing we do not ship stays in the tree,
+# and no code sits where a scanner that follows the build could not reach it.
+# - examples/: sample programs, only used under ALSOFT_EXAMPLES, which is OFF below. Patch 008
+#   moves the one helper library that was declared outside that check.
+# - utils/: command-line tools, only used under ALSOFT_UTILS, which is OFF below.
+# - tests/: only used under ALSOFT_TESTS, which is OFF below.
+# - registry/: the API lists and the script that makes headers from them, run by hand. No build
+#   file mentions this folder.
+# - fmt-11.2.0/: a bundled copy of fmt. 001-devendor-fmt.patch uses the fmt port instead.
+file(REMOVE_RECURSE
+    "${SOURCE_PATH}/examples"
+    "${SOURCE_PATH}/utils"
+    "${SOURCE_PATH}/tests"
+    "${SOURCE_PATH}/registry"
+    "${SOURCE_PATH}/fmt-11.2.0"
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
@@ -66,6 +84,7 @@ vcpkg_cmake_configure(
         -DALSOFT_INSTALL_CONFIG=OFF
         -DALSOFT_INSTALL_HRTF_DATA=OFF
         -DALSOFT_NO_CONFIG_UTIL=ON
+        -DALSOFT_TESTS=OFF
         -DALSOFT_UPDATE_BUILD_VERSION=OFF
         -DALSOFT_UTILS=OFF
         -DLIBTYPE=${OPENAL_LIBTYPE}
