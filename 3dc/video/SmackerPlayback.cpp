@@ -256,6 +256,10 @@ void *SmackerDecodeThread(void *args)
 		uint32_t audioSize = 0;
 		if (fmv->_nAudioTracks) {
 			audioSize = Smacker_GetAudioData(fmv->_handle, trackIndex, (int16_t*)fmv->_audioDataBuffer);
+			// the in-tree decoder never returns more than the buffer holds (SM-P1); an older libsmackerdec could
+			if (audioSize > fmv->_audioDataBufferSize) {
+				audioSize = fmv->_audioDataBufferSize;
+			}
 		}
 
 		if (audioSize)

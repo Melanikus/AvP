@@ -318,6 +318,10 @@ void *BinkDecodeThread(void *args)
 		uint32_t audioSize = 0;
 		if (fmv->_nAudioTracks) {
 			audioSize = Bink_GetAudioData(fmv->_handle, 0, (int16_t*)fmv->_audioDataBuffer);
+			// the in-tree decoder never returns more than the buffer holds (BK-P4); an older libbinkdec could
+			if (audioSize > fmv->_audioDataBufferSize) {
+				audioSize = fmv->_audioDataBufferSize;
+			}
 		}
 
 		if (audioSize)
