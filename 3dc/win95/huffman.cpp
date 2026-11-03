@@ -431,16 +431,22 @@ extern char *HuffmanDecompress(const HuffmanPackage *inpackage)
 }
 
 /*
-	HuffmanDecompress for a package read from an untrusted file (a save game) of packageSize bytes, header included.
-	Returns NULL, without touching anything, when the package cannot be decoded safely:
+	HuffmanDecompress for a package read from an untrusted file (a save game, language.txt, credits.txt) of
+	packageSize bytes, header included.
+	Returns NULL when the package cannot be decoded safely and completely:
 	- it is smaller than its header;
 	- UncompressedDataSize is negative or larger than the data could hold (every code is at least one bit long,
 	  so n bytes of data decode to at most 8 * n bytes);
 	- the code lengths are negative or do not fill the code space (sum of CodelengthCount[n] << (MAX_DEPTH-1-n)
-	  below 1 << MAX_DEPTH): MakeHuffmanDecodeTable would then run past CodelengthCount and past DecodeTable.
-	A package written by HuffmanCompression passes all three (its code is a complete Huffman code), and is decoded
-	exactly as HuffmanDecompress does; the only other difference is that the decoder never reads past the end of
-	the package (it reads zero bits there, which only ever fill the look-ahead after the last code).
+	  below 1 << MAX_DEPTH): MakeHuffmanDecodeTable would then run past CodelengthCount and past DecodeTable;
+	- the data decodes to fewer than UncompressedDataSize bytes (it reaches a code with no symbol first): the rest
+	  of the buffer would be uninitialised, so it is freed.
+	The first three are checked before anything is changed. After them DecodeTable has been rebuilt, which is
+	harmless (every decode rebuilds it first); nothing else outlives a NULL result.
+	A package written by HuffmanCompression passes all four (its code is a complete Huffman code, and its data holds
+	every symbol), and is decoded exactly as HuffmanDecompress does; the only other difference is that the decoder
+	never reads past the end of the package (it reads zero bits there, which only ever fill the look-ahead after the
+	last code).
 */
 extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packageSize)
 {
@@ -480,7 +486,12 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 	if (uncompressedData)
 	{
 		const int *source = (const int*)(inpackage+1);
-		HuffmanDecode(uncompressedData,source,source+(size_t)(dataBytes/4),DecodeTable,inpackage->UncompressedDataSize);
+		int decoded = HuffmanDecode(uncompressedData,source,source+(size_t)(dataBytes/4),DecodeTable,inpackage->UncompressedDataSize);
+		if (decoded != inpackage->UncompressedDataSize)
+		{
+			free(uncompressedData);
+			return NULL;
+		}
 	}
 
 	return (char*)uncompressedData;
