@@ -127,5 +127,12 @@ char *GetTextString(enum TEXTSTRING_ID stringID)
 {
 	LOCALASSERT(stringID < MAX_NO_OF_TEXTSTRINGS);
 
+	// an id from outside the table (save file, level data, a computed offset) gets the empty string instead of a read
+	// past TextStringPtr (LOCALASSERT is empty in Release)
+	if ((int)stringID < 0 || (int)stringID >= MAX_NO_OF_TEXTSTRINGS)
+	{
+		return EmptyString;
+	}
+
 	return TextStringPtr[stringID];
 }
