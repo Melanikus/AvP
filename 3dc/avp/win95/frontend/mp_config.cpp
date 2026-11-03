@@ -272,9 +272,15 @@ const char* GetMultiplayerConfigDescription(int index)
 	if (description_length > 0)
 	{
 		size_t toRead = ((size_t)description_length < sizeof(MP_Config_Description)) ? (size_t)description_length : sizeof(MP_Config_Description);
-		LastDescriptionText = new char[toRead + 1];
-		size_t bytesRead = fread(LastDescriptionText, 1, toRead, file);
-		LastDescriptionText[bytesRead] = 0;
+		// Ask for the memory without the "crash if there is none" behaviour of a plain new (std::nothrow): if the
+		// allocation fails, LastDescriptionText stays empty (0) and the menu simply shows no description, as for a file
+		// with no description, instead of the game ending.
+		LastDescriptionText = new(std::nothrow) char[toRead + 1];
+		if (LastDescriptionText)
+		{
+			size_t bytesRead = fread(LastDescriptionText, 1, toRead, file);
+			LastDescriptionText[bytesRead] = 0;
+		}
 	}
 	fclose(file);
 	
