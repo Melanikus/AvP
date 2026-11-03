@@ -3240,18 +3240,27 @@ void save_preplaced_decals()
 	Special_Objects_Chunk* soc=(Special_Objects_Chunk*) edc->lookup_single_child("SPECLOBJ");
 	if(!soc) soc=new Special_Objects_Chunk(edc);
 	
-	//delete the old decal chunk
-	delete soc->lookup_single_child("AVPDECAL");
+	// Delete the old decal chunks. A level file the game wrote has at most one;
+	// a broken one could hold more, and every one of them goes, so that the
+	// new decals below never end up mixed with old ones. (Deleting a chunk
+	// also takes it off soc's list, so this loop ends.)
+	while (Chunk* old_decal_chunk = soc->lookup_single_child("AVPDECAL"))
+		delete old_decal_chunk;
 
 	if(NumFixedDecals)
 	{
 		List<Object_Chunk*> ob_list;
 		env_rif->fc->list_objects(&ob_list);
 
-		// The new chunk adds itself to its parent, soc, as it is made (every chunk
-		// does), and the parent deletes it later along with the rest of the level
-		// file's chunks. That is why it is not deleted here.
-		AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
+		// Use soc's AVPDECAL chunk, or make one if it has none. It never has one at
+		// this point (the old ones were all deleted above), so this always makes a
+		// new one. Like every chunk, the new one adds itself to its parent, soc, as
+		// it is made, and soc deletes it later along with the rest of the level
+		// file's chunks; that is why it is not deleted here. This "use it or make
+		// it" form is the one used for soc itself just above, and it lets
+		// code-checking tools see that the parent keeps the new chunk.
+		AVP_Decal_Chunk* decal_chunk=(AVP_Decal_Chunk*) soc->lookup_single_child("AVPDECAL");
+		if(!decal_chunk) decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
 		Fill_Decal_Chunk(decal_chunk, ob_list);
 	}
 
