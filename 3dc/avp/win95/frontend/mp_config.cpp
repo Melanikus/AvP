@@ -898,7 +898,7 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 	// (At 100 bytes, a custom level file name of about 90 characters or more would not fit.)
 	static char return_string[MAX_PATH + 64];
 	return_string[0] = 0;
-
+	
 	// find the index of a custom level from its name
 	if (gameType == NGT_Coop)
 	{
