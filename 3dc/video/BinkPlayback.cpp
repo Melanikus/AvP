@@ -96,7 +96,12 @@ int BinkPlayback::Open(const std::string &fileName, bool isLooped)
 		}
 
 		// we need some temporary mAudio data storage space and a ring buffer instance
-		_audioData = new(std::nothrow) uint8_t[idealBufferSize];
+		// (the audio thread copies whole stream buffers through _audioData, which can be more than idealBufferSize)
+		uint32_t audioDataSize = idealBufferSize;
+		if (audioDataSize < _audioStream->GetBufferSize()) {
+			audioDataSize = _audioStream->GetBufferSize();
+		}
+		_audioData = new(std::nothrow) uint8_t[audioDataSize];
 		if (_audioData == NULL)
 		{
 			Con_PrintError("Failed to create _audioData stream buffer for Bink playback");
