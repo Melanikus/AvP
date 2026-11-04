@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   multiplayer level and settings names and paths have size limits, and so do the texts read from a settings
 //   file; a path that does not fit counts as a missing file, a name with dots in it stays whole, the custom
-//   level name list is freed in full, and a negative level number in a settings file counts as 0
+//   level name list is freed in full, a negative level number in a settings file counts as 0, and a byte below the
+//   space in a description becomes a space
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -201,6 +202,20 @@ BOOL BuildLoadMPConfigMenu()
 	return TRUE;
 }
 
+// The small font has no letters below the space, so a byte like that in a description would be drawn from the wrong
+// place in the font picture. The game never writes one: only a damaged or edited settings file has them, and a space
+// takes the place of each one. text must end with the usual zero byte.
+static void ReplaceBytesBelowSpace(char *text)
+{
+	for (; *text; text++)
+	{
+		if ((unsigned char)*text < ' ')
+		{
+			*text = ' ';
+		}
+	}
+}
+
 const char* GetMultiplayerConfigDescription(int index)
 {
 	if (index < 0 || index >= ConfigurationFilenameList.size()) {
@@ -280,6 +295,7 @@ const char* GetMultiplayerConfigDescription(int index)
 		{
 			size_t bytesRead = fread(LastDescriptionText, 1, toRead, file);
 			LastDescriptionText[bytesRead] = 0;
+			ReplaceBytesBelowSpace(LastDescriptionText);
 		}
 	}
 	fclose(file);
@@ -385,6 +401,7 @@ void LoadMultiplayerConfiguration(const char* name)
 	// the length comes from the file, so the read stops at the 202 bytes of MP_Config_Description
 	int description_length = file.GetInt32LE();
 	ReadConfigString(file, MP_Config_Description, sizeof(MP_Config_Description), description_length);
+	ReplaceBytesBelowSpace(MP_Config_Description);
 
 	netGameData.preDestroyLights    = file.GetInt32LE();
 	netGameData.disableFriendlyFire = file.GetInt32LE();
