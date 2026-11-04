@@ -46,15 +46,13 @@ static float RandomBetween(float lowest, float highest)
 	return lowest + (highest - lowest) * fraction;
 }
 
-// A camera like the game's, and a box round what was drawn, 20,000 across in every direction from the camera.
+// A camera like the game's, and one thing drawn: this box.
+static const ShadowReachBox kUsualBox = { { -10000.0f, -3000.0f, -2000.0f }, { 10000.0f, 3000.0f, 20000.0f } };
+
 static void MakeTheUsualView(ShadowReachView *view)
 {
-	float const smallest[3] = { -10000.0f, -3000.0f, -2000.0f };
-	float const largest[3] = { 10000.0f, 3000.0f, 20000.0f };
-
 	ShadowReach_StartView(view);
 	ShadowReach_AddCameraView(view, 1.0f, 1.3f);
-	ShadowReach_AddBox(view, smallest, largest);
 }
 
 static void CheckScenesWorkedByHand()
@@ -62,61 +60,61 @@ static void CheckScenesWorkedByHand()
 	ShadowReachView view;
 	MakeTheUsualView(&view);
 
-	Check(view.count == ShadowReachView::kMostPlanes, "a camera and a box fill the view's planes exactly, and none is lost");
+	Check(view.count == ShadowReachView::kMostPlanes, "a camera fills the view's planes exactly, and none is lost");
 
 	{
 		ShadowReachBall const ball = { 0.0f, 0.0f, -100000.0f, 500.0f };
 		float const light[4] = { 0.0f, 0.0f, -99000.0f, 90000.0f };
-		Check(!ShadowReach_CanReach(view, ball, light), "far behind the camera, with the shadow going further away: no");
+		Check(!ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "far behind the camera, with the shadow going further away: no");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 0.0f, 5000.0f, 500.0f };
 		float const light[4] = { 0.0f, 0.0f, 100.0f, 10000.0f };
-		Check(ShadowReach_CanReach(view, ball, light), "straight ahead of the camera: yes");
+		Check(ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "straight ahead of the camera: yes");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 0.0f, 5000.0f, 500.0f };
 		float const light[4] = { 0.0f, 0.0f, 100.0f, 4000.0f };
-		Check(!ShadowReach_CanReach(view, ball, light), "a light that stops short of the ball: no");
+		Check(!ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "a light that stops short of the ball: no");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 0.0f, -50000.0f, 1000.0f };
 		float const light[4] = { 0.0f, 0.0f, -50000.0f, 100.0f };
-		Check(ShadowReach_CanReach(view, ball, light), "a light inside the ball: yes, even a long way off and with a tiny range");
+		Check(ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "a light inside the ball: yes, even a long way off and with a tiny range");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 0.0f, -30000.0f, 500.0f };
 		float const light[4] = { 0.0f, 0.0f, -35000.0f, 40000.0f };
-		Check(ShadowReach_CanReach(view, ball, light), "behind the camera, but with its shadow thrown forward into the view: yes");
+		Check(ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "behind the camera, but with its shadow thrown forward into the view: yes");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 9000.0f, 5000.0f, 500.0f };
 		float const light[4] = { 0.0f, 8000.0f, 5000.0f, 40000.0f };
-		Check(!ShadowReach_CanReach(view, ball, light), "in the room above, and lit from below, so the shadow goes up and away from the box: no");
+		Check(!ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "in the room above, and lit from below, so the shadow goes up and away from the box: no");
 	}
 
 	{
 		ShadowReachBall const ball = { 0.0f, 9000.0f, 5000.0f, 500.0f };
 		float const light[4] = { 0.0f, 12000.0f, 5000.0f, 40000.0f };
-		Check(ShadowReach_CanReach(view, ball, light), "in the room above, and lit from over it, so the shadow comes down into the box: yes");
+		Check(ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "in the room above, and lit from over it, so the shadow comes down into the box: yes");
 	}
 
 	{
 		// off the right of the screen, with the light further right, so the shadow crosses the screen
 		ShadowReachBall const ball = { 9000.0f, 0.0f, 3000.0f, 500.0f };
 		float const light[4] = { 12000.0f, 0.0f, 3000.0f, 30000.0f };
-		Check(ShadowReach_CanReach(view, ball, light), "off the side of the screen, with its shadow thrown across it: yes");
+		Check(ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "off the side of the screen, with its shadow thrown across it: yes");
 	}
 
 	{
 		ShadowReachBall const ball = { 9000.0f, 0.0f, 3000.0f, 500.0f };
 		float const light[4] = { 8000.0f, 0.0f, 3000.0f, 30000.0f };
-		Check(!ShadowReach_CanReach(view, ball, light), "off the side of the screen, with its shadow thrown away from it: no");
+		Check(!ShadowReach_CanReach(view, &kUsualBox, 1, ball, light), "off the side of the screen, with its shadow thrown away from it: no");
 	}
 
 	{
@@ -132,7 +130,7 @@ static void CheckScenesWorkedByHand()
 
 		ShadowReachBall const ball = { 1000.0f, 0.0f, 0.0f, 500.0f };
 		float const light[4] = { 0.0f, 0.0f, 0.0f, 2000.0f };
-		Check(ShadowReach_CanReach(corner, ball, light), "only the edge of the cone, at the end of the range, is inside the plane: yes");
+		Check(ShadowReach_CanReach(corner, 0, 0, ball, light), "only the edge of the cone, at the end of the range, is inside the plane: yes");
 	}
 
 	{
@@ -166,7 +164,26 @@ static void CheckScenesWorkedByHand()
 	ShadowReach_StartView(&empty);
 	ShadowReachBall const anywhere = { 500000.0f, 500000.0f, 500000.0f, 1.0f };
 	float const nearby[4] = { 499990.0f, 500000.0f, 500000.0f, 1000.0f };
-	Check(ShadowReach_CanReach(empty, anywhere, nearby), "with no planes, a ball within range is always a yes");
+	Check(ShadowReach_CanReach(empty, 0, 0, anywhere, nearby), "with no planes and no boxes, a ball within range is always a yes");
+
+	{
+		// Two rooms drawn, with a room between them that wasn't. One box round both would hold that room too.
+		ShadowReachBox const rooms[2] =
+		{
+			{ { -9000.0f, -2000.0f, 1000.0f }, { -5000.0f, 2000.0f, 9000.0f } },
+			{ {  5000.0f, -2000.0f, 1000.0f }, {  9000.0f, 2000.0f, 9000.0f } }
+		};
+
+		ShadowReachBall const inBetween = { 0.0f, 0.0f, 3000.0f, 100.0f };
+		float const overhead[4] = { 0.0f, 800.0f, 3000.0f, 8000.0f };
+		Check(!ShadowReach_CanReach(view, rooms, 2, inBetween, overhead), "a wall in the room between, throwing its shadow down and out of both rooms: no");
+
+		float const toTheLeft[4] = { 1500.0f, 0.0f, 3000.0f, 12000.0f };
+		Check(ShadowReach_CanReach(view, rooms, 2, inBetween, toTheLeft), "the same wall, throwing its shadow into the room on its left: yes");
+
+		ShadowReachBox const reversed[2] = { rooms[1], rooms[0] };
+		Check(ShadowReach_CanReach(view, reversed, 2, inBetween, toTheLeft), "the same, with the rooms the other way round in the list: yes");
+	}
 }
 
 static void CheckBallsHoldTheirBoxes()
@@ -215,6 +232,26 @@ static bool PlaceIsInView(const ShadowReachView &view, const float *place)
 	}
 
 	return true;
+}
+
+static bool PlaceIsInABox(const ShadowReachBox *boxes, int numBoxes, const float *place)
+{
+	for (int i = 0; i < numBoxes; i++)
+	{
+		bool inside = true;
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			inside = inside && place[axis] >= boxes[i].smallest[axis] + 0.05f && place[axis] <= boxes[i].largest[axis] - 0.05f;
+		}
+
+		if (inside)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // Fills place with a random point that really is in the ball's shadow, and gives back false if the light can't reach the point it tried.
@@ -366,7 +403,16 @@ static void CheckPlanesNextToShadows()
 
 		tried++;
 
-		if (!ShadowReach_CanReach(view, ball, light))
+		// and the same point, with a small box round it and nothing else drawn
+		float const size = RandomBetween(1.0f, 400.0f);
+		ShadowReachBox const justThere =
+		{
+			{ place[0] - size, place[1] - size, place[2] - size }, { place[0] + size, place[1] + size, place[2] + size }
+		};
+		ShadowReachBox const elsewhere = { { 900000.0f, 900000.0f, 900000.0f }, { 900100.0f, 900100.0f, 900100.0f } };
+		ShadowReachBox const both[2] = { elsewhere, justThere };
+
+		if (!ShadowReach_CanReach(view, 0, 0, ball, light) || !ShadowReach_CanReach(view, both, 2, ball, light))
 		{
 			wronglyRefused++;
 		}
@@ -397,12 +443,24 @@ static void CheckRealShadows()
 
 		float const middle[3] = { RandomBetween(-20000.0f, 20000.0f), RandomBetween(-5000.0f, 5000.0f), RandomBetween(0.0f, 30000.0f) };
 		float const size[3] = { RandomBetween(500.0f, 15000.0f), RandomBetween(500.0f, 5000.0f), RandomBetween(500.0f, 15000.0f) };
-		float const smallest[3] = { middle[0] - size[0], middle[1] - size[1], middle[2] - size[2] };
-		float const largest[3] = { middle[0] + size[0], middle[1] + size[1], middle[2] + size[2] };
+
+		// the main box, and two smaller ones somewhere else, as a level has a few rooms drawn
+		ShadowReachBox boxes[3] =
+		{
+			{ { middle[0] - size[0], middle[1] - size[1], middle[2] - size[2] }, { middle[0] + size[0], middle[1] + size[1], middle[2] + size[2] } }
+		};
+
+		for (int extra = 1; extra < 3; extra++)
+		{
+			for (int axis = 0; axis < 3; axis++)
+			{
+				boxes[extra].smallest[axis] = middle[axis] + RandomBetween(-30000.0f, 30000.0f);
+				boxes[extra].largest[axis] = boxes[extra].smallest[axis] + RandomBetween(500.0f, 6000.0f);
+			}
+		}
 
 		ShadowReach_StartView(&view);
 		ShadowReach_AddCameraView(&view, RandomBetween(0.4f, 2.0f), RandomBetween(0.4f, 2.0f));
-		ShadowReach_AddBox(&view, smallest, largest);
 
 		// The ball is put a short way outside the box, where the answer is hard: a shadow here may just reach in, or just miss. A ball and a light
 		// picked from anywhere nearly always have nothing to do with the view, and that would prove very little.
@@ -423,7 +481,7 @@ static void CheckRealShadows()
 			RandomBetween(1000.0f, 60000.0f)
 		};
 
-		bool const answer = ShadowReach_CanReach(view, ball, light);
+		bool const answer = ShadowReach_CanReach(view, boxes, 3, ball, light);
 		bool anyInView = false;
 
 		saidNo += answer ? 0 : 1;
@@ -432,7 +490,7 @@ static void CheckRealShadows()
 		{
 			float place[3];
 
-			if (PickPointInShadow(ball, light, place) && PlaceIsInView(view, place))
+			if (PickPointInShadow(ball, light, place) && PlaceIsInView(view, place) && PlaceIsInABox(boxes, 3, place))
 			{
 				anyInView = true;
 				break;

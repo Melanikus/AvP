@@ -12,11 +12,13 @@
 // no light gets that far to be blocked. That shape is awkward to test, so it's swapped for a simpler one it fits inside: imagine stretching a skin
 // tight round two balls, the real one and a second at the end of the range, as wide as the cone is there.
 //
-// Next, the view. Everything the camera can see lies on the inside of a few flat planes: the sides of the screen, and the sides of a box round
-// everything that was drawn. If the stretched shape is wholly outside any one plane, no part of the shadow can touch anything seen, whatever the
-// other planes say. And a stretched skin is only wholly outside a plane if both of its balls are, so those two balls are all that's asked about.
+// Next, what can be seen. All of it lies on the inside of the planes at the sides of the screen, and inside the box of something that was drawn. If
+// the stretched shape is wholly outside any one plane of the screen, no part of the shadow can touch anything seen. If it's wholly outside one
+// side of a box, it can't touch that box, and if that's true of every box, it can't touch anything drawn. And a stretched skin is only wholly
+// outside a plane if both of its balls are, so those two balls are all that's asked about.
 //
-// The box is what leaves out the rooms behind the walls. They can be in line with the screen, but they're beyond what was drawn.
+// The boxes are what leave out the rooms behind the walls. A room like that is in line with the screen, but nothing in it was drawn. There has to be
+// a box for each thing: one box round everything drawn would also hold every room lying between the things in it.
 
 #include "shadow_reach.h"
 
@@ -67,16 +69,6 @@ void ShadowReach_AddCameraView(ShadowReachView *view, float scaleAcross, float s
 	AddPlane(view, 0.0f, -up / upLength, 1.0f / upLength, 0.0f);
 }
 
-void ShadowReach_AddBox(ShadowReachView *view, const float *smallest, const float *largest)
-{
-	AddPlane(view,  1.0f,  0.0f,  0.0f, -smallest[0]);
-	AddPlane(view, -1.0f,  0.0f,  0.0f,  largest[0]);
-	AddPlane(view,  0.0f,  1.0f,  0.0f, -smallest[1]);
-	AddPlane(view,  0.0f, -1.0f,  0.0f,  largest[1]);
-	AddPlane(view,  0.0f,  0.0f,  1.0f, -smallest[2]);
-	AddPlane(view,  0.0f,  0.0f, -1.0f,  largest[2]);
-}
-
 void ShadowReach_BallRoundBox(const float *smallest, const float *largest, float *ball)
 {
 	float const halfX = (largest[0] - smallest[0]) * 0.5f;
@@ -89,7 +81,26 @@ void ShadowReach_BallRoundBox(const float *smallest, const float *largest, float
 	ball[3] = sqrtf(halfX * halfX + halfY * halfY + halfZ * halfZ) + kBallRoundedUp;
 }
 
-bool ShadowReach_CanReach(const ShadowReachView &view, const ShadowReachBall &ball, const float *light)
+// Is the stretched shape wholly outside one side of this box? near and far are the two balls' middles.
+static bool ShapeMissesBox(const ShadowReachBox &box, const float *near, float nearRadius, const float *far, float farRadius)
+{
+	for (int axis = 0; axis < 3; axis++)
+	{
+		if (near[axis] + nearRadius < box.smallest[axis] && far[axis] + farRadius < box.smallest[axis])
+		{
+			return true;
+		}
+
+		if (near[axis] - nearRadius > box.largest[axis] && far[axis] - farRadius > box.largest[axis])
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool ShadowReach_CanReach(const ShadowReachView &view, const ShadowReachBox *boxes, int numBoxes, const ShadowReachBall &ball, const float *light)
 {
 	float const range = light[3];
 	float const toBallX = ball.x - light[0];
@@ -118,16 +129,20 @@ bool ShadowReach_CanReach(const ShadowReachView &view, const ShadowReachBall &ba
 
 	// The second ball, one light range along the cone, and as wide as the cone is there. It's measured straight across the cone, so it's a little
 	// more than what the range itself would reach: the cone's edge reaches the range sooner than its middle does. That's the side to be wrong on.
-	float const farX = light[0] + toBallX / distance * range;
-	float const farY = light[1] + toBallY / distance * range;
-	float const farZ = light[2] + toBallZ / distance * range;
+	float const near[3] = { ball.x, ball.y, ball.z };
+	float const far[3] =
+	{
+		light[0] + toBallX / distance * range,
+		light[1] + toBallY / distance * range,
+		light[2] + toBallZ / distance * range
+	};
 	float const farRadius = range * widening;
 
 	for (int i = 0; i < view.count; i++)
 	{
 		float const *plane = view.planes[i];
-		float const ballInside = plane[0] * ball.x + plane[1] * ball.y + plane[2] * ball.z + plane[3] + ball.radius;
-		float const farInside = plane[0] * farX + plane[1] * farY + plane[2] * farZ + plane[3] + farRadius;
+		float const ballInside = plane[0] * near[0] + plane[1] * near[1] + plane[2] * near[2] + plane[3] + ball.radius;
+		float const farInside = plane[0] * far[0] + plane[1] * far[1] + plane[2] * far[2] + plane[3] + farRadius;
 
 		if (ballInside < 0.0f && farInside < 0.0f)
 		{
@@ -135,5 +150,18 @@ bool ShadowReach_CanReach(const ShadowReachView &view, const ShadowReachBall &ba
 		}
 	}
 
-	return true;
+	if (numBoxes == 0)
+	{
+		return true;
+	}
+
+	for (int i = 0; i < numBoxes; i++)
+	{
+		if (!ShapeMissesBox(boxes[i], near, ball.radius, far, farRadius))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }

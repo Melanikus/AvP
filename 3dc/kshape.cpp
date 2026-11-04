@@ -5589,6 +5589,16 @@ static bool placeHasPositions[kToyMostLights];   // whether the lamp in this pla
 static int placesChangedLastFrame = 0;
 static int placesChangedSinceReport = 0;
 
+// For the log, to tell walking past lights from a light flipping on and off the list: the lights that left most recently, and when. A light that
+// comes back soon after it left was flipping. Only compared, never read through.
+static const int kLightsLeftKept = 16;
+static const int kBackSoonFrames = 60;
+static LIGHTBLOCK *lightsThatLeft[kLightsLeftKept];
+static unsigned int lightsLeftFrame[kLightsLeftKept];
+static int nextLightThatLeft = 0;
+static unsigned int placesFrame = 0;
+static int lightsBackSoon = 0;
+
 extern int ToyShadowsNearLights;
 
 // What the log says about the lights chosen most recently. These are copies, so the log never reads a light that may have gone.
@@ -5636,11 +5646,12 @@ static void const *ToyOwnerOf(const DISPLAYBLOCK *block)
 // Could any of this light's range be on screen? The test is a deliberately wide view, about 127 degrees across in both
 // directions, so that it never drops a light the camera can really see, whatever the field of view or the zoom. A wrong
 // "no" would show as shadows popping off, and a wrong "yes" only costs a pass. A light behind the camera can still pass,
-// because what counts is its whole range and not where it sits.
-static bool ToyLightCanReachTheView(const LIGHTBLOCK *light)
+// because what counts is its whole range and not where it sits. A light with a place is tested a little wider, so that one right at the edge
+// doesn't drop out and come back as the camera turns.
+static bool ToyLightCanReachTheView(const LIGHTBLOCK *light, bool hasAPlace)
 {
-	const float kWideSlope = 2.0f;
-	const float kPlaneScale = 2.236f;  // the square root of 1 + kWideSlope squared: turns the sums below into distances
+	float const kWideSlope = hasAPlace ? 2.5f : 2.0f;
+	float const kPlaneScale = hasAPlace ? 2.693f : 2.236f;  // the square root of 1 + kWideSlope squared: turns the sums below into distances
 
 	float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
 	float view[3];
@@ -5714,6 +5725,13 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 
 	if (block && ToyBlockIsFlare(block))
 	{
+		// A flare goes ahead of every lamp so that its shadows always move. One that can't reach the view has no shadows to move, and it would take
+		// a lamp's place for nothing. In the game's lighting it's held to the same dim red, and lights nothing that can be seen.
+		if (!ToyLightCanReachTheView(light, hasAPlace))
+		{
+			return;
+		}
+
 		order = distance - 0x40000000;
 	}
 	else
@@ -5721,7 +5739,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 		// Something at the camera throws every shadow straight away from the eye, where it can't be seen, so it isn't worth a
 		// place. That keeps out the glow on the alien's teeth, which is a light element at the player's spot. The player's own
 		// lights, such as a muzzle flash, still count: they have to leave the game's lighting to be blocked like any other.
-		if (block != Player && (distance < 300 || !ToyLightCanReachTheView(light)))
+		if (block != Player && (distance < (hasAPlace ? 200 : 300) || !ToyLightCanReachTheView(light, hasAPlace)))
 		{
 			return;
 		}
@@ -5806,12 +5824,27 @@ static void ToyHoldFlaresToTheirCap()
 	}
 }
 
+static bool LightIsInPlaces(LIGHTBLOCK *const *places, const LIGHTBLOCK *light)
+{
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (places[place] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // Gives each chosen light its place on the list: the one it already has, or else a free one. placeOf and hadPositions get one answer for each
 // chosen light: which place it's in, and whether it was already one of the lamps with several positions. Gives back how many places the list
 // needs, which is the last one in use and every place before it, so a free place in the middle is on the list. It's filled in as a dark light.
 static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int *placeOf, bool *hadPositions)
 {
 	LIGHTBLOCK *newPlaces[kToyMostLights] = { 0 };
+
+	placesFrame++;
 
 	for (int i = 0; i < numChosen; i++)
 	{
@@ -5844,6 +5877,25 @@ static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int
 
 			placeOf[i] = firstFree;
 			newPlaces[firstFree] = chosen[i].light;
+
+			for (int left = 0; left < kLightsLeftKept; left++)
+			{
+				if (lightsThatLeft[left] == chosen[i].light && placesFrame - lightsLeftFrame[left] <= (unsigned int)kBackSoonFrames)
+				{
+					lightsBackSoon++;
+					break;
+				}
+			}
+		}
+	}
+
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (lightInPlace[place] && !LightIsInPlaces(newPlaces, lightInPlace[place]))
+		{
+			lightsThatLeft[nextLightThatLeft] = lightInPlace[place];
+			lightsLeftFrame[nextLightThatLeft] = placesFrame;
+			nextLightThatLeft = (nextLightThatLeft + 1) % kLightsLeftKept;
 		}
 	}
 
@@ -6176,7 +6228,7 @@ void ToyShadows_NoteFrameLights(int frame)
 				cameraInside++;
 			}
 
-			if (ToyLightCanReachTheView(light))
+			if (ToyLightCanReachTheView(light, false))
 			{
 				canReach++;
 			}
@@ -6226,10 +6278,12 @@ void ToyShadows_NoteFrameLights(int frame)
 	LogString(line);
 
 	// A lit lamp that keeps its place never counts here. A light coming onto the list or leaving it does, once.
-	_snprintf(line, sizeof(line) - 1, "shadow lights: %d places on the list changed owner on the last frame, %d since the last report", placesChangedLastFrame, placesChangedSinceReport);
+	_snprintf(line, sizeof(line) - 1, "shadow lights: %d places on the list changed owner on the last frame, %d since the last report; %d lights came back within %d frames of leaving",
+		placesChangedLastFrame, placesChangedSinceReport, lightsBackSoon, kBackSoonFrames);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 	placesChangedSinceReport = 0;
+	lightsBackSoon = 0;
 
 	for (int i = 0; i < toyNumChosen; i++)
 	{
@@ -6319,6 +6373,8 @@ static void ToyPlaneInWorld(const SurfacePolygon &polygon, const VECTORCH &place
 	plane[3] = polygon.distance + polygon.nx * (float)place.vx + polygon.ny * (float)place.vy + polygon.nz * (float)place.vz;
 }
 
+void ShadowReach_StartDrawnThing(const void *owner);
+
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 {
 	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
@@ -6345,6 +6401,8 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	int const whatItMayDo = ToyChooseKind(dptr, kind);
 	void const *owner = ToyOwnerOf(dptr);
 	int polygonsKept = 0;
+
+	ShadowReach_StartDrawnThing(owner);
 
 	if (dptr->ObMyModule)
 	{

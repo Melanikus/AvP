@@ -3701,27 +3701,73 @@ bool ToyShadows_StartUnseenModule(const ShadowReachBall &ball)
 // Where a shadow can show this frame: see shadow_reach.cpp.
 static ShadowReachView shadowReachView;
 
-// A box round everything drawn this frame, in the same numbers as the polygons, for that view. It always holds the camera, which is at 0 0 0.
-static float drawnBoxSmallest[3];
-static float drawnBoxLargest[3];
+// A box round each thing drawn this frame, in the same numbers as the polygons. The first holds the camera, which is at 0 0 0, so that whatever's
+// right in front of it counts as drawn. Past the limit, the last box simply grows, which can only let in too many. A model is many parts with one
+// owner, and they share a box, so that this stays a list of rooms and objects.
+static const int kMostDrawnBoxes = 256;
+static ShadowReachBox drawnBoxes[kMostDrawnBoxes];
+static int numDrawnBoxes = 0;
+static void const *drawnBoxOwner = 0;
 
-// How far the box stands out from what's in it. A few things are drawn without being on the list: a sprite, or a spear stuck in a wall. They sit
+// How far a box stands out from what's in it. A few things are drawn without being on the list: a sprite, or a spear stuck in a wall. They sit
 // among things that are on it, so this is enough to take them in.
 static const float kDrawnBoxMargin = 500.0f;
 
-static void MakeShadowReachView()
+static void StartDrawnBoxes()
 {
-	float smallest[3], largest[3];
+	numDrawnBoxes = 1;
+	drawnBoxOwner = 0;
 
 	for (int axis = 0; axis < 3; axis++)
 	{
-		smallest[axis] = drawnBoxSmallest[axis] - kDrawnBoxMargin;
-		largest[axis] = drawnBoxLargest[axis] + kDrawnBoxMargin;
+		drawnBoxes[0].smallest[axis] = 0.0f;
+		drawnBoxes[0].largest[axis] = 0.0f;
+	}
+}
+
+// The polygons added after this belong to a new thing on the list of what's drawn. owner is what it belongs to, or nothing for a piece of the level.
+void ShadowReach_StartDrawnThing(const void *owner)
+{
+	if (numDrawnBoxes == 0)
+	{
+		StartDrawnBoxes();
+	}
+
+	if ((owner && owner == drawnBoxOwner) || numDrawnBoxes == kMostDrawnBoxes)
+	{
+		return;
+	}
+
+	ShadowReachBox &box = drawnBoxes[numDrawnBoxes++];
+
+	drawnBoxOwner = owner;
+
+	// inside out, so that the first corner sets it
+	for (int axis = 0; axis < 3; axis++)
+	{
+		box.smallest[axis] = 1.0e30f;
+		box.largest[axis] = -1.0e30f;
+	}
+}
+
+static void MakeShadowReachView()
+{
+	if (numDrawnBoxes == 0)
+	{
+		StartDrawnBoxes();
+	}
+
+	for (int i = 0; i < numDrawnBoxes; i++)
+	{
+		for (int axis = 0; axis < 3; axis++)
+		{
+			drawnBoxes[i].smallest[axis] -= kDrawnBoxMargin;
+			drawnBoxes[i].largest[axis] += kDrawnBoxMargin;
+		}
 	}
 
 	ShadowReach_StartView(&shadowReachView);
 	ShadowReach_AddCameraView(&shadowReachView, d3d.matProjection._11, d3d.matProjection._22);
-	ShadowReach_AddBox(&shadowReachView, smallest, largest);
 }
 
 // On a report frame, what the shadow reach test saved, for the log. These walls are collected and built only to count them, and never drawn.
@@ -3774,20 +3820,22 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 	}
 
 	// this comes ahead of the limits: something left off the list is still on screen, and a shadow can still land on it
-	if (kind != kToyCasterCastOnly)
+	if (kind != kToyCasterCastOnly && numDrawnBoxes > 0)
 	{
+		ShadowReachBox &box = drawnBoxes[numDrawnBoxes - 1];
+
 		for (int i = 0; i < count * 3; i++)
 		{
 			int const axis = i % 3;
 
-			if (pts[i] < drawnBoxSmallest[axis])
+			if (pts[i] < box.smallest[axis])
 			{
-				drawnBoxSmallest[axis] = pts[i];
+				box.smallest[axis] = pts[i];
 			}
 
-			if (pts[i] > drawnBoxLargest[axis])
+			if (pts[i] > box.largest[axis])
 			{
-				drawnBoxLargest[axis] = pts[i];
+				box.largest[axis] = pts[i];
 			}
 		}
 	}
@@ -4265,8 +4313,8 @@ static void ToyLogFrame(const ToyFrameReport &report)
 	// Before and after, from this one frame. "Before" is everything in a light's range, the old test, with a light's reach a little wider for
 	// the size of the light. The verts are added up over every pass, and those it saved were built only to be counted.
 	_snprintf(line, sizeof(line) - 1,
-		"shadow volumes: frame %d, out of view: before the reach test %d polygons and %d verts, after it %d polygons and %d verts",
-		report.frame, toyPolygonsOfKind[kToyCasterCastOnly], toyVertsOfKind[kToyCasterCastOnly] + vertsReachLeftOut, polygonsReachKept, toyVertsOfKind[kToyCasterCastOnly]);
+		"shadow volumes: frame %d, out of view: before the reach test %d polygons and %d verts, after it %d polygons and %d verts; %d things drawn",
+		report.frame, toyPolygonsOfKind[kToyCasterCastOnly], toyVertsOfKind[kToyCasterCastOnly] + vertsReachLeftOut, polygonsReachKept, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4819,7 +4867,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 			if (toyCasterModule[caster] != moduleAsked)
 			{
 				moduleAsked = toyCasterModule[caster];
-				moduleCanShow = ShadowReach_CanReach(shadowReachView, toyUnseenModules[moduleAsked], light);
+				moduleCanShow = ShadowReach_CanReach(shadowReachView, drawnBoxes, numDrawnBoxes, toyUnseenModules[moduleAsked], light);
 				moduleWouldHaveCast = noteWhatReachSaves && !moduleCanShow && ToyBallInReach(toyUnseenModules[moduleAsked], light);
 			}
 
@@ -5059,7 +5107,7 @@ bool ModuleShadowCanShow(const ShadowReachBall &ball, const float *lights, int n
 			continue;
 		}
 
-		if (ShadowReach_CanReach(shadowReachView, ball, light))
+		if (ShadowReach_CanReach(shadowReachView, drawnBoxes, numDrawnBoxes, ball, light))
 		{
 			return true;
 		}
@@ -5071,7 +5119,7 @@ bool ModuleShadowCanShow(const ShadowReachBall &ball, const float *lights, int n
 			float moved[kToyLightFloats];
 			ToyLightAtPosition(light, position, axes, moved);
 
-			if (ShadowReach_CanReach(shadowReachView, ball, moved))
+			if (ShadowReach_CanReach(shadowReachView, drawnBoxes, numDrawnBoxes, ball, moved))
 			{
 				return true;
 			}
@@ -5257,12 +5305,7 @@ static void ToyForgetCasters()
 	toyStretchCorners = 0;
 	polygonsReachKept = 0;
 	vertsReachLeftOut = 0;
-
-	for (int axis = 0; axis < 3; axis++)
-	{
-		drawnBoxSmallest[axis] = 0.0f;
-		drawnBoxLargest[axis] = 0.0f;
-	}
+	numDrawnBoxes = 0;
 }
 
 // Whether the depth buffer the game was given has stencil bits, which is where a light's shadow marks go. The game asks for only two
