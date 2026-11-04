@@ -266,6 +266,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ShadowsFullReport = 1;
 		}
+		extern int StaticSurfaceOn;
+		if (strstr(command_line, "-staticsurface"))
+		{
+			StaticSurfaceOn = 1;
+		}
+		extern int StaticSurfaceCompare;
+		if (strstr(command_line, "-staticcompare"))
+		{
+			StaticSurfaceCompare = 1;
+		}
 		extern int KeptPrismsOff;
 		// not -nokeptprisms, for the same reason as -shadowsoff
 		if (strstr(command_line, "-keptprismsoff"))

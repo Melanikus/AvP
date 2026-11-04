@@ -46,6 +46,8 @@
 #include "pixel_lights.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
+#include "static_frame.h"
+#include "surface_static.h"
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
@@ -384,6 +386,7 @@ float cot(float in)
 
 static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
+static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
@@ -399,6 +402,7 @@ static bool ExecuteBuffer()
 	if (!toyFinalFlush)
 	{
 		toyEarlyFlushes++;
+		earlyFlushThisFrame = true;
 	}
 
 	// sort the list of render objects
@@ -4877,7 +4881,7 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 // a hair nearer, or rounding would leave specks of them behind the game's own. The hair is a fixed size, and doesn't grow with a surface's
 // slant: depth isn't written here, so of two polygons that both pass, the last drawn wins, and a wider margin would let the wrong one win
 // along the line where something meets a floor. Says false if nothing was drawn.
-static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes)
+static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool useStatic)
 {
 	ToySetVolumeState(device);
 
@@ -4886,11 +4890,179 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes)
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, ToyShadowsMode != kViewFinalNoRelief);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, ToyShadowsMode != kViewFinalNoRelief, useStatic);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
 	return drawn;
+}
+
+// -staticsurface: the walls in the surface pictures come from the fixed buffer. -staticcompare: the same, and a report frame also draws the pictures
+// the old way and compares every pixel, which makes that frame wait for the card, so it's only for checking. Off is the old route. It stays
+// off by default until the comparison has been seen to come out clean in the game.
+int StaticSurfaceOn = 0;
+int StaticSurfaceCompare = 0;
+
+static const int kMostFrameRanges = 16384;
+static StaticRange frameRanges[kMostFrameRanges];
+static int numFrameRanges = 0;
+
+// Works out which parts of the fixed buffer this frame draws, and whether it can use them. Every module the frame drew has to be in the list, or its
+// polygons would vanish from the pictures. So if there's any doubt, the answer is no, and the old route draws everything.
+static bool ChooseStaticRoute()
+{
+	numFrameRanges = 0;
+
+	// these three move corners or flip the view in ways the buffer doesn't know about
+	if ((!StaticSurfaceOn && !StaticSurfaceCompare) || !StaticLevel_Ready() || !SurfaceStatic_Ready()
+		|| MIRROR_CHEATMODE || TRIPTASTIC_CHEATMODE || UNDERWATER_CHEATMODE)
+	{
+		return false;
+	}
+
+	int numModules = 0;
+	int const *modules = SurfaceNormals_ModulesDrawn(&numModules);
+
+	if (numModules > kMostModulesInAFrame)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < numModules; i++)
+	{
+		int count = 0;
+		StaticRange const *ranges = StaticLevel_RangesOf(modules[i], &count);
+
+		if (count > kMostFrameRanges - numFrameRanges)
+		{
+			return false;
+		}
+
+		for (int range = 0; range < count; range++)
+		{
+			frameRanges[numFrameRanges++] = ranges[range];
+		}
+	}
+
+	numFrameRanges = StaticFrame_SortAndJoin(frameRanges, numFrameRanges);
+	SurfaceStatic_SetFrame(frameRanges, numFrameRanges);
+	return true;
+}
+
+// A picture read back into memory. It's given back when this goes.
+class PictureInMemory
+{
+public:
+	PictureInMemory() : copy(0), bits(0), pitch(0)
+	{
+		memset(&description, 0, sizeof(description));
+	}
+
+	~PictureInMemory()
+	{
+		if (bits)
+		{
+			copy->UnlockRect();
+		}
+
+		if (copy)
+		{
+			copy->Release();
+		}
+	}
+
+	bool Read(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture)
+	{
+		D3DLOCKED_RECT locked;
+
+		if (FAILED(picture->GetDesc(&description))
+			|| FAILED(device->CreateOffscreenPlainSurface(description.Width, description.Height, description.Format, D3DPOOL_SYSTEMMEM, &copy, NULL))
+			|| FAILED(device->GetRenderTargetData(picture, copy))
+			|| FAILED(copy->LockRect(&locked, NULL, D3DLOCK_READONLY)))
+		{
+			return false;
+		}
+
+		bits = (uint8_t const *)locked.pBits;
+		pitch = (uint32_t)locked.Pitch;
+		return true;
+	}
+
+	IDirect3DSurface9 *copy;
+	uint8_t const *bits;
+	uint32_t pitch;
+	D3DSURFACE_DESC description;
+};
+
+// One route's pictures, read back. The two picture textures come from surface_pictures.cpp.
+struct RoutePictures
+{
+	PictureInMemory distance, normal, colour;
+
+	bool Read(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *distancePicture)
+	{
+		IDirect3DSurface9 *normalPicture = 0;
+		IDirect3DSurface9 *colourPicture = 0;
+		bool worked = false;
+
+		if (SUCCEEDED(SurfacePictures_Normal()->GetSurfaceLevel(0, &normalPicture)) && SUCCEEDED(SurfacePictures_Colour()->GetSurfaceLevel(0, &colourPicture)))
+		{
+			worked = distance.Read(device, distancePicture) && normal.Read(device, normalPicture) && colour.Read(device, colourPicture);
+		}
+
+		if (normalPicture)
+		{
+			normalPicture->Release();
+		}
+
+		if (colourPicture)
+		{
+			colourPicture->Release();
+		}
+
+		return worked;
+	}
+
+	SurfacePicturesInMemory InMemory() const
+	{
+		SurfacePicturesInMemory pictures = { distance.bits, normal.bits, colour.bits, distance.pitch, normal.pitch, colour.pitch };
+		return pictures;
+	}
+};
+
+// Draws the pictures both ways and compares them. Whatever's left in the pictures after this, the caller draws them again.
+static void CompareSurfaceRoutes(LPDIRECT3DDEVICE9 device, const float *worldAxes, int frame)
+{
+	RoutePictures oldRoute, newRoute;
+
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+	bool const oldDrawn = ToyDrawPictures(device, worldAxes, false) && oldRoute.Read(device, toyDepthSurface);
+
+	device->SetRenderTarget(0, toyDepthSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+	bool const newDrawn = ToyDrawPictures(device, worldAxes, true) && newRoute.Read(device, toyDepthSurface);
+
+	device->SetRenderTarget(0, toyDepthSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+	char line[300] = { 0 };
+
+	if (!oldDrawn || !newDrawn)
+	{
+		_snprintf(line, sizeof(line) - 1, "static compare: frame %d: couldn't read the pictures back, so nothing was compared", frame);
+		LogString(line);
+		return;
+	}
+
+	PictureDifferences differences;
+	StaticFrame_Compare(oldRoute.InMemory(), newRoute.InMemory(), oldRoute.colour.description.Width, oldRoute.colour.description.Height,
+		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &differences);
+
+	_snprintf(line, sizeof(line) - 1,
+		"static compare: frame %d, %d pixels, %d ranges: %d holes in the new route, %d only in the new route, %d colours changed, %d normals changed, %d distances changed, largest change %.2f",
+		frame, differences.pixelsCompared, numFrameRanges, differences.holesInNew, differences.extraInNew, differences.colourChanged,
+		differences.normalChanged, differences.distanceChanged, differences.largestDistanceChange);
+	LogString(line);
 }
 
 // There are two ways to show a shadow. If this card can do everything below, the surface pictures are drawn, every light reads them, and
@@ -5591,6 +5763,8 @@ static void ToyForgetCasters()
 	toyNumVerts = 0;
 	toyStretchTotal = 0.0;
 	toyStretchCorners = 0;
+	earlyFlushThisFrame = false;
+	SurfaceNormals_ForgetModulesDrawn();
 	polygonsReachKept = 0;
 	polygonsReachLeftOut = 0;
 	prismsOutOfRange = 0;
@@ -5751,7 +5925,25 @@ static void ToyShadows_Draw()
 		device->SetViewport(&viewport);
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
 
-		if (ToyDrawPictures(device, worldAxes))
+		bool const useStatic = ChooseStaticRoute();
+
+		if (logThisFrame && StaticSurfaceCompare)
+		{
+			if (!useStatic)
+			{
+				LogString("static compare: the fixed buffer can't draw this frame, so nothing was compared");
+			}
+			else if (earlyFlushThisFrame)
+			{
+				LogString("static compare: this frame's lists flushed early, so the old route only holds the last of them, and nothing was compared");
+			}
+			else
+			{
+				CompareSurfaceRoutes(device, worldAxes, toyFrame);
+			}
+		}
+
+		if (ToyDrawPictures(device, worldAxes, useStatic))
 		{
 			FrameTiming_Mark(kStageSurfacePictures);
 			PixelLights_DrawTotal(device, lights, report.lights, toyDepthTexture);

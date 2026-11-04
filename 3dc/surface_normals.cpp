@@ -84,6 +84,10 @@ static uint32_t thisDrawing = 0;      // each object drawn gets the next number,
 static bool objectIsTurned = false;   // does the object being drawn point a different way from the world?
 static int moduleBeingDrawn = -1;     // the module being drawn, or -1 if it's anything else
 
+static const int kMostModulesNoted = kMostModulesInAFrame;
+static int modulesDrawn[kMostModulesNoted];
+static int numModulesDrawn = 0;
+
 // How to turn it, as three lines of three numbers: one line for each of the world's x, y and z.
 static float turning[9];
 
@@ -288,6 +292,18 @@ void SurfaceNormals_StartObject()
 	// an object can use the same shape as a module, and only the module is in the fixed buffer
 	moduleBeingDrawn = Global_ODB_Ptr->ObMyModule ? Global_ODB_Ptr->ObMyModule->m_index : -1;
 
+	// The modules a frame draws, which is what the fixed buffer has to draw too. This is here, beside the polygons being marked as in the buffer, so
+	// that the two can't disagree: a polygon marked and not drawn from the buffer would vanish from the pictures. A reflection writes nothing.
+	if (moduleBeingDrawn >= 0 && !DrawingAReflection && !ToyShadowsInMirror)
+	{
+		if (numModulesDrawn < kMostModulesNoted)
+		{
+			modulesDrawn[numModulesDrawn] = moduleBeingDrawn;
+		}
+
+		numModulesDrawn++;
+	}
+
 	if (objectIsTurned)
 	{
 		float const one = (float)ONE_FIXED;
@@ -344,6 +360,17 @@ static void PointNormal(int point, float *normal)
 	normal[0] = turned.x;
 	normal[1] = turned.y;
 	normal[2] = turned.z;
+}
+
+const int *SurfaceNormals_ModulesDrawn(int *count)
+{
+	*count = numModulesDrawn;
+	return modulesDrawn;
+}
+
+void SurfaceNormals_ForgetModulesDrawn()
+{
+	numModulesDrawn = 0;
 }
 
 void SurfaceNormals_PolygonTangent(int polygonNumber, float *tangent)

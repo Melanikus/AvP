@@ -44,6 +44,13 @@ void SurfaceNormals_WritePolygon(const struct polyheader *polygon, int polygonNu
 // All zero means the polygon has none, and then nothing should bend its normal. See SurfaceTangent.
 void SurfaceNormals_PolygonTangent(int polygonNumber, float *tangent);
 
+// The most modules this notes in a frame.
+enum { kMostModulesInAFrame = 4096 };
+
+// The modules drawn so far this frame, and how many. count can be more than the list holds, which means some weren't noted.
+const int *SurfaceNormals_ModulesDrawn(int *count);
+void SurfaceNormals_ForgetModulesDrawn();
+
 // Hands the list to the graphics card, or takes it back, for a pass that reads it.
 void SurfaceNormals_UseList();
 void SurfaceNormals_StopUsingList();

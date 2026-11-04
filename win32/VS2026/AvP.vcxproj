@@ -408,6 +408,7 @@
     <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
     <ClCompile Include="..\..\3dc\shadow_reach.cpp" />
     <ClCompile Include="..\..\3dc\frame_timing.cpp" />
+    <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes_card.cpp" />
     <ClCompile Include="..\..\3dc\surface_tangent.cpp" />
