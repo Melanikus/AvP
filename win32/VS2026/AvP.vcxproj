@@ -403,6 +403,7 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
+    <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\texture_relief.cpp" />
     <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
     <ClCompile Include="..\..\3dc\shadow_reach.cpp" />
@@ -699,6 +700,7 @@
     <None Include="..\..\shaders\surface.vsh" />
     <None Include="..\..\shaders\surfaceRelief.psh" />
     <None Include="..\..\shaders\surfaceRelief.vsh" />
+    <None Include="..\..\shaders\surfaceStatic.vsh" />
     <None Include="..\..\shaders\tallText.psh" />
     <None Include="..\..\shaders\tallText.vsh" />
     <None Include="..\..\shaders\vertex.vsh" />

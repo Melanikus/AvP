@@ -14,6 +14,7 @@
 
 #include "surface_pictures.h"
 #include "surface_normals.h"
+#include "surface_static.h"
 #include "texture_relief.h"
 #include "d3_func.h"
 #include "RenderList.h"
@@ -147,7 +148,9 @@ bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device)
 	return true;
 }
 
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted)
+// useStatic asks for the level's walls to be drawn from the fixed buffer, and only what isn't in it to be drawn the old way. It can be asked for on any frame,
+// and if that route can't draw, the old way draws everything: see surface_static.cpp.
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic)
 {
 	if (!SurfacePictures_Ready(device))
 	{
@@ -169,9 +172,7 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	// always did, so turning relief off leaves nothing of it behind.
 	bool const withRelief = reliefWanted && textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
-
-	d3d.effectSystem->SetActive(effect);
-	d3d.effectSystem->SetVertexShaderConstant(effect, 0, CONST_MATRIX, &d3d.matProjection);
+	bool const fromBuffer = useStatic && SurfaceStatic_Ready();
 
 	// The world's three directions, for surface.psh to turn each normal to face the way the camera does. This is the only place that happens.
 	// They go straight into the shader's registers. A vertex shader's numbers go through a list whose order the compiler picks, so a second
@@ -183,6 +184,21 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 		worldAxes[6], worldAxes[7], worldAxes[8], 0.0f,
 	};
 	device->SetPixelShaderConstantF(0, axes, 3);
+
+	if (fromBuffer)
+	{
+		SurfaceStatic_Draw(device, withRelief);
+	}
+
+	d3d.effectSystem->SetActive(effect);
+
+	// These go straight into the shader's registers too, for the same reason. A matrix is read down its columns there.
+	D3DXMATRIX projectionDown;
+	D3DXMatrixTranspose(&projectionDown, &d3d.matProjection);
+	device->SetVertexShaderConstantF(0, (const float *)&projectionDown, 4);
+
+	float const route[4] = { fromBuffer ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+	device->SetVertexShaderConstantF(4, route, 1);
 
 	SurfaceNormals_UseList();
 

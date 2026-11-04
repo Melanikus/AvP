@@ -2510,6 +2510,13 @@ bool InitialiseDirect3D()
 	d3d.surfaceDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
 	d3d.surfaceDecl->Create();
 
+	d3d.surfaceStaticDecl = new VertexDeclaration;
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+	d3d.surfaceStaticDecl->Create();
+
 	d3d.surfaceReliefDecl = 0;
 
 	if (textureRelief.IsOn())
@@ -2641,10 +2648,13 @@ bool InitialiseDirect3D()
 
 	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
 	d3d.surfaceReliefEffect = kNullEffectID;
+	d3d.surfaceStaticEffect = d3d.effectSystem->Add("surfaceStatic", "surfaceStatic.vsh", "surface.psh", d3d.surfaceStaticDecl);
+	d3d.surfaceStaticReliefEffect = kNullEffectID;
 
 	if (d3d.surfaceReliefDecl)
 	{
 		d3d.surfaceReliefEffect = d3d.effectSystem->Add("surfaceRelief", "surfaceRelief.vsh", "surfaceRelief.psh", d3d.surfaceReliefDecl);
+		d3d.surfaceStaticReliefEffect = d3d.effectSystem->Add("surfaceStaticRelief", "surfaceStatic.vsh", "surfaceRelief.psh", d3d.surfaceStaticDecl);
 	}
 
 	// the pixel shader is never used: a prism only marks the stencil, so this runs with none, as the ordinary prisms do
@@ -2731,6 +2741,7 @@ void ReleaseDirect3D()
 	delete d3d.mainDecl;
 	delete d3d.surfaceDecl;
 	delete d3d.surfaceReliefDecl;
+	delete d3d.surfaceStaticDecl;
 
 	delete d3d.volumeDecl;
 	delete d3d.orthoDecl;

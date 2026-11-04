@@ -11,7 +11,8 @@
 // THE DIRECTIONS ARE THE WORLD'S, not the camera's. A piece of the level never turns, so its numbers are already right and are simply
 // copied. If they were kept relative to the camera, every normal in view would need turning again each time the camera moved.
 //
-// EMPTY MEANS "NOT IN THE PICTURES": each normal has a fourth number, 1 for a polygon that goes in the surface pictures. The list starts
+// EMPTY MEANS "NOT IN THE PICTURES": each normal has a fourth number, 1 for a polygon that goes in the surface pictures, and 2 for one that also lives in the
+// level's fixed buffer, so that surface_pictures.cpp can draw it from there and leave it out here. The list starts
 // each frame full of zeros, so a polygon nobody wrote down stays out of them, and keeps the light the game gave it. A reflection does that
 // on purpose. A shape can also really hold a normal of zero: that's a surface like any other, with a fourth number of 1, and the shaders
 // light it the way the game does, as a surface turned side-on.
@@ -33,8 +34,10 @@
 #include <string.h>
 
 #include "3dc.h"
+#include "module.h"
 
 #include "surface_normals.h"
+#include "static_level.h"
 #include "surface_tangent.h"
 #include "texture_relief.h"
 #include "d3_func.h"
@@ -79,6 +82,7 @@ static TurnedNormal turnedNormals[maxrotpts];
 
 static uint32_t thisDrawing = 0;      // each object drawn gets the next number, so nothing turned for the one before is ever reused
 static bool objectIsTurned = false;   // does the object being drawn point a different way from the world?
+static int moduleBeingDrawn = -1;     // the module being drawn, or -1 if it's anything else
 
 // How to turn it, as three lines of three numbers: one line for each of the world's x, y and z.
 static float turning[9];
@@ -280,6 +284,9 @@ void SurfaceNormals_StartObject()
 	// moves, or something placed at an angle. The object's own matrix is what's tested, because that's the thing that's true of every case.
 	MATRIXCH const &matrix = Global_ODB_Ptr->ObMat;
 	objectIsTurned = (memcmp(&matrix, &IdentityMatrix, sizeof(MATRIXCH)) != 0);
+
+	// an object can use the same shape as a module, and only the module is in the fixed buffer
+	moduleBeingDrawn = Global_ODB_Ptr->ObMyModule ? Global_ODB_Ptr->ObMyModule->m_index : -1;
 
 	if (objectIsTurned)
 	{
@@ -493,6 +500,7 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, u
 	}
 
 	float *place = openList + firstVertex * kNumbersPerVertex;
+	float const fourthNumber = (moduleBeingDrawn >= 0 && StaticLevel_PolygonIsIn(moduleBeingDrawn, polygonNumber)) ? 2.0f : 1.0f;
 
 	for (uint32_t corner = 0; corner < corners; corner++)
 	{
@@ -502,7 +510,7 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, u
 		*place++ = normal[0];
 		*place++ = normal[1];
 		*place++ = normal[2];
-		*place++ = 1.0f;   // this polygon goes in the pictures
+		*place++ = fourthNumber;
 	}
 
 	// one tangent for the whole polygon, repeated at each corner. The checks above cover this list too: it's the same length.

@@ -221,6 +221,9 @@ typedef struct D3DInfo
 	effectID_t				surfaceEffect;
 	class VertexDeclaration	*surfaceReliefDecl;     // these two stay empty with relief pictures off
 	effectID_t				surfaceReliefEffect;
+	class VertexDeclaration	*surfaceStaticDecl;     // the level's fixed buffer: see surface_static.cpp
+	effectID_t				surfaceStaticEffect;
+	effectID_t				surfaceStaticReliefEffect;
 	class VertexDeclaration	*volumeDecl;      // shadow prisms kept between frames: see shadow_volumes.cpp
 	effectID_t				volumeEffect;
 	effectID_t				lightTotalEffect;
