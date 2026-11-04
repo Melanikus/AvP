@@ -295,6 +295,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			int const asked = atoi(flareSizeSwitch + strlen("-shadowflaresize="));
 			ToyShadowsFlareSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
+		}
 		extern int ToyShadowsModelGap;
 		char const *modelGapSwitch = strstr(command_line, "-shadowmodelgap=");
 		if (modelGapSwitch)
