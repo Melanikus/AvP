@@ -4,7 +4,7 @@
 //   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
 //   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
-//   file path too long for its buffer is skipped, like a missing sound
+//   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -435,7 +435,10 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 	for(;!chlif.done();chlif.next())
 	{
 		Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
-		max_index=max(max_index,isc->index);
+		if (isc->index_is_valid())
+		{
+			max_index=max(max_index,isc->index);
+		}
 	}
 	//now create a large enough array , and fill it in
 	num_sounds=max_index+1;
@@ -457,6 +460,13 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 		{
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
 			int index=isc->index;
+
+			// A number the list has no place for goes to the log, and that sound stays missing. See index_is_valid.
+			if (!isc->index_is_valid())
+			{
+				LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(index));
+				continue;
+			}
 
 			// A level file can leave a sound's name blank, and the chunk then holds no name at all. There is nothing
 			// to load, so it stays a missing sound.
