@@ -4,7 +4,8 @@
 //   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
 //   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
-//   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound
+//   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
+//   a shape set collection is limited to the sets and shapes the game has room for
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -742,13 +743,20 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 
 	//now go through the list of shape set collections again
 	Hierarchy_Alternate_Shape_Set* found_sets[20];
+
+	// A level file chooses how many sets a collection uses, and how many shapes each set replaces. The sets have to
+	// fit in found_sets, and the shapes in the size sum further down, which would come out far too small if the total
+	// were huge. The game's own files use at most 3 sets, and a set replaces at most 20 shapes, so these limits leave
+	// plenty of room. A set that would go over either limit is left out, and the model keeps those shapes.
+	int const max_found_sets=sizeof(found_sets)/sizeof(found_sets[0]);
+	int const max_shapes_to_replace=65535;
+
 	int num_found_sets;
 	int num_shapes_to_replace;
 	LIF<Hierarchy_Alternate_Shape_Set*> alt_lif(&alternate_shape_set_list);
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
-		GLOBALASSERT(coll->Index_List.size()<20);
 		//locate the sets that this collections is using
 		num_found_sets=0;
 		num_shapes_to_replace=0;
@@ -760,10 +768,17 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 			{
 				if(ind_lif()==alt_lif()->index)
 				{
-					found_sets[num_found_sets]=alt_lif();
-					num_found_sets++;
-					num_shapes_to_replace+=alt_lif()->num_replaced_shapes;
-					combined_flags|=alt_lif()->flags;
+					if(num_found_sets<max_found_sets && alt_lif()->num_replaced_shapes<=max_shapes_to_replace-num_shapes_to_replace)
+					{
+						found_sets[num_found_sets]=alt_lif();
+						num_found_sets++;
+						num_shapes_to_replace+=alt_lif()->num_replaced_shapes;
+						combined_flags|=alt_lif()->flags;
+					}
+					else
+					{
+						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + riffname);
+					}
 					break;
 				}
 			}
