@@ -10,6 +10,7 @@
 # Nothing else needs changing. A test that needs stand-ins for parts of the game keeps them in tests/name_stubs/, and
 # lists that folder in its .args with /Itests/name_stubs, ahead of the game's folders.
 #
+# The .args file comes last on the compiler's line, so it can end with /link and settings for the linker.
 # Run it from anywhere, in PowerShell:  tests/build.ps1
 # To build only one test:  tests/build.ps1 -Only name
 # The programs land in $env:RUNNER_TEMP\avp-tests. Outside the automatic checks, they land in a folder called
@@ -55,7 +56,7 @@ foreach ($test in $tests)
         "call `"$setupScript`" -arch=x86 -host_arch=amd64 -no_logo",
         'if errorlevel 1 exit /b 1',
         "cd /d `"$repository`"",
-        "cl /nologo @`"$($test.FullName)`" /Fe:`"$outputDir\$($test.BaseName).exe`" /Fo:`"$objectDir\\`"",
+        "cl /nologo /Fe:`"$outputDir\$($test.BaseName).exe`" /Fo:`"$objectDir\\`" @`"$($test.FullName)`"",
         'exit /b %errorlevel%'
     ) | Set-Content -Encoding Ascii -Path $batchFile
 
