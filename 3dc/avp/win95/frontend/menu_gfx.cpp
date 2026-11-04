@@ -587,11 +587,11 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 	return sx;
 }
 
-// The most pixels RenderSmallFontString_Wrapped counts for one word or one run of spaces. The text can come from a
-// file, and nothing limits how long a word in a file is: without a limit, a long enough word would add up to more
-// than an int can hold and wrap round to a wrong width. A million pixels is far wider than any screen, so a word that
-// reaches the limit could not fit whatever its true width is, and no text that can be shown changes. Two such widths
-// added together, and the line count worked out from them, also stay far below the largest number an int can hold.
+// The most pixels RenderSmallFontString_Wrapped counts for a word and the spaces before it, or for one run of spaces.
+// The text can come from a file, and nothing limits how long a word in a file is: without a limit, a long enough word
+// would add up to more than an int can hold and wrap round to a wrong width. A million pixels is far wider than any
+// screen, so a word that reaches the limit could not fit whatever its true width is, and no text that can be shown
+// changes. The line count worked out from this width also stays far below the largest number an int can hold.
 static const int MAX_COUNTED_TEXT_WIDTH = 1000000;
 
 extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
@@ -607,24 +607,26 @@ Determine area used by text , so we can draw it centrally
 	const char *textPtr2 = textPtr;
 	while (*textPtr2) 
 	{
-		int widthFromSpaces = 0;
-		int widthFromChars = 0;
+		int widthFromSpaces;
+
+		wordWidth = 0;
 		
 		while (*textPtr2 && *textPtr2==' ') 
 		{
-			widthFromSpaces += AAFontWidths[(unsigned char)*textPtr2++];
-			if (widthFromSpaces > MAX_COUNTED_TEXT_WIDTH)
-				widthFromSpaces = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
+				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
+		
+		// Remember how much of the width so far is spaces: if this word moves to a new line, they are not needed.
+		widthFromSpaces = wordWidth;
 		
 		while (*textPtr2 && *textPtr2!=' ') 
 		{
-			widthFromChars += AAFontWidths[(unsigned char)*textPtr2++];
-			if (widthFromChars > MAX_COUNTED_TEXT_WIDTH)
-				widthFromChars = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
+				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
-		
-		wordWidth=widthFromSpaces+widthFromChars;
 		
 		if (wordWidth > area->right - sx) 
 		{
