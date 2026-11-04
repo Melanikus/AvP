@@ -138,8 +138,15 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	if (voice_types) 
 		return;
 
-	char path[MAX_PATH] = ScreamFilePath;
-	strcat(path, filename);
+	// The path is the sound folder followed by one of the four short file names built into this file, so it fits
+	// today. It is still written with a size limit, so that it can never run past the end of path.
+	char path[MAX_PATH];
+	if (_snprintf(path, sizeof(path) - 1, "%s%s", ScreamFilePath, filename) < 0)
+	{
+		LOGDXFMT(("Path too long for %s",filename));
+		return;
+	}
+	path[sizeof(path) - 1] = '\0';
 
 	HANDLE file = avp_CreateFile(path, GENERIC_READ, 0, 0, OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 	if (file == INVALID_HANDLE_VALUE)
