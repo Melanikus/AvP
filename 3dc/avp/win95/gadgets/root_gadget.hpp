@@ -3,6 +3,9 @@
 	rootgadg.hpp
 
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   added Make, a small function that makes the root gadget and hands it back
 
 #ifndef _rootgadg
 #define _rootgadg 1
@@ -46,6 +49,13 @@
 	private:
 		RootGadget();
 		~RootGadget();
+
+		// Makes the one and only RootGadget. Its constructor records it in pSingleton and GADGET_UnInit deletes it at
+		// shutdown, so a caller has no need to keep the pointer this hands back.
+		static RootGadget* Make(void)
+		{
+			return new RootGadget;
+		}
 
 	private:
 		static RootGadget* pSingleton;

@@ -9,7 +9,8 @@
  *******************************************************************/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   a function with nothing to do no longer holds two empty blocks; the compiled code is the same
+//   a function with nothing to do no longer holds two empty blocks, and switched-off test code is removed;
+//   the root gadget is made by a small function that hands it back (it works the same as before)
 
 /* Includes ********************************************************/
 #include "3dc.h"
@@ -93,7 +94,7 @@ extern void GADGET_Init(void)
 
 	/* CODE */
 	{
-		new RootGadget;
+		RootGadget :: Make();
 	}
 }
 
