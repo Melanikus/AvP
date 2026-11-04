@@ -6470,6 +6470,8 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
 	bool const reportDue = ShadowReportIsDue();
 	int const keptGroup = (stored && (whatItMayDo == kToyCasterLevel || whatItMayDo == kToyCasterObject) && BlockIsStill(dptr)) ? ShadowGroup_Start(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx) : -1;
+	CasterSource const source = { dptr->ObShape, { dptr->ObWorld.vx, dptr->ObWorld.vy, dptr->ObWorld.vz }, dptr->ObStrategyBlock ? (int)dptr->ObStrategyBlock->I_SBtype : -1,
+		stored ? "stored plane" : !shapePtr->sh_surfacepolygons ? "its shape has no list" : dptr->ObMorphCtrl ? "it's morphing" : "it's turned" };
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -6516,7 +6518,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 			// PolygonWithinFrustum is the game's own test, the one it's about to make on this polygon anyway, so the report can't disagree
 			// with what really happens. That's why it's only asked on a report frame.
-			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber };
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber, &source };
 
 			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, facts);
 			polygonsKept++;
@@ -6690,7 +6692,7 @@ static int ToyCollectUnseenModule(const MODULE *module)
 			}
 
 			// a wall has no owner, and this one isn't being drawn
-			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber };
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber, 0 };
 
 			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, facts);
 			polygonsAdded++;

@@ -3669,6 +3669,7 @@ static KeptGroup keptGroups[kMostKeptGroups];
 static int numKeptGroups = 0;
 static int casterGroup[kToyMaxCasters];     // which of keptGroups a polygon is in, or -1
 static int casterPolygon[kToyMaxCasters];   // its place in its shape
+static CasterSource casterSource[kToyMaxCasters];   // only filled in on a report frame, for a polygon that's drawn
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
 static int toyCasterModule[kToyMaxCasters];  // for a cast-only polygon, which of toyUnseenModules it belongs to
@@ -3877,6 +3878,11 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 	casterGroup[toyNumCasters] = facts.keptGroup;
 	casterPolygon[toyNumCasters] = facts.polygonNumber;
 
+	if (facts.drawn && facts.source)
+	{
+		casterSource[toyNumCasters] = *facts.source;
+	}
+
 	if (facts.keptGroup >= 0)
 	{
 		keptGroups[facts.keptGroup].casters++;
@@ -4014,6 +4020,7 @@ static void CheckNoPolygonSeenFromBehind()
 {
 	int checked[2] = { 0, 0 }, behind[2] = { 0, 0 };   // the first of each pair is for planes worked out, the second for stored planes
 	float furthest = 0.0f, largest = 0.0f;
+	int furthestCaster = -1;
 
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
@@ -4046,6 +4053,7 @@ static void CheckNoPolygonSeenFromBehind()
 		if (fabsf(cameraSide) > furthest)
 		{
 			furthest = fabsf(cameraSide);
+			furthestCaster = caster;
 		}
 	}
 
@@ -4053,6 +4061,15 @@ static void CheckNoPolygonSeenFromBehind()
 	_snprintf(line, sizeof(line) - 1, "shadows: frame %d: camera behind a drawn polygon: %d of %d stored planes, %d of %d worked out, furthest %.1f, largest area %.0f",
 		toyFrame, behind[1], checked[1], behind[0], checked[0], furthest, largest);
 	LogString(line);
+
+	if (furthestCaster >= 0)
+	{
+		CasterSource const &source = casterSource[furthestCaster];
+
+		_snprintf(line, sizeof(line) - 1, "shadows: frame %d: furthest was polygon %d of shape %d at %d %d %d, behaviour %d, %s",
+			toyFrame, casterPolygon[furthestCaster], source.shapeNumber, source.place[0], source.place[1], source.place[2], source.behaviour, source.why ? source.why : "");
+		LogString(line);
+	}
 }
 
 // Adds one body part to the log's count of how big each model is. All the parts of one model arrive together, so a new owner

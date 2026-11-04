@@ -40,6 +40,15 @@ enum
 	kToyMostRange = 100000
 };
 
+// Where a polygon came from, for the report. sh_name is never filled in, so a shape is named by its number, and its place finds it in the level file.
+struct CasterSource
+{
+	int shapeNumber;
+	int place[3];
+	int behaviour;     // what the object is, from AVP_BEHAVIOUR_TYPE, or -1 for a piece of the level with no owner
+	const char *why;   // why its plane is worked out from its corners. Always a fixed piece of text
+};
+
 // What a polygon brings with it to ToyShadows_AddCaster, besides its corners.
 struct CasterFacts
 {
@@ -48,6 +57,7 @@ struct CasterFacts
 	bool drawn;                 // the game is drawing it this frame. Only asked on a report frame
 	int keptGroup;              // which group its prisms are kept with, from ShadowGroup_Start, or -1
 	int polygonNumber;          // its place in its shape
+	const CasterSource *source; // only read for a polygon that's drawn
 };
 
 // A place on the list can have nothing in it, and a lamp that's dark for the moment keeps its place: see ToyShadows_ChooseLights. Neither has
