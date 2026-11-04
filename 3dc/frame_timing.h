@@ -72,6 +72,7 @@ enum ProcessorStage
 	kProcessorDrawing,      // handing the lists to the card, the shadow pass included
 	kProcessorShadowPass,   // the shadow pass alone
 	kProcessorPresent,      // waiting to show the frame: for the card to catch up, and for the screen
+	kProcessorStateBlock,   // saving and putting back all the card's settings around the shadow pass, which is part of that pass
 	kProcessorBeginScene,   // starting a frame. A driver that's holding a frame back to match the screen can wait here and not in present
 	kProcessorGame,         // the game itself: animation, movement, what everything does
 	kProcessorLog,          // handing lines to the log. It should never be more than a moment: see logString.cpp

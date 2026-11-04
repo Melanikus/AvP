@@ -2495,6 +2495,16 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 }
 
 
+// How big a triangle is, as the square of twice its area, which is all a comparison needs. a, b and c have been checked by the caller.
+static double TriangleSize(const int *points, int a, int b, int c)
+{
+	double const ax = (double)points[b * 3 + 0] - points[a * 3 + 0], ay = (double)points[b * 3 + 1] - points[a * 3 + 1], az = (double)points[b * 3 + 2] - points[a * 3 + 2];
+	double const bx = (double)points[c * 3 + 0] - points[a * 3 + 0], by = (double)points[c * 3 + 1] - points[a * 3 + 1], bz = (double)points[c * 3 + 2] - points[a * 3 + 2];
+	double const x = ay * bz - az * by, y = az * bx - ax * bz, z = ax * by - ay * bx;
+
+	return x * x + y * y + z * z;
+}
+
 // Works out which way this polygon's texture runs across it, for relief pictures. These numbers all come from the level file, so each is checked
 // first: a polygon that fails keeps an empty entry, and nothing bends its normal.
 static void work_out_polygon_tangent(SHAPEHEADER *shphd, const ChunkShape *cshp_ptr, int polygon, int UVIndex)
@@ -2506,23 +2516,40 @@ static void work_out_polygon_tangent(SHAPEHEADER *shphd, const ChunkShape *cshp_
 		return;
 	}
 
-	float corners[9], coordinates[6];
+	// A polygon's first three corners can lie almost in a line, and then they say very little about how the texture lies on it. So a four-cornered
+	// polygon uses whichever of its two triangles is bigger.
 	int const *points = *shphd->points;
+	int which[3] = { 0, 1, 2 };
 
-	for (int corner = 0; corner < 3; corner++)
+	for (int corner = 0; corner < poly.num_verts; corner++)
 	{
 		int const point = poly.vert_ind[corner];
 
-		if (point < 0 || point >= shphd->numpoints)
+		if (corner >= 4 || point < 0 || point >= shphd->numpoints)
 		{
 			return;
 		}
+	}
 
-		corners[corner * 3 + 0] = (float)points[point * 3 + 0];
-		corners[corner * 3 + 1] = (float)points[point * 3 + 1];
-		corners[corner * 3 + 2] = (float)points[point * 3 + 2];
-		coordinates[corner * 2 + 0] = cshp_ptr->uv_list[UVIndex].vert[corner].u;
-		coordinates[corner * 2 + 1] = cshp_ptr->uv_list[UVIndex].vert[corner].v;
+	if (poly.num_verts == 4 && cshp_ptr->uv_list[UVIndex].num_verts >= 4
+		&& TriangleSize(points, poly.vert_ind[0], poly.vert_ind[2], poly.vert_ind[3]) > TriangleSize(points, poly.vert_ind[0], poly.vert_ind[1], poly.vert_ind[2]))
+	{
+		which[1] = 2;
+		which[2] = 3;
+	}
+
+	float corners[9], coordinates[6];
+
+	for (int i = 0; i < 3; i++)
+	{
+		int const corner = which[i];
+		int const point = poly.vert_ind[corner];
+
+		corners[i * 3 + 0] = (float)points[point * 3 + 0];
+		corners[i * 3 + 1] = (float)points[point * 3 + 1];
+		corners[i * 3 + 2] = (float)points[point * 3 + 2];
+		coordinates[i * 2 + 0] = cshp_ptr->uv_list[UVIndex].vert[corner].u;
+		coordinates[i * 2 + 1] = cshp_ptr->uv_list[UVIndex].vert[corner].v;
 	}
 
 	SurfaceTangent_Work(corners, coordinates, &shphd->sh_surfacetangents[polygon]);

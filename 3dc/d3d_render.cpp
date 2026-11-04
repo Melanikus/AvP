@@ -5887,7 +5887,10 @@ static void ToyShadows_Draw()
 
 	// The game caches its render states, so everything is put back exactly as it was, whatever happens here.
 	IDirect3DStateBlock9 *savedState = 0;
-	report.block = device->CreateStateBlock(D3DSBT_ALL, &savedState);
+	{
+		ProcessorStageClock stateClock(kProcessorStateBlock);
+		report.block = device->CreateStateBlock(D3DSBT_ALL, &savedState);
+	}
 	if (FAILED(report.block))
 	{
 		if (logThisFrame)
@@ -6259,8 +6262,11 @@ static void ToyShadows_Draw()
 		countQuery->Release();
 	}
 
-	savedState->Apply();
-	savedState->Release();
+	{
+		ProcessorStageClock stateClock(kProcessorStateBlock);
+		savedState->Apply();
+		savedState->Release();
+	}
 
 	if (logThisFrame)
 	{
