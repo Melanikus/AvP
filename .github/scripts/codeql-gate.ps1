@@ -56,10 +56,22 @@ $unscannedTypes = '.cs', '.cshtml', '.razor', '.go', '.java', '.kt', '.kts', '.p
 
 # Helper entries in vcpkg's build folder that hold no library code. D3DX is Microsoft's binary package: it has no source
 # to scan, and it is the one exception the project accepts.
-$notLibraries = 'detect_compiler', 'dxsdk-d3dx', 'vcpkg-cmake', 'vcpkg-cmake-config'
+$notLibraries = 'detect_compiler', 'dxsdk-d3dx', 'vcpkg-cmake', 'vcpkg-cmake-config', 'versioning_'
 
 function Test-FileType([string] $Path, [string[]] $Types) {
     return $Types -contains [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+}
+
+# CMake, the build tool most libraries use, keeps its working files in folders called CMakeFiles. Some are tiny test
+# programs it writes on the spot to ask questions like "does this machine have sys/socket.h?", and many of those are
+# meant to fail. Others aren't code at all: CMake's notes from looking for C++ modules, which CodeQL tries to read anyway.
+# None of them is part of a library, none ends up in the game, and no fix of ours could reach them. So in the traced
+# library scan they don't decide anything, in either direction: a problem in one can't fail the scan, and seeing one
+# doesn't prove a library was read. They are still listed, in cmake-files-set-aside.tsv, so nothing vanishes silently.
+# The match is exact on purpose: CMakeFiles straight inside a build folder such as enet/x86-windows-rel/. A file in a
+# library's own source can never match it, even if a library had a folder with that name.
+function Test-CMakeWorkFile([string] $Path) {
+    return ($Kind -eq 'libs') -and ($Path -match '^[^/]+/[^/]+-(rel|dbg)/CMakeFiles/')
 }
 
 # Turns a location from the report into a plain file name such as 3dc/avp/weapons.cpp.
@@ -99,6 +111,8 @@ foreach ($file in $sarifFiles) {
 }
 
 # Findings: any at all fails the scan, whatever their level.
+$setAsideFindings = @($findings | Where-Object { Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0]) })
+$findings = @($findings | Where-Object { -not (Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0])) })
 $findingLines = foreach ($finding in $findings) {
     $place = @($finding.locations)[0]
     $firstLine = ([string] $finding.message.text -split "`n")[0]
@@ -115,6 +129,13 @@ if ($findings.Count -gt 0) {
 $noticesByKind = @($notices | Group-Object -Property { $_.descriptor.id } | Sort-Object -Property Count -Descending)
 Write-ReportList 'notices-by-kind.txt' @($noticesByKind | ForEach-Object { '{0,7}  {1}' -f $_.Count, $_.Name })
 $readProblems = @($notices | Where-Object { $_.descriptor.id -match $readProblemNotice })
+$setAsideProblems = @($readProblems | Where-Object { Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0]) })
+$readProblems = @($readProblems | Where-Object { -not (Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0])) })
+$setAsideLines = foreach ($item in @($setAsideFindings) + @($setAsideProblems)) {
+    $rule = if ($item.ruleId) { $item.ruleId } else { $item.descriptor.id }
+    '{0}{1}{2}' -f $rule, "`t", (Get-ReportPath @($item.locations)[0])
+}
+Write-ReportList 'cmake-files-set-aside.tsv' @($setAsideLines)
 $readProblemLines = foreach ($problem in $readProblems) {
     $place = @($problem.locations)[0]
     $firstLine = ([string] $problem.message.text -split "`n")[0]
@@ -185,7 +206,8 @@ if ($Kind -eq 'own') {
     if ($libraries.Count -eq 0) { $failures.Add('No libraries were built') }
     $libraryLines = foreach ($library in $libraries) {
         $count = @($seen | Where-Object {
-                $_.StartsWith("$($library.Name)/", [System.StringComparison]::OrdinalIgnoreCase) -and (Test-FileType $_ $sourceTypes)
+                $_.StartsWith("$($library.Name)/", [System.StringComparison]::OrdinalIgnoreCase) -and
+                (Test-FileType $_ $sourceTypes) -and -not (Test-CMakeWorkFile $_)
             }).Count
         if ($count -eq 0) { $failures.Add("CodeQL saw no compiled source for the library $($library.Name)") }
         '{0,7}  {1}' -f $count, $library.Name
@@ -255,7 +277,8 @@ $summary = @(
     "  headers missed:  $($missedHeaders.Count)",
     "  findings:        $($findings.Count)",
     "  read problems:   $($readProblems.Count)",
-    "  look-away notes: $($suppressions.Count)"
+    "  look-away notes: $($suppressions.Count)",
+    "  CMake set aside: $(@($setAsideFindings).Count + @($setAsideProblems).Count)"
 )
 Write-ReportList 'summary.txt' $summary
 $summary | Write-Output
