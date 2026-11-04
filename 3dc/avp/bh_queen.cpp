@@ -4,6 +4,7 @@
 //   simply skipped
 //   the Queen copes with a model missing a foot or a swiping hand; her hit animation is the
 //   one set to not playing when she is made, where the attack was set twice
+//   a Queen left without her two animations by a save file is left out of the game
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -5138,8 +5139,13 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	queenStatusPointer->QueenRightHand=GetThisSectionData(queenStatusPointer->HModelController.section_data,"rrrr fing");
 
 	Load_SoundState(&queenStatusPointer->soundHandle);
-	
 
+	//these two animations are used every frame without checking. They're added when the Queen is made, and nothing
+	//removes them, so a Queen without them comes from a damaged or made-up save file, and is left out of the game
+	if(!queenStatusPointer->attack_delta || !queenStatusPointer->hit_delta)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Queen(STRATEGYBLOCK* sbPtr)

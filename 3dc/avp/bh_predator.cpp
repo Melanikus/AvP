@@ -5,6 +5,7 @@ Source file for predator AI
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a dormant predator keeps its own copy of its level data, not a pointer to it
 //   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
+//   a save file can no longer give a predator a weapon that does not exist
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -7061,6 +7062,10 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//check the size of the save block
 	if(header->size!=sizeof(*block)) return;
+
+	//the predator's weapon is used all the time without checking, so a number that isn't a weapon stops here. The predator
+	//just stays as the level made it
+	if(!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id))) return;
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);

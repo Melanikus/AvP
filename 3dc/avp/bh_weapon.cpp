@@ -3,6 +3,7 @@
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
 //   so code scanners can read the file; the game runs the same code as before
 //   a disc whose model has no disc part no longer crashes
+//   a thrown weapon that a save file leaves without a model is left out of the game
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -4924,6 +4925,11 @@ void LoadStrategy_Molotov(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 
+	//the bottle's model only comes from the save file, and it can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Molotov(STRATEGYBLOCK* sbPtr)
@@ -5012,6 +5018,12 @@ void LoadStrategy_PredatorDisc(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 	Load_SoundState(&behav->soundHandle);
+
+	//the model only comes from the save file, and this can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_PredatorDisc(STRATEGYBLOCK* sbPtr)
@@ -5188,6 +5200,12 @@ void LoadStrategy_Frisbee(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 	Load_SoundState(&behav->soundHandle);
+
+	//the model only comes from the save file, and this can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Frisbee(STRATEGYBLOCK* sbPtr)

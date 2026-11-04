@@ -9,6 +9,7 @@
 //   a request can only send a marine along a path that exists
 //   a sentry sent back to a spot outside every module keeps the module it has
 //   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
+//   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
 #include "3dc.h"
 
 #include "inline.h"
@@ -18112,6 +18113,66 @@ typedef struct marine_save_block
 #define SAVELOAD_BEHAV marineStatusPointer
 
 
+// Can a marine carry this weapon, in this level? Each level only loads the model files it uses, and the save file can
+// name any number at all.
+static BOOL Marine_Weapon_Is_Usable(int weapon_id)
+{
+	MARINE_WEAPON_DATA *weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(weapon_id));
+
+	return weapon && GetNamedHierarchyFromLibrary(weapon->Riffname, weapon->HierarchyName);
+}
+
+// Can this marine carry on with what a save file left it? The code that fires a gun uses the tip of the gun without
+// checking. In the game that's safe, for three reasons:
+// - A limb that holds a gun kills a marine or civilian when it's cut off. Androids survive that, but the game moves them
+//   to a model with the gun in the other hand straight away.
+// - A marine with a SADAR or Skeeter takes the gun apart to reload, and the tip goes with it until the reload puts it back
+//   (see Execute_MNS_Reloading). A game saved in between loads without the tip, so it's put back here, the way the reload
+//   does it. The marine then finishes reloading with the gun already whole.
+// - The only model with no gun at all is the weapon's plain model, which a marine wears while burning to death, and
+//   nothing a burning marine does fires a weapon (see RunAroundOnFireMission_Control).
+static BOOL Marine_Can_Carry_On(STRATEGYBLOCK *sbPtr, MARINE_STATUS_BLOCK *marineStatusPointer)
+{
+	HMODELCONTROLLER *controller = &marineStatusPointer->HModelController;
+	SECTION *model = controller->Root_Section;
+	MARINE_WEAPON_DATA *weapon = marineStatusPointer->My_Weapon;
+
+	if (!model || !weapon || _stricmp(model->Rif_Name, weapon->Riffname) != 0)
+	{
+		return FALSE;
+	}
+
+	if (strcmp(model->Hierarchy_Name, weapon->HierarchyName) != 0)
+	{
+		return (strcmp(model->Hierarchy_Name, weapon->TemplateName) == 0) && (marineStatusPointer->Mission == MM_RunAroundOnFire);
+	}
+
+	if (weapon->GunflashName == NULL)
+	{
+		return TRUE;
+	}
+
+	if (marineStatusPointer->My_Gunflash_Section == NULL)
+	{
+		SECTION_DATA *clip = GetThisSectionData(controller->section_data, weapon->ClipName);
+
+		if (clip)
+		{
+			clip->flags &= ~(section_data_terminate_here|section_data_notreal);
+		}
+
+		// the first of these only tells the model code which object it's working on
+		ProveHModel_Far(controller, sbPtr);
+		Transmogrify_HModels(sbPtr, controller, model, 0, 1, 1);
+		ProveHModel_Far(controller, sbPtr);
+
+		marineStatusPointer->My_Gunflash_Section = GetThisSectionData(controller->section_data, weapon->GunflashName);
+		marineStatusPointer->My_Elevation_Section = GetThisSectionData(controller->section_data, weapon->ElevationSection);
+	}
+
+	return (marineStatusPointer->My_Gunflash_Section != NULL);
+}
+
 void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
 	STRATEGYBLOCK* sbPtr;
@@ -18120,6 +18181,10 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//check the size of the save block
 	if(header->size!=sizeof(*block)) return;
+
+	//everything a marine does goes through its weapon, so a weapon that can't be used stops here. A marine already in
+	//the level just stays as the level made it
+	if(!Marine_Weapon_Is_Usable(block->weapon_id)) return;
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);
@@ -18254,6 +18319,12 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	Load_SoundState(&marineStatusPointer->soundHandle);
 	Load_SoundState(&marineStatusPointer->soundHandle2);
+
+	//a marine that can't work with what the save file gave it is left out of the game
+	if(!Marine_Can_Carry_On(sbPtr, marineStatusPointer))
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Marine(STRATEGYBLOCK* sbPtr)

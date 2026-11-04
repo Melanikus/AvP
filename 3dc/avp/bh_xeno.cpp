@@ -7,6 +7,7 @@
 //   compiled, so code scanners can read the file; the game runs the same code as before
 //   the arms' tilt is limited with min and max
 //   a Xenoborg placed outside every module is left out, instead of crashing
+//   a Xenoborg left without its animations by a save file is left out of the game
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -5197,6 +5198,16 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	Load_SoundState(&xenoStatusPointer->soundHandle1);
 	Load_SoundState(&xenoStatusPointer->soundHandle2);
+
+	//these animations are used without checking. They're added when the Xenoborg is made, and nothing removes them, so
+	//one without them all comes from a damaged or made-up save file, and is left out of the game
+	if(!xenoStatusPointer->head_pan || !xenoStatusPointer->head_tilt
+		|| !xenoStatusPointer->left_arm_pan || !xenoStatusPointer->left_arm_tilt
+		|| !xenoStatusPointer->right_arm_pan || !xenoStatusPointer->right_arm_tilt
+		|| !xenoStatusPointer->torso_twist)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 

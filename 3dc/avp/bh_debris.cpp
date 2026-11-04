@@ -2,6 +2,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   debris in a save that cannot get a dynamics block is left out, instead of crashing
+//   debris that a save file leaves without a model is left out of the game
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -1660,6 +1661,11 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 
+	//debris is made from nothing as it loads, and its model comes from the save file. Without one it can't go on
+	if(!hdebrisStatusPointer->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_HierarchicalDebris(STRATEGYBLOCK* sbPtr)

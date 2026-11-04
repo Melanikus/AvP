@@ -8,6 +8,7 @@
 //   finds the data after a save block with DataAfterBlock, which says what it means
 //   a delta sequence's name is copied by the length measured for it
 //   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
+//   a save file can only change a model for a whole model from the same file
 
 #include "3dc.h"
 #include "io.h"
@@ -4785,6 +4786,7 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	void LoadHierarchy(SAVE_BLOCK_HEADER *header, HMODELCONTROLLER *controller)
 	{
 		SECTION *root_section;
+		SECTION *whole_model;
 		const char *Rif_Name;
 		const char *Hierarchy_Name;
 		HIERARCHY_SAVE_BLOCK *block = (HIERARCHY_SAVE_BLOCK *) header;
@@ -4844,19 +4846,33 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 			if (needToCreateHModel)
 			{
 				extern SECTION *GetNamedHierarchyFromLibrary(const char * rif_name, const char * hier_name);
-				root_section = GetNamedHierarchyFromLibrary(Rif_Name, Hierarchy_Name);
+				whole_model = GetNamedHierarchyFromLibrary(Rif_Name, Hierarchy_Name);
+
+				if (!whole_model)
+				{
+					return;
+				}
+
+				//may not want the 'real' root (hierarchical debris)
+				root_section = GetThisSection_FromID(whole_model, block->root_section_id);
 
 				if (!root_section)
 				{
 					return;
 				}
 
-				//may not want the 'real' root (hierarchical debris)
-				root_section = GetThisSection_FromID(root_section, block->root_section_id);
-
-				if (!root_section)
+				/*
+				Something that already has a model is a character, a placed object or the player's weapon, and its code
+				relies on the kind of model it was given. In the game, such a model only ever changes for a whole model
+				from the same file. Only debris uses a piece of a model, and debris has no model when it gets here. A save
+				file that asks for anything else is damaged or was made to do harm, so the object keeps the model it has.
+				*/
+				if (controller->Root_Section)
 				{
-					return;
+					if (root_section != whole_model || _stricmp(Rif_Name, controller->Root_Section->Rif_Name) != 0)
+					{
+						return;
+					}
 				}
 
 				//reinitialise the hierarchy
