@@ -18,6 +18,10 @@
 /* Additionally, TYPE must have valid assignment         */
 /* operator and copy constructor                         */
 /****************************************************Jake*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the HashTable classes are written out in full instead of being made by macros (the compiled result
+//   is the same), so that code-checking tools can read this file
 
 /************************************************************/
 /*                                                          */
@@ -831,35 +835,70 @@ void _base_HashTable<TYPE,ARG_TYPE,CMP_ARG_TYPE>::DeleteNode(Node * _nodeP)
 
 template <class TYPE> class HashTable;
 
-#define HT_DEFINITION(T1,T2,T3) \
-	: public _base_HashTable<T1,T2,T3> { public: HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<T1,T2,T3>(_initialTableSizeShift){} };
+// HashTable comes in two kinds, both written out in full below. They used to be made by macros. A compiler expands
+// macros, so the compiled result is the same, but a code-checking tool reads the file as it stands, and it cannot
+// follow a class that is only made when a macro is expanded.
 
-// for simple types
-#define HT_WATCOM_DEFINE_FOR_SIMPLE_TYPE(TYPE) \
-	class HashTable<TYPE> HT_DEFINITION(TYPE,TYPE,TYPE)
+// For a simple type, such as a number, values are passed around by making a copy:
+template<> class HashTable<unsigned long> : public _base_HashTable<unsigned long,unsigned long,unsigned long>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<unsigned long,unsigned long,unsigned long>(_initialTableSizeShift){}
+};
+template<> class HashTable<signed long> : public _base_HashTable<signed long,signed long,signed long>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<signed long,signed long,signed long>(_initialTableSizeShift){}
+};
+template<> class HashTable<unsigned> : public _base_HashTable<unsigned,unsigned,unsigned>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<unsigned,unsigned,unsigned>(_initialTableSizeShift){}
+};
+template<> class HashTable<signed> : public _base_HashTable<signed,signed,signed>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<signed,signed,signed>(_initialTableSizeShift){}
+};
+template<> class HashTable<unsigned short> : public _base_HashTable<unsigned short,unsigned short,unsigned short>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<unsigned short,unsigned short,unsigned short>(_initialTableSizeShift){}
+};
+template<> class HashTable<signed short> : public _base_HashTable<signed short,signed short,signed short>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<signed short,signed short,signed short>(_initialTableSizeShift){}
+};
+template<> class HashTable<unsigned char> : public _base_HashTable<unsigned char,unsigned char,unsigned char>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<unsigned char,unsigned char,unsigned char>(_initialTableSizeShift){}
+};
+template<> class HashTable<signed char> : public _base_HashTable<signed char,signed char,signed char>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<signed char,signed char,signed char>(_initialTableSizeShift){}
+};
+template<> class HashTable<char> : public _base_HashTable<char,char,char>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<char,char,char>(_initialTableSizeShift){}
+};
+template<> class HashTable<float> : public _base_HashTable<float,float,float>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<float,float,float>(_initialTableSizeShift){}
+};
 
-#define HT_DEFINE_FOR_SIMPLE_TYPE(SIMPLE_TYPE) template<> HT_WATCOM_DEFINE_FOR_SIMPLE_TYPE(SIMPLE_TYPE)
-
-HT_DEFINE_FOR_SIMPLE_TYPE(unsigned long)
-HT_DEFINE_FOR_SIMPLE_TYPE(signed long)
-HT_DEFINE_FOR_SIMPLE_TYPE(unsigned)
-HT_DEFINE_FOR_SIMPLE_TYPE(signed)
-HT_DEFINE_FOR_SIMPLE_TYPE(unsigned short)
-HT_DEFINE_FOR_SIMPLE_TYPE(signed short)
-HT_DEFINE_FOR_SIMPLE_TYPE(unsigned char)
-HT_DEFINE_FOR_SIMPLE_TYPE(signed char)
-HT_DEFINE_FOR_SIMPLE_TYPE(char)
-HT_DEFINE_FOR_SIMPLE_TYPE(float)
-
-#undef HT_DEFINE_FOR_SIMPLE_TYPE
-#undef HT_WATCOM_DEFINE_FOR_SIMPLE_TYPE
-
-// for other types
+// For any other type, values are passed by reference, which avoids copying them:
 template <class TYPE>
-class HashTable HT_DEFINITION(TYPE,TYPE const &, TYPE const &)
+class HashTable : public _base_HashTable<TYPE,TYPE const &, TYPE const &>
+{
+	public:
+		HashTable(unsigned _initialTableSizeShift = HT_DEFAULTTABLESIZESHIFT) : _base_HashTable<TYPE,TYPE const &, TYPE const &>(_initialTableSizeShift){}
+};
 
 //template <class TYPE *> class HashTable : public _base_HashTable<TYPE *,TYPE *,TYPE const *> {};
-
-#undef HT_DEFINITION
 
 #endif // ! HASH_TEMPLATE_VERSION
