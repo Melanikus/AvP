@@ -24,6 +24,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
+      - name: Compile every shader
+        shell: pwsh
+        run: ./tests/compile-shaders.ps1
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1
