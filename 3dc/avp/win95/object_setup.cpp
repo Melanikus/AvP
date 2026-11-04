@@ -1099,6 +1099,30 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		
 	}
 
+	// The game starts first_sequence as soon as the object is made. It could still be a gap, if the level file names
+	// no starting sequence and leaves place 0 empty, so it moves to the first entry with something to play. If no
+	// entry has, because a file can also give -1 as a sequence, the object goes to the log and is left out of the level.
+	if(phtt->first_sequence->sequence_no==-1)
+	{
+		PLACED_HIERARCHY_SEQUENCE* playable_sequence=0;
+
+		for(i=0;i<phtt->num_sequences && !playable_sequence;i++)
+		{
+			if(phtt->sequences[i].sequence_no!=-1)
+			{
+				playable_sequence=&phtt->sequences[i];
+			}
+		}
+
+		if(!playable_sequence)
+		{
+			LogErrorString("level file has a placed object with no usable sequence");
+			return;
+		}
+
+		phtt->first_sequence=playable_sequence;
+	}
+
 	phtt->num_special_track_points=0;
 	phtt->special_track_points=0;
 	AVP_Strategy_Chunk* asc=(AVP_Strategy_Chunk*) phc->lookup_single_child("AVPSTRAT");
