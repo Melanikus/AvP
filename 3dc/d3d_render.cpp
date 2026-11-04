@@ -4137,7 +4137,8 @@ struct ToyLightReport
 {
 	bool drawn;            // it got as far as its passes. A light whose whole range is off screen doesn't
 	int polygonsInReach;   // added up over all its passes, like the prisms
-	int prismsBuilt;
+	int prismsBuilt;       // only those worked out this frame. Kept ones don't come through here, so these two stay low once a light's prisms are kept
+	int keptCorners;       // the corners drawn from the kept prisms instead
 	float nearestCaster;   // how close any corner of a polygon that cast came to the light
 	float maskRise;        // for a lamp, how much the mask's average went up. For a flare, the average of its own mask
 	unsigned int stayedMarked;   // for a lamp, marked pixels no polygon painted, added up over its passes
@@ -5054,6 +5055,12 @@ static bool UseKeptPrisms(const KeptGroup &group, const float *light, const floa
 	}
 
 	*corners = run.corners;
+
+	if (toyNoteLight)
+	{
+		toyNoteLight->keptCorners += run.corners;
+	}
+
 	return ShadowVolumes_AddRun(run);
 }
 
@@ -6085,16 +6092,16 @@ static void ToyShadows_Draw()
 				if (kind == 2.0f)
 				{
 					_snprintf(line, sizeof(line) - 1,
-						"toy-shadows: frame %d, light %d, added per pixel: %.0f away at %.0f %.0f %.0f, range %.0f, strength %.2f, %s, %d passes marked %u pixels (%.1f%% of the screen a pass), %d polygons in reach, %d prisms, nearest caster %.0f, its mask averages %.3f",
+						"toy-shadows: frame %d, light %d, added per pixel: %.0f away at %.0f %.0f %.0f, range %.0f, strength %.2f, %s, %d passes marked %u pixels (%.1f%% of the screen a pass), %d polygons in reach, %d prisms, %d kept corners, nearest caster %.0f, its mask averages %.3f",
 						report.frame, i, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
-						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise);
+						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->polygonsInReach, did->prismsBuilt, did->keptCorners, did->nearestCaster, did->maskRise);
 				}
 				else
 				{
 					_snprintf(line, sizeof(line) - 1,
-						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes painted %u pixels (%.1f%% of the screen a pass), %u stayed marked, %d polygons in reach, %d prisms, nearest caster %.0f, mask rose %.4f, so a painted pixel lost a share of %.3f and keeps %.3f",
+						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes painted %u pixels (%.1f%% of the screen a pass), %u stayed marked, %d polygons in reach, %d prisms, %d kept corners, nearest caster %.0f, mask rose %.4f, so a painted pixel lost a share of %.3f and keeps %.3f",
 						report.frame, i, kind, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
-						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->stayedMarked, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
+						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->stayedMarked, did->polygonsInReach, did->prismsBuilt, did->keptCorners, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
 				}
 
 				line[sizeof(line) - 1] = 0;

@@ -6402,7 +6402,8 @@ static bool BlockIsStill(const DISPLAYBLOCK *dptr)
 
 // The corners of one polygon of a shape standing at place, in the world's numbers, written as x y z. Gives back how many there are, or 0 if the
 // polygon can't be used. These are the shape's own numbers, not the rounded ones on the light list, so a corner two polygons share is the same
-// corner to the last digit, whenever each of their prisms was made, and no crack of light can open between them.
+// corner to the last digit, whenever each of their prisms was made, and no crack of light can open between them. A kept polygon next to one that went
+// the ordinary way, because the store was full, can be up to 0.87 from it at their edge, but only until the store has been emptied and refilled.
 int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners)
 {
 	SHAPEHEADER const *shape = (SHAPEHEADER const *)shapePointer;
