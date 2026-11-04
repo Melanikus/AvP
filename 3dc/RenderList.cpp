@@ -279,9 +279,17 @@ void RenderList::Reset()
 // Draws this list's solid polygons a second time, for a pass that adds light to them. The caller has set the shaders and
 // the blending. This goes straight to the device, because the caller puts the device back afterwards, and the game's own
 // record of its settings has to stay true.
-void RenderList::DrawOpaqueAgain()
+void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
 {
-	(**decl).Set();
+	if (declaration)
+	{
+		declaration->Set();
+	}
+	else
+	{
+		(**decl).Set();
+	}
+
 	(**vb).Set();
 	(**ib).Set();
 

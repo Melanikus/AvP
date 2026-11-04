@@ -16,6 +16,8 @@
 #include "RenderList.h"
 #include "VertexBuffer.h"
 #include "FmvCutscenes.h"
+#include "surface_normals.h"
+#include "surface_pictures.h"
 #define UseLocalAssert FALSE
 #include "ourasert.h"
 #include <assert.h>
@@ -283,6 +285,7 @@ static bool LockExecuteBuffer()
 
 	// lock main vertex and index buffers
 	d3d.mainVB->Lock((void**)&mainVertex);
+	SurfaceNormals_Lock();
 	d3d.mainIB->Lock(&mainIndex);
 
 	// lock ortho vertex and index buffers
@@ -344,6 +347,7 @@ static bool UnlockExecuteBufferAndPrepareForUse()
 
 	// unlock main vertex and index buffers
 	d3d.mainVB->Unlock();
+	SurfaceNormals_Unlock();
 	d3d.mainIB->Unlock();
 
 	// unlock ortho vertex and index buffers
@@ -1414,6 +1418,13 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 		weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
 	} else {
 		mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
+	}
+
+	// A see-through polygon can be drawn long after its shape, when the shape's normals are no longer the current ones. It never reaches
+	// the surface pictures, and nor does the weapon, so neither needs a normal.
+	if (!gunLayer && RenderPolygon.TranslucencyMode == TRANSLUCENCY_OFF)
+	{
+		SurfaceNormals_WritePolygon(inputPolyPtr, vb, RenderPolygon.NumberOfVertices);
 	}
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
@@ -4461,6 +4472,7 @@ void ToyShadows_ReleaseTargets()
 	ToyRelease(toyDepthSurface);
 	ToyRelease(toyMaskTexture);
 	ToyRelease(toyDepthTexture);
+	SurfacePictures_Release();
 	toyTargetsFailed = false;
 }
 
@@ -4539,13 +4551,9 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 }
 
 // Writes down how far away each pixel of the level is. The bias is the one the darkening uses, for the same reason.
-static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device)
+static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device, const float *worldAxes)
 {
 	ToySetVolumeState(device);
-
-	d3d.effectSystem->SetActive(d3d.shadowDepthEffect);
-	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowDepthEffect, 0, CONST_MATRIX, &d3d.matProjection);
-	d3d.mainDecl->Set();
 
 	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
@@ -4553,7 +4561,15 @@ static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device)
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
 
-	ToyDrawLevelPolygons(device, 0);
+	// The surface pass writes the distance along with everything else. A card that can't run it just gets the distance.
+	if (!SurfacePictures_Draw(device, toyDepthSurface, worldAxes))
+	{
+		d3d.effectSystem->SetActive(d3d.shadowDepthEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.shadowDepthEffect, 0, CONST_MATRIX, &d3d.matProjection);
+		d3d.mainDecl->Set();
+
+		ToyDrawLevelPolygons(device, 0);
+	}
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
@@ -5298,7 +5314,7 @@ static void ToyShadows_Draw()
 		device->SetRenderTarget(0, toyDepthSurface);
 		device->SetViewport(&viewport);
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
-		ToyDrawDepthForSoftening(device);
+		ToyDrawDepthForSoftening(device, worldAxes);
 
 		// the mask starts at nothing blocked
 		device->SetRenderTarget(0, toyMaskSurface);

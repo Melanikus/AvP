@@ -28,6 +28,7 @@
 //   the menu font's letters are limited to what its texture can hold
 
 #include "d3_func.h"
+#include "surface_normals.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
 #include "logString.h"
@@ -73,6 +74,13 @@ bool usingStencil = false;
 
 std::string shaderPath;
 std::string videoModeDescription;
+
+// The game's shaders all fit shader model 2. The ones for shadows and lighting need 3, for their length and to draw on several pictures at
+// once. Those are told apart by the start of the file's name.
+static bool ShaderNeedsModel3(const std::string &fileName)
+{
+	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0;
+}
 
 bool CreateVolatileResources();
 bool ReleaseVolatileResources();
@@ -191,6 +199,7 @@ bool ReleaseVolatileResources()
 	Tex_ReleaseDynamicTextures();
 
 	SAFE_DELETE(d3d.mainVB);
+	SurfaceNormals_Release();
 	SAFE_DELETE(d3d.mainIB);
 
 	SAFE_DELETE(d3d.orthoVB);
@@ -712,6 +721,7 @@ bool CreateVolatileResources()
 	// main
 	d3d.mainVB = new VertexBuffer;
 	d3d.mainVB->Create(kMaxVertices*5, sizeof(D3DLVERTEX), USAGE_DYNAMIC);
+	SurfaceNormals_Create(kMaxVertices*5);
 
 	d3d.mainIB = new IndexBuffer;
 	d3d.mainIB->Create((kMaxIndices*5) * 3, USAGE_DYNAMIC);
@@ -1272,7 +1282,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 						NULL,            // macro's
 						NULL,            // includes
 						"vs_main",       // main function
-						(fileName.compare(0, 6, "shadow") == 0) ? "vs_3_0" : "vs_2_0",        // shader profile
+						ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -1364,7 +1374,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 						NULL,            // macro's
 						NULL,            // includes
 						"ps_main",       // main function
-						(fileName.compare(0, 6, "shadow") == 0) ? "ps_3_0" : "ps_2_0",        // shader profile
+						ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -2471,6 +2481,15 @@ bool InitialiseDirect3D()
 	d3d.mainDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
 	d3d.mainDecl->Create();
 
+	// the game's vertices, plus the normal that goes with each, from a second list. Only the surface pass uses this.
+	d3d.surfaceDecl = new VertexDeclaration;
+	d3d.surfaceDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+	d3d.surfaceDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    1);
+	d3d.surfaceDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceDecl->Create();
+
 	d3d.orthoDecl = new VertexDeclaration;
 	d3d.orthoDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.orthoDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
@@ -2583,6 +2602,7 @@ bool InitialiseDirect3D()
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
 
 	d3d.shadowEffect = d3d.effectSystem->Add("shadow", "shadow.vsh", "shadow.psh", d3d.mainDecl);
+	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
 	d3d.shadowDepthEffect = d3d.effectSystem->Add("shadowDepth", "shadow.vsh", "shadowDepth.psh", d3d.mainDecl);
 	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
 	d3d.shadowFlareEffect = d3d.effectSystem->Add("shadowFlare", "shadowFlare.vsh", "shadowFlare.psh", d3d.mainDecl);
@@ -2658,6 +2678,7 @@ void ReleaseDirect3D()
 
 	// release vertex declarations
 	delete d3d.mainDecl;
+	delete d3d.surfaceDecl;
 	delete d3d.orthoDecl;
 	delete d3d.decalDecl;
 	delete d3d.fmvDecl;

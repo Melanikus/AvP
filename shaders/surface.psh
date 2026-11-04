@@ -1,0 +1,50 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float3 ViewPosition : TEXCOORD0;
+    float3 Normal       : TEXCOORD1;
+    float2 Texture      : TEXCOORD2;
+    float3 Keep         : TEXCOORD3;
+};
+
+// Pixel shader output structure: one colour for each picture being drawn on
+struct PS_OUTPUT
+{
+    float4 Distance : COLOR0;    // how far away this pixel is
+    float4 Normal   : COLOR1;    // which way it faces, as colours from 0 to 1. Read it back with no normalising: it can be zero
+    float4 Colour   : COLOR2;    // the colour of its texture. An alpha of 1 means a surface is here, and 0 means nothing is
+};
+
+// Global variables
+sampler2D Tex0 : register(s0);
+
+
+// Name: Surface pixel shader
+// Type: Pixel shader
+// Desc: Writes down what every light needs to know about this pixel, once, so that no light has to draw the polygon again to find out.
+
+PS_OUTPUT ps_main(in PS_INPUT In)
+{
+    PS_OUTPUT Out;
+
+    float4 texel = tex2D(Tex0, In.Texture);
+
+    // A polygon nobody wrote a normal for stays out of the pictures, and keeps the light the game gave it.
+    clip(In.Keep.x - 0.5f);
+
+    // A hole in a texture, such as the gaps in a grate. The game's alpha test drew nothing here, so what shows is the surface behind, and
+    // that's the one the pictures must hold. This is the game's own sum, from pixel.psh.
+    clip(texel.a * In.Keep.y + In.Keep.z - 0.5f);
+
+    Out.Distance = float4(In.ViewPosition.z, 0.0f, 0.0f, 1.0f);
+    Out.Colour   = float4(texel.rgb, 1.0f);
+
+    // A shape can really have a zero normal. Normalising zero gives nonsense, so that's kept as zero. The game lights such a point as a
+    // surface turned side-on, and so do the light shaders.
+    float size = dot(In.Normal, In.Normal);
+    float3 facing = (size > 0.0f) ? In.Normal / sqrt(size) : float3(0.0f, 0.0f, 0.0f);
+
+    Out.Normal = float4(facing * 0.5f + 0.5f, 1.0f);
+
+    return Out;
+}

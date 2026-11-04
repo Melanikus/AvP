@@ -7,6 +7,7 @@
 //   overflowed;
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 #include "3dc.h"
+#include "surface_normals.h"
 #include "logString.h"
 #include <math.h>
 #include <vector>
@@ -259,6 +260,7 @@ void SetupShapePipeline(void)
 	// if((Global_ODB_Ptr->ObStrategyBlock)&&(Global_ODB_Ptr->ObStrategyBlock->I_SBtype == I_BehaviourQueenAlien))
 	//      Global_ODB_Ptr->ObFlags3 &= ObFlag3_NoLightDot;
 	ObjectCounter++;
+	SurfaceNormals_StartObject();
 }
 
 void ChooseLightingModel(DISPLAYBLOCK *dispPtr)

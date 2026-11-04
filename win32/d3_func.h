@@ -215,6 +215,8 @@ typedef struct D3DInfo
 
 	// vertex and index buffers
 	class VertexBuffer		*mainVB;
+	class VertexDeclaration	*surfaceDecl;
+	effectID_t				surfaceEffect;
 	class IndexBuffer		*mainIB;
 
 	class VertexBuffer		*orthoVB;

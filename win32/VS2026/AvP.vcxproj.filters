@@ -126,6 +126,12 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_normals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_pictures.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\RimLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1417,6 +1423,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\shadowFlare.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surface.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surface.vsh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\tallText.psh">
