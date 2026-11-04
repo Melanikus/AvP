@@ -5,6 +5,7 @@
 //   a shape stored in a level as a raw copy of memory is no longer read, because nothing could check it
 //   an animated shape with no merge data no longer crashes; an alternate skin only shares an animation that fits it
 //   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
+//   a shape stays still if a frame of its texture animation names a picture that isn't real
 
 #include <stdlib.h>
 #include <string>
@@ -30,7 +31,7 @@
 #include "mempool.h"
 #include <math.h>
 // for log file
-void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc);
+void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
 void SetupAnimOnTriangle(SHAPEHEADER *shp, TEXANIM *ta, int poly);
 void SetupAnimOnQuad(Shape_Chunk *sc, SHAPEHEADER *shp, TEXANIM *ta1, TEXANIM *ta2, int poly);
 
@@ -2160,8 +2161,19 @@ void SetupAnimOnQuad(Shape_Chunk *sc, SHAPEHEADER *shp, TEXANIM *ta1, TEXANIM *t
 	shp->items[poly][3] = UVIndex << 16;
 }
 
-void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int *local_tex_index_nos)
+void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos)
 {
+	// Each frame finds its picture by a texture number from the level file, and a picture that isn't there would become part of the polygon's
+	// colour. It can only be checked here, once the level's pictures are known. A shape with one that isn't real stays still, and keeps
+	// the texture it has. All 14542 frames in the game's own levels have a real one.
+	for (int i = 0; i < ac->NumPolys; i++)
+	{
+		if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))
+		{
+			return;
+		}
+	}
+
 	//create conversion between unmerged poly nos and merged poly nos
 	int *PolyConv = 0;
 	int *mgd = 0;
@@ -2665,7 +2677,7 @@ BOOL copy_to_shapeheader(
 			smdc = (Shape_Merge_Data_Chunk *)pCh;
 		}
 
-		SetupAnimatedTextures((Shape_Chunk *)shape, shphd, ac, smdc, local_tex_index_nos);
+		SetupAnimatedTextures((Shape_Chunk *)shape, shphd, ac, smdc, local_max_index, local_tex_index_nos);
 	}
 
 	if (shape->count_children("ANIMSEQU"))

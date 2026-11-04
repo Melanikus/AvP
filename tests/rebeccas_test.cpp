@@ -54,6 +54,7 @@
 #include "strategy_def.h"
 #include "bh_lift.h"
 #include "environment_chunk.hpp"
+#include "animation_chunk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
@@ -1719,6 +1720,395 @@ static void TestChunkBoundChecks()
 	Check(NameLengthInChunk(atTheWall, wallBytes) == -1, "a name with no zero stops at the end of its room");
 }
 
+// Writes one animated polygon of a chunk of texture animation: its six numbers, then each sequence's five numbers and its frames, all zeros.
+static char * PutAnimatedPolygon(char * where, int polygon, int sequences, int corners, int frames, unsigned int flags)
+{
+	int * out = (int *)where;
+
+	*out++ = polygon;
+	*out++ = 0;
+	*out++ = sequences;
+	*out++ = corners;
+	*out++ = 0;
+	*out++ = 0;
+
+	for (int i = 0; i < sequences; i++)
+	{
+		*out++ = 65536;
+		*out++ = (int)flags;
+		*out++ = frames;
+		*out++ = 0;
+		*out++ = 0;
+
+		for (int j = 0; j < frames * (1 + 2 * corners); j++)
+		{
+			*out++ = 0;
+		}
+	}
+
+	return (char *)out;
+}
+
+// Adds a chunk of texture animation that gives one polygon a sequence of one or more frames.
+static char * PutAnimation(char * where, int polygon, int frames)
+{
+	int const polygons = 1;
+	char temporary[4096];
+
+	memcpy(temporary, &polygons, sizeof(polygons));
+
+	size_t const bytes = PutAnimatedPolygon(temporary + sizeof(polygons), polygon, 1, 3, frames, 0) - temporary;
+	char * data = PutChunk(where, "TEXTANIM", bytes);
+
+	memcpy(data, temporary, bytes);
+
+	return data + bytes;
+}
+
+// Loads a shape from memory that ends right after it, so that a read past the end of its last chunk crashes the test, every time.
+static bool ShapeIsAcceptedAtTheWall(char const * end)
+{
+	size_t const allBytes = end - wholeShape;
+	char * atTheWall = MemoryEndingAtAWall(allBytes);
+
+	memcpy(atTheWall, wholeShape, allBytes);
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	new Shape_Chunk(&file, atTheWall, allBytes);
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+// 31. A chunk of texture animation is lists inside lists, and every count comes from the level file. The game then uses its numbers to reach
+// into the shape's lists, and writes there. So the chunk has to fit its own size, and its numbers have to fit the shape it's in.
+static void TestTextureAnimation()
+{
+	puts("31. texture animation");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const secondTriangle[5] = { 0, 2, 3, -1, -1 };
+
+	// A whole chunk is a count of 1, then a polygon with one sequence of one frame. Each row keeps some of it, and can change one number.
+	size_t const wholeChunkBytes = 76;
+	size_t const polygonsAt = 0, sequencesAt = 12, cornersAt = 16, flagsAt = 32, framesAt = 36;
+	size_t const nothing = wholeChunkBytes;
+
+	struct ChunkRow { size_t bytes; size_t at; int value; bool accepted; char const * what; };
+	ChunkRow const rows[] =
+	{
+		{ 76, nothing,      0,          true,  "a polygon with one frame is accepted" },
+		{  4, polygonsAt,   0,          true,  "a chunk with no polygons is accepted" },
+		{  0, nothing,      0,          false, "a chunk with no room for its count is refused" },
+		{  3, nothing,      0,          false, "a chunk too short for its count is refused" },
+		{ 76, polygonsAt,   0,          false, "bytes left over with no polygons are refused" },
+		{ 80, nothing,      0,          false, "bytes left over after the last frame are refused" },
+		{  4, polygonsAt,   -1,         false, "a negative count of polygons is refused" },
+		{ 76, polygonsAt,   2,          false, "a count of polygons too big for the chunk is refused" },
+		{ 76, polygonsAt,   0x40000001, false, "a count of polygons that wraps round is refused" },
+		{ 27, nothing,      0,          false, "a polygon cut short is refused" },
+		{ 47, nothing,      0,          false, "a sequence cut short is refused" },
+		{ 75, nothing,      0,          false, "a frame cut short is refused" },
+		{ 28, sequencesAt,  0,          false, "a polygon with no sequences is refused" },
+		{ 28, sequencesAt,  -1,         false, "a negative count of sequences is refused" },
+		{ 76, sequencesAt,  2,          false, "a count of sequences too big for the chunk is refused" },
+		{ 76, cornersAt,    2,          false, "a polygon with 2 corners is refused" },
+		{ 76, cornersAt,    4,          false, "a polygon with 4 corners is refused" },
+		{ 48, framesAt,     0,          false, "a sequence with no frames is refused" },
+		{ 48, framesAt,     -1,         false, "a negative count of frames is refused" },
+		{ 76, framesAt,     2,          false, "a count of frames too big for the chunk is refused" },
+		{ 76, framesAt,     0x7fffffff, false, "a huge count of frames is refused" },
+		{ 76, flagsAt,      (int)0x80000000, false, "one frame with nothing to lead back to is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		char whole[100] = { 0 };
+		int const polygons = 1;
+
+		memcpy(whole, &polygons, sizeof(polygons));
+		PutAnimatedPolygon(whole + sizeof(polygons), 0, 1, 3, 1, 0);
+
+		if (rows[i].at != nothing)
+		{
+			memcpy(whole + rows[i].at, &rows[i].value, sizeof(int));
+		}
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * data = PutChunk(wholeShape + bytes, "TEXTANIM", rows[i].bytes);
+
+		memcpy(data, whole, rows[i].bytes);
+
+		// The same row twice. In ordinary memory a read past the end only finds the next bytes, so it's the wall that shows there wasn't one.
+		Check(ShapeIsAccepted(data + rows[i].bytes) == rows[i].accepted, rows[i].what);
+		Check(ShapeIsAcceptedAtTheWall(data + rows[i].bytes) == rows[i].accepted, "and the same at the end of readable memory");
+	}
+
+	// A count of frames too big for the chunk, with another polygon still to come. The last check, that the chunk ends where the walk ends,
+	// can't save this one: the sum of what's left would wrap round to a huge number, and the walk would go on past the end of the chunk.
+	{
+		char whole[100] = { 0 };
+		int const polygons = 2;
+		int const frames = 2;
+
+		memcpy(whole, &polygons, sizeof(polygons));
+		PutAnimatedPolygon(whole + sizeof(polygons), 0, 1, 3, 1, 0);
+		memcpy(whole + framesAt, &frames, sizeof(frames));
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * data = PutChunk(wholeShape + bytes, "TEXTANIM", wholeChunkBytes);
+
+		memcpy(data, whole, wholeChunkBytes);
+
+		Check(!ShapeIsAcceptedAtTheWall(data + wholeChunkBytes), "a count of frames too big, with more to come, stops at the end of the chunk");
+	}
+
+	// A flag that leaves out the frame leading back is fine with two frames, because the two still lead into each other.
+	{
+		int const polygons = 1;
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * data = wholeShape + bytes + ChunkHeaderBytes;
+
+		memcpy(data, &polygons, sizeof(polygons));
+		size_t const chunkBytes = PutAnimatedPolygon(data + sizeof(polygons), 0, 1, 3, 2, 0x80000000) - data;
+
+		char saved[200];
+		memcpy(saved, data, chunkBytes);
+		PutChunk(wholeShape + bytes, "TEXTANIM", chunkBytes);
+		memcpy(data, saved, chunkBytes);
+
+		Check(ShapeIsAccepted(data + chunkBytes), "two frames with nothing to lead back to are accepted");
+	}
+
+	// The most frames the game can count, then one more. A chunk this big is needed to reach the limit: anything shorter fails on its size.
+	{
+		static int bigChunk[2 + 6 + 5 + 7 * 32768];
+		int const most = 32767;
+
+		for (int frames = most; frames <= most + 1; frames++)
+		{
+			File_Chunk file;
+			Parent_File = &file;
+
+			int const polygons = 1;
+			memcpy(bigChunk, &polygons, sizeof(polygons));
+
+			size_t const bytes = PutAnimatedPolygon((char *)bigChunk + sizeof(polygons), 0, 1, 3, frames, 0) - (char *)bigChunk;
+
+			new Animation_Chunk(&file, (char *)bigChunk, bytes);
+
+			Check((file.error_code == 0) == (frames == most), frames == most ? "the most frames the game can count are accepted" : "one frame more is refused");
+			Parent_File = 0;
+		}
+	}
+
+	// What the chunk holds has to arrive.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int numbers[1 + 6 + 5 + 7] = { 0 };
+		numbers[0] = 1;
+		PutAnimatedPolygon((char *)&numbers[1], 7, 1, 3, 1, 0);
+		numbers[12] = 9;
+		numbers[18] = 11;
+
+		Animation_Chunk * chunk = new Animation_Chunk(&file, (char *)numbers, sizeof(numbers));
+
+		Check(file.error_code == 0 && chunk->NumPolys == 1, "a real chunk is accepted");
+		Check(chunk->AnimList[0]->poly == 7, "its polygon's number was read");
+		Check(chunk->AnimList[0]->Seq[0]->Textures[0] == 9, "its frame's texture number was read");
+		Check(chunk->AnimList[0]->Seq[0]->UVCoords[5] == 11, "and the last of its frame's coordinates");
+		Parent_File = 0;
+	}
+
+	// The polygon it names, in a shape of one polygon.
+	struct PolygonRow { int corners[5]; int polygon; bool accepted; char const * what; };
+	PolygonRow const polygonRows[] =
+	{
+		{ { 0, 1, 2, -1, -1 }, 0,          true,  "a real triangle can be animated" },
+		{ { 0, 1, 2, -1, -1 }, 1,          false, "a polygon past the last is refused" },
+		{ { 0, 1, 2, -1, -1 }, -1,         false, "a negative polygon is refused" },
+		{ { 0, 1, 2, -1, -1 }, 0x7fffffff, false, "a polygon far past the last is refused" },
+		{ { 0, 1, 2,  3, -1 }, 0,          false, "a polygon with four corners is refused" },
+		{ { 0, 0, 1, -1, -1 }, 0,          false, "a triangle with its first two corners the same is refused" },
+		{ { 0, 1, 1, -1, -1 }, 0,          false, "a triangle with its last two corners the same is refused" },
+		{ { 1, 0, 1, -1, -1 }, 0,          false, "a triangle with its first and last corners the same is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(polygonRows) / sizeof(polygonRows[0]); i++)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, polygonRows[i].corners);
+
+		Check(ShapeIsAccepted(PutAnimation(wholeShape + bytes, polygonRows[i].polygon, 1)) == polygonRows[i].accepted, polygonRows[i].what);
+	}
+
+	// A number outside the list reads whatever is there, and that's unlikely to look like a triangle, so the shape above would be refused
+	// whether or not the number was checked. Here the shape's one polygon sits in the middle of three good triangles, so the only thing
+	// that can refuse these numbers is the check on them.
+	{
+		struct NeighbourRow { int polygon; bool accepted; char const * what; };
+		NeighbourRow const neighbourRows[] =
+		{
+			{  0, true,  "the polygon between two good ones is accepted" },
+			{  1, false, "a polygon just past the last is refused, even with a good triangle there" },
+			{ -1, false, "a polygon just before the first is refused, even with a good triangle there" },
+		};
+
+		for (size_t i = 0; i < sizeof(neighbourRows) / sizeof(neighbourRows[0]); i++)
+		{
+			File_Chunk file;
+			Parent_File = &file;
+
+			size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+			char * end = PutAnimation(wholeShape + bytes, neighbourRows[i].polygon, 1);
+
+			Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+
+			ChunkPoly threeTriangles[3];
+
+			for (int j = 0; j < 3; j++)
+			{
+				threeTriangles[j] = shape->shape_data.poly_list[0];
+			}
+
+			ChunkPoly * const ownList = shape->shape_data.poly_list;
+			ChunkShape & data = const_cast<ChunkShape &>(shape->shape_data);
+			data.poly_list = &threeTriangles[1];
+
+			Check(shape->numbers_are_valid() == neighbourRows[i].accepted, neighbourRows[i].what);
+
+			data.poly_list = ownList;
+			Parent_File = 0;
+		}
+	}
+
+	// A merge pair. If both polygons are animated, the game reads the second's frames by the first's counts.
+	struct PairRow { int firstSequences; int firstFrames; int secondSequences; int secondFrames; bool accepted; char const * what; };
+	PairRow const pairRows[] =
+	{
+		{ 1, 2, 1, 2, true,  "a pair that matches is accepted" },
+		{ 2, 2, 2, 2, true,  "a pair that matches in two sequences is accepted" },
+		{ 1, 2, 0, 0, true,  "a pair with only its first polygon animated is accepted" },
+		{ 1, 3, 1, 2, false, "a second polygon with fewer frames is refused" },
+		{ 1, 2, 1, 3, false, "a second polygon with more frames is refused" },
+		{ 2, 2, 1, 2, false, "a second polygon with fewer sequences is refused" },
+		{ 1, 2, 2, 2, false, "a second polygon with more sequences is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(pairRows) / sizeof(pairRows[0]); i++)
+	{
+		PairRow const & row = pairRows[i];
+
+		char * end = PutShapeHeader(wholeShape, 4, 2);
+		end = PutPoints(end, 4);
+		end = PutPolygons(end, 2, triangle);
+		memcpy(end - 36 + 16, secondTriangle, 5 * sizeof(int));
+		end = PutNormals(end, 4, 2);
+
+		int const merge[2] = { 1, 0 };
+		char * mergeData = PutChunk(end, "SHPMRGDT", sizeof(merge));
+		memcpy(mergeData, merge, sizeof(merge));
+		end = mergeData + sizeof(merge);
+
+		int const polygons = row.secondSequences ? 2 : 1;
+		char list[1000];
+		memcpy(list, &polygons, sizeof(polygons));
+
+		char * listEnd = PutAnimatedPolygon(list + sizeof(polygons), 0, row.firstSequences, 3, row.firstFrames, 0);
+
+		if (row.secondSequences)
+		{
+			listEnd = PutAnimatedPolygon(listEnd, 1, row.secondSequences, 3, row.secondFrames, 0);
+		}
+
+		char * data = PutChunk(end, "TEXTANIM", listEnd - list);
+		memcpy(data, list, listEnd - list);
+
+		Check(ShapeIsAccepted(data + (listEnd - list)) == row.accepted, row.what);
+	}
+
+	// An animation replaces its polygon's list of texture coordinates, so a polygon that isn't animated can't be using the same one.
+	struct SharingRow { unsigned int secondColour; bool accepted; char const * what; };
+	SharingRow const sharingRows[] =
+	{
+		{ 0x00010000, true,  "a polygon with a list of its own is accepted beside an animated one" },
+		{ 0x00000000, false, "a polygon sharing an animated polygon's list is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(sharingRows) / sizeof(sharingRows[0]); i++)
+	{
+		char * end = PutShapeHeader(wholeShape, 4, 2);
+		end = PutPoints(end, 4);
+		end = PutPolygons(end, 2, triangle);
+
+		int const kind = I_3dTexturedPolygon;
+		memcpy(end - 2 * 36, &kind, sizeof(kind));
+		memcpy(end - 36, &kind, sizeof(kind));
+		memcpy(end - 36 + 12, &sharingRows[i].secondColour, sizeof(unsigned int));
+
+		end = PutNormals(end, 4, 2);
+		end = PutUVLists(end, 2, 3);
+
+		Check(ShapeIsAccepted(PutAnimation(end, 0, 1)) == sharingRows[i].accepted, sharingRows[i].what);
+	}
+
+	// A sub-shape isn't a Shape_Chunk, which is what the game takes the holder of this chunk to be.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, 4, triangle);
+		char * end = PutAnimation(wholeShape + bytes, 0, 1);
+
+		new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "texture animation in a sub-shape is refused");
+		Parent_File = 0;
+	}
+
+	// Each frame's picture. These can only be checked once the level's pictures are known, so the game asks this function, with a list that
+	// has a picture for texture numbers 0 and 2.
+	{
+		int const list[4] = { 99, 5, -1, 7 };
+		int const * pictures = &list[1];
+
+		struct PictureRow { int first; int second; int const * list; bool known; char const * what; };
+		PictureRow const pictureRows[] =
+		{
+			{  0, 2, pictures, true,  "frames with real pictures are known" },
+			{  1, 2, pictures, false, "a texture number with no picture is not known" },
+			{  0, 1, pictures, false, "the same in a later frame" },
+			{  0, 3, pictures, false, "a texture number past the end of the list is not known" },
+			{ -1, 0, pictures, false, "a negative texture number is not known" },
+			{  0, 2, 0,        false, "with no list at all, nothing is known" },
+		};
+
+		for (size_t i = 0; i < sizeof(pictureRows) / sizeof(pictureRows[0]); i++)
+		{
+			File_Chunk file;
+			Parent_File = &file;
+
+			int numbers[1 + 6 + 5 + 14] = { 0 };
+			numbers[0] = 1;
+			PutAnimatedPolygon((char *)&numbers[1], 0, 1, 3, 2, 0);
+			numbers[12] = pictureRows[i].first;
+			numbers[13] = pictureRows[i].second;
+
+			Animation_Chunk * chunk = new Animation_Chunk(&file, (char *)numbers, sizeof(numbers));
+
+			Check(chunk->AnimList[0]->ImagesAreKnown(2, pictureRows[i].list) == pictureRows[i].known, pictureRows[i].what);
+			Parent_File = 0;
+		}
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1746,6 +2136,7 @@ int main()
 	TestChunksInTheWrongPlace();
 	TestNesting();
 	TestChunkBoundChecks();
+	TestTextureAnimation();
 
 	if (checksFailed)
 	{

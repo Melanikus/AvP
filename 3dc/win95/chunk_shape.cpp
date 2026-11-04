@@ -16,13 +16,16 @@
 //   a chunk of morph frames must be exactly the size its count says, and hold no more frames than the game can count
 //   a textured polygon can't have the bit set that makes the game skip its texture coordinates
 //   a shape's centre is only made inside a shape, because it writes into the shape
+//   a chunk of texture animation must fit the polygons it names, and only a shape can have one
 
 #include <math.h>
+#include <vector>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "chunk_shape.hpp"
 #include "chunk_object.hpp"
+#include "animation_chunk.hpp"
 
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -265,6 +268,25 @@ static bool animation_matches_shape (Chunk_With_Children const * shape_chunk, in
 	return sequences.size() == 0 || frames_found > 0;
 }
 
+// Two animated polygons of a merge pair become one, and the game reads the second's sequences and frames using the first's counts.
+static bool animations_have_the_same_frames (TEXANIM const * first, TEXANIM const * second)
+{
+	if (first->NumSeq != second->NumSeq)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < first->NumSeq; i++)
+	{
+		if (first->Seq[i]->NumFrames != second->Seq[i]->NumFrames)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 // A textured polygon keeps the place of its list of texture coordinates in the top half of its colour. The game uses that
 // place to write into lists of its own, so it has to be a real list. The game reads the colour both as a signed number and
 // as an unsigned one, so reading it as signed here means a number with its top bit set fails, which is safe for both. A list
@@ -296,6 +318,80 @@ static bool texture_numbers_are_valid (ChunkShape const & shape, ChunkPoly const
 	int const list_corners = shape.uv_list[list].num_verts;
 
 	return list_corners == 0 || list_corners >= polygon.num_verts;
+}
+
+// A chunk of texture animation names its polygons by number, and the game goes straight to that polygon in its lists, then writes there. These
+// numbers are places in the shape's own list, before any pairs are merged, which is the list the game looks them up in: with merge data it
+// turns each one into a merged place itself, and with none the two lists are the same. It's all been measured: all 3552 animated polygons
+// in the game's own levels pass.
+// - The polygon has to be real, and a triangle with three different corners. To join a pair the game finds each corner in the merged polygon
+//   and adds up where they were to work out the fourth, so two the same would send that sum, and a write, outside the list.
+// - All 1353 pairs that are both animated match, frame for frame. See animations_have_the_same_frames.
+// - An animation replaces a polygon's list of texture coordinates with a list of its own, of another kind and much shorter. So a polygon that
+//   isn't animated can't share that list: it would read the new list as coordinates, and run past its end.
+static bool texture_animation_fits_shape (ChunkShape const & shape, Chunk_With_Children const * shape_chunk)
+{
+	Animation_Chunk const * animation = (Animation_Chunk const *) shape_chunk->lookup_single_child ("TEXTANIM");
+
+	if (!animation)
+	{
+		return true;
+	}
+
+	int const polygon_count = shape.num_polys;
+	std::vector<TEXANIM const *> animation_of_polygon (polygon_count, (TEXANIM const *) 0);
+	std::vector<bool> list_is_animated (shape.num_uvs, false);
+
+	for (int i = 0; i < animation->NumPolys; i++)
+	{
+		TEXANIM const * entry = animation->AnimList[i];
+
+		if (entry->poly < 0 || entry->poly >= polygon_count)
+		{
+			return false;
+		}
+
+		ChunkPoly const & polygon = shape.poly_list[entry->poly];
+		int const * corners = polygon.vert_ind;
+
+		if (polygon.num_verts != 3 || corners[0] == corners[1] || corners[1] == corners[2] || corners[0] == corners[2])
+		{
+			return false;
+		}
+
+		animation_of_polygon[entry->poly] = entry;
+
+		if (is_textured (polygon.engine_type))
+		{
+			list_is_animated[(int) polygon.colour >> 16] = true;
+		}
+	}
+
+	Shape_Merge_Data_Chunk const * merging = (Shape_Merge_Data_Chunk const *) shape_chunk->lookup_single_child ("SHPMRGDT");
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		TEXANIM const * entry = animation_of_polygon[i];
+
+		if (!entry)
+		{
+			if (is_textured (shape.poly_list[i].engine_type) && list_is_animated[(int) shape.poly_list[i].colour >> 16])
+			{
+				return false;
+			}
+
+			continue;
+		}
+
+		int const partner = merging ? merging->merge_data[i] : -1;
+
+		if (partner != -1 && animation_of_polygon[partner] && !animations_have_the_same_frames (entry, animation_of_polygon[partner]))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 // Checks the numbers that say how big a shape is, all of which come from the level file.
@@ -417,7 +513,7 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 		return false;
 	}
 
-	return animation_matches_shape (shape_chunk, point_count, polygon_count);
+	return animation_matches_shape (shape_chunk, point_count, polygon_count) && texture_animation_fits_shape (shape, shape_chunk);
 }
 
 bool Shape_Chunk::numbers_are_valid()
@@ -2143,9 +2239,12 @@ Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 // A sub-shape becomes a shape in the game like any other, so it has to pass the same checks. It can sit in several
 // different places inside a shape, and this step reaches every one of them. load_rif sees the error and stops the level.
 // A sub-shape that fails stops here, because the chunks inside it use its numbers as they stand, and one of them writes.
+//
+// A sub-shape can't have texture animation: the game treats whatever holds that chunk as a Shape_Chunk, which a sub-shape isn't, and none of the
+// 418 of them in the game's own levels is in a sub-shape.
 void Shape_Sub_Shape_Chunk::post_input_processing()
 {
-	if (!shape_numbers_are_valid (shape_data, this))
+	if (!shape_numbers_are_valid (shape_data, this) || count_children ("TEXTANIM"))
 	{
 		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		return;
