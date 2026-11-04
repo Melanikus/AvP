@@ -132,6 +132,7 @@ void UpdateRunTimeLights(void)
 }
 
 extern int ToyShadowsLightsByPixel;
+extern int ToyShadowsInMirror;
 extern bool gunLayer;
 bool ToyBlockIsFlare(const DISPLAYBLOCK *block);
 bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light);
@@ -139,10 +140,12 @@ void ToyShadows_ChooseLights();
 
 // Is this chosen light added per pixel on what's being drawn now, instead of here? The surface pictures come from the main list, so
 // that's what has to leave the light out, or it would be lit twice. The player's weapon isn't in those pictures, and keeps its light. Nor
-// is a reflection, which keeps it too, and that's right: the code below works out the light's place on the far side of the mirror.
+// is a reflection, which keeps it too. There are two kinds, and neither is in a picture. For a piece of the level or an object,
+// DrawingAReflection is set, and the code below works out the light's place on the far side of the mirror. For a body part only
+// ToyShadowsInMirror is set, and the game lights it from the light's real place, as it always has (kzsort.cpp).
 static bool ToyLightIsAddedLater(const LIGHTBLOCK *light)
 {
-	return !gunLayer && !DrawingAReflection && ToyShadows_LightIsByPixel(light);
+	return !gunLayer && !DrawingAReflection && !ToyShadowsInMirror && ToyShadows_LightIsByPixel(light);
 }
 
 void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
