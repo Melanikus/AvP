@@ -24,7 +24,8 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the debug text that prints a matrix is written with a size limit, so it always fits;
-//   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone)
+//   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone);
+//   the menu font's letters are limited to what its texture can hold
 
 #include "d3_func.h"
 #include "fmvCutscenes.h"
@@ -1003,6 +1004,17 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	}
 
 	uint32_t numTotalChars = tex.height / charHeight;
+
+	// The letters go into the texture in rows, nRows letters to a row, from the top down. How many letters there are
+	// comes from the size of the font picture, so a very tall picture would be written past the bottom of the texture.
+	// Any letters with no row left are left out. The game's own font fits: 224 letters, with room for 225.
+	const uint32_t maxChars = IntroFont_Light.nRows * (padHeight / charHeight);
+
+	if (numTotalChars > maxChars)
+	{
+		Con_PrintError("The menu font has more letters than its texture can hold. Leaving the last ones out");
+		numTotalChars = maxChars;
+	}
 
 	LastError = d3d.lpD3DDevice->CreateTexture(padWidth, padHeight, 1, textureUsage, colourFormat, texturePool, &texture.texture, NULL);
 	if (FAILED(LastError))
