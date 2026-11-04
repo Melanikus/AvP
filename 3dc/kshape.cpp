@@ -6,6 +6,8 @@
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
 //   overflowed;
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the shadow code is told which polygons show both sides, and on a report frame which ones the game draws
 #include "3dc.h"
 #include "surface_normals.h"
 #include "logString.h"
@@ -161,7 +163,8 @@ VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane);
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane, bool twoSided, bool drawn);
+bool ShadowReportIsDue();
 void ToyShadows_NoteModelPart(const void *model, int polygons);
 
 /*
@@ -6349,6 +6352,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	}
 
 	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
+	bool const reportDue = ShadowReportIsDue();
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -6393,7 +6397,11 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 				ToyPlaneInWorld(stored[polygonNumber], dptr->ObWorld, plane);
 			}
 
-			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, stored ? plane : 0);
+			// PolygonWithinFrustum is the game's own test, the one it's about to make on this polygon anyway, so the report can't disagree
+			// with what really happens. That's why it's only asked on a report frame.
+			bool const drawn = reportDue && PolygonWithinFrustum(polyPtr) != 0;
+
+			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, drawn);
 			polygonsKept++;
 		}
 	}
@@ -6563,7 +6571,8 @@ static int ToyCollectUnseenModule(const MODULE *module)
 				ToyPlaneInWorld(stored[polygonNumber], place, plane);
 			}
 
-			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, stored ? plane : 0);  // a wall has no owner
+			// a wall has no owner, and this one isn't being drawn
+			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false);
 			polygonsAdded++;
 		}
 	}

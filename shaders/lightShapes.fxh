@@ -55,7 +55,10 @@ float LightShape(float4 light, float shape, float3 position, float3 normal)
 
     if (shape < 1.5f)
     {
-        return (1.0f - reach) * ((turned > 0.0f) ? slant : 0.125f);
+        // The game gives a point turned away from a live light an eighth of that light anyway. Here that's only for a surface with no direction
+        // of its own, which NormalHere makes exactly zero. A surface really turned away gets nothing: it's the side of a wall the light can't
+        // reach, and that wall's shadow doesn't cover it any more (ToyAddPrism in d3d_render.cpp), so this is what keeps it dark.
+        return (1.0f - reach) * ((turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f : 0.0f);
     }
 
     return (1.0f - reach * reach) * ((turned > 0.0f) ? slant : 0.0f);

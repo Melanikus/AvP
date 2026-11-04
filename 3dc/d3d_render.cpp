@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
 //   broken picture coordinates
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   with the surface pictures, a shadow's start depends on the polygon and the light, not on where the camera is
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -377,6 +379,7 @@ static int toyEarlyFlushes = 0;     // how often the lists were drawn before the
 static void ToyShadows_Draw();
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
+static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
 static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
 
 static bool ExecuteBuffer()
@@ -3605,6 +3608,7 @@ struct ToyFlatSurface
 	float distance;     // how far the surface is from the middle of its numbers, along that arrow. See ToyDistanceFrom
 	float halfSize;     // half the longer of its first two sides, which says how big the polygon is. Only a model's is kept
 	bool inWorld;       // true if these are the world's numbers, and false if they're the light list's
+	bool keepsStartGap; // true if its shadow starts at the ordinary distance even with its front turned from the light. See ToyAddPrism
 };
 
 // How far a place is from a flat surface, and the sign says which side it's on. The place has to be in the surface's own numbers.
@@ -3613,12 +3617,24 @@ static inline float ToyDistanceFrom(const ToyFlatSurface &surface, const float *
 	return surface.nx * place[0] + surface.ny * place[1] + surface.nz * place[2] - surface.distance;
 }
 
+// Is a place on the back of a polygon? distance is what ToyDistanceFrom gave for it. A polygon's arrow points out of its back, and
+// surface_normals.cpp says why. The mirror cheat turns the picture over once more, so the corners on the list stop being a mirror image of the
+// shape, and an arrow worked out from them points out of the front instead. Stored arrows aren't used under that cheat (ToyStoredPlanes).
+static inline bool IsBehindPolygon(float distance)
+{
+	return MIRROR_CHEATMODE ? distance < 0.0f : distance > 0.0f;
+}
+
 static const int   kToyMostPolyPoints  = 16;
 static const int   kToyMaxCasters      = 60000;
 static const int   kToyMaxCasterPoints = 240000;
 static const int   kToyMaxVerts        = 1200000;
 static const float kToyStartGap        = 8.0f;      // start just behind the polygon, or surfaces shadow themselves in speckles
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
+// How far past a polygon its shadow starts when the polygon's front is turned from the light. It can be this small because nothing on that
+// polygon is lit by that light, so there's nothing there to shadow. It can't be less: the game rounds a corner to whole numbers, which can
+// move it by up to 0.87, and the start still has to be past the surface after that.
+static const float kUnlitStartGap      = 2.0f;
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
 static const float kToyFlareTouching   = 40.0f;     // a flare this close to a polygon's flat surface is lying on it
 static const float kToyCloakedShadow   = 0.25f;     // how strong a cloaked Predator's shadow is, against an ordinary one
@@ -3629,7 +3645,10 @@ static ToyVec toyCasterPoints[kToyMaxCasterPoints];
 static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
 static ToyFlatSurface toyCasterSurface[kToyMaxCasters];
-static float toyCameraInWorld[3];   // where the camera is, in the world's numbers. In the light list's numbers it's always 0 0 0
+static float toyCameraInWorld[3];   // where the camera is, in the world's numbers
+static const float kCameraOnTheList[3] = { 0.0f, 0.0f, 0.0f };   // and in the light list's numbers it's always here
+static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
+static bool casterDrawnOneSided[kToyMaxCasters];  // only on a report frame: true for a polygon the game draws and hides the back of. See CheckNoPolygonSeenFromBehind
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
 static int toyCasterModule[kToyMaxCasters];  // for a cast-only polygon, which of toyUnseenModules it belongs to
@@ -3724,6 +3743,7 @@ static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
 	float const sideB = bx * bx + by * by + bz * bz;
 	surface.halfSize = sqrtf(sideA > sideB ? sideA : sideB) * 0.5f;
 	surface.inWorld = false;
+	surface.keepsStartGap = false;
 
 	if (length < 0.001f)
 	{
@@ -3745,7 +3765,8 @@ static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
 // kind is one of ToyCasterKind. owner is what the polygon belongs to, or nothing for the level.
 // storedPlane is the polygon's plane if its shape keeps one: an arrow and a distance, four numbers, in the world's numbers. If not, it's empty.
-void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane)
+// twoSided says the game shows both sides of this polygon. drawn says the game is drawing it this frame, and it's only asked on a report frame.
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane, bool twoSided, bool drawn)
 {
 	if (count < 3 || count > kToyMostPolyPoints || kind < 0 || kind >= kToyCasterKinds)
 	{
@@ -3811,7 +3832,19 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		ToyWorkOutSurface(&toyCasterPoints[firstPoint], surface);
 	}
 
+	// A polygon with two sides can be seen on either, so its shadow can't count on the side away from the light being unlit. A cloaked
+	// Predator isn't in the surface pictures at all, so it has no surface for the small gap to be about.
+	surface.keepsStartGap = twoSided || kind == kToyCasterCloaked;
+
+	casterDrawnOneSided[toyNumCasters] = drawn && !twoSided && (kind == kToyCasterLevel || kind == kToyCasterObject);
+
 	toyNumCasters++;
+}
+
+// Is the frame being collected now one that ToyShadows_Draw will report on? It counts a frame when it draws, and that comes after collecting.
+bool ShadowReportIsDue()
+{
+	return ((toyFrame + 1) % kFramesBetweenReports) == 0;
 }
 
 // The proof that a stored plane and the polygon's corners agree, on a report frame. The corners on the list are a mirror image of the shape,
@@ -3866,6 +3899,57 @@ static void ToyCheckStoredPlanes(const float *axes)
 	char line[200] = { 0 };
 	_snprintf(line, sizeof(line) - 1, "toy-shadows: frame %d: %d stored planes checked against their corners, %d point the other way, %d have no area on one side only, largest of those %.0f",
 		toyFrame, compared, opposite, oneHasNoArea, largest);
+	LogString(line);
+}
+
+// The proof behind the rule in ToyAddPrism that lets a shadow leave the camera out. That rule says nobody can see the back of a one-sided
+// polygon, so its back never needs lighting, because the game hides it. So on a report frame this counts the polygons the game is drawing
+// with the camera behind them. It should find next to none, and of two kinds. A polygon almost edge-on can land either side, because the
+// game works in whole numbers, and "furthest" stays under a few units if that's all they are. And on 34 of the 715,116 one-sided polygons in
+// the stock levels the normal stored in the file disagrees with the corner order. Those can be big, and the rule still can't take one's own
+// surface into its shadow, because either way its shadow starts past the surface.
+static void CheckNoPolygonSeenFromBehind()
+{
+	int checked[2] = { 0, 0 }, behind[2] = { 0, 0 };   // the first of each pair is for planes worked out, the second for stored planes
+	float furthest = 0.0f, largest = 0.0f;
+
+	for (int caster = 0; caster < toyNumCasters; caster++)
+	{
+		if (!casterDrawnOneSided[caster])
+		{
+			continue;
+		}
+
+		ToyFlatSurface const &surface = toyCasterSurface[caster];
+		int const which = surface.inWorld ? 1 : 0;
+		float const cameraSide = ToyDistanceFrom(surface, surface.inWorld ? toyCameraInWorld : kCameraOnTheList);
+
+		checked[which]++;
+
+		if (!IsBehindPolygon(cameraSide))
+		{
+			continue;
+		}
+
+		behind[which]++;
+
+		ToyFlatSurface corners;
+		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], corners) * 0.5f;
+
+		if (area > largest)
+		{
+			largest = area;
+		}
+
+		if (fabsf(cameraSide) > furthest)
+		{
+			furthest = fabsf(cameraSide);
+		}
+	}
+
+	char line[200] = { 0 };
+	_snprintf(line, sizeof(line) - 1, "shadows: frame %d: camera behind a drawn polygon: %d of %d stored planes, %d of %d worked out, furthest %.1f, largest area %.0f",
+		toyFrame, behind[1], checked[1], behind[0], checked[0], furthest, largest);
 	LogString(line);
 }
 
@@ -3937,11 +4021,9 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 
 	float const nx = surface.nx, ny = surface.ny, nz = surface.nz;
 
-	// Three places are held against the surface, and they have to be in its own numbers. That's the only difference between the two kinds.
-	static const float kCameraOnTheList[3] = { 0.0f, 0.0f, 0.0f };
+	// These places are held against the surface, and they have to be in its own numbers. That's the only difference between the two kinds.
 	float const *lightPlace = surface.inWorld ? light + kToyLightWorld : light;
 	float const *centrePlace = surface.inWorld ? centre + kToyLightWorld : centre;
-	float const *cameraPlace = surface.inWorld ? toyCameraInWorld : kCameraOnTheList;
 
 	float const lx = light[0] - pts[0].x, ly = light[1] - pts[0].y, lz = light[2] - pts[0].z;
 	float const facing = ToyDistanceFrom(surface, lightPlace);
@@ -4004,6 +4086,13 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 			startGap = kToyStartGap;
 		}
 	}
+	else if (prismsForPictures && !surface.keepsStartGap && IsBehindPolygon(facing))
+	{
+		// The light is behind this polygon, and the game hides a polygon's back, so the only side anyone sees is the one the light can't
+		// reach. With the pictures, lightShapes.fxh already gives that side nothing from this light, so it doesn't have to be inside its own
+		// shadow to stay dark. All that's left is what's beyond it, like the floor at the foot of a wall, so the shadow starts as close as it can.
+		startGap = kUnlitStartGap;
+	}
 
 	// the lower the light hits the surface, the further the start has to move to get behind it by the same amount
 	float const angle = fabsf(facing) / lightDistance;
@@ -4013,14 +4102,21 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 		gap = kToyWidestGap;
 	}
 
-	// The game adds a live light to every point in range, walls or no walls, even a point turned away from it. So a surface we
-	// see from the side the light can't reach has to be in that light's shadow, even with nothing else in the way, as when
-	// the light is behind it. Its prism starts just in front of it, towards the light, and takes the surface in. The camera
-	// is at 0 0 0 on the list.
-	float const cameraSide = ToyDistanceFrom(surface, cameraPlace);
-	// A model doesn't need this. lightShapes.fxh gives a surface turned away from a lamp or a flare nothing to lose, and
-	// on a model all it would do is leave a thin dark strip along every edge of the lit part.
-	bool const takeSurfaceIn = !model && (cameraSide < 0.0f) != (facing < 0.0f);
+	// The flat shadows have no pictures to say which way a pixel faces, and the game adds a live light to every point in range, walls or no
+	// walls, even a point turned away from it. So on those frames a surface we see from the side the light can't reach has to be in that
+	// light's shadow, even with nothing else in the way, as when the light is behind it. Its prism starts just in front of it, towards the
+	// light, and takes the surface in. These are the only prisms that depend on where the camera is, so a frame with the pictures can keep
+	// its prisms however the camera moves.
+	bool takeSurfaceIn = false;
+
+	if (!prismsForPictures && !model)
+	{
+		// A model doesn't need this. lightShapes.fxh gives a surface turned away from a lamp or a flare nothing to lose, and
+		// on a model all it would do is leave a thin dark strip along every edge of the lit part.
+		float const cameraSide = ToyDistanceFrom(surface, surface.inWorld ? toyCameraInWorld : kCameraOnTheList);
+		takeSurfaceIn = (cameraSide < 0.0f) != (facing < 0.0f);
+	}
+
 	if (takeSurfaceIn)
 	{
 		gap = -kToyStartGap;
@@ -5213,7 +5309,7 @@ static void ToyShadows_Draw()
 	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals)
 		&& toyNumCasters > 0 && ToyPicturesCanRun(d3d.lpD3DDevice);
 
-	bool const logThisFrame = (++toyFrame % 300) == 0;
+	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
 
 	ToyFrameReport report = { toyFrame, toyNumCasters, 0, 0, S_OK, S_OK, S_OK, S_OK, S_OK, 0, 0.0f, 0.0f };
 
@@ -5366,9 +5462,12 @@ static void ToyShadows_Draw()
 	float const kToyMaskCounts = 0.02f;
 	bool const noting = logThisFrame && screen != 0;
 
+	prismsForPictures = screen != 0;   // every prism this frame is built after this line
+
 	if (noting)
 	{
 		ToyCheckStoredPlanes(worldAxes);
+		CheckNoPolygonSeenFromBehind();
 	}
 
 	ToyLightReport lightReports[kToyMostLights];
