@@ -12,14 +12,13 @@
 #     Release, x86), which also proves that the game builds on a clean machine.
 #   - Get the vcpkg libraries for CodeQL builds our open-source dependencies once and hands their source and headers to
 #     the two build mode none jobs. It finds nothing by itself, but those jobs can't run without it.
-#   - CodeQL (SAST) on every file of ours reads every C/C++ file in git with build mode none, including what the game's
-#     projects never compile (enet/, for one).
+#   - CodeQL (SAST) on every file of ours reads every C/C++ file in git with build mode none, including anything the
+#     game's projects don't compile, such as a header nothing includes.
 #   - CodeQL (SAST) on the vcpkg libraries watches vcpkg build the libraries, with the same flags and patches the game
 #     uses. Tracing matters most here: only a real build creates files such as openal-soft's generated headers.
 #   - CodeQL (SAST) on all library source reads every file of those libraries with build mode none, including tests,
 #     examples and other operating systems' code, which the traced job can't see because they are never compiled.
 #   - CodeQL (SAST) on actions reads this repository's own workflows, because a security gate is worth attacking too.
-#   - CodeQL (SAST) on javascript-typescript reads the rest of the code that isn't C/C++ (enet's documentation pages).
 #
 # ANY finding, or any code CodeQL could not read, fails the job (.github/scripts/codeql-gate.ps1 decides). A finding is
 # resolved only by fixing it in the code: we don't ignore, park or exclude findings. D3DX is the one thing not read:
@@ -438,16 +437,12 @@ jobs:
             ${{ runner.temp }}/codeql_databases/*/diagnostic
           retention-days: 7
 
-  codeql-scripts:
-    name: CodeQL (SAST) on ${{ matrix.language }}
+  codeql-actions:
+    name: CodeQL (SAST) on actions
     runs-on: windows-2025-vs2026   # pinned: the same machine as the other jobs, so the checked CodeQL download fits
     permissions:
       contents: read
       security-events: write   # upload the report to code scanning
-    strategy:
-      fail-fast: false   # one language failing must not stop the other from reporting
-      matrix:
-        language: [actions, javascript-typescript]
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -462,7 +457,7 @@ jobs:
         uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           tools: ${{ steps.tools.outputs.path }}
-          languages: ${{ matrix.language }}
+          languages: actions
           build-mode: none
           queries: security-and-quality
           trap-caching: false
@@ -470,7 +465,7 @@ jobs:
       - name: Analyse
         uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
-          category: codeql-${{ matrix.language }}
+          category: codeql-actions
           output: ${{ runner.temp }}/codeql-sarif
           upload: always
           upload-database: false
@@ -479,14 +474,14 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         run: >-
-          ./.github/scripts/codeql-gate.ps1 -Kind other -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
+          ./.github/scripts/codeql-gate.ps1 -Kind actions -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
           -SourceRoot "$env:GITHUB_WORKSPACE" -ReportFolder "$env:RUNNER_TEMP\codeql-report"
 
       - name: Keep the reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: codeql-${{ matrix.language }}-report
+          name: codeql-actions-report
           path: |
             ${{ runner.temp }}/codeql-report
             ${{ runner.temp }}/codeql-sarif
