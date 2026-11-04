@@ -4956,8 +4956,33 @@ static void ToyForgetCasters()
 	toyStretchCorners = 0;
 }
 
+// Whether the depth buffer the game was given has stencil bits, which is where a light's shadow marks go. The game asks for only two
+// kinds that have them (DepthFormats, d3_func.cpp). On a card that offers neither, the pass would work from marks that were never
+// made, and what it drew would be up to the driver, most likely a dark world.
+static bool ToyDepthBufferHasStencil()
+{
+	D3DFORMAT const format = d3d.d3dpp.AutoDepthStencilFormat;
+
+	return format == D3DFMT_D24S8 || format == D3DFMT_D24FS8;
+}
+
 static void ToyShadows_Draw()
 {
+	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
+	// them back on, and with ToyShadowsMode at 0 nothing collects polygons or chooses lights.
+	if (!ToyDepthBufferHasStencil())
+	{
+		if (ToyShadowsMode)
+		{
+			LogString("toy-shadows: the depth buffer has no stencil bits, so shadows stay off");
+			ToyShadowsMode = 0;
+		}
+
+		ToyShadowsLightsByPixel = 0;
+		ToyForgetCasters();
+		return;
+	}
+
 	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
 	if (DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
 	{
