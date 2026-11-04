@@ -4,6 +4,7 @@ so player.c is looking a bit bare at the moment. */
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save with no model for the weapon leaves the player with the one they have
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a save can't choose which weapon is in a slot, or pick a slot, weapon state, vision mode or grenade that doesn't exist
 
 #include "3dc.h"
 #include "module.h"
@@ -2013,6 +2014,13 @@ void SaveStrategy_Player(STRATEGYBLOCK* sbPtr)
 	Save_SoundState(&playerStatusPtr->soundHandleForPredatorCloakDamaged);
 }
 
+// Can this number from a save be used to pick the player's weapon? It has to be a slot, and the slot has to hold a weapon. The rest of the
+// game looks a slot's weapon up in TemplateWeapon without asking, and that table holds the functions that fire it.
+static bool SavedSlotHoldsAWeapon(const PLAYER_STATUS *playerStatusPtr, int slot)
+{
+	return Save_WeaponSlotIsValid(slot) && playerStatusPtr->WeaponSlot[slot].WeaponIDNumber != NULL_WEAPON;
+}
+
 void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
 	PLAYER_SAVE_BLOCK* block = (PLAYER_SAVE_BLOCK*) header;
@@ -2026,9 +2034,19 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 
-	COPYELEMENT_LOAD(SelectedWeaponSlot)
-	COPYELEMENT_LOAD(SwapToWeaponSlot)
-	COPYELEMENT_LOAD(PreviouslySelectedWeaponSlot)
+	//the level has just set the player up, so a number that can't be real leaves things as the level made them
+	if(SavedSlotHoldsAWeapon(playerStatusPtr,block->SelectedWeaponSlot))
+	{
+		COPYELEMENT_LOAD(SelectedWeaponSlot)
+	}
+	if(block->SwapToWeaponSlot==WEAPON_FINISHED_SWAPPING || SavedSlotHoldsAWeapon(playerStatusPtr,block->SwapToWeaponSlot))
+	{
+		COPYELEMENT_LOAD(SwapToWeaponSlot)
+	}
+	if(SavedSlotHoldsAWeapon(playerStatusPtr,block->PreviouslySelectedWeaponSlot))
+	{
+		COPYELEMENT_LOAD(PreviouslySelectedWeaponSlot)
+	}
 
     COPYELEMENT_LOAD(Health)	 /* in 16.16 */
 	COPYELEMENT_LOAD(Energy)	 /* in 16.16 */
@@ -2078,8 +2096,12 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	for(i=0;i<MAX_NO_OF_WEAPON_SLOTS;i++)
 	{
-		playerStatusPtr->WeaponSlot[i].WeaponIDNumber = block->WeaponSlot[i].WeaponIDNumber;
-		playerStatusPtr->WeaponSlot[i].CurrentState = block->WeaponSlot[i].CurrentState;
+		//The weapon in a slot isn't loaded. Each species has a fixed list, and the level has already set it up, so a real save holds the
+		//same number anyway.
+		if(Save_WeaponStateIsValid(block->WeaponSlot[i].CurrentState))
+		{
+			playerStatusPtr->WeaponSlot[i].CurrentState = block->WeaponSlot[i].CurrentState;
+		}
 		playerStatusPtr->WeaponSlot[i].StateTimeOutCounter = block->WeaponSlot[i].StateTimeOutCounter;
 		playerStatusPtr->WeaponSlot[i].PrimaryRoundsRemaining = block->WeaponSlot[i].PrimaryRoundsRemaining;
 		playerStatusPtr->WeaponSlot[i].SecondaryRoundsRemaining = block->WeaponSlot[i].SecondaryRoundsRemaining;
@@ -2096,9 +2118,15 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	PlayersWeapon.ObMat = block->Weapon_Matrix;
 
 	//global
-	CurrentVisionMode = block->CurrentVisionMode;
+	if(Save_VisionModeIsValid(block->CurrentVisionMode))
+	{
+		CurrentVisionMode = block->CurrentVisionMode;
+	}
 	SmartgunMode = block->SmartgunMode;
-	GrenadeLauncherData = block->GrenadeLauncherData;
+	if(Save_AmmoIsValid(block->GrenadeLauncherData.SelectedAmmo))
+	{
+		GrenadeLauncherData = block->GrenadeLauncherData;
+	}
 
 	//strategy block stuff
 	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);

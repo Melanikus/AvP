@@ -8,6 +8,12 @@ struct dynamicsblock;
 // Are these the numbers of a game the player could really have saved?
 bool Save_SlotNumbersAreValid(int species, int episode, int difficulty);
 
+// Is this number one of the player's weapon slots? And a weapon's state, a vision mode, a kind of ammunition?
+bool Save_WeaponSlotIsValid(int slot);
+bool Save_WeaponStateIsValid(int state);
+bool Save_VisionModeIsValid(int mode);
+bool Save_AmmoIsValid(int ammo);
+
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
 void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
 

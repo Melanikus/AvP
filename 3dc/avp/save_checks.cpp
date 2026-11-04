@@ -11,6 +11,8 @@
 #include "dynblock.h"
 #include "gamedef.h"
 #include "env_info.h"
+#include "equipment.h"
+#include "vision.h"
 #include "save_checks.h"
 
 // The slot's numbers are read when the menu lists the saves, long before the file is loaded. They pick the level's name from a table, a line
@@ -38,6 +40,28 @@ bool Save_SlotNumbersAreValid(int species, int episode, int difficulty)
 	}
 
 	return episode >= 0 && episode < episodes && difficulty >= 0 && difficulty < I_MaxDifficulties;
+}
+
+// These four numbers pick an entry in a table the game then reads without asking: the player's weapon slots, the rate each weapon state
+// runs at, the colour of every particle in each vision mode, and the name of each kind of ammunition.
+bool Save_WeaponSlotIsValid(int slot)
+{
+	return slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS;
+}
+
+bool Save_WeaponStateIsValid(int state)
+{
+	return state >= 0 && state < MAX_NO_OF_WEAPON_STATES;
+}
+
+bool Save_VisionModeIsValid(int mode)
+{
+	return mode >= 0 && mode < NUMBER_OF_VISION_MODES;
+}
+
+bool Save_AmmoIsValid(int ammo)
+{
+	return ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES;
 }
 
 // A dynamics block says where an object is and how it moves. Nearly all of it is only numbers, and strange numbers just give a strange

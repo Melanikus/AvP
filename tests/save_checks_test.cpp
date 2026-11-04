@@ -18,6 +18,8 @@
 #include "dynblock.h"
 #include "gamedef.h"
 #include "env_info.h"
+#include "equipment.h"
+#include "vision.h"
 #include "save_checks.h"
 
 static int checksFailed = 0;
@@ -49,6 +51,30 @@ static void TestSlotNumbers()
 	Check(!Save_SlotNumbersAreValid(I_Marine, -1, I_Easy), "no negative level");
 	Check(!Save_SlotNumbersAreValid(I_Marine, 0, I_MaxDifficulties), "one difficulty past the end");
 	Check(!Save_SlotNumbersAreValid(I_Marine, 0, -1), "no negative difficulty");
+}
+
+static void TestTableNumbers()
+{
+	Check(Save_WeaponSlotIsValid(WEAPON_SLOT_1), "the first weapon slot");
+	Check(Save_WeaponSlotIsValid(MAX_NO_OF_WEAPON_SLOTS - 1), "the last weapon slot");
+	Check(!Save_WeaponSlotIsValid(MAX_NO_OF_WEAPON_SLOTS), "one weapon slot past the end");
+	Check(!Save_WeaponSlotIsValid(-1), "no negative weapon slot");
+
+	Check(Save_WeaponStateIsValid(WEAPONSTATE_IDLE), "the first weapon state");
+	Check(Save_WeaponStateIsValid(MAX_NO_OF_WEAPON_STATES - 1), "the last weapon state");
+	Check(!Save_WeaponStateIsValid(MAX_NO_OF_WEAPON_STATES), "one weapon state past the end");
+	Check(!Save_WeaponStateIsValid(-1), "no negative weapon state");
+
+	Check(Save_VisionModeIsValid(VISION_MODE_NORMAL), "the first vision mode");
+	Check(Save_VisionModeIsValid(NUMBER_OF_VISION_MODES - 1), "the last vision mode");
+	Check(!Save_VisionModeIsValid(NUMBER_OF_VISION_MODES), "one vision mode past the end");
+	Check(!Save_VisionModeIsValid(-1), "no negative vision mode");
+
+	Check(Save_AmmoIsValid(0), "the first kind of ammunition");
+	Check(Save_AmmoIsValid(AMMO_GRENADE), "the grenade launcher's first kind");
+	Check(Save_AmmoIsValid(MAX_NO_OF_AMMO_TEMPLATES - 1), "the last kind of ammunition");
+	Check(!Save_AmmoIsValid(MAX_NO_OF_AMMO_TEMPLATES), "one kind of ammunition past the end");
+	Check(!Save_AmmoIsValid(AMMO_NONE), "no ammunition at all isn't a choice");
 }
 
 static void MakeLive(DYNAMICSBLOCK &live)
@@ -141,6 +167,7 @@ static void TestDynamics()
 int main()
 {
 	TestSlotNumbers();
+	TestTableNumbers();
 	TestDynamics();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");
