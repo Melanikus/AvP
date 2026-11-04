@@ -3505,7 +3505,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 // Stencil shadow volumes. Every polygon that faces the light gets its own closed prism, reaching away from the light.
 // Each prism is closed, so z-fail counts come out right with no edge data, and neighbours' shared sides cancel out.
 
-int ToyShadowsEnabled = 0;
+int ToyShadowsEnabled = 1;
 
 struct ToyVec
 {

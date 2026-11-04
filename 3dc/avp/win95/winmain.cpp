@@ -249,11 +249,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	{
 		extern int ToyShadowsEnabled;
-		if (strstr(command_line, "-shadows"))
+		// not -noshadows: the level name switch further down takes anything starting with -n
+		if (strstr(command_line, "-shadowsoff"))
 		{
-			ToyShadowsEnabled = 1;
-			LogString("toy-shadows: on");
+			ToyShadowsEnabled = 0;
 		}
+		LogString(ToyShadowsEnabled ? "toy-shadows: on" : "toy-shadows: off");
 	}
 
 	if (strstr(command_line, "-intro"))	{
