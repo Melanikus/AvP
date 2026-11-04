@@ -248,16 +248,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	{
-		extern int ToyShadowsEnabled;
+		extern int ToyShadowsMode;
 		// not -noshadows: the level name switch further down takes anything starting with -n
 		if (strstr(command_line, "-shadowsoff"))
 		{
-			ToyShadowsEnabled = 0;
+			ToyShadowsMode = 0;
 		}
-		extern int ToyShadowsDebug;
-		if (strstr(command_line, "-shadowdebug"))
+		extern int ToyShadowsDarkness;
+		char const *darkSwitch = strstr(command_line, "-shadowdark=");
+		if (darkSwitch)
 		{
-			ToyShadowsDebug = 1;
+			int const asked = atoi(darkSwitch + strlen("-shadowdark="));
+			ToyShadowsDarkness = (asked < 0) ? 0 : (asked > 100) ? 100 : asked;
 		}
 		extern int ToyShadowsTest;
 		if (strstr(command_line, "-shadowtest"))
@@ -271,7 +273,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
 			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
 		}
-		LogString(ToyShadowsEnabled ? "toy-shadows: on" : "toy-shadows: off");
+		LogString(ToyShadowsMode ? "toy-shadows: on" : "toy-shadows: off");
 	}
 
 	if (strstr(command_line, "-intro"))	{

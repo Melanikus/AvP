@@ -5481,7 +5481,7 @@ int LightIntensityAtPoint(VECTORCH *pointPtr)
 
 // ---- toy-shadows ------------------------------------------------------------------------------------------------
 
-extern int ToyShadowsEnabled;
+extern int ToyShadowsMode;
 extern int NumActiveLightElements;
 extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
@@ -5492,7 +5492,7 @@ static int toyMostLightsInAFrame = 0;
 
 void ToyShadows_NoteObjectLights()
 {
-	if (ToyShadowsEnabled && NumLightSourcesForObject > toyMostLightsOnAnObject)
+	if (ToyShadowsMode && NumLightSourcesForObject > toyMostLightsOnAnObject)
 	{
 		toyMostLightsOnAnObject = NumLightSourcesForObject;
 
@@ -5505,7 +5505,7 @@ void ToyShadows_NoteObjectLights()
 
 void ToyShadows_NoteFrameLights()
 {
-	if (!ToyShadowsEnabled)
+	if (!ToyShadowsMode)
 	{
 		return;
 	}
@@ -5546,11 +5546,11 @@ static VECTORCH toyCameraWorld;
 struct ToyFoundLight
 {
 	LIGHTBLOCK *light;
-	int distance;
+	int order;    // lowest first
 };
 
-// Keeps the nearest lights to the camera, in order, nearest first.
-static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most)
+// Keeps the lights nearest the camera, in order. A light marked first goes ahead of every other, nearest of those first.
+static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most, bool first)
 {
 	if (!light->LightBright || light->LightRange <= 0 || !(light->RedScale || light->GreenScale || light->BlueScale))
 	{
@@ -5565,13 +5565,15 @@ static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFo
 	int const distance = Approximate3dMagnitude(&toLight);
 
 	// a light on the camera throws every shadow straight away from the eye, where it can't be seen
-	if (distance < 300)
+	if (distance < 300 && !first)
 	{
 		return;
 	}
 
+	int const order = first ? distance - 0x40000000 : distance;
+
 	int place = *numFound;
-	while (place > 0 && found[place - 1].distance > distance)
+	while (place > 0 && found[place - 1].order > order)
 	{
 		place--;
 	}
@@ -5588,10 +5590,19 @@ static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFo
 	}
 
 	found[place].light = light;
-	found[place].distance = distance;
+	found[place].order = order;
 }
 
-// Fills lights with x y z range for each light chosen, in the space the polygons were collected in. Gives back how many.
+// A fixed point number as a fraction, kept between 0 and 1.
+static float ToyFraction(int fixedPoint)
+{
+	float const fraction = (float)fixedPoint / 65536.0f;
+	return (fraction < 0.0f) ? 0.0f : (fraction > 1.0f) ? 1.0f : fraction;
+}
+
+// Fills lights with x y z range red green blue for each light chosen, 7 numbers each, in the space the polygons were collected
+// in. Gives back how many. Flares come first, near or far, so that a flare in flight always moves its shadows. The player can
+// have 4 going at once (pmove.cpp).
 int ToyShadows_PickLights(float *lights, int most)
 {
 	const int kMostHere = 8;
@@ -5612,15 +5623,17 @@ int ToyShadows_PickLights(float *lights, int most)
 			continue;
 		}
 
+		bool const isFlare = block->ObStrategyBlock && block->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade;
+
 		for (int j = 0; j < block->ObNumLights; j++)
 		{
-			ToyConsiderLight(block->ObLights[j], found, &numFound, most);
+			ToyConsiderLight(block->ObLights[j], found, &numFound, most, isFlare);
 		}
 	}
 
 	for (int i = 0; i < NumActiveLightElements; i++)
 	{
-		ToyConsiderLight(&LightElementStorage[i].LightBlock, found, &numFound, most);
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, found, &numFound, most, false);
 	}
 
 	for (int i = 0; i < numFound; i++)
@@ -5631,10 +5644,15 @@ int ToyShadows_PickLights(float *lights, int most)
 
 		TranslatePoint(source, view, toyViewMatrix);
 
-		lights[i * 4 + 0] = view[0];
-		lights[i * 4 + 1] = -view[1];
-		lights[i * 4 + 2] = view[2];
-		lights[i * 4 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+		float const bright = ToyFraction(light->LightBright);
+
+		lights[i * 7 + 0] = view[0];
+		lights[i * 7 + 1] = -view[1];
+		lights[i * 7 + 2] = view[2];
+		lights[i * 7 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+		lights[i * 7 + 4] = bright * ToyFraction(light->RedScale);
+		lights[i * 7 + 5] = bright * ToyFraction(light->GreenScale);
+		lights[i * 7 + 6] = bright * ToyFraction(light->BlueScale);
 	}
 
 	return numFound;
@@ -5644,7 +5662,7 @@ int ToyShadows_PickLights(float *lights, int most)
 // modules cast: anything else, such as a model or a crate, has no module of its own.
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 {
-	if (!ToyShadowsEnabled || !dptr->ObMyModule || gunLayer || DrawingAReflection || CurrentVisionMode != VISION_MODE_NORMAL)
+	if (!ToyShadowsMode || !dptr->ObMyModule || gunLayer || DrawingAReflection || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
 		return;
 	}

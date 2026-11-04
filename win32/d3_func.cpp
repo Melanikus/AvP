@@ -2579,6 +2579,8 @@ bool InitialiseDirect3D()
 	d3d.tallTextEffect = d3d.effectSystem->Add("tallText", "tallText.vsh", "tallText.psh", d3d.tallTextDecl);
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
 
+	d3d.shadowEffect = d3d.effectSystem->Add("shadow", "shadow.vsh", "shadow.psh", d3d.mainDecl);
+
 	// we should bail out if the shaders can't be loaded
 	if ((d3d.mainEffect  == kNullShaderID)    ||
 		(d3d.orthoEffect == kNullShaderID)    ||

@@ -1,0 +1,27 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float3 ViewPosition : TEXCOORD0;
+    float3 Normal       : TEXCOORD1;
+};
+
+// Global variables
+float4 LightPosition : register(c0);   // x y z, and one over the light's range
+float4 LightStrength : register(c1);   // how much of red, green and blue this light can take away, right beside it
+
+
+// Name: Shadow pixel shader
+// Type: Pixel shader
+// Desc: Runs on pixels a light can't reach. Works out what that light would have given this pixel, and gives back how much of
+// the pixel to keep, so it loses that much. The fade and the angle are the ones the level's lighting was baked with: a cosine
+// that reaches nothing at the light's range, times how squarely the surface faces the light.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    float3 toLight  = LightPosition.xyz - In.ViewPosition;
+    float  howFar   = length(toLight);
+    float  fade     = cos(1.5707963f * saturate(howFar * LightPosition.w));
+    float  facing   = saturate(dot(normalize(In.Normal), toLight / max(howFar, 1.0f)));
+
+    return float4(1.0f - LightStrength.rgb * fade * facing, 1.0f);
+}

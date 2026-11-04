@@ -231,6 +231,7 @@ typedef struct D3DInfo
 
 	// shader IDs
 	effectID_t				mainEffect;
+	effectID_t				shadowEffect;
 	effectID_t				decalEffect;
 	effectID_t				orthoEffect;
 	effectID_t				tallTextEffect;
