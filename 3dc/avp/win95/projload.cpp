@@ -3,7 +3,8 @@
 //   text is copied using the exact length measured when its space was made, and the debug decal save
 //   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
 //   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
-//   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer
+//   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
+//   file path too long for its buffer is skipped, like a missing sound
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -53,6 +54,7 @@
 #include <vector>
 #include "TextureManager.h"
 #include "utilities.h"
+#include "logString.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -456,6 +458,13 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
 			int index=isc->index;
 
+			// A level file can leave a sound's name blank, and the chunk then holds no name at all. There is nothing
+			// to load, so it stays a missing sound.
+			if (!isc->wav_name)
+			{
+				continue;
+			}
+
 			GLOBALASSERT(sound_array[index].sound_loaded==0);
 
 			sound_array[index].s3d.inner_range = (int)(isc->inner_range*local_scale);
@@ -467,7 +476,16 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 			sound_array[index].volume=isc->max_volume;
 			if (dir_chunk)
 			{
-				sprintf(wavname, "%s/%s", dir_chunk->directory, isc->wav_name);
+				// wavname holds 200 bytes, and both parts of this path come from the level file, so they could be
+				// any length (the longest in the game's own files is 44). A path too long for it is not cut short,
+				// which could load the wrong sound: it goes to the log, and the game carries on with no sound
+				// here, as it does when a sound is missing.
+				if (_snprintf(wavname, sizeof(wavname) - 1, "%s/%s", dir_chunk->directory, isc->wav_name) < 0)
+				{
+					LogErrorString(std::string("sound file path too long: ") + isc->wav_name);
+					continue;
+				}
+				wavname[sizeof(wavname) - 1] = '\0';
 				sound_array[index].sound_loaded = GetSound(wavname);
 			}
 			else
