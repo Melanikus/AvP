@@ -40,7 +40,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'This tag is not on avpx_main' }
           $results = gh api --paginate "repos/$env:GITHUB_REPOSITORY/commits/$env:GITHUB_SHA/check-runs?per_page=100" --jq '.check_runs[] | .name + "=" + .conclusion'
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the scan results' }
-          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries'
+          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries',
+            'CodeQL (SAST) on our code', 'CodeQL (SAST) on the vcpkg libraries', 'CodeQL (SAST) on actions',
+            'CodeQL (SAST) on library headers we use'
           foreach ($check in $required) {
             if ($results -notcontains "$check=success") { throw "'$check' did not pass on this commit" }
           }

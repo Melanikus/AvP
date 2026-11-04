@@ -41,8 +41,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $failures = [System.Collections.Generic.List[string]]::new()
-$sourceTypes = '.c', '.cc', '.cpp', '.cxx'
-$headerTypes = '.h', '.hh', '.hpp', '.hxx'
+$sourceTypes = '.c', '.cc', '.cpp', '.cxx', '.c++'
+$headerTypes = '.h', '.hh', '.hpp', '.hxx', '.h++', '.inl', '.ipp', '.tpp', '.inc'
 
 # The report's "notices" are notes from the tool, separate from its findings. Each language puts its own name in front
 # (cpp/..., js/..., actions/...), so these patterns match only the end. This one names each file it read.
@@ -328,7 +328,7 @@ $suppressionComment = '\b(lgtm|codeql)\s*\[[^\]]*\]|(//|/\*|#|;)\s*lgtm\b'
 $textTypes = if ($Kind -eq 'actions') {
     '.yml', '.yaml'
 } else {
-    $sourceTypes + $headerTypes + '.inc', '.inl', '.ipp', '.tcc'
+    $sourceTypes + $headerTypes + '.tcc'
 }
 $suppressions = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
     Where-Object { Test-FileType $_.Name $textTypes } |

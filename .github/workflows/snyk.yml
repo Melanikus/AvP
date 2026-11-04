@@ -83,15 +83,19 @@ jobs:
           exit "$rc"
 
       # Snyk reports how many files it read in the SARIF. A file it could not parse is silently skipped and the scan
-      # still passes, so we compare its count with what git tracks. A missing report fails here too.
+      # still passes, so we compare its count with what git tracks. Anything Snyk calls other than SUPPORTED counts as not
+      # read, whatever the name. Names are matched in any case, because an old file could be called OLDFILE.CPP. A
+      # missing report fails here too, and so does a count of zero, which would mean this check compared nothing.
       - name: Fail if Snyk Code skipped any C/C++ file
         if: ${{ !cancelled() }}
         run: |
-          tracked=$(git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' | wc -l)
-          analysed=$(jq '[.runs[0].properties.coverage[]? | select(.type == "SUPPORTED" and (.lang | IN(".c",".cc",".cpp",".cxx",".h",".hh",".hpp",".hxx"))) | .files] | add // 0' snyk-code.sarif)
-          unparsed=$(jq '[.runs[0].properties.coverage[]? | select(.type == "FAILED_PARSING") | .files] | add // 0' snyk-code.sarif)
-          echo "C/C++ files tracked by git: $tracked, analysed by Snyk: $analysed, failed to parse: $unparsed"
-          if [ "$unparsed" != "0" ] || [ "$analysed" != "$tracked" ]; then
+          types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
+          tracked=$(git ls-files | grep -ciE "$types" || true)
+          analysed=$(jq --arg types "$types" '[.runs[0].properties.coverage[]? | select(.type == "SUPPORTED" and (.lang | ascii_downcase | test($types))) | .files] | add // 0' snyk-code.sarif)
+          unparsed=$(jq '[.runs[0].properties.coverage[]? | select(.type != "SUPPORTED") | .files] | add // 0' snyk-code.sarif)
+          echo "C/C++ files tracked by git: $tracked, analysed by Snyk: $analysed, not analysed: $unparsed"
+          jq -c '.runs[0].properties.coverage' snyk-code.sarif
+          if [ "$tracked" -eq 0 ] || [ "$unparsed" != "0" ] || [ "$analysed" != "$tracked" ]; then
             echo "::error::Snyk Code did not analyse every C/C++ file"
             exit 1
           fi
@@ -116,10 +120,27 @@ jobs:
           persist-credentials: false
 
       # We build our open-source dependencies from source, so nothing precompiled belongs here. Images and other
-      # resources are fine; this looks only for compiled code.
+      # resources are fine; this looks only for compiled code. It checks each file's name, and also its first bytes,
+      # because every kind of compiled file starts with its own signature, so a DLL renamed to .dat is still caught.
       - name: Fail if precompiled code is in the repository
+        shell: bash
         run: |
           found=$(git ls-files | grep -iE '\.(dll|lib|exp|exe|obj|o|a|so|dylib|pdb|ilk|ocx|sys)$' || true)
+          while IFS= read -r -d '' file; do
+            [ -f "$file" ] || continue
+            signature=$(head -c 8 -- "$file" | od -An -tx1 | tr -d ' \n')
+            case "$signature" in
+              4d5a*)                                   ;; # Windows program or DLL
+              7f454c46*)                               ;; # Linux program
+              feedface*|feedfacf*|cefaedfe*|cffaedfe*) ;; # macOS program
+              cafebabe*)                               ;; # macOS universal program, or Java class
+              213c617263683e*)                         ;; # static library
+              0061736d*)                               ;; # WebAssembly
+              4c01*|6486*|64aa*)                       ;; # Windows object file
+              *) continue ;;
+            esac
+            found="$found"$'\n'"$file"
+          done < <(git ls-files -z)
           if [ -n "$found" ]; then
             echo "$found"
             echo "::error::Precompiled code is in the repository"
@@ -201,28 +222,41 @@ jobs:
             --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      # Skips D3DX: Microsoft's binary package, with no source to scan.
+      # Everything vcpkg built is collected, so a new library is scanned without anyone changing this file. A library with
+      # no source to collect fails, because a library we can't read is a blind spot. The only folders passed over are the
+      # ones named here, which aren't libraries we compile: Microsoft's D3DX is a binary package, the two vcpkg-cmake ones
+      # are build helpers, and the last two are vcpkg's own working folders.
       - name: Collect each library's patched source
         shell: pwsh
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
           $out = Join-Path $env:RUNNER_TEMP 'libsrc'
           New-Item -ItemType Directory -Force $out | Out-Null
+          $notLibraries = 'dxsdk-d3dx', 'vcpkg-cmake', 'vcpkg-cmake-config', 'detect_compiler', 'versioning_'
+          $failed = $false
           foreach ($port in Get-ChildItem $bt -Directory) {
-            if ($port.Name -eq 'dxsdk-d3dx') { continue }
+            if ($notLibraries -contains $port.Name) { continue }
             $src = Join-Path $port.FullName 'src'
-            if (-not (Test-Path $src)) { continue }
-            foreach ($d in Get-ChildItem $src -Directory) {
+            $folders = if (Test-Path $src) { @(Get-ChildItem $src -Directory) } else { @() }
+            if ($folders.Count -eq 0) {
+              Write-Output "::error::$($port.Name) was built but has no source to scan"
+              $failed = $true
+            }
+            foreach ($d in $folders) {
               Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
               "$($port.Name)/$($d.Name)"
             }
           }
+          if ($failed) { exit 1 }
 
       - name: Hand the sources to the scan job
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vcpkg-library-sources
           path: ${{ runner.temp }}/libsrc
+          # Without this the upload silently leaves out hidden files. Source in a hidden folder would go unscanned, and
+          # the check for .snyk files in the next job could never find one.
+          include-hidden-files: true
           retention-days: 1
 
   vcpkg-scan:
@@ -252,9 +286,10 @@ jobs:
           chmod +x "$RUNNER_TEMP/snyk"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # Every library is scanned even if an earlier one fails, so one run shows everything; the job fails at the end
-      # if any scan found anything. Each library must be present by name, so a broken hand-over can't pass as clean,
-      # and no library may carry a comment that tells a scanner to look away.
+      # Every library that was collected is scanned, even if an earlier one fails, so one run shows everything; the job
+      # fails at the end if any scan found anything. The six we know of must be present by name, so a broken hand-over
+      # can't pass as clean, and a new library is scanned without anyone adding it here. No library may carry a comment or
+      # a settings file that tells a scanner to look away.
       - name: SAST and SCA on each library's source
         shell: bash
         env:
@@ -276,6 +311,13 @@ jobs:
             return "$rc"
           }
           for lib in enet fmt libogg libvorbis openal-soft pthreads; do
+            if [ ! -d "libsrc/$lib" ]; then
+              echo "::error::No source collected for $lib"
+              failed=1
+            fi
+          done
+          for libdir in libsrc/*/; do
+            lib=$(basename "$libdir")
             echo "================ $lib"
             dirs=$(find "libsrc/$lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
             if [ -z "$dirs" ]; then
@@ -284,13 +326,21 @@ jobs:
               continue
             fi
             for d in $dirs; do
-              if grep -rIlE 'deepcode ignore|snyk:ignore' "$d"; then
+              # Each source folder gets its own reports, so a library with two folders can't overwrite one with the other.
+              name="$lib.$(basename "$d")"
+              if grep -rIliE 'deepcode ignore|snyk:ignore' "$d"; then
                 echo "::error::$lib has a comment that suppresses a scanner"
                 failed=1
               fi
-              if ! code_scan "$d" "results/$lib.code.sarif"; then failed=1; fi
+              settings=$(find "$d" \( -name .snyk -o -name .dcignore \) -print)
+              if [ -n "$settings" ]; then
+                echo "$settings"
+                echo "::error::$lib has a file that tells a scanner to look away"
+                failed=1
+              fi
+              if ! code_scan "$d" "results/$name.code.sarif"; then failed=1; fi
               for attempt in 1 2 3; do
-                if (cd "$d" && snyk test --unmanaged --print-dep-paths --json-file-output="$GITHUB_WORKSPACE/results/$lib.sca.json") | tee sca.log; then rc=0; else rc=$?; fi
+                if (cd "$d" && snyk test --unmanaged --print-dep-paths --json-file-output="$GITHUB_WORKSPACE/results/$name.sca.json") | tee sca.log; then rc=0; else rc=$?; fi
                 if [ "$rc" -lt 2 ]; then break; fi
                 echo "Snyk Open Source error (exit $rc) on attempt $attempt"
                 sleep 30
@@ -299,7 +349,7 @@ jobs:
               # an expiry date, and says why. Any other report, or any report after that date, still fails.
               if [ "$rc" -eq 1 ] && [ "$lib" = "$(jq -r .library repo/.github/snyk-accepted.json)" ] && \
                  [ "$(date -u +%F)" \< "$(jq -r .expires repo/.github/snyk-accepted.json)" ]; then
-                other=$(jq -r 'if type == "array" then .[] else . end | .vulnerabilities[]?.id' "results/$lib.sca.json" | sort -u \
+                other=$(jq -r 'if type == "array" then .[] else . end | .vulnerabilities[]?.id' "results/$name.sca.json" | sort -u \
                   | comm -23 - <(jq -r '.reports[]' repo/.github/snyk-accepted.json | sort -u))
                 if [ -z "$other" ]; then
                   echo "::warning::$lib: only the accepted reports were found (see .github/snyk-accepted.json)"
