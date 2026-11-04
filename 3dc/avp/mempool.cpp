@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a level that asks for more memory than a pool block holds gets it separately, instead of writing past
+//   the block
 #include "ourasert.h"
 #include "mem3dc.h"
 #include "mempool.h"
