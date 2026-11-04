@@ -9,7 +9,9 @@
 #     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
 #     it is not scanned.
 # ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
-# or exclude findings. If Snyk or GitHub Actions is unavailable, the checks fail and nothing merges.
+# or exclude findings. The single exception is .github/snyk-accepted.json: 4 reports where Snyk's own data is wrong, which
+# no code change can clear. It names each report and expires. If Snyk or GitHub Actions is unavailable, the checks fail
+# and nothing merges.
 name: Snyk
 
 on:
@@ -227,6 +229,12 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
     steps:
+      - name: Check out the accepted-reports list
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          persist-credentials: false
+
       - name: Download the collected sources
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -278,11 +286,22 @@ jobs:
               fi
               if ! code_scan "$d" "results/$lib.code.sarif"; then failed=1; fi
               for attempt in 1 2 3; do
-                if (cd "$d" && snyk test --unmanaged --print-dep-paths) | tee sca.log; then rc=0; else rc=$?; fi
+                if (cd "$d" && snyk test --unmanaged --print-dep-paths --json-file-output="$GITHUB_WORKSPACE/results/$lib.sca.json") | tee sca.log; then rc=0; else rc=$?; fi
                 if [ "$rc" -lt 2 ]; then break; fi
                 echo "Snyk Open Source error (exit $rc) on attempt $attempt"
                 sleep 30
               done
+              # The one exception in this gate: .github/snyk-accepted.json lists 4 reports by ID, for one library, with
+              # an expiry date, and says why. Any other report, or any report after that date, still fails.
+              if [ "$rc" -eq 1 ] && [ "$lib" = "$(jq -r .library repo/.github/snyk-accepted.json)" ] && \
+                 [ "$(date -u +%F)" \< "$(jq -r .expires repo/.github/snyk-accepted.json)" ]; then
+                other=$(jq -r 'if type == "array" then .[] else . end | .vulnerabilities[]?.id' "results/$lib.sca.json" | sort -u \
+                  | comm -23 - <(jq -r '.reports[]' repo/.github/snyk-accepted.json | sort -u))
+                if [ -z "$other" ]; then
+                  echo "::warning::$lib: only the accepted reports were found (see .github/snyk-accepted.json)"
+                  rc=0
+                fi
+              fi
               if [ "$rc" -ne 0 ]; then failed=1; fi
               tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
               if [ "$tested" -lt 1 ]; then
