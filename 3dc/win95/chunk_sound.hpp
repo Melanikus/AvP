@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed the declarations of code only the level editor used: the game itself never runs it
+//   removed the declarations of code only the level editor used: the game itself never runs it; added a
+//   check on the sound numbers a level file gives
 
 #ifndef _sndchunk_hpp
 #define _sndchunk_hpp 1
@@ -118,6 +119,14 @@ public :
 	
 	int num_extra_data;
 	int* extra_data;
+
+	// The game keeps a list of sounds, just long enough for the highest number it finds, and uses each sound's number
+	// as its place in that list. The number comes straight from the level file, so it could be anything. A negative
+	// number would point in front of the list, and a huge one would need more memory than the size sum can count,
+	// which leaves a list far too short. Numbers in the game's own files run from 0 to 39, so this limit leaves plenty
+	// of room. Anything using index as a place in a list must skip a sound that fails this check.
+	static const int Max_Sound_Number = 4095;
+	bool index_is_valid() const { return index >= 0 && index <= Max_Sound_Number; }
 };
 
 
