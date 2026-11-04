@@ -127,6 +127,8 @@ void UpdateRunTimeLights(void)
 	HandleLightElementSystem();
 }
 
+extern int ToyShadowsFlaresByPixel;
+
 void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 {
 	DISPLAYBLOCK **aptr;
@@ -148,6 +150,12 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	for(i = NumActiveBlocks; i!=0 && NumLightSourcesForObject < MaxLightsPerObject; i--)
 	{
 		dptr2 = *aptr++;
+
+		// while shadows are on, a flare's light is added per pixel instead, only where it can really reach
+		if (ToyShadowsFlaresByPixel && dptr2->ObStrategyBlock && dptr2->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade)
+		{
+			continue;
+		}
 
 		if (dptr2->ObNumLights)
 		{

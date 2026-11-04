@@ -5487,6 +5487,7 @@ extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
 extern bool gunLayer;
 extern int GlobalFrameCounter;
+extern int ToyShadowsFlaresByPixel;
 
 static int toyMostLightsOnAnObject = 0;
 static int toyMostLightsInAFrame = 0;
@@ -5738,6 +5739,12 @@ int ToyShadows_PickLights(float *lights, int most)
 			lights[i * 8 + 4] = weight * ToyFraction(light->RedScale);
 			lights[i * 8 + 5] = weight * ToyFraction(light->GreenScale);
 			lights[i * 8 + 6] = weight * ToyFraction(light->BlueScale);
+		}
+
+		// 2: a flare left out of the game's lighting, which the shadow pass adds per pixel. Only a flare has an order below 0.
+		if (ToyShadowsFlaresByPixel && steady[i].order < 0)
+		{
+			lights[i * 8 + 7] = 2.0f;
 		}
 
 		toyChosenLastFrame[i] = steady[i].light;

@@ -2585,6 +2585,7 @@ bool InitialiseDirect3D()
 	d3d.shadowEffect = d3d.effectSystem->Add("shadow", "shadow.vsh", "shadow.psh", d3d.mainDecl);
 	d3d.shadowDepthEffect = d3d.effectSystem->Add("shadowDepth", "shadow.vsh", "shadowDepth.psh", d3d.mainDecl);
 	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
+	d3d.shadowFlareEffect = d3d.effectSystem->Add("shadowFlare", "shadowFlare.vsh", "shadowFlare.psh", d3d.mainDecl);
 
 	// we should bail out if the shaders can't be loaded
 	if ((d3d.mainEffect  == kNullShaderID)    ||

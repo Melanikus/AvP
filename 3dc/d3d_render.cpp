@@ -3534,6 +3534,7 @@ extern void NewOnScreenMessage(char *messagePtr);
 int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
+int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 6;       // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
@@ -4172,7 +4173,8 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 		constants[i * 4 + 1] = other[1];
 		constants[i * 4 + 2] = other[2];
 		constants[i * 4 + 3] = 1.0f / other[3];
-		constants[(8 + i) * 4 + 0] = (other[4] + other[5] + other[6]) / 3.0f;
+		// a flare added per pixel isn't in the picture yet, so it has no share of what's there. Its weight stays 0.
+		constants[(8 + i) * 4 + 0] = (other[7] == 2.0f) ? 0.0f : (other[4] + other[5] + other[6]) / 3.0f;
 		constants[(8 + i) * 4 + 1] = other[7];
 	}
 
@@ -4360,6 +4362,98 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
+// Fills toyVerts with this light's prisms.
+static void ToyBuildPrisms(const float *light, ToyFrameReport *report)
+{
+	toyNumVerts = 0;
+	for (int caster = 0; caster < toyNumCasters; caster++)
+	{
+		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light);
+	}
+	if (ToyShadowsTest)
+	{
+		ToyAddTestBox(light);
+	}
+	report->verts += toyNumVerts;
+}
+
+// Clears the stencil and marks the pixels the light behind the prisms in toyVerts can't reach.
+static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
+{
+	HRESULT const cleared = device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+	if (FAILED(cleared))
+	{
+		report->clear = cleared;
+	}
+
+	ToySetVolumeState(device);
+
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_INCR);
+	HRESULT const back = ToyDrawVolumes(0);
+	if (FAILED(back))
+	{
+		report->back = back;
+	}
+
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_DECR);
+	HRESULT const front = ToyDrawVolumes(0);
+	if (FAILED(front))
+	{
+		report->front = front;
+	}
+}
+
+// Adds one flare's light to the picture, only on pixels its own stencil left unmarked, so it lights nothing it can't see.
+// Each flare does this for itself, so where one is blocked another can still light the same place.
+static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+{
+	d3d.effectSystem->SetActive(d3d.shadowFlareEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowFlareEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+	float const constants[8] =
+	{
+		light[0], light[1], light[2], 1.0f / light[3],
+		light[4], light[5], light[6], 0.0f,
+	};
+	device->SetPixelShaderConstantF(0, constants, 2);
+
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+	device->SetRenderState(D3DRS_STENCILREF, 0);
+	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+
+	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+
+	// the same surface again, so a hair nearer, or rounding would leave specks behind the game's own
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
+	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
+
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_BEGIN);
+	}
+
+	mainList->DrawOpaqueAgain();
+
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_END);
+		*pixels += ToyAskCard(countQuery);
+	}
+
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
+	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
+}
+
 static void ToyForgetCasters()
 {
 	toyNumCasters = 0;
@@ -4384,6 +4478,11 @@ static void ToyShadows_Draw()
 		NewOnScreenMessage(message);
 		LogString(message);
 	}
+
+	// Flares are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to the game.
+	// This takes effect from the next frame, since this frame's lighting is already done.
+	bool const flaresOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
+		&& d3d.shadowFlareEffect != kNullEffectID && toyNumCasters > 0;
 
 	static int toyFrame = 0;
 	bool const logThisFrame = (++toyFrame % 300) == 0;
@@ -4416,6 +4515,7 @@ static void ToyShadows_Draw()
 		{
 			ToyLogFrame(report);
 		}
+		ToyShadowsFlaresByPixel = flaresOurs;
 		ToyForgetCasters();
 		return;
 	}
@@ -4431,6 +4531,7 @@ static void ToyShadows_Draw()
 		{
 			ToyLogFrame(report);
 		}
+		ToyShadowsFlaresByPixel = flaresOurs;
 		ToyForgetCasters();
 		return;
 	}
@@ -4484,16 +4585,13 @@ static void ToyShadows_Draw()
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
 
-		toyNumVerts = 0;
-		for (int caster = 0; caster < toyNumCasters; caster++)
+		// flares come after the world has been darkened
+		if (thisLight[7] == 2.0f)
 		{
-			ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], thisLight);
+			continue;
 		}
-		if (ToyShadowsTest)
-		{
-			ToyAddTestBox(thisLight);
-		}
-		report.verts += toyNumVerts;
+
+		ToyBuildPrisms(thisLight, &report);
 
 		if (ToyShadowsMode == kToyViewEdges)
 		{
@@ -4514,29 +4612,7 @@ static void ToyShadows_Draw()
 			measuredThisFrame = true;
 		}
 
-		HRESULT const cleared = device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
-		if (FAILED(cleared))
-		{
-			report.clear = cleared;
-		}
-
-		ToySetVolumeState(device);
-
-		device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
-		device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_INCR);
-		HRESULT const back = ToyDrawVolumes(0);
-		if (FAILED(back))
-		{
-			report.back = back;
-		}
-
-		device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
-		device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_DECR);
-		HRESULT const front = ToyDrawVolumes(0);
-		if (FAILED(front))
-		{
-			report.front = front;
-		}
+		ToyMarkShadow(device, &report);
 
 		HRESULT darkened;
 		if (ToyShadowsMode == kToyViewPolygons)
@@ -4576,6 +4652,19 @@ static void ToyShadows_Draw()
 		if (ToyShadowsMode == kToyViewFinal)
 		{
 			ToyDimWorld(device);
+		}
+
+		for (int light = 0; light < report.lights; light++)
+		{
+			float const *thisLight = &lights[light * kToyLightFloats];
+
+			if (thisLight[7] == 2.0f)
+			{
+				ToyBuildPrisms(thisLight, &report);
+				ToyMarkShadow(device, &report);
+				ToyAddFlareLight(device, thisLight, countQuery, &pixelsByLight[light]);
+				report.pixels += pixelsByLight[light];
+			}
 		}
 	}
 
@@ -4627,5 +4716,6 @@ static void ToyShadows_Draw()
 		}
 	}
 
+	ToyShadowsFlaresByPixel = flaresOurs;
 	ToyForgetCasters();
 }

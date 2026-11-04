@@ -83,6 +83,7 @@ class RenderList
 
 		void Reset();
 		void Init(size_t size);
+		void DrawOpaqueAgain();
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }

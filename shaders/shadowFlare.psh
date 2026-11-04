@@ -1,0 +1,37 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float3 ViewPosition : TEXCOORD0;
+    float2 Texture      : TEXCOORD1;
+};
+
+// Global variables
+sampler2D Tex0   : register(s0);       // the polygon's own texture
+float4    Light  : register(c0);       // the flare: x y z, and one over its range
+float4    Colour : register(c1);       // its colour times its brightness
+
+
+// Name: Flare light pixel shader
+// Type: Pixel shader
+// Desc: The light of one flare on one pixel, added to the picture. While shadows are on, flares are left out of the game's
+// lighting of the walls, and this is the only light they give. The stencil only lets this run on pixels the flare can really
+// reach, so a flare lights nothing it can't see. The fade is the one the game uses for a live light. The game also gives a
+// little light to surfaces turned away from a light, which is the blanket glow this replaces, so here they get none.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    // which way this surface faces: how the position changes across the screen gives two lines lying along the surface
+    float3 normal = normalize(cross(ddx(In.ViewPosition), ddy(In.ViewPosition)));
+    if (dot(normal, In.ViewPosition) > 0.0f)
+    {
+        normal = -normal;
+    }
+
+    float3 toLight = Light.xyz - In.ViewPosition;
+    float  howFar  = length(toLight);
+    float  reach   = saturate(howFar * Light.w);
+    float  turned  = dot(normal, toLight / max(howFar, 1.0f));
+    float  given   = (1.0f - reach) * ((turned > 0.0f) ? (turned + 0.25f) * 0.5f : 0.0f);
+
+    return float4(tex2D(Tex0, In.Texture).rgb * saturate(Colour.rgb * given), 0.0f);
+}

@@ -23,6 +23,7 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "RenderList.h"
+#include "TextureManager.h"
 #include "renderer.h"
 #include <algorithm>
 #include <assert.h>
@@ -273,6 +274,35 @@ void RenderList::Reset()
 	// lets specify that the VB and IB are now empty
 	(**vb).SetSize(0);
 	(**ib).SetSize(0);
+}
+
+// Draws this list's solid polygons a second time, for a pass that adds light to them. The caller has set the shaders and
+// the blending. This goes straight to the device, because the caller puts the device back afterwards, and the game's own
+// record of its settings has to stay true.
+void RenderList::DrawOpaqueAgain()
+{
+	(**decl).Set();
+	(**vb).Set();
+	(**ib).Set();
+
+	for (size_t i = 0; i < listIndex; i++)
+	{
+		RenderItem *it = &Items[i];
+		uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
+
+		if (get_command(it->sortKey) || !numPrimitives || get_transType(it->sortKey) != TRANSLUCENCY_OFF)
+		{
+			continue;
+		}
+
+		DWORD const addressing = (get_texAddressType(it->sortKey) == TEXTURE_WRAP) ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;
+
+		d3d.lpD3DDevice->SetTexture(0, Tex_GetTexture(get_texID(it->sortKey)));
+		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, addressing);
+		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, addressing);
+
+		R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
+	}
 }
 
 void RenderList::Draw()
