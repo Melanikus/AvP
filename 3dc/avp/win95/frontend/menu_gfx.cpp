@@ -123,6 +123,26 @@ static int SmallLetterWidth(char letter)
 	return width;
 }
 
+// The most pixels this file counts for any run of text. The text can come from a file, and nothing limits how long it
+// is: without a limit, a long enough text would add up to more than an int can hold and wrap round to a wrong width. A
+// million pixels is far wider than any screen, so text that reaches the limit could not fit whatever its true width is,
+// and no text that can be shown changes. The line count worked out from this width also stays far below the largest
+// number an int can hold.
+#define MAX_COUNTED_TEXT_WIDTH 1000000
+
+// Adds one width to a running total of widths, and stops at the limit above. Every width sum in this file goes through
+// here. The check comes before the adding: it asks whether there is room left, with a subtraction that cannot go
+// wrong, where adding first could already have gone past what an int can hold.
+static int AddCappedWidth(int total, int width)
+{
+	if (width > MAX_COUNTED_TEXT_WIDTH - total)
+	{
+		return MAX_COUNTED_TEXT_WIDTH;
+	}
+
+	return total + width;
+}
+
 AVPIndexedFont IntroFont_Light;
 
 static void LoadMenuFont(void)
@@ -260,7 +280,7 @@ extern int LengthOfMenuText(const char *textPtr)
 		// The game is built with the /J setting, which makes a char run from 0 to 255, so every character has its slot
 		// in FontWidth. Going through unsigned char keeps that true in a build without /J, where an accented letter
 		// would be a negative number, and so a place in front of the list.
-		width += IntroFont_Light.FontWidth[(unsigned char) *textPtr];
+		width = AddCappedWidth(width, IntroFont_Light.FontWidth[(unsigned char) *textPtr]);
 
 		textPtr++;
 	}
@@ -270,7 +290,6 @@ extern int LengthOfMenuText(const char *textPtr)
 extern int RenderMenuText(char *textPtr, int pX, int pY, int alpha, enum AVPMENUFORMAT_ID format) 
 {
 	int width = LengthOfMenuText(textPtr);
-	int word_length = 0;
 
 	switch (format)
 	{
@@ -345,8 +364,7 @@ extern int RenderMenuText(char *textPtr, int pX, int pY, int alpha, enum AVPMENU
 
 			DrawTallFontCharacter(positionX, positionY, IntroFont_Light.textureID, topLeftU, topLeftV, charWidth, IntroFont_Light.charHeight, alpha);
 
-			positionX   += charWidth;
-			word_length += charWidth;
+			positionX = AddCappedWidth(positionX, (int)charWidth);
 		}
 	}
 
@@ -381,7 +399,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length;
@@ -394,7 +412,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length/2;
@@ -426,7 +444,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length;
@@ -439,7 +457,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length/2;
@@ -472,7 +490,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length;
@@ -485,7 +503,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length/2;
@@ -523,7 +541,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length;
@@ -536,7 +554,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=SmallLetterWidth(*ptr++);
+				length = AddCappedWidth(length, SmallLetterWidth(*ptr++));
 			}
 
 			x -= length/2;
@@ -625,19 +643,12 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 
 			DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, alphaR, alphaG, alphaB, alphaR);
 
-			sx += SmallLetterWidth(c);
+			sx = AddCappedWidth(sx, SmallLetterWidth(c));
 		}
 	}
 
 	return sx;
 }
-
-// The most pixels RenderSmallFontString_Wrapped counts for a word and the spaces before it, or for one run of spaces.
-// The text can come from a file, and nothing limits how long a word in a file is: without a limit, a long enough word
-// would add up to more than an int can hold and wrap round to a wrong width. A million pixels is far wider than any
-// screen, so a word that reaches the limit could not fit whatever its true width is, and no text that can be shown
-// changes. The line count worked out from this width also stays far below the largest number an int can hold.
-#define MAX_COUNTED_TEXT_WIDTH 1000000
 
 extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
 {
@@ -658,9 +669,7 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2==' ') 
 		{
-			wordWidth += SmallLetterWidth(*textPtr2++);
-			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
-				wordWidth = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth = AddCappedWidth(wordWidth, SmallLetterWidth(*textPtr2++));
 		}
 		
 		// Remember how much of the width so far is spaces: if this word moves to a new line, they are not needed.
@@ -668,9 +677,7 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2!=' ') 
 		{
-			wordWidth += SmallLetterWidth(*textPtr2++);
-			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
-				wordWidth = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth = AddCappedWidth(wordWidth, SmallLetterWidth(*textPtr2++));
 		}
 		
 		if (wordWidth > area->right - sx) 
@@ -706,7 +713,7 @@ Determine area used by text , so we can draw it centrally
 				wordWidth -= widthFromSpaces;
 			}
 		}
-		sx += wordWidth;
+		sx = AddCappedWidth(sx, wordWidth);
 	}
 	
 	if (sy == area->top) 
@@ -734,15 +741,11 @@ Determine area used by text , so we can draw it centrally
 		wordWidth = 0;
 		
 		while (*textPtr2 && *textPtr2==' ') {
-			wordWidth += SmallLetterWidth(*textPtr2++);
-			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
-				wordWidth = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth = AddCappedWidth(wordWidth, SmallLetterWidth(*textPtr2++));
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') {
-			wordWidth += SmallLetterWidth(*textPtr2++);
-			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
-				wordWidth = MAX_COUNTED_TEXT_WIDTH;
+			wordWidth = AddCappedWidth(wordWidth, SmallLetterWidth(*textPtr2++));
 		}
 		
 		if (wordWidth > area->right-sx) 
@@ -772,9 +775,7 @@ Determine area used by text , so we can draw it centrally
 
 		while (*textPtr && *textPtr==' ') 
 		{
-			sx += SmallLetterWidth(*textPtr++);
-			if (sx > MAX_COUNTED_TEXT_WIDTH)
-				sx = MAX_COUNTED_TEXT_WIDTH;
+			sx = AddCappedWidth(sx, SmallLetterWidth(*textPtr++));
 		}
 		
 		if (sx > area->right) 
@@ -794,7 +795,7 @@ Determine area used by text , so we can draw it centrally
 			char c = *textPtr++;
 			int letterWidth = SmallLetterWidth(c);
 			
-			if (sx + letterWidth > area->right) 
+			if (AddCappedWidth(sx, letterWidth) > area->right) 
 			{
 				sx = area->left;
 				sy += HUD_FONT_HEIGHT;
@@ -810,7 +811,7 @@ Determine area used by text , so we can draw it centrally
 
 				DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, ONE_FIXED, ONE_FIXED, ONE_FIXED, alpha);
 
-				sx += SmallLetterWidth(c);
+				sx = AddCappedWidth(sx, SmallLetterWidth(c));
 			}
 		}
 	}
