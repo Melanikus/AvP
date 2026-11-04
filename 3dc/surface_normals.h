@@ -35,6 +35,10 @@ void SurfaceNormals_StartObject();
 // of vertices. The polygon has to be a real one of the shape being drawn, because its corner numbers are looked up in that shape.
 void SurfaceNormals_WritePolygon(const struct polyheader *polygon, int polygonNumber, uint32_t firstVertex, uint32_t corners);
 
+// Gives four numbers for a polygon of the shape being drawn: which way its texture's U runs, in the world's directions, and which side its V is on.
+// All zero means the polygon has none, and then nothing should bend its normal. See SurfaceTangent.
+void SurfaceNormals_PolygonTangent(int polygonNumber, float *tangent);
+
 // Hands the list to the graphics card, or takes it back, for a pass that reads it.
 void SurfaceNormals_UseList();
 void SurfaceNormals_StopUsingList();

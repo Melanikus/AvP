@@ -219,6 +219,10 @@ typedef struct shapeheader
 	 Empty for a model, and for any shape whose corners can change in play*/
 	struct SurfacePolygon *sh_surfacepolygons;
 
+	/*one entry for each polygon, worked out once when the shape is loaded: see surface_tangent.cpp.
+	 All zero for a polygon with no texture. Models have one too, because a model's body part doesn't change shape*/
+	struct SurfaceTangent *sh_surfacetangents;
+
 } SHAPEHEADER;
 
 

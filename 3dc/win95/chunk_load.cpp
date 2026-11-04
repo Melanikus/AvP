@@ -25,6 +25,7 @@
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
 #include "mempool.h"
+#include "surface_tangent.h"
 #include <math.h>
 // for log file
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc);
@@ -2492,6 +2493,39 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 }
 
 
+// Works out which way this polygon's texture runs across it, for relief pictures. These numbers all come from the level file, so each is checked
+// first: a polygon that fails keeps an empty entry, and nothing bends its normal.
+static void work_out_polygon_tangent(SHAPEHEADER *shphd, const ChunkShape *cshp_ptr, int polygon, int UVIndex)
+{
+	ChunkPoly const &poly = cshp_ptr->poly_list[polygon];
+
+	if (!shphd->sh_surfacetangents || UVIndex < 0 || UVIndex >= cshp_ptr->num_uvs || poly.num_verts < 3 || cshp_ptr->uv_list[UVIndex].num_verts < 3)
+	{
+		return;
+	}
+
+	float corners[9], coordinates[6];
+	int const *points = *shphd->points;
+
+	for (int corner = 0; corner < 3; corner++)
+	{
+		int const point = poly.vert_ind[corner];
+
+		if (point < 0 || point >= shphd->numpoints)
+		{
+			return;
+		}
+
+		corners[corner * 3 + 0] = (float)points[point * 3 + 0];
+		corners[corner * 3 + 1] = (float)points[point * 3 + 1];
+		corners[corner * 3 + 2] = (float)points[point * 3 + 2];
+		coordinates[corner * 2 + 0] = cshp_ptr->uv_list[UVIndex].vert[corner].u;
+		coordinates[corner * 2 + 1] = cshp_ptr->uv_list[UVIndex].vert[corner].v;
+	}
+
+	SurfaceTangent_Work(corners, coordinates, &shphd->sh_surfacetangents[polygon]);
+}
+
 BOOL copy_to_shapeheader(
     RIFFHANDLE h,
     ChunkShape const &cshp,
@@ -2633,6 +2667,13 @@ BOOL copy_to_shapeheader(
 		}
 	}
 
+	shphd->sh_surfacetangents = (SurfaceTangent *) PoolAllocateMem(sizeof(SurfaceTangent) * shphd->numitems);
+
+	if (shphd->sh_surfacetangents)
+	{
+		memset(shphd->sh_surfacetangents, 0, sizeof(SurfaceTangent) * shphd->numitems);
+	}
+
 	for (i = 0; i < shphd->numitems; i++)
 	{
 		item_list[i * 9] = (cshp_ptr->poly_list[i].engine_type);
@@ -2659,6 +2700,8 @@ BOOL copy_to_shapeheader(
 					(shphd->sh_textures[UVIndex])[(j * 2)] = (int)cshp_ptr->uv_list[UVIndex].vert[j].u; //ProcessUVCoord(h, UVC_POLY_U, (int)cshp_ptr->uv_list[UVIndex].vert[j].u, uv_imnums[UVIndex]);
 					(shphd->sh_textures[UVIndex])[(j * 2) + 1] = (int)cshp_ptr->uv_list[UVIndex].vert[j].v; //ProcessUVCoord(h, UVC_POLY_V, (int)cshp_ptr->uv_list[UVIndex].vert[j].v, uv_imnums[UVIndex]);
 				}
+
+				work_out_polygon_tangent(shphd, cshp_ptr, i, UVIndex);
 			}
 			else
 			{

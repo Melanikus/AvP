@@ -31,6 +31,7 @@
 #include "3dc.h"
 
 #include "surface_normals.h"
+#include "surface_tangent.h"
 #include "d3_func.h"
 #include "VertexBuffer.h"
 #include "mempool.h"
@@ -293,6 +294,27 @@ static void PointNormal(int point, float *normal)
 	normal[0] = turned.x;
 	normal[1] = turned.y;
 	normal[2] = turned.z;
+}
+
+void SurfaceNormals_PolygonTangent(int polygonNumber, float *tangent)
+{
+	tangent[0] = 0.0f;
+	tangent[1] = 0.0f;
+	tangent[2] = 0.0f;
+	tangent[3] = 0.0f;
+
+	if (!Global_ShapeHeaderPtr || !Global_ShapeHeaderPtr->sh_surfacetangents || polygonNumber < 0 || polygonNumber >= Global_ShapeHeaderPtr->numitems)
+	{
+		return;
+	}
+
+	SurfaceTangent const &stored = Global_ShapeHeaderPtr->sh_surfacetangents[polygonNumber];
+
+	// Turning an object doesn't change which side a texture's V is on, so only the arrow is turned.
+	tangent[0] = objectIsTurned ? turning[0] * stored.x + turning[1] * stored.y + turning[2] * stored.z : stored.x;
+	tangent[1] = objectIsTurned ? turning[3] * stored.x + turning[4] * stored.y + turning[5] * stored.z : stored.y;
+	tangent[2] = objectIsTurned ? turning[6] * stored.x + turning[7] * stored.y + turning[8] * stored.z : stored.z;
+	tangent[3] = stored.flip;
 }
 
 // The way a polygon faces, in the world's directions. Its arrow is stored pointing the other way: the top of this file says why.
