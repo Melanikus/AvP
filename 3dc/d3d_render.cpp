@@ -9,7 +9,8 @@
 //   walls drawn from the fixed buffer cast shadows from their shapes, with nothing on the caster list
 //   with -keptsnap, a kept prism is finished each frame in the shader, from the same cut corners as the walls
 //   particles and coronas are written into their lists before those lists are closed, not after. Every writer now
-//   stops when its list says it has no room, and rain makes room the way the level's other shapes do
+//   stops when its list says it has no room, and rain makes room the way the level's other shapes do. A frame that
+//   couldn't start draws nothing, and an overlay in two parts goes whole or not at all
 //   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. This comes out before merge
 
 #include "console.h"
@@ -267,6 +268,11 @@ bool staticDecalsTest = false;
 static bool LockExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorLocks);
+	// While the game is getting the graphics card back, there are no buffers. The lists know what to do about that.
+	if (!d3d.particleVB || !d3d.particleIB || !d3d.mainVB || !d3d.mainIB || !d3d.orthoVB || !d3d.orthoIB || !d3d.decalVB || !d3d.decalIB)
+	{
+		return false;
+	}
 
 	// lock particle vertex and index buffers
 	d3d.particleVB->Lock((void**)&particleVertex);
@@ -348,6 +354,11 @@ static bool UnlockExecuteBufferAndPrepareForUse()
 
 	ProcessorStageClock clock(kProcessorLocks);
 
+	if (!d3d.particleVB || !d3d.particleIB || !d3d.mainVB || !d3d.mainIB || !d3d.orthoVB || !d3d.orthoIB || !d3d.decalVB || !d3d.decalIB)
+	{
+		return false;
+	}
+
 	// unlock particle vertex and index buffers
 	d3d.particleVB->Unlock();
 	d3d.particleIB->Unlock();
@@ -370,6 +381,24 @@ static bool UnlockExecuteBufferAndPrepareForUse()
 	d3d.decalVB->Unlock();
 
 	return true;
+}
+
+// True between the start of a frame and its end, if the frame could start. The graphics card can refuse to start one, and the game carries on running anyway.
+static bool frameIsOpen = false;
+
+static bool ExecuteBuffer();
+
+// Draws everything waiting in the lists and starts them again, for when a list is full in the middle of a frame. If the frame couldn't start, there's nothing to draw.
+static void FlushLists()
+{
+	if (!frameIsOpen)
+	{
+		return;
+	}
+
+	UnlockExecuteBufferAndPrepareForUse();
+	ExecuteBuffer();
+	LockExecuteBuffer();
 }
 
 float cot(float in)
@@ -1464,9 +1493,7 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 {
 	// bjd - This is the function responsible for drawing level geometry and the players weapon
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	texID_t textureID = (inputPolyPtr->PolyColour & ClrTxDefn);
@@ -1520,9 +1547,7 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 {
 	// responsible for drawing predators lock on triangle, for one
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	// Take header information
@@ -1565,9 +1590,7 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 void D3D_PredatorThermalVisionPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
 {
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	if (!mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, TRANSLUCENCY_OFF)) {
@@ -1595,9 +1618,7 @@ void D3D_PredatorThermalVisionPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVER
 void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
 {
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	// We assume bit 15 (TxLocal) HAS been
@@ -1778,9 +1799,7 @@ void D3D_DrawParticle_Rain(PARTICLE *particlePtr, VECTORCH *prevPositionPtr)
 		// A raindrop is three corners and a level can have 999 drops, so rain can reach the end of the main list like
 		// anything else in the level. When it does, what's waiting is drawn and the list starts again.
 		if (!mainList->Check(3)) {
-			UnlockExecuteBufferAndPrepareForUse();
-			ExecuteBuffer();
-			LockExecuteBuffer();
+			FlushLists();
 		}
 
 		if (!mainList->AddItem(3, NO_TEXTURE, TRANSLUCENCY_NORMAL)) {
@@ -2601,9 +2620,7 @@ void DrawScanlinesOverlay(float level)
 void D3D_SkyPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
 {
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	// We assume bit 15 (TxLocal) HAS been
@@ -2647,9 +2664,7 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 	VECTORCH *pointWS = MeshWorldVertex;
 
 	if (!mainList->Check(kNumMeshVerts)) {
-		UnlockExecuteBufferAndPrepareForUse();
-		ExecuteBuffer();
-		LockExecuteBuffer();
+		FlushLists();
 	}
 
 	if (!mainList->AddItem(kNumMeshVerts, currentWaterTexture, TRANSLUCENCY_NORMAL)) {
@@ -2685,9 +2700,11 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 
 void ThisFramesRenderingHasBegun()
 {
-	if (R_BeginScene()) // calls a function to perform d3d_device->Begin();
+	// calls a function to perform d3d_device->Begin();
+	if (R_BeginScene())
 	{
 		FrameTiming_StartFrame(d3d.lpD3DDevice);
+		frameIsOpen = true;
 		LockExecuteBuffer(); // lock vertex buffer
 	}
 }
@@ -2699,6 +2716,16 @@ void ThisFramesRenderingHasFinished()
 	Osk_Draw();
 
 	Con_Draw();
+
+	if (!frameIsOpen)
+	{
+		// Nothing can be drawn, but these two lists of what was collected this frame still have to be emptied, or they'd grow for as long as this lasts.
+		DrawParticles();
+		DrawCoronas();
+		return;
+	}
+
+	frameIsOpen = false;
 
 	ShadowStatus_Draw();
 
@@ -2935,9 +2962,7 @@ extern void D3D_DrawColourBar(int yTop, int yBottom, int rScale, int gScale, int
 
 	// this function draws a lot of triangles so we'll force a buffer flush so we can keen
 	// the size of the ortho buffer small
-	UnlockExecuteBufferAndPrepareForUse();
-	ExecuteBuffer();
-	LockExecuteBuffer();
+	FlushLists();
 
 	for (uint32_t i = 0; i < 255;)
 	{
@@ -3110,6 +3135,13 @@ extern void D3D_ScreenInversionOverlay()
 	int theta[2];
 	int colour = 0xffffffff;
 
+	// It's two rectangles that only look right together, so if both won't fit, neither is drawn
+	if (!orthoList->Check(8, 12))
+	{
+		orthoList->NoteLeftOutBecauseFull();
+		return;
+	}
+
 	theta[0] = (CloakingPhase/8)&4095;
 	theta[1] = (800-CloakingPhase/8)&4095;
 
@@ -3222,6 +3254,13 @@ extern void D3D_PlayerDamagedOverlay(int intensity)
 {
 	int theta[2];
 	int colour, baseColour;
+
+	// It's two rectangles that only look right together, so if both won't fit, neither is drawn
+	if (!orthoList->Check(8, 12))
+	{
+		orthoList->NoteLeftOutBecauseFull();
+		return;
+	}
 
 	theta[0] = (CloakingPhase/8)&4095;
 	theta[1] = (800-CloakingPhase/8)&4095;

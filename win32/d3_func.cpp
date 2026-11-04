@@ -28,6 +28,8 @@
 //   the menu font's letters are limited to what its texture can hold
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   makes the list and the shader for shadow prisms kept between frames
+//   waiting for the graphics card to come back asks it again each time round, so it can't wait forever, and the wait ends if
+//   the player closes the game. A buffer that couldn't be made can't be locked
 
 #include "d3_func.h"
 #include "surface_normals.h"
@@ -86,6 +88,7 @@ std::string videoModeDescription;
 bool CreateVolatileResources();
 bool ReleaseVolatileResources();
 bool SetRenderStateDefaults();
+extern bool bRunning;
 void ToggleWireframe();
 
 const int kMaxTextureStages = 8;
@@ -314,42 +317,81 @@ bool R_BeginScene()
 		// disable XInput
 		XInputEnable(false);
 
+		// these are so that a long wait says each thing once, and doesn't fill the log 20 times a second
+		bool saidLost = false;
+		bool saidCantReset = false;
+
 		while (1)
 		{
 			CheckForWindowsMessages();
 
-			if (D3DERR_DEVICENOTRESET == LastError)
+			// The player closed the game while waiting. The frame doesn't start, and the game's main loop ends.
+			if (!bRunning)
+			{
+				return false;
+			}
+
+			// The answer changes as the wait goes on, so it has to be asked again each time round
+			LastError = d3d.lpD3DDevice->TestCooperativeLevel();
+
+			if (SUCCEEDED(LastError))
+			{
+				// It came back by itself, and only needs what was let go of above. That's done below.
+				break;
+			}
+			else if (D3DERR_DEVICENOTRESET == LastError)
 			{
 				LogDebugString("Releasing resources for a device reset...");
 
 				if (FAILED(d3d.lpD3DDevice->Reset(&d3d.d3dpp)))
 				{
-					LogDebugString("Couldn't reset device");
+					if (!saidCantReset)
+					{
+						LogDebugString("Couldn't reset device");
+						saidCantReset = true;
+					}
 				}
 				else
 				{
 					LogDebugString("We have reset the device. recreating resources...");
-					CreateVolatileResources();
-
-					SetTransforms();
-
-					// re-enable XInput
-					XInputEnable(true);
 					break;
 				}
 			}
 			else if (D3DERR_DEVICELOST == LastError)
 			{
-				LogDebugString("D3D device lost");
+				if (!saidLost)
+				{
+					LogDebugString("D3D device lost");
+					saidLost = true;
+				}
 			}
-			else if (D3DERR_DRIVERINTERNALERROR == LastError)
+			else
 			{
-				// handle this a lot better (exit the game etc)
-				Con_PrintError("need to close avp as a display adapter error occured");
+				// Microsoft's advice for this is to shut down, so the game is asked to close. This frame doesn't start.
+				static bool saidCantGoOn = false;
+
+				if (!saidCantGoOn)
+				{
+					Con_PrintError("need to close avp as a display adapter error occured");
+					saidCantGoOn = true;
+				}
+
+				bRunning = false;
 				return false;
 			}
 			Sleep(50);
 		}
+	}
+
+	// What was let go of has to be made again before a frame can start. That's the wait above. A failed change of resolution also leaves the buffers gone.
+	if (!d3d.mainVB)
+	{
+		CreateVolatileResources();
+
+		SetTransforms();
+
+		// re-enable XInput
+		XInputEnable(true);
 	}
 
 	LastError = d3d.lpD3DDevice->BeginScene();
@@ -605,6 +647,11 @@ bool R_LockVertexBuffer(class VertexBuffer &vertexBuffer, uint32_t offsetToLock,
 		return false;
 	}
 
+	// if making the buffer failed, there's nothing to lock. The failure was logged when it happened
+	if (!vertexBuffer._vertexBuffer.vertexBuffer) {
+		return false;
+	}
+
 	DWORD vbFlags = 0;
 	if (usage == USAGE_DYNAMIC) {
 		vbFlags = D3DLOCK_DISCARD;
@@ -650,6 +697,11 @@ bool R_LockIndexBuffer(class IndexBuffer &indexBuffer, uint32_t offsetToLock, ui
 	if (indexBuffer._isLocked) {
 		Con_PrintError("Index buffer is already locked!");
 		assert(0);
+		return false;
+	}
+
+	// if making the buffer failed, there's nothing to lock. The failure was logged when it happened
+	if (!indexBuffer._indexBuffer.indexBuffer) {
 		return false;
 	}
 

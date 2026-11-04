@@ -20,14 +20,18 @@
 // in this test does what the game's writers do, so a list that wrongly says yes gets written past its end, the pattern
 // changes, and the test notices. The program gives back a non-zero result if anything failed.
 //
-// WHAT IT CAN'T TEST
+// THE REAL WRITERS
 //
-// The writers themselves are in d3d_render.cpp, which brings most of the game with it. So the writers here are copies of
-// their shape, and D3D_DrawParticle_Rain's is one of them. The compiler checks the real ones: it complains about any
-// writer that ignores the list's answer.
+// The writers themselves are in d3d_render.cpp, which brings most of the game with it, so the writers run here are copies of
+// their shape, and D3D_DrawParticle_Rain's is one of them. The compiler only catches a writer that throws the list's answer
+// away. It's fooled by a cast, or by looking at the answer and doing nothing. So this test also reads d3d_render.cpp itself
+// as text, and checks every writer is built the right way: that's CheckTheRealWriters at the end. That's a reading, not a run.
+// It sees what the code says, and it can only check the rules written there.
 
+#include <fstream>
 #include <map>
 #include <new>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -375,7 +379,7 @@ static void CheckTheCountsAgree()
 {
 	printf("The number of index numbers a shape is said to need:\n");
 
-	for (uint32_t corners = 3; corners <= 8; corners++)
+	for (uint32_t corners = 3; corners <= 12; corners++)
 	{
 		TestList t("counts", 10, 100, 100, sizeof(ORTHOVERTEX));
 		t.Open();
@@ -400,13 +404,173 @@ static void CheckTheCountsAgree()
 		t.Close();
 	}
 
+	for (uint32_t corners = 1; corners <= 2; corners++)
 	{
 		TestList t("counts", 10, 100, 100, sizeof(ORTHOVERTEX));
 		t.Open();
-		bool const added = WriteShape(t, 9, 1);
-		Check(added && t.indexBuffer.GetSize() == 0, "a shape with a size CreateIndices doesn't know writes no index numbers");
+		bool const added = WriteShape(t, corners, 1);
+		Check(added && t.indexBuffer.GetSize() == 0 && GetNumIndices(corners) == 0, std::to_string(corners) + " corners aren't a shape, so no index numbers are said to be needed, and none are written");
 		t.Close();
 	}
+}
+
+// Which corners make which triangle, from how the game has always done it up to eight corners. Nine and up carry on the same way.
+static void CheckTheTriangles()
+{
+	printf("Which corners make which triangle:\n");
+
+	struct Expected
+	{
+		uint32_t corners;
+		std::vector<int> triangles;
+	};
+
+	Expected const expected[] =
+	{
+		{ 3, { 0,2,1 } },
+		{ 4, { 0,1,2, 0,2,3 } },
+		{ 5, { 0,1,4, 1,3,4, 1,2,3 } },
+		{ 6, { 0,4,5, 0,3,4, 0,2,3, 0,1,2 } },
+		{ 7, { 0,5,6, 0,4,5, 0,3,4, 0,2,3, 0,1,2 } },
+		{ 8, { 0,6,7, 0,5,6, 0,4,5, 0,3,4, 0,2,3, 0,1,2 } },
+		{ 9, { 0,7,8, 0,6,7, 0,5,6, 0,4,5, 0,3,4, 0,2,3, 0,1,2 } },
+	};
+
+	for (size_t e = 0; e < sizeof(expected) / sizeof(expected[0]); e++)
+	{
+		TestList t("triangles", 10, 100, 100, sizeof(ORTHOVERTEX));
+		t.Open();
+
+		// a shape first, so that these corners aren't numbered from zero
+		bool const first = WriteShape(t, 4, 1);
+		uint32_t const startIndex = t.indexBuffer.GetSize();
+		bool const added = WriteShape(t, expected[e].corners, 1);
+		bool same = first && added && (t.indexBuffer.GetSize() - startIndex == expected[e].triangles.size());
+
+		for (size_t i = 0; same && i < expected[e].triangles.size(); i++)
+		{
+			same = t.indices[startIndex + i] == 4 + expected[e].triangles[i];
+		}
+
+		Check(same, std::to_string(expected[e].corners) + " corners make the triangles they always have");
+		t.Close();
+	}
+
+	// A shape with nine corners used to say it needed index numbers, and write none, so that the draw read whatever was already there
+	{
+		TestList t("nine", 10, 100, 100, sizeof(ORTHOVERTEX));
+		t.Open();
+		bool const added = WriteShape(t, 9, 1);
+		t.Close();
+		drawn.clear();
+		t.list.Draw();
+		Check(added && drawn.size() == 1 && drawn[0].triangles == 7, "a nine-cornered shape draws its seven triangles");
+		Check(drawn.size() == 1 && drawn[0].startIndex + drawn[0].triangles * 3 == t.indexBuffer.GetSize(), "from exactly the index numbers it wrote");
+	}
+}
+
+// A list's buffers can be gone: they're let go of while the game gets the graphics card back
+static void CheckMissingBuffers()
+{
+	printf("A list whose buffers aren't there:\n");
+
+	TestList t("missing", 10, 100, 100, sizeof(ORTHOVERTEX));
+	t.vb = 0;
+	t.ib = 0;
+
+	Check(!t.list.Check(4), "it has no room");
+	Check(!t.list.AddItem(4, 1, TRANSLUCENCY_NORMAL), "it says no to a shape");
+	Check(t.list.GetLeftOutBecauseClosed() == 1, "and counts it as closed");
+	Check(t.list.GetSize() == 0, "and saves nothing");
+	t.list.CreateOrthoIndices(0);
+	t.list.CreateIndices(0, 4);
+	t.list.AddTriangle(0, 0, 1, 2, 3);
+	t.list.IncrementIndexCount(3);
+	t.list.Reset();
+	t.list.AddCommand(kCommandZWriteDisable);
+	drawn.clear();
+	t.list.Draw();
+	Check(drawn.empty() && t.list.GetVertexCount() == 0 && t.list.GetIndexCount() == 0, "and everything else it can be asked to do is safe");
+
+	t.vb = &t.vertexBuffer;
+	t.ib = &t.indexBuffer;
+	t.Open();
+	Check(WriteScreenQuad(t, 1), "and when they're back, it carries on");
+	t.Close();
+
+	t.decl = 0;
+	drawn.clear();
+	t.list.Draw();
+	Check(drawn.empty(), "and with no description of its corners, it draws nothing");
+}
+
+// What's used can be set in several ways, so the room check can't assume it's never past the room
+static void CheckSizesPastTheRoom()
+{
+	printf("A list said to hold more than it has room for:\n");
+
+	{
+		TestList t("past", 10, 100, 100, sizeof(ORTHOVERTEX));
+		t.Open();
+		t.vertexBuffer.SetSize(101);
+		Check(!t.list.Check(1), "too many corners: no room, instead of wrapping round to a lot of room");
+		t.vertexBuffer.SetSize(0xFFFFFFF0u);
+		Check(!t.list.Check(1), "far too many corners: no room");
+		Check(!t.list.AddItem(4, 1, TRANSLUCENCY_NORMAL), "and a shape is refused");
+		t.Close();
+	}
+
+	{
+		TestList t("past", 10, 100, 100, sizeof(ORTHOVERTEX));
+		t.Open();
+		t.indexBuffer.SetSize(101);
+		Check(!t.list.Check(3), "too many index numbers: no room");
+		t.list.AddTriangle(t.indices, 0, 1, 2, 3);
+		Check(t.indexBuffer.GetSize() == 101 && t.NothingPastTheEnd(), "and no more are written");
+		t.Close();
+	}
+}
+
+// Asking for room for a certain number of each, which is what an overlay in two parts does
+static void CheckRoomForTwoParts()
+{
+	printf("Room for a shape in two parts:\n");
+
+	TestList t("parts", 10, 8, 12, sizeof(ORTHOVERTEX));
+	t.Open();
+	Check(t.list.Check(8, 12), "two rectangles fit in exactly their room");
+	Check(!t.list.Check(9, 12), "one corner more doesn't");
+	Check(!t.list.Check(8, 13), "and neither does one index number more");
+	Check(WriteScreenQuad(t, 1), "the first goes in");
+	Check(!t.list.Check(8, 12), "and then two more don't fit");
+	Check(t.list.Check(4, 6), "but one does");
+	uint32_t const before = t.list.GetLeftOutBecauseFull();
+	logLines.clear();
+	t.list.NoteLeftOutBecauseFull();
+	t.list.NoteLeftOutBecauseFull();
+	Check(t.list.GetLeftOutBecauseFull() == before + 2, "what an overlay leaves out is counted");
+	Check(LogLinesContaining("parts is full") == 1, "and said once");
+	t.Close();
+}
+
+// A mesh only has one AddItem for all its triangles, so nothing stops the triangles but the code writing them
+static void CheckTrianglesCantRunOver()
+{
+	printf("Too many triangles for what was saved:\n");
+
+	TestList t("mesh", 10, 300, 12, sizeof(ORTHOVERTEX));
+	t.Open();
+	bool const added = t.list.AddItem(4, 1, TRANSLUCENCY_NORMAL);
+
+	for (int i = 0; i < 2000; i++)
+	{
+		t.list.AddTriangle(t.indices, 0, 1, 2, 4);
+	}
+
+	Check(added && t.indexBuffer.GetSize() == 12, "they stop at the end of the room");
+	Check(t.NothingPastTheEnd(), "and nothing is written past the end");
+	Check(t.list.GetLeftOutBecauseFull() > 0, "and it's counted");
+	t.Close();
 }
 
 // Each of the game's four kinds of buffer, at its real size, filled with rectangles until the list says no
@@ -566,6 +730,13 @@ static void CheckHugeCounts()
 	Check(t.vertexBuffer.GetSize() == 4, "the refused shapes saved no corners");
 	Check(t.list.GetLeftOutBecauseFull() == 4, "the 4 refusals are counted as full");
 	t.Close();
+
+	// Picked so that adding it to what's used would wrap round to almost nothing, in the corners and in the index numbers at once: with 12 index numbers used, this one needs 12 fewer than none
+	TestList both("both", 10, 100, 100, sizeof(ORTHOVERTEX));
+	both.Open();
+	bool const two = WriteScreenQuad(both, 1) && WriteScreenQuad(both, 1);
+	Check(two && !both.list.Check(0xFFFFFFFEu), "a count that would wrap both sums round still gets a no");
+	both.Close();
 }
 
 // Writing to a closed buffer is the bug this test exists for
@@ -980,9 +1151,552 @@ static void CheckNewBuffersStartEmpty()
 	indexBuffer->~IndexBuffer();
 }
 
+// ---- Reading the real writers, as text ----------------------------------------------------------------------------------
+
+static std::string ReadSourceFile(char const *name)
+{
+	// /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	path = path.substr(0, tests) + name;
+
+	std::ifstream file(path.c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	return all.str();
+}
+
+// The code with its comments gone, and what's inside quotes gone, and anything in an #if 0, so none of those can be mistaken for code
+static std::string JustTheCode(std::string const &source)
+{
+	std::string out;
+	out.reserve(source.size());
+
+	for (size_t i = 0; i < source.size();)
+	{
+		char const c = source[i];
+
+		if (c == '/' && i + 1 < source.size() && source[i + 1] == '/')
+		{
+			while (i < source.size() && source[i] != '\n')
+			{
+				i++;
+			}
+		}
+		else if (c == '/' && i + 1 < source.size() && source[i + 1] == '*')
+		{
+			std::string::size_type const end = source.find("*/", i + 2);
+			i = (end == std::string::npos) ? source.size() : end + 2;
+		}
+		else if (c == '"' || c == '\'')
+		{
+			out += c;
+			i++;
+
+			while (i < source.size() && source[i] != c && source[i] != '\n')
+			{
+				i += (source[i] == '\\') ? 2 : 1;
+			}
+
+			if (i < source.size())
+			{
+				out += source[i];
+				i++;
+			}
+		}
+		else
+		{
+			out += c;
+			i++;
+		}
+	}
+
+	// The lines between an #if 0 and its #endif, counting any others inside it
+	std::stringstream lines(out);
+	std::string line, kept;
+	int insideIfZero = 0;
+
+	while (std::getline(lines, line))
+	{
+		std::string::size_type const first = line.find_first_not_of(" \t");
+		std::string const trimmed = (first == std::string::npos) ? "" : line.substr(first);
+
+		if (insideIfZero > 0)
+		{
+			insideIfZero += (trimmed.compare(0, 3, "#if") == 0) ? 1 : (trimmed.compare(0, 6, "#endif") == 0) ? -1 : 0;
+			continue;
+		}
+
+		if (trimmed.compare(0, 5, "#if 0") == 0)
+		{
+			insideIfZero = 1;
+			continue;
+		}
+
+		kept += line;
+		kept += '\n';
+	}
+
+	return kept;
+}
+
+struct SourceFunction
+{
+	std::string name;
+	std::string body;
+};
+
+// Splits code at the outermost braces. What comes before an opening brace says what it is, and it's a function if the name is followed by round brackets.
+static std::vector<SourceFunction> SplitIntoFunctions(std::string const &code, bool *balanced)
+{
+	std::vector<SourceFunction> functions;
+	int depth = 0;
+	size_t headerStart = 0, bodyStart = 0;
+
+	for (size_t i = 0; i < code.size(); i++)
+	{
+		char const c = code[i];
+
+		if (c == '{')
+		{
+			if (depth == 0)
+			{
+				bodyStart = i + 1;
+			}
+			depth++;
+		}
+		else if (c == '}')
+		{
+			depth--;
+
+			if (depth == 0)
+			{
+				std::string const header = code.substr(headerStart, bodyStart - 1 - headerStart);
+				std::string::size_type const bracket = header.find('(');
+
+				if (bracket != std::string::npos)
+				{
+					std::string::size_type end = bracket;
+
+					while (end > 0 && isspace((unsigned char)header[end - 1]))
+					{
+						end--;
+					}
+
+					std::string::size_type start = end;
+
+					while (start > 0 && (isalnum((unsigned char)header[start - 1]) || header[start - 1] == '_'))
+					{
+						start--;
+					}
+
+					SourceFunction const function = { header.substr(start, end - start), code.substr(bodyStart, i - bodyStart) };
+					functions.push_back(function);
+				}
+
+				headerStart = i + 1;
+			}
+		}
+		else if (c == ';' && depth == 0)
+		{
+			headerStart = i + 1;
+		}
+	}
+
+	*balanced = (depth == 0);
+	return functions;
+}
+
+static size_t SkipSpace(std::string const &text, size_t at)
+{
+	while (at < text.size() && isspace((unsigned char)text[at]))
+	{
+		at++;
+	}
+
+	return at;
+}
+
+// Where the round bracket that closes the one at this place is
+static size_t ClosingBracket(std::string const &text, size_t open)
+{
+	int depth = 0;
+
+	for (size_t i = open; i < text.size(); i++)
+	{
+		depth += (text[i] == '(') ? 1 : (text[i] == ')') ? -1 : 0;
+
+		if (depth == 0)
+		{
+			return i;
+		}
+	}
+
+	return std::string::npos;
+}
+
+static int CountOf(std::string const &text, std::string const &words)
+{
+	int count = 0;
+
+	for (std::string::size_type at = text.find(words); at != std::string::npos; at = text.find(words, at + words.size()))
+	{
+		count++;
+	}
+
+	return count;
+}
+
+// The checks on the source, kept apart from running it, so that a test of the checks themselves can hand them broken copies
+struct SourceFindings
+{
+	std::vector<std::string> addItemNotFollowed;     // writers that don't stop when a list says no
+	std::vector<std::string> wrongWayOut;            // those that stop the wrong way
+	std::vector<std::string> mainWithoutRoom;        // main list writers that don't make room first
+	std::vector<std::string> writesBeforeAsking;     // corners written ahead of asking for room
+	std::vector<std::string> wrongCornerCount;       // a different number of corners from what was asked for
+	std::vector<std::string> flushOutsideTheHelper;  // places that flush the lists by hand, with no check that the frame is open
+	std::vector<std::string> twoPartsUnchecked;      // two-part overlays that don't ask for room for both
+	bool writesBeforeClosing;
+	bool executeWrites;
+	bool flushChecksTheFrame;
+	bool frameEndChecksTheFrame;
+	bool frameStartRemembers;
+	int writersRead;
+	int mainWritersRead;
+	bool balanced;
+};
+
+static SourceFindings ReadTheWriters(std::string const &source)
+{
+	SourceFindings found;
+	std::string const code = JustTheCode(source);
+	std::vector<SourceFunction> const functions = SplitIntoFunctions(code, &found.balanced);
+
+	found.writesBeforeClosing = false;
+	found.executeWrites = false;
+	found.flushChecksTheFrame = false;
+	found.frameEndChecksTheFrame = false;
+	found.frameStartRemembers = false;
+	found.writersRead = 0;
+	found.mainWritersRead = 0;
+
+	static char const * const lists[] = { "orthoList", "particleList", "decalList", "mainList", "weaponList" };
+	static char const * const stores[] = { "orthoVertex[", "particleVertex[", "decalVertex[", "mainVertex[" };
+
+	for (size_t f = 0; f < functions.size(); f++)
+	{
+		SourceFunction const &function = functions[f];
+		std::string const &body = function.body;
+
+		// Every AddItem has to be the question of an if, and the answer no has to leave
+		size_t firstAdd = std::string::npos;
+		size_t firstMainAdd = std::string::npos;
+		int adds = 0;
+
+		for (size_t l = 0; l < sizeof(lists) / sizeof(lists[0]); l++)
+		{
+			std::string const call = std::string(lists[l]) + "->AddItem(";
+
+			for (std::string::size_type at = body.find(call); at != std::string::npos; at = body.find(call, at + call.size()))
+			{
+				adds++;
+				firstAdd = (at < firstAdd) ? at : firstAdd;
+
+				if (l >= 3)
+				{
+					firstMainAdd = (at < firstMainAdd) ? at : firstMainAdd;
+				}
+
+				size_t const before = body.find_last_not_of(" \t\r\n", at - 1);
+				bool const asked = before != std::string::npos && before >= 4 && body.compare(before - 4, 5, "if (!") == 0;
+				size_t const end = ClosingBracket(body, at + call.size() - 1);
+				bool stops = false;
+
+				if (asked && end != std::string::npos)
+				{
+					size_t next = SkipSpace(body, end + 1);
+
+					if (next < body.size() && body[next] == ')')
+					{
+						next = SkipSpace(body, next + 1);
+
+						if (next < body.size() && body[next] == '{')
+						{
+							next = SkipSpace(body, next + 1);
+						}
+
+						bool const leavesByReturn = body.compare(next, 7, "return;") == 0;
+						bool const leavesByContinue = body.compare(next, 9, "continue;") == 0;
+
+						stops = leavesByReturn || leavesByContinue;
+
+						// A corona is in a loop, and the end of its function has to run. Everything else just leaves.
+						if ((function.name == "DrawCoronas") != leavesByContinue)
+						{
+							found.wrongWayOut.push_back(function.name);
+						}
+					}
+				}
+
+				if (!stops)
+				{
+					found.addItemNotFollowed.push_back(function.name);
+				}
+			}
+		}
+
+		found.writersRead += (adds > 0) ? 1 : 0;
+
+		// Anything adding to the main list has to make room first, the way the level's shapes do
+		if (firstMainAdd != std::string::npos)
+		{
+			found.mainWritersRead++;
+			size_t const check = body.find("mainList->Check(");
+			size_t const flush = (check == std::string::npos) ? std::string::npos : body.find("FlushLists()", check);
+
+			if (check == std::string::npos || check > firstMainAdd || flush == std::string::npos || flush > firstMainAdd)
+			{
+				found.mainWithoutRoom.push_back(function.name);
+			}
+		}
+
+		// No corner can be written until a list has said yes
+		for (size_t s = 0; s < sizeof(stores) / sizeof(stores[0]); s++)
+		{
+			size_t const write = body.find(stores[s]);
+
+			if (write != std::string::npos && (firstAdd == std::string::npos || write < firstAdd))
+			{
+				found.writesBeforeAsking.push_back(function.name);
+			}
+		}
+
+		// The screen writers ask for 4 corners, and that's what they have to write. A loop that goes round twice for two parts is checked below.
+		bool const twoParts = CountOf(body, "orthoList->AddItem(") == 2;
+
+		if (twoParts && (body.find("orthoList->Check(8, 12)") == std::string::npos || body.find("orthoList->Check(8, 12)") > firstAdd))
+		{
+			found.twoPartsUnchecked.push_back(function.name);
+		}
+
+		if (!twoParts && CountOf(body, "orthoList->AddItem(4,") == 1)
+		{
+			int const corners = CountOf(body, "orthoVBOffset++") + 4 * CountOf(body, "orthoVBOffset += 4");
+
+			if (corners != 4)
+			{
+				found.wrongCornerCount.push_back(function.name);
+			}
+		}
+
+		// Everything has to go through the one place that checks a frame is open, apart from the end of a frame, which checks for itself
+		if (body.find("UnlockExecuteBufferAndPrepareForUse()") != std::string::npos && function.name != "FlushLists" && function.name != "ThisFramesRenderingHasFinished")
+		{
+			found.flushOutsideTheHelper.push_back(function.name);
+		}
+
+		if (function.name == "UnlockExecuteBufferAndPrepareForUse")
+		{
+			size_t const sort1 = body.find("particleList->Sort()");
+			size_t const sort2 = body.find("decalList->Sort()");
+			size_t const particles = body.find("DrawParticles()");
+			size_t const coronas = body.find("DrawCoronas()");
+			size_t const close = body.find("->Unlock()");
+
+			found.writesBeforeClosing = sort1 != std::string::npos && sort1 < sort2 && sort2 < particles && particles < coronas && coronas < close && close != std::string::npos;
+		}
+
+		if (function.name == "ExecuteBuffer")
+		{
+			found.executeWrites = body.find("DrawParticles()") != std::string::npos || body.find("DrawCoronas()") != std::string::npos || body.find("->Sort()") != std::string::npos;
+		}
+
+		if (function.name == "FlushLists")
+		{
+			size_t const guard = body.find("if (!frameIsOpen)");
+			found.flushChecksTheFrame = guard != std::string::npos && guard < body.find("UnlockExecuteBufferAndPrepareForUse()");
+		}
+
+		if (function.name == "ThisFramesRenderingHasFinished")
+		{
+			size_t const guard = body.find("if (!frameIsOpen)");
+			found.frameEndChecksTheFrame = guard != std::string::npos && guard < body.find("UnlockExecuteBufferAndPrepareForUse()");
+		}
+
+		if (function.name == "ThisFramesRenderingHasBegun")
+		{
+			size_t const begin = body.find("R_BeginScene()");
+			size_t const remember = body.find("frameIsOpen = true");
+			size_t const open = body.find("LockExecuteBuffer()");
+			found.frameStartRemembers = begin != std::string::npos && begin < remember && remember != std::string::npos && remember < open && open != std::string::npos;
+		}
+	}
+
+	return found;
+}
+
+static std::string Names(std::vector<std::string> const &names)
+{
+	std::string all;
+
+	for (size_t i = 0; i < names.size(); i++)
+	{
+		all += (i ? ", " : "") + names[i];
+	}
+
+	return all;
+}
+
+static void CheckTheRealWriters()
+{
+	printf("Reading the real writers in d3d_render.cpp:\n");
+
+	std::string const source = ReadSourceFile("3dc/d3d_render.cpp");
+	Check(source.size() > 100000, "the source file was found and read");
+
+	SourceFindings const found = ReadTheWriters(source);
+
+	Check(found.balanced, "its braces add up, so the functions were read as they are");
+	Check(found.writersRead >= 25, "it read " + std::to_string(found.writersRead) + " functions that write shapes");
+	Check(found.mainWritersRead >= 6, "of which " + std::to_string(found.mainWritersRead) + " write to the main or weapon list");
+	Check(found.addItemNotFollowed.empty(), "every AddItem is asked as a question, and a no leaves at once: " + Names(found.addItemNotFollowed));
+	Check(found.wrongWayOut.empty(), "a corona skips to the next one, and every other writer returns: " + Names(found.wrongWayOut));
+	Check(found.mainWithoutRoom.empty(), "every main list writer makes room first, rain included: " + Names(found.mainWithoutRoom));
+	Check(found.writesBeforeAsking.empty(), "no corner is written before a list has said yes: " + Names(found.writesBeforeAsking));
+	Check(found.wrongCornerCount.empty(), "each screen writer writes the 4 corners it asked for: " + Names(found.wrongCornerCount));
+	Check(found.twoPartsUnchecked.empty(), "an overlay in two parts asks for room for both first: " + Names(found.twoPartsUnchecked));
+	Check(found.flushOutsideTheHelper.empty(), "nothing flushes the lists except through the one place that checks the frame is open: " + Names(found.flushOutsideTheHelper));
+	Check(found.writesBeforeClosing, "particles and coronas are written before their buffers close, after the two sorts, in that order");
+	Check(!found.executeWrites, "and not afterwards");
+	Check(found.flushChecksTheFrame, "a flush checks the frame is open");
+	Check(found.frameEndChecksTheFrame, "the end of a frame checks it too");
+	Check(found.frameStartRemembers, "and the start of a frame only says it's open if it did start");
+
+	// That these checks can catch anything has to be shown as well. Each of these breaks one writer in a copy of the file.
+	struct Broken
+	{
+		char const *what;
+		char const *from;
+		char const *to;
+		std::vector<std::string> SourceFindings::*list;
+		char const *function;
+	};
+
+	Broken const broken[] =
+	{
+		{ "an answer that's looked at and ignored", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t}", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
+		{ "an answer that's thrown away with a cast", "if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {\n\t\treturn;\n\t}", "(void)decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);", &SourceFindings::addItemNotFollowed, "D3D_Decal_Output" },
+		{ "a writer that writes one corner too many", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}", "if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}\n\torthoVBOffset++;", &SourceFindings::wrongCornerCount, "DrawFadeQuad" },
+		{ "a writer that writes before it asks", "\tif (!particleList->AddItem(4,", "\tparticleVertex[pVb].x = 0.0f;\n\tif (!particleList->AddItem(4,", &SourceFindings::writesBeforeAsking, "D3D_Particle_Output" },
+		{ "a corona that returns", "continue; // no room for this one", "return; // no room for this one", &SourceFindings::wrongWayOut, "DrawCoronas" },
+		{ "rain that doesn't make room", "if (!mainList->Check(3)) {\n\t\t\tFlushLists();\n\t\t}", "", &SourceFindings::mainWithoutRoom, "D3D_DrawParticle_Rain" },
+		{ "a flush by hand", "\t\tif (!mainList->Check(3)) {\n\t\t\tFlushLists();\n\t\t}", "\t\tif (!mainList->Check(3)) {\n\t\t\tUnlockExecuteBufferAndPrepareForUse();\n\t\t\tExecuteBuffer();\n\t\t\tLockExecuteBuffer();\n\t\t}", &SourceFindings::flushOutsideTheHelper, "D3D_DrawParticle_Rain" },
+		{ "an overlay that doesn't check for both parts", "// alien overlay\n\tint theta[2];\n\tint colour = 0xffffffff;\n\n\t// It's two rectangles that only look right together, so if both won't fit, neither is drawn\n\tif (!orthoList->Check(8, 12))", "// alien overlay\n\tint theta[2];\n\tint colour = 0xffffffff;\n\n\tif (false)", &SourceFindings::twoPartsUnchecked, "D3D_ScreenInversionOverlay" },
+	};
+
+	std::string plain = source;
+
+	for (std::string::size_type at = plain.find("\r\n"); at != std::string::npos; at = plain.find("\r\n", at))
+	{
+		plain.erase(at, 1);
+	}
+
+	for (size_t b = 0; b < sizeof(broken) / sizeof(broken[0]); b++)
+	{
+		std::string copy = plain;
+		std::string::size_type const at = copy.find(broken[b].from);
+		Check(at != std::string::npos, std::string("the copy for \"") + broken[b].what + "\" could be made");
+
+		if (at != std::string::npos)
+		{
+			copy.replace(at, strlen(broken[b].from), broken[b].to);
+			SourceFindings const caught = ReadTheWriters(copy);
+			bool named = false;
+
+			for (size_t n = 0; n < (caught.*broken[b].list).size(); n++)
+			{
+				named = named || (caught.*broken[b].list)[n] == broken[b].function;
+			}
+
+			Check(named, std::string("and ") + broken[b].what + " is caught, in " + broken[b].function);
+		}
+	}
+
+	{
+		// Writing particles and coronas after the buffers have closed, which is how it used to be
+		std::string copy = plain;
+		std::string::size_type const unlock = copy.find("static bool UnlockExecuteBufferAndPrepareForUse()");
+		std::string::size_type const particles = (unlock == std::string::npos) ? unlock : copy.find("DrawParticles();", unlock);
+		std::string::size_type const coronas = (particles == std::string::npos) ? particles : copy.find("DrawCoronas();", particles);
+		bool made = coronas != std::string::npos;
+
+		if (made)
+		{
+			copy.erase(coronas, strlen("DrawCoronas();"));
+			copy.erase(particles, strlen("DrawParticles();"));
+			std::string::size_type const execute = copy.find("static bool ExecuteBuffer()\n{");
+			made = execute != std::string::npos;
+
+			if (made)
+			{
+				copy.insert(execute + strlen("static bool ExecuteBuffer()\n{"), "\n\tDrawParticles();\n\tDrawCoronas();\n");
+			}
+		}
+
+		SourceFindings const caught = ReadTheWriters(copy);
+		Check(made && !caught.writesBeforeClosing && caught.executeWrites, "and writing particles and coronas after the buffers close is caught");
+	}
+
+	// The compiler has to be asked to refuse a thrown away answer, and the list has to ask for that
+	std::string const header = JustTheCode(ReadSourceFile("3dc/RenderList.h"));
+	Check(header.find("[[nodiscard]] bool AddItem") != std::string::npos, "the list says its answer can't be thrown away");
+	std::string const project = ReadSourceFile("win32/VS2026/AvP.vcxproj");
+	Check(CountOf(project, "/we4834") >= 2, "and both of the game's builds treat throwing it away as an error");
+
+	// The wait for a lost graphics card can't be run here, because it needs a graphics card, so it's read.
+	std::string const device = JustTheCode(ReadSourceFile("win32/d3_func.cpp"));
+	bool deviceBalanced = false;
+	std::vector<SourceFunction> const deviceFunctions = SplitIntoFunctions(device, &deviceBalanced);
+	std::string beginScene;
+
+	for (size_t f = 0; f < deviceFunctions.size(); f++)
+	{
+		beginScene = (deviceFunctions[f].name == "R_BeginScene") ? deviceFunctions[f].body : beginScene;
+	}
+
+	size_t const wait = beginScene.find("while (1)");
+	size_t const askAgain = (wait == std::string::npos) ? wait : beginScene.find("TestCooperativeLevel()", wait);
+	size_t const makeAgain = beginScene.find("if (!d3d.mainVB)");
+
+	Check(deviceBalanced && wait != std::string::npos, "the wait for a lost graphics card was found");
+	Check(askAgain != std::string::npos, "it asks the card again each time round, so it can't wait on an old answer forever");
+	Check(wait != std::string::npos && beginScene.find("if (!bRunning)", wait) != std::string::npos, "and it ends if the player closes the game");
+	Check(makeAgain != std::string::npos && makeAgain > wait && beginScene.find("BeginScene()", makeAgain) != std::string::npos, "and what it let go of is made again before a frame can start");
+	Check(CountOf(beginScene, "CreateVolatileResources()") == 1, "in one place, whichever way the wait ended");
+
+	std::string const windows = JustTheCode(ReadSourceFile("3dc/win95/win_func.cpp"));
+	Check(windows.find("while (!bActive && bRunning)") != std::string::npos, "and being closed also ends the wait for the game to become active");
+
+	// Nothing else adds to these lists. kshape.cpp has the only other mention, in code that's switched off.
+	std::string const shapes = JustTheCode(ReadSourceFile("3dc/kshape.cpp"));
+	Check(shapes.size() > 100000 && shapes.find("->AddItem(") == std::string::npos, "and the only other file that uses the lists doesn't add shapes to them");
+}
+
 int main()
 {
 	CheckTheCountsAgree();
+	CheckTheTriangles();
+	CheckMissingBuffers();
+	CheckSizesPastTheRoom();
+	CheckRoomForTwoParts();
+	CheckTrianglesCantRunOver();
 	CheckFillingEveryList();
 	CheckIndexRoomCounts();
 	CheckMixedShapes();
@@ -995,6 +1709,7 @@ int main()
 	CheckRain();
 	CheckTheLog();
 	CheckNewBuffersStartEmpty();
+	CheckTheRealWriters();
 
 	if (checksFailed)
 	{

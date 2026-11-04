@@ -23,7 +23,8 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-04 by Melanikus for the AvP port:
-//   AddItem now says no when the list's buffers are full or closed, and the list keeps count of what it left out
+//   AddItem now says no when the list's buffers are full or closed, and the list keeps count of what it left out.
+//   Its buffers can be missing without harm
 
 #include <stdint.h>
 #include <vector>
@@ -89,6 +90,7 @@ class RenderList
 
 		void MakeRoomForOneMoreItem();
 		void ReportHowFullItGot();
+		bool BuffersExist() const { return *vb && *ib; }
 
 	public:
 		RenderList(const std::string &listName, size_t size, VertexBuffer **vb, IndexBuffer **ib, VertexDeclaration **decl);
@@ -101,8 +103,8 @@ class RenderList
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }
 
-		uint32_t GetVertexCount() const { return (**vb).GetSize(); }
-		uint32_t GetIndexCount()  const { return (**ib).GetSize(); }
+		uint32_t GetVertexCount() const { return *vb ? (**vb).GetSize() : 0; }
+		uint32_t GetIndexCount()  const { return *ib ? (**ib).GetSize() : 0; }
 
 		int GetCurrentLayer() const { return layer; }
 	
@@ -110,6 +112,8 @@ class RenderList
 		void SetLayer(int layer);
 
 		bool Check(uint32_t numVerts);
+		bool Check(uint32_t numVerts, uint32_t numIndices);
+		void NoteLeftOutBecauseFull();
 		void Sort();
 		void AddTriangle(uint16_t *indexArray, uint32_t a, uint32_t b, uint32_t c, uint32_t n);
 		// Saves room for one more shape. Returns false, and saves nothing, when there's no room or the list is closed.
