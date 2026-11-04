@@ -34,7 +34,12 @@ PS_OUTPUT ps_main(in PS_INPUT In)
 
     // A hole in a texture, such as the gaps in a grate. The game's alpha test drew nothing here, so what shows is the surface behind, and
     // that's the one the pictures must hold. This is the game's own sum, from pixel.psh.
-    clip(texel.a * In.Keep.y + In.Keep.z - 0.5f);
+    //
+    // It looks as if the test should be against 0.5, because d3_func.cpp sets the game's to 0.5. It isn't. That line hands the card the
+    // bits of a float where it wants a whole number, and the card reads the low 8 bits, which are 0. So the game drops only an alpha of
+    // exactly 0, and this is half of one step above that. At 0.5, the soft edge of a grate would be drawn by the game but missing from
+    // the pictures, and it would show as a thin unlit line.
+    clip(texel.a * In.Keep.y + In.Keep.z - 0.002f);
 
     Out.Distance = float4(In.ViewPosition.z, 0.0f, 0.0f, 1.0f);
     Out.Colour   = float4(texel.rgb, 1.0f);
