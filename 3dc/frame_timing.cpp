@@ -415,7 +415,7 @@ static void ReportProcessorTimes()
 	if (lastReportClock)
 	{
 		double const frames = (double)framesCounted;
-		char line[300];
+		char line[420];
 
 		_snprintf(line, sizeof(line) - 1,
 			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f, starting the scene %.1f, game %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that",
