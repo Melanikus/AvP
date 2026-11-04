@@ -3,7 +3,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a saved profile is loaded only when complete, its name ends inside its box and cannot lead outside
 //   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused;
-//   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file
+//   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file;
+//   a profile file whose inner name is not its own file name is skipped, so it cannot delete another profile
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -109,6 +110,16 @@ void EmptyUserProfilesList()
 extern BOOL UserProfileNameIsSafe(const char *name)
 {
 	return (strpbrk(name, "/\\:") == NULL);
+}
+
+// Deleting a profile removes <name>.prf and <name>_1.sav and so on, using the name stored inside the profile. The game
+// always saves a profile as <name>.prf, so that name is also the name of its file. A file where the two differ was
+// made by hand: left in the list, deleting it would remove some other player's profile and saved games.
+static BOOL UserProfileNameMatchesFile(const char *name, const char *fileName)
+{
+	size_t const length = strlen(name);
+
+	return (_strnicmp(fileName, name, length) == 0) && (_stricmp(fileName + length, USER_PROFILES_SUFFIX) == 0);
 }
 
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
@@ -341,8 +352,9 @@ static int LoadUserProfiles(void)
 			// name would run on past the end of the box.
 			profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
 
-			// a name that could reach outside the profile folder: skip the file, like an unreadable one
-			if (!UserProfileNameIsSafe(profilePtr->Name))
+			// a name that could reach outside the profile folder, or that is not this file's own name: skip the file,
+			// like an unreadable one
+			if (!UserProfileNameIsSafe(profilePtr->Name) || !UserProfileNameMatchesFile(profilePtr->Name, wfd.cFileName))
 			{
 				CloseHandle (rif_file);
 				delete[] pszFullPath;
