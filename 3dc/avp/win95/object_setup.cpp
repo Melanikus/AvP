@@ -4,6 +4,8 @@
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
 //   an impossible sequence number is skipped too, and an object with no usable sequence is left out, as is a
 //   placed sound with no file name
+//   a track sound with no place of its own is skipped
+//   times and tracks from the level file that would divide by nothing, hang or crash are kept to what the game can use
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -181,7 +183,7 @@ void setup_track_sound(Object_Chunk* oc,TRACK_SOUND** start_sound,TRACK_SOUND** 
 	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
 	{
 		Object_Track_Sound_Chunk* otsc=(Object_Track_Sound_Chunk*)chlif();
-		TRACK_SOUND** sound_ptr;
+		TRACK_SOUND** sound_ptr=0;
 
 		switch(otsc->index)
 		{
@@ -228,7 +230,9 @@ void setup_track_sound(Object_Chunk* oc,TRACK_SOUND** start_sound,TRACK_SOUND** 
 TRACK_CONTROLLER* setup_track_controller(Object_Chunk* oc)
 {
 	Object_Track_Chunk2* otc=(Object_Track_Chunk2*)oc->lookup_single_child("OBJTRAK2");
-	if(!otc) return 0;
+
+	// a track with no sections has nowhere to go, and everything below reads the first one
+	if(!otc || !otc->num_sections) return 0;
 
 	
 	
@@ -294,7 +298,8 @@ TRACK_CONTROLLER* setup_track_controller(Object_Chunk* oc)
 		tsd->pivot_travel=(cts->pivot_end-cts->pivot_start)*local_scale;
 		tsd->object_offset=cts->object_offset*local_scale;
 
-		tsd->time_for_section=cts->time_for_section;
+		// A track's timer is worked through a section at a time, so a section of no time at all could never use it up, and the game would hang.
+		tsd->time_for_section=max(cts->time_for_section,ONE_FIXED/1000);
 	}
 
    	if(otc->flags & TrackFlag_Loop)
@@ -532,7 +537,8 @@ void create_strategies_from_list ()
 
 		if(!sbPtr)
 		{
-			GLOBALASSERT(0=="Run out of strategy blocks");
+			// a level can ask for more than there are, and what doesn't fit is left out
+			continue;
 		}
 
 		InitialiseSBValues(sbPtr);
@@ -875,8 +881,8 @@ static void add_trackobject(Object_Chunk* ob, int list_pos,AVP_Strategy_Chunk* a
 	TRACK_CONTROLLER* track=setup_track_controller(ob);
 	if(!track)
 	{
-		LOGDXFMT(("%s has no track\n",ob->object_data.o_name));	
-	 	GLOBALASSERT(track);
+		LOGDXFMT(("%s has no track\n",ob->object_data.o_name));
+	 	return;
 	}
 	
 	TrackStrategy* ts=(TrackStrategy*) asc->Strategy;
@@ -1239,8 +1245,10 @@ static void add_fan(Object_Chunk* ob, int list_pos,AVP_Strategy_Chunk* asc)
 {
 	
 	TRACK_CONTROLLER* track=setup_track_controller(ob);
-	GLOBALASSERT(track);
-	
+
+	// a fan with no track has nothing to turn on
+	if(!track) return;
+
 	FanStrategy* fs=(FanStrategy*) asc->Strategy;
 				
 	FAN_TOOLS_TEMPLATE* ftt=(FAN_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(FAN_TOOLS_TEMPLATE));
@@ -1856,10 +1864,11 @@ static void add_placed_light(Object_Chunk* ob,int list_pos,AVP_Strategy_Chunk* a
 	pltd->colour_diff_green-=pltd->colour_green;
 	pltd->colour_diff_blue-=pltd->colour_blue;
 
-	pltd->fade_up_time=(max(lchunk->light.fade_up_time,1)*ONE_FIXED)/1000;
-	pltd->fade_down_time=(max(lchunk->light.fade_down_time,1)*ONE_FIXED)/1000;
-	pltd->up_time=(max(lchunk->light.up_time,1)*ONE_FIXED)/1000;
-	pltd->down_time=(max(lchunk->light.down_time,1)*ONE_FIXED)/1000;
+	// These are multiplied, so a big enough time from the file wraps round to nothing, and a light that takes no time at all to change would change for ever.
+	pltd->fade_up_time=max((max(lchunk->light.fade_up_time,1)*ONE_FIXED)/1000,1);
+	pltd->fade_down_time=max((max(lchunk->light.fade_down_time,1)*ONE_FIXED)/1000,1);
+	pltd->up_time=max((max(lchunk->light.up_time,1)*ONE_FIXED)/1000,1);
+	pltd->down_time=max((max(lchunk->light.down_time,1)*ONE_FIXED)/1000,1);
 	pltd->timer=(max(lchunk->light.start_time,1)*ONE_FIXED)/1000;
 
 	pltd->type=(LIGHT_TYPE)lchunk->light.light_type;
@@ -3013,8 +3022,8 @@ void setup_generators (Environment_Data_Chunk * envd)
 	//first setup the global generator paramaters
 	Chunk * pChunk = envd->lookup_single_child("GLOGENDC");
 	
-	int generator_enemy;
-	
+	int generator_enemy=I_BehaviourAlien;
+
 	if(pChunk)
 	{
 		Global_Generator_Data_Chunk* ggdc=(Global_Generator_Data_Chunk*)pChunk;
@@ -3890,9 +3899,9 @@ void setup_particle_generators(Environment_Data_Chunk * envd)
 		part_temp->speed=data_chunk->speed*10;
 		
 		if(data_chunk->type==PARGEN_TYPE_SPARK)
-			part_temp->frequency=(data_chunk->time*ONE_FIXED)/10;
+			part_temp->frequency=max((data_chunk->time*ONE_FIXED)/10,1);
 		else
-			part_temp->frequency=ONE_FIXED/max(data_chunk->quantity,1);
+			part_temp->frequency=max(ONE_FIXED/max(data_chunk->quantity,1),1);
 
 		part_temp->active=!(data_chunk->flags & ParticleGeneratorFlag_Inactive);
 

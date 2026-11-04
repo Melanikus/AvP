@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a switch that starts out moving needs a track to move along
+
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -180,6 +184,12 @@ void* BinarySwitchBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 	}
 
 	bs_bhv->bs_track=bs_tt->track;
+
+	// a level file can ask for a switch that starts out moving, and with no track there's nothing to move along
+	if(bs_bhv->bs_mode==I_bswitch_moving && !bs_bhv->bs_track)
+	{
+		bs_bhv->bs_mode=I_bswitch_timer;
+	}
 
 	if (bs_bhv->bs_track)
 	{

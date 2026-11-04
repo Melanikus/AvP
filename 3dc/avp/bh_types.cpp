@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
+//   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -1139,9 +1140,10 @@ void AssignAllSBNames()
 						if(*((int *)switchDoorBehaviourPtr->linkedDoorName) + *( ((int *)switchDoorBehaviourPtr->linkedDoorName)+1 ) )
 							switchDoorBehaviourPtr->linkedDoorPtr = FindSBWithName(switchDoorBehaviourPtr->linkedDoorName);
 			 			/* may or may not be linked to another door */
-			 			if(switchDoorBehaviourPtr->linkedDoorPtr)
+			 			// the name comes from the level file, and anything but a switch door would be read as one
+			 			if(switchDoorBehaviourPtr->linkedDoorPtr && switchDoorBehaviourPtr->linkedDoorPtr->I_SBtype != I_BehaviourSwitchDoor)
 						{
-			 				GLOBALASSERT(switchDoorBehaviourPtr->linkedDoorPtr->I_SBtype == I_BehaviourSwitchDoor);
+			 				switchDoorBehaviourPtr->linkedDoorPtr = 0;
 						}
 			 			break;
 					}
@@ -2564,7 +2566,11 @@ void RequestState(STRATEGYBLOCK* sbptr, int message, STRATEGYBLOCK * SBRequester
 
 BOOL GetState(STRATEGYBLOCK* sbptr)
 {
-	GLOBALASSERT(sbptr);
+	// a lift's door can be named in a level file and not exist
+	if(!sbptr)
+	{
+		return FALSE;
+	}
 
 	switch (sbptr->I_SBtype)
 	  {
