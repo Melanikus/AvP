@@ -13,7 +13,7 @@
 //   a shape must have one normal for each point and one for each polygon, each normal's numbers must be sensible, and a polygon's
 //   own normal must be one of those in its list
 //   the two polygons of a merge pair must be triangles that share exactly one edge
-//   a chunk of morph frames must be exactly the size its count says
+//   a chunk of morph frames must be exactly the size its count says, and hold no more frames than the game can count
 //   a textured polygon can't have the bit set that makes the game skip its texture coordinates
 
 #include <math.h>
@@ -1885,6 +1885,10 @@ Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing
 	size_t const numbers_bytes = 12;
 	unsigned long long const bytes_for_each_frame = 12;
 
+	// The game keeps a count of frames in the top half of a number (mph_maxframes, in chunk_load.cpp), so it can't count more than
+	// this. The most in any chunk in the game's own levels is 2.
+	int const most_frames = 32767;
+
 	a_flags = 0;
 	a_speed = 0;
 	num_frames = 0;
@@ -1904,7 +1908,7 @@ Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing
 	data +=4;
 
 	// These numbers are wide enough that the sum can't wrap round, and a negative count turns into a huge number, so it's refused too.
-	if ((unsigned long long) count * bytes_for_each_frame != size - numbers_bytes)
+	if (count > most_frames || (unsigned long long) count * bytes_for_each_frame != size - numbers_bytes)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		return;

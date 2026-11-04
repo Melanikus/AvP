@@ -548,8 +548,9 @@ static void TestBakedColours()
 }
 
 // Room for the data of a whole shape: its header, its points and its polygons, laid out as in a level file. The biggest
-// one here has 10001 points, at 12 bytes each, with a normal for each point, also 12 bytes.
-alignas(int) static char wholeShape[250000];
+// one here has 10001 points, at 12 bytes each, with a normal for each point, also 12 bytes. The biggest chunk of morph frames
+// here has 32768 frames, also at 12 bytes each.
+alignas(int) static char wholeShape[500000];
 
 // Writes a chunk's header and gives back where its data goes. The data starts as all zeros.
 static char * PutChunk(char * where, char const * name, size_t dataBytes)
@@ -1412,6 +1413,8 @@ static void TestMorphFrames()
 		{ 24,         -1, false, "a negative count is refused" },
 		{ 24, 0x55555556, false, "a count that wraps round when multiplied is refused" },
 		{ 24, 0x7fffffff, false, "a huge count is refused" },
+		{ 12 + 12 * 32767, 32767, true,  "as many frames as the game can count are accepted" },
+		{ 12 + 12 * 32768, 32768, false, "one frame more than the game can count is refused" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
