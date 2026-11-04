@@ -5723,15 +5723,22 @@ int ToyShadows_PickLights(float *lights, int most)
 		lights[i * 8 + 5] = bright * ToyFraction(light->GreenScale);
 		lights[i * 8 + 6] = bright * ToyFraction(light->BlueScale);
 
-		// A flare's brightness flickers around 4, so it counts as a steady 4, and its shadows hold still. Only a flare has an
-		// order below 0. This is a weight in a share, not a colour: it has no effect on what any light looks like.
-		if (steady[i].order < 0)
-		{
-			lights[i * 8 + 4] = lights[i * 8 + 5] = lights[i * 8 + 6] = 4.0f;
-		}
-
 		// 0 for a light baked into the walls, 1 for one the game works out live, like a flare
-		lights[i * 8 + 7] = (light->LightFlags & LFlag_PreLitSource) ? 0.0f : 1.0f;
+		bool const live = !(light->LightFlags & LFlag_PreLitSource);
+		lights[i * 8 + 7] = live ? 1.0f : 0.0f;
+
+		// A live light can be brighter than 1: a new flare is about 4, fading to nothing. What matters here is what the game
+		// really adds to the wall, so a live light counts at its real brightness. This is a weight in a share, not a colour:
+		// it has no effect on what any light looks like.
+		if (live)
+		{
+			float const liveBright = (float)light->LightBright / 65536.0f;
+			float const weight = (liveBright < 0.0f) ? 0.0f : (liveBright > 8.0f) ? 8.0f : liveBright;
+
+			lights[i * 8 + 4] = weight * ToyFraction(light->RedScale);
+			lights[i * 8 + 5] = weight * ToyFraction(light->GreenScale);
+			lights[i * 8 + 6] = weight * ToyFraction(light->BlueScale);
+		}
 
 		toyChosenLastFrame[i] = steady[i].light;
 		toyChosen[i].distance = steady[i].distance;

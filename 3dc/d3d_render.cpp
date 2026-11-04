@@ -3657,6 +3657,17 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 		gap = kToyWidestGap;
 	}
 
+	// The game adds a live light to every point in range, walls or no walls, even a point turned away from it. So a surface we
+	// see from the side the light can't reach has to be in that light's shadow, even with nothing else in the way, as when
+	// the light is behind it. Its prism starts just in front of it, towards the light, and takes the surface in. The camera
+	// is at 0 0 0.
+	float const cameraSide = -(nx * pts[0].x + ny * pts[0].y + nz * pts[0].z);
+	bool const takeSurfaceIn = (cameraSide < 0.0f) != (facing < 0.0f);
+	if (takeSurfaceIn)
+	{
+		gap = -kToyStartGap;
+	}
+
 	ToyVec nearPts[kToyMostPolyPoints], farPts[kToyMostPolyPoints];
 
 	for (int i = 0; i < count; i++)
@@ -3677,22 +3688,25 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 		dy /= length;
 		dz /= length;
 
+		// a light almost touching the polygon: the start stays on the light's far side of the corner
+		float const start = (takeSurfaceIn && length < kToyStartGap * 2.0f) ? length * -0.5f : gap;
+
 		float reach = length * scale;
 		if (reach > kToyMostReach)
 		{
 			reach = kToyMostReach;
 		}
-		if (reach < length + gap + 1.0f)
+		if (reach < length + start + 1.0f)
 		{
-			reach = length + gap + 1.0f;   // the far end must stay behind the near end, or the prism turns inside out
+			reach = length + start + 1.0f;   // the far end must stay behind the near end, or the prism turns inside out
 		}
 
 		toyStretchTotal += reach - length;
 		toyStretchCorners++;
 
-		nearPts[i].x = point.x + dx * gap;
-		nearPts[i].y = point.y + dy * gap;
-		nearPts[i].z = point.z + dz * gap;
+		nearPts[i].x = point.x + dx * start;
+		nearPts[i].y = point.y + dy * start;
+		nearPts[i].z = point.z + dz * start;
 		farPts[i].x  = light[0] + dx * reach;
 		farPts[i].y  = light[1] + dy * reach;
 		farPts[i].z  = light[2] + dz * reach;
