@@ -272,7 +272,7 @@ static void ReportProcessorTimes()
 		char line[300];
 
 		_snprintf(line, sizeof(line) - 1,
-			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f; %.0f vertices and %.0f draws a frame",
+			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that",
 			framesCounted, ClockMilliseconds(now - lastReportClock) / frames, ClockMilliseconds(processorTotal[kProcessorShapes]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorLocks]) / frames, ClockMilliseconds(processorTotal[kProcessorDrawing]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorShadowPass]) / frames, ClockMilliseconds(processorTotal[kProcessorPresent]) / frames,
