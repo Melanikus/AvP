@@ -20,6 +20,10 @@
 // Right after the name in ChunkObject comes index_num, which is filled in before the name is copied. So a name that
 // runs past its end lands on a real field, and these tests would see index_num change.
 //
+// After a level is read, the game joins each object to its shape, using numbers from the file. So the last test builds
+// real objects and shapes in a real File_Chunk, runs the real post_input_processing, and checks that a level whose
+// numbers don't join up is refused.
+//
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this file together with the game's real chunk code, using the settings in
@@ -34,6 +38,8 @@
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "chunk_object.hpp"
+#include "chunk_shape.hpp"
+#include "mishchnk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
@@ -283,14 +289,120 @@ static void TestImpossibleChildSize()
 	Check(NameLength(object) == 63, "and its name was read");
 }
 
+// The bytes of a shape: an SHPHEAD1 chunk with 68 bytes of data, and the shape's number at byte 20 of that data. An object
+// names its shape at byte 56 of its own data.
+static size_t const ShapeHeaderDataBytes = 68;
+static size_t const ShapeNumberAt = 20;
+static size_t const ObjectShapeNumberAt = 56;
+
+alignas(int) static char shapeBytes[ChunkHeaderBytes + ShapeHeaderDataBytes];
+
+static void BuildShape(int shapeNumber)
+{
+	int const chunkBytes = (int)sizeof(shapeBytes);
+
+	memset(shapeBytes, 0, sizeof(shapeBytes));
+	memcpy(shapeBytes, "SHPHEAD1", 8);
+	memcpy(shapeBytes + 8, &chunkBytes, sizeof(chunkBytes));
+	memcpy(shapeBytes + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+}
+
+// Builds an object with this number, naming the shape with this number. Gives back how many bytes it takes up.
+static size_t BuildObject(int objectNumber, int shapeItNames)
+{
+	size_t const bytes = BuildObjectHeader("object", 7);
+
+	memcpy(objectBytes + ChunkHeaderBytes + ObjectNumberAt, &objectNumber, sizeof(objectNumber));
+	memcpy(objectBytes + ChunkHeaderBytes + ObjectShapeNumberAt, &shapeItNames, sizeof(shapeItNames));
+
+	return bytes;
+}
+
+// 7. Joining objects to shapes, in a real File_Chunk: everything that can't be right has to refuse the level, not crash.
+static void TestObjectsAndShapes()
+{
+	puts("7. objects and shapes that don't join up");
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		Shape_Chunk * shape = new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		size_t const bytes = BuildObject(5, 7);
+		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		file.post_input_processing();
+
+		Check(file.error_code == 0, "a level whose numbers join up is accepted");
+		Check(object->get_assoc_shape() == shape, "and the object is joined to its shape");
+		Check(file.get_object_by_index(5) == object, "and the object can be found by its number");
+	}
+
+	struct BadLevel { int objectNumber; int shapeItNames; int shapeNumber; char const * what; };
+	BadLevel const badLevels[] =
+	{
+		{          5,       1000,          7, "an object naming a shape that isn't in the file is refused" },
+		{          5,          3,          7, "an object naming a gap in the shape numbers is refused" },
+		{          5,         -1,          7, "an object naming a negative shape number is refused" },
+		{          5, 0x7FFFFFFF,          7, "an object naming a huge shape number is refused" },
+		{ 0x40000000,          7,          7, "an object number too big for the list is refused" },
+		{         -1,          7,          7, "a negative object number is refused" },
+		{          5,         -1,         -1, "a negative shape number is refused" },
+		{          5, 0x7FFFFFFF, 0x7FFFFFFF, "a huge shape number is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(badLevels) / sizeof(badLevels[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(badLevels[i].shapeNumber);
+		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		size_t const bytes = BuildObject(badLevels[i].objectNumber, badLevels[i].shapeItNames);
+		new Object_Chunk(&file, objectBytes, bytes);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, badLevels[i].what);
+		Check(file.get_object_by_index(0) == 0, "and looking up an object is still safe");
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		new Object_Chunk(&file, objectBytes, 0);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "an object with no header is refused");
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		new Shape_Chunk(&file, shapeBytes, 0);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with no header is refused");
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
+	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
+	setvbuf(stdout, NULL, _IONBF, 0);
+
 	TestStockName();
 	TestLongestName();
 	TestOneCharacterTooMany();
 	TestNoEndMarker();
 	TestChunkTooShort();
 	TestImpossibleChildSize();
+	TestObjectsAndShapes();
 
 	if (checksFailed)
 	{
