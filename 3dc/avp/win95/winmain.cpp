@@ -247,6 +247,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 	}
 
+	{
+		extern int ToyShadowsEnabled;
+		if (strstr(command_line, "-shadows"))
+		{
+			ToyShadowsEnabled = 1;
+			LogString("toy-shadows: on");
+		}
+	}
+
 	if (strstr(command_line, "-intro"))	{
 		WeWantAnIntro();
 	}

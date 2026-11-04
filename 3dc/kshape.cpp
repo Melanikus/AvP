@@ -6,6 +6,7 @@
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
 //   overflowed
 #include "3dc.h"
+#include "logString.h"
 #include <math.h>
 #include "module.h"
 #include "inline.h"
@@ -151,6 +152,10 @@ extern void AddCorona(PARTICLE *particlePtr, VECTORCHF *coronaPoint);
 void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr);
 
 VECTORCH Global_LightVector;
+
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr);
+void ToyShadows_NoteObjectLights();
+void ToyShadows_AddPolygon(const float *pts, int count, const float *light);
 
 /*
  Global variables and arrays
@@ -2909,6 +2914,7 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 
 	/* Find out which light sources are in range of of the object */
 	LightSourcesInRangeOfObject(dptr);
+	ToyShadows_NoteObjectLights();
 	/* Shape Language Execution Shell */
 	{
 		SHAPEINSTR *shapeinstrptr = shapeheaderptr->sh_instruction;
@@ -3155,6 +3161,7 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 	if (!(PIPECLEANER_CHEATMODE || BALLSOFFIRE_CHEATMODE) || !dptr->ObStrategyBlock) {
 		/* Find out which light sources are in range of of the object */
 		LightSourcesInRangeOfObject(dptr);
+		ToyShadows_NoteObjectLights();
 		/* Shape Language Execution Shell */
 		shapeinstrptr = shapeheaderptr->sh_instruction;
 
@@ -3165,6 +3172,8 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		} else {
 			TranslateShapeVertices(shapeinstrptr);
 		}
+
+		ToyShadows_Collect(dptr, shapeheaderptr);
 
 		/* call polygon pipeline */
 		ShapePipeline(shapeheaderptr);
@@ -5466,4 +5475,130 @@ int LightIntensityAtPoint(VECTORCH *pointPtr)
 	}
 
 	return intensity;
+}
+
+
+// ---- toy-shadows ------------------------------------------------------------------------------------------------
+
+extern int ToyShadowsEnabled;
+extern int NumActiveLightElements;
+extern int DrawingAReflection;
+extern bool gunLayer;
+
+static int toyMostLightsOnAnObject = 0;
+static int toyMostLightsInAFrame = 0;
+
+void ToyShadows_NoteObjectLights()
+{
+	if (ToyShadowsEnabled && NumLightSourcesForObject > toyMostLightsOnAnObject)
+	{
+		toyMostLightsOnAnObject = NumLightSourcesForObject;
+
+		char line[80];
+		_snprintf(line, sizeof(line) - 1, "toy-shadows: most lights on one object so far: %d", toyMostLightsOnAnObject);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+}
+
+void ToyShadows_NoteFrameLights()
+{
+	if (!ToyShadowsEnabled)
+	{
+		return;
+	}
+
+	// the same lights LightSourcesInRangeOfObject would consider, before it looks at range
+	int lights = NumActiveLightElements;
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK *light = block->ObLights[j];
+
+			if (light->LightBright && (light->RedScale || light->GreenScale || light->BlueScale))
+			{
+				lights++;
+			}
+		}
+	}
+
+	if (lights > toyMostLightsInAFrame)
+	{
+		toyMostLightsInAFrame = lights;
+
+		char line[80];
+		_snprintf(line, sizeof(line) - 1, "toy-shadows: most lights in one frame so far: %d", toyMostLightsInAFrame);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+}
+
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+{
+	if (!ToyShadowsEnabled || gunLayer || DrawingAReflection)
+	{
+		return;
+	}
+
+	// the nearest light that isn't sitting on the object itself. With none in range, one high above, so there is
+	// always something to see
+	VECTORCH lightWorld = dptr->ObWorld;
+	lightWorld.vy -= 6000;
+	int nearest = 0x7fffffff;
+
+	for (int i = 0; i < NumLightSourcesForObject; i++)
+	{
+		LIGHTBLOCK *light = LightSourcesForObject[i];
+		VECTORCH toLight;
+
+		toLight.vx = light->LightWorld.vx - dptr->ObWorld.vx;
+		toLight.vy = light->LightWorld.vy - dptr->ObWorld.vy;
+		toLight.vz = light->LightWorld.vz - dptr->ObWorld.vz;
+
+		int const distance = Approximate3dMagnitude(&toLight);
+
+		if (distance > 300 && distance < nearest)
+		{
+			nearest = distance;
+			lightWorld = light->LightWorld;
+		}
+	}
+
+	float const lightSource[3] = { (float)lightWorld.vx, (float)lightWorld.vy, (float)lightWorld.vz };
+	float lightView[3];
+	TranslatePoint(lightSource, lightView, ViewMatrix);
+	lightView[1] = -lightView[1];
+
+	int numitems = shapePtr->numitems;
+	int **itemArrayPtr = shapePtr->items;
+
+	while (numitems--)
+	{
+		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
+
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent))
+		{
+			continue;
+		}
+
+		float pts[maxpolypts * 3];
+		int count = 0;
+		int *vertexNumberPtr = &polyPtr->Poly1stPt;
+
+		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
+		{
+			VECTORCH const *point = &RotatedPts[*vertexNumberPtr++];
+
+			pts[count * 3 + 0] = (float)point->vx;
+			pts[count * 3 + 1] = (float)-point->vy;
+			pts[count * 3 + 2] = (float)point->vz;
+			count++;
+		}
+
+		ToyShadows_AddPolygon(pts, count, lightView);
+	}
 }
