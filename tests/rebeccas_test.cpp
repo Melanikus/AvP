@@ -876,11 +876,14 @@ static void TestRepeatedAndMissingChunks()
 // place to reach into its lists, so it has to be real, and the two polygons of a pair have to name each other. A place just
 // outside the list would be refused anyway, for not naming its partner back, by looking at whatever is there. So the "far"
 // rows use places so far off that looking there would crash, which shows that the limit itself is doing the refusing.
+// The game joins a pair at the edge they share, so a pair must be two triangles with exactly one edge in common. These three all do.
 static void TestMergeData()
 {
 	puts("14. merge data");
 
 	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const secondTriangle[5] = { 0, 2, 3, -1, -1 };
+	int const thirdTriangle[5] = { 1, 2, 3, -1, -1 };
 
 	int const farAway = 0x10000000;
 
@@ -906,12 +909,45 @@ static void TestMergeData()
 		char * end = PutShapeHeader(wholeShape, 4, 3);
 		end = PutPoints(end, 4);
 		end = PutPolygons(end, 3, triangle);
+		memcpy(end - 2 * 36 + 16, secondTriangle, 5 * sizeof(int));
+		memcpy(end - 36 + 16, thirdTriangle, 5 * sizeof(int));
 		end = PutNormals(end, 4, 3);
 
 		char * merge = PutChunk(end, "SHPMRGDT", mergeBytes);
 		memcpy(merge, rows[i].merge, mergeBytes);
 
 		Check(ShapeIsAccepted(merge + mergeBytes) == rows[i].accepted, rows[i].what);
+	}
+
+	// The two polygons of a pair, each given in full, in a shape of 6 points. All but the first must be refused.
+	struct PairRow { int first[5]; int second[5]; bool accepted; char const * what; };
+	PairRow const pairRows[] =
+	{
+		{ { 0, 1, 2, -1, -1 }, { 0, 2, 3, -1, -1 }, true,  "two triangles sharing one edge can merge" },
+		{ { 0, 1, 2, -1, -1 }, { 3, 4, 5, -1, -1 }, false, "two triangles with nothing in common are refused" },
+		{ { 0, 1, 2, -1, -1 }, { 2, 3, 4, -1, -1 }, false, "two triangles sharing one corner are refused" },
+		{ { 0, 1, 2, -1, -1 }, { 2, 1, 0, -1, -1 }, false, "two triangles with all their corners in common are refused" },
+		{ { 0, 1, 2, -1, -1 }, { 0, 1, 1, -1, -1 }, false, "a second polygon with all its corners in the first is refused" },
+		{ { 0, 1, 1, -1, -1 }, { 0, 1, 2, -1, -1 }, false, "a first polygon with all its corners in the second is refused" },
+		{ { 0, 1, 2, 3, -1 },  { 0, 1, 4, -1, -1 }, false, "a first polygon with four corners is refused" },
+		{ { 0, 1, 4, -1, -1 }, { 0, 1, 2, 3, -1 },  false, "a second polygon with four corners is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(pairRows) / sizeof(pairRows[0]); i++)
+	{
+		int const pair[2] = { 1, 0 };
+
+		char * end = PutShapeHeader(wholeShape, 6, 2);
+		end = PutPoints(end, 6);
+		end = PutPolygons(end, 2, triangle);
+		memcpy(end - 2 * 36 + 16, pairRows[i].first, 5 * sizeof(int));
+		memcpy(end - 36 + 16, pairRows[i].second, 5 * sizeof(int));
+		end = PutNormals(end, 6, 2);
+
+		char * merge = PutChunk(end, "SHPMRGDT", sizeof(pair));
+		memcpy(merge, pair, sizeof(pair));
+
+		Check(ShapeIsAccepted(merge + sizeof(pair)) == pairRows[i].accepted, pairRows[i].what);
 	}
 }
 

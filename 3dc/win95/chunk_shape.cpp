@@ -12,6 +12,7 @@
 //   lists of texture coordinates are read within their chunk and their 4 places, and each textured polygon's list is checked
 //   a shape must have one normal for each point and one for each polygon, each normal's numbers must be sensible, and a polygon's
 //   own normal must be one of those in its list
+//   the two polygons of a merge pair must be triangles that share exactly one edge
 
 #include <math.h>
 
@@ -152,7 +153,32 @@ static bool normals_are_valid (ChunkVectorFloat const * list, int list_count, in
 // every pair from its first polygon only, so an entry that doesn't lead back would leave its polygon with no place in the
 // merged list. Every one of the 12528 chunks of merge data in the game's own levels has one entry per polygon, and all of
 // their 89320 pairs lead back to each other.
-static bool merge_data_is_valid (Shape_Merge_Data_Chunk const * merge, int polygon_count)
+//
+// The game joins a pair by walking round the two triangles and crossing at the edge they share, so a pair has to be just that. To
+// find the corner it's adding, it looks for a corner of the second triangle that the first doesn't have, and it trusts there is one.
+// Two polygons with all their corners in common would send it to a place holding nothing. Every one of those 89320 pairs is two
+// triangles with exactly two corners in common, seen from either side.
+static int corners_also_in (ChunkPoly const & triangle, ChunkPoly const & other)
+{
+	int const corners_in_a_triangle = 3;
+	int shared = 0;
+
+	for (int i = 0; i < corners_in_a_triangle; i++)
+	{
+		for (int j = 0; j < corners_in_a_triangle; j++)
+		{
+			if (triangle.vert_ind[i] == other.vert_ind[j])
+			{
+				shared++;
+				break;
+			}
+		}
+	}
+
+	return shared;
+}
+
+static bool merge_data_is_valid (Shape_Merge_Data_Chunk const * merge, ChunkPoly const * polygons, int polygon_count)
 {
 	if (merge->num_polys != polygon_count)
 	{
@@ -173,7 +199,14 @@ static bool merge_data_is_valid (Shape_Merge_Data_Chunk const * merge, int polyg
 			return false;
 		}
 
-		if (partner == i || merge->merge_data[partner] != i)
+		if (merge->merge_data[partner] != i)
+		{
+			return false;
+		}
+
+		// This runs from each polygon of the pair in turn, so it only has to look one way. A polygon that names itself as its partner
+		// fails here too, because it has all its corners in common with itself.
+		if (polygons[i].num_verts != 3 || corners_also_in (polygons[i], polygons[partner]) != 2)
 		{
 			return false;
 		}
@@ -369,7 +402,7 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 
 	Shape_Merge_Data_Chunk * merging = (Shape_Merge_Data_Chunk *) shape_chunk->lookup_single_child ("SHPMRGDT");
 
-	if (merging && !merge_data_is_valid (merging, polygon_count))
+	if (merging && !merge_data_is_valid (merging, shape.poly_list, polygon_count))
 	{
 		return false;
 	}
