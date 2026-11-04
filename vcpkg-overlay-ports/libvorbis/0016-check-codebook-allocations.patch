@@ -1,14 +1,39 @@
-Check the codebook allocations that upstream's fixes do not cover.
+Check the allocations that upstream's fixes do not cover.
 
 Our own patch (AvP). A crafted setup header can make these allocations fail: an
-ordered book's size is not limited by the size of the packet. Upstream's main
-limits that memory in its unreleased codebook rewrite (e99e46ed5c), which cannot
-be taken on its own. Here, a failed allocation refuses the file instead of
-writing through a null pointer.
+ordered book's size and a residue's decode table are not limited by the size of
+the packet. Upstream's main limits the codebook memory in its unreleased codebook
+rewrite (e99e46ed5c), which cannot be taken on its own. Here, a failed allocation
+is reported as an error instead of writing through a null pointer. During setup
+that refuses the file. Once audio is being decoded, the decoder cannot start:
+ov_read returns an error on every call (patch 0018), and the caller has to stop.
 
+--- a/lib/block.c
++++ b/lib/block.c
+@@ -234,6 +234,7 @@ static int _vds_shared_init(vorbis_dsp_state *v,vorbis_info *vi,int encp){
+     /* finish the codebooks */
+     if(!ci->fullbooks){
+       ci->fullbooks=_ogg_calloc(ci->books,sizeof(*ci->fullbooks));
++      if(ci->fullbooks==NULL)goto abort_books;
+       for(i=0;i<ci->books;i++){
+         if(ci->book_param[i]==NULL)
+           goto abort_books;
+@@ -275,9 +276,11 @@ static int _vds_shared_init(vorbis_dsp_state *v,vorbis_info *vi,int encp){
+     b->flr[i]=_floor_P[ci->floor_type[i]]->
+       look(v,ci->floor_param[i]);
+ 
+-  for(i=0;i<ci->residues;i++)
++  for(i=0;i<ci->residues;i++){
+     b->residue[i]=_residue_P[ci->residue_type[i]]->
+       look(v,ci->residue_param[i]);
++    if(b->residue[i]==NULL)goto abort_books;
++  }
+ 
+   return 0;
+  abort_books:
 --- a/lib/codebook.c
 +++ b/lib/codebook.c
-@@ -148,6 +148,7 @@
+@@ -148,6 +148,7 @@ int vorbis_staticbook_pack(const static_codebook *c,oggpack_buffer *opb){
  static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
    long i,j;
    static_codebook *s=_ogg_calloc(1,sizeof(*s));
@@ -16,7 +41,7 @@ writing through a null pointer.
    s->allocedp=1;
  
    /* make sure alignment is correct */
-@@ -170,6 +171,7 @@
+@@ -170,6 +171,7 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
        goto _eofout;
      /* unordered */
      s->lengthlist=_ogg_malloc(sizeof(*s->lengthlist)*s->entries);
@@ -24,7 +49,7 @@ writing through a null pointer.
  
      /* allocated but unused entries? */
      if(unused){
-@@ -199,7 +201,12 @@
+@@ -199,7 +201,12 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
      {
        long length=oggpack_read(opb,5)+1;
        if(length==0)goto _eofout;
@@ -37,7 +62,7 @@ writing through a null pointer.
  
        for(i=0;i<s->entries;){
          long num=oggpack_read(opb,ov_ilog(s->entries-i));
-@@ -263,6 +270,7 @@
+@@ -263,6 +270,7 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
        if(((quantvals*s->q_quant+7)>>3)>opb->storage-oggpack_bytes(opb))
          goto _eofout;
        s->quantlist=_ogg_malloc(sizeof(*s->quantlist)*quantvals);
@@ -45,9 +70,90 @@ writing through a null pointer.
        for(i=0;i<quantvals;i++)
          s->quantlist[i]=oggpack_read(opb,s->q_quant);
  
+--- a/lib/res0.c
++++ b/lib/res0.c
+@@ -139,11 +139,15 @@ void res0_free_look(vorbis_look_residue *i){
+     }
+     fprintf(stderr,"\n");*/
+ 
+-    for(j=0;j<look->parts;j++)
+-      if(look->partbooks[j])_ogg_free(look->partbooks[j]);
++    /* res0_look also comes here when its memory ran out, so either list may
++       be missing */
++    if(look->partbooks)
++      for(j=0;j<look->parts;j++)
++        if(look->partbooks[j])_ogg_free(look->partbooks[j]);
+     _ogg_free(look->partbooks);
+-    for(j=0;j<look->partvals;j++)
+-      _ogg_free(look->decodemap[j]);
++    if(look->decodemap)
++      for(j=0;j<look->partvals;j++)
++        _ogg_free(look->decodemap[j]);
+     _ogg_free(look->decodemap);
+ 
+     memset(look,0,sizeof(*look));
+@@ -264,6 +268,7 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,
+   int j,k,acc=0;
+   int dim;
+   int maxstage=0;
++  if(look==NULL)return(NULL);
+   look->info=info;
+ 
+   look->parts=info->partitions;
+@@ -272,12 +277,14 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,
+   dim=look->phrasebook->dim;
+ 
+   look->partbooks=_ogg_calloc(look->parts,sizeof(*look->partbooks));
++  if(look->partbooks==NULL)goto errout;
+ 
+   for(j=0;j<look->parts;j++){
+     int stages=ov_ilog(info->secondstages[j]);
+     if(stages){
+       if(stages>maxstage)maxstage=stages;
+       look->partbooks[j]=_ogg_calloc(stages,sizeof(*look->partbooks[j]));
++      if(look->partbooks[j]==NULL)goto errout;
+       for(k=0;k<stages;k++)
+         if(info->secondstages[j]&(1<<k)){
+           look->partbooks[j][k]=ci->fullbooks+info->booklist[acc++];
+@@ -294,11 +301,16 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,
+       look->partvals*=look->parts;
+ 
+   look->stages=maxstage;
+-  look->decodemap=_ogg_malloc(look->partvals*sizeof(*look->decodemap));
++  /* The size of this table comes from the file. Each entry below starts out
++     empty, so that if the memory runs out part way, res0_free_look can tell
++     which entries it has to free. The caller then reports the failure. */
++  look->decodemap=_ogg_calloc(look->partvals,sizeof(*look->decodemap));
++  if(look->decodemap==NULL)goto errout;
+   for(j=0;j<look->partvals;j++){
+     long val=j;
+     long mult=look->partvals/look->parts;
+     look->decodemap[j]=_ogg_malloc(dim*sizeof(*look->decodemap[j]));
++    if(look->decodemap[j]==NULL)goto errout;
+     for(k=0;k<dim;k++){
+       long deco=val/mult;
+       val-=deco*mult;
+@@ -313,6 +325,9 @@ vorbis_look_residue *res0_look(vorbis_dsp_state *vd,
+   }
+ #endif
+   return(look);
++ errout:
++  res0_free_look(look);
++  return(NULL);
+ }
+ 
+ /* break an abstraction and copy some code for performance purposes */
 --- a/lib/sharedbook.c
 +++ b/lib/sharedbook.c
-@@ -214,6 +214,7 @@
+@@ -80,6 +80,7 @@ ogg_uint32_t *_make_words(char *l,long n,long sparsecount){
+   long i,j,count=0;
+   ogg_uint32_t marker[33];
+   ogg_uint32_t *r=_ogg_malloc((sparsecount?sparsecount:n)*sizeof(*r));
++  if(r==NULL)return(NULL);
+   memset(marker,0,sizeof(marker));
+ 
+   for(i=0;i<n;i++){
+@@ -214,6 +215,7 @@ float *_book_unquantize(const static_codebook *b,int n,int *sparsemap){
      float mindel=_float32_unpack(b->q_min);
      float delta=_float32_unpack(b->q_delta);
      float *r=_ogg_calloc(n*b->dim,sizeof(*r));
@@ -55,7 +161,7 @@ writing through a null pointer.
  
      /* maptype 1 and 2 both use a quantized value vector, but
         different sizes */
-@@ -383,6 +384,9 @@
+@@ -383,6 +385,9 @@ int vorbis_book_init_decode(codebook *c,const static_codebook *s){
      _ogg_free(codes); codes=NULL;
  
      c->valuelist=_book_unquantize(s,n,sortindex);
