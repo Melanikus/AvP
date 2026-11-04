@@ -9,6 +9,9 @@
 	be 'seen' at any one time. In the following plan view, from where the stick man is, the shaded yellow modules
 	are the ones that are visible.
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 
 #include "3dc.h"
 #include "inline.h"
@@ -200,7 +203,7 @@ void FindVisibleModules(VMODULE *vptr,int flag)
 {
 	while(vptr->vmod_type != vmtype_term)
 	{
-		MODULE *mptr;
+		MODULE *mptr = 0;
 
 		/* Add this module to the visible array */
 		if(vptr->vmod_mref.mref_ptr)
@@ -1020,7 +1023,7 @@ void PrintName(char *name)
 int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 
 	VMODULE *vptr;
-	MODULE *mptr;
+	MODULE *mptr = 0;
 	int gotit;
 
 	vptr=source->m_vmptr;
