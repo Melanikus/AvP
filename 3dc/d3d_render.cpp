@@ -3646,6 +3646,9 @@ int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen l
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
+int ShadowsDepthGap = 0;      // -shadowdepthgap: a shadow also starts further behind its polygon as depth gets coarser, on prisms made each frame
+float ShadowSurfaceBias = -0.000001f;   // -shadowbiassteps=N: how much nearer the surface pictures draw, in the depth buffer's own numbers
+int ShadowBiasSteps = 0;      // what -shadowbiassteps asked for, for the tag, or 0
 int ShadowsEvenGap = 0;       // -shadowevengap: a shadow starts the same distance behind every part of its polygon. See shadow_gap.h
 // Whether every prism is worked out every frame, as if nothing could be kept. This is the default for now, because the user saw shadows flicker with
 // kept prisms and not without them. -keptprismson turns them back on for testing. It doesn't change the aim, which is that a still light keeps its
@@ -3703,6 +3706,18 @@ static const float kToyWidestGap       = 200.0f;    // the most that gap can str
 // polygon is lit by that light, so there's nothing there to shadow. It can't be less: the game cuts a corner down to whole numbers, which can
 // move it by up to 1.73, and the start still has to be past the surface after that.
 static const float kUnlitStartGap      = 2.0f;
+
+// How many of the depth buffer's steps a shadow's start stands behind its polygon, with -shadowdepthgap. The depth buffer holds one over the distance, so
+// it gets coarser with the square of how far away something is: one step is 0.09 units at 10 metres, 3.4 at 60 and 9.3 at 100. Past about 40 metres, 8
+// units is only a few steps, and a surface and the start of its own shadow can come out at the same depth, and swap as the camera moves. 4 steps stays
+// under about half a pixel on screen at 100 metres, so it shouldn't change how anything looks.
+static const float kDepthStepsBehind   = 4.0f;
+
+// The size of one step of a 24-bit depth buffer, at this far from the camera.
+static float DepthStepAt(float z)
+{
+	return z * z / (-d3d.matProjection._43 * 16777216.0f);
+}
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
 static const float kToyFlareTouching   = 40.0f;     // a flare this close to a polygon's flat surface is lying on it
 static const float kToyCloakedShadow   = 0.25f;     // how strong a cloaked Predator's shadow is, against an ordinary one
@@ -3773,6 +3788,7 @@ static const int kToyVertsPerDraw = 60000 * 3;
 static D3DLVERTEX toyChunk[kToyVertsPerDraw];
 
 static ToyVec toyVerts[kToyMaxVerts];
+static bool prismCornersInWorld = false;   // true while prisms are being made from corners in the world's numbers, which have no distance from the camera
 static float toyVertEnds[kToyMaxVerts];   // each of those corners' KeptCorner end. Only a prism made for the card reads it
 static int toyNumVerts = 0;
 static int toyPrismsLeftOut = 0;
@@ -4472,6 +4488,15 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 			start = ShadowGap_ForCorner(startGap, length, planeDistance, kShadowGapWidest);
 		}
 
+		// Far away, depth is too coarse to tell a surface from the start of its own shadow. This only ever moves a start further back, and only where
+		// the steps are coarser than what's already there, so a shadow close to the camera stays exactly as it is.
+		if (ShadowsDepthGap && !takeSurfaceIn && !prismCornersInWorld)
+		{
+			float const clearOfTheSteps = ShadowGap_ForCorner(kDepthStepsBehind * DepthStepAt(point.z), length, planeDistance, kShadowGapWidest);
+
+			start = (clearOfTheSteps > start) ? clearOfTheSteps : start;
+		}
+
 		float reach = length * scale;
 		if (reach > kToyMostReach)
 		{
@@ -5034,9 +5059,10 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 }
 
 // Draws the surface pictures, which also write down how far away each pixel is. They're the same surfaces the game has just drawn, so they go
-// a hair nearer, or rounding would leave specks of them behind the game's own. The hair is a fixed size, and doesn't grow with a surface's
-// slant: depth isn't written here, so of two polygons that both pass, the last drawn wins, and a wider margin would let the wrong one win
-// along the line where something meets a floor. Says false if nothing was drawn.
+// a hair nearer, or rounding would leave specks of them behind the game's own. The hair is a fixed number of the depth buffer's steps, about 17, and
+// doesn't grow with a surface's slant. In the world it does grow: it's 1.6 units at 10 metres, 56 at 60 and 156 at 100. Depth isn't written here, so of
+// two polygons that both pass, the last drawn wins, and a wider margin lets the wrong one win along the line where two surfaces meet. So far away,
+// the pictures can hold the wrong polygon's normal near a crease. -shadowbiassteps tries a smaller hair. Says false if nothing was drawn.
 static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool useStatic)
 {
 	ToySetVolumeState(device);
@@ -5044,7 +5070,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
 	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, ToyShadowsMode != kViewFinalNoRelief, useStatic);
 
@@ -5384,6 +5410,12 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 // cornersMade says how many. false means they aren't all there, so they can't be used.
 static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, const float *centre, int *cornersMade)
 {
+	struct InWorldForNow
+	{
+		InWorldForNow() { prismCornersInWorld = true; }
+		~InWorldForNow() { prismCornersInWorld = false; }
+	} inWorldForNow;
+
 	// The light's first three numbers are its place in the light list's numbers, which change whenever the camera does. So this gives the sums in
 	// ToyAddPrism a copy with the world's numbers there instead. The surfaces are all in the world's numbers already, because a group only
 	// has shapes that keep their planes.
@@ -6102,32 +6134,35 @@ static void ToyReadPicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture,
 	copy->Release();
 }
 
-// Reads a picture back, and hands every fourth pixel each way to the flicker number. It makes the game wait for the card, so it's only with -shadowflicker.
-static void ReadPictureSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, FlickerPicture which)
+// Reads a picture back, and gives every second pixel each way as a number. It makes the game wait for the card, so it's only with -shadowflicker.
+static bool ReadSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, std::vector<float> &samples)
 {
-	static std::vector<float> samples;
-
 	D3DSURFACE_DESC size;
 	IDirect3DSurface9 *copy = 0;
 	D3DLOCKED_RECT locked;
+	bool read = false;
 
 	if (FAILED(picture->GetDesc(&size))
 		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 	{
-		return;
+		return false;
 	}
 
 	if (SUCCEEDED(device->GetRenderTargetData(picture, copy)) && SUCCEEDED(copy->LockRect(&locked, NULL, D3DLOCK_READONLY)))
 	{
 		samples.clear();
 
-		for (UINT y = 0; y < size.Height; y += 4)
+		for (UINT y = 0; y < size.Height; y += 2)
 		{
 			unsigned char const *row = (unsigned char const *)locked.pBits + y * locked.Pitch;
 
-			for (UINT x = 0; x < size.Width; x += 4)
+			for (UINT x = 0; x < size.Width; x += 2)
 			{
-				if (size.Format == D3DFMT_R16F)
+				if (size.Format == D3DFMT_R32F)
+				{
+					samples.push_back(*(float const *)(row + x * 4));
+				}
+				else if (size.Format == D3DFMT_R16F)
 				{
 					samples.push_back(ToyHalfFloat(*(unsigned short const *)(row + x * 2)));
 				}
@@ -6145,10 +6180,22 @@ static void ReadPictureSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *pict
 		}
 
 		copy->UnlockRect();
-		Flicker_AddPicture(which, samples);
+		read = true;
 	}
 
 	copy->Release();
+	return read;
+}
+
+// One picture for the flicker number.
+static void ReadPictureSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, FlickerPicture which)
+{
+	static std::vector<float> samples;
+
+	if (ReadSamples(device, picture, samples))
+	{
+		Flicker_AddPicture(which, samples);
+	}
 }
 
 // A small number for what carries a light, for a capture's numbers. The real thing is a place in memory, and that's no use to anyone reading them. 0 means nothing does.
@@ -6319,13 +6366,18 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 9, kLineLength = 48 };
+	enum { kMostLines = 10, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
 	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
 	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF %s", (textureRelief.IsReady() && ToyShadowsMode != kViewFinalNoRelief) ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
+	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
+	{
+		_snprintf(lines[numLines++], kLineLength - 1, "%s%sBIAS %d", ShadowsDepthGap ? "DEPTH GAP " : "", ShadowsEvenGap ? "EVEN GAP " : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
+	}
+
 	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
@@ -6782,6 +6834,13 @@ static void ToyShadows_Draw()
 
 			if (ShadowFlickerOn)
 			{
+				static std::vector<float> distances;
+
+				if (ReadSamples(device, toyDepthSurface, distances))
+				{
+					Flicker_SetDistances(distances);
+				}
+
 				ReadPictureSamples(device, toyMaskSurface, kFlickerMask);
 			}
 

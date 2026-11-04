@@ -313,6 +313,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			KeptPrismsOff = 0;
 		}
+		extern int ShadowsDepthGap;
+		if (strstr(command_line, "-shadowdepthgap"))
+		{
+			ShadowsDepthGap = 1;
+			LogString("shadows: a shadow's start stands further behind its polygon as depth gets coarser (-shadowdepthgap)");
+		}
+		char const *biasSwitch = strstr(command_line, "-shadowbiassteps=");
+		if (biasSwitch)
+		{
+			extern float ShadowSurfaceBias;
+			extern int ShadowBiasSteps;
+			int const asked = atoi(biasSwitch + strlen("-shadowbiassteps="));
+			ShadowBiasSteps = (asked < 1) ? 1 : (asked > 64) ? 64 : asked;
+			ShadowSurfaceBias = -(float)ShadowBiasSteps / 16777216.0f;
+			LogString("shadows: the surface pictures' margin was set by -shadowbiassteps");
+		}
 		extern int KeptSnap;
 		// the longer word first, because the shorter one is inside it
 		if (strstr(command_line, "-keptsnapfar"))

@@ -24,13 +24,16 @@ void ShadowCapture_EndFrame(LPDIRECT3DDEVICE9 device, int frame);
 // Drops a capture that's under way. The device is about to be reset, and a capture across that would mean nothing.
 void ShadowCapture_GiveUp();
 
-// THE FLICKER NUMBER, with -shadowflicker: see flicker_meter.cpp. A picture is a list of samples, taken from every fourth pixel each way.
+// THE FLICKER NUMBER, with -shadowflicker: see flicker_meter.cpp. A picture is a list of samples, taken from every second pixel each way.
 enum FlickerPicture
 {
 	kFlickerMask,      // the lamps' shadows, before softening
 	kFlickerScreen,    // the world at the end of the shadow pass, with nothing on top of it yet
 	kNumFlickerPictures
 };
+
+// How far from the camera each sample is, for the pictures that follow. They all have to be the same size.
+void Flicker_SetDistances(const std::vector<float> &distances);
 
 void Flicker_AddPicture(FlickerPicture picture, const std::vector<float> &samples);
 

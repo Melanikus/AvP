@@ -21,9 +21,10 @@ void FlickerMeter::Forget()
 	frameBefore.clear();
 }
 
-FlickerCounts FlickerMeter::Add(const std::vector<float> &samples)
+FlickerCounts FlickerMeter::Add(const std::vector<float> &samples, const std::vector<unsigned char> &bands)
 {
-	FlickerCounts counts = { (int)samples.size(), 0, 0 };
+	FlickerCounts counts = { (int)samples.size(), 0, 0, { 0 } };
+	bool const haveBands = bands.size() == samples.size();
 
 	// a picture of another size, after the screen's size changed, can't be compared with anything
 	bool const canCompare = lastFrame.size() == samples.size();
@@ -41,6 +42,11 @@ FlickerCounts FlickerMeter::Add(const std::vector<float> &samples)
 				if (canLookBack && fabsf(samples[i] - frameBefore[i]) <= howMuchCounts * 0.5f)
 				{
 					counts.cameBack++;
+
+					if (haveBands && bands[i] < kFlickerBands)
+					{
+						counts.cameBackInBand[bands[i]]++;
+					}
 				}
 			}
 		}

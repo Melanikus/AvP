@@ -6,11 +6,22 @@
 
 #include <vector>
 
+// How far from the camera a place is: under 5 metres, 5 to 20, 20 to 50, and further. A small flickering patch far away is lost in a number for the whole
+// screen, and depth is much coarser far away, so that's where to look.
+enum { kFlickerBands = 4 };
+
+// Which band a distance is in. The game's units are millimetres. A place with no surface counts as the furthest.
+inline int FlickerBandFor(float distance)
+{
+	return (distance <= 1.0f || distance >= 50000.0f) ? 3 : (distance >= 20000.0f) ? 2 : (distance >= 5000.0f) ? 1 : 0;
+}
+
 struct FlickerCounts
 {
 	int samples;     // how many places in the picture were compared
 	int changed;     // how many differ from the last frame
 	int cameBack;    // how many of those are back to what they were two frames ago
+	int cameBackInBand[kFlickerBands];   // the same, by distance. All zero if no distances were given
 };
 
 class FlickerMeter
@@ -19,8 +30,9 @@ public:
 	// howMuchCounts is the smallest difference that counts as a change. Anything less is only rounding.
 	explicit FlickerMeter(float howMuchCounts);
 
-	// Takes this frame's picture, and says how it compares with the last two.
-	FlickerCounts Add(const std::vector<float> &samples);
+	// Takes this frame's picture, and says how it compares with the last two. bands says which band each place is in, and if it isn't the same length
+	// as the picture, nothing is counted by distance.
+	FlickerCounts Add(const std::vector<float> &samples, const std::vector<unsigned char> &bands);
 
 	// Forgets the last two pictures. The next two frames have too little to compare with.
 	void Forget();

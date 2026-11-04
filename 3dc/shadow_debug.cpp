@@ -242,6 +242,7 @@ struct FlickerGroup
 	int frames;
 	double changed[kNumFlickerPictures];
 	double cameBack[kNumFlickerPictures];
+	double cameBackInBand[kNumFlickerPictures][kFlickerBands];
 };
 
 struct WorstFlicker
@@ -262,9 +263,21 @@ static bool haveLastCamera = false;
 static int framesSinceReport = 0;
 static int samplesInAPicture[kNumFlickerPictures];
 
+static std::vector<unsigned char> distanceBands;
+
+void Flicker_SetDistances(const std::vector<float> &distances)
+{
+	distanceBands.resize(distances.size());
+
+	for (size_t i = 0; i < distances.size(); i++)
+	{
+		distanceBands[i] = (unsigned char)FlickerBandFor(distances[i]);
+	}
+}
+
 void Flicker_AddPicture(FlickerPicture picture, const std::vector<float> &samples)
 {
-	thisFrameCounts[picture] = meters[picture].Add(samples);
+	thisFrameCounts[picture] = meters[picture].Add(samples, distanceBands);
 	samplesInAPicture[picture] = (int)samples.size();
 }
 
@@ -287,14 +300,23 @@ void Flicker_WriteReport()
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 
+	// where it was. This is the number to compare, because a small patch far away is lost in the totals
+	_snprintf(line, sizeof(line) - 1,
+		"flicker:   came back per frame while moving, by distance from the camera: mask under 5 m %.1f, 5 to 20 m %.1f, 20 to 50 m %.1f, over 50 m %.1f; screen %.1f, %.1f, %.1f, %.1f",
+		movingFrames.cameBackInBand[kFlickerMask][0] / moving, movingFrames.cameBackInBand[kFlickerMask][1] / moving, movingFrames.cameBackInBand[kFlickerMask][2] / moving, movingFrames.cameBackInBand[kFlickerMask][3] / moving,
+		movingFrames.cameBackInBand[kFlickerScreen][0] / moving, movingFrames.cameBackInBand[kFlickerScreen][1] / moving, movingFrames.cameBackInBand[kFlickerScreen][2] / moving, movingFrames.cameBackInBand[kFlickerScreen][3] / moving);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
 	for (int i = 0; i < kWorstFramesKept; i++)
 	{
 		WorstFlicker const &worst = worstFrames[i];
 
 		if (worst.score > 0)
 		{
-			_snprintf(line, sizeof(line) - 1, "flicker:   frame %d: mask %d changed and %d came back, screen %d changed and %d came back; the camera moved %.1f and turned %.5f",
-				worst.frame, worst.counts[kFlickerMask].changed, worst.counts[kFlickerMask].cameBack, worst.counts[kFlickerScreen].changed, worst.counts[kFlickerScreen].cameBack, worst.moved, worst.turned);
+			_snprintf(line, sizeof(line) - 1, "flicker:   frame %d: mask %d changed and %d came back, %d of them over 50 m; screen %d changed and %d came back, %d of them over 50 m; the camera moved %.1f and turned %.5f",
+				worst.frame, worst.counts[kFlickerMask].changed, worst.counts[kFlickerMask].cameBack, worst.counts[kFlickerMask].cameBackInBand[3],
+				worst.counts[kFlickerScreen].changed, worst.counts[kFlickerScreen].cameBack, worst.counts[kFlickerScreen].cameBackInBand[3], worst.moved, worst.turned);
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
 		}
@@ -338,6 +360,11 @@ void Flicker_EndFrame(int frame, const float *cameraPlace, const float *cameraAx
 	{
 		group.changed[i] += thisFrameCounts[i].changed;
 		group.cameBack[i] += thisFrameCounts[i].cameBack;
+
+		for (int band = 0; band < kFlickerBands; band++)
+		{
+			group.cameBackInBand[i][band] += thisFrameCounts[i].cameBackInBand[band];
+		}
 	}
 
 	int const score = thisFrameCounts[kFlickerMask].cameBack + thisFrameCounts[kFlickerScreen].cameBack;
