@@ -148,8 +148,9 @@ void WriteToLog(const std::string &logLine)
 	file.close();
 }
 
-void LogWriteNow()
+void WriteErrorToLog(const std::string &logLine)
 {
+	WriteToLog(logLine);
 }
 
 void LogTakeWriteTimes(int *writes, float *slowestMilliseconds, int *linesLost)
@@ -179,7 +180,9 @@ public:
 		InitializeCriticalSection(&fileLock);
 		QueryPerformanceFrequency(&ticksPerSecond);
 
-		filePath = GetSaveFolderPath();
+		// no folder means the current one: the log is only worth so much, and it mustn't be why the game won't start
+		char const *folder = GetSaveFolderPath();
+		filePath = folder ? folder : "";
 		filePath += logFilename;
 
 		wake = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -190,11 +193,12 @@ public:
 		}
 	}
 
-	void Add(const std::string &line)
+	// mustGoIn is for errors, which go on the list even if it's full
+	void Add(const std::string &line, bool mustGoIn)
 	{
 		EnterCriticalSection(&listLock);
 
-		if (waiting.size() + line.size() > kMostWaiting)
+		if (!mustGoIn && waiting.size() + line.size() > kMostWaiting)
 		{
 			linesLost++;
 		}
@@ -223,18 +227,27 @@ public:
 		LeaveCriticalSection(&fileLock);
 	}
 
-	// For a crash. Whatever crashed may be holding a lock, and waiting for it would hang the crash, so this writes only if nobody is.
+	// For a crash. Whatever crashed may be holding a lock, and waiting for it for ever would hang the crash, so this only tries, for a moment, in case
+	// the writer thread is halfway through a write. The list's lock is kept once it's been won: if it were let go, another thread could take it and
+	// stop on the same broken memory that caused the crash. It's fine to take it again below, because a thread can hold a lock twice over.
 	void WriteWaitingIfFree()
 	{
-		if (TryEnterCriticalSection(&fileLock))
+		for (int tries = 0; tries < kCrashTries; tries++)
 		{
-			if (TryEnterCriticalSection(&listLock))
+			if (TryEnterCriticalSection(&fileLock))
 			{
-				LeaveCriticalSection(&listLock);
-				WriteListToFile();
+				if (TryEnterCriticalSection(&listLock))
+				{
+					WriteListToFile();
+					LeaveCriticalSection(&listLock);
+					LeaveCriticalSection(&fileLock);
+					return;
+				}
+
+				LeaveCriticalSection(&fileLock);
 			}
 
-			LeaveCriticalSection(&fileLock);
+			Sleep(1);
 		}
 	}
 
@@ -252,7 +265,7 @@ public:
 			file = INVALID_HANDLE_VALUE;
 		}
 
-		HANDLE const cleared = CreateFileA(filePath.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		HANDLE const cleared = CreateFileA(filePath.c_str(), GENERIC_WRITE, kShareEverything, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 		if (cleared != INVALID_HANDLE_VALUE)
 		{
@@ -276,6 +289,10 @@ public:
 
 private:
 	static const size_t kMostWaiting = 4 * 1024 * 1024;
+	static const int kCrashTries = 200;   // a millisecond each
+
+	// left open, and shared, so that anyone can read, copy, rename or delete the log while the game runs, and a second game can write to it too
+	static const DWORD kShareEverything = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
 	static DWORD WINAPI WriterThread(void *self)
 	{
@@ -303,10 +320,9 @@ private:
 		LARGE_INTEGER started, finished;
 		QueryPerformanceCounter(&started);
 
-		// left open, and shared, so that anyone can read or copy the log while the game runs
 		if (file == INVALID_HANDLE_VALUE)
 		{
-			file = CreateFileA(filePath.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			file = CreateFileA(filePath.c_str(), FILE_APPEND_DATA, kShareEverything, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		}
 
 		if (file != INVALID_HANDLE_VALUE)
@@ -362,11 +378,15 @@ static void WriteLogAtExit()
 	logWriter->WriteWaiting();
 }
 
-// It's never given back: it has to outlive everything that might still write to the log as the game ends.
+// It's never given back: it has to outlive everything that might still write to the log as the game ends. It can give back nothing, while it's being
+// made: finding the save folder can log a problem, and that line would come straight back here. So a line that early is dropped.
 static LogWriter *TheLogWriter()
 {
-	if (!logWriter)
+	static bool beingMade = false;
+
+	if (!logWriter && !beingMade)
 	{
+		beingMade = true;
 		logWriter = new LogWriter;
 		filterBeforeOurs = SetUnhandledExceptionFilter(WriteLogBeforeCrash);
 		atexit(WriteLogAtExit);
@@ -377,24 +397,43 @@ static LogWriter *TheLogWriter()
 
 void ClearLog()
 {
-	TheLogWriter()->Empty();
+	if (LogWriter *writer = TheLogWriter())
+	{
+		writer->Empty();
+	}
 }
 
 void WriteToLog(const std::string &logLine)
 {
 	ProcessorStageClock clock(kProcessorLog);
 
-	TheLogWriter()->Add(logLine);
+	if (LogWriter *writer = TheLogWriter())
+	{
+		writer->Add(logLine, false);
+	}
 }
 
-void LogWriteNow()
+void WriteErrorToLog(const std::string &logLine)
 {
-	TheLogWriter()->WriteWaiting();
+	ProcessorStageClock clock(kProcessorLog);
+
+	if (LogWriter *writer = TheLogWriter())
+	{
+		writer->Add(logLine, true);
+		writer->WriteWaiting();
+	}
 }
 
 void LogTakeWriteTimes(int *writes, float *slowestMilliseconds, int *linesLost)
 {
-	TheLogWriter()->TakeWriteTimes(writes, slowestMilliseconds, linesLost);
+	*writes = 0;
+	*slowestMilliseconds = 0.0f;
+	*linesLost = 0;
+
+	if (LogWriter *writer = TheLogWriter())
+	{
+		writer->TakeWriteTimes(writes, slowestMilliseconds, linesLost);
+	}
 }
 
 #endif
@@ -415,8 +454,7 @@ void LogDxError(HRESULT hr, int LINE, const char* FILE)
 	temp.append(" File: ");
 	temp.append(FILE);
 	temp.append("\n");
-	WriteToLog("\t" + temp);
-	LogWriteNow();
+	WriteErrorToLog("\t" + temp);
 
 	lastError = temp;
 }
@@ -425,8 +463,7 @@ void LogDxError(HRESULT hr, int LINE, const char* FILE)
 void LogErrorString(const std::string &errorString, int LINE, const char* FILE)
 {
 	std::string temp = "Error: " + errorString + " Line: " + Util::IntToString(LINE) + " File: " + FILE + "\n";
-	WriteToLog("\t" + temp);
-	LogWriteNow();
+	WriteErrorToLog("\t" + temp);
 
 	lastError = temp;
 }
@@ -435,8 +472,7 @@ void LogErrorString(const std::string &errorString, int LINE, const char* FILE)
 void LogErrorString(const std::string &errorString)
 {
 	std::string temp = "Error: " + errorString + "\n";
-	WriteToLog("\t" + temp);
-	LogWriteNow();
+	WriteErrorToLog("\t" + temp);
 
 	lastError = temp;
 }

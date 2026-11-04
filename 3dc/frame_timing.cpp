@@ -431,7 +431,7 @@ static void ReportProcessorTimes()
 		float slowest = 0.0f;
 		LogTakeWriteTimes(&writes, &slowest, &linesLost);
 
-		_snprintf(line, sizeof(line) - 1, "log: %d writes to the disk, the slowest %.1f ms, none of it on the game's thread; %d lines lost", writes, slowest, linesLost);
+		_snprintf(line, sizeof(line) - 1, "log: %d writes to the disk, the slowest %.1f ms, and only an error is written on the game's thread; %d lines lost", writes, slowest, linesLost);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
 	}
