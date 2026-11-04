@@ -319,7 +319,7 @@ static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPl
 
 // The last check, on the finished lists, because a bad index goes to the graphics driver and nothing can catch it there. Every index of every range
 // has to land on a corner of that range, and every index in the list has to belong to a range.
-static bool EveryIndexIsSafe(const StaticLevelData &data, uint32_t mostForOneBase)
+static bool EveryIndexIsSafe(const StaticLevelData &data, uint32_t mostForOneBase, uint32_t mostTriangles)
 {
 	uint64_t indicesSeen = 0;
 
@@ -330,7 +330,7 @@ static bool EveryIndexIsSafe(const StaticLevelData &data, uint32_t mostForOneBas
 		uint64_t const lowest = range.firstVertex;
 		uint64_t const pastHighest = lowest + range.vertexCount;
 
-		if ((uint64_t)range.firstIndex + count > data.indices.size() || pastHighest > mostForOneBase || (uint64_t)range.baseVertex + pastHighest > data.vertices.size())
+		if (range.triangles > mostTriangles || (uint64_t)range.firstIndex + count > data.indices.size() || pastHighest > mostForOneBase || (uint64_t)range.baseVertex + pastHighest > data.vertices.size())
 		{
 			return false;
 		}
@@ -382,7 +382,7 @@ static inline void AddTriangle(std::vector<uint32_t> *indices, uint32_t first, u
 static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 {
 	if (setup.numModules < 0 || setup.moduleNumbers < 0 || setup.moduleNumbers > kMostModuleNumbers || (setup.numModules > 0 && !setup.modules)
-		|| setup.mostVerticesForOneBase < 4 || !setup.textureSize || !setup.cornerNormal)
+		|| setup.mostVerticesForOneBase < 4 || setup.mostTrianglesInOneRange < 2 || !setup.textureSize || !setup.cornerNormal)
 	{
 		return Refuse(data, "the builder was set up wrongly", -1, -1);
 	}
@@ -490,6 +490,12 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 			needNewRange = last.texture != placed.texture || last.twoSided != placed.twoSided || rangeInputs.back() != placed.input;
 		}
 
+		// the card only takes so many triangles in one draw, so a range that would pass that stops here, and the next one carries on
+		if (!needNewRange && (uint64_t)ranges.back().triangles + (corners - 2) > setup.mostTrianglesInOneRange)
+		{
+			needNewRange = true;
+		}
+
 		// with 16-bit indices, a range can only reach so far from its base, so the next one gets a new base
 		if (corners > setup.mostVerticesForOneBase - sinceBase)
 		{
@@ -570,12 +576,17 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 		}
 	}
 
-	if (!EveryIndexIsSafe(*data, setup.mostVerticesForOneBase))
+	if (!EveryIndexIsSafe(*data, setup.mostVerticesForOneBase, setup.mostTrianglesInOneRange))
 	{
 		return Refuse(data, "an index came out wrong", -1, -1);
 	}
 
 	return true;
+}
+
+bool StaticLevel_ModuleSitsStill(int flags, int angleX, int angleY, int angleZ)
+{
+	return !(flags & ObFlag_ArbRot) && angleX == 0 && angleY == 0 && angleZ == 0;
 }
 
 bool StaticLevel_Work(const StaticLevelSetup &setup, StaticLevelData *data)

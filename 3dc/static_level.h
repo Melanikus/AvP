@@ -48,7 +48,8 @@ struct StaticLevelSetup
 	int numModules;
 	int moduleNumbers;                 // every module number has to be below this
 	uint32_t noTexture;                // the texture a polygon with no texture uses
-	uint32_t mostVerticesForOneBase;   // how far one baseVertex can reach: 65536 with 16-bit indices
+	uint32_t mostVerticesForOneBase;   // how far one baseVertex can reach: what the card says, and never more than 16-bit indices can count
+	uint32_t mostTrianglesInOneRange;  // how many triangles the card takes in one draw. A longer range becomes two
 
 	// The size of a texture, or false if there's no such texture.
 	bool (*textureSize)(uint32_t texture, uint32_t *width, uint32_t *height);
@@ -91,6 +92,11 @@ struct StaticLevelData
 	std::vector<ModuleEntry> moduleEntries;
 	std::vector<uint32_t> polygonBits;
 };
+
+// Does this module sit exactly where its points plus its place say? Only then can its corners be worked out once and kept. flags is its MapFlags, and the
+// three angles are its MapEuler. The game makes every module's matrix the identity (module.cpp), so no level can turn one today, and this keeps it so.
+// ObFlag_ArbRot comes straight from the file, and makes the game place a shape by the camera.
+bool StaticLevel_ModuleSitsStill(int flags, int angleX, int angleY, int angleZ);
 
 // Builds the list. false means it refused, and the level stays on the old route.
 bool StaticLevel_Work(const StaticLevelSetup &setup, StaticLevelData *data);

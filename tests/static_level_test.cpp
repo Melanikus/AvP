@@ -196,6 +196,7 @@ static StaticLevelSetup MakeSetup(const StaticLevelInput *modules, int numModule
 	setup.moduleNumbers = 20;
 	setup.noTexture = kNoTexture;
 	setup.mostVerticesForOneBase = 0xFFFFFFFFu;
+	setup.mostTrianglesInOneRange = 0xFFFFFFFFu;
 	setup.textureSize = MadeUpTextureSize;
 	setup.cornerNormal = MadeUpCornerNormal;
 	return setup;
@@ -447,6 +448,43 @@ static void CheckSmallerIndices()
 
 	setup.mostVerticesForOneBase = 3;
 	Check(!StaticLevel_Work(setup, &data) && RefusedFor(data, "the builder was set up wrongly"), "a base that can't hold a polygon at all is refused");
+}
+
+static void CheckTrianglesInOneDraw()
+{
+	MadeUpShape shape;
+
+	for (int i = 0; i < 5; i++)
+	{
+		shape.AddQuad(kTextureA);
+	}
+
+	shape.Finish();
+	StaticLevelInput const input = { (const shapeheader *)&shape.header, { 0, 0, 0 }, 1 };
+	StaticLevelSetup setup = MakeSetup(&input, 1);
+	setup.mostTrianglesInOneRange = 4;
+
+	StaticLevelData data;
+	data.Clear();
+	Check(StaticLevel_Work(setup, &data), "a range longer than the card can draw at once is built");
+
+	int count = 0;
+	StaticRange const *ranges = data.RangesOf(1, &count);
+	Check(count == 3 && ranges[0].triangles == 4 && ranges[1].triangles == 4 && ranges[2].triangles == 2, "and it becomes several, each as long as the card allows");
+	Check(ranges[1].firstVertex == 8 && ranges[1].firstIndex == 12 && ranges[1].baseVertex == 0, "each carrying on where the last stopped");
+
+	setup.mostTrianglesInOneRange = 1;
+	Check(!StaticLevel_Work(setup, &data) && RefusedFor(data, "the builder was set up wrongly"), "a card that can't draw a quad is refused");
+}
+
+static void CheckModulesThatSitStill()
+{
+	Check(StaticLevel_ModuleSitsStill(0, 0, 0, 0), "an ordinary module sits where its points say");
+	Check(StaticLevel_ModuleSitsStill(ObFlag_NotVis, 0, 0, 0), "other flags don't matter here");
+	Check(!StaticLevel_ModuleSitsStill(ObFlag_ArbRot, 0, 0, 0), "a module placed by the camera doesn't");
+	Check(!StaticLevel_ModuleSitsStill(0, 1, 0, 0), "a module turned round x doesn't");
+	Check(!StaticLevel_ModuleSitsStill(0, 0, -1, 0), "a module turned round y doesn't");
+	Check(!StaticLevel_ModuleSitsStill(0, 0, 0, 4095), "a module turned round z doesn't");
 }
 
 static void CheckLimits()
@@ -934,6 +972,8 @@ int main()
 	CheckNoTexture();
 	CheckOrderAndRanges();
 	CheckSmallerIndices();
+	CheckTrianglesInOneDraw();
+	CheckModulesThatSitStill();
 	CheckLimits();
 	CheckHostilePolygons();
 	CheckHostileShapes();

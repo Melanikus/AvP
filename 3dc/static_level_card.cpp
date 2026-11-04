@@ -65,6 +65,13 @@ static void ListModules(std::vector<StaticLevelInput> *modules)
 			continue;
 		}
 
+		MODULEMAPBLOCK const *map = module->m_mapptr;
+
+		if (!StaticLevel_ModuleSitsStill(map->MapFlags, map->MapEuler.EulerX, map->MapEuler.EulerY, map->MapEuler.EulerZ))
+		{
+			continue;
+		}
+
 		VECTORCH const &place = module->m_mapptr->MapWorld;
 		StaticLevelInput const input = { shape, { place.vx, place.vy, place.vz }, module->m_index };
 
@@ -169,7 +176,13 @@ void StaticLevel_BuildThisLevel()
 	setup.numModules = (int)modules.size();
 	setup.moduleNumbers = ModuleArraySize;
 	setup.noTexture = (uint32_t)NO_TEXTURE;
-	setup.mostVerticesForOneBase = indicesAre32Bit ? 0xFFFFFFFFu : 0xFFFFu;
+
+	// What the card says it can take, and not what the index format could count. Nothing can catch an index past this once it's on the card.
+	uint64_t const cardReach = (uint64_t)caps.MaxVertexIndex + 1;
+	uint64_t const formatReach = indicesAre32Bit ? 0xFFFFFFFFull : 0xFFFFull;
+
+	setup.mostVerticesForOneBase = (uint32_t)((cardReach < formatReach) ? cardReach : formatReach);
+	setup.mostTrianglesInOneRange = caps.MaxPrimitiveCount;
 	setup.textureSize = RealTextureSize;
 	setup.cornerNormal = SurfaceNormals_CornerNormal;
 
