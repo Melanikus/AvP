@@ -3537,7 +3537,7 @@ int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goe
 int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
 int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
-int ToyShadowsSoft = 6;       // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
+int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 
 struct ToyVec
@@ -3555,6 +3555,7 @@ static const float kToyStartGap        = 8.0f;      // start just behind the pol
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
 static const float kToyMostRange       = 100000.0f; // well inside the far plane, which z-fail needs
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
+static const float kToySoftStaysWideTo = 6000.0f;   // how far away a shadow's soft edge stays at its full width, before it narrows
 static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen light fails to reach loses this much of its brightness
 
 static ToyVec toyCasterPoints[kToyMaxCasterPoints];
@@ -3758,6 +3759,10 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 	return result;
 }
 
+// How long the pass really takes, measured on a frame with no counting in it. Below 0 until there's an answer.
+static float toyPassMilliseconds = -1.0f;   // the processor, building and sending it
+static float toyCardMilliseconds = -1.0f;   // the graphics card, drawing it
+
 // What one frame did. The hr values stay S_OK unless a call failed.
 struct ToyFrameReport
 {
@@ -3773,12 +3778,12 @@ struct ToyFrameReport
 
 static void ToyLogFrame(const ToyFrameReport &report)
 {
-	char line[320];
+	char line[360];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d",
+		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d, pass %.1f ms, card %.1f ms",
 		report.frame, kToyViewNames[ToyShadowsMode], report.casters, toyCastersLeftOut, report.lights, report.verts, toyPrismsLeftOut,
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
-		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft);
+		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyPassMilliseconds, toyCardMilliseconds);
 	toyEarlyFlushes = 0;
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
@@ -3819,12 +3824,11 @@ static void ToySetVolumeState(LPDIRECT3DDEVICE9 device)
 
 static int toyQueriesUnanswered = 0;
 
-// The card answers when it gets there, which for the first count of a frame means finishing everything drawn so far. So this
-// waits by the clock, half a second at most. A count that never came is noted, not taken for a 0.
-static unsigned int ToyAskCard(IDirect3DQuery9 *countQuery)
+// The card answers when it gets there, which for the first question of a frame means finishing everything drawn so far. So
+// this waits by the clock, half a second at most, and says whether the answer came.
+static bool ToyWaitForCard(IDirect3DQuery9 *query, void *answer, DWORD bytes)
 {
-	DWORD counted = 0;
-	HRESULT answer = S_FALSE;
+	HRESULT result = S_FALSE;
 
 	LARGE_INTEGER started, now, ticksPerSecond;
 	QueryPerformanceCounter(&started);
@@ -3832,11 +3836,19 @@ static unsigned int ToyAskCard(IDirect3DQuery9 *countQuery)
 
 	do
 	{
-		answer = countQuery->GetData(&counted, sizeof(counted), D3DGETDATA_FLUSH);
+		result = query->GetData(answer, bytes, D3DGETDATA_FLUSH);
 		QueryPerformanceCounter(&now);
-	} while (answer == S_FALSE && now.QuadPart - started.QuadPart < ticksPerSecond.QuadPart / 2);
+	} while (result == S_FALSE && now.QuadPart - started.QuadPart < ticksPerSecond.QuadPart / 2);
 
-	if (answer != S_OK)
+	return result == S_OK;
+}
+
+// A count that never came is noted, not taken for a 0.
+static unsigned int ToyAskCard(IDirect3DQuery9 *countQuery)
+{
+	DWORD counted = 0;
+
+	if (!ToyWaitForCard(countQuery, &counted, sizeof(counted)))
 	{
 		toyQueriesUnanswered++;
 		return 0;
@@ -4324,7 +4336,7 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 
 	float const constants[8] =
 	{
-		pixelAcross, pixelDown, (float)ToyShadowsSoft, 3000.0f,
+		pixelAcross, pixelDown, (float)ToyShadowsSoft, kToySoftStaysWideTo,
 		(float)ToyShadowsDarkness / 100.0f, 0.0f, 0.0f, 0.0f,
 	};
 	device->SetPixelShaderConstantF(0, constants, 2);
@@ -4406,22 +4418,71 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 	}
 }
 
-// Adds one flare's light to the picture, only on pixels its own stencil left unmarked, so it lights nothing it can't see.
-// Each flare does this for itself, so where one is blocked another can still light the same place.
-static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+// Turns the stencil's marks for this flare into a picture: white where it's blocked. The flare's shader softens that as it
+// reads it, which a stencil can't do: a stencil is only ever yes or no.
+static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport)
+{
+	device->SetRenderTarget(0, toyMaskSurface);
+	device->SetViewport(viewport);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+
+	device->SetPixelShader(NULL);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_NOTEQUAL);
+	device->SetRenderState(D3DRS_STENCILREF, 0);
+	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+	ToyDrawScreenQuad(device, 0xFFFFFFFF);
+
+	device->SetRenderTarget(0, screen);
+	device->SetViewport(viewport);
+}
+
+// Adds one flare's light to the picture. With a mask, the shader takes the blocked part out, softly. Without one, the stencil
+// does it, with a hard edge. Either way it lights nothing it can't see. Each flare does this for itself, so where one is
+// blocked another can still light the same place.
+static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, bool haveMask, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	d3d.effectSystem->SetActive(d3d.shadowFlareEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowFlareEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
-	float const constants[8] =
+	D3DSURFACE_DESC size = { };
+	if (haveMask)
+	{
+		toyMaskSurface->GetDesc(&size);
+	}
+
+	float const constants[12] =
 	{
 		light[0], light[1], light[2], 1.0f / light[3],
 		light[4], light[5], light[6], 0.0f,
+		haveMask ? 1.0f / (float)size.Width : 0.0f, haveMask ? 1.0f / (float)size.Height : 0.0f,
+		haveMask ? (float)ToyShadowsSoft : -1.0f, kToySoftStaysWideTo,
 	};
-	device->SetPixelShaderConstantF(0, constants, 2);
+	device->SetPixelShaderConstantF(0, constants, 3);
+
+	if (haveMask)
+	{
+		device->SetTexture(1, toyMaskTexture);
+		device->SetTexture(2, toyDepthTexture);
+
+		for (int sampler = 1; sampler <= 2; sampler++)
+		{
+			device->SetSamplerState(sampler, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			device->SetSamplerState(sampler, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+			device->SetSamplerState(sampler, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+			device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		}
+	}
 
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_STENCILENABLE, haveMask ? FALSE : TRUE);
 	device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
 	device->SetRenderState(D3DRS_STENCILREF, 0);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
@@ -4457,6 +4518,13 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, IDire
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
+
+	// both pictures are drawn on again later, and a picture can't be read and drawn on at once
+	if (haveMask)
+	{
+		device->SetTexture(1, NULL);
+		device->SetTexture(2, NULL);
+	}
 }
 
 static void ToyForgetCasters()
@@ -4551,6 +4619,22 @@ static void ToyShadows_Draw()
 	if (logThisFrame && FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
 	{
 		countQuery = 0;
+	}
+
+	// Half way between reports, the card is asked how long the pass really took. It's kept apart from the frames with counts in
+	// them, because waiting for those changes the answer.
+	enum { kTimerSpoiled, kTimerStart, kTimerEnd, kTimerFrequency, kNumTimers };
+	IDirect3DQuery9 *timers[kNumTimers] = { 0 };
+	bool const timing = (toyFrame % 300) == 150
+		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &timers[kTimerSpoiled]))
+		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &timers[kTimerStart]))
+		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &timers[kTimerEnd]))
+		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &timers[kTimerFrequency]));
+
+	if (timing)
+	{
+		timers[kTimerSpoiled]->Issue(D3DISSUE_BEGIN);
+		timers[kTimerStart]->Issue(D3DISSUE_END);
 	}
 
 	ToyMeasurements measured = { 0, 0, 0, 0, 0, 0 };
@@ -4650,7 +4734,6 @@ static void ToyShadows_Draw()
 		{
 			device->SetRenderTarget(0, screen);
 			device->SetViewport(&viewport);
-			screen->Release();
 			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
 		}
 
@@ -4667,10 +4750,47 @@ static void ToyShadows_Draw()
 			{
 				ToyBuildPrisms(thisLight, &report);
 				ToyMarkShadow(device, &report);
-				ToyAddFlareLight(device, thisLight, countQuery, &pixelsByLight[light]);
+				if (screen)
+				{
+					ToyPaintFlareMask(device, screen, &viewport);
+				}
+				ToyAddFlareLight(device, thisLight, screen != 0, countQuery, &pixelsByLight[light]);
 				report.pixels += pixelsByLight[light];
 			}
 		}
+
+		if (screen)
+		{
+			screen->Release();
+		}
+	}
+
+	if (timing)
+	{
+		timers[kTimerEnd]->Issue(D3DISSUE_END);
+		timers[kTimerFrequency]->Issue(D3DISSUE_END);
+		timers[kTimerSpoiled]->Issue(D3DISSUE_END);
+
+		QueryPerformanceCounter(&finished);
+		toyPassMilliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
+
+		// "spoiled" means the card's clock changed speed while it was timing, so the times can't be trusted
+		UINT64 start = 0, end = 0, frequency = 0;
+		BOOL spoiled = TRUE;
+
+		if (ToyWaitForCard(timers[kTimerSpoiled], &spoiled, sizeof(spoiled))
+			&& ToyWaitForCard(timers[kTimerStart], &start, sizeof(start))
+			&& ToyWaitForCard(timers[kTimerEnd], &end, sizeof(end))
+			&& ToyWaitForCard(timers[kTimerFrequency], &frequency, sizeof(frequency))
+			&& !spoiled && frequency)
+		{
+			toyCardMilliseconds = (float)((double)(end - start) * 1000.0 / (double)frequency);
+		}
+	}
+
+	for (int timer = 0; timer < kNumTimers; timer++)
+	{
+		ToyRelease(timers[timer]);
 	}
 
 	if (countQuery)
