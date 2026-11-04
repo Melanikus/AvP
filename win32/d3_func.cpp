@@ -319,6 +319,7 @@ bool R_BeginScene()
 
 		// these are so that a long wait says each thing once, and doesn't fill the log 20 times a second
 		bool saidLost = false;
+		bool saidResetting = false;
 		bool saidCantReset = false;
 
 		while (1)
@@ -341,7 +342,11 @@ bool R_BeginScene()
 			}
 			else if (D3DERR_DEVICENOTRESET == LastError)
 			{
-				LogDebugString("Releasing resources for a device reset...");
+				if (!saidResetting)
+				{
+					LogDebugString("Releasing resources for a device reset...");
+					saidResetting = true;
+				}
 
 				if (FAILED(d3d.lpD3DDevice->Reset(&d3d.d3dpp)))
 				{
@@ -405,6 +410,10 @@ bool R_BeginScene()
 	if (FAILED(LastError))
 	{
 		LogDxError(LastError, __LINE__, __FILE__);
+
+		// This frame stops here, so nothing else will close the scene opened just above. The card refuses to open a scene while one
+		// is open, so if this one stayed open, no frame could ever start again.
+		R_EndScene();
 		return false;
 	}
 

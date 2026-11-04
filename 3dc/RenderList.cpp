@@ -180,8 +180,13 @@ void RenderList::CreateIndices(uint16_t *indexArray, uint32_t numVerts)
 		}
 		default:
 		{
-			// Six corners or more: a fan of triangles, all from the first corner. The game's clipping can make a four-cornered polygon into nine, one
-			// more for each of the five flat surfaces it's cut against.
+			// Six corners or more: a fan of triangles, all from the first corner. Stored polygons have three or four corners. More can only come from
+			// the game's clipping (3dc/frustum.cpp), which cuts a polygon against five flat surfaces, and each cut can add corners. Clipping is switched
+			// off in this build, because USE_FRUSTUM_CULL isn't defined, except for the trail behind a thrown disc (RenderTrailSegment), which calls it
+			// directly. Nine is not a limit on what clipping can make. It's what a flat polygon with no dent comes to when each cut adds one. With the
+			// switch on, every polygon crossing a surface would be clipped, including those from level files, and a crafted one with a dent or a twist
+			// comes out with more, about fourteen in the arithmetic. That would write past the end of the nine-corner arrays the clipper uses, unless the
+			// clipper itself stops at nine. This code copes with any number of corners, so it isn't what keeps that safe.
 			for (uint32_t i = numVerts - 2; i >= 1; i--)
 			{
 				AddIndices(indexArray, 0, i, i + 1, numVerts);

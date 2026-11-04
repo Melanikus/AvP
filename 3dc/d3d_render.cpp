@@ -2722,29 +2722,31 @@ void ThisFramesRenderingHasFinished()
 		// Nothing can be drawn, but these two lists of what was collected this frame still have to be emptied, or they'd grow for as long as this lasts.
 		DrawParticles();
 		DrawCoronas();
-		return;
 	}
-
-	frameIsOpen = false;
-
-	ShadowStatus_Draw();
-
-	ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
-
-	UnlockExecuteBufferAndPrepareForUse();
-	toyFinalFlush = true;
-	ExecuteBuffer();
-	toyFinalFlush = false;
-	FrameTiming_Mark(kStageAfter);
-
+	else
 	{
-		ProcessorStageClock clock(kProcessorEndScene);
-		R_EndScene();
+		frameIsOpen = false;
+
+		ShadowStatus_Draw();
+
+		ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
+
+		UnlockExecuteBufferAndPrepareForUse();
+		toyFinalFlush = true;
+		ExecuteBuffer();
+		toyFinalFlush = false;
+		FrameTiming_Mark(kStageAfter);
+
+		{
+			ProcessorStageClock clock(kProcessorEndScene);
+			R_EndScene();
+		}
+
+		FrameTiming_EndFrame();
+		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 	}
 
-	FrameTiming_EndFrame();
-	ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
-
+	// The game goes on whether or not this frame could be drawn, so what's below happens either way
 	Tex_CheckMemoryUsage();
 
 #ifdef _XBOX

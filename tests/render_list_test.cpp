@@ -1367,6 +1367,7 @@ struct SourceFindings
 	bool executeWrites;
 	bool flushChecksTheFrame;
 	bool frameEndChecksTheFrame;
+	bool frameEndAlwaysFinishes;
 	bool frameStartRemembers;
 	int writersRead;
 	int mainWritersRead;
@@ -1383,6 +1384,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 	found.executeWrites = false;
 	found.flushChecksTheFrame = false;
 	found.frameEndChecksTheFrame = false;
+	found.frameEndAlwaysFinishes = false;
 	found.frameStartRemembers = false;
 	found.writersRead = 0;
 	found.mainWritersRead = 0;
@@ -1528,6 +1530,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 		{
 			size_t const guard = body.find("if (!frameIsOpen)");
 			found.frameEndChecksTheFrame = guard != std::string::npos && guard < body.find("UnlockExecuteBufferAndPrepareForUse()");
+			found.frameEndAlwaysFinishes = body.find("LightBlockDeallocation()") != std::string::npos && body.find("return") == std::string::npos;
 		}
 
 		if (function.name == "ThisFramesRenderingHasBegun")
@@ -1577,6 +1580,7 @@ static void CheckTheRealWriters()
 	Check(!found.executeWrites, "and not afterwards");
 	Check(found.flushChecksTheFrame, "a flush checks the frame is open");
 	Check(found.frameEndChecksTheFrame, "the end of a frame checks it too");
+	Check(found.frameEndAlwaysFinishes, "and a frame that couldn't be drawn still gets to the end of that function, where the lights that are due to go are let go of");
 	Check(found.frameStartRemembers, "and the start of a frame only says it's open if it did start");
 
 	// That these checks can catch anything has to be shown as well. Each of these breaks one writer in a copy of the file.
@@ -1680,6 +1684,42 @@ static void CheckTheRealWriters()
 	Check(wait != std::string::npos && beginScene.find("if (!bRunning)", wait) != std::string::npos, "and it ends if the player closes the game");
 	Check(makeAgain != std::string::npos && makeAgain > wait && beginScene.find("BeginScene()", makeAgain) != std::string::npos, "and what it let go of is made again before a frame can start");
 	Check(CountOf(beginScene, "CreateVolatileResources()") == 1, "in one place, whichever way the wait ended");
+
+	// The wait goes round twenty times a second, so anything it says has to be said once. Saying something and then leaving the wait is fine too.
+	size_t const waitEnd = (wait == std::string::npos) ? wait : beginScene.find("Sleep(50)", wait);
+	bool saysEachThingOnce = waitEnd != std::string::npos;
+	int thingsSaid = 0;
+	char const *const ways[] = { "LogDebugString(", "Con_PrintError(" };
+
+	for (size_t w = 0; saysEachThingOnce && w < sizeof(ways) / sizeof(ways[0]); w++)
+	{
+		for (size_t at = beginScene.find(ways[w], wait); at != std::string::npos && at < waitEnd; at = beginScene.find(ways[w], at + 1))
+		{
+			thingsSaid++;
+
+			size_t const lineEnd = beginScene.find(';', at);
+			size_t const after = beginScene.find_first_not_of(" \t\r\n", lineEnd + 1);
+			bool const leavesStraightAfter = after != std::string::npos && beginScene.compare(after, 6, "break;") == 0;
+
+			// Otherwise it has to be inside "if (!said...)", with nothing closing that between the two, and it has to note that it's been said
+			size_t const guard = beginScene.rfind("if (!said", at);
+			size_t const blockEnd = beginScene.find('}', at);
+			bool const insideGuard = guard != std::string::npos && guard > wait && beginScene.find('}', guard) == blockEnd;
+			bool const notesIt = blockEnd != std::string::npos && beginScene.substr(at, blockEnd - at).find("= true") != std::string::npos;
+
+			if (!leavesStraightAfter && !(insideGuard && notesIt))
+			{
+				saysEachThingOnce = false;
+			}
+		}
+	}
+
+	Check(saysEachThingOnce && thingsSaid >= 4, "and everything it says, it says once, so a long wait doesn't fill the log");
+
+	size_t const clear = beginScene.find("->Clear(");
+	size_t const closedAfterClear = (clear == std::string::npos) ? clear : beginScene.find("R_EndScene()", clear);
+	size_t const stoppedAfterClear = (clear == std::string::npos) ? clear : beginScene.find("return false", clear);
+	Check(closedAfterClear != std::string::npos && stoppedAfterClear != std::string::npos && closedAfterClear < stoppedAfterClear, "and a frame stopped by a failed clear closes the scene it opened, or no frame could ever start again");
 
 	std::string const windows = JustTheCode(ReadSourceFile("3dc/win95/win_func.cpp"));
 	Check(windows.find("while (!bActive && bRunning)") != std::string::npos, "and being closed also ends the wait for the game to become active");
