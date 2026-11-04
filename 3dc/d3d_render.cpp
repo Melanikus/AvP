@@ -6,6 +6,7 @@
 //   with the surface pictures, a shadow's start depends on the polygon and the light, not on where the camera is
 //   a still light and a still shape keep their shadow prisms on the graphics card, and the prisms are only worked out again if something moves
 //   the same for a polygon's flat surface worked out each frame
+//   walls drawn from the fixed buffer cast shadows from their shapes, with nothing on the caster list
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -3703,11 +3704,18 @@ struct KeptGroup
 	int firstCaster;
 	int casters;
 	bool whole;             // false if some of its polygons didn't fit on the caster list this frame, so its prisms can't be made
+	bool walked;            // true if none of its polygons are on the caster list, because the game drew it from the fixed buffer. Its prisms come from the shape
+	int numPolygons;        // only a walked group: how many its shape has
+	float ball[4];          // only a walked group: a ball round it, in the world's numbers
 };
 
 static const int kMostKeptGroups = 4096;
 static KeptGroup keptGroups[kMostKeptGroups];
 static int numKeptGroups = 0;
+static int walkedGroups[kMostKeptGroups];   // which of keptGroups are walked
+static int numWalkedGroups = 0;
+static ToyVec worldPrisms[kToyMaxVerts];   // this frame's prisms for a walked group that isn't kept, in the world's numbers, for one light
+static int numWorldCorners = 0;
 static int casterGroup[kToyMaxCasters];     // which of keptGroups a polygon is in, or -1
 static int casterPolygon[kToyMaxCasters];   // its place in its shape
 static CasterSource casterSource[kToyMaxCasters];   // only filled in on a report frame, for a polygon that's drawn
@@ -3739,6 +3747,7 @@ int ToyShadows_ChosenLights(float *lights, const void **owners);
 void ToyShadows_WorldAxes(float *axes);
 void ToyShadows_ViewMatrix(float *matrix);
 int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners);
+int ToyShadows_PolygonInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners, float *plane, bool *twoSided);
 void ToyShadows_CameraPlace(float *place);
 int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, int *polygonsLeftOut);
 void ToyShadows_NextCollectingFrame();
@@ -4004,8 +4013,40 @@ int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *pla
 	group.firstCaster = toyNumCasters;
 	group.casters = 0;
 	group.whole = true;
+	group.walked = false;
 
 	return numKeptGroups++;
+}
+
+// A module the game drew from the fixed buffer this frame. It went through no pipeline, so it has no corners on the list, and this is all that's known about
+// it. ballInWorld is four numbers. The ball also stands in for its corners in the box round what's drawn: a box that's too big only costs a little time.
+void ShadowGroup_StartWalked(const void *shape, unsigned int listNumber, const int *place, int numPolygons, const float *ballInWorld, const ShadowReachBall &ballOnTheList)
+{
+	ShadowReach_StartDrawnThing(0);
+
+	if (numDrawnBoxes > 0)
+	{
+		ShadowReachBox &box = drawnBoxes[numDrawnBoxes - 1];
+		float const middle[3] = { ballOnTheList.x, ballOnTheList.y, ballOnTheList.z };
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			float const lowest = middle[axis] - ballOnTheList.radius, highest = middle[axis] + ballOnTheList.radius;
+
+			box.smallest[axis] = (lowest < box.smallest[axis]) ? lowest : box.smallest[axis];
+			box.largest[axis] = (highest > box.largest[axis]) ? highest : box.largest[axis];
+		}
+	}
+
+	int const number = ShadowGroup_Start(shape, listNumber, place);
+
+	if (number >= 0)
+	{
+		keptGroups[number].walked = true;
+		keptGroups[number].numPolygons = numPolygons;
+		memcpy(keptGroups[number].ball, ballInWorld, sizeof(keptGroups[number].ball));
+		walkedGroups[numWalkedGroups++] = number;
+	}
 }
 
 // Is the frame being collected now one that ToyShadows_Draw will report on? It counts a frame when it draws, and that comes after collecting.
@@ -4452,16 +4493,16 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 
 	FrameTiming_Mark(kStagePrismsSent);
 
-	if (ShadowVolumes_NumRuns() > 0)
+	if (ShadowVolumes_NumRuns() > 0 || numWorldCorners > 0)
 	{
-		HRESULT const kept = ShadowVolumesCard_Draw(d3d.lpD3DDevice, colour);
+		HRESULT const kept = ShadowVolumesCard_Draw(d3d.lpD3DDevice, colour, &worldPrisms[0].x, numWorldCorners);
 		if (FAILED(kept))
 		{
 			result = kept;
 		}
 
 		ToySetVolumeProgram(d3d.lpD3DDevice);
-		FrameTiming_CountPrismCorners(0, keptCornersThisPass);
+		FrameTiming_CountPrismCorners(numWorldCorners, keptCornersThisPass);
 		FrameTiming_Mark(kStagePrismsKept);
 	}
 
@@ -4745,7 +4786,9 @@ static void ToyDrawWires(LPDIRECT3DDEVICE9 device, D3DCOLOR colour)
 // A small solid box where each light is, in that light's colour, seen through walls.
 static void ToyDrawLightMarkers(LPDIRECT3DDEVICE9 device, const float *lights, int numLights)
 {
-	ShadowVolumes_StartRuns();   // the last light's kept prisms aren't part of these boxes
+	// the last light's prisms aren't part of these boxes
+	ShadowVolumes_StartRuns();
+	numWorldCorners = 0;
 
 	float const size = 80.0f;
 	static const int kFaces[6][4] = { { 0, 1, 3, 2 }, { 4, 5, 7, 6 }, { 0, 1, 5, 4 }, { 2, 3, 7, 6 }, { 0, 2, 6, 4 }, { 1, 3, 7, 5 } };
@@ -5252,8 +5295,9 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
-// Works out a group's prisms for a light, in the world's numbers, and puts them on the card. false means they aren't kept, and nothing has changed.
-static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, const float *light, const float *centre, ShadowVolumeRun *run)
+// Works out a group's prisms for a light, in the world's numbers. They're left just past the end of toyVerts, at the place toyNumVerts still says, and corners
+// says how many. false means they aren't all there, so they can't be used.
+static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, const float *centre, int *cornersMade)
 {
 	// The light's first three numbers are its place in the light list's numbers, which change whenever the camera does. So this gives the sums in
 	// ToyAddPrism a copy with the world's numbers there instead. The surfaces are all in the world's numbers already, because a group only
@@ -5270,24 +5314,61 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 	int const leftOutBefore = toyPrismsLeftOut;
 	bool cornersAgree = true;
 
-	for (int caster = group.firstCaster; caster < group.firstCaster + group.casters; caster++)
+	if (group.walked)
 	{
-		ToyVec corners[kToyMostPolyPoints];
-		int const count = ToyShadows_CornersInWorld(group.shape, casterPolygon[caster], group.place, &corners[0].x, kToyMostPolyPoints);
-
-		if (count != toyCasterCount[caster])
+		for (int polygon = 0; polygon < group.numPolygons; polygon++)
 		{
-			cornersAgree = false;
-			break;
-		}
+			ToyVec corners[kToyMostPolyPoints];
+			float plane[4];
+			bool twoSided = false;
+			int const count = ToyShadows_PolygonInWorld(group.shape, polygon, group.place, &corners[0].x, kToyMostPolyPoints, plane, &twoSided);
 
-		ToyAddPrism(corners, count, toyCasterSurface[caster], lightInWorld, centreInWorld, false);
+			if (count >= 3)
+			{
+				ToyFlatSurface surface;
+
+				surface.nx = plane[0];
+				surface.ny = plane[1];
+				surface.nz = plane[2];
+				surface.distance = plane[3];
+				surface.halfSize = 0.0f;
+				surface.inWorld = true;
+				surface.keepsStartGap = twoSided;
+
+				ToyAddPrism(corners, count, surface, lightInWorld, centreInWorld, false);
+			}
+		}
+	}
+	else
+	{
+		for (int caster = group.firstCaster; caster < group.firstCaster + group.casters; caster++)
+		{
+			ToyVec corners[kToyMostPolyPoints];
+			int const count = ToyShadows_CornersInWorld(group.shape, casterPolygon[caster], group.place, &corners[0].x, kToyMostPolyPoints);
+
+			if (count != toyCasterCount[caster])
+			{
+				cornersAgree = false;
+				break;
+			}
+
+			ToyAddPrism(corners, count, toyCasterSurface[caster], lightInWorld, centreInWorld, false);
+		}
 	}
 
-	int const corners = toyNumVerts - vertsBefore;
+	*cornersMade = toyNumVerts - vertsBefore;
 	toyNumVerts = vertsBefore;
 
-	if (!cornersAgree || toyPrismsLeftOut != leftOutBefore)
+	return cornersAgree && toyPrismsLeftOut == leftOutBefore;
+}
+
+// Works out a group's prisms for a light, and puts them on the card. false means they aren't kept, and nothing has changed.
+static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, const float *light, const float *centre, ShadowVolumeRun *run)
+{
+	int const vertsBefore = toyNumVerts;
+	int corners = 0;
+
+	if (!WorkOutPrismsInWorld(group, light, centre, &corners))
 	{
 		return false;
 	}
@@ -5341,6 +5422,34 @@ static bool UseKeptPrisms(const KeptGroup &group, const float *light, const floa
 	return ShadowVolumes_AddRun(run);
 }
 
+// A walked group's prisms for this light, for this frame only: a light that's moving, or a store that's full or switched off. The ordinary route can't take
+// them, because that list is in the view's numbers and these have no corners there, so they go in a list of their own, in the world's numbers.
+static void AddWorldPrisms(const KeptGroup &group, const float *light, const float *centre)
+{
+	int const vertsBefore = toyNumVerts;
+	int corners = 0;
+
+	if (!WorkOutPrismsInWorld(group, light, centre, &corners) || corners > kToyMaxVerts - numWorldCorners)
+	{
+		toyPrismsLeftOut++;
+		return;
+	}
+
+	memcpy(&worldPrisms[numWorldCorners], &toyVerts[vertsBefore], (size_t)corners * sizeof(ToyVec));
+	numWorldCorners += corners;
+}
+
+// Could anything in this group block this light? The same test as PolygonIsOutOfRange, with the group's ball in place of a polygon, from the light's true place.
+static bool GroupIsInRange(const KeptGroup &group, const float *centre)
+{
+	float const dx = group.ball[0] - centre[kToyLightWorld + 0];
+	float const dy = group.ball[1] - centre[kToyLightWorld + 1];
+	float const dz = group.ball[2] - centre[kToyLightWorld + 2];
+	float const reach = group.ball[3] + centre[3];
+
+	return dx * dx + dy * dy + dz * dz < reach * reach;
+}
+
 // Fills toyVerts with this light's prisms. A cloaked model casts only a faint shadow, and a stencil only knows yes or no, so its
 // prisms go through a pass of their own: cloakedOnly picks those, and leaving it false picks all the others.
 // owner is what carries this light, or nothing. Anything carrying a light sits around it, so it would block that light in every
@@ -5358,6 +5467,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 	int keptCorners = 0;
 
 	ShadowVolumes_StartRuns();
+	numWorldCorners = 0;
 
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
@@ -5405,11 +5515,33 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], toyCasterSurface[caster], light, centre, kind == kToyCasterModel);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
+
+	// walls drawn from the fixed buffer, which have nothing on the list above. A wall isn't a cloaked Predator, and it has no owner to step over.
+	for (int walked = 0; walked < numWalkedGroups && !cloakedOnly; walked++)
+	{
+		KeptGroup const &group = keptGroups[walkedGroups[walked]];
+		int corners = 0;
+
+		if (!GroupIsInRange(group, centre))
+		{
+			continue;
+		}
+
+		if (keeping && UseKeptPrisms(group, light, centre, &corners))
+		{
+			keptCorners += corners;
+			toyVertsOfKind[kToyCasterLevel] += corners;
+			continue;
+		}
+
+		AddWorldPrisms(group, light, centre);
+	}
+
 	if (ToyShadowsTest && !cloakedOnly)
 	{
 		ToyAddTestBox(light, centre);
 	}
-	report->verts += toyNumVerts + keptCorners;
+	report->verts += toyNumVerts + keptCorners + numWorldCorners;
 	keptCornersThisPass = keptCorners;
 }
 
@@ -5853,6 +5985,7 @@ static void ToyForgetCasters()
 	toyNumCasters = 0;
 	toyNumCasterPoints = 0;
 	numKeptGroups = 0;
+	numWalkedGroups = 0;
 	toyCastersLeftOut = 0;
 	toyLastModel = 0;
 	toyThisModelPolygons = 0;
@@ -5919,7 +6052,7 @@ static void ToyShadows_Draw()
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
 	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief)
-		&& toyNumCasters > 0 && ToyPicturesCanRun(d3d.lpD3DDevice);
+		&& (toyNumCasters > 0 || numWalkedGroups > 0) && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
 
@@ -5944,7 +6077,7 @@ static void ToyShadows_Draw()
 	// chosen before this frame's lighting ran: see ToyShadows_ChooseLights
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
-	report.lights = toyNumCasters ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+	report.lights = (toyNumCasters || numWalkedGroups) ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
 
 	if (!report.lights)
 	{

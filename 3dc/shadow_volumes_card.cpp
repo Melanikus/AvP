@@ -82,9 +82,14 @@ bool ShadowVolumesCard_Write(int first, const float *corners, int count)
 	return true;
 }
 
-HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour)
+HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const float *worldCorners, int numWorldCorners)
 {
 	HRESULT result = S_OK;
+
+	if (d3d.volumeEffect == kNullEffectID || !d3d.volumeDecl)
+	{
+		return E_FAIL;
+	}
 
 	d3d.effectSystem->SetActive(d3d.volumeEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.volumeEffect, 0, CONST_MATRIX, &worldToClip);
@@ -110,6 +115,18 @@ HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour)
 			{
 				result = drawn;
 			}
+		}
+	}
+
+	// corners from a moving light, or from a store that's full or off. These are this frame's only, so they aren't worth a list on the card.
+	for (int done = 0; done < numWorldCorners; done += kMostCornersInOneDraw)
+	{
+		int const corners = (numWorldCorners - done < kMostCornersInOneDraw) ? numWorldCorners - done : kMostCornersInOneDraw;
+		HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, corners / 3, worldCorners + done * 3, kBytesEachCorner);
+
+		if (FAILED(drawn))
+		{
+			result = drawn;
 		}
 	}
 

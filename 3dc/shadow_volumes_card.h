@@ -19,7 +19,7 @@ void ShadowVolumesCard_SetView(const float *view);
 // Writes corners to the list, starting at the place the store gave. Each corner is x y z. false means it wasn't written.
 bool ShadowVolumesCard_Write(int first, const float *corners, int count);
 
-// Draws the store's list of runs, with whatever stencil and depth settings are on.
-HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour);
+// Draws the store's list of runs, and then any corners in the world's numbers that aren't kept, x y z each, with whatever stencil and depth settings are on.
+HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const float *worldCorners, int numWorldCorners);
 
 #endif

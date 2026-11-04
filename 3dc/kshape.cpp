@@ -10,6 +10,7 @@
 //   the shadow code is told which polygons show both sides, and on a report frame which ones the game draws
 //   the shadow code is told which shapes are staying still, so their prisms can be kept
 //   the rule for a module that never moves is one function, which the static level uses too
+//   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -171,6 +172,7 @@ extern int DrawingAReflection;
 void ToyShadows_NoteObjectLights();
 void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const CasterFacts &facts);
 int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *place);
+void ShadowGroup_StartWalked(const void *shape, unsigned int listNumber, const int *place, int numPolygons, const float *ballInWorld, const ShadowReachBall &ballOnTheList);
 bool ShadowReportIsDue();
 void ToyShadows_NoteModelPart(const void *model, int polygons);
 
@@ -6451,9 +6453,52 @@ int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const
 	return count;
 }
 
-// A wall on the fixed buffer's route has no corners on the list, so this is where its shadows will be collected from.
+static ShadowReachBall ToyModuleBallOnTheList(const MODULE *module);
+
+// A wall on the fixed buffer's route has no corners on the list, because it never went through the pipeline, so this is where its shadows are collected from.
+// Its prisms are made from the shape itself, for each light that wants them.
 void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 {
+	if (!ToyShadowsMode)
+	{
+		return;
+	}
+
+	MODULE const *module = dptr->ObMyModule;
+
+	// without this it would be taken for a wall out of view, and cast twice
+	ToyNoteModuleCollected(module);
+
+	if (ToyShadowsCasters & (1 << kToyCasterLevel))
+	{
+		ShadowGroup_StartWalked(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx, shapePtr->numitems, module->m_ball, ToyModuleBallOnTheList(module));
+	}
+}
+
+// One polygon of a shape standing at place, as the shadow code wants it, read from the shape with nothing drawn. Gives back how many corners it has, or 0 if it
+// casts no shadow: the same ones ToyShadows_Collect leaves out. plane gets its stored plane, moved to the place, as ToyShadows_AddCaster wants it.
+int ToyShadows_PolygonInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners, float *plane, bool *twoSided)
+{
+	SHAPEHEADER const *shape = (SHAPEHEADER const *)shapePointer;
+
+	if (polygonNumber < 0 || polygonNumber >= shape->numitems || !shape->sh_surfacepolygons)
+	{
+		return 0;
+	}
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+
+	if (polygon->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+	{
+		return 0;
+	}
+
+	VECTORCH const world = { place[0], place[1], place[2] };
+
+	ToyPlaneInWorld(shape->sh_surfacepolygons[polygonNumber], world, plane);
+	*twoSided = (polygon->PolyFlags & iflag_no_bfc) != 0;
+
+	return ToyShadows_CornersInWorld(shapePointer, polygonNumber, place, corners, mostCorners);
 }
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
