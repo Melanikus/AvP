@@ -8,8 +8,8 @@
 #     ones the build never uses, but the guesses make it less exact. So it only adds to a traced scan, it never replaces one.
 #
 # The jobs:
-#   - CodeQL (SAST) on our code watches the real build of the game (Release, x86), which also proves that the game
-#     builds on a clean machine.
+#   - CodeQL (SAST) on our code watches the real build of the game in every configuration of the solution (Debug and
+#     Release, x86), which also proves that the game builds on a clean machine.
 #   - Get the vcpkg libraries for CodeQL builds our open-source dependencies once and hands their source and headers to
 #     the two build mode none jobs. It finds nothing by itself, but those jobs can't run without it.
 #   - CodeQL (SAST) on every file of ours reads every C/C++ file in git with build mode none, including what the game's
@@ -92,7 +92,9 @@ jobs:
           queries: security-and-quality,./.github/codeql/read-problems
           trap-caching: false
 
-      # The same command we build with by hand. If the game doesn't build, this job fails here.
+      # The same command we build with by hand, once per configuration, because each one compiles code the others don't
+      # (Debug has the game's debug-only code). The list comes from the solution, so a configuration added later gets
+      # scanned without anyone remembering to change this file. If the game doesn't build, this job fails here.
       - name: Build the game while CodeQL watches
         shell: pwsh
         run: |
@@ -100,8 +102,15 @@ jobs:
           $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' |
             Select-Object -First 1
           if (-not $msbuild) { throw 'MSBuild was not found' }
-          & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $configurations = @(Select-String -LiteralPath win32\VS2026\AvP.sln -Pattern '^\s*(\w+)\|(\w+)\s*=\s*\1\|\2\s*$')
+          if ($configurations.Count -eq 0) { throw 'The solution lists no configurations' }
+          foreach ($line in $configurations) {
+            $configuration = $line.Matches[0].Groups[1].Value
+            $platform = $line.Matches[0].Groups[2].Value
+            "Building $configuration|$platform"
+            & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m "/p:Configuration=$configuration" "/p:Platform=$platform"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Analyse our code
         uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2

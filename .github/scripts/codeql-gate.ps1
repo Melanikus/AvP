@@ -49,6 +49,10 @@ $fileReadNotice = '/diagnostics/successfully-extracted-files$'
 # These notices mean some code was not fully read. read-problems is our own query (.github/codeql/read-problems).
 $readProblemNotice = '/diagnostics/(failed-extractor-invocations|extraction-warnings|extraction-errors|read-problems)$'
 
+# Languages CodeQL can read that no job in codeql.yml scans. A file like this would be code nobody reads, so it fails
+# the gate. Whoever adds one should add a CodeQL job for its language and take it off this list.
+$unscannedTypes = '.cs', '.cshtml', '.razor', '.go', '.java', '.kt', '.kts', '.py', '.rb', '.erb', '.rs', '.swift'
+
 # Helper entries in vcpkg's build folder that hold no library code. D3DX is Microsoft's binary package: it has no source
 # to scan, and it is the one exception the project accepts.
 $notLibraries = 'detect_compiler', 'dxsdk-d3dx', 'vcpkg-cmake', 'vcpkg-cmake-config'
@@ -161,6 +165,11 @@ if ($Kind -eq 'own') {
     $tracked = @(git -C $SourceRoot ls-files)
     if ($LASTEXITCODE -ne 0) { $failures.Add('git could not list the tracked files') }
     $expected = @($tracked | Where-Object { (Test-FileType $_ $sourceTypes) -or (Test-FileType $_ $headerTypes) })
+    $unscanned = @($tracked | Where-Object { Test-FileType $_ $unscannedTypes })
+    Write-ReportList 'languages-not-scanned.txt' $unscanned
+    if ($unscanned.Count -gt 0) {
+        $failures.Add("$($unscanned.Count) files are in a language CodeQL can read but no job scans (see languages-not-scanned.txt)")
+    }
 } elseif ($Kind -eq 'all-sources') {
     # installed-include is only there so the libraries' #include lines resolve. It is not a library of its own.
     $root = (Resolve-Path -LiteralPath $SourceRoot).Path.TrimEnd('\', '/')
