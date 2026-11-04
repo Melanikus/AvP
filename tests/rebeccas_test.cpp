@@ -25,8 +25,8 @@
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
-// animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, and test 18 whether a lift has all
-// its parts.
+// animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, test 18 whether a lift has all
+// its parts, and test 19 chunks of morph frames.
 //
 // HOW IT RUNS
 //
@@ -1386,6 +1386,68 @@ static void TestLifts()
 	Check(LiftIsComplete(&lift) == 0, "a lift with a module missing can't run");
 }
 
+// 19. A chunk of morph frames holds three numbers, the last a count of frames, and then three numbers for each frame. The count sizes
+// a list that's then filled from the file, so the chunk has to be exactly the size the count says.
+static void TestMorphFrames()
+{
+	puts("19. morph frames");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	size_t const countAt = 8;
+
+	// The count is written even when it falls past the end of the chunk, because that's where a read with no check would find it. In
+	// the row of 8 bytes it's the one count that would pass the size check, because 8 less 12 wraps round to the same number as 12 times
+	// that count. So only the check on the chunk's room can refuse that row.
+	struct FrameRow { size_t bytes; int count; bool accepted; char const * what; };
+	FrameRow const rows[] =
+	{
+		{ 12,          0, true,  "a chunk with no frames is accepted" },
+		{ 24,          1, true,  "one frame is accepted" },
+		{ 36,          2, true,  "two frames are accepted" },
+		{  8, 0x15555555, false, "a chunk with no room for its three numbers is refused" },
+		{ 24,          2, false, "a count too big for the chunk is refused" },
+		{ 24,          0, false, "a count too small for the chunk is refused" },
+		{ 28,          1, false, "bytes left over after the last frame are refused" },
+		{ 24,         -1, false, "a negative count is refused" },
+		{ 24, 0x55555556, false, "a count that wraps round when multiplied is refused" },
+		{ 24, 0x7fffffff, false, "a huge count is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * morph = PutChunk(wholeShape + mainBytes, "SHPMORPH", ChunkHeaderBytes + rows[i].bytes);
+		char * frames = PutChunk(morph, "FRMMORPH", rows[i].bytes);
+
+		memcpy(frames + countAt, &rows[i].count, sizeof(int));
+
+		Check(ShapeIsAccepted(frames + rows[i].bytes) == rows[i].accepted, rows[i].what);
+	}
+
+	// The numbers themselves have to arrive. A shape number of -1 means the shape the morph belongs to, so this frame needs nothing else.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const numbers[6] = { 0, 65536, 1, -1, -1, 0 };
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * morph = PutChunk(wholeShape + mainBytes, "SHPMORPH", ChunkHeaderBytes + sizeof(numbers));
+		char * frames = PutChunk(morph, "FRMMORPH", sizeof(numbers));
+		memcpy(frames, numbers, sizeof(numbers));
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, (frames + sizeof(numbers)) - wholeShape);
+		file.post_input_processing();
+
+		Chunk_With_Children * morphChunk = (Chunk_With_Children *)shape->lookup_single_child("SHPMORPH");
+		Shape_Morphing_Frame_Data_Chunk * frameChunk = (Shape_Morphing_Frame_Data_Chunk *)morphChunk->lookup_single_child("FRMMORPH");
+
+		Check(file.error_code == 0, "a real chunk of morph frames is accepted");
+		Check(frameChunk->anim_frames.size() == 1, "its frame was read");
+		Check(frameChunk->a_speed == 65536, "and so was its speed");
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1409,6 +1471,7 @@ int main()
 	TestTextureCoordinates();
 	TestNormals();
 	TestLifts();
+	TestMorphFrames();
 
 	if (checksFailed)
 	{

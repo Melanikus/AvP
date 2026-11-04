@@ -13,6 +13,7 @@
 //   a shape must have one normal for each point and one for each polygon, each normal's numbers must be sensible, and a polygon's
 //   own normal must be one of those in its list
 //   the two polygons of a merge pair must be triangles that share exactly one edge
+//   a chunk of morph frames must be exactly the size its count says
 
 #include <math.h>
 
@@ -1866,20 +1867,46 @@ void Shape_Morphing_Data_Chunk::prepare_for_output()
 
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("FRMMORPH",Shape_Morphing_Frame_Data_Chunk,"SHPMORPH",Shape_Morphing_Data_Chunk)
 
-Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *data, size_t /*size*/)
+// A chunk of morph frames holds three numbers, the last a count of frames, and then three numbers for each frame. The count comes
+// from the level file, and this goes on to make a list of that size and read the file into it. A count too big for the chunk would
+// read past its end, and one big enough would wrap round when it's multiplied, leaving a tiny list that the loop below writes far
+// past the end of. So the chunk has to be exactly the size its count says. All 761 of these in the game's own levels are.
+Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *data, size_t size)
 : Chunk (parent, "FRMMORPH")
 {
+	size_t const numbers_bytes = 12;
+	unsigned long long const bytes_for_each_frame = 12;
+
+	a_flags = 0;
+	a_speed = 0;
+	num_frames = 0;
+	frame_store = 0;
+
+	if (size < numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	a_flags = *((int *)data);
 	data +=4;
 	a_speed = *((int *)data);
 	data +=4;
-	num_frames = *((int *)data);
+	int const count = *((int *)data);
 	data +=4;
+
+	// These numbers are wide enough that the sum can't wrap round, and a negative count turns into a huge number, so it's refused too.
+	if ((unsigned long long) count * bytes_for_each_frame != size - numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	num_frames = count;
 
 	if (num_frames)
 		frame_store = new int [num_frames * 3];
-	else 
-		frame_store=0;
+
 	for (int i=0; i<num_frames; i++)
 	{
 		frame_store[i*3] = *((int *)data);
