@@ -1,6 +1,7 @@
-# Compiles every shader in shaders\ the way the game does, and fails on any error or any warning. This is the gate shaders get:
-# neither of our code scanners can read them. The game compiles them from text files as it starts, so a mistake here would
-# otherwise only show on a player's machine, and only as a shader that's missing.
+# Compiles every shader in shaders\ with Microsoft's newest compiler, and fails on any error or any warning. This is half of the gate
+# shaders get: neither of our code scanners can read them. The game compiles them from text files as it starts, so a mistake here
+# would otherwise only show on a player's machine, and only as a shader that's missing. The other half is tests/shader_test.cpp,
+# which uses the game's own older compiler. The two don't always agree, and a shader has to pass both.
 #
 # Each file is compiled on its own. A .fxh file isn't a shader: it's included by others, so it's checked as part of each one that
 # includes it. Nothing is kept, because the game makes its own copy each time it starts.
@@ -16,10 +17,10 @@ if (-not $fxc) { throw 'The shader compiler, fxc.exe, was not found' }
 
 # The game picks shader model 2 or 3 by how a file's name starts. That rule is read from the game's own code, so there's only one
 # copy of it, and this can't drift away from what the game really does.
-$code = Get-Content -Raw (Join-Path $root 'win32\d3_func.cpp')
-$rule = [regex]::Match($code, 'static bool ShaderNeedsModel3[^}]*\}').Value
+$code = Get-Content -Raw (Join-Path $root 'win32\shader_model.h')
+$rule = [regex]::Match($code, 'bool ShaderNeedsModel3[^}]*\}').Value
 $starts = @([regex]::Matches($rule, 'compare\(0, \d+, "(\w+)"\)') | ForEach-Object { $_.Groups[1].Value })
-if ($starts.Count -eq 0) { throw 'Could not read ShaderNeedsModel3 in win32\d3_func.cpp' }
+if ($starts.Count -eq 0) { throw 'Could not read ShaderNeedsModel3 in win32\shader_model.h' }
 "Shader model 3 for names starting: $($starts -join ', ')"
 
 $shaders = @(Get-ChildItem (Join-Path $root 'shaders') -File | Where-Object { $_.Extension -in '.vsh', '.psh' })

@@ -665,6 +665,7 @@
     <ClInclude Include="..\..\3dc\win95\shpanim.h" />
     <ClInclude Include="..\..\3dc\win95\zsp.hpp" />
     <ClInclude Include="..\d3_func.h" />
+    <ClInclude Include="..\shader_model.h" />
     <ClInclude Include="..\resource.h" />
   </ItemGroup>
   <ItemGroup>

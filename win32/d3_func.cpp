@@ -30,6 +30,7 @@
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "surface_pictures.h"
+#include "shader_model.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
 #include "logString.h"
@@ -75,13 +76,6 @@ bool usingStencil = false;
 
 std::string shaderPath;
 std::string videoModeDescription;
-
-// The game's shaders all fit shader model 2. The ones for shadows and lighting need 3, for their length and to draw on several pictures at
-// once. Those are told apart by the start of the file's name.
-static bool ShaderNeedsModel3(const std::string &fileName)
-{
-	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0;
-}
 
 bool CreateVolatileResources();
 bool ReleaseVolatileResources();
