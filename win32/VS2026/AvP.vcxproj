@@ -40,6 +40,12 @@
     <VcpkgRoot Condition="'$(VcpkgRoot)'=='' and '$(VCPKG_ROOT)'!=''">$(VCPKG_ROOT)</VcpkgRoot>
     <VcpkgRoot Condition="'$(VcpkgRoot)'==''">$(VsInstallRoot)\VC\vcpkg</VcpkgRoot>
   </PropertyGroup>
+  <!-- vcpkg reinstalls libraries only when vcpkg.json or vcpkg-configuration.json changes, so a changed patch in our
+       overlay ports would leave the old library in place with no warning. Adding the ports to the inputs of its step
+       makes a change to them rebuild the libraries. -->
+  <ItemGroup>
+    <_ZVcpkgInstallManifestDependenciesInputs Include="..\..\vcpkg-overlay-ports\**\*" />
+  </ItemGroup>
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props')" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
