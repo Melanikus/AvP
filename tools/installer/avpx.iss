@@ -63,7 +63,6 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Name: {app}\shaders\; Type: filesandordirs; 
 Name: {app}\redist\; Type: filesandordirs;
 Name: {app}\AvPx.exe; Type: files;
-Name: {app}\enet.dll; Type: files;
 Name: {app}\libbinkdec.dll; Type: files;
 Name: {app}\libogg.dll; Type: files;
 Name: {app}\libsmackerdec.dll; Type: files;
