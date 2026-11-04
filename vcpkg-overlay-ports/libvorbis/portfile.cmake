@@ -38,9 +38,13 @@ vcpkg_from_github(
 # - contrib/: upstream's fuzz test setup;
 # - lib/psytune.c: a command-line tool for tuning the encoder;
 # - lib/misc.c: a debug memory tracker, only for builds with DEBUG_MALLOC, which needs pthread.h.
-# lib/barkmel.c and lib/tone.c are not built either. They stay for now: Snyk recognises this
-# library by how many of its release files are still here unchanged, and its scan fails if it no
-# longer does. The lowest figure known to pass is 0.691, 56 of 81 files; this tree is at 58.
+# - lib/barkmel.c, lib/tone.c: small standalone programs, each with its own main().
+#
+# Before changing what this port patches or deletes, read this. Snyk recognises this library by
+# how many of its release files are still here unchanged, and its scan fails if it no longer
+# does. The lowest figure known to pass is 0.691, which is 56 of 81 files, and this tree is at
+# exactly that figure. Patching a file that a patch here already changes costs nothing. Patching
+# or deleting any other file Snyk counts costs one, and nothing below 0.691 has been tested.
 file(REMOVE_RECURSE
     "${SOURCE_PATH}/vq"
     "${SOURCE_PATH}/examples"
@@ -48,6 +52,8 @@ file(REMOVE_RECURSE
     "${SOURCE_PATH}/contrib"
     "${SOURCE_PATH}/lib/psytune.c"
     "${SOURCE_PATH}/lib/misc.c"
+    "${SOURCE_PATH}/lib/barkmel.c"
+    "${SOURCE_PATH}/lib/tone.c"
 )
 
 vcpkg_cmake_configure(
