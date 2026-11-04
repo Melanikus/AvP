@@ -317,7 +317,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (strstr(command_line, "-shadowdepthgap"))
 		{
 			ShadowsDepthGap = 1;
-			LogString("shadows: a shadow's start stands further behind its polygon as depth gets coarser (-shadowdepthgap)");
+			LogString("shadows: a shadow's start stands further behind its polygon as depth gets coarser (-shadowdepthgap), on prisms made each frame only: not kept prisms, and not the walls -staticscene walks");
 		}
 		char const *biasSwitch = strstr(command_line, "-shadowbiassteps=");
 		if (biasSwitch)
@@ -325,9 +325,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			extern float ShadowSurfaceBias;
 			extern int ShadowBiasSteps;
 			// anything but a number from 1 to 64 leaves the margin as it was, rather than quietly testing a margin nobody asked for
-			long const asked = strtol(biasSwitch + strlen("-shadowbiassteps="), NULL, 10);
+			char const *number = biasSwitch + strlen("-shadowbiassteps=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
 
-			if (asked >= 1 && asked <= 64)
+			// it has to start with a digit and stop where the switch stops, so that 5abc and 5.9 aren't taken for 5
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 1 && asked <= 64)
 			{
 				ShadowBiasSteps = (int)asked;
 				ShadowSurfaceBias = -(float)ShadowBiasSteps / 16777216.0f;
