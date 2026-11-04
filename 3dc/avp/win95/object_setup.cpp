@@ -975,6 +975,10 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		{
 			phtt->num_sounds=max(phtt->num_sounds,isc->index+1);
 		}
+		else
+		{
+			LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
+		}
 	}
 
 	if(phtt->num_sounds)
@@ -990,10 +994,9 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		{
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
 
-			// A number the list has no place for goes to the log, and that sound stays missing. See index_is_valid.
+			// A number the list has no place for went to the log above, and that sound stays missing. See index_is_valid.
 			if(!isc->index_is_valid())
 			{
-				LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
 				continue;
 			}
 
@@ -1019,6 +1022,10 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		if(phsc->index_is_valid())
 		{
 			phtt->num_sequences=max(phtt->num_sequences,phsc->index+1);
+		}
+		else
+		{
+			LogErrorString("level file gives a sequence an impossible number: " + Util::IntToString(phsc->index));
 		}
 	}
 
@@ -1048,10 +1055,9 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	{
 		Placed_Hierarchy_Sequence_Chunk* phsc=(Placed_Hierarchy_Sequence_Chunk*)chlif();
 
-		// A number the list has no place for goes to the log, and that sequence is left out. See index_is_valid.
+		// A number the list has no place for went to the log above, and that sequence is left out. See index_is_valid.
 		if(!phsc->index_is_valid())
 		{
-			LogErrorString("level file gives a sequence an impossible number: " + Util::IntToString(phsc->index));
 			continue;
 		}
 

@@ -6,7 +6,7 @@
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
-//   number is left out
+//   number is left out; when two sounds have the same number, the earlier one is given back
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -441,6 +441,10 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 		{
 			max_index=max(max_index,isc->index);
 		}
+		else
+		{
+			LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
+		}
 	}
 	//now create a large enough array , and fill it in
 	num_sounds=max_index+1;
@@ -463,10 +467,9 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
 			int index=isc->index;
 
-			// A number the list has no place for goes to the log, and that sound stays missing. See index_is_valid.
+			// A number the list has no place for went to the log above, and that sound stays missing. See index_is_valid.
 			if (!isc->index_is_valid())
 			{
-				LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(index));
 				continue;
 			}
 
@@ -477,7 +480,14 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 				continue;
 			}
 
-			GLOBALASSERT(sound_array[index].sound_loaded==0);
+			// Two sounds with the same number: the later one takes the place, and the earlier one is given back. A level
+			// file can do this, and none of the game's own files does.
+			if (sound_array[index].sound_loaded)
+			{
+				LogErrorString("level file gives two sounds the same number: " + Util::IntToString(index));
+				LoseSound(sound_array[index].sound_loaded);
+				sound_array[index].sound_loaded = 0;
+			}
 
 			sound_array[index].s3d.inner_range = (int)(isc->inner_range*local_scale);
 			sound_array[index].s3d.outer_range = (int)(isc->outer_range*local_scale);
@@ -717,6 +727,10 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 		{
 			max_index=max(max_index,coll->Set_Collection_Num);
 		}
+		else
+		{
+			LogErrorString("level file gives a shape set collection an impossible number: " + Util::IntToString(coll->Set_Collection_Num));
+		}
 	}
 
 	if(max_index==-1) return;
@@ -762,10 +776,9 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
 
-		// A number the list has no place for goes to the log, and that collection is left out. See number_is_valid.
+		// A number the list has no place for went to the log above, and that collection is left out. See number_is_valid.
 		if(!coll->number_is_valid())
 		{
-			LogErrorString("level file gives a shape set collection an impossible number: " + Util::IntToString(coll->Set_Collection_Num));
 			continue;
 		}
 
