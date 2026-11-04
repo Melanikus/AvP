@@ -64,6 +64,30 @@ static void CheckByHand()
 	SurfaceTangent_Work(onePoint, floorTexture, &tangent);
 	Check(tangent.x == 0.0f && tangent.y == 0.0f && tangent.z == 0.0f && tangent.flip == 0.0f, "a polygon with no size: all zero");
 
+	// A level file can hold anything in a float. Dividing zero by zero makes a value that isn't a number, and dividing one by zero makes infinity.
+	float const zero = RandomBetween(0.0f, 0.0f);
+	float const notANumber = zero / zero;
+	float const infinity = 1.0f / zero;
+	float const hostile[3] = { notANumber, infinity, -infinity };
+	bool allEmpty = true;
+
+	for (int value = 0; value < 3; value++)
+	{
+		for (int place = 0; place < 6; place++)
+		{
+			float coordinates[6] = { 0.0f, 0.0f,   256.0f, 0.0f,   0.0f, 256.0f };
+			coordinates[place] = hostile[value];
+			SurfaceTangent_Work(floorCorners, coordinates, &tangent);
+
+			if (tangent.x != 0.0f || tangent.y != 0.0f || tangent.z != 0.0f || tangent.flip != 0.0f)
+			{
+				allEmpty = false;
+			}
+		}
+	}
+
+	Check(allEmpty, "a texture coordinate that isn't a real number: all zero, wherever it is");
+
 	float const stretched[6] = { 0.0f, 0.0f,   256.0f, 0.0f,   0.0f, 8.0f };
 	SurfaceTangent_Work(floorCorners, stretched, &tangent);
 	Check(Near(tangent.x, 1.0f) && Near(tangent.z, 0.0f), "a texture stretched one way: the direction doesn't change");

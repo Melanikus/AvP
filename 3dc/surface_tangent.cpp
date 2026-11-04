@@ -47,8 +47,10 @@ void SurfaceTangent_Work(const float *corners, const float *coordinates, Surface
 
 	double const length = sqrt(alongU[0] * alongU[0] + alongU[1] * alongU[1] + alongU[2] * alongU[2]);
 
-	// A very small length means the world hardly moves across the whole texture, which is a polygon with no real size.
-	if (length < 0.000001)
+	// A very small length means the world hardly moves across the whole texture, which is a polygon with no real size. A huge one comes from
+	// corners all but in a line in the texture. And these numbers come from a level file, so they may not be real numbers at all. Anything
+	// compared with one of those comes out false, so this is written to need a true answer before it carries on.
+	if (!(length >= 0.000001 && length <= 1.0e30))
 	{
 		return;
 	}
