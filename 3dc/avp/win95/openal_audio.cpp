@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the message naming the default sound device is written with a size limit, so it always fits;
 //   a sound volume is kept inside the volume table before the table is read
+//   a WAV file's size for its sound data is checked before the memory is asked for, and failing to
+//   get that memory now loses only that sound
 
 #ifdef USE_OPENAL
 
@@ -1196,6 +1198,23 @@ int ReturnInvalidWAV()
 	return 0;
 }
 
+// The most sound data one WAV file may hold. The largest of the 1,656 sounds in the stock game is 172,282 bytes, and
+// 64 MB is about six minutes of CD-quality stereo, so this leaves plenty of room for a mod.
+static const uint32_t kMaxWavDataBytes = 64 * 1024 * 1024;
+
+// Sets aside the memory for a sound's data. The size comes from the WAV file, which can claim anything up to 4 GB, so
+// it is checked first. "nothrow" means that if the memory cannot be found we get an empty answer, and only this sound
+// fails to load; without it, the game would stop. A file that claims more than it holds is caught when it is read.
+static bool AllocateWavData(int soundNum, uint32_t nAudioBytes)
+{
+	if (nAudioBytes > kMaxWavDataBytes)
+	{
+		return false;
+	}
+	GameSounds[soundNum].audioBuffer = new(std::nothrow) uint8_t[nAudioBytes];
+	return GameSounds[soundNum].audioBuffer != NULL;
+}
+
 inline ALenum GetALFormat(uint16_t bitsPerSample, uint16_t nChannels)
 {
 	ALenum alFormat = 0;
@@ -1290,7 +1309,10 @@ int LoadWavFile(int soundNum, const std::string &fileName)
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
-	GameSounds[soundNum].audioBuffer = new uint8_t[nAudioBytes];
+	if (!AllocateWavData(soundNum, nAudioBytes))
+	{
+		return ReturnInvalidWAV();
+	}
 
 	// Read sound data from file to buffer
 	uint32_t nBytesRead = fStream.ReadBytes(GameSounds[soundNum].audioBuffer, nAudioBytes);
@@ -1399,7 +1421,12 @@ int ExtractWavFile(int soundNum, FileStream &fStream)
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
-	GameSounds[soundNum].audioBuffer = new uint8_t[nAudioBytes];
+	if (!AllocateWavData(soundNum, nAudioBytes))
+	{
+		// step over this sound, so that the next one in the sound bank is still found
+		fStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);
+		return ReturnInvalidWAV();
+	}
 
 	// Read sound data from file to buffer
 	uint32_t nBytesRead = fStream.ReadBytes(GameSounds[soundNum].audioBuffer, nAudioBytes);

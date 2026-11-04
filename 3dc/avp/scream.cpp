@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the character sound files are read only inside their size, and one that is too large or cannot be loaded
 //   is refused; the folder and sound names are copied with size limits, so they can never overflow
+//   a count from the file is checked once more where it becomes a request for memory
 #include "3dc.h"
 #include "ourasert.h"
 #include "psndplat.h"
@@ -133,6 +134,22 @@ static bool ScreamFileLayoutIsValid(const char *pos, const char *end)
 	return true;
 }
 
+/*
+	Sets aside room for a list from a character sound file: count things of size bytes each. ScreamFileLayoutIsValid has
+	already refused any file whose lists do not fit inside it, so count cannot be negative or larger than the file. This
+	says so again at the point where a number from a file becomes a request for memory: if a later change ever broke
+	that check, the game would stop here with its out-of-memory message, not ask for a size nobody checked.
+*/
+static void* AllocateScreamList(int count, size_t size)
+{
+	if (count < 0 || count > (int)kMaxScreamFileSize)
+	{
+		// AllocMem is certain to refuse this size, and refusing is what stops the game
+		return AllocateMem((size_t)-1);
+	}
+	return PoolAllocateMem(count * size);
+}
+
 void CharacterSoundEffects::LoadSounds(const char* filename, const char* directory)
 {
 	if (voice_types) 
@@ -204,7 +221,7 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	num_voice_cats = *(int*)bufpos;
 	bufpos+=4;
 	
-	voice_types = (ScreamVoiceType*) PoolAllocateMem(num_voice_types * sizeof(ScreamVoiceType));
+	voice_types = (ScreamVoiceType*) AllocateScreamList(num_voice_types, sizeof(ScreamVoiceType));
 	
 	char wavpath[MAX_PATH];
 	size_t const directory_length = strnlen(directory, MAX_PATH - 1);
@@ -214,7 +231,7 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	
 	for (int i=0;i<num_voice_types;i++)	
 	{
-		voice_types[i].category = (ScreamSoundCategory*) PoolAllocateMem( num_voice_cats * sizeof(ScreamSoundCategory));
+		voice_types[i].category = (ScreamSoundCategory*) AllocateScreamList(num_voice_cats, sizeof(ScreamSoundCategory));
 		for (int j=0;j<num_voice_cats;j++)
 		{
 			ScreamSoundCategory* cat=&voice_types[i].category[j];
@@ -224,7 +241,7 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 
 			if (cat->num_sounds)
 			{
-				cat->sounds = (ScreamSound*) PoolAllocateMem(cat->num_sounds * sizeof(ScreamSound));
+				cat->sounds = (ScreamSound*) AllocateScreamList(cat->num_sounds, sizeof(ScreamSound));
 			}
 			else
 			{
