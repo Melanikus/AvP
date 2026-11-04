@@ -5,6 +5,7 @@
 //   the decal list in a level file is checked against the real size of its chunk before it is read
 //   a generator is only made inside the special objects chunk, because it looks two levels up
 //   a generator's weights have to fit their chunk, and are freed the same way they were made
+//   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -827,15 +828,38 @@ size_t AVP_Particle_Generator_Data_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("R6GENDAT",Rainbow6_Generator_Extra_Data_Chunk)
 
-Rainbow6_Generator_Extra_Data_Chunk::Rainbow6_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+// Two numbers, then a list with its own count. No level the game comes with has one of these, so nothing measures an exact size for it, and all
+// this asks is that the list fits the chunk. The count has to be checked before the list is made: asking for more memory than there is ends the game.
+Rainbow6_Generator_Extra_Data_Chunk::Rainbow6_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t chunk_bytes)
 :Chunk(parent,"R6GENDAT")
 {
+	size_t const numbers_bytes = 3 * sizeof(int);
+
+	distance = 0;
+	flags = 0;
+	num_extra_data = 0;
+	extra_data = 0;
+
+	if (chunk_bytes < numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	int const count = *(int *)(data + 2 * sizeof(int));
+
+	if (!CountFitsChunk(count, sizeof(int), chunk_bytes - numbers_bytes))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	distance=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
 	data+=4;
-	
-	num_extra_data=*(int*)data;
+
+	num_extra_data=count;
 	data+=4;
 	if(num_extra_data)
 	{

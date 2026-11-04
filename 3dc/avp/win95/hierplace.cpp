@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   names saved into level data are copied, and stepped past, by the length measured from the name
-//   itself, and unused code for making new level files was removed
+//   itself, and unused code for making new level files was removed;
+//   a placed hierarchy's name and lists are checked against the size of their chunk before they're read
 #include "hierplace.hpp"
 #include "md5.h"
 
@@ -29,10 +30,44 @@ Children for Placed_Hiearchy_Chunk :
 ///////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("PLACHIDT",Placed_Hierarchy_Data_Chunk)
 
-Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* parent, const char* data, const size_t)
+// A name, some numbers, then a list of extra numbers with its own count. The count comes from the file and sizes a list, so the whole chunk is
+// measured before any of it is read: asking for more memory than there is ends the game, and a count too big reads past the chunk. All 3 of
+// these in the game's own levels end exactly at the end of their chunk, so that's the rule.
+Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* parent, const char* data, const size_t chunk_bytes)
 :Chunk(parent,"PLACHIDT")
 {
-	size_t length = strlen(data);
+	size_t const numbers_bytes = sizeof(int) + sizeof(ChunkVectorInt) + sizeof(ChunkQuat) + sizeof(ObjectID) + sizeof(int);
+
+	// whatever happens next, these are safe for the destructor
+	name = 0;
+	num_extra_data = 0;
+	extra_data = 0;
+
+	int const name_length = NameLengthInChunk(data, chunk_bytes);
+
+	if (name_length < 0)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	size_t const length = (size_t)name_length;
+	size_t const name_bytes = (length + 4) & ~(size_t)3;
+
+	if (chunk_bytes < name_bytes + numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	int const extra_count = *(int *)(data + name_bytes + numbers_bytes - sizeof(int));
+	size_t const bytes_left = chunk_bytes - name_bytes - numbers_bytes;
+
+	if (!CountFitsChunk(extra_count, sizeof(int), bytes_left) || (size_t)extra_count * sizeof(int) != bytes_left)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
 
 	if (length)
 	{
@@ -57,7 +92,7 @@ Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* pa
 	id = *(ObjectID*)data;
 	data += sizeof(ObjectID);
 
-	num_extra_data = *(int*) data;
+	num_extra_data = extra_count;
 	data += 4;
 
 	if (num_extra_data)
@@ -167,9 +202,46 @@ size_t Placed_Hierarchy_Data_Chunk::size_chunk()
 /////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("PLHISEQU",Placed_Hierarchy_Sequence_Chunk)
 
-Placed_Hierarchy_Sequence_Chunk::Placed_Hierarchy_Sequence_Chunk(Chunk_With_Children* parent,const char* data, const size_t)
+// Five numbers, a list of sounds, then a list of extra numbers, each list with its own count. Both counts come from the file and size a list,
+// so they're measured against the chunk before anything is made. All 3 of these in the game's own levels end exactly at the end of their
+// chunk, so that's the rule.
+Placed_Hierarchy_Sequence_Chunk::Placed_Hierarchy_Sequence_Chunk(Chunk_With_Children* parent,const char* data, const size_t chunk_bytes)
 :Chunk(parent,"PLHISEQU")
 {
+	size_t const numbers_bytes = 5 * sizeof(int);
+	size_t const count_bytes = sizeof(int);
+
+	// whatever happens next, these are safe for the destructor
+	sound_list_size = 0;
+	sound_list = 0;
+	num_extra_data = 0;
+	extra_data = 0;
+
+	if (chunk_bytes < numbers_bytes + 2 * count_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	int const sound_count = *(int *)(data + numbers_bytes);
+	size_t const room_for_lists = chunk_bytes - numbers_bytes - 2 * count_bytes;
+
+	if (!CountFitsChunk(sound_count, sizeof(Timed_Sound_Description), room_for_lists))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	size_t const sound_bytes = (size_t)sound_count * sizeof(Timed_Sound_Description);
+	int const extra_count = *(int *)(data + numbers_bytes + count_bytes + sound_bytes);
+	size_t const bytes_left = room_for_lists - sound_bytes;
+
+	if (!CountFitsChunk(extra_count, sizeof(int), bytes_left) || (size_t)extra_count * sizeof(int) != bytes_left)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	index=*(int*) data;
 	data+=4;
 	
@@ -185,7 +257,7 @@ Placed_Hierarchy_Sequence_Chunk::Placed_Hierarchy_Sequence_Chunk(Chunk_With_Chil
 	flags=*(int*)data ;
 	data+=4;
 
-	sound_list_size=*(int*)data;
+	sound_list_size=sound_count;
 	data+=4;
 
 	if(sound_list_size)
@@ -202,7 +274,7 @@ Placed_Hierarchy_Sequence_Chunk::Placed_Hierarchy_Sequence_Chunk(Chunk_With_Chil
 		sound_list=0;
 	}
 		
-	num_extra_data=*(int*) data;
+	num_extra_data=extra_count;
 	data+=4;
 
 	if(num_extra_data)

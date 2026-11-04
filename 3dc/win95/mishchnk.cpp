@@ -4,6 +4,7 @@
 //   names and other text are copied using their exact measured length; level-editor code was removed
 //   a child chunk whose size cannot be real is refused
 //   a compressed level goes through the checked decoder, which knows the size of the file
+//   a module's points have to fit the box stored with its shape
 //   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
 //   rely on a whole level; object numbers are limited to what the object list can hold; so is a level with a
 //   shape that has more points than the game's list of points can hold
@@ -687,6 +688,13 @@ void File_Chunk::post_input_processing()
 		// could leave -1 on an object that had no number yet, and build_object_array leaves those out of its list.
 		if (!object_header || ol()->object_data.index_num > Object_Chunk::Max_Index_Num || object_header->shape_id_no < 0 ||
 			object_header->shape_id_no > highest_shape_number || !shape_array[object_header->shape_id_no])
+		{
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			delete[] shape_array;
+			return;
+		}
+
+		if (ol()->lookup_single_child ("MODULEDT") && !shape_array[object_header->shape_id_no]->points_fit_box())
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			delete[] shape_array;

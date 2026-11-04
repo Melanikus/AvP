@@ -15,6 +15,7 @@
 //   the two polygons of a merge pair must be triangles that share exactly one edge
 //   a chunk of morph frames must be exactly the size its count says, and hold no more frames than the game can count
 //   a textured polygon can't have the bit set that makes the game skip its texture coordinates
+//   a module's points have to fit the box stored with its shape
 //   a shape's centre is only made inside a shape, because it writes into the shape
 //   a chunk of texture animation must fit the polygons it names, and only a shape can have one
 
@@ -514,6 +515,26 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 	}
 
 	return animation_matches_shape (shape_chunk, point_count, polygon_count) && texture_animation_fits_shape (shape, shape_chunk);
+}
+
+// A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape, not from its points. In all
+// 12813 module shapes in the game's own levels the box is exact. Other shapes can't be held to this: 655 others have points outside
+// their box, by up to 5845, so only a module's shape is asked.
+bool Shape_Chunk::points_fit_box()
+{
+	for (int i = 0; i < shape_data.num_verts; i++)
+	{
+		ChunkVectorInt const & point = shape_data.v_list[i];
+
+		if (point.x < shape_data.min.x || point.x > shape_data.max.x
+			|| point.y < shape_data.min.y || point.y > shape_data.max.y
+			|| point.z < shape_data.min.z || point.z > shape_data.max.z)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 bool Shape_Chunk::numbers_are_valid()

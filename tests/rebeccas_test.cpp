@@ -55,6 +55,7 @@
 #include "bh_lift.h"
 #include "environment_chunk.hpp"
 #include "avp_chunk.hpp"
+#include "hierplace.hpp"
 #include "animation_chunk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -2167,6 +2168,180 @@ static void TestGeneratorSettings()
 	}
 }
 
+// 33. Three more chunks with counts that size a list. Each goes at the wall, so reading a byte past its end stops the test.
+static bool ConstructedAtTheWall(char const * bytes, size_t size, int kind)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size);
+	memcpy(atTheWall, bytes, size);
+
+	if (kind == 0)
+	{
+		new Placed_Hierarchy_Data_Chunk(&file, atTheWall, size);
+	}
+	else if (kind == 1)
+	{
+		new Placed_Hierarchy_Sequence_Chunk(&file, atTheWall, size);
+	}
+	else
+	{
+		new Rainbow6_Generator_Extra_Data_Chunk(&file, atTheWall, size);
+	}
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestPlacedHierarchies()
+{
+	puts("33. placed hierarchies, and Rainbow 6 generators");
+
+	alignas(int) static char bytes[256];
+
+	// A name of 3 letters takes 4 bytes. Then 40 bytes of numbers, 4 for the count, then the list.
+	size_t const numbersBytes = 4 + 12 + 16 + 8;
+	size_t const dataCountAt = 4 + numbersBytes;
+
+	struct DataRow { size_t size; int count; bool accepted; char const * what; };
+	DataRow const dataRows[] =
+	{
+		{ dataCountAt + 4,     0, true,  "a placed hierarchy with no extra numbers is accepted" },
+		{ dataCountAt + 12,    2, true,  "a placed hierarchy with two is accepted" },
+		{ dataCountAt + 4,     1, false, "a count too big for the chunk is refused" },
+		{ dataCountAt + 8,     0, false, "bytes left over are refused" },
+		{ dataCountAt + 4,    -1, false, "a negative count is refused" },
+		{ dataCountAt + 4, 0x40000001, false, "a count that wraps round is refused" },
+		{ dataCountAt,         0, false, "a chunk with no room for its count is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(dataRows) / sizeof(dataRows[0]); i++)
+	{
+		memset(bytes, 0, sizeof(bytes));
+		memcpy(bytes, "abc", 3);
+
+		if (dataRows[i].size >= dataCountAt + 4)
+		{
+			memcpy(bytes + dataCountAt, &dataRows[i].count, sizeof(int));
+		}
+
+		Check(ConstructedAtTheWall(bytes, dataRows[i].size, 0) == dataRows[i].accepted, dataRows[i].what);
+	}
+
+	memset(bytes, 'x', sizeof(bytes));
+	Check(!ConstructedAtTheWall(bytes, 60, 0), "a name with no end is refused");
+
+	// Five numbers, the count of sounds, 12 bytes for each sound, the count of extra numbers, then those.
+	size_t const soundCountAt = 20;
+
+	struct SequenceRow { size_t size; int sounds; int extras; bool accepted; char const * what; };
+	SequenceRow const sequenceRows[] =
+	{
+		{ 28, 0, 0, true,  "a sequence with no sounds is accepted" },
+		{ 52, 2, 0, true,  "a sequence with two sounds is accepted" },
+		{ 44, 1, 1, true,  "a sequence with a sound and an extra number is accepted" },
+		{ 24, 0, 0, false, "a chunk with no room for its second count is refused" },
+		{ 28, 1, 0, false, "more sounds than the chunk holds are refused" },
+		{ 28, -1, 0, false, "a negative count of sounds is refused" },
+		{ 28, 0x7fffffff, 0, false, "a huge count of sounds is refused" },
+		{ 28, 0x15555556, 0, false, "a count of sounds that wraps round is refused" },
+		{ 28, 0, 1, false, "more extra numbers than the chunk holds are refused" },
+		{ 28, 0, -1, false, "a negative count of extra numbers is refused" },
+		{ 32, 0, 0, false, "bytes left over after the lists are refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(sequenceRows) / sizeof(sequenceRows[0]); i++)
+	{
+		memset(bytes, 0, sizeof(bytes));
+
+		if (sequenceRows[i].size >= soundCountAt + 4)
+		{
+			memcpy(bytes + soundCountAt, &sequenceRows[i].sounds, sizeof(int));
+		}
+
+		// the second count follows the sounds, as long as they're a real number of sounds
+		if (sequenceRows[i].sounds >= 0 && sequenceRows[i].sounds <= 2 && soundCountAt + 8 + 12 * (size_t)sequenceRows[i].sounds <= sequenceRows[i].size)
+		{
+			memcpy(bytes + soundCountAt + 4 + 12 * sequenceRows[i].sounds, &sequenceRows[i].extras, sizeof(int));
+		}
+
+		Check(ConstructedAtTheWall(bytes, sequenceRows[i].size, 1) == sequenceRows[i].accepted, sequenceRows[i].what);
+	}
+
+	struct GeneratorRow { size_t size; int count; bool accepted; char const * what; };
+	GeneratorRow const generatorRows[] =
+	{
+		{ 12,  0, true,  "a Rainbow 6 generator with no list is accepted" },
+		{ 20,  2, true,  "a Rainbow 6 generator with a list is accepted" },
+		{ 24,  2, true,  "with no size measured from the game's levels, spare bytes are allowed" },
+		{ 16,  2, false, "a list too long for the chunk is refused" },
+		{ 16, -1, false, "a negative count is refused" },
+		{ 16, 0x40000001, false, "a count that wraps round is refused" },
+		{  8,  0, false, "a chunk with no room for its count is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(generatorRows) / sizeof(generatorRows[0]); i++)
+	{
+		memset(bytes, 0, sizeof(bytes));
+
+		if (generatorRows[i].size >= 12)
+		{
+			memcpy(bytes + 8, &generatorRows[i].count, sizeof(int));
+		}
+
+		Check(ConstructedAtTheWall(bytes, generatorRows[i].size, 2) == generatorRows[i].accepted, generatorRows[i].what);
+	}
+}
+
+// 34. A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape. So a module's points have to
+// fit that box. Other shapes don't have to: some of the game's own have points outside theirs.
+static void TestModuleBoxes()
+{
+	puts("34. a module's box");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const shapeNumber = 7;
+
+	struct BoxRow { bool module; int pointX; bool accepted; char const * what; };
+	BoxRow const rows[] =
+	{
+		{ true,  0, true,  "a module whose points fit its box is accepted" },
+		{ true,  1, false, "a module with a point past the top of its box is refused" },
+		{ true, -1, false, "a module with a point past the bottom of its box is refused" },
+		{ false, 1, true,  "an object that isn't a module can have a point outside its box" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const shapeBytesUsed = BuildShapeData(wholeShape, false, 4, triangle);
+		memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
+		memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &rows[i].pointX, sizeof(int));
+
+		new Shape_Chunk(&file, wholeShape, shapeBytesUsed);
+
+		size_t objectBytesUsed = BuildObject(5, shapeNumber);
+
+		if (rows[i].module)
+		{
+			PutChunk(objectBytes + objectBytesUsed, "MODULEDT", 0);
+			objectBytesUsed += ChunkHeaderBytes;
+		}
+
+		new Object_Chunk(&file, objectBytes, objectBytesUsed);
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -2196,6 +2371,8 @@ int main()
 	TestChunkBoundChecks();
 	TestTextureAnimation();
 	TestGeneratorSettings();
+	TestPlacedHierarchies();
+	TestModuleBoxes();
 
 	if (checksFailed)
 	{

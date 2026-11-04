@@ -73,6 +73,7 @@ public:
 
 	// says whether the numbers that give this shape's size can be real. See the function itself.
 	bool numbers_are_valid();
+	bool points_fit_box();
 
 	// I want the external file load to be as transparent as possible
 	// i.e. we have a shape which is loaded as usaul - it should then
