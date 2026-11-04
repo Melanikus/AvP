@@ -5,6 +5,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   with the surface pictures, a shadow's start depends on the polygon and the light, not on where the camera is
 //   a still light and a still shape keep their shadow prisms on the graphics card, and the prisms are only worked out again if something moves
+//   the same for a polygon's flat surface worked out each frame
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -3829,14 +3830,24 @@ static int vertsOutOfRange = 0;
 // game wait for the card, so a report frame then takes many times as long, and it shows as a hitch every few seconds. It's off unless asked for.
 int ShadowsFullReport = 0;
 
-// pts holds at least three points. Gives back twice the area of the triangle they make.
-static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
+// pts holds count points, at least three. Gives back twice the area of the polygon. Its way round comes from all its triangles, because its first three
+// corners can be almost in a line, and then their triangle can point anywhere: see polygon_facing.h, which is the same sum for shapes.
+static float ToyWorkOutSurface(const ToyVec *pts, int count, ToyFlatSurface &surface)
 {
 	float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
 	float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
-	float const nx = ay * bz - az * by;
-	float const ny = az * bx - ax * bz;
-	float const nz = ax * by - ay * bx;
+	float nx = 0.0f, ny = 0.0f, nz = 0.0f;
+
+	for (int i = 1; i < count - 1; i++)
+	{
+		float const ux = pts[i].x - pts[0].x, uy = pts[i].y - pts[0].y, uz = pts[i].z - pts[0].z;
+		float const vx = pts[i + 1].x - pts[0].x, vy = pts[i + 1].y - pts[0].y, vz = pts[i + 1].z - pts[0].z;
+
+		nx += uy * vz - uz * vy;
+		ny += uz * vx - ux * vz;
+		nz += ux * vy - uy * vx;
+	}
+
 	float const length = sqrtf(nx * nx + ny * ny + nz * nz);
 
 	float const sideA = ax * ax + ay * ay + az * az;
@@ -3948,7 +3959,7 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 	}
 	else
 	{
-		ToyWorkOutSurface(&toyCasterPoints[firstPoint], surface);
+		ToyWorkOutSurface(&toyCasterPoints[firstPoint], count, surface);
 	}
 
 	// A polygon with two sides can be seen on either, so its shadow can't count on the side away from the light being unlit. A cloaked
@@ -4005,7 +4016,7 @@ static void ToyCheckStoredPlanes(const float *axes)
 		}
 
 		ToyFlatSurface corners;
-		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], corners) * 0.5f;
+		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], corners) * 0.5f;
 
 		float const x = stored.nx * axes[0] + stored.ny * axes[3] + stored.nz * axes[6];
 		float const y = stored.nx * axes[1] + stored.ny * axes[4] + stored.nz * axes[7];
@@ -4074,7 +4085,7 @@ static void CheckNoPolygonSeenFromBehind()
 		behind[which]++;
 
 		ToyFlatSurface corners;
-		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], corners) * 0.5f;
+		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], corners) * 0.5f;
 
 		if (area > largest)
 		{
@@ -4696,7 +4707,7 @@ static void ToyAddTestBox(const float *light, const float *centre)
 	{
 		ToyVec const points[4] = { corners[kFaces[face][0]], corners[kFaces[face][1]], corners[kFaces[face][2]], corners[kFaces[face][3]] };
 		ToyFlatSurface surface;
-		ToyWorkOutSurface(points, surface);
+		ToyWorkOutSurface(points, 4, surface);
 		ToyAddPrism(points, 4, surface, light, centre, false);
 	}
 }

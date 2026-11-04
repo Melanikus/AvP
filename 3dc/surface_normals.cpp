@@ -39,6 +39,7 @@
 #include "surface_normals.h"
 #include "static_level.h"
 #include "surface_tangent.h"
+#include "polygon_facing.h"
 #include "texture_relief.h"
 #include "d3_func.h"
 #include "VertexBuffer.h"
@@ -179,31 +180,35 @@ static void WorkOutPolygon(const SHAPEHEADER *shape, int polygonNumber, SurfaceP
 	const POLYHEADER *polygon = (const POLYHEADER *)shape->items[polygonNumber];
 	const VECTORCH *points = (const VECTORCH *)*shape->points;
 	const int *corners = &polygon->Poly1stPt;
+	int count = 0;
 
-	for (int corner = 0; corner < 3; corner++)
+	while (count < kCornersInList && corners[count] != kTerminationMarker)
 	{
-		if (corners[corner] < 0 || corners[corner] >= shape->numpoints)
+		if (corners[count] < 0 || corners[count] >= shape->numpoints)
 		{
 			return;
 		}
+
+		count++;
+	}
+
+	if (count < 3)
+	{
+		return;
 	}
 
 	VECTORCH const &first = points[corners[0]];
-	VECTORCH const &second = points[corners[1]];
-	VECTORCH const &third = points[corners[2]];
 
-	double const ax = (double)second.vx - first.vx, ay = (double)second.vy - first.vy, az = (double)second.vz - first.vz;
-	double const bx = (double)third.vx - first.vx, by = (double)third.vy - first.vy, bz = (double)third.vz - first.vz;
+	// the way the polygon faces, from the whole of it: see polygon_facing.h
+	double face[3];
+	PolygonFacing(points, corners, count, face);
 
-	// the way the polygon faces, from two of its sides
-	double const faceX = ay * bz - az * by;
-	double const faceY = az * bx - ax * bz;
-	double const faceZ = ax * by - ay * bx;
+	double const faceX = face[0], faceY = face[1], faceZ = face[2];
 	double const faceLength = sqrt(faceX * faceX + faceY * faceY + faceZ * faceZ);
 
 	if (faceLength < 0.001)
 	{
-		return;   // three corners in a line: no area, no flat surface
+		return;   // all its corners are in a line: no area, no flat surface
 	}
 
 	double const nx = -faceX / faceLength, ny = -faceY / faceLength, nz = -faceZ / faceLength;

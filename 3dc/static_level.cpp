@@ -29,6 +29,7 @@
 #include "static_level.h"
 #include "3dc.h"
 #include "surface_tangent.h"
+#include "polygon_facing.h"
 
 #include <math.h>
 #include <string.h>
@@ -156,26 +157,6 @@ static int CountCorners(const POLYHEADER *polygon, int numPoints)
 	return 0;
 }
 
-// Which way a polygon's corners go round, added up over its triangles so that a first triangle with no area can't mislead it.
-static void CornerFacing(const VECTORCH *points, const int *corners, int count, double *facing)
-{
-	facing[0] = 0.0;
-	facing[1] = 0.0;
-	facing[2] = 0.0;
-
-	VECTORCH const &first = points[corners[0]];
-
-	for (int i = 1; i < count - 1; i++)
-	{
-		double const ax = (double)points[corners[i]].vx - first.vx, ay = (double)points[corners[i]].vy - first.vy, az = (double)points[corners[i]].vz - first.vz;
-		double const bx = (double)points[corners[i + 1]].vx - first.vx, by = (double)points[corners[i + 1]].vy - first.vy, bz = (double)points[corners[i + 1]].vz - first.vz;
-
-		facing[0] += ay * bz - az * by;
-		facing[1] += az * bx - ax * bz;
-		facing[2] += ax * by - ay * bx;
-	}
-}
-
 // Everything about one polygon that can be wrong. Gives back why it's refused, or nothing. polygon->PolyFlags has already said this one goes in.
 static const char *CheckPolygon(const SHAPEHEADER *shape, const POLYHEADER *polygon, const std::vector<char> &animatedLists, const StaticLevelSetup &setup, PolygonToPlace *out)
 {
@@ -202,7 +183,7 @@ static const char *CheckPolygon(const SHAPEHEADER *shape, const POLYHEADER *poly
 	out->twoSided = noNormal || (polygon->PolyFlags & iflag_no_bfc) != 0;
 
 	double facing[3];
-	CornerFacing((const VECTORCH *)*shape->points, &polygon->Poly1stPt, corners, facing);
+	PolygonFacing((const VECTORCH *)*shape->points, &polygon->Poly1stPt, corners, facing);
 	out->turnedRound = !out->twoSided && facing[0] * stored.vx + facing[1] * stored.vy + facing[2] * stored.vz < 0.0;
 	out->recipWidth = 0.0f;
 	out->recipHeight = 0.0f;
