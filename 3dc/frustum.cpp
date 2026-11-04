@@ -10,6 +10,8 @@
 //   the polygon clipping is one whole macro (Clip_Polygon) instead of a start and an end macro, so code scanners
 //   can read it; the compiled code is the same;
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   clipping leaves corners out rather than write past the end of its lists
 
 #if 1
 
@@ -24,6 +26,7 @@
 #include "kzsort.h"
 #include "frustum.h"
 #include "particle.h"
+#include "logstring.h"
 #define UseLocalAssert Yes
 #include "ourasert.h"
 
@@ -196,7 +199,28 @@ void SetFrustumType(enum FrustumType frustumType)
    The calling function sets up curVertexPtr, outputVerticesPtr, verticesLeft, numberOfPointsOutputted and
    curVertexInside first. This is one whole macro, so its brackets balance on their own: code scanners read
    macros as written, and they could not follow the old version, which was split into a start and an end macro
-   with the brackets opened in one and closed in the other. The code it makes is exactly what the old one made. */
+   with the brackets opened in one and closed in the other.
+
+   The two lists it copies between, VerticesBuffer and RenderPolygon.Vertices, hold maxpolypts corners, and every cut
+   can add some. A flat polygon with no dent gets one more for each cut when the first corner is tested properly,
+   which is where nine comes from. A twisted one can get more. So can any polygon while USE_FRUSTUM_CULL is off,
+   because each cut then assumes its first corner is on the visible side. So a full list leaves the rest of the corners
+   out. All that goes wrong is that the polygon has the wrong shape for that frame. Up to maxpolypts nothing changes. */
+static_assert(sizeof(VerticesBuffer) / sizeof(VerticesBuffer[0]) == maxpolypts, "Clip_Polygon stops at maxpolypts, so both of its lists have to hold that many");
+static_assert(sizeof(RenderPolygon.Vertices) / sizeof(RenderPolygon.Vertices[0]) == maxpolypts, "Clip_Polygon stops at maxpolypts, so both of its lists have to hold that many");
+
+/* Says once that clipping had to leave corners out, so a log can show whether that ever happens in a real game */
+static void Clip_NoteCornersLeftOut(void)
+{
+	static bool alreadySaid = false;
+
+	if (!alreadySaid)
+	{
+		alreadySaid = true;
+		LogString("Clipping made more corners than a polygon can hold, so the extra ones were left out. Any more like it won't be logged.");
+	}
+}
+
 #define Clip_Polygon(b, Test, Lambda, OutputXYZ, OutputAttributes) \
 	do \
 	{ \
@@ -216,8 +240,15 @@ void SetFrustumType(enum FrustumType frustumType)
 		/* if current vertex is inside the plane, output it */ \
 		if (curVertexInside) \
 		{ \
-			numberOfPointsOutputted++; \
-			*outputVerticesPtr++ = *curVertexPtr; \
+			if (numberOfPointsOutputted < maxpolypts) \
+			{ \
+				numberOfPointsOutputted++; \
+				*outputVerticesPtr++ = *curVertexPtr; \
+			} \
+			else \
+			{ \
+				Clip_NoteCornersLeftOut(); \
+			} \
 		} \
  \
 		/* test if next vertex is inside the plane */ \
@@ -226,13 +257,20 @@ void SetFrustumType(enum FrustumType frustumType)
 		/* if one is in, and the other is out, output a clipped vertex */ \
 		if (nextVertexInside != curVertexInside) \
 		{ \
-			int lambda; \
+			if (numberOfPointsOutputted < maxpolypts) \
+			{ \
+				int lambda; \
  \
-			lambda = Lambda; \
-			OutputXYZ \
-			OutputAttributes \
-			numberOfPointsOutputted++; \
-			outputVerticesPtr++; \
+				lambda = Lambda; \
+				OutputXYZ \
+				OutputAttributes \
+				numberOfPointsOutputted++; \
+				outputVerticesPtr++; \
+			} \
+			else \
+			{ \
+				Clip_NoteCornersLeftOut(); \
+			} \
 		} \
  \
 		/* okay, now the current vertex becomes what was the next vertex */ \
