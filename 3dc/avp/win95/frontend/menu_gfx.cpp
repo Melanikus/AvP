@@ -2,7 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the small font's letter widths are looked up with an unsigned byte, so it no longer matters how the compiler
 //   treats a plain char; the wrapped text function stops counting a word's width at a limit, so a huge word in a
-//   file cannot make the sum overflow
+//   file cannot make the sum overflow; the size of the menu font picture is checked before it is used
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
@@ -172,13 +172,32 @@ static void LoadMenuFont(void)
 
 	introFontRIM.GetDimensions(width, height);
 
+	// The size of this picture comes from the file, so it is checked before anything relies on it. The picture is one
+	// long strip of letters, one letter wide, with each letter under the one before it. The game's own picture is
+	// 30 wide and 7392 tall, which is 224 letters, and that is exactly what these two limits allow, so they must not
+	// get any tighter:
+	//  - width: the code that copies the letters into the texture (R_CreateTallFontTexture) takes exactly one letter's
+	//    width from each row, so a narrower picture would make it read past the end of the picture.
+	//  - height: FontWidth has a slot for each character code, and the letters start at code 32 (the space), so more
+	//    letters than the slots left would be written past the end of FontWidth.
+	// A picture that fails is treated as a missing one. With these limits the buffer's size below is under a megabyte,
+	// so the sum can't get too big for a number to hold, as it could with any size a file chose.
+	const uint32_t numChars = height / IntroFont_Light.charHeight;
+	const uint32_t numFontWidthSlots = sizeof(IntroFont_Light.FontWidth) / sizeof(IntroFont_Light.FontWidth[0]);
+
+	if ((width != IntroFont_Light.charWidth) || (numChars > numFontWidthSlots - 32))
+	{
+		Con_PrintError("Menus/IntroFont.RIM is the wrong size for the menu font");
+		return;
+	}
+
 	// allocate buffer to decode into
 	uint8_t *srcBuffer = new uint8_t[width*height*4];
 	introFontRIM.Decode(srcBuffer, width*4);
 
 	uint8_t *srcPtr = srcBuffer;
 
-	IntroFont_Light.numchars = height / IntroFont_Light.charHeight;
+	IntroFont_Light.numchars = numChars;
 	IntroFont_Light.FontWidth[32] = 5;
 
 	for (int c = 33; c < (32+IntroFont_Light.numchars); c++)
