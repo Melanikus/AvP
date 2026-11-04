@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   when the computer has no memory left to give, the game now stops with a clear message, instead of carrying
-//   on with nothing and crashing somewhere else
+//   on with nothing and crashing somewhere else; a block can now change size, and a list can be asked for by
+//   count, with the same promise
 #include "3dc.h"
 
 #include <malloc.h>
@@ -69,6 +70,40 @@ void *AllocMem(size_t __size)
 	}
 
 	return block;
+}
+
+/*
+	Changes the size of a block from AllocMem and keeps what is in it. When realloc fails it answers 0 and leaves the old
+	block where it was, so the usual p = realloc(p, n) loses the block as well. There is nothing to rescue here: the game
+	stops, as it does in AllocMem, so the answer never needs checking.
+*/
+void *ReallocMem(void *__ptr, size_t __size)
+{
+	GLOBALASSERT(__size>0);
+
+	void *block = realloc(__ptr, __size);
+	if (!block)
+	{
+		StopGameOutOfMemory(__size);
+	}
+
+	return block;
+}
+
+/*
+	Asks for room for a list of __count things of __size bytes each. The count often comes from a file, and a big enough
+	count times the size is more than a number can hold: it wraps round to a small number, and the list comes out far
+	too short for its count. A list that size could never fit in memory anyway, so it stops the game like any other
+	request that cannot be met. A negative count from a file arrives here as a huge one, and stops the same way.
+*/
+void *AllocArrayMem(size_t __count, size_t __size)
+{
+	if (__size != 0 && __count > (size_t)-1 / __size)
+	{
+		StopGameOutOfMemory((size_t)-1);
+	}
+
+	return AllocMem(__count * __size);
 }
 
 /* Note: Never use DeallocMem directly !  */
