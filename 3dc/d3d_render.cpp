@@ -5578,6 +5578,8 @@ static void ShootCrossKeptPrisms(const KeptGroup &group, const float *light, con
 {
 	// this isn't work the frame did, so it stays out of the frame's numbers
 	ToyLightReport *const noteLight = toyNoteLight;
+	int const leftOut = toyPrismsLeftOut, outOfRange = prismsOutOfRange, vertsOut = vertsOutOfRange, stretchCorners = toyStretchCorners;
+	double const stretchTotal = toyStretchTotal;
 	int corners = 0;
 
 	toyNoteLight = 0;
@@ -5587,6 +5589,11 @@ static void ShootCrossKeptPrisms(const KeptGroup &group, const float *light, con
 
 	shootCrossingRoute = kShootRouteNone;
 	toyNoteLight = noteLight;
+	toyPrismsLeftOut = leftOut;
+	prismsOutOfRange = outOfRange;
+	vertsOutOfRange = vertsOut;
+	toyStretchCorners = stretchCorners;
+	toyStretchTotal = stretchTotal;
 
 	ShadowShoot_NoteKeptGroup(cornersOnCard, corners, whole);
 }
@@ -6604,6 +6611,19 @@ static void ShadowStatus_Draw()
 	}
 }
 
+// Puts the shoot tool's words on the screen, if it has any.
+static void ShootSayWords(const char *words)
+{
+	static char shootWords[64];
+
+	if (words)
+	{
+		_snprintf(shootWords, sizeof(shootWords) - 1, "%s", words);
+		shootWords[sizeof(shootWords) - 1] = 0;
+		NewOnScreenMessage(shootWords);
+	}
+}
+
 // Shows the polygon last shot in green and each stopped polygon in red, so that anyone can see it's the one they meant. The colour stays on what's nearest, and the outline shows through
 // anything, so a polygon with something in front of it can still be found. Its corners are where it was when it was shot, so on something moving, it stays behind.
 static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
@@ -6730,7 +6750,6 @@ static void ToyShadows_Draw()
 		// F9 shoots, F10 stops the polygon last shot from casting, and F5 undoes the newest stop. See shadow_shoot.cpp. The game leaves these three keys alone.
 		if (ShadowShootOn)
 		{
-			static char shootWords[64];
 			const char *words = 0;
 
 			if (DebouncedKeyboardInput[KEY_F9])
@@ -6740,7 +6759,7 @@ static void ToyShadows_Draw()
 
 			if (DebouncedKeyboardInput[KEY_F10])
 			{
-				words = ShadowShoot_StopCasting();
+				words = ShadowShoot_StopCasting(!KeptPrismsOff);
 			}
 
 			if (DebouncedKeyboardInput[KEY_F5])
@@ -6748,12 +6767,7 @@ static void ToyShadows_Draw()
 				words = ShadowShoot_UndoStop();
 			}
 
-			if (words)
-			{
-				_snprintf(shootWords, sizeof(shootWords) - 1, "%s", words);
-				shootWords[sizeof(shootWords) - 1] = 0;
-				NewOnScreenMessage(shootWords);
-			}
+			ShootSayWords(words);
 		}
 	}
 
@@ -6791,6 +6805,11 @@ static void ToyShadows_Draw()
 
 	if (!report.lights)
 	{
+		if (ShadowShootOn)
+		{
+			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, (toyNumCasters || numWalkedGroups) ? "this frame has no lights chosen" : "nothing on this frame casts a shadow"));
+		}
+
 		if (logThisFrame)
 		{
 			ToyLogFrame(report);
@@ -6818,6 +6837,11 @@ static void ToyShadows_Draw()
 	}
 	if (FAILED(report.block))
 	{
+		if (ShadowShootOn)
+		{
+			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, "the card's settings couldn't be saved on this frame"));
+		}
+
 		if (logThisFrame)
 		{
 			ToyLogFrame(report);
@@ -6856,7 +6880,7 @@ static void ToyShadows_Draw()
 		{
 			toyFrame, AVP_BUILD_COMMIT, ToyShadows_RoomName(), view, toyCameraInWorld,
 			d3d.matProjection._11, d3d.matProjection._22, d3d.matProjection._33, d3d.matProjection._43,
-			crosshairX, crosshairY, KeptSnap == 2, ShadowVolumesCard_CornersAreCut()
+			crosshairX, crosshairY, KeptSnap == 2, ShadowVolumesCard_CornersAreCut(), ToyShadowsTest != 0
 		};
 
 		ShadowShoot_StartFrame(device, facts);
@@ -7256,6 +7280,11 @@ static void ToyShadows_Draw()
 	if (capturingFrame)
 	{
 		NoteCaptureNumbers(toyFrame, lights, lightOwners, report.lights, pixelsByLight);
+
+		if (ShadowShootOn)
+		{
+			ShadowCapture_AddNumbers("-shadowshoot is on, so these pictures can have its green and red tints on them\n");
+		}
 	}
 
 	if (ShadowFlickerOn)
@@ -7267,6 +7296,7 @@ static void ToyShadows_Draw()
 	{
 		ShadowShoot_EndFrame(device, lights, report.lights, screen != 0, toyMaskSurface, toyDepthSurface, toyDepthTexture);
 		ShootDrawTints(device);
+		ShootSayWords(ShadowShoot_EndOfEveryFrame());
 	}
 
 	{

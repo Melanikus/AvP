@@ -22,6 +22,9 @@ struct ShootTarget
 	int behaviour;         // what the object is, from AVP_BEHAVIOUR_TYPE, or -1
 	int flags;             // the polygon's PolyFlags
 	bool isPartOfAModel;
+	bool hasSimplerVersions;   // a part of a model that's swapped for a simpler shape at a distance, whose polygons are numbered differently
+	bool partWasReplaced;      // a part of a model given another shape, so what's drawn isn't the shape the ray tested
+	bool isMorphing;           // like a door: the ray tested it in between two shapes, and these corners are its first shape
 	int distance;          // how far along the ray, as the game worked it out
 	int point[3];          // where in the world, as the game worked it out
 	float arrow[3];        // straight out of the side the ray hit
@@ -43,6 +46,7 @@ struct ShootFrameFacts
 	int crosshairX, crosshairY;
 	bool farCornersExact;   // -keptsnapfar
 	bool cornersCut;        // kept and walked corners are finished by volumeCut.vsh
+	bool testBoxesOn;       // -shadowtest, whose boxes are drawn but aren't anyone's polygon
 };
 
 // These three are in kshape.cpp, which knows the game's shapes. FindTarget sends a ray from the camera, along direction, a line 1 long in the world. ShapeNumber gives a shape's number
@@ -51,10 +55,16 @@ void ShadowShoot_FindTarget(const float *direction, ShootTarget *target);
 int ShadowShoot_ShapeNumber(const void *shape);
 void ShadowShoot_CrosshairPixel(int *x, int *y);
 
-// The keys. These two give back words for the screen.
+// The keys. These two give back words for the screen. keptPrismsOn says whether a stop also moves its shape off the kept route.
 void ShadowShoot_AskForShot();
-const char *ShadowShoot_StopCasting();
+const char *ShadowShoot_StopCasting(bool keptPrismsOn);
 const char *ShadowShoot_UndoStop();
+
+// This frame can't take a shot that was asked for. That press is dropped, so it can't go off later somewhere else. why is said in the log. Gives back words for the screen, or nothing if no shot was asked for.
+const char *ShadowShoot_DropAskedShot(int frame, const char *why);
+
+// Every frame that gets as far as its prisms, at the end. It says whether a new stop stopped anything. Gives back words for the screen, or nothing.
+const char *ShadowShoot_EndOfEveryFrame();
 
 bool ShadowShoot_IsStopped(const void *shape, int polygon);
 bool ShadowShoot_ShapeHasStops(const void *shape);

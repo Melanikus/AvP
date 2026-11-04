@@ -16,7 +16,11 @@
 //
 // A SHOT MUSTN'T CHANGE WHAT IT MEASURES: those test quads write nothing, not to the screen, the depth buffer or the stencil. Every setting is saved first and put back after, and the
 // settings changed are compared with what they were, and the log says if any differ. The one exception is at the very end of the frame, when each lamp's share is run on the mask at that
-// one pixel, and by then nothing needs the mask until the next frame clears it. If the card stops answering, the shot gives up asking after one wait of half a second and the log says so.
+// one pixel, and by then nothing needs the mask until the next frame clears it.
+//
+// A SHOT MUSTN'T HANG THE GAME: if the card doesn't answer a question within half a second, the shot asks nothing more of it, and the log says so. The whole shot also has a limit of a few seconds,
+// after which the same happens. Copying a picture back can't be timed out, because Direct3D 9 only offers a call that waits, so one already started has to finish, but no more are started. The block always says
+// how long the shot took. Before reading anything, the card is asked two questions with known answers. If it gets those wrong, nothing it says can be believed, so nothing is read.
 //
 // KEPT PRISMS are on the card and can't be read back, so on a shot's frame they're worked out again, the same way they were first made. That gives the same numbers, as long as the
 // light and the shape haven't changed, and they can't have, because those are what a kept prism is found by. Their corner count is compared with the card's copy as a check.
@@ -96,8 +100,15 @@ struct ShootPass
 static bool shotAsked = false;
 static int shotsTaken = 0;
 
+static const double kShotMostSeconds = 5.0;
+static const double kOneAnswerMostSeconds = 0.5;
+
 static IDirect3DQuery9 *shotQuery = 0;
+static LARGE_INTEGER shotStartedAt;
 static bool cardStoppedAnswering = false;
+static bool shotRanOutOfTime = false;
+static bool cardAnswersMakeNoSense = false;
+static bool depthReadAsNothing = false;   // the depth buffer read as its very first level, which nothing drawn can be at
 static int settingsNotSaved = 0;       // how many reads of this shot were skipped, because the card's settings couldn't be saved first
 static int settingsNotPutBack = 0;     // how many times a setting wasn't what it had been, after being put back
 
@@ -111,6 +122,7 @@ static float cameraPlace[3];
 static double projection33 = 1.0, projection43 = -64.0;
 static bool farExact = false;
 static bool cutCorners = false;
+static bool testBoxesOn = false;
 static int frameNumber = 0;
 static const char *frameCommit = "";
 static const char *frameRoom = "";
@@ -131,6 +143,8 @@ static int passesOfLight[kToyMostLights];
 static ShootStopList stops = { { 0 }, { 0 }, 0 };
 static float stopCorners[kShootMostStops][kShootMostCorners * 3];
 static int stopNumCorners[kShootMostStops];
+static int matchesOfNewStop = 0;       // how many prisms the newest stop has kept from being made, since it was pressed
+static bool newStopToReportOn = false;
 
 static char wordsForTheScreen[64];
 
@@ -154,13 +168,33 @@ void ShadowShoot_AskForShot()
 	shotAsked = true;
 }
 
-const char *ShadowShoot_StopCasting()
+const char *ShadowShoot_DropAskedShot(int frame, const char *why)
+{
+	if (!shotAsked)
+	{
+		return 0;
+	}
+
+	shotAsked = false;
+	Write("shoot: frame %d: no shot, because %s. The press is dropped", frame, why);
+
+	return "SHOOT: NO SHOT ON THIS FRAME, SEE THE LOG";
+}
+
+const char *ShadowShoot_StopCasting(bool keptPrismsOn)
 {
 	wordsForTheScreen[sizeof(wordsForTheScreen) - 1] = 0;
 
 	if (!haveTarget || !target.found)
 	{
 		return "SHOOT: NOTHING SHOT YET";
+	}
+
+	// The ray tested the shape in this part's plan, so the number means nothing on the shape it has now.
+	if (target.partWasReplaced)
+	{
+		LogString("shoot: nothing stopped: this part of a model has been given another shape, so the polygon the ray found isn't a polygon of the shape it casts");
+		return "SHOOT: THAT PART WAS REPLACED, NOTHING STOPPED";
 	}
 
 	int const place = stops.Add(target.shape, target.polygon);
@@ -174,7 +208,15 @@ const char *ShadowShoot_StopCasting()
 	memcpy(stopCorners[place], target.corners, sizeof(stopCorners[place]));
 	stopNumCorners[place] = target.numCorners;
 
+	matchesOfNewStop = 0;
+	newStopToReportOn = true;
+
 	Write("shoot: shape %d polygon %d no longer casts from any light, on every copy of that shape", target.shapeNumber, target.polygon);
+
+	if (keptPrismsOn)
+	{
+		LogString("shoot: with kept prisms on, every polygon of that shape now goes the ordinary way, not just this one. So a flicker going away now may be that change of route, and not this polygon");
+	}
 
 	_snprintf(wordsForTheScreen, sizeof(wordsForTheScreen) - 1, "SHOOT: SHAPE %d POLYGON %d STOPPED", target.shapeNumber, target.polygon);
 	return wordsForTheScreen;
@@ -197,7 +239,37 @@ const char *ShadowShoot_UndoStop()
 
 bool ShadowShoot_IsStopped(const void *shape, int polygon)
 {
-	return stops.Has(shape, polygon);
+	if (!stops.Has(shape, polygon))
+	{
+		return false;
+	}
+
+	if (stops.count > 0 && stops.shapes[stops.count - 1] == shape && stops.polygons[stops.count - 1] == polygon)
+	{
+		matchesOfNewStop++;
+	}
+
+	return true;
+}
+
+const char *ShadowShoot_EndOfEveryFrame()
+{
+	if (!newStopToReportOn)
+	{
+		return 0;
+	}
+
+	newStopToReportOn = false;
+
+	if (matchesOfNewStop > 0)
+	{
+		Write("shoot: that stop matched %d polygons being cast on this frame, one for each pass that reached it", matchesOfNewStop);
+		return 0;
+	}
+
+	LogString("shoot: THAT STOP MATCHED NOTHING on this frame. Either no light reaches that polygon just now, or it isn't what's being cast: a distant model casts a simpler shape, and a part can be given another");
+
+	return "SHOOT: THAT STOP MATCHED NOTHING THIS FRAME";
 }
 
 bool ShadowShoot_ShapeHasStops(const void *shape)
@@ -241,6 +313,7 @@ void ShadowShoot_LevelEnded()
 	stops.count = 0;
 	haveTarget = false;
 	shotAsked = false;
+	newStopToReportOn = false;
 }
 
 void ShadowShoot_ReleaseCardThings()
@@ -371,10 +444,40 @@ static void SetOnePixelState(LPDIRECT3DDEVICE9 device)
 	device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
 }
 
+static double SecondsSince(const LARGE_INTEGER &then)
+{
+	LARGE_INTEGER now, ticksPerSecond;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&ticksPerSecond);
+
+	return (double)(now.QuadPart - then.QuadPart) / (double)ticksPerSecond.QuadPart;
+}
+
+// Is anything more to be asked of the card? This is what stops a shot once it has gone wrong or gone on too long.
+static bool ShotMayAskMore()
+{
+	if (cardStoppedAnswering || cardAnswersMakeNoSense || shotRanOutOfTime)
+	{
+		return false;
+	}
+
+	if (SecondsSince(shotStartedAt) > kShotMostSeconds)
+	{
+		shotRanOutOfTime = true;
+		return false;
+	}
+
+	return true;
+}
+
 // The card stopped answering, or the device has gone. Nothing more is asked of it for this shot, so that this costs one wait and no more.
 static void GiveUpAsking()
 {
-	cardStoppedAnswering = true;
+	if (!shotRanOutOfTime && !cardAnswersMakeNoSense)
+	{
+		cardStoppedAnswering = true;
+	}
 
 	if (shotQuery)
 	{
@@ -397,6 +500,12 @@ static bool PixelPasses(LPDIRECT3DDEVICE9 device, float depth)
 		return false;
 	}
 
+	if (!ShotMayAskMore())
+	{
+		GiveUpAsking();
+		return false;
+	}
+
 	ScreenCorner const quad[4] =
 	{
 		{ 0.0f,      0.0f,       depth, 1.0f, 0 },
@@ -409,9 +518,8 @@ static bool PixelPasses(LPDIRECT3DDEVICE9 device, float depth)
 	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(ScreenCorner));
 	shotQuery->Issue(D3DISSUE_END);
 
-	LARGE_INTEGER started, now, ticksPerSecond;
+	LARGE_INTEGER started;
 	QueryPerformanceCounter(&started);
-	QueryPerformanceFrequency(&ticksPerSecond);
 
 	DWORD counted = 0;
 	HRESULT result;
@@ -419,8 +527,7 @@ static bool PixelPasses(LPDIRECT3DDEVICE9 device, float depth)
 	do
 	{
 		result = shotQuery->GetData(&counted, sizeof(counted), D3DGETDATA_FLUSH);
-		QueryPerformanceCounter(&now);
-	} while (result == S_FALSE && now.QuadPart - started.QuadPart < ticksPerSecond.QuadPart / 2);
+	} while (result == S_FALSE && SecondsSince(started) < kOneAnswerMostSeconds);
 
 	if (result != S_OK)
 	{
@@ -429,6 +536,27 @@ static bool PixelPasses(LPDIRECT3DDEVICE9 device, float depth)
 	}
 
 	return counted > 0;
+}
+
+// Two questions with known answers. A quad can't fail with a depth test that always passes, and it can't pass with one that never does. A card or driver that gets these wrong has nothing to say that can be believed.
+static bool CardAnswersMakeSense(LPDIRECT3DDEVICE9 device)
+{
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+
+	bool const passedWhenItMust = PixelPasses(device, 0.5f);
+
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_NEVER);
+
+	bool const passedWhenItCant = PixelPasses(device, 0.5f);
+
+	// not answering is a different fault, and it's already been noted
+	if (!shotQuery)
+	{
+		return true;
+	}
+
+	return passedWhenItMust && !passedWhenItCant;
 }
 
 // What's in the depth buffer at the pixel, in the buffer's steps. A quad passes if it's no further than what's there, so this looks for the furthest quad that still passes.
@@ -489,6 +617,11 @@ static bool ReadPixel(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, floa
 	bool read = false;
 
 	numbers[0] = numbers[1] = numbers[2] = numbers[3] = 0.0f;
+
+	if (!ShotMayAskMore())
+	{
+		return false;
+	}
 
 	if (!picture || FAILED(picture->GetDesc(&size)) || shotPixelX < 0 || shotPixelY < 0 || (UINT)shotPixelX >= size.Width || (UINT)shotPixelY >= size.Height
 		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
@@ -587,6 +720,7 @@ void ShadowShoot_StartFrame(LPDIRECT3DDEVICE9 device, const ShootFrameFacts &fac
 	memcpy(cameraPlace, facts.cameraInWorld, sizeof(cameraPlace));
 	farExact = facts.farCornersExact;
 	cutCorners = facts.cornersCut;
+	testBoxesOn = facts.testBoxesOn;
 	frameNumber = facts.frame;
 	frameCommit = facts.commit;
 	frameRoom = facts.room;
@@ -636,9 +770,13 @@ void ShadowShoot_StartFrame(LPDIRECT3DDEVICE9 device, const ShootFrameFacts &fac
 
 	depthRead = false;
 	bufferLevel = 0.0;
+	depthReadAsNothing = false;
 	cardStoppedAnswering = false;
+	shotRanOutOfTime = false;
+	cardAnswersMakeNoSense = false;
 	settingsNotSaved = 0;
 	settingsNotPutBack = 0;
+	QueryPerformanceCounter(&shotStartedAt);
 
 	if (FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &shotQuery)))
 	{
@@ -653,7 +791,24 @@ void ShadowShoot_StartFrame(LPDIRECT3DDEVICE9 device, const ShootFrameFacts &fac
 		if (SaveSettings(device, &settings))
 		{
 			SetOnePixelState(device);
-			depthRead = ReadDepthBuffer(device, &bufferLevel);
+
+			if (CardAnswersMakeSense(device))
+			{
+				depthRead = ReadDepthBuffer(device, &bufferLevel);
+
+				// Level 0 is the near plane itself, and nothing is drawn there. A card saying that is more likely to be saying "no" to everything.
+				if (depthRead && bufferLevel == 0.0)
+				{
+					depthRead = false;
+					depthReadAsNothing = true;
+				}
+			}
+			else
+			{
+				cardAnswersMakeNoSense = true;
+				GiveUpAsking();
+			}
+
 			PutSettingsBack(device, &settings);
 		}
 	}
@@ -902,6 +1057,11 @@ static bool ReadShare(LPDIRECT3DDEVICE9 device, const float *light, IDirect3DSur
 	D3DRECT const clearing = { shotPixelX, shotPixelY, shotPixelX + 1, shotPixelY + 1 };
 	float numbers[4];
 
+	if (!ShotMayAskMore())
+	{
+		return false;
+	}
+
 	device->SetRenderTarget(0, mask);
 	device->SetViewport(&viewport);
 	device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
@@ -1124,9 +1284,31 @@ void ShadowShoot_EndFrame(LPDIRECT3DDEVICE9 device, const float *lights, int num
 	Write("SHOT %d, frame %d, commit %s, room %s: pixel %d %d, ray across %.6f up %.6f", shotsTaken, frameNumber, frameCommit, frameRoom, shotPixelX, shotPixelY, shotRay.across, shotRay.up);
 	Write("  camera at %.0f %.0f %.0f. Kept and walked corners are %s", cameraPlace[0], cameraPlace[1], cameraPlace[2], cutCorners ? (farExact ? "cut, far ends exact" : "cut") : "exact");
 
+	Write("  this shot took %.0f milliseconds, up to the start of this block. Its limit is %.0f seconds", SecondsSince(shotStartedAt) * 1000.0, kShotMostSeconds);
+
 	if (cardStoppedAnswering)
 	{
-		LogString("  THE CARD STOPPED ANSWERING during this shot, so nothing more was asked of it: anything below marked as unread is why");
+		LogString("  THE CARD STOPPED ANSWERING during this shot, so nothing more was asked of it: anything below that wasn't read is why");
+	}
+
+	if (shotRanOutOfTime)
+	{
+		LogString("  THIS SHOT RAN OUT OF TIME, so nothing more was asked of the card: anything below that wasn't read is why");
+	}
+
+	if (cardAnswersMakeNoSense)
+	{
+		LogString("  THE CARD'S ANSWERS CAN'T BE BELIEVED: a test that had to pass didn't, or one that couldn't pass did. So the depth buffer and the stencil weren't read");
+	}
+
+	if (depthReadAsNothing)
+	{
+		LogString("  THE DEPTH BUFFER READ AS ITS VERY FIRST LEVEL, where nothing can be drawn, so that isn't believed. Distances below come from the next best there is");
+	}
+
+	if (testBoxesOn)
+	{
+		LogString("  -shadowtest is on: its boxes are drawn, but they're nobody's polygon, so they aren't in the crossings. A pass that disagrees may only be that");
 	}
 
 	if (settingsNotSaved > 0)
@@ -1144,6 +1326,26 @@ void ShadowShoot_EndFrame(LPDIRECT3DDEVICE9 device, const float *lights, int num
 		Write("  hit: shape %d polygon %d, %s %d, behaviour %d%s, flags 0x%08X, %d corners", target.shapeNumber, target.polygon, (target.moduleNumber >= 0) ? "module" : "not a module", target.moduleNumber,
 			target.behaviour, target.isPartOfAModel ? ", part of a model" : "", (unsigned int)target.flags, target.numCorners);
 		Write("  point %d %d %d, %d from the camera. The side hit faces %.4f %.4f %.4f", target.point[0], target.point[1], target.point[2], target.distance, target.arrow[0], target.arrow[1], target.arrow[2]);
+
+		if (target.isPartOfAModel)
+		{
+			LogString("  THIS IS PART OF A MODEL, not a wall");
+		}
+
+		if (target.hasSimplerVersions)
+		{
+			LogString("  THIS PART HAS SIMPLER VERSIONS for a distance, numbered differently, so what it casts may not be this polygon. A stop may match nothing");
+		}
+
+		if (target.partWasReplaced)
+		{
+			LogString("  THIS PART WAS GIVEN ANOTHER SHAPE. The ray tested the shape in its plan, so this polygon, its corners and the tint may not be what's on the screen");
+		}
+
+		if (target.isMorphing)
+		{
+			LogString("  THIS IS MORPHING, like a door. The ray tested it in between two shapes, and these corners are its first shape standing still, so the tint and the distance by its corners can be off");
+		}
 
 		if (target.hasPlane)
 		{
@@ -1221,6 +1423,14 @@ void ShadowShoot_EndFrame(LPDIRECT3DDEVICE9 device, const float *lights, int num
 		bool const isFlare = light[kShootLightKind] == 2.0f && light[kShootLightLook] == 0.0f;
 		float const flatTurned = target.found ? (target.arrow[0] * dx + target.arrow[1] * dy + target.arrow[2] * dz) / ((howFar > 1.0f) ? howFar : 1.0f) : 0.0f;
 		char pictureWords[80] = "no picture";
+		char hitWords[64] = "there's no hit to measure from";
+		char flatWords[32] = "no hit";
+
+		if (target.found)
+		{
+			_snprintf(hitWords, sizeof(hitWords) - 1, "%.1f from the hit", howFar);
+			_snprintf(flatWords, sizeof(flatWords) - 1, "%.3f flat", flatTurned);
+		}
 
 		if (havePictureNormal && havePictureDepth)
 		{
@@ -1251,7 +1461,7 @@ void ShadowShoot_EndFrame(LPDIRECT3DDEVICE9 device, const float *lights, int num
 			_snprintf(shareWords, sizeof(shareWords) - 1, "It added %.3f %.3f %.3f to the screen", screenAfter[i][0] - screenBefore[i][0], screenAfter[i][1] - screenBefore[i][1], screenAfter[i][2] - screenBefore[i][2]);
 		}
 
-		Write("  LIGHT %d, a %s, kind %.0f: at %.0f %.0f %.0f, %.1f from the hit, range %.0f%s. N.L %.3f flat, %s. %s", i, isFlare ? "flare" : "lamp", light[kShootLightKind], place[0], place[1], place[2], howFar, light[kShootLightRange], planeWords, flatTurned, pictureWords, shareWords);
+		Write("  LIGHT %d, a %s, kind %.0f: at %.0f %.0f %.0f, %s, range %.0f%s. N.L %s, %s. %s", i, isFlare ? "flare" : "lamp", light[kShootLightKind], place[0], place[1], place[2], hitWords, light[kShootLightRange], planeWords, flatWords, pictureWords, shareWords);
 
 		int passesOfThisLight = 0, marked = 0;
 

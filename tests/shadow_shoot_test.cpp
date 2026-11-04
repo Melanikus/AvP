@@ -129,6 +129,49 @@ static void TestSharedEdgesAndCorners()
 	}
 
 	Check(true, "a ray exactly on a shared corner counts for just one triangle of the fan, for fans of 3 to 8 at four turns");
+
+	// A prism's silhouette: two triangles meeting at an edge the ray lies on, both on the same side of it, one facing the camera and one facing away. The card gives both of them that pixel or neither, because
+	// which pixels a triangle gets doesn't depend on which way it faces. Counting one and not the other would add up to a shadow that isn't there.
+	struct Fold { float a[3], b[3], side[3]; const char *what; };
+
+	Fold const folds[] =
+	{
+		{ { 0.0f, -10.0f, 100.0f }, { 0.0f, 10.0f, 100.0f }, { -10.0f, 0.0f, 100.0f }, "an upright silhouette, on its left" },
+		{ { 0.0f, -10.0f, 100.0f }, { 0.0f, 10.0f, 100.0f }, { 10.0f, 0.0f, 100.0f }, "an upright silhouette, on its right" },
+		{ { -10.0f, 0.0f, 100.0f }, { 10.0f, 0.0f, 100.0f }, { 0.0f, 10.0f, 100.0f }, "a level silhouette, above it" },
+		{ { -10.0f, 0.0f, 100.0f }, { 10.0f, 0.0f, 100.0f }, { 0.0f, -10.0f, 100.0f }, "a level silhouette, below it" },
+	};
+
+	for (int i = 0; i < 4; i++)
+	{
+		Fold const &fold = folds[i];
+		float const further[3] = { fold.side[0] * 2.0f, fold.side[1] * 2.0f, 200.0f };
+		double depth = 0.0;
+		bool addsOne = false, otherAddsOne = false;
+		bool const first = Shoot_RayCrosses(fold.a, fold.b, fold.side, kStraightAhead, &depth, &addsOne);
+		bool const second = Shoot_RayCrosses(fold.b, fold.a, further, kStraightAhead, &depth, &otherAddsOne);
+		char words[100];
+
+		sprintf(words, "%s: both triangles count or neither does", fold.what);
+		Check(first == second, words);
+	}
+}
+
+static void TestDistanceFromAnEdge()
+{
+	// on the screen, at 100 pixels for each unit of across and up: a triangle with corners at -100 -100, 100 -100 and 0 100, and the ray in the middle. The nearest edge is a slanted one, 44.72 away.
+	float const a[3] = { -100.0f, -100.0f, 100.0f }, b[3] = { 100.0f, -100.0f, 100.0f }, c[3] = { 0.0f, 100.0f, 100.0f };
+
+	Check(fabs(Shoot_PixelsFromEdge(a, b, c, kStraightAhead, 100.0, 100.0, 64.0) - 44.72) < 0.01, "the distance to a triangle's nearest edge, in pixels");
+
+	// a ray past its end is measured to the end of the edge, not to the line it's on
+	ShootRay const pastTheEnd = { 2.0, -1.0 };
+
+	Check(fabs(Shoot_PixelsFromEdge(a, b, c, pastTheEnd, 100.0, 100.0, 64.0) - 100.0) < 0.01, "and to its nearest corner, when that's nearer than any edge goes");
+
+	float const tooClose[3] = { 0.0f, 100.0f, 10.0f };
+
+	Check(Shoot_PixelsFromEdge(a, b, tooClose, kStraightAhead, 100.0, 100.0, 64.0) == -1.0, "a corner closer than the near plane can't be put on the screen, so it says so");
 }
 
 // A box with its faces wound as a prism's are: every face goes anticlockwise as seen from outside looking at its far side, so that a face turned away from the camera adds one.
@@ -209,6 +252,10 @@ static void TestHalfFloats()
 	Check(Shoot_HalfFloat(0xC000) == -2.0f, "half float -2");
 	Check(Shoot_HalfFloat(0x3800) == 0.5f, "half float a half");
 	Check(fabsf(Shoot_HalfFloat(0x3555) - 0.33325f) < 0.0001f, "half float a third");
+	Check(Shoot_HalfFloat(0x0400) == 0.00006103515625f, "the smallest ordinary half float");
+	Check(Shoot_HalfFloat(0x0200) == 0.000030517578125f, "half of that, which is stored differently");
+	Check(Shoot_HalfFloat(0x0001) == 0.000000059604644775390625f, "the smallest half float of all");
+	Check(Shoot_HalfFloat(0x8001) == -0.000000059604644775390625f, "and the same below zero");
 }
 
 static void TestPrismParts()
@@ -308,6 +355,7 @@ int main()
 
 	TestOneTriangle();
 	TestSharedEdgesAndCorners();
+	TestDistanceFromAnEdge();
 	TestAWholeBox();
 	TestDepthLevels();
 	TestHalfFloats();

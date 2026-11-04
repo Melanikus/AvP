@@ -6598,8 +6598,9 @@ void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
 		return;
 	}
 
-	// A part of a model can be given a different shape from the one in its plan, and the one it has now is the one that's drawn.
-	SHAPEHEADER const *shape = !section ? GetShapeData(hit->ObShape) : section->Shape ? section->Shape : section->sempai->Shape;
+	// The line of sight code tests a model's part by the shape in its plan, so that's what the polygon's number means. A part can have been given another shape since, and that's the one it casts.
+	SHAPEHEADER const *shape = !section ? GetShapeData(hit->ObShape) : section->sempai->Shape;
+	SHAPEHEADER const *shapeItCasts = (section && section->Shape) ? section->Shape : shape;
 
 	if (!shape || polygonNumber < 0 || polygonNumber >= shape->numitems)
 	{
@@ -6640,7 +6641,10 @@ void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
 	}
 
 	target->found = true;
-	target->shape = shape;
+	target->shape = shapeItCasts;
+	target->partWasReplaced = shapeItCasts != shape;
+	target->hasSimplerVersions = section != 0 && shapeItCasts->shape_degradation_array != 0;
+	target->isMorphing = hit->ObMorphCtrl != 0;
 	target->shapeNumber = ShadowShoot_ShapeNumber(shape);
 	target->polygon = polygonNumber;
 	target->moduleNumber = hit->ObMyModule ? hit->ObMyModule->m_index : -1;
