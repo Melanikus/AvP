@@ -1,6 +1,9 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   removed the chunk for a lift in another level file, which nothing used
 
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a mission objective has a destructor, so it gives back its two lists
 #ifndef strachnk_hpp
 #define strachnk_hpp 1
 
@@ -485,6 +488,7 @@ class MissionObjectiveStrategy : public AvpStrat
 {
 	public:
 	MissionObjectiveStrategy(const char* data_start,size_t);
+	virtual ~MissionObjectiveStrategy();
 
 	//indeces in english.txt
 	int mission_description_string;

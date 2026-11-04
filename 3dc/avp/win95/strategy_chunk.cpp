@@ -5,6 +5,7 @@
 //   a message's number has to be a place in the table of level messages
 //   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
 //   a name is only read as far as the end of its chunk
+//   memory made with new[] goes back with delete[], and a mission objective now gives back its two lists
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -1002,6 +1003,8 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t size)
 
 MultiSwitchStrategy::~MultiSwitchStrategy()
 {
+	// both lists were made with new[], so they go back with delete[]. Deleting nothing is safe, so an empty list
+	// needs no test first.
 	delete[] Targets;
 	delete[] LinkedSwitches;
 }
@@ -1287,6 +1290,13 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 
 	
 			
+}
+
+MissionObjectiveStrategy::~MissionObjectiveStrategy()
+{
+	// nothing else keeps these two lists, so without this they stayed in memory until the game closed
+	delete[] mission_targets;
+	delete[] request_targets;
 }
 
 size_t MissionObjectiveStrategy::GetStrategySize()
@@ -1611,6 +1621,8 @@ HierarchyStrategy::~HierarchyStrategy()
 	{
 		delete point_effects[i];
 	}
+
+	// the list itself was made with new[], so it goes back with delete[]
 	delete[] point_effects;
 }
 
