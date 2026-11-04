@@ -11,8 +11,8 @@ of them already saved on the machine. The first build on a clean machine takes a
 What it leaves in -OutFolder: the program, its libraries, the shaders, the notes, and a list of every file's hash.
 
 WHAT GOES ON THE NETWORK, so that nobody is surprised when security software asks: git fetches vcpkg from github.com. vcpkg's bootstrap
-then runs its own scripts\tls12-download.exe to fetch vcpkg.exe from github.com. And vcpkg.exe, also when it's started by the build,
-fetches each library's source and the tools to build it. These are all Microsoft's own, at the commit vcpkg.json names, but on your
+then runs its own scripts\tls12-download.exe to fetch vcpkg.exe from github.com. And vcpkg.exe fetches each library's source and the
+tools to build it. The programs are all Microsoft's own, and vcpkg's list is at the commit vcpkg.json names, but on your
 own machine they'll look like unknown programs going online.
 
 -UseVcpkgAt is for trying this on your own machine with a vcpkg you already have, such as the one inside Visual Studio. It skips the
@@ -62,12 +62,18 @@ $env:VCPKG_ROOT = $vcpkgRoot
 $commit = (git rev-parse --short HEAD)
 Set-Content -Encoding Ascii -Path '3dc\build_commit.h' -Value "#define AVP_BUILD_COMMIT `"$commit`""
 
-# --- The game
+# --- The libraries, with vcpkg run here and not from inside the build. MSBuild reads everything vcpkg prints, and fails the build if a line
+# looks like an error, even when vcpkg recovers. On the first run on a runner, one download mirror failed, vcpkg got the file from another and
+# finished with success, and the build still stopped. vcpkg's own answer is the one that counts.
+& (Join-Path $vcpkgRoot 'vcpkg.exe') install --triplet x86-windows --x-install-root="$(Join-Path $repository 'vcpkg_installed')" --x-wait-for-lock --disable-metrics
+if ($LASTEXITCODE -ne 0) { throw 'The libraries did not build' }
+
+# --- The game. The libraries are already there, in the folder the project looks in, so the project doesn't need to install them again.
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $msbuild) { throw 'MSBuild was not found' }
 
-& $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32
+& $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32 /p:VcpkgManifestInstall=false
 if ($LASTEXITCODE -ne 0) { throw 'The game did not build' }
 
 # --- The package: only what the game needs, plus a hash of every file so anyone can check their copy
