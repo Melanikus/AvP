@@ -679,6 +679,13 @@
     <None Include="..\..\shaders\pixel.psh" />
     <None Include="..\..\shaders\rhw.psh" />
     <None Include="..\..\shaders\rhw.vsh" />
+    <None Include="..\..\shaders\shadow.psh" />
+    <None Include="..\..\shaders\shadow.vsh" />
+    <None Include="..\..\shaders\shadowBlur.psh" />
+    <None Include="..\..\shaders\shadowBlur.vsh" />
+    <None Include="..\..\shaders\shadowDepth.psh" />
+    <None Include="..\..\shaders\shadowFlare.psh" />
+    <None Include="..\..\shaders\shadowFlare.vsh" />
     <None Include="..\..\shaders\tallText.psh" />
     <None Include="..\..\shaders\tallText.vsh" />
     <None Include="..\..\shaders\vertex.vsh" />
