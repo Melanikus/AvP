@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   colours are looked up in a way that can't go past the end of the colour table
+
 #pragma once
 
 #include "FileStream.h"
@@ -55,6 +58,10 @@ const int kMaskNone = 0;
 const int kMask = 1;
 const int kMaskTransparentColour = 2;
 const int kMaskLasso = 3;
+
+// Each pixel is a number that fits in 16 bits, so a colour table can never use more colours than this. The biggest
+// table in the game's own pictures has 1769.
+const uint32_t kMaxColours = 65536;
 
 struct ColourRegister
 {
@@ -93,6 +100,7 @@ class RimLoader
 		bool HandleBMHD();
 		bool HandleCMAP();
 		void OddChunkSizeCheck();
+		ColourRegister GetColour(uint32_t index) const;
 
 		FileStream file;
 
@@ -101,6 +109,7 @@ class RimLoader
 
 		BitMapHeader header;
 		ColourRegister *colourMap;
+		uint32_t numColours;             // how many colours colourMap holds
 		uint8_t  *src;
 		uint8_t  *destRowStart;
 		uint32_t rowBytes;
