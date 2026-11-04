@@ -3581,13 +3581,14 @@ enum ToyShadowsView
 	kToyViewFinal,      // the real thing
 	kToyViewEdges,      // each light's volumes as lines, in that light's colour
 	kToyViewPolygons,   // each light's shadowed pixels filled in that light's colour, blended so overlaps show
+	kViewRedVolumes,    // every light's shadowed pixels filled in red, and every volume drawn over them as red lines
 	kToyViewMask,       // just what final multiplies the picture by: white is untouched, black is the full depth of shadow
 	kViewNormals,       // which way each pixel faces, from the surface pictures
 	kViewFinalNoRelief, // the real thing without relief pictures, to compare with
 	kToyViewCount
 };
 
-static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK", "NORMALS", "FINAL WITHOUT RELIEF" };
+static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "RED VOLUMES", "MASK", "NORMALS", "FINAL WITHOUT RELIEF" };
 static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -5782,7 +5783,7 @@ static void ToyShadows_Draw()
 	bool const noting = fullReport && screen != 0;
 
 	// Every prism this frame is built after this line. The edges view draws no pictures, but it's there to show what a frame with them would use.
-	prismsForPictures = screen != 0 || (ToyShadowsMode == kToyViewEdges && ToyPicturesCanRun(device));
+	prismsForPictures = screen != 0 || ((ToyShadowsMode == kToyViewEdges || ToyShadowsMode == kViewRedVolumes) && ToyPicturesCanRun(device));
 
 	// these only read what's already on the processor's side, so they don't wait for anything
 	if (logThisFrame && screen != 0)
@@ -5811,7 +5812,7 @@ static void ToyShadows_Draw()
 		}
 
 		// a light that can't reach the screen has nothing to do. The edges view still shows it.
-		if (ToyShadowsMode != kToyViewEdges)
+		if (ToyShadowsMode != kToyViewEdges && ToyShadowsMode != kViewRedVolumes)
 		{
 			RECT reach;
 			if (!ToyLightRectangle(device, thisLight, &reach))
@@ -5882,6 +5883,11 @@ static void ToyShadows_Draw()
 		{
 			darkened = ToyDarkenStencilledPixels(device, 0x60000000 | kToyLightColours[light], countQuery, &pixelsByLight[light]);
 		}
+		else if (ToyShadowsMode == kViewRedVolumes)
+		{
+			darkened = ToyDarkenStencilledPixels(device, 0xA0FF0000, countQuery, &pixelsByLight[light]);
+			ToyDrawWires(device, 0xFFFF0000);
+		}
 		else if (screen)
 		{
 			darkened = ToyShadeLevel(device, thisLight, 1.0f, countQuery, &pixelsByLight[light]);
@@ -5925,7 +5931,7 @@ static void ToyShadows_Draw()
 	{
 		ToyDrawLightMarkers(device, lights, report.lights);
 	}
-	else
+	else if (ToyShadowsMode != kViewRedVolumes)
 	{
 		if (screen)
 		{
