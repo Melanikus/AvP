@@ -4,7 +4,8 @@
 //   names and other text are copied using their exact measured length; level-editor code was removed
 //   a child chunk whose size cannot be real is refused
 //   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
-//   rely on a whole level; object numbers are limited to what the object list can hold
+//   rely on a whole level; object numbers are limited to what the object list can hold; so is a level with a
+//   shape that has more points than the game's list of points can hold
 
 #include <string>
 #include "chunk.hpp"
@@ -646,7 +647,7 @@ void File_Chunk::post_input_processing()
 	{
 		Shape_Header_Chunk * shape_header = sli()->get_header();
 
-		if (!shape_header || !shape_header->file_id_num_is_valid())
+		if (!shape_header || !shape_header->file_id_num_is_valid() || !sli()->point_count_is_valid())
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			return;

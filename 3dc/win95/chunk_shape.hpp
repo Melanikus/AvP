@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them; added a
-//   check on the shape numbers a level file gives
+//   check on the shape numbers a level file gives, and on how many points a shape claims
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -69,6 +69,9 @@ public:
 
 	// constructor from buffer
 	Shape_Chunk (Chunk_With_Children * parent, const char *, size_t);
+
+	// says whether the number of points this shape claims can be real. See the function itself.
+	bool point_count_is_valid();
 
 	// I want the external file load to be as transparent as possible
 	// i.e. we have a shape which is loaded as usaul - it should then

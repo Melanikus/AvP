@@ -3,6 +3,7 @@
 //   removed a large amount of code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   a child chunk whose size cannot be real is refused
+//   added a check on how many points a shape claims
 
 #include <math.h>
 
@@ -100,6 +101,24 @@ Shape_Chunk::~Shape_Chunk ()
 Shape_Header_Chunk * Shape_Chunk::get_header()
 {
 	return (Shape_Header_Chunk *) this->lookup_single_child ("SHPHEAD1");
+}
+
+// Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
+// many there are. The number comes from the level file, so a shape with too many would be written past the end of that
+// list. The header also gives a count of its own, which has to agree with the points really in the file. The biggest
+// shape in the game's own levels has 2421 points, and the two counts agree in all of them.
+bool Shape_Chunk::point_count_is_valid()
+{
+	int const point_count = shape_data.num_verts;
+
+	if (point_count < 0 || point_count > maxrotpts)
+	{
+		return false;
+	}
+
+	Shape_Vertex_Chunk * points = (Shape_Vertex_Chunk *) this->lookup_single_child ("SHPRAWVT");
+
+	return !points || points->num_verts == point_count;
 }
 
 List<Object_Chunk *> const & Shape_Chunk::list_assoc_objs()

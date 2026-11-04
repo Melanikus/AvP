@@ -406,6 +406,30 @@ static void TestObjectsAndShapes()
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with no header is refused");
 	}
 
+	// How many points a shape claims, at byte 24 of its data. The game's list of points holds 10000. These made-up shapes
+	// have no points of their own, so only the count is being tested here.
+	struct PointCount { int points; bool accepted; char const * what; };
+	PointCount const pointCounts[] =
+	{
+		{      10000, true,  "a shape with as many points as the game can hold is accepted" },
+		{      10001, false, "one point too many is refused" },
+		{         -1, false, "a negative number of points is refused" },
+		{ 0x7FFFFFFF, false, "a huge number of points is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(pointCounts) / sizeof(pointCounts[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		memcpy(shapeBytes + ChunkHeaderBytes + 24, &pointCounts[i].points, sizeof(pointCounts[i].points));
+		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == pointCounts[i].accepted, pointCounts[i].what);
+	}
+
 	Parent_File = 0;
 }
 
