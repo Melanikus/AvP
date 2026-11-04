@@ -1,0 +1,40 @@
+Keep a failed decoder setup failed.
+
+Our own patch (AvP). This bug is in libvorbis 1.3.7. Upstream's main no longer has it:
+its codebook rewrite (ec9ca811) frees the decode books on failure, and that rewrite
+cannot be taken on its own. When building the decode books failed, the half-built
+list stayed in place, so the next ov_read reported success and decoded with books of
+dimension 0. A crafted file gets there with no shortage of memory: an impossible
+Huffman tree in book 0 is enough. It then crashed on a division by zero in res0.c, or
+hung in floor 0.
+
+--- a/lib/block.c
++++ b/lib/block.c
+@@ -284,6 +284,14 @@ static int _vds_shared_init(vorbis_dsp_state *v,vorbis_info *vi,int encp){
+ 
+   return 0;
+  abort_books:
++  /* A setup that fails must stay failed, because the caller can simply try
++     again: ov_read does, every time it is called. So nothing half built may
++     be left behind. The static books and the half built decode books all go,
++     and the next try comes straight back here, because it finds no static book
++     to build from. (Before, the next try found fullbooks already there, took
++     that to mean the books were ready and reported success. The failed book and
++     those after it were all zeros, so decoding audio divided by a dim of 0 in
++     res0.c, or hung in floor 0.) */
+   for(i=0;i<ci->books;i++){
+     if(ci->book_param[i]!=NULL){
+       vorbis_staticbook_destroy(ci->book_param[i]);
+@@ -291,6 +299,12 @@ static int _vds_shared_init(vorbis_dsp_state *v,vorbis_info *vi,int encp){
+     }
+   }
+   vorbis_dsp_clear(v);
++  if(ci->fullbooks!=NULL){
++    for(i=0;i<ci->books;i++)
++      vorbis_book_clear(ci->fullbooks+i);
++    _ogg_free(ci->fullbooks);
++    ci->fullbooks=NULL;
++  }
+   return -1;
+ }
+ 

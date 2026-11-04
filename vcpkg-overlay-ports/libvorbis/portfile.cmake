@@ -25,6 +25,7 @@ vcpkg_from_github(
         0015-check-fopen-and-bound-buffer-in-disabled-dumps.patch
         0016-check-codebook-allocations.patch
         0017-limit-codebook-memory-per-file.patch
+        0018-keep-a-failed-decoder-setup-failed.patch
 )
 
 # Delete source files that are never built, so that nothing we do not ship stays in the tree.
