@@ -138,9 +138,11 @@
       <HeapCommitSize>0</HeapCommitSize>
       <StackReserveSize>0</StackReserveSize>
       <StackCommitSize>0</StackCommitSize>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -211,9 +213,11 @@
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
