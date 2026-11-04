@@ -3572,7 +3572,6 @@ static const int   kToyMaxCasterPoints = 240000;
 static const int   kToyMaxVerts        = 1200000;
 static const float kToyStartGap        = 8.0f;      // start just behind the polygon, or surfaces shadow themselves in speckles
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
-static const float kToyMostRange       = 100000.0f; // well inside the far plane, which z-fail needs
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
 static const float kToyFlareTouching   = 40.0f;     // a flare this close to a polygon's flat surface is lying on it
 static const float kToyCloakedShadow   = 0.25f;     // how strong a cloaked Predator's shadow is, against an ordinary one

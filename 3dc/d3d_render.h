@@ -29,7 +29,11 @@ enum
 
 	// each light is 9 numbers: x y z, range, red green blue, its kind (0 baked into the walls, 1 live, in the game's lighting,
 	// 2 live, added per pixel), then 1 if it's lit the way the game lights it, or 0 for the look chosen for flares
-	kToyLightFloats = 9
+	kToyLightFloats = 9,
+
+	// The furthest a light counts as reaching, in the game's units. A shadow has to end well inside the far plane, or the
+	// stencil can't count it. A level can ask for more: 1,024,900 is in the stock levels.
+	kToyMostRange = 100000
 };
 
 extern void D3D_DrawBackdrop();

@@ -5493,7 +5493,6 @@ extern int NumActiveLightElements;
 extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
 extern bool gunLayer;
-extern int GlobalFrameCounter;
 extern int ToyShadowsLightsByPixel;
 extern int ToyShadowsMaxLights;
 extern int ToyShadowsMaxBrief;
@@ -5816,7 +5815,7 @@ void ToyShadows_ChooseLights()
 		out[0] = view[0];
 		out[1] = -view[1];
 		out[2] = view[2];
-		out[3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+		out[3] = (float)((light->LightRange < kToyMostRange) ? light->LightRange : kToyMostRange);
 		out[4] = bright * ToyFraction(light->RedScale);
 		out[5] = bright * ToyFraction(light->GreenScale);
 		out[6] = bright * ToyFraction(light->BlueScale);
