@@ -623,6 +623,7 @@ bool R_DrawIndexedPrimitive(uint32_t baseVertexIndex, uint32_t minIndex, uint32_
 	}
 
 	nDrawIndexedPrimCalls++;
+	FrameTiming_CountDraw();
 
 	return true;
 }

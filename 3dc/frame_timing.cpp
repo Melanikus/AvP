@@ -49,6 +49,7 @@ static int cornersKept = 0;
 
 static int64_t processorTotal[kNumProcessorStages];
 static int64_t mainVerticesTotal = 0;
+static int64_t drawsTotal = 0;
 static int framesCounted = 0;
 static int64_t lastReportClock = 0;
 
@@ -256,6 +257,11 @@ void FrameTiming_CountMainVertices(int vertices)
 	mainVerticesTotal += vertices;
 }
 
+void FrameTiming_CountDraw()
+{
+	drawsTotal++;
+}
+
 static void ReportProcessorTimes()
 {
 	int64_t const now = ClockNow();
@@ -266,11 +272,11 @@ static void ReportProcessorTimes()
 		char line[300];
 
 		_snprintf(line, sizeof(line) - 1,
-			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f; %.0f vertices a frame",
+			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f; %.0f vertices and %.0f draws a frame",
 			framesCounted, ClockMilliseconds(now - lastReportClock) / frames, ClockMilliseconds(processorTotal[kProcessorShapes]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorLocks]) / frames, ClockMilliseconds(processorTotal[kProcessorDrawing]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorShadowPass]) / frames, ClockMilliseconds(processorTotal[kProcessorPresent]) / frames,
-			(double)mainVerticesTotal / frames);
+			(double)mainVerticesTotal / frames, (double)drawsTotal / frames);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
 	}
@@ -278,6 +284,7 @@ static void ReportProcessorTimes()
 	lastReportClock = now;
 	memset(processorTotal, 0, sizeof(processorTotal));
 	mainVerticesTotal = 0;
+	drawsTotal = 0;
 	framesCounted = 0;
 }
 

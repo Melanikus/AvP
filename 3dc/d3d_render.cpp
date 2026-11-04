@@ -3815,6 +3815,11 @@ static void MakeShadowReachView()
 static int polygonsReachKept = 0;
 static int polygonsReachLeftOut = 0;
 
+// What leaving out polygons beyond a light's range saved this frame, added up over every pass. Prisms taken from the store aren't counted, because
+// they were never built: with -keptprismsoff these cover the whole frame.
+static int prismsOutOfRange = 0;
+static int vertsOutOfRange = 0;
+
 // -shadowreport: the full report, with a count of pixels from the card and a reading of its pictures on every report frame. Each of those makes the
 // game wait for the card, so a report frame then takes many times as long, and it shows as a hitch every few seconds. It's off unless asked for.
 int ShadowsFullReport = 0;
@@ -4148,7 +4153,37 @@ static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 	toyVerts[toyNumVerts++] = c;
 }
 
-// surface is the polygon's flat surface. light holds x y z range. centre is where the light really is: the two differ while the prisms
+// Is every point of this polygon out of the light's range? light holds x y z range.
+static bool PolygonIsOutOfRange(const ToyVec *pts, int count, const float *light)
+{
+	float smallest[3] = { pts[0].x, pts[0].y, pts[0].z };
+	float largest[3] = { pts[0].x, pts[0].y, pts[0].z };
+
+	for (int i = 1; i < count; i++)
+	{
+		float const point[3] = { pts[i].x, pts[i].y, pts[i].z };
+
+		for (int axis = 0; axis < 3; axis++)
+		{
+			smallest[axis] = (point[axis] < smallest[axis]) ? point[axis] : smallest[axis];
+			largest[axis] = (point[axis] > largest[axis]) ? point[axis] : largest[axis];
+		}
+	}
+
+	float distanceSquared = 0.0f;
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		float const outside = (light[axis] < smallest[axis]) ? smallest[axis] - light[axis] : (light[axis] > largest[axis]) ? light[axis] - largest[axis] : 0.0f;
+
+		distanceSquared += outside * outside;
+	}
+
+	return distanceSquared >= light[3] * light[3];
+}
+
+// surface is the polygon's flat surface. light holds x y z range, and pts and centre's first three numbers have to be in the same numbers as it.
+// centre is where the light really is: the two differ while the prisms
 // are built from one of the light's positions. model says this polygon is part of a model, such as an alien
 static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surface, const float *light, const float *centre, bool model)
 {
@@ -4188,6 +4223,18 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	float const planeDistance = fabsf(facing);
 	if (planeDistance >= light[3])
 	{
+		return;
+	}
+
+	// A long flat surface can pass that test with the polygon itself nowhere near. A shadow only runs away from a light, so a polygon wholly beyond
+	// the light's range can't block anything the light reaches, and it would only be more work for the card. A box round the polygon can't be
+	// further away than the polygon is, so if the box is out of range, the polygon is too. This is measured from the light's true place, even
+	// for a position: everything between a position and a lit spot is inside the range of the true place. It's only with the pictures that a spot
+	// past the range loses nothing. The flat shadows on older cards have no fading, so they stay as they were.
+	if (prismsForPictures && PolygonIsOutOfRange(pts, count, centre))
+	{
+		prismsOutOfRange++;
+		vertsOutOfRange += needed;
 		return;
 	}
 
@@ -4427,8 +4474,8 @@ static void ToyLogFrame(const ToyFrameReport &report)
 
 	// Modules in a light's range, and what the reach test did with them. The polygons it left out are only counted, never built.
 	_snprintf(line, sizeof(line) - 1,
-		"shadow volumes: frame %d, out of view: %d polygons kept and %d left out by the reach test, %d verts; %d things drawn",
-		report.frame, polygonsReachKept, polygonsReachLeftOut, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes);
+		"shadow volumes: frame %d, out of view: %d polygons kept and %d left out by the reach test, %d verts; %d things drawn; beyond the range: %d prisms and %d verts left out of %d verts built",
+		report.frame, polygonsReachKept, polygonsReachLeftOut, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes, prismsOutOfRange, vertsOutOfRange, report.verts);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4938,6 +4985,10 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 	memcpy(lightInWorld, light, sizeof(lightInWorld));
 	memcpy(lightInWorld, light + kToyLightWorld, 3 * sizeof(float));
 
+	float centreInWorld[kToyLightFloats];
+	memcpy(centreInWorld, centre, sizeof(centreInWorld));
+	memcpy(centreInWorld, centre + kToyLightWorld, 3 * sizeof(float));
+
 	int const vertsBefore = toyNumVerts;
 	int const leftOutBefore = toyPrismsLeftOut;
 	bool cornersAgree = true;
@@ -4953,7 +5004,7 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 			break;
 		}
 
-		ToyAddPrism(corners, count, toyCasterSurface[caster], lightInWorld, centre, false);
+		ToyAddPrism(corners, count, toyCasterSurface[caster], lightInWorld, centreInWorld, false);
 	}
 
 	int const corners = toyNumVerts - vertsBefore;
@@ -5534,6 +5585,8 @@ static void ToyForgetCasters()
 	toyStretchCorners = 0;
 	polygonsReachKept = 0;
 	polygonsReachLeftOut = 0;
+	prismsOutOfRange = 0;
+	vertsOutOfRange = 0;
 	numDrawnBoxes = 0;
 }
 

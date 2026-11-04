@@ -38,6 +38,9 @@ void FrameTiming_CountPrismCorners(int sent, int kept);
 // Counts the vertices the game's own lists held when they were drawn.
 void FrameTiming_CountMainVertices(int vertices);
 
+// Counts one draw of the game's own lists. Every one is a texture or a state changing, which is what batching would cut.
+void FrameTiming_CountDraw();
+
 // Gives back what's held on the graphics card, which has to go whenever the device resets.
 void FrameTiming_Release();
 
