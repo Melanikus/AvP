@@ -4941,9 +4941,8 @@ template <class T> static void ToyRelease(T *&thing)
 // copying everything into it. It holds on to whatever was set when it last took its copy, so it has to go before the device can be reset.
 static IDirect3DStateBlock9 *savedCardSettings = 0;
 
-void ToyShadows_ReleaseTargets()
+static void ReleaseShadowPictures()
 {
-	ToyRelease(savedCardSettings);
 	ToyRelease(toyMaskSurface);
 	ToyRelease(toyDepthSurface);
 	ToyRelease(toyMaskTexture);
@@ -4951,6 +4950,12 @@ void ToyShadows_ReleaseTargets()
 	SurfacePictures_Release();
 	PixelLights_Release();
 	toyTargetsFailed = false;
+}
+
+void ToyShadows_ReleaseTargets()
+{
+	ToyRelease(savedCardSettings);
+	ReleaseShadowPictures();
 }
 
 // The mask is added to many times, in small amounts, so eight bits would round them away. A float picture is better, but only if
@@ -5018,7 +5023,8 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 		|| FAILED(toyMaskTexture->GetSurfaceLevel(0, &toyMaskSurface))
 		|| FAILED(toyDepthTexture->GetSurfaceLevel(0, &toyDepthSurface)))
 	{
-		ToyShadows_ReleaseTargets();
+		// Only the pictures: this can happen partway through the shadow pass, which still has to put the card's settings back when it ends.
+		ReleaseShadowPictures();
 		toyTargetsFailed = true;
 		LogString("toy-shadows: couldn't make the pictures for soft edges, so shadow edges stay hard");
 		return false;
