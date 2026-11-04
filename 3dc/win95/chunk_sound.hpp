@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it; added a
+//   check on the sound numbers a level file gives
+
 #ifndef _sndchunk_hpp
 #define _sndchunk_hpp 1
 #include "chunk_type.hpp"
@@ -56,10 +61,8 @@ public:
 	ObjectID CalculateID();
 
 	Sound_Object_Extra_Data_Chunk* get_extra_data_chunk();
-	Sound_Object_Extra_Data_Chunk* create_extra_data_chunk(); //gets chunk if it exists , otherwise creates a new one
 
 	Object_Alternate_Locations_Chunk* get_alternate_locations_chunk();
-	Object_Alternate_Locations_Chunk* create_alternate_locations_chunk(); //gets chunk if it exists , otherwise creates a new one
 
 private:
 
@@ -74,7 +77,6 @@ class Sound_Object_Extra_Data_Chunk : public Chunk_With_Children
 {
 public:
 	Sound_Object_Extra_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
-	Sound_Object_Extra_Data_Chunk (Chunk_With_Children * parent,Sound_Object_Chunk*);
 	
 	Sound_Object_Chunk* get_sound_chunk();
 };
@@ -84,7 +86,6 @@ class Sound_Object_Extra_Name_Chunk : public Chunk
 {
 public :	
 	Sound_Object_Extra_Name_Chunk(Chunk_With_Children* parent,const char*,size_t);
-	Sound_Object_Extra_Name_Chunk(Chunk_With_Children* parent,const char* _name);
 	~Sound_Object_Extra_Name_Chunk();
 	
 	char* name;
@@ -118,6 +119,14 @@ public :
 	
 	int num_extra_data;
 	int* extra_data;
+
+	// The game keeps a list of sounds, just long enough for the highest number it finds, and uses each sound's number
+	// as its place in that list. The number comes straight from the level file, so it could be anything. A negative
+	// number would point in front of the list, and a huge one would need more memory than the size sum can count,
+	// which leaves a list far too short. Numbers in the game's own files run from 0 to 39, so this limit leaves plenty
+	// of room. Anything using index as a place in a list must skip a sound that fails this check.
+	static const int Max_Sound_Number = 4095;
+	bool index_is_valid() const { return index >= 0 && index <= Max_Sound_Number; }
 };
 
 

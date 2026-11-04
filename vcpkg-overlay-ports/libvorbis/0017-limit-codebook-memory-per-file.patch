@@ -1,0 +1,300 @@
+Limit what one file's codebooks and residue tables can claim, and its links.
+
+Our own patch (AvP). It closes what patch 0016 left open: a few bytes of a crafted
+setup header could make the decoder claim gigabytes of memory. Upstream's main reduces
+what the codebooks need in its unreleased rewrite (e99e46ed5c), which has no limit and
+does nothing for the residue tables. Each book and each residue's decode table now
+takes its worst-case cost from a 64 MB budget before anything is allocated. All the
+links of a chained file share that budget, because a seekable file keeps them all in
+memory. A stream that cannot seek keeps one link at a time, so each of its links gets
+the whole budget. The budget covers books and residue tables only, so a very long valid
+chain can reach it and be refused.
+
+A seekable file may have at most 256 links, because opening one recurses once per
+link. When a chained file is refused, the setups of the links already read are now
+freed; before, they were lost.
+
+--- a/lib/codebook.c
++++ b/lib/codebook.c
+@@ -145,7 +145,8 @@ int vorbis_staticbook_pack(const static_codebook *c,oggpack_buffer *opb){
+ 
+ /* unpacks a codebook from the packet buffer into the codebook struct,
+    readies the codebook auxiliary structures for decode *************/
+-static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
++static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb,
++                                          long *memory_left){
+   long i,j;
+   static_codebook *s=_ogg_calloc(1,sizeof(*s));
+   if(s==NULL)return(NULL);
+@@ -161,6 +162,32 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
+ 
+   if(ov_ilog(s->dim)+ov_ilog(s->entries)>24)goto _eofout;
+ 
++  /* A few bytes of a crafted setup header can describe a huge codebook, and
++     a link can have 256 of them, so a tiny file could make the decoder claim
++     gigabytes of memory while it is being opened. So each book first takes
++     what it will need from this file's budget, and the file is refused if
++     the budget runs out, before anything is allocated. One link of a valid
++     file is nowhere near the limit, but a very long valid chain can reach it
++     (see VORBIS_BOOK_MEMORY_LIMIT).
++
++     A book needs at most, for each of its entries: 2 bytes for its length
++     (one while reading it, one for decoding), 16 for its codeword, sorted
++     position, place in the code list and entry number (4 each), 8 for a
++     pointer used while sorting, and 4 for each of its 'dim' values. That
++     makes 26 bytes and 4 for each dim. On top of that comes 1 KB for the book
++     itself: its search table has at most 256 entries of 4 bytes. The check
++     above keeps entries*dim below 2^24, so this cannot overflow a long.
++
++     The list of quantized values is not counted. It takes a long for each
++     value, so on a 32-bit build it can be 32 times the bytes it fills in the
++     packet, but it has at most entries*dim values, so it adds at most as much
++     again as the 4 bytes for each dim above. */
++  {
++    long cost=1024+s->entries*(26+4*s->dim);
++    if(cost>*memory_left)goto _errout;
++    *memory_left-=cost;
++  }
++
+   /* codeword ordering.... length ordered or unordered? */
+   switch((int)oggpack_read(opb,1)){
+   case 0:{
+@@ -202,9 +229,9 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
+       long length=oggpack_read(opb,5)+1;
+       if(length==0)goto _eofout;
+       /* Unlike the unordered case above, this size is not limited by the
+-         size of the packet: a few bytes of a crafted setup header can ask for
+-         16 MB, and for up to 256 books. If the memory is not there, refuse
+-         the file instead of writing through a null pointer. */
++         size of the packet, only by the budget checked above. If the memory
++         is not there, refuse the file instead of writing through a null
++         pointer. */
+       s->lengthlist=_ogg_malloc(sizeof(*s->lengthlist)*s->entries);
+       if(s->lengthlist==NULL)goto _errout;
+ 
+--- a/lib/codebook.h
++++ b/lib/codebook.h
+@@ -97,7 +97,19 @@ extern long vorbis_book_codelen(codebook *book,int entry);
+ 
+ 
+ extern int vorbis_staticbook_pack(const static_codebook *c,oggpack_buffer *b);
+-extern static_codebook *vorbis_staticbook_unpack(oggpack_buffer *b);
++/* The most memory, in bytes, that the codebooks and residue tables of one file
++   may ask for, with all the links of a chained file sharing it (see
++   vorbis_staticbook_unpack and _vorbis_unpack_books). A stream that cannot seek
++   is the exception: it only ever holds one link, so each link gets all of it.
++   One link needs far less: the codebooks of the largest of 289 files measured
++   need about 0.6 MB, and all 812 books built into the encoder added together
++   need about 15 MB. A very long valid chain can reach the limit and be refused:
++   real 44.1 kHz stereo chains from the encoder stopped at 110 to 122 links at
++   low quality settings, and at the limit of 256 links at high ones. */
++#define VORBIS_BOOK_MEMORY_LIMIT (64L*1024L*1024L)
++
++extern static_codebook *vorbis_staticbook_unpack(oggpack_buffer *b,
++                                                 long *memory_left);
+ 
+ extern int vorbis_book_encode(codebook *book, int a, oggpack_buffer *b);
+ 
+--- a/lib/codec_internal.h
++++ b/lib/codec_internal.h
+@@ -127,6 +127,8 @@ typedef struct codec_setup_info {
+                                 highly redundant structure, but
+                                 improves clarity of program flow. */
+   int         halfrate_flag; /* painless downsample for decode */
++  long        book_memory_left; /* what this file may still ask for, in bytes:
++                                   see VORBIS_BOOK_MEMORY_LIMIT */
+ } codec_setup_info;
+ 
+ extern vorbis_look_psy_global *_vp_global_look(vorbis_info *vi);
+--- a/lib/info.c
++++ b/lib/info.c
+@@ -151,8 +151,10 @@ int vorbis_info_blocksize(vorbis_info *vi,int zo){
+ 
+ /* used by synthesis, which has a full, alloced vi */
+ void vorbis_info_init(vorbis_info *vi){
++  codec_setup_info *ci;
+   memset(vi,0,sizeof(*vi));
+-  vi->codec_setup=_ogg_calloc(1,sizeof(codec_setup_info));
++  vi->codec_setup=ci=_ogg_calloc(1,sizeof(codec_setup_info));
++  if(ci)ci->book_memory_left=VORBIS_BOOK_MEMORY_LIMIT;
+ }
+ 
+ void vorbis_info_clear(vorbis_info *vi){
+@@ -280,7 +282,9 @@ static int _vorbis_unpack_books(vorbis_info *vi,oggpack_buffer *opb){
+   ci->books=oggpack_read(opb,8)+1;
+   if(ci->books<=0)goto err_out;
+   for(i=0;i<ci->books;i++){
+-    ci->book_param[i]=vorbis_staticbook_unpack(opb);
++    /* every book takes its share of the file's budget, so that together they
++       cannot pass the limit */
++    ci->book_param[i]=vorbis_staticbook_unpack(opb,&ci->book_memory_left);
+     if(!ci->book_param[i])goto err_out;
+   }
+ 
+@@ -312,6 +316,19 @@ static int _vorbis_unpack_books(vorbis_info *vi,oggpack_buffer *opb){
+     if(ci->residue_type[i]<0 || ci->residue_type[i]>=VI_RESB)goto err_out;
+     ci->residue_param[i]=_residue_P[ci->residue_type[i]]->unpack(vi,opb);
+     if(!ci->residue_param[i])goto err_out;
++    {
++      /* Decoding builds a table for each residue (res0_look): one entry for
++         each combination the residue's main book can name, which is a pointer
++         (4 bytes) to its own small block of 4 bytes for each dim, and the
++         memory system adds up to 16 bytes to each block. A file can give all
++         its residues the same large book, so each one pays for its own table.
++         The size is at most the book's entries, so this cannot overflow. */
++      vorbis_info_residue0 *info=ci->residue_param[i];
++      long dim=ci->book_param[info->groupbook]->dim;
++      long cost=info->partvals*(4+16+4*dim);
++      if(cost>ci->book_memory_left)goto err_out;
++      ci->book_memory_left-=cost;
++    }
+   }
+ 
+   /* map backend settings */
+--- a/lib/vorbisfile.c
++++ b/lib/vorbisfile.c
+@@ -28,6 +28,7 @@
+ 
+ #include "os.h"
+ #include "misc.h"
++#include "codec_internal.h"
+ 
+ /* A 'chained bitstream' is a Vorbis bitstream that contains more than
+    one logical bitstream arranged end to end (the only form of Ogg
+@@ -281,9 +282,13 @@ static ogg_int64_t _get_prev_page_serial(OggVorbis_File *vf, ogg_int64_t begin,
+ 
+ /* uses the local ogg_stream storage in vf; this is important for
+    non-streaming input sources */
++/* memory_left: when several links are held in memory together, what is left of
++   the file's budget for codebooks (see VORBIS_BOOK_MEMORY_LIMIT). This link
++   takes its share, and memory_left is updated. NULL means this link is the only
++   one in memory, so it starts with all of the budget. */
+ static int _fetch_headers(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc,
+                           long **serialno_list, int *serialno_n,
+-                          ogg_page *og_ptr){
++                          ogg_page *og_ptr, long *memory_left){
+   ogg_page og;
+   ogg_packet op;
+   int i,ret;
+@@ -299,6 +304,8 @@ static int _fetch_headers(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc,
+   vorbis_info_init(vi);
+   vorbis_comment_init(vc);
+   vf->ready_state=OPENED;
++  if(memory_left && vi->codec_setup)
++    ((codec_setup_info *)vi->codec_setup)->book_memory_left=*memory_left;
+ 
+   /* extract the serialnos of all BOS pages + the first set of vorbis
+      headers we see in the link */
+@@ -406,6 +413,8 @@ static int _fetch_headers(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc,
+       }
+     }
+ 
++    if(memory_left)
++      *memory_left=((codec_setup_info *)vi->codec_setup)->book_memory_left;
+     return 0;
+   }
+ 
+@@ -468,6 +477,11 @@ static ogg_int64_t _initial_pcmoffset(OggVorbis_File *vf, vorbis_info *vi){
+    (has to begin by knowing the offset of the lb's initial page).
+    Recurses for each link so it can alloc the link storage after
+    finding them all, then unroll and fill the cache at the same time */
++/* The most links a seekable file may have. This function calls itself once per
++   link, and keeps every link's setup in memory while it does, so a crafted file
++   of thousands of tiny links could use up the stack or the memory. */
++#define VORBIS_MAX_LINKS 256
++
+ static int _bisect_forward_serialno(OggVorbis_File *vf,
+                                     ogg_int64_t begin,
+                                     ogg_int64_t searched,
+@@ -476,7 +490,8 @@ static int _bisect_forward_serialno(OggVorbis_File *vf,
+                                     int endserial,
+                                     long *currentno_list,
+                                     int  currentnos,
+-                                    long m){
++                                    long m,
++                                    long *memory_left){
+   ogg_int64_t pcmoffset;
+   ogg_int64_t dataoffset=searched;
+   ogg_int64_t endsearched=end;
+@@ -533,6 +548,9 @@ static int _bisect_forward_serialno(OggVorbis_File *vf,
+     vorbis_comment vc;
+     int testserial = serialno+1;
+ 
++    /* m counts from 0, so the link after this one would be number m+2 */
++    if(m+2>VORBIS_MAX_LINKS)return(OV_EBADHEADER);
++
+     /* the below guards against garbage seperating the last and
+        first pages of two links. */
+     while(searched<endsearched){
+@@ -568,8 +586,12 @@ static int _bisect_forward_serialno(OggVorbis_File *vf,
+     ret=_seek_helper(vf,next);
+     if(ret)return(ret);
+ 
+-    ret=_fetch_headers(vf,&vi,&vc,&next_serialno_list,&next_serialnos,NULL);
+-    if(ret)return(ret);
++    ret=_fetch_headers(vf,&vi,&vc,&next_serialno_list,&next_serialnos,NULL,
++                       memory_left);
++    if(ret){
++      if(next_serialno_list)_ogg_free(next_serialno_list);
++      return(ret);
++    }
+     serialno = vf->os.serialno;
+     dataoffset = vf->offset;
+ 
+@@ -578,10 +600,15 @@ static int _bisect_forward_serialno(OggVorbis_File *vf,
+     pcmoffset = _initial_pcmoffset(vf,&vi);
+ 
+     ret=_bisect_forward_serialno(vf,next,vf->offset,end,endgran,endserial,
+-                                 next_serialno_list,next_serialnos,m+1);
+-    if(ret)return(ret);
+-
++                                 next_serialno_list,next_serialnos,m+1,
++                                 memory_left);
+     if(next_serialno_list)_ogg_free(next_serialno_list);
++    if(ret){
++      /* this link's setup only goes into vf below, so it must be freed here */
++      vorbis_info_clear(&vi);
++      vorbis_comment_clear(&vc);
++      return(ret);
++    }
+ 
+     vf->offsets[m+1]=next;
+     vf->serialnos[m+1]=serialno;
+@@ -620,6 +647,9 @@ static int _open_seekable2(OggVorbis_File *vf){
+   int endserial=vf->os.serialno;
+   int serialno=vf->os.serialno;
+ 
++  /* the later links get what the first one left of the file's budget */
++  long memory_left=((codec_setup_info *)vf->vi->codec_setup)->book_memory_left;
++
+   /* we're partially open and have a first link header state in
+      storage in vf */
+ 
+@@ -645,7 +675,8 @@ static int _open_seekable2(OggVorbis_File *vf){
+ 
+   /* now determine bitstream structure recursively */
+   if(_bisect_forward_serialno(vf,0,dataoffset,end,endgran,endserial,
+-                              vf->serialnos+2,vf->serialnos[1],0)<0)return(OV_EREAD);
++                              vf->serialnos+2,vf->serialnos[1],0,
++                              &memory_left)<0)return(OV_EREAD);
+ 
+   vf->offsets[0]=0;
+   vf->serialnos[0]=serialno;
+@@ -854,7 +885,7 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
+           /* we're streaming */
+           /* fetch the three header packets, build the info struct */
+ 
+-          int ret=_fetch_headers(vf,vf->vi,vf->vc,NULL,NULL,&og);
++          int ret=_fetch_headers(vf,vf->vi,vf->vc,NULL,NULL,&og,NULL);
+           if(ret)return(ret);
+           vf->current_serialno=vf->os.serialno;
+           vf->current_link++;
+@@ -913,7 +944,7 @@ static int _ov_open1(void *f,OggVorbis_File *vf,const char *initial,
+ 
+   /* Fetch all BOS pages, store the vorbis header and all seen serial
+      numbers, load subsequent vorbis setup headers */
+-  if((ret=_fetch_headers(vf,vf->vi,vf->vc,&serialno_list,&serialno_list_size,NULL))<0){
++  if((ret=_fetch_headers(vf,vf->vi,vf->vc,&serialno_list,&serialno_list_size,NULL,NULL))<0){
+     vf->datasource=NULL;
+     ov_clear(vf);
+   }else{

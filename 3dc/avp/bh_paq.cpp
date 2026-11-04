@@ -1,6 +1,9 @@
 /*------------------------Patrick 18/2/97-----------------------------
   Source file for Predator-Alien and Queen AI behaviour functions....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   number conversions between signed and unsigned types are written out explicitly (the values are the same)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -924,12 +927,12 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 		 		case 6:
  	    	{
- 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(rand & 255)-PREDALIEN_ATTACK_PITCH);
+ 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(int)(rand & 255)-PREDALIEN_ATTACK_PITCH);
  	    		break;
  	    	}
 				case 7:
  	    	{
- 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(rand & 255)-PREDALIEN_ATTACK_PITCH);
+ 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(int)(rand & 255)-PREDALIEN_ATTACK_PITCH);
  	    		break;
  	    	}
 			 	default:
@@ -961,7 +964,7 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 				case 3:
  	    	{
- 	    		Sound_Play(SID_TAIL,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_TAIL,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 				case 4:
@@ -976,12 +979,12 @@ static void Execute_PAQNS_Attack(STRATEGYBLOCK *sbPtr)
  	    	}
 		 		case 6:
  	    	{
- 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_SWISH,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 				case 7:
  	    	{
- 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(rand & 255));
+ 	    		Sound_Play(SID_ALIEN_HISS,"dp",&dynPtr->Position,-(int)(rand & 255));
  	    		break;
  	    	}
 			 	default:

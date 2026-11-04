@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the module list command, which nothing could reach, and the teleport request message is
+//   written with a size limit, so it always fits
 /*******************************************************************
  *
  *    DESCRIPTION: 	modcmds.cpp
@@ -48,107 +52,6 @@
 
 #if UseGadgets
 // namespace ModuleCommands
-void ModuleCommands :: ListModules(void)
-{
-
-	char Msg[256];
-
-	if
-	(
-		Global_ModulePtr
-	)
-	{
-		SCENEMODULE* pSceneModule = Global_ModulePtr[0];
-
-		if ( pSceneModule )
-		{
-			MODULE** ppModule_I = pSceneModule -> sm_marray;
-
-			if ( ppModule_I )
-			{
-				GADGET_NewOnScreenMessage( "MODULE LISTING (CASE INSENSITIVE):" );
-
-				int Index=0;
-
-				// Iterate through NULL-terminated list of MODULE*s
-				while ( *ppModule_I )
-				{
-					MODULE* pModule = *ppModule_I;
-
-					// Diagnostic on pModule:
-					{
-						if
-						(
-							pModule -> name
-						)
-						{
-							// Get upper-case module name:
-							char TempName[256];
-							char* pCh_Dst = &TempName[0];
-							char* pCh_Src = pModule -> name;
-							int CharCount = 0;
-							while ( (*pCh_Src) && (CharCount < 255) )
-							{
-								*(pCh_Dst++) = toupper( *(pCh_Src++));
-								CharCount++;
-							}
-
-							*pCh_Dst = 0;
-
-							sprintf
-							(
-								Msg,
-								"MODULE:%3i \"%s\"",
-								Index,
-								TempName
-							);
-						}
-						else
-						{
-							sprintf
-							(
-								Msg,
-								"MODULE:%3i NULL NAME",
-								Index
-							);							
-						}
-						
-
-						GADGET_NewOnScreenMessage( Msg );
-
-					}
-
-					// Advance to next MODULE*
-					(ppModule_I++);
-					Index++;
-
-				}
-
-				sprintf
-				(
-					Msg,
-					"END OF MODULE LISTING (%i MODULES)",
-					ModuleArraySize
-				);
-				GADGET_NewOnScreenMessage( Msg );
-
-			}
-			else
-			{
-				GADGET_NewOnScreenMessage( "CANNOT LIST MODULES; SM_MARRAY IS NULL" );
-			}
-		}
-		else
-		{
-			GADGET_NewOnScreenMessage( "CANNOT LIST MODULES; GLOBALMODULEPTR[0] IS NULL" );
-		}
-	}
-	else
-	{
-		GADGET_NewOnScreenMessage( "CANNOT LIST MODULES; GLOBALMODULEPTR IS NULL" );
-	}
-}
-
 void ModuleCommands :: TryToTeleport(char* UpperCasePotentialModuleName)
 {
 	// the test name is in upper case (since its been typed in)
@@ -167,12 +70,14 @@ void ModuleCommands :: TryToTeleport(char* UpperCasePotentialModuleName)
 		char Msg[256];
 
 		{
-			sprintf
+			_snprintf
 			(
 				Msg,
+				sizeof(Msg) - 1,
 				"TELEPORT REQUEST TO MODULE \"%s\"",
 				UpperCasePotentialModuleName
 			);
+			Msg[sizeof(Msg) - 1] = '\0';
 			
 			GADGET_NewOnScreenMessage( Msg );
 		}

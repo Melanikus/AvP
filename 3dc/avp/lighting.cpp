@@ -1,6 +1,10 @@
 /*KJL***************************************************
 * lighting.c - a lighting interface for simple effects *
 ***************************************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the number of lights read from a save file is checked, and every light near an object gets a place in its
+//   light list
 
 #include "3dc.h"
 #include "io.h"
@@ -240,7 +244,7 @@ void LightBlockDeallocation(void)
 *      LIGHT ELEMENT CODE         *
 *                                 *
 ******************************KJL*/
-#define MAX_NO_OF_LIGHTELEMENTS 500
+// MAX_NO_OF_LIGHTELEMENTS (500) is in lighting.h
 LIGHTELEMENT LightElementStorage[MAX_NO_OF_LIGHTELEMENTS];
 int NumActiveLightElements;
 
@@ -629,6 +633,10 @@ void Load_LightElements(SAVE_BLOCK_HEADER* header)
 	LIGHT_ELEMENT_SAVE_BLOCK_HEADER* block = (LIGHT_ELEMENT_SAVE_BLOCK_HEADER*) header;
 	LIGHTELEMENT* saved_light_element = (LIGHTELEMENT*) (block+1);
 	int expected_size;
+
+	//the light elements are read from the block: the count must fit the block and
+	//LightElementStorage[MAX_NO_OF_LIGHTELEMENTS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveLightElements, sizeof(LIGHTELEMENT), MAX_NO_OF_LIGHTELEMENTS)) return;
 
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);

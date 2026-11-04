@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted an old, switched-off (#if 0) version of one if-statement in the alien's jump code, which was never
+//   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
+//   the same code as before
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -917,12 +922,6 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 						targetPos.vx,
 						distanceToTarget
 					);
-				#if 0
-				if ( (targetPos.vy < -ALIEN_ATTACKDISTANCE_MIN)
-				   &&(targetPos.vx*targetPos.vx+targetPos.vz*targetPos.vz < 2*ALIEN_ATTACKDISTANCE_MIN*ALIEN_ATTACKDISTANCE_MIN)
-				   &&(DotProduct(&dynPtr->GravityDirection,(VECTORCH*)&dynPtr->OrientMat.mat21)>64500)
-				   &&(sbPtr->containingModule==playerPherModule))
-				#else
 				if ((dynPtr->UseStandardGravity==0)&&(sbPtr->containingModule==playerPherModule)) {
 					int dot;
 					//VECTORCH velocityDirection=dynPtr->LinVelocity;
@@ -935,7 +934,6 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 					Normalise(&velocityDirection);
 					dot=DotProduct(&dynPtr->GravityDirection,&velocityDirection);
 					if (dot<-60000)
-				#endif
 				{
 					/* patrick 29/7/97: I have added the extra condition of not being in the same module as
 					the player, so that alien does not jump at entry-points */
@@ -945,9 +943,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 					dynPtr->LinImpulse.vy -= MUL_FIXED(dynPtr->GravityDirection.vy,ALIEN_JUMPVELOCITY);
 					dynPtr->LinImpulse.vz -= MUL_FIXED(dynPtr->GravityDirection.vz,ALIEN_JUMPVELOCITY);
 				}
-				#if 1
 				}
-				#endif
 			 	RotateVector(&dynPtr->LinVelocity,&dynPtr->OrientMat);
 
 				/* align to velocity */

@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
+
 #ifndef _renderer_h_
 #define _renderer_h_
 
@@ -129,10 +132,6 @@ char*    R_GetDeviceName();
 
 #ifdef USE_D3D9
 	#include <../win32/d3_func.h>
-#endif
-
-#ifdef USE_D3D_XBOX
-	#include <../xbox/src/d3_func.h>
 #endif
 
 #ifdef USE_OPENGL

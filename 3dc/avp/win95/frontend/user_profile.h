@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   added UserProfileNameIsSafe
 #ifndef _avp_user_profile_h_
 #define _avp_user_profile_h_ 1
 
@@ -147,6 +150,7 @@ extern int NumberOfUserProfiles(void);
 extern AVP_USER_PROFILE *GetFirstUserProfile(void);
 extern AVP_USER_PROFILE *GetNextUserProfile(void);
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr);
+extern BOOL UserProfileNameIsSafe(const char *name);
 extern void DeleteUserProfile(int number);
 
 void EmptyUserProfilesList();

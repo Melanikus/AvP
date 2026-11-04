@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   console commands are made by a small function that hands them back (it works the same as before)
 /*******************************************************************
  *
  *    DESCRIPTION: 	conscmnd.cpp
@@ -113,7 +117,7 @@
 // public:
 
 // Various factory methods:
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -121,7 +125,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidVoid
+	return new ConsoleCommand_VoidVoid
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -129,7 +133,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -137,7 +141,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidInt
+	return new ConsoleCommand_VoidInt
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -145,7 +149,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -154,7 +158,7 @@
 
 )
 {
-	new ConsoleCommand_IntVoid
+	return new ConsoleCommand_IntVoid
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -163,7 +167,7 @@
 	);
 }
 
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -171,7 +175,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_IntInt
+	return new ConsoleCommand_IntInt
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -179,7 +183,7 @@
 		Cheat
 	);
 }
-/*static*/ void ConsoleCommand :: Make
+/*static*/ ConsoleCommand* ConsoleCommand :: Make
 (
 	ProjChar* pProjCh_ToUse,
 	ProjChar* pProjCh_Description_ToUse,
@@ -187,7 +191,7 @@
 	bool Cheat
 )
 {
-	new ConsoleCommand_VoidCharP
+	return new ConsoleCommand_VoidCharP
 	(
 		pProjCh_ToUse,
 		pProjCh_Description_ToUse,
@@ -278,12 +282,11 @@
 
 /*static*/ void ConsoleCommand :: ListAll(void)
 {
-	SCString* pSCString_Temp = new SCString("LIST OF ALL CONSOLE COMMANDS:");
+	RefHolder<SCString> pSCString_Temp(new SCString("LIST OF ALL CONSOLE COMMANDS:"));
 		// LOCALISEME()
 
 	pSCString_Temp -> SendToScreen();
 
-	pSCString_Temp ->R_Release();
 
 	for
 	(
@@ -309,20 +312,19 @@ void ConsoleCommand :: Display(void) const
 	SCString* pSCString_Temp1 = new SCString("\"");
 	SCString* pSCString_Temp2 = new SCString("\" ");
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_Temp1,
 		pSCString_Symbol,
 		pSCString_Temp2,
 		pSCString_Description
-	);
+	));
 
 	pSCString_Temp2 -> R_Release();
 	pSCString_Temp1 -> R_Release();
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 }
 
 
@@ -341,9 +343,8 @@ ConsoleCommand :: ConsoleCommand
 
 void ConsoleCommand :: EchoResult(int Result)
 {
-	SCString* pSCString_Feedback = new SCString(Result);
+	RefHolder<SCString> pSCString_Feedback(new SCString(Result));
 	pSCString_Feedback -> SendToScreen();
-	pSCString_Feedback -> R_Release();
 }
 
 int ConsoleCommand :: GetArg(ProjChar* pProjCh_Arg)

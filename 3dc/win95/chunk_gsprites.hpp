@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code and declarations only the level editor used: the game itself never runs them
+
 #ifndef _included_gsprchnk_hpp_
 #define _included_gsprchnk_hpp_
 
@@ -10,8 +14,6 @@ class AllSprites_Chunk : public Lockable_Chunk_With_Children
 {
 public:
 
-	// empty constructor
-	AllSprites_Chunk (Chunk_With_Children * parent);
 	// constructor from buffer
 	AllSprites_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
@@ -68,11 +70,6 @@ private:
 	
 
 	
-	// constructor from parent
-	AllSprites_Header_Chunk (AllSprites_Chunk * parent)
-	: Chunk (parent, "ASPRHEAD"),
-	flags (0), version_no (0)
-	{}
 	
 };
 	

@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the message naming the default sound device is written with a size limit, so it always fits;
+//   a sound volume is kept inside the volume table before the table is read
 
 #ifdef USE_OPENAL
 
@@ -113,6 +117,24 @@ static const float vol_to_gain_table[] = {
 	0.743019f, 0.758578f, 0.774462f, 0.790679f, 0.807235f, 0.824138f, 0.840427f, 0.857038f,
 	0.873977f, 0.891251f, 0.908866f, 0.926830f, 0.945148f, 0.962720f, 0.980618f, 1.000000f
 };
+
+// vol_to_gain_table has 128 entries (volumes 0..VOLUME_MAX), but not every caller stays in that range: the FMV
+// volume reaches 128 (FmvCutscenes.cpp: MUL_FIXED(FmvSoundVolume*256, ...)/256 with FmvSoundVolume up to 128), and
+// stream / sound volumes also come from the user profile and save files. Use the nearest entry instead of reading
+// outside the table.
+static float VolumeToGain(int volume)
+{
+	const int lastEntry = (int)(sizeof(vol_to_gain_table) / sizeof(vol_to_gain_table[0])) - 1;
+
+	if (volume < 0) {
+		volume = 0;
+	}
+	else if (volume > lastEntry) {
+		volume = lastEntry;
+	}
+
+	return vol_to_gain_table[volume];
+}
 
 // this table plots the frequency change for
 // 128/ths of a semitone for one octave (0-1535),
@@ -533,7 +555,8 @@ int PlatStartSoundSys()
 	SoundConfig.env_index		= 1000;
 
 	char *defaultDevice = (char*)alcGetString(NULL, ALC_DEFAULT_DEVICE_SPECIFIER);
-	sprintf(buf, "Using default device \"%s\" for OpenAL", defaultDevice);
+	_snprintf(buf, sizeof(buf) - 1, "Using default device \"%s\" for OpenAL", defaultDevice);
+	buf[sizeof(buf) - 1] = '\0';
 	Con_PrintMessage(buf);
 
 	alGetError(); // clear error stack
@@ -790,7 +813,7 @@ int PlatChangeGlobalVolume(int volume)
 	LOCALASSERT((volume >= VOLUME_MIN) && (volume <= VOLUME_MAX));
 
 	// set the volume
-	alListenerf(AL_GAIN, vol_to_gain_table[volume]);
+	alListenerf(AL_GAIN, VolumeToGain(volume));
 	AlCheckError();
 
 	return 1;
@@ -969,7 +992,7 @@ void PlatStopSound(int activeIndex)
 int PlatChangeSoundVolume(int activeIndex, int volume)
 {
 	if (ActiveSounds[activeIndex].source) {
-		alSourcef(ActiveSounds[activeIndex].source->_alSource, AL_GAIN, vol_to_gain_table[volume]);
+		alSourcef(ActiveSounds[activeIndex].source->_alSource, AL_GAIN, VolumeToGain(volume));
 		AlCheckError();
 	}
 	return 1;
@@ -1826,7 +1849,7 @@ uint32_t AudioStream::GetWritableBufferSize()
 
 int32_t AudioStream::SetVolume(uint32_t volume)
 {
-	alSourcef(_source->_alSource, AL_GAIN, vol_to_gain_table[volume]);
+	alSourcef(_source->_alSource, AL_GAIN, VolumeToGain((volume > (uint32_t)VOLUME_MAX) ? VOLUME_MAX + 1 : (int)volume));
 	alGetError();
 
 	return 1;

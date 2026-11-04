@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it
+
 #include "chunk.hpp"
 #include "chunk_light.hpp"
 
@@ -21,23 +25,10 @@ Children for Light_Set_Chunk :
 "AVPSTRAT"		AVP_Strategy_Chunk
 */
 
-Light_Set_Chunk::Light_Set_Chunk (Chunk_With_Children * parent, char * light_set_name)
-: Chunk_With_Children (parent, "LIGHTSET")
-{
-	new Light_Set_Header_Chunk (this, light_set_name);
-}
-
-
 
 ////////////////////////////////////////////////////////////////////////////////////
 
 RIF_IMPLEMENT_DYNCREATE("LTSETHDR",Light_Set_Header_Chunk)
-
-Light_Set_Header_Chunk::Light_Set_Header_Chunk (Light_Set_Chunk * parent, char l_set_name[8])
-: Chunk (parent, "LTSETHDR"), pad (0)
-{
-	strncpy (light_set_name, l_set_name, 8);
-}
 
 void Light_Set_Header_Chunk::fill_data_block ( char * data_start)
 {

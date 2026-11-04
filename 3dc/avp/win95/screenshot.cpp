@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the module-link file path is written with a size limit; if it does not fit, an error is logged and
+//   no file is written;
+//   the camera log file path (debug builds only) is built with a size limit
 #include "3dc.h"
 #include <avp_string.hpp>
 #include "screenshot.hpp"
@@ -7,6 +12,7 @@
 #include "ourasert.h"
 #include "renderer.h"
 #include "pheromone.h"
+#include "logString.h"
 
 #include "frontend\menus.h"
 
@@ -23,10 +29,15 @@ void LogCameraPosForModuleLinking()
 	if (!playerPherModule) return;
 	if (!playerPherModule->name) return;
 
-	char Filename[MAX_PATH]={"avp_rifs/"};
+	char Filename[MAX_PATH];
 
-	strcat(Filename, Env_List[AvP.CurrentEnv]->main);
-	strcat(Filename, ".mlf");
+	// LevelName can hold up to 259 characters for a custom level, so the whole path may not fit. If so, stop here.
+	if (_snprintf(Filename, sizeof(Filename) - 1, "avp_rifs/%s.mlf", Env_List[AvP.CurrentEnv]->main) < 0)
+	{
+		LogErrorString(std::string("module link file path too long: avp_rifs/") + Env_List[AvP.CurrentEnv]->main + ".mlf");
+		return;
+	}
+	Filename[sizeof(Filename) - 1] = '\0';
 
 	FILE* file = avp_open_userfile(Filename, "ab");
 	if (!file )return;

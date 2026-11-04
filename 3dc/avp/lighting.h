@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the maximum number of lights (500) is defined here, so view.cpp can size an object's light list
 #ifndef _Lighting_h_
 #define _Lighting_h_
 
@@ -46,6 +49,9 @@ typedef struct
 	int LifeTime;
 
 } LIGHTELEMENT;
+
+// size of LightElementStorage (lighting.cpp); view.cpp sizes an object's light list with it
+#define MAX_NO_OF_LIGHTELEMENTS 500
 
 
 void InitialiseLightElementSystem(void);

@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares DxErrorToString and LogErrorStringC (see logString.cpp)
+
 #ifndef LOGSTRING_H
 #define LOGSTRING_H
 
@@ -33,8 +36,10 @@
 void ClearLog();
 void WriteToLog(const std::string &logLine);
 void LogDxError(HRESULT hr, int LINE, const char* FILE);
+std::string DxErrorToString(HRESULT hr); // name + system message of a Direct3D / D3DX / COM result (replaces dxerr)
 void LogErrorString(const std::string &errorString, int LINE, const char* FILE);
 void LogErrorString(const std::string &errorString);
+void LogErrorStringC(const char *errorString); // same, for files that do not include the C++ string headers
 void LogDebugString(const std::string &debugString, int LINE, const char* FILE);
 void LogDebugString(const std::string &debugString);
 const std::string& GetLastErrorMessage();

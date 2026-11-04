@@ -2,6 +2,9 @@
   Source file for FAR AI alien behaviour etc....
   NB some of the functions in this file are re-used for other NPC AI.
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   an angle read from a save file is kept between 0 and 4095 before it is used to look up a sine or cosine
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -1066,8 +1069,8 @@ AIMODULE *FarNPC_GetTargetAIModuleForWander(STRATEGYBLOCK *sbPtr, AIMODULE *exce
 	if (!dynPtr) return targetModule;
 
 	/* get npc 2d directional vector */
-	npcDirn.vx = GetSin(dynPtr->OrientEuler.EulerY);
-	npcDirn.vz = GetCos(dynPtr->OrientEuler.EulerY);
+	npcDirn.vx = GetSin(dynPtr->OrientEuler.EulerY & wrap360);
+	npcDirn.vz = GetCos(dynPtr->OrientEuler.EulerY & wrap360);
 	npcDirn.vy = 0;
 	Normalise(&npcDirn);
 

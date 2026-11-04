@@ -1,6 +1,9 @@
 /*----------------Patrick 15/11/96-------------------
  Source for NPC generator behavior
  ----------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed debug logging code that was switched off and could never run
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -50,11 +53,6 @@ int FarAliens;
 int Alt_FarAliens;
 int ShowHiveState=0;
 
-/* for testing */
-#define logGenData	0
-#if logGenData
-FILE *logFile;
-#endif
 
 
 /*
@@ -182,13 +180,6 @@ void GeneratorBehaviour(STRATEGYBLOCK *sbPtr)
 	/* if generator is visible, do not create a new NPC */
 	if(ModuleCurrVisArray[(sbPtr->containingModule->m_index)])
 	{	
-		#if logGenData
-		{
-			logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-			fprintf(logFile, "generator: I am visible \n \n");
-			fclose(logFile);
-		}
-		#endif
 		return;
 	}
 
@@ -224,13 +215,6 @@ void GeneratorBehaviour(STRATEGYBLOCK *sbPtr)
 	/* if there are too many NPCs in the module, do not create a new one */
 	if(PherAi_Buf[(sbPtr->containingModule->m_aimodule->m_index)] >= MAX_GENERATORNPCSPERMODULE)
 	{
-		#if logGenData
-		{
-			logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-			fprintf(logFile, "generator: too many aliens in my module \n \n");
-			fclose(logFile);
-		}	
-		#endif
 		return;
 	}
 	/* if there are too many npcs in the env, do not create a new one */
@@ -482,18 +466,6 @@ void InitHive(void)
 		}
 	}
 	
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","w");
-		fprintf(logFile, "GENERATOR/HIVE DATA LOG \n \n");
-		fprintf(logFile, "num Geners: %d \n",NPCHive.numGenerators);
-		fprintf(logFile, "hive timer: %d \n",NPCHive.hiveStateTimer);
-		fprintf(logFile, "max npcs: %d \n",NPCHive.maxGeneratorNPCs);
-		fprintf(logFile, "npcs per min: %d \n",NPCHive.generatorNPCsPerMinute);
-		fprintf(logFile, "change in npcs per min: %d \n \n",NPCHive.deltaGeneratorNPCsPerMinute);
-		fclose(logFile);
-	}
-	#endif
 
 	ActivateHive();
 }
@@ -671,14 +643,6 @@ static void ResetGeneratorTimer(GENERATOR_BLOCK *genBlock)
 	if(genBlock->Timer>GENERATORTIME_MAX) genBlock->Timer=GENERATORTIME_MAX;
 	if(genBlock->Timer<GENERATORTIME_MIN) genBlock->Timer=GENERATORTIME_MIN;
 
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "Reset Gen Timer \n");
-		fprintf(logFile, "gen timer to: %d seconds \n \n",genBlock->Timer);
-		fclose(logFile);
-	}
-	#endif
 }
 
 static void ResetHiveStateTime(void)
@@ -692,14 +656,6 @@ static void ResetHiveStateTime(void)
 	baseTime = LoadedHiveData.hiveStateBaseTime;
 	NPCHive.hiveStateTimer = ((baseTime*7)/8) + (FastRandom()%(baseTime/4));
 
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "Reset Hive Timer \n");
-		fprintf(logFile, "hive timer to: %d seconds \n \n",NPCHive.hiveStateTimer);
-		fclose(logFile);
-	}
-	#endif
 }
 
 
@@ -726,13 +682,6 @@ int NumGeneratorNPCsInEnv(void)
 		}
 	}
 
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "current num gener npcs: %d \n \n",numOfNPCs);
-		fclose(logFile);
-	}
-	#endif
 	return numOfNPCs;
 }
 
@@ -795,13 +744,6 @@ int NumGeneratorNPCsVisible(void)
 			if(sbPtr->SBdptr)numOfVisNPCs++;
 		}
 	}
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "current num visible npcs: %d \n \n",numOfVisNPCs);
-		fclose(logFile);
-	}
-	#endif
 	return numOfVisNPCs;
 }
 
@@ -815,13 +757,6 @@ void ForceAGenerator(void)
 {
 	int sbIndex = 0;
 	STRATEGYBLOCK *sbPtr;
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "forcing a generator... \n");
-		fclose(logFile);
-	}
-	#endif
 
 	while(sbIndex < NumActiveStBlocks)
 	{
@@ -835,24 +770,10 @@ void ForceAGenerator(void)
 			{
 				/* found a generator with timer>0, so set it to zero and return */
 				genBlock->Timer = 0;
-				#if logGenData
-				{
-					logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-					fprintf(logFile, "... forced generator ref %d \n \n",sbIndex);
-					fclose(logFile);
-				}
-				#endif
 				return;
 			}
 		}
 	}
-	#if logGenData
-	{
-		logFile = fopen("D:/PATRICK/GENLOG.TXT","a");
-		fprintf(logFile, "... didn't find one to force \n \n");
-		fclose(logFile);
-	}	
-	#endif
 }
 
 

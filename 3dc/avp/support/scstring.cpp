@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 /*******************************************************************
  *
  *    DESCRIPTION: 	string.cpp
@@ -16,9 +20,6 @@
 #include "strutil.h"	
 #include "index_font.hpp"
 
-	#if TrackReferenceCounted
-	#include "dump_context.hpp"
-	#endif
 
 	#define UseLocalAssert TRUE
 	#include "ourasert.h"
@@ -49,12 +50,6 @@
 /* Exported function definitions ***********************************/
 // class SCString
 // public:
-#if TrackReferenceCounted
-void SCString :: DumpIDForReferenceDump(R_DumpContext& theContext) const
-{
-	theContext . dprintf("SCString \"%s\" refs remainining=%i\n",pProjCh_Val,CheckRef());
-}
-#endif
 
 ProjChar* SCString :: pProjCh(void) const
 {
@@ -554,11 +549,11 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2		
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -617,7 +612,6 @@ SCString :: SCString
 			);
 		}
 
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 
@@ -652,12 +646,12 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2,
 			pStringObj_3
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -720,7 +714,6 @@ SCString :: SCString
 			);
 		}
 
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 
@@ -758,13 +751,13 @@ SCString :: SCString
 			pFirst = this;
 		}
 
-		SCString* pStringObj_Intermediate = new SCString
+		RefHolder<SCString> pStringObj_Intermediate(new SCString
 		(
 			pStringObj_1,
 			pStringObj_2,
 			pStringObj_3,
 			pStringObj_4
-		);
+		));
 		
 		ProjChar* pProjCh_Init_0 = pStringObj_0 -> pProjCh();
 		GLOBALASSERT( pProjCh_Init_0 );
@@ -831,7 +824,6 @@ SCString :: SCString
 			);
 		}
 		
-		pStringObj_Intermediate -> R_Release();
 	}
 }
 

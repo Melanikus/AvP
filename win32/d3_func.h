@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   no longer includes the DirectX SDK's error-text header (our own DxErrorToString replaces it)
 #ifdef _WIN32
 
 #ifndef _included_d3_func_h_
@@ -5,7 +8,6 @@
 
 #include <d3d9.h>
 #include <d3dx9.h>
-#include <Dxerr.h>
 #include <stdint.h>
 #include "aw.h"
 #include <string>

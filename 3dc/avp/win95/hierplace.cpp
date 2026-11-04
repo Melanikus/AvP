@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   names saved into level data are copied, and stepped past, by the length measured from the name
+//   itself, and unused code for making new level files was removed
 #include "hierplace.hpp"
 #include "md5.h"
 
@@ -21,12 +25,6 @@ Children for Placed_Hiearchy_Chunk :
 */
 
 
-
-Placed_Hierarchy_Chunk::Placed_Hierarchy_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation)
-:Chunk_With_Children(parent,"PLACHIER")
-{
-	new Placed_Hierarchy_Data_Chunk(this,_name,_hierarchy_index,_location,_orientation);
-}
 
 ///////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("PLACHIDT",Placed_Hierarchy_Data_Chunk)
@@ -115,15 +113,21 @@ void Placed_Hierarchy_Data_Chunk::fill_data_block(char* data)
 	*((int *) data) = chunk_size;
 	data += 4;
 
+	// The name is stored followed by its end marker (the zero byte that marks
+	// where a text stops), then the write position moves on by a whole number
+	// of 4-byte steps. With no name, 4 zero bytes are stored. The name is
+	// measured once, here, and that length is used both to copy it and to step
+	// past it, instead of measuring again what was just written.
+	size_t const nameLength = name ? strlen(name) : 0;
 	if(name)
 	{
-		strcpy(data,name);
+		memcpy(data,name,nameLength+1);
 	}
 	else
 	{
 		*(int*)data=0;
 	}
-	data+=(strlen(data)+4)&~3;
+	data+=(nameLength+4)&~3;
 
 	*(int*)data=hierarchy_index;
 	data+=4;

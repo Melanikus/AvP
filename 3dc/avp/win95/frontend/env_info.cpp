@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   built-in and custom level names are copied into LevelName with a size limit and always end inside
+//   it, and the level file name is written with a size limit, so they always fit
 #include "3dc.h"		 
 #include "inline.h"
 #include "module.h"
@@ -7,6 +11,7 @@
 #include "user_profile.h"
 #include "mp_config.h"
 #include "pldnet.h"
+#include "logString.h"
 
 static enum AVP_ENVIRONMENT_ID MarineEpisodes[] =
 {
@@ -203,7 +208,7 @@ static char *RifNamesForEnvironments[] =
 	"CompoundCoop",//AVP_ENVIRONMENT_COMPOUND_COOP,
 };
 
-extern char LevelName[];
+extern char LevelName[MAX_PATH];
 
 AvP_Level_Target_Desc LevelStatsTargets[I_MaxDifficulties][AVP_ENVIRONMENT_END_OF_LIST] = {
 {
@@ -5121,17 +5126,40 @@ AvP_Level_Target_Desc LevelStatsTargets[I_MaxDifficulties][AVP_ENVIRONMENT_END_O
 
 };
 
+// Copies one of the built-in level names (RifNamesForEnvironments, at most 18
+// characters) into LevelName, which holds MAX_PATH (260) bytes, so they always
+// fit. The copy still stops at the last byte of LevelName, and the name is
+// always followed by the end marker (the zero byte that marks where a text
+// stops), written here on its own line so that it is plain to see.
+static void SetBuiltInLevelName(const char *name)
+{
+	size_t const length = strnlen(name, sizeof(LevelName) - 1);
+	memcpy(LevelName, name, length);
+	LevelName[length] = '\0';
+}
+
 void SetLevelToLoadForAlien(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[AlienEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[AlienEpisodes[episode]]);
 }
 void SetLevelToLoadForPredator(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[PredatorEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[PredatorEpisodes[episode]]);
 }
 void SetLevelToLoadForMarine(int episode)
 {
-	strcpy(LevelName,RifNamesForEnvironments[MarineEpisodes[episode]]);
+	SetBuiltInLevelName(RifNamesForEnvironments[MarineEpisodes[episode]]);
+}
+
+// Puts "Custom/<name>" into LevelName. The name is a file name from avp_rifs/custom and may be long, so the copy
+// stops at the end of LevelName, and a name that gets cut short goes to the log.
+static void SetCustomLevelName(const char *name)
+{
+	if (_snprintf(LevelName, sizeof(LevelName) - 1, "Custom/%s", name) < 0)
+	{
+		LogErrorString(std::string("custom level name too long, truncated: ") + name);
+	}
+	LevelName[sizeof(LevelName) - 1] = '\0';
 }
 
 void SetLevelToLoadForMultiplayer(int episode)
@@ -5141,11 +5169,11 @@ void SetLevelToLoadForMultiplayer(int episode)
 	{
 		//it certainly is
 		//(the game type sent passed to the function doesn't really matter , as long as it isn't NGT_COOP)
-		sprintf(LevelName,"Custom/%s",GetCustomMultiplayerLevelName(episode,NGT_Individual));
+		SetCustomLevelName(GetCustomMultiplayerLevelName(episode,NGT_Individual));
 	}
 	else
 	{
-		strcpy(LevelName,RifNamesForEnvironments[MultiplayerEpisodes[episode]]);
+		SetBuiltInLevelName(RifNamesForEnvironments[MultiplayerEpisodes[episode]]);
 	}
 }
 void SetLevelToLoadForCooperative(int episode)
@@ -5154,17 +5182,17 @@ void SetLevelToLoadForCooperative(int episode)
 	if(episode>=MAX_NO_OF_COOPERATIVE_EPISODES)
 	{
 		//it certainly is
-		sprintf(LevelName,"Custom/%s",GetCustomMultiplayerLevelName(episode,NGT_Coop));
+		SetCustomLevelName(GetCustomMultiplayerLevelName(episode,NGT_Coop));
 	}
 	else
 	{
-		strcpy(LevelName,RifNamesForEnvironments[CooperativeEpisodes[episode]]);
+		SetBuiltInLevelName(RifNamesForEnvironments[CooperativeEpisodes[episode]]);
 	}
 }
 
 void SetLevelToLoad(enum AVP_ENVIRONMENT_ID env)
 {
-	strcpy(LevelName,RifNamesForEnvironments[env]);
+	SetBuiltInLevelName(RifNamesForEnvironments[env]);
 }
 
 void SetLevelToLoadForCheatMode(int environment)
@@ -5205,7 +5233,8 @@ static BOOL DoesNamedLevelExist(const char* level_name)
 
 	OutputDebugString("DoesNamedLevelExist\n");
 
-	sprintf(filename, "avp_rifs/%s.rif", level_name);
+	_snprintf(filename, sizeof(filename) - 1, "avp_rifs/%s.rif", level_name);
+	filename[sizeof(filename) - 1] = '\0';
 
 	file_handle = avp_CreateFile(filename,GENERIC_READ,0,0,OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 	if(file_handle == INVALID_HANDLE_VALUE)	return FALSE;

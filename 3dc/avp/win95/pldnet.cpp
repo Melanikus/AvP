@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   chat lines, multiplayer console messages and the lives, score and time texts are written with
+//   size limits, so no name, chat line or language-file text can run past the end of its buffer
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -4231,7 +4235,24 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 		}
 		while (*ptr++);
 	}
-	sprintf(OnScreenMessageBuffer, "%s: %s", netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	// Show our own chat line on our screen as "NAME: message".
+	// OnScreenMessageBuffer holds 300 bytes: up to 299 characters (letters,
+	// digits, spaces and so on), then a zero byte that marks where the text
+	// stops (the "end marker").
+	// The check near the top of this function turns away a message of 254
+	// characters or more, and a player's name is kept in a 13-byte box (at
+	// most 12 characters and its end marker). So today the line is at most
+	// 12 + 2 + 253 = 267 characters long and always fits.
+	// The limits are also put right here, so the line can never run past the
+	// end of the buffer, even if one of those checks is changed one day:
+	// - "%.*s" with NET_PLAYERNAMELENGTH reads no more than the 13 bytes of
+	//   the name box, even if its end marker were missing;
+	// - _snprintf writes at most 299 characters. When it has to cut the text
+	//   short it leaves out the end marker, so we always write one ourselves
+	//   into the last byte.
+	// A line that fits comes out exactly as before.
+	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
 
@@ -7191,7 +7212,20 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 			}
 		}
 
-		sprintf(OnScreenMessageBuffer, "%s: %s", netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		// Another player's computer sent us this chat line over the network.
+		// We show it as "NAME: message" in OnScreenMessageBuffer, which holds 300
+		// bytes: up to 299 characters, then the end marker (the zero byte that
+		// marks where the text stops).
+		// The check at the top of this function refuses a line of 254 characters
+		// or more, and the sender's name is kept in a 13-byte box, so the line
+		// fits today. A broken or hostile computer must never be able to push it
+		// past the end of the buffer, so the limits are also right here: at most
+		// the 13 bytes of the name box ("%.*s"), at most 299 characters in all
+		// (_snprintf), and the end marker written by us into the last byte,
+		// because _snprintf leaves it out when it cuts the text short.
+		// A line that fits comes out exactly as before.
+		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 		NewOnScreenMessage(OnScreenMessageBuffer);
 
 		/* KJL 99/2/5 - play 'incoming message' sound */
@@ -10576,84 +10610,68 @@ void ChangeNetGameType_PredatorTag()
 */
 static void NetworkGameConsoleMessage(enum TEXTSTRING_ID stringID, const char *name1, const char *name2)
 {
-	char *messageptr = &OnScreenMessageBuffer[0];
-	char *string = GetTextString(stringID);
-
-	if (!string) {
-		return;
-	}
-
-	while (*string)
-	{
-		if (string[0] == '%')
-		{
-			if (string[1] >= '1' && string[1] <= '9')
-			{
-				if (string[1] == '1' && name1)
-				{
-					strcpy(messageptr, name1);
-					messageptr += strlen(name1);
-				}
-
-				if (string[1] == '2' && name2)
-				{
-					strcpy(messageptr, name2);
-					messageptr += strlen(name2);
-				}
-
-				string += 2;
-				continue;
-			}
-		}
-
-		*messageptr++ = *string++;
-	}
-
-	*messageptr = 0;
-	NewOnScreenMessage(OnScreenMessageBuffer);
+	// This is the same job as the weapon-icon version below, without a weapon
+	// icon, so it hands the work over to that one.
+	NetworkGameConsoleMessageWithWeaponIcon(stringID, name1, name2, 0);
 }
 
 static void NetworkGameConsoleMessageWithWeaponIcon(enum TEXTSTRING_ID stringID, const char *name1, const char *name2, const char *weaponSymbol)
 {
+	// We build the message in OnScreenMessageBuffer, which holds 300 bytes:
+	// up to 299 characters (letters, digits, spaces and so on), then a zero
+	// byte that marks where the text stops (the "end marker").
+	// The message pattern, such as "%1 was killed by %2", comes from the
+	// game's language text file on disk. Without the limits below, a pattern
+	// line made very long in that file would make this code write past the
+	// end of the buffer and damage other memory. Every copy below stops at
+	// the 299th character instead, so a message that is too long is cut
+	// short. A message that fits comes out exactly as before.
 	char *messageptr = &OnScreenMessageBuffer[0];
-	char *string = GetTextString(stringID);
+	char * const messageend = &OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1]; // the last byte is kept for the end marker
+	const char *string = GetTextString(stringID);
 
 	if (!string) {
 		return;
 	}
 
-	while (*string)
+	while (*string && messageptr < messageend)
 	{
-		if (string[0] == '%')
+		// "%1" means "put the first name here" and "%2" the second one.
+		// "%3" to "%9" have no name to put in, so they are left out, as before.
+		if (string[0] == '%' && string[1] >= '1' && string[1] <= '9')
 		{
-			if (string[1] >= '1' && string[1] <= '9')
+			const char *name = (string[1] == '1') ? name1 : ((string[1] == '2') ? name2 : 0);
+
+			if (name)
 			{
-				if (string[1] == '1' && name1)
-				{
-					strcpy(messageptr, name1);
-					messageptr += strlen(name1);
-				}
-
-				if (string[1] == '2' && name2)
-				{
-					strcpy(messageptr, name2);
-					messageptr += strlen(name2);
-				}
-
-				string += 2;
-				continue;
+				// Every caller passes a player's name from netGameData, which is
+				// kept in a 13-byte box (NET_PLAYERNAMELENGTH). We read no more
+				// than that box, and copy no more than still fits in the buffer.
+				size_t const nameBox = NET_PLAYERNAMELENGTH;
+				size_t const room = messageend - messageptr;
+				size_t const nameLength = strnlen(name, (room < nameBox) ? room : nameBox);
+				memcpy(messageptr, name, nameLength);
+				messageptr += nameLength;
 			}
+
+			string += 2;
+			continue;
 		}
 
 		*messageptr++ = *string++;
 	}
 
-	*messageptr = 0;
-
-	if (weaponSymbol) {
-		strcat(OnScreenMessageBuffer, weaponSymbol);
+	// A kill message can end with the weapon that was used: a space and one
+	// special character that the console font draws as a small picture of
+	// the weapon. It is added only as far as it still fits.
+	if (weaponSymbol)
+	{
+		size_t const symbolLength = strnlen(weaponSymbol, messageend - messageptr);
+		memcpy(messageptr, weaponSymbol, symbolLength);
+		messageptr += symbolLength;
 	}
 
+	*messageptr = 0;
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
 
@@ -11293,6 +11311,13 @@ void DoMultiplayerEndGameScreen(void)
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
 	int i, j;
 	int x, y;
+	// text holds 100 bytes: up to 99 characters (letters, digits, spaces and so
+	// on), then a zero byte that marks where the text stops (the "end marker").
+	// The "lives left" line below holds words from the game's language text file on
+	// disk, so it uses _snprintf, which stops at 99 characters, and then writes the
+	// end marker into the last byte itself, because _snprintf leaves it out when it
+	// has to cut the text short. Text that fits is shown exactly as before. (The
+	// other lines here only write numbers, which always fit.)
 	char text[100];
 
 	if (netGameData.myGameState == NGS_EndGameScreen) {
@@ -11489,7 +11514,9 @@ void DoMultiplayerEndGameScreen(void)
 			}
 
 			//display remaining lives
-			sprintf(text, "%s: %d", GetTextString(TEXTSTRING_MULTIPLAYER_LIVES_LEFT), CountMultiplayerLivesLeft());
+			// size-limited: see the note where text is declared
+			_snprintf(text, sizeof(text) - 1, "%s: %d", GetTextString(TEXTSTRING_MULTIPLAYER_LIVES_LEFT), CountMultiplayerLivesLeft());
+			text[sizeof(text) - 1] = '\0';
 			RenderStringCentred(text, ScreenDescriptorBlock.SDB_Width / 2, y, 0xffffffff);
 		}
 	}
@@ -11606,6 +11633,12 @@ static BOOL IsItPossibleToScore()
 void DoMultiplayerSpecificHud()
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
+	// text holds 200 bytes: up to 199 characters (letters, digits, spaces and so
+	// on), then a zero byte that marks where the text stops (the "end marker").
+	// The score and time lines below hold words from the game's language text file
+	// on disk, so they use _snprintf, which stops at 199 characters, and then write
+	// the end marker into the last byte themselves, because _snprintf leaves it out
+	// when it has to cut the text short. Text that fits is shown exactly as before.
 	char text[200];
 
 	// Show score table if either
@@ -11637,7 +11670,9 @@ void DoMultiplayerSpecificHud()
 
 		if (score || IsItPossibleToScore())
 		{
-			sprintf(text, "%s : %d", GetTextString(TEXTSTRING_MULTIPLAYER_SCORE), score);
+			// size-limited: see the note where text is declared
+			_snprintf(text, sizeof(text) - 1, "%s : %d", GetTextString(TEXTSTRING_MULTIPLAYER_SCORE), score);
+			text[sizeof(text) - 1] = '\0';
 			RenderString(text, 5, 0, 0xffffffff);
 		}
 	}
@@ -11657,7 +11692,9 @@ void DoMultiplayerSpecificHud()
 		minutesLeft = (secondsLeft / 60) % 60;
 		secondsLeft %= 60;
 		// display time left as hh:mm:ss
-		sprintf(text, "%s : %02d:%02d:%02d", GetTextString(TEXTSTRING_MULTIPLAYER_TIME), hoursLeft, minutesLeft, secondsLeft);
+		// size-limited: see the note where text is declared
+		_snprintf(text, sizeof(text) - 1, "%s : %02d:%02d:%02d", GetTextString(TEXTSTRING_MULTIPLAYER_TIME), hoursLeft, minutesLeft, secondsLeft);
+		text[sizeof(text) - 1] = '\0';
 		RenderString(text, 5, 20, 0xffffffff);
 	}
 }

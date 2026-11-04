@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares SaveBlockArrayFits, the shared check that a counted list from a save file fits its block and array
 #ifndef savegame_h_
 #define savegame_h_ 1
 
@@ -81,6 +84,11 @@ extern struct aimodule * GetPointerFromAIModuleIndex(int index);
 extern int GetIndexFromAIModulePointer(struct aimodule* module);
 
 extern SAVE_BLOCK_HEADER* GetNextBlockIfOfType(SAVE_BLOCK_TYPE type);
+
+//for a block made of a fixed part of fixedSize bytes, which holds the element count at *countPtr, followed by an array
+//of elements of elemSize bytes: TRUE when the fixed part fits in header->size, 0 <= count <= capacity and the elements
+//fit in the rest of the block (no overflow). The caller keeps its own exact size test.
+extern BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const int* countPtr, int elemSize, int capacity);
 
 #define GET_SAVE_BLOCK_POINTER(blockStructDefinition, block) block = (blockStructDefinition*)GetPointerForSaveBlock(sizeof(*block))
 

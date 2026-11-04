@@ -1,5 +1,10 @@
 // Chunk library
 
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed a group of helper macros that nothing used
+//   added ChildChunkFits, which checks that a child chunk's size from the file can be real
+
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
@@ -337,60 +342,29 @@ protected:
 };
 
 /////////////////////////////////////////////
-// macros to save typing for chunk with children loader
+// the file chunk being loaded, for the loaders' error codes
 
 extern Chunk * Parent_File;
 
-#define CHUNK_WITH_CHILDREN_LOADER_PARENT __parent
+// A chunk's children sit one after another inside it. Each child starts with a 12-byte header, an 8-byte name and then
+// its own size, and that size counts the header. All of this comes from the file, so before a child is used the
+// loaders ask this function whether it can be real: there must be room left for a header, the size must at least hold
+// the header, and the child must end inside its parent. A size below 12 would make the loaders walk backwards or spin
+// on the same spot, and would hand the child a "size minus 12" that wraps round to about 4 GB.
+// child is where the child starts, start is where the parent's data starts, total is the size of the parent's data.
+inline bool ChildChunkFits(char const * child, char const * start, signed int total)
+{
+	signed int const bytes_left = total - (signed int)(child - start);
 
-#define CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-chunkclass::chunkclass(Chunk_With_Children * const CHUNK_WITH_CHILDREN_LOADER_PARENT, char const * __data, size_t const __size) \
-:Chunk_With_Children(CHUNK_WITH_CHILDREN_LOADER_PARENT,id)
+	if (bytes_left < 12)
+	{
+		return false;
+	}
 
-#define CHUNK_WITH_CHILDREN_LOADER_INIT_PT2 { \
-	const char * const __buffer_ptr = __data; \
-	while (__data - __buffer_ptr < (signed)__size){ \
-		if (*(int *)(__data + 8) + (__data-__buffer_ptr) > (signed)__size){ \
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED; \
-			break;}
+	signed int const child_size = *(int const *)(child + 8);
 
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-chunkclass::chunkclass(Chunk_With_Children * const CHUNK_WITH_CHILDREN_LOADER_PARENT, char const * __data, size_t const __size) \
-:Lockable_Chunk_With_Children(CHUNK_WITH_CHILDREN_LOADER_PARENT,id)
-
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT2 { \
-	const char * const __buffer_ptr = __data; \
-	while (__data - __buffer_ptr < (signed) __size){ \
-		if (*(int *)(__data + 8) + (__data-__buffer_ptr) > (signed) __size){ \
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED; \
-			break;}
-
-#define CHUNK_WITH_CHILDREN_LOADER_INIT(id,chunkclass) \
-	CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-	CHUNK_WITH_CHILDREN_LOADER_INIT_PT2
-
-#define LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT(id,chunkclass) \
-	LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT1(id,chunkclass) \
-	LOCKABLE_CHUNK_WITH_CHILDREN_LOADER_INIT_PT2
-
-#define CHUNK_WITH_CHILDREN_LOADER_FOR(id,chunkclass) \
-		else if (!strncmp(__data,id,8)){ \
-			new chunkclass(this,__data+12,*(int *)(__data+8)-12); \
-			__data += *(int *)(__data+8);}
-
-#define CHUNK_WITH_CHILDREN_LOADER_END \
-		else { \
-			new Miscellaneous_Chunk (this, __data, (__data + 12), (*(int *) (__data + 8)) -12 ); \
-			__data += *(int *)(__data + 8);}}}
-
-// example:
-//
-// CHUNK_WITH_CHILDREN_LOADER_INIT("GAMEMODE",Environment_Game_Mode_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("ENVPALET",Environment_Palette_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("ENVTXLIT",Environment_TLT_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("CLRLOOKP",Coloured_Polygons_Lookup_Chunk)
-//     CHUNK_WITH_CHILDREN_LOADER_FOR("RIFCHILD",RIF_Name_Chunk)
-// CHUNK_WITH_CHILDREN_LOADER_END
+	return child_size >= 12 && child_size <= bytes_left;
+}
 
 ///////////////////////////////////////////////
 //macros for use in chunk construction from buffer, assume buffer is called data
@@ -540,7 +514,7 @@ chunk_class::chunk_class(Chunk_With_Children * const parent, char const * __data
 {\
 	const char * __buffer_ptr = __data;\
 	while ((__data-__buffer_ptr)< (signed) __size) {\
-		if ((*(int *)(__data + 8)) + (__data-__buffer_ptr) > (signed) __size) {\
+		if (!ChildChunkFits(__data, __buffer_ptr, (signed) __size)) {\
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\
 			break;\
 		}\
@@ -559,7 +533,7 @@ chunk_class::chunk_class(Chunk_With_Children * const parent,char const * __data,
 {\
 	const char * __buffer_ptr = __data;\
 	while ((__data-__buffer_ptr)< (signed) __size) {\
-		if ((*(int *)(__data + 8)) + (__data-__buffer_ptr) > (signed) __size) {\
+		if (!ChildChunkFits(__data, __buffer_ptr, (signed) __size)) {\
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\
 			break;\
 		}\

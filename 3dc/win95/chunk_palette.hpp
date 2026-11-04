@@ -1,6 +1,13 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text is copied using its exact measured length, level file names are kept in a list that grows as
+//   needed, and the declarations of code only the level editor used were removed
+
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
 
+#include <string>
+#include <vector>
 #include "chunk.hpp"
 #include "bitmap_names.hpp"
 
@@ -496,8 +503,6 @@ public:
 															
 	Environment_Game_Mode_Header_Chunk * header;
 	Environment_Data_Chunk * const envd_parent;
-	
-	char * ExpandedIdentifier() const; // must delete return value
 
 	inline BOOL operator == (Environment_Game_Mode_Chunk const & m) const;
 	inline BOOL operator != (Environment_Game_Mode_Chunk const & m) const;
@@ -571,19 +576,13 @@ public:
 	int flags;
 	char * mode_identifier;
 
-	inline void add_rif_entry(char const * f)
-	{
-		char * n = new char[strlen(f)+1];
-		strcpy(n,f);
-		rif_files.add_entry(n);
-	}
 	inline const char * get_safe_source(void)
 	{
 		if (flags & GameModeFlag_Editable)
 			return "this.rif";
-		if (!rif_files.size())
+		if (rif_files.empty())
 			return "unknown.rif";
-		return rif_files.first_entry();
+		return rif_files[0].c_str();
 	}
 	
 private:
@@ -594,7 +593,7 @@ private:
 	friend class GameModeDlg;
 	friend class GameModeRifDlg;
 
-	List<char *> rif_files; // where the game mode goes to or comes from
+	std::vector<std::string> rif_files; // where the game mode goes to or comes from
 	
 	#define ChunkGMod_NumReserved 3
 	int reserved[ChunkGMod_NumReserved];
@@ -677,8 +676,9 @@ public:
 		delete[] filename;
 		if (c.filename)
 		{
-			filename = new char[strlen(c.filename)+1];
-			strcpy(filename,c.filename);
+			size_t const filename_size = strlen(c.filename)+1;
+			filename = new char[filename_size];
+			memcpy(filename,c.filename,filename_size);
 		}
 		else
 			filename = 0;
@@ -728,10 +728,8 @@ public:
 	virtual void fill_data_block (char * data_start);
 	
 	int const * GetMD5Val(BMP_Flags const & rcbmp);
-	void SetMD5Val(BMP_Flags const & rcbmp, int const * md5id);
 	void RemoveMD5Val(char const * bname);
 	Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	void CreateMD5Chunk(BMP_Flags const & rcbmp, int const * md5id);
 	
 	Environment_Game_Mode_Chunk * const egm_parent;
 	

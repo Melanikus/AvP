@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text is copied using the exact length measured when its space was made, and a sound file path
+//   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
+//   an impossible sequence number is skipped too, and an object with no usable sequence is left out, as is a
+//   placed sound with no file name
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -58,6 +64,7 @@
 #include "mempool.h"
 #include "pldnet.h"
 #include "3dc.h"
+#include "logString.h"
 
 extern MAPSETVDB chnk_playcam_vdb;
 extern int GlobalAmbience;
@@ -108,9 +115,23 @@ extern char* Rif_Sound_Directory;
 LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 {
 	static char filename[200];
+
+	// A level file can leave a sound's name blank, and the chunk then holds no name at all. There is nothing to load.
+	if (!wav_name)
+	{
+		return 0;
+	}
+
 	if (Rif_Sound_Directory)
 	{
-		sprintf(filename, "%s/%s", Rif_Sound_Directory, wav_name);
+		// filename holds 200 bytes. A path too long for it is not cut short, which could load the wrong sound:
+		// it goes to the log, and the game carries on with no sound here, as it does when a sound is missing.
+		if (_snprintf(filename, sizeof(filename) - 1, "%s/%s", Rif_Sound_Directory, wav_name) < 0)
+		{
+			LogErrorString(std::string("sound file path too long: ") + wav_name);
+			return 0;
+		}
+		filename[sizeof(filename) - 1] = '\0';
 		return GetSound(filename);
 	}
 	else
@@ -950,7 +971,14 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(;!chlif.done();chlif.next())
 	{
 		Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
-		phtt->num_sounds=max(phtt->num_sounds,isc->index+1);
+		if(isc->index_is_valid())
+		{
+			phtt->num_sounds=max(phtt->num_sounds,isc->index+1);
+		}
+		else
+		{
+			LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
+		}
 	}
 
 	if(phtt->num_sounds)
@@ -965,6 +993,13 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		for(chlif.restart();!chlif.done();chlif.next())
 		{
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
+
+			// A number the list has no place for went to the log above, and that sound stays missing. See index_is_valid.
+			if(!isc->index_is_valid())
+			{
+				continue;
+			}
+
 			PLACED_HIERARCHY_SOUND* phs=&phtt->sounds[isc->index];
 
 			phs->inner_range = (unsigned)(isc->inner_range*local_scale);
@@ -984,15 +1019,34 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Placed_Hierarchy_Sequence_Chunk* phsc=(Placed_Hierarchy_Sequence_Chunk*)chlif();
-		phtt->num_sequences=max(phtt->num_sequences,phsc->index+1);
+		if(phsc->index_is_valid())
+		{
+			phtt->num_sequences=max(phtt->num_sequences,phsc->index+1);
+		}
+		else
+		{
+			LogErrorString("level file gives a sequence an impossible number: " + Util::IntToString(phsc->index));
+		}
 	}
 
-	GLOBALASSERT(phtt->num_sequences);
+	// The game starts an object's first sequence as soon as the object is made, so an object with no usable sequence
+	// goes to the log and is left out of the level.
+	if(!phtt->num_sequences)
+	{
+		LogErrorString("level file has a placed object with no usable sequence");
+		return;
+	}
 
+	// A number the level file doesn't use leaves a gap in this list, so every part of every entry gets a safe value.
 	phtt->sequences=(PLACED_HIERARCHY_SEQUENCE*)PoolAllocateMem(sizeof(PLACED_HIERARCHY_SEQUENCE)*phtt->num_sequences);
 	for(i=0;i<phtt->num_sequences;i++)
 	{
 		phtt->sequences[i].sequence_no=-1;
+		phtt->sequences[i].sub_sequence_no=0;
+		phtt->sequences[i].time=0;
+		phtt->sequences[i].loop=0;
+		phtt->sequences[i].num_sound_times=0;
+		phtt->sequences[i].sound_times=0;
 	}
 	phtt->first_sequence=&phtt->sequences[0];
 	phtt->playing=0;
@@ -1000,6 +1054,13 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Placed_Hierarchy_Sequence_Chunk* phsc=(Placed_Hierarchy_Sequence_Chunk*)chlif();
+
+		// A number the list has no place for went to the log above, and that sequence is left out. See index_is_valid.
+		if(!phsc->index_is_valid())
+		{
+			continue;
+		}
+
 		PLACED_HIERARCHY_SEQUENCE* ph_seq=&phtt->sequences[phsc->index];
 
 		ph_seq->sequence_no=phsc->sequence;
@@ -1042,6 +1103,30 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 			ph_seq->sound_times=0;
 		}
 		
+	}
+
+	// The game starts first_sequence as soon as the object is made. It could still be a gap, if the level file names
+	// no starting sequence and leaves place 0 empty, so it moves to the first entry with something to play. If no
+	// entry has, because a file can also give -1 as a sequence, the object goes to the log and is left out of the level.
+	if(phtt->first_sequence->sequence_no==-1)
+	{
+		PLACED_HIERARCHY_SEQUENCE* playable_sequence=0;
+
+		for(i=0;i<phtt->num_sequences && !playable_sequence;i++)
+		{
+			if(phtt->sequences[i].sequence_no!=-1)
+			{
+				playable_sequence=&phtt->sequences[i];
+			}
+		}
+
+		if(!playable_sequence)
+		{
+			LogErrorString("level file has a placed object with no usable sequence");
+			return;
+		}
+
+		phtt->first_sequence=playable_sequence;
 	}
 
 	phtt->num_special_track_points=0;
@@ -3692,6 +3777,16 @@ void setup_sounds (Environment_Data_Chunk *envd)
 		for (LIF<Chunk *> cli(&cl); !cli.done(); cli.next())
 		{
 			Sound_Object_Chunk *snd = (Sound_Object_Chunk *) cli();
+
+			// A level file can leave a placed sound's file name blank, and the chunk then holds no name at all. Everything
+			// below, and the sound object the game makes later, measures and copies that name, so a sound with no name
+			// goes to the log and is left out of the level. None of the game's own 2062 placed sounds has a blank name.
+			if (!snd->wav_name)
+			{
+				LogErrorString("level file has a placed sound with no file name");
+				continue;
+			}
+
 			SOUND_TOOLS_TEMPLATE *stt = (SOUND_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(SOUND_TOOLS_TEMPLATE));
 			
 			stt->position.vx = (int)(snd->position.x * local_scale);
@@ -3716,8 +3811,9 @@ void setup_sounds (Environment_Data_Chunk *envd)
 			else
 				stt->loop=1;
 
-			stt->sound_name = (char*) PoolAllocateMem(strlen (snd->wav_name) + 1);
-			strcpy(stt->sound_name, snd->wav_name);
+			size_t const sound_name_size = strlen (snd->wav_name) + 1;
+			stt->sound_name = (char*) PoolAllocateMem(sound_name_size);
+			memcpy(stt->sound_name, snd->wav_name, sound_name_size);
 			stt->sound_loaded = GetSoundForMainRif(snd->wav_name);
 
 			AddToBehaviourList(snd->snd_name,snd->CalculateID(), I_BehaviourPlacedSound, (void *) stt);

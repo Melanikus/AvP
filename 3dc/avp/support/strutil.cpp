@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the string copy helper copies exactly as many bytes as its callers made room for
 /*
 
 	STRUTIL.C
@@ -205,7 +208,9 @@ ProjChar* STRUTIL_SC_StrCpy
 	GLOBALASSERT(pProjCh_Dst);
 	GLOBALASSERT(pProjCh_Src);
 
-	return (strcpy(pProjCh_Dst,pProjCh_Src));
+	// every caller makes pProjCh_Dst exactly STRUTIL_SC_NumBytes(pProjCh_Src) bytes big, so this copy always fits
+	memcpy(pProjCh_Dst, pProjCh_Src, STRUTIL_SC_NumBytes(pProjCh_Src));
+	return pProjCh_Dst;
 }
 
 void STRUTIL_SC_FastCat

@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   added a check on the shape set collection numbers a level file gives
+
 #ifndef _hierchnk_hpp
 #define _hierchnk_hpp 1
 
@@ -164,6 +168,14 @@ public :
 
 	int TypeIndex;
 	int flags;
+
+	// The game keeps a list of collections, just long enough for the highest number it finds, and uses each
+	// collection's number as its place in that list. The number comes straight from the level file, so it could be
+	// anything, with the same dangers as Indexed_Sound_Chunk::index_is_valid describes. Numbers in the game's own files
+	// run from 2 to 18, so this limit leaves plenty of room. Anything using the number as a place in a list must skip a
+	// collection that fails this check.
+	static const int Max_Set_Collection_Number = 4095;
+	bool number_is_valid() const { return Set_Collection_Num >= 0 && Set_Collection_Num <= Max_Set_Collection_Number; }
 };
 
 class Hierarchy_Degradation_Distance_Chunk : public Chunk

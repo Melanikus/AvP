@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text expansions are made by a small function that hands them back (it works the same as before)
 /*
 	
 	textexp.hpp
@@ -62,6 +65,16 @@
 			SCString* pSCString_Short,
 			SCString* pSCString_Expansion
 		);
+
+		// creates an expansion; it adds itself to List_pTextExp, and TryToRemoveExpansion deletes it
+		static TextExpansion* Make
+		(
+			SCString* pSCString_Short,
+			SCString* pSCString_Expansion
+		)
+		{
+			return new TextExpansion(pSCString_Short, pSCString_Expansion);
+		}
 
 		static void TryToRemoveExpansion
 		(

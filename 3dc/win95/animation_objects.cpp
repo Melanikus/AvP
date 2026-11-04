@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it
+
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
 #include "list_tem.hpp"
@@ -220,39 +224,6 @@ void Object_Animation_Sequences_Chunk::list_sequences(List <Object_Animation_Seq
 }
 
 
-Object_Animation_Sequence_Chunk::Object_Animation_Sequence_Chunk(Object_Animation_Sequences_Chunk* parent,Object_Animation_Sequence_Chunk* template_seq,ChunkQuat & orient ,ChunkVectorInt & trans)
-:Chunk_With_Children (parent, "OBANSEQC")
-{
-	Object_Animation_Sequence_Header_Chunk* template_header = template_seq->get_header();
-	Object_Animation_Sequence_Header_Chunk* header = new Object_Animation_Sequence_Header_Chunk(this);
-
-	header->num_frames = 65536;
-	header->sequence_number = template_header->sequence_number;
-	header->sub_sequence_number = template_header->sub_sequence_number;
-	header->sequence_name = new char[strlen(template_header->sequence_name)+1];
-	strcpy(header->sequence_name, template_header->sequence_name);
-
-	Object_Animation_Sequence_Frame_Chunk* oasfc=new Object_Animation_Sequence_Frame_Chunk(this);
-	
-	oasfc->orientation=  orient;
-	oasfc->transform = trans;
-	oasfc->at_frame_no = 0;
-	oasfc->frame_ref_no = 0;
-
-	//see if template sequence is a delta sequence
-	List<Object_Animation_Sequence_Frame_Chunk*> framelist;
-	template_seq->get_frames(&framelist);
-	while (framelist.size())
-	{
-		if (framelist.first_entry()->flags & HierarchyFrameFlag_DeltaFrame)
-		{
-			oasfc->flags=HierarchyFrameFlag_DeltaFrame;
-			break;
-		}
-		framelist.delete_first_entry();
-	}
-}
-
 Object_Animation_Sequence_Chunk * Object_Animation_Sequences_Chunk::get_sequence (int num, int subnum)
 {
 	List <Object_Animation_Sequence_Chunk *> seq_list;
@@ -332,22 +303,6 @@ int Object_Animation_Sequence_Chunk::get_sequence_flags()
 		return flag_chunk->flags;
 	}
 	return 0;
-}
-
-void Object_Animation_Sequence_Chunk::set_sequence_flags(int new_flags)
-{
-	//find existing flag_chunk , or create a new one
-	Object_Animation_Sequence_Flags_Chunk* flag_chunk=(Object_Animation_Sequence_Flags_Chunk*)lookup_single_child("OBASEQFL");
-	if(flag_chunk)
-	{
-		//set the flags
-		flag_chunk->flags = new_flags;
-	}
-	else
-	{
-		//create a new chunk then
-		new Object_Animation_Sequence_Flags_Chunk(this,new_flags);
-	}
 }
 
 Hierarchy_Bounding_Box_Chunk* Object_Animation_Sequence_Chunk::get_bounding_box()

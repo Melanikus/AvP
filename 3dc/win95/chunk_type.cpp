@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the texture file names of a shape are copied using their exact measured length, so they always fit
+
 #include "chunk.hpp"
 #include <math.h>
 #include "chunk_type.hpp"
@@ -509,8 +513,9 @@ ChunkShape::ChunkShape(const ChunkShape &shp)
 		texture_fns = new char * [num_texfiles];
 		for (i=0; i < num_texfiles; i++)
 		{
-			texture_fns[i] = new char [strlen (shp.texture_fns[i]) + 1];
-			strcpy (texture_fns[i], shp.texture_fns[i]);
+			size_t const texture_fn_size = strlen (shp.texture_fns[i]) + 1;
+			texture_fns[i] = new char [texture_fn_size];
+			memcpy (texture_fns[i], shp.texture_fns[i], texture_fn_size);
 		}
 	}
 
@@ -599,8 +604,9 @@ ChunkShape& ChunkShape::operator=(const ChunkShape &shp)
 		texture_fns = new char * [num_texfiles];
 		for (int i=0; i < num_texfiles; i++)
 		{
-			texture_fns[i] = new char [strlen (shp.texture_fns[i]) + 1];
-			strcpy (texture_fns[i], shp.texture_fns[i]);
+			size_t const texture_fn_size = strlen (shp.texture_fns[i]) + 1;
+			texture_fns[i] = new char [texture_fn_size];
+			memcpy (texture_fns[i], shp.texture_fns[i], texture_fn_size);
 		}
 	}
 	

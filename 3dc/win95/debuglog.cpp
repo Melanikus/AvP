@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the log lines not yet written are kept in a list that cleans up after itself
+
 #include <string.h>
 #include <stdlib.h>
 #include "os_header.h"
@@ -85,13 +89,11 @@ LogFile::LogFile(LogFile const & l)
 
 void LogFile::FlushOut(FILE * fp)
 {
-	while (unwritten.size())
+	for (size_t i = 0; i < unwritten.size(); ++i)
 	{
-		char * str = unwritten.first_entry();
-		unwritten.delete_first_entry();
-		fputs(str,fp);
-		delete[] str;
+		fputs(unwritten[i].c_str(),fp);
 	}
+	unwritten.clear();
 }
 
 int vlfprintf(LOGFILE * lfp, char const * format, va_list args )

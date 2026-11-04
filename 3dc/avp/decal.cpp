@@ -3,6 +3,10 @@
 *  D E C A L   S Y S T E M  *
 *                           *
 ************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it;
+//   the number of decals (marks on walls) and their ids read from a save file are checked before use
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -29,7 +33,6 @@
 #include <assert.h>
 
 #define MAX_NO_OF_DECALS 1024
-#define MAX_NO_OF_FIXED_DECALS 1024
 #define DECAL_Z_OFFSET 0
 
 THREE_LASER_DOT_DESC PredatorLaserTarget;
@@ -1107,10 +1110,20 @@ void Load_Decals(SAVE_BLOCK_HEADER* header)
 	DECAL* saved_decal = (DECAL*) (block+1);
 	int expected_size;
 
+	//the decals are read from the block (AllocateDecal never fails, it reuses the ring): the count must fit the block
+	//and DecalStorage[MAX_NO_OF_DECALS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveDecals, sizeof(DECAL), MAX_NO_OF_DECALS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(DECAL) * block->NumActiveDecals;
 	if(header->size != expected_size) return;
+
+	//DecalDescription[DecalID] is read when each decal is drawn: skip a block with an id the game cannot have saved
+	for(i=0;i<block->NumActiveDecals;i++)
+	{
+		if((int)saved_decal[i].DecalID < 0 || (int)saved_decal[i].DecalID >= MAX_NO_OF_DECAL_IDS) return;
+	}
 
 
 	for(i=0;i<block->NumActiveDecals;i++)

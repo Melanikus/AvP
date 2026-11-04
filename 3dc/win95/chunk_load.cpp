@@ -1,4 +1,10 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
+//   text is copied using its exact measured length, so it always fits
+
 #include <stdlib.h>
+#include <string>
 #include <avp_string.hpp>
 
 #include "list_tem.hpp"
@@ -572,10 +578,10 @@ RIFFHANDLE load_rif(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		char message[200];
-		sprintf(message, "Error loading %s", fname);
+		// fname can be a long custom level path: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message, MB_OK + MB_SYSTEMMODAL);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
 		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
@@ -605,10 +611,10 @@ RIFFHANDLE load_rif_non_env(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		char message[200];
-		sprintf(message, "Error loading %s", fname);
+		// fname can come from a level's RIFCHILD chunk: no fixed-size buffer
+		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
-		avp_MessageBox(message, MB_OK + MB_SYSTEMMODAL);
+		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
 		avp_exit(0x111);
 		return INVALID_RIFFHANDLE;
 	}
@@ -2681,8 +2687,9 @@ BOOL copy_to_shapeheader(
 	{
 		for (i = 0; i < cshp_ptr->num_texfiles; i++)
 		{
-			shphd->sh_localtextures[i] = (char *) PoolAllocateMem(sizeof(char) * (strlen(cshp_ptr->texture_fns[i]) + 1));
-			strcpy(shphd->sh_localtextures[i], cshp_ptr->texture_fns[i]);
+			size_t const texture_fn_size = strlen(cshp_ptr->texture_fns[i]) + 1;
+			shphd->sh_localtextures[i] = (char *) PoolAllocateMem(sizeof(char) * texture_fn_size);
+			memcpy(shphd->sh_localtextures[i], cshp_ptr->texture_fns[i], texture_fn_size);
 		}
 
 		shphd->sh_localtextures[i] = 0;

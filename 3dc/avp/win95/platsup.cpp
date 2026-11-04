@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a loaded text file always ends with a 0 byte, and a second loader also returns the file's size; a file whose
+//   size cannot be read counts as unreadable, and a file that fails to load no longer leaves its memory allocated
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -205,7 +209,16 @@ int IDemandChangeEnvironment()
 /* KJL 15:53:52 05/04/97 - 
 Loaders/Unloaders for language internationalization code in language.c */
 
+char *LoadTextFileWithSize(const char *filename, size_t *sizePtr); // declared in language.h
+
 char *LoadTextFile(const char *filename)
+{
+	return LoadTextFileWithSize(filename, NULL);
+}
+
+// the buffer is one byte longer than the file and that byte is 0, so the text parsers (InitTextStrings,
+// RollCreditsText) can stop at the end of a short or truncated file instead of reading past the block
+char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 {
 	char *bufferPtr;
 	long int save_pos, size_of_file;
@@ -219,7 +232,15 @@ char *LoadTextFile(const char *filename)
 	fseek(fp, 0L, SEEK_END);
 	size_of_file = ftell(fp);
 
-	bufferPtr = (char*)AllocateMem(size_of_file);
+	// ftell answers -1 when it cannot say where it is in the file. That is a "don't know", not a size: used as a size
+	// it would ask for no memory at all and then try to read a huge amount into it. So the file counts as unreadable.
+	if (size_of_file < 0)
+	{
+		fclose(fp);
+		goto error;
+	}
+
+	bufferPtr = (char*)AllocateMem((size_t)size_of_file + 1);
 	if (!bufferPtr)
 	{
 		memoryInitialisationFailure = 1;
@@ -230,8 +251,14 @@ char *LoadTextFile(const char *filename)
 	
 	if (!fread(bufferPtr, size_of_file,1,fp))
 	{
+		// The file is empty or could not be read, so nobody will ever get this memory to free it. Free it here.
+		DeallocateMem(bufferPtr);
 		fclose(fp);
 		goto error;
+	}
+	bufferPtr[size_of_file] = 0;
+	if (sizePtr) {
+		*sizePtr = (size_t)size_of_file;
 	}
 			
 	fclose(fp);

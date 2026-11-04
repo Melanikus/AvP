@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
+//   broken picture coordinates
+
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -1049,6 +1054,11 @@ void DrawSmallMenuCharacter(uint32_t topX, uint32_t topY, uint32_t texU, uint32_
 	uint32_t textureHeight = 0;
 
 	Tex_GetDimensions(AAFontImageNumber, textureWidth, textureHeight);
+
+	// the font texture is missing or empty: draw nothing rather than inf/NaN texture coordinates
+	if (textureWidth == 0 || textureHeight == 0) {
+		return;
+	}
 
 	float RecipW = 1.0f / textureWidth; // 0.00390625
 	float RecipH = 1.0f / textureHeight;

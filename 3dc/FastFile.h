@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   each packed file keeps its name, so a lookup can check it (see FastFile.cpp)
+
 #ifndef _FastFile_h_
 #define _FastFile_h_
 
@@ -34,7 +37,7 @@ struct FastFileHandle
 	uint32_t fileOffset;    // nBytes offset into fast file where actual file data starts
 	uint32_t fileSize;
 
-	std::string fileName;   // this is only set if this item is part of a collision chain
+	std::string fileName;   // the file's name in the fast file (lowercase, '/' separators), checked by FF_Find
 };
 
 bool FF_Init();

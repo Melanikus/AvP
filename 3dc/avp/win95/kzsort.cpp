@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the list of visible level parts has room for one more than its limit, so 401 parts still draw without
+//   writing past the list
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -23,8 +27,9 @@ extern DISPLAYBLOCK *Player;
 
 struct KItem KItemList[maxpolyptrs];
 
-static struct KObject VisibleModules[MAX_NUMBER_OF_VISIBLE_MODULES];
-static struct KObject VisibleModules2[MAX_NUMBER_OF_VISIBLE_MODULES];
+// one entry more than MAX_NUMBER_OF_VISIBLE_MODULES: KRenderItems draws up to MAX + 1 modules (see its limit test)
+static struct KObject VisibleModules[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
+static struct KObject VisibleModules2[MAX_NUMBER_OF_VISIBLE_MODULES + 1];
 static struct KObject *SortedModules;
 static struct KObject VisibleObjects[maxobjects];
 
@@ -221,6 +226,17 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 		/* if it's a module, which isn't inside another module */
 		if (modulePtr && !(modulePtr->m_flags & m_flag_slipped_inside))
 		{
+			/* the original test (numVisMods > MAX), checked before VisibleModules[numVisMods] is written: MAX + 1 modules
+			are drawn as they always were, the arrays have MAX + 1 entries for them, and the MAX + 2nd returns */
+			if (numVisMods > MAX_NUMBER_OF_VISIBLE_MODULES)
+			{
+				/* outside the environment! */
+				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);
+				textprint("Possibly outside the environment!\n");
+//				LOCALASSERT(0);
+				return;
+			}
+
 			// these tests should really be done using the camera (VDB) position
 			if (playerPherModule == modulePtr)
 			{
@@ -291,15 +307,6 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 				VisibleModules[numVisMods].DispPtr = objectPtr;
 
 				VisibleModules[numVisMods].SortKey = Magnitude(&dist);
-			}
-
-			if (numVisMods>MAX_NUMBER_OF_VISIBLE_MODULES)
-			{
-				/* outside the environment! */
-				textprint("MAX_NUMBER_OF_VISIBLE_MODULES (%d) exceeded!\n",MAX_NUMBER_OF_VISIBLE_MODULES);
-				textprint("Possibly outside the environment!\n");
-//				LOCALASSERT(0);
-				return;
 			}
 
 			numVisMods++;

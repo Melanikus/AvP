@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed a large amount of code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
+//   a child chunk whose size cannot be real is refused
+
 #include <math.h>
 
 #include "chunk.hpp"
@@ -49,7 +55,7 @@ Shape_Chunk::Shape_Chunk(Chunk_With_Children * parent, const char *data, size_t 
 	
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -87,55 +93,8 @@ Shape_Chunk::Shape_Chunk(Chunk_With_Children * parent, const char *data, size_t 
 	}
 }
 
-Shape_Chunk::Shape_Chunk (Chunk_With_Children * parent, ChunkShape &shp_dat)
-: Lockable_Chunk_With_Children (parent, "REBSHAPE"), shape_data (shp_dat)
-{
-	shape_data_store = (ChunkShape *) &shape_data;
-
-	new Shape_Header_Chunk (this);
-
-	if (shape_data.v_list) new Shape_Vertex_Chunk (this, shape_data.num_verts);
-	if (shape_data.v_normal_list) new Shape_Vertex_Normal_Chunk (this, shape_data.num_verts);
-	if (shape_data.p_normal_list) new Shape_Polygon_Normal_Chunk (this, shape_data.num_polys);
-	if (shape_data.poly_list) new Shape_Polygon_Chunk (this, shape_data.num_polys);
-	if (shape_data.uv_list) new Shape_UV_Coord_Chunk (this, shape_data.num_uvs);
-	if (shape_data.texture_fns) new Shape_Texture_Filenames_Chunk (this, shape_data.num_texfiles);
-
-	//calculate the shape's centre and radius_about_centre
-	shape_data_store->centre=(shape_data_store->min+shape_data_store->max)/2;
-	shape_data_store->radius_about_centre=0;
-
-	for(int i=0;i<shape_data_store->num_verts;i++)
-	{
-		float length = (float) mod(shape_data_store->v_list[i]-shape_data_store->centre);
-		if(length>shape_data_store->radius_about_centre)
-		{
-			shape_data_store->radius_about_centre=length;
-		}
-	}
-
-	//if the shape hasn't got a Shape_Centre_Chunk , create one.
-	if(!lookup_single_child("SHPCENTR"))
-	{
-		new Shape_Centre_Chunk(this);
-	}
-}
-
 Shape_Chunk::~Shape_Chunk ()
 {
-}
-
-Shape_Chunk* Shape_Chunk::make_copy_of_chunk()
-{
-	char* Data=this->make_data_block_from_chunk();
-	Shape_Chunk* NewShape=new Shape_Chunk(parent,Data+12,this->size_chunk()-12);
-	delete[] Data;
-	delete NewShape->get_header();
-	new Shape_Header_Chunk(NewShape);
-	//need to call post_input_processing in order to copy morphing data correctly
-	NewShape->post_input_processing();
-	NewShape->updated=TRUE;
-	return NewShape;
 }
 
 Shape_Header_Chunk * Shape_Chunk::get_header()
@@ -357,91 +316,6 @@ BOOL Shape_Chunk::assoc_with_object_list(File_Chunk *fc)
 		}
 	}
 	return(TRUE);
-}
-
-BOOL Shape_Chunk::update_my_chunkshape (ChunkShape & cshp)
-{
-	// Firstly lose all the chunks that were with
-	// the old chunk shape
-	List <Chunk *> chlst;
-
-	lookup_child ("SHPRAWVT",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPVNORM",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPPNORM",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPPOLYS",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPUVCRD",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPTEXFN",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	*shape_data_store = cshp;
-
-	if (shape_data.v_list) new Shape_Vertex_Chunk (this, shape_data.num_verts);
-	if (shape_data.v_normal_list) new Shape_Vertex_Normal_Chunk (this, shape_data.num_verts);
-	if (shape_data.p_normal_list) new Shape_Polygon_Normal_Chunk (this, shape_data.num_polys);
-	if (shape_data.poly_list) new Shape_Polygon_Chunk (this, shape_data.num_polys);
-	if (shape_data.uv_list) new Shape_UV_Coord_Chunk (this, shape_data.num_uvs);
-	if (shape_data.texture_fns) new Shape_Texture_Filenames_Chunk (this, shape_data.num_texfiles);
-
-	//calculate the shape's centre and radius_about_centre
-	shape_data_store->centre=(shape_data_store->min+shape_data_store->max)/2;
-	shape_data_store->radius_about_centre=0;
-	for(int i=0;i<shape_data_store->num_verts;i++)
-	{
-		float length = (float) mod(shape_data_store->v_list[i]-shape_data_store->centre);
-		if(length>shape_data_store->radius_about_centre)
-		{
-			shape_data_store->radius_about_centre=length;
-		}
-	}
-
-	//if the shape hasn't got a Shape_Centre_Chunk , create one.
-
-	if(!lookup_single_child("SHPCENTR"))
-	{
-		new Shape_Centre_Chunk(this);
-	}
-
-	return TRUE;
 }
 
 Console_Shape_Chunk* Shape_Chunk::get_console_shape_data(Console_Type ct)
@@ -1319,7 +1193,7 @@ void Shape_Header_Chunk::fill_data_block(char * data_start)
 
 	for (LIF<char *> ons(&object_names_store); !ons.done(); ons.next())
 	{
-		strcpy (data_start, ons());
+		memcpy (data_start, ons(), strlen(ons()) + 1);
 		data_start += (strlen(ons())+1);
 	}
 }
@@ -1346,8 +1220,9 @@ void Shape_Header_Chunk::prepare_for_output()
 		if (aosl()->get_header())
 			aosl()->get_header()->shape_id_no = file_id_num;
 
-		str = new char [strlen(aosl()->object_data.o_name) + 1];
-		strcpy(str, aosl()->object_data.o_name);
+		size_t const name_size = strlen(aosl()->object_data.o_name) + 1;
+		str = new char [name_size];
+		memcpy(str, aosl()->object_data.o_name, name_size);
 		object_names_store.add_entry(str);
 	}
 
@@ -1449,13 +1324,6 @@ Children for Shape_External_File_Chunk :
 CHUNK_WITH_CHILDREN_LOADER("SHPEXTFL",Shape_External_File_Chunk)
 
 
-Shape_External_File_Chunk::Shape_External_File_Chunk (Chunk_With_Children * parent, const char * fname)
-:Chunk_With_Children (parent, "SHPEXTFL")
-{
-	new Shape_External_Filename_Chunk (this, fname);
-	post_input_processing();
-}
-
 void Shape_External_File_Chunk::post_input_processing()
 {
 	Chunk_With_Children::post_input_processing();
@@ -1480,16 +1348,6 @@ const char* Shape_External_File_Chunk::get_shape_name()
 
 /////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("SHPEXTFN",Shape_External_Filename_Chunk)
-
-Shape_External_Filename_Chunk::Shape_External_Filename_Chunk(Chunk_With_Children * parent, const char * fname)
-: Chunk (parent, "SHPEXTFN")
-{
-	file_name = new char [strlen(fname)+1];
-	strcpy (file_name, fname);
-
-	rescale = 1;
-	version_no = -1;
-}
 
 Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t /*fsize*/)
 : Chunk (parent, "SHPEXTFN")
@@ -1525,7 +1383,7 @@ void Shape_External_Filename_Chunk::fill_data_block (char *data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, file_name);
+	memcpy (data_start, file_name, strlen(file_name) + 1);
 }
 
 ///////////////////////////////////////
@@ -1597,7 +1455,7 @@ void Shape_External_Object_Name_Chunk::fill_data_block (char *data_start)
 
 	data_start+=4;
 
-	strcpy (data_start, object_name);
+	memcpy (data_start, object_name, strlen(object_name) + 1);
 }
 
 ///////////////////////////////////////
@@ -1620,7 +1478,7 @@ Shape_Morphing_Data_Chunk::Shape_Morphing_Data_Chunk (Shape_Chunk * parent, cons
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1638,7 +1496,7 @@ Shape_Morphing_Data_Chunk::Shape_Morphing_Data_Chunk (Shape_Sub_Shape_Chunk * pa
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1897,7 +1755,7 @@ Shape_Sub_Shape_Chunk::Shape_Sub_Shape_Chunk(Chunk_With_Children * parent, const
 
 	while ((data-buffer_ptr)< (signed)size) 
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size) 
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size)) 
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1908,142 +1766,13 @@ Shape_Sub_Shape_Chunk::Shape_Sub_Shape_Chunk(Chunk_With_Children * parent, const
 	}
 }
 
-Shape_Sub_Shape_Chunk::Shape_Sub_Shape_Chunk (Chunk_With_Children * parent, ChunkShape &shp_dat)
-: Chunk_With_Children (parent, "SUBSHAPE"), shape_data (shp_dat)
-{
-	shape_data_store = (ChunkShape *) &shape_data;
-
-	new Shape_Sub_Shape_Header_Chunk (this);
-
-	if (shape_data.v_list) new Shape_Vertex_Chunk (this, shape_data.num_verts);
-	if (shape_data.v_normal_list) new Shape_Vertex_Normal_Chunk (this, shape_data.num_verts);
-	if (shape_data.p_normal_list) new Shape_Polygon_Normal_Chunk (this, shape_data.num_polys);
-	if (shape_data.poly_list) new Shape_Polygon_Chunk (this, shape_data.num_polys);
-	if (shape_data.uv_list) new Shape_UV_Coord_Chunk (this, shape_data.num_uvs);
-	if (shape_data.texture_fns) new Shape_Texture_Filenames_Chunk (this, shape_data.num_texfiles);
-
-	//calculate the shape's centre and radius_about_centre
-	shape_data_store->centre=(shape_data_store->min+shape_data_store->max)/2;
-	shape_data_store->radius_about_centre=0;
-	for(int i=0;i<shape_data_store->num_verts;i++)
-	{
-		float length = (float) mod(shape_data_store->v_list[i]-shape_data_store->centre);
-		if(length>shape_data_store->radius_about_centre)
-		{
-			shape_data_store->radius_about_centre=length;
-		}
-	}
-
-	//if the shape hasn't got a Shape_Centre_Chunk , create one.
-
-	if(!lookup_single_child("SHPCENTR"))
-	{
-		new Shape_Centre_Chunk(this);
-	}
-}
-
 Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 {
-}
-
-Shape_Sub_Shape_Chunk* Shape_Sub_Shape_Chunk::make_copy_of_chunk()
-{
-	char* Data=this->make_data_block_from_chunk();
-	Shape_Sub_Shape_Chunk* NewShape=new Shape_Sub_Shape_Chunk(parent,Data+12,this->size_chunk()-12);
-	delete[] Data;
-	delete NewShape->get_header();
-	new Shape_Sub_Shape_Header_Chunk(NewShape);
-	return NewShape;
 }
 
 Shape_Sub_Shape_Header_Chunk * Shape_Sub_Shape_Chunk::get_header()
 {
 	return (Shape_Sub_Shape_Header_Chunk *) this->lookup_single_child ("SUBSHPHD");
-}
-
-BOOL Shape_Sub_Shape_Chunk::update_my_chunkshape (ChunkShape & cshp)
-{
-	// Firstly lose all the chunks that were with
-	// the old chunk shape
-	List <Chunk *> chlst;
-
-	lookup_child ("SHPRAWVT",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPVNORM",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPPNORM",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPPOLYS",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPUVCRD",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child ("SHPTEXFN",chlst);
-
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	*shape_data_store = cshp;
-
-	if (shape_data.v_list) new Shape_Vertex_Chunk (this, shape_data.num_verts);
-	if (shape_data.v_normal_list) new Shape_Vertex_Normal_Chunk (this, shape_data.num_verts);
-	if (shape_data.p_normal_list) new Shape_Polygon_Normal_Chunk (this, shape_data.num_polys);
-	if (shape_data.poly_list) new Shape_Polygon_Chunk (this, shape_data.num_polys);
-	if (shape_data.uv_list) new Shape_UV_Coord_Chunk (this, shape_data.num_uvs);
-	if (shape_data.texture_fns) new Shape_Texture_Filenames_Chunk (this, shape_data.num_texfiles);
-
-	//calculate the shape's centre and radius_about_centre
-	shape_data_store->centre=(shape_data_store->min+shape_data_store->max)/2;
-	shape_data_store->radius_about_centre=0;
-	for(int i=0;i<shape_data_store->num_verts;i++)
-	{
-		float length=(float)mod(shape_data_store->v_list[i]-shape_data_store->centre);
-		if(length>shape_data_store->radius_about_centre)
-		{
-			shape_data_store->radius_about_centre=length;
-		}
-	}
-
-	//if the shape hasn't got a Shape_Centre_Chunk , create one.
-
-	if(!lookup_single_child("SHPCENTR"))
-	{
-		new Shape_Centre_Chunk(this);
-	}
-
-	return TRUE;
 }
 
 
@@ -2272,7 +2001,7 @@ void Shape_Name_Chunk::fill_data_block (char * data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, shape_name);
+	memcpy (data_start, shape_name, strlen(shape_name) + 1);
 }
 
 /////////////////////////////////////////
@@ -2474,7 +2203,7 @@ Anim_Shape_Sequence_Chunk::Anim_Shape_Sequence_Chunk(Chunk_With_Children * const
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2488,25 +2217,6 @@ Anim_Shape_Sequence_Chunk::Anim_Shape_Sequence_Chunk(Chunk_With_Children * const
 		//this sequence is no longer valid
 		delete this;
 	}
-}
-
-Anim_Shape_Sequence_Chunk::Anim_Shape_Sequence_Chunk(Chunk_With_Children * const parent, int sequencenum,const char* name)
-: Chunk_With_Children (parent, "ANIMSEQU")
-{
-	sequence_data_store=(ChunkAnimSequence*)&sequence_data;
-
-	sequence_data_store->SequenceNum=sequencenum;
-	sequence_data_store->name=new char[strlen(name)+1];
-	strcpy(sequence_data_store->name,name);
-	RegenerateChildChunks();
-}
-
-Anim_Shape_Sequence_Chunk::Anim_Shape_Sequence_Chunk(Chunk_With_Children * const parent, ChunkAnimSequence const* cas )
-: Chunk_With_Children (parent, "ANIMSEQU")
-{
-	sequence_data_store=(ChunkAnimSequence*)&sequence_data;
-	*(ChunkAnimSequence*)&sequence_data=*cas;
-	RegenerateChildChunks();
 }
 
 int Anim_Shape_Sequence_Chunk::ConstructSequenceDataFromChildren()
@@ -2589,12 +2299,6 @@ void Anim_Shape_Sequence_Chunk::post_input_processing()
 }
 
 
-void Anim_Shape_Sequence_Chunk::update_my_sequencedata(ChunkAnimSequence & seq)
-{
-	*sequence_data_store=seq;
-	RegenerateChildChunks();
-}
-
 void Anim_Shape_Sequence_Chunk::set_sequence_flags(int flags)
 {
 	sequence_data_store->flags=flags;
@@ -2607,30 +2311,6 @@ void Anim_Shape_Sequence_Chunk::set_frame_flags(int frameno,int flags)
 		{
 			sequence_data_store->Frames[frameno]->flags=flags;
 		}
-	}
-}
-
-void Anim_Shape_Sequence_Chunk::RegenerateChildChunks()
-{
-	List<Chunk*> chlist;
-	lookup_child("ANISEQDT",chlist);
-	while(chlist.size())
-	{
-		delete chlist.first_entry();
-		chlist.delete_first_entry();
-	}
-	lookup_child("ANIMFRAM",chlist);
-	while(chlist.size())
-	{
-		delete chlist.first_entry();
-		chlist.delete_first_entry();
-	}
-
-	new Anim_Shape_Sequence_Data_Chunk(this,sequence_data_store);
-	for(int i=0;i<sequence_data_store->NumFrames;i++)
-	{
-		if(sequence_data_store->Frames[i]->flags & animframeflag_interpolated_frame)continue;
-		new Anim_Shape_Frame_Chunk(this,sequence_data_store->Frames[i],i);
 	}
 }
 
@@ -2665,7 +2345,7 @@ Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk *const 
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2675,14 +2355,6 @@ Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk *const 
 	}
 }
 
-
-Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk * const parent,ChunkAnimFrame* caf,int frameno)
-: Chunk_With_Children (parent, "ANIMFRAM")
-{
-	new Anim_Shape_Frame_Data_Chunk(this,caf,frameno);
-	new Shape_Vertex_Chunk(this,caf->v_list,caf->num_verts);
-	new Shape_Polygon_Normal_Chunk(this,caf->p_normal_list,caf->num_polys);
-}
 /////////////////////////////////////////
 
 // Class Anim_Shape_Sequence_Data_Chunk functions
@@ -2704,17 +2376,6 @@ Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequen
 	data+=4;
 	name=new char[strlen(data)+1];
 	strcpy(name,data);
-}
-
-Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,ChunkAnimSequence* cas)
-: Chunk(parent, "ANISEQDT")
-{
-	SequenceNum=cas->SequenceNum;
-	name=cas->name;
-	flags=cas->flags;
-	pad2=cas->pad2;
-	pad3=cas->pad3;
-	pad4=cas->pad4;
 }
 
 void Anim_Shape_Sequence_Data_Chunk::fill_data_block(char* datastart)
@@ -2768,17 +2429,6 @@ Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk*
 	strcpy(name,data);
 }
 
-Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,ChunkAnimFrame* caf,int frameno)
-: Chunk(parent, "ANIFRADT")
-{
-	FrameNum=frameno;
-	name=caf->name;
-	flags=caf->flags;
-	num_interp_frames=caf->num_interp_frames;
-	pad3=caf->pad3;
-	pad4=caf->pad4;
-}
-
 
 void Anim_Shape_Frame_Data_Chunk::fill_data_block(char* datastart)
 {
@@ -2825,7 +2475,7 @@ Anim_Shape_Alternate_Texturing_Chunk::Anim_Shape_Alternate_Texturing_Chunk(Chunk
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2833,46 +2483,6 @@ Anim_Shape_Alternate_Texturing_Chunk::Anim_Shape_Alternate_Texturing_Chunk(Chunk
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
-}
-
-Shape_Sub_Shape_Chunk* Anim_Shape_Alternate_Texturing_Chunk::CreateNewSubShape(const char* name)
-{
-	if(!name) return 0;
-	//check to make sure that name isn't already in use
-	List<Chunk*> chlist;
-	lookup_child("SUBSHAPE",chlist);
-
-	for(LIF<Chunk*> chlif(& chlist);!chlif.done();chlif.next())
-	{
-		Shape_Sub_Shape_Chunk* sssc=(Shape_Sub_Shape_Chunk*) chlif();
-		if(!_stricmp(name,sssc->get_shape_name()))return 0;
-	}
-
-	ChunkShape cs;
-	if(!_stricmp(parent->identifier,"REBSHAPE"))
-		cs=((Shape_Chunk*)parent)->shape_data;
-	else if(!_stricmp(parent->identifier,"SUBSHAPE"))
-		cs=((Shape_Sub_Shape_Chunk*)parent)->shape_data;
-	else
-		return 0;
-	Shape_Sub_Shape_Chunk* sssc=new Shape_Sub_Shape_Chunk(this,cs);
-	new Shape_Name_Chunk(sssc,name);
-
-	//copy the texture animation data
-	Chunk_With_Children* anim_chunk=(Chunk_With_Children*)parent->lookup_single_child("TEXTANIM");
-	if(anim_chunk)
-	{
-		char * tempbuffer = anim_chunk->make_data_block_from_chunk();
-		sssc->DynCreate(tempbuffer);
-		delete[] tempbuffer;
-	}
-
-	Shape_Merge_Data_Chunk* smdc=(Shape_Merge_Data_Chunk*)parent->lookup_single_child("SHPMRGDT");
-	if(smdc)
-	{
-		new Shape_Merge_Data_Chunk(sssc,smdc->merge_data,smdc->num_polys);	
-	}
-	return sssc;
 }
 
 /////////////////////////////////////////
@@ -2992,7 +2602,7 @@ Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children * const parent, con
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -3003,12 +2613,6 @@ Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children * const parent, con
 	}
 }
 
-Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children* const parent,Console_Type ct)
-:Chunk_With_Children(parent,"CONSHAPE")
-{
-	shape_data_store=(ChunkShape*)&shape_data;
-	new Console_Type_Chunk(this,ct);
-}
 void Console_Shape_Chunk::generate_console_chunkshape()
 {
 	//sort out the chunkshape
@@ -3054,26 +2658,6 @@ void Console_Shape_Chunk::generate_console_chunkshape()
 		shape_data_store->uv_list=(ChunkUV_List*)succ->uv_data;
 		shape_data_store->num_uvs=succ->num_uvs;
 	}
-}
-
-void Console_Shape_Chunk::update_my_chunkshape(ChunkShape & cshp)
-{
-	List<Chunk*> chlist;
-	lookup_child("SHPUVCRD",chlist);
-	while(chlist.size())
-	{
-		delete chlist.first_entry();
-		chlist.delete_first_entry();
-	}
-	lookup_child("SHPPOLYS",chlist);
-	while(chlist.size())
-	{
-		delete chlist.first_entry();
-		chlist.delete_first_entry();
-	}
-	*shape_data_store=cshp;
-	if (shape_data.poly_list) new Shape_Polygon_Chunk (this, shape_data.num_polys);
-	if (shape_data.uv_list) new Shape_UV_Coord_Chunk (this, shape_data.num_uvs);
 }
 
 

@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed switched-off code; temporary text objects are let go automatically, not by hand;
+//   key bindings are made by a small function that hands them back (it works the same as before);
+//   UNBIND now really frees the key bindings it removes
 /*******************************************************************
  *
  *    DESCRIPTION: 	consbind.cpp
@@ -85,7 +90,7 @@ KeyBinding :: ParseBindCommand
 		SCString* pSCString_ToBind = new SCString(pProjCh_FollowingTheKey);
 
 		// Create the KeyBinding object:
-		KeyBinding* pNewBinding = new KeyBinding
+		Make
 		(
 			theKey,
 			pSCString_ToBind
@@ -103,17 +108,16 @@ KeyBinding :: ParseBindCommand
 				theKey
 			);
 
-			SCString* pSCString_Feedback = new SCString
+			RefHolder<SCString> pSCString_Feedback(new SCString
 			(
 				pSCString_1,
 				pSCString_ToBind,
 				pSCString_2,
 				pSCString_3
-			);
+			));
 
 			pSCString_Feedback -> SendToScreen();
 
-			pSCString_Feedback -> R_Release();
 			pSCString_3 -> R_Release();
 			pSCString_2 -> R_Release();
 			pSCString_1 -> R_Release();
@@ -209,7 +213,12 @@ KeyBinding :: ParseUnbindCommand
 				GLOBALASSERT(oi());
 				if ( oi() -> theKey == theKey_ToUnbind )
 				{
-					oi . delete_current();
+					// the list only holds a pointer to each binding, so taking it off the list would not free it.
+					// Step past it first, then delete it: its destructor takes it off the list and lets go of its text.
+					// (A key bound to UNBIND itself is safe: Maintain keeps its own hold on the text while it runs.)
+					KeyBinding* pKeyBinding = oi();
+					oi . next();
+					delete pKeyBinding;
 				}
 				else
 				{
@@ -220,100 +229,17 @@ KeyBinding :: ParseUnbindCommand
 	}
 }
 
-#if 0
-// static
-void
-KeyBinding :: AttemptToBind
-(
-	SCString* pSCString_Key, // description of key
-	SCString* pSCString_ToBind // string to be bound
-)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( pSCString_Key );
-		GLOBALASSERT( pSCString_ToBind );
-	}
-
-	/* CODE */
-	{
-		BindableKey theBindableKey_ToUse;
-
-		if
-		(
-			!bGetKeyForString
-			(
-				theBindableKey_ToUse, // BindableKey& theKey_Out,
-				pSCString_Key -> pProjCh()
-			)
-		)
-		{
-			// Can't recognise which key is to be bound to;
-			// provide an error message
-			ErrorDontRecogniseKey(pSCString_Key);
-
-			return;
-		}
-
-		// Create the KeyBinding object:
-		new KeyBinding
-		(
-			theBindableKey_ToUse,
-			pSCString_ToBind
-		);
-	}
-}
-
-// static
-void
-KeyBinding :: AttemptToUnbind
-(
-	SCString* pSCString_Key // description of key
-)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( pSCString_Key );
-	}
-
-	/* CODE */
-	{
-		BindableKey theBindableKey_ToUse;
-
-		if
-		(
-			!bGetKeyForString
-			(
-				theBindableKey_ToUse, // BindableKey& theKey_Out,
-				pSCString_Key -> pProjCh()
-			)
-		)
-		{
-			// Can't recognise which key is to be bound to;
-			// provide an error message
-			ErrorDontRecogniseKey(pSCString_Key);
-
-			return;
-		}
-
-		// Find and remove any bindings to that key; note the number:
-
-		// Provide feedback:
-	}
-}
-#endif
 
 
 // static
 void
 KeyBinding :: UnbindAll(void)
 {
-	SCString* pSCString_Feedback = new SCString("DESTROYING ALL KEY BINDINGS");
+	RefHolder<SCString> pSCString_Feedback(new SCString("DESTROYING ALL KEY BINDINGS"));
 		// LOCALISEME
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 
 	while
 	(
@@ -330,12 +256,11 @@ KeyBinding :: UnbindAll(void)
 void
 KeyBinding :: ListAllBindings(void)
 {
-	SCString* pSCString_Feedback = new SCString("LIST OF ALL KEY BINDINGS:");
+	RefHolder<SCString> pSCString_Feedback(new SCString("LIST OF ALL KEY BINDINGS:"));
 		// LOCALISEME
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 
 	for
 	(
@@ -632,16 +557,15 @@ KeyBinding :: ErrorDontRecogniseKey( SCString* pSCString_Key )
 	SCString* pSCString_2 = new SCString("\"");
 		// LOCALISEME
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_1,
 		pSCString_Key,
 		pSCString_2
-	);
+	));
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 	pSCString_2 -> R_Release();
 	pSCString_1 -> R_Release();
 }
@@ -655,17 +579,16 @@ KeyBinding :: ListThis(void) const
 		// LOCALISEME
 	SCString* pSCString_3 = new SCString("\"");
 
-	SCString* pSCString_Feedback = new SCString
+	RefHolder<SCString> pSCString_Feedback(new SCString
 	(
 		pSCString_1,
 		pSCString_2,
 		pSCString_ToOutput,
 		pSCString_3
-	);
+	));
 
 	pSCString_Feedback -> SendToScreen();
 
-	pSCString_Feedback -> R_Release();
 	pSCString_3 -> R_Release();
 	pSCString_2 -> R_Release();
 	pSCString_1 -> R_Release();

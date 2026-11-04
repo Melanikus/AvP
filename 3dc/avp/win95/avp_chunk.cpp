@@ -1,3 +1,10 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   names saved into level data are copied by their measured length, an ID's name is built in text that
+//   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed;
+//   the decal list in a level file is checked against the real size of its chunk before it is read
+#include <string>
+#include <limits.h>
 #include "avp_chunk.hpp"
 #include "md5.h"
 
@@ -40,7 +47,7 @@ void AVP_Generator_Chunk::fill_data_block (char * data_start)
 	*(data_start) = extra2;
 	data_start ++;
 	
-	strcpy (data_start, name);
+	memcpy (data_start, name, strlen(name) + 1);
 }
 
 size_t AVP_Generator_Chunk::size_chunk ()
@@ -99,13 +106,12 @@ ObjectID AVP_Generator_Chunk::CalculateID()
 	List<Chunk*> chlist;
 	cwc->lookup_child("RIFFNAME",chlist);
 	if(!chlist.size()) return retval;
-	char Name[100];
+	// rif name + generator name, hashed; both come from the .rif and have no length limit (stock max 91 characters)
+	std::string Name(((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
 
-	strcpy(Name,((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
-
-	strcat(Name,name);
+	Name += name;
 	char buffer[16];
-	md5_buffer(Name,strlen(Name),&buffer[0]);
+	md5_buffer(Name.c_str(),(unsigned int)Name.size(),&buffer[0]);
 	buffer[7]=0;
 	retval = *(ObjectID*)&buffer[0];
 	return retval;
@@ -135,14 +141,6 @@ AVP_Generator_Extra_Data_Chunk* AVP_Generator_Chunk::get_extra_data_chunk()
 	return 0;
 }
 
-AVP_Generator_Extra_Data_Chunk* AVP_Generator_Chunk::create_extra_data_chunk()
-{
-	AVP_Generator_Extra_Data_Chunk* agedc=get_extra_data_chunk();
-	if(agedc)return agedc;
-	
-	return new AVP_Generator_Extra_Data_Chunk(parent,this);
-}
-
 AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::get_extended_settings()
 {
 	if(flags & AVPGENFLAG_ADVANCEDGENERATOR)
@@ -152,17 +150,6 @@ AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::get_extended_setting
 		return (AVP_Generator_Extended_Settings_Chunk*)agedc->lookup_single_child("GENEXSET");
 	}
 	return 0;
-}
-
-AVP_Generator_Extended_Settings_Chunk* AVP_Generator_Chunk::create_extended_settings()
-{
-	flags|=AVPGENFLAG_ADVANCEDGENERATOR;
-	AVP_Generator_Extra_Data_Chunk* agedc=create_extra_data_chunk();
-
-	AVP_Generator_Extended_Settings_Chunk* setting=(AVP_Generator_Extended_Settings_Chunk*)agedc->lookup_single_child("GENEXSET");
-	if(setting) return setting;
-
-	return new AVP_Generator_Extended_Settings_Chunk(agedc);
 }
 
 Object_Alternate_Locations_Chunk* AVP_Generator_Chunk::get_alternate_locations_chunk()
@@ -189,12 +176,6 @@ children for AVP_Generator_Extra_Data_Chunk :
 "ALTLOCAT"		Object_Alternate_Locations_Chunk)
 */
 
-
-AVP_Generator_Extra_Data_Chunk::AVP_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,AVP_Generator_Chunk* agc)
-:Chunk_With_Children(parent,"AVPGENEX")
-{
-	new AVP_Generator_Extra_Name_Chunk(this,agc->name);	
-}
 
 AVP_Generator_Chunk* AVP_Generator_Extra_Data_Chunk::get_generator_chunk()
 {
@@ -246,7 +227,7 @@ void AVP_Generator_Extra_Name_Chunk::fill_data_block(char* data_start)
 	*((int *) data_start) = chunk_size;
 	data_start += 4;
 
-	strcpy(data_start,name);
+	memcpy(data_start,name,strlen(name)+1);
 }
 
 
@@ -516,7 +497,7 @@ void AVP_Power_Cable_Chunk::fill_data_block(char* data)
 
 	if(name)
 	{
-		strcpy(data,name);
+		memcpy(data,name,strlen(name)+1);
 	}
 	else
 	{
@@ -619,14 +600,31 @@ AVP_Environment_Settings_Chunk* GetAVPEnvironmentSettings(Environment_Data_Chunk
 //////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("AVPDECAL",AVP_Decal_Chunk)
 
-AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+AVP_Decal_Chunk::AVP_Decal_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPDECAL")
 {
-	num_decals = *(int*)data;
-	data+=4;
+	//the chunk starts with two numbers: how many decals it holds, and how big each one is
+	num_decals = 0;
+	int loaded_decal_size = 0;
+	if (datasize >= 8)
+	{
+		num_decals = *(int*)data;
+		data+=4;
 
-	int loaded_decal_size = *(int*)data;
-	data+=4;
+		loaded_decal_size = *(int*)data;
+		data+=4;
+
+		datasize-=8;
+	}
+
+	//a broken or hand-made level file can say anything here, so the two numbers must fit what is really in the
+	//chunk, and the memory they ask for must be a size we can work out. If not, the chunk counts as holding no decals.
+	if (loaded_decal_size <= 0 || num_decals < 0 || (size_t)num_decals > datasize / loaded_decal_size ||
+		num_decals > INT_MAX / max(loaded_decal_size, (int)sizeof(AVP_Decal)))
+	{
+		num_decals = 0;
+		loaded_decal_size = sizeof(AVP_Decal);
+	}
 
 	decal_size = max(loaded_decal_size, (int)sizeof(AVP_Decal));
 
@@ -707,12 +705,6 @@ Object_Alternate_Locations_Chunk	"ALTLOCAT"
 Indexed_Sound_Chunk					"INDSOUND"
 */
 
-
-AVP_Particle_Generator_Chunk::AVP_Particle_Generator_Chunk(Chunk_With_Children* parent , const char* name,ObjectID & id)
-:Chunk_With_Children(parent,"PARGENER")
-{
-	new AVP_Particle_Generator_Data_Chunk(this,name,id); 
-}
 
 AVP_Particle_Generator_Data_Chunk* AVP_Particle_Generator_Chunk::get_data_chunk()
 {

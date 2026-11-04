@@ -1,0 +1,390 @@
+# Security gate for this repository (AvP Tao #1: security is paramount, the goal is zero vulnerabilities).
+#
+# Three jobs run for every pull request into avpx_main. All must pass before anything can merge:
+#   - Snyk Code (SAST) reads our own source. It also fails if Snyk skipped even one C/C++ file, because a file the
+#     scanner could not read is a blind spot, not a pass.
+#   - Snyk Open Source (SCA) recognises vendored open-source code by file hashes and reports known vulnerabilities. It
+#     also fails if precompiled code (DLLs, libraries, executables) is in the repository.
+#   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
+#     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
+#     it is not scanned.
+# ANY finding or scan error fails its job. A finding is resolved only by fixing it in the code: we don't ignore, park
+# or exclude findings. The single exception is .github/snyk-accepted.json: 4 reports where Snyk's own data is wrong, which
+# no code change can clear. It names each report and expires. If Snyk or GitHub Actions is unavailable, the checks fail
+# and nothing merges.
+name: Snyk
+
+on:
+  push:
+    branches: [avpx_main]
+  pull_request:
+    branches: [avpx_main]
+  workflow_dispatch:
+  # Every night, so a vulnerability published today in a library we already pin is noticed by morning, even when nobody is
+  # committing. Scheduled runs use this file on the default branch. A failure here blocks nothing by itself, but the next
+  # pull request scans the same libraries and is blocked until it's dealt with, and GitHub emails the owner.
+  schedule:
+    - cron: "23 6 * * *"
+
+permissions:
+  contents: read
+
+# The gate's own engine is pinned too: an exact Snyk CLI release, checked against this hash before it runs. Updating it
+# is a deliberate, reviewed change here, so a bad "latest" release can never reach the gate or its token.
+# The hash is the one published for this release both on downloads.snyk.io and in snyk/cli's GitHub release.
+env:
+  SNYK_CLI_VERSION: v1.1308.3
+  SNYK_CLI_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
+
+jobs:
+  snyk-code:
+    name: Snyk Code (SAST)
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to code scanning
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Scanners can be told to look away with a comment or a settings file. We fix findings, so none of those may exist.
+      - name: Fail if anything tells a scanner to look away
+        run: |
+          found=$(git grep -n -i -E 'deepcode ignore|snyk:ignore|lgtm\[|codeql\[' -- . ':!.github' || true)
+          files=$(git ls-files | grep -E '(^|/)\.(snyk|dcignore)$' || true)
+          if [ -n "$found$files" ]; then
+            echo "$found"
+            echo "$files"
+            echo "::error::Something in the repository suppresses a scanner"
+            exit 1
+          fi
+          echo "No scanner suppressions found."
+
+      # Exit 1 is findings, which fail at once. Exit 2 or more is an error, retried; it fails if it never clears.
+      - name: Snyk Code (SAST)
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          for attempt in 1 2 3; do
+            if snyk code test --sarif-file-output=snyk-code.sarif; then rc=0; else rc=$?; fi
+            if [ "$rc" -lt 2 ]; then break; fi
+            echo "Snyk Code error (exit $rc) on attempt $attempt"
+            sleep 30
+          done
+          exit "$rc"
+
+      # Snyk reports how many files it read in the SARIF. A file it could not parse is silently skipped and the scan
+      # still passes, so we compare its count with what git tracks. Anything Snyk calls other than SUPPORTED counts as not
+      # read, whatever the name. Names are matched in any case, because an old file could be called OLDFILE.CPP. A
+      # missing report fails here too, and so does a count of zero, which would mean this check compared nothing.
+      - name: Fail if Snyk Code skipped any C/C++ file
+        if: ${{ !cancelled() }}
+        run: |
+          types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
+          tracked=$(git ls-files | grep -ciE "$types" || true)
+          analysed=$(jq --arg types "$types" '[.runs[0].properties.coverage[]? | select(.type == "SUPPORTED" and (.lang | ascii_downcase | test($types))) | .files] | add // 0' snyk-code.sarif)
+          unparsed=$(jq '[.runs[0].properties.coverage[]? | select(.type != "SUPPORTED") | .files] | add // 0' snyk-code.sarif)
+          echo "C/C++ files tracked by git: $tracked, analysed by Snyk: $analysed, not analysed: $unparsed"
+          jq -c '.runs[0].properties.coverage' snyk-code.sarif
+          if [ "$tracked" -eq 0 ] || [ "$unparsed" != "0" ] || [ "$analysed" != "$tracked" ]; then
+            echo "::error::Snyk Code did not analyse every C/C++ file"
+            exit 1
+          fi
+
+      - name: Upload Snyk Code results
+        if: ${{ !cancelled() && hashFiles('snyk-code.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+
+  snyk-open-source:
+    name: Snyk Open Source (SCA)
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to code scanning
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # We build our open-source dependencies from source, so nothing precompiled belongs here. Images and other
+      # resources are fine; this looks only for compiled code. It checks each file's name, and also its first bytes,
+      # because every kind of compiled file starts with its own signature, so a DLL renamed to .dat is still caught.
+      - name: Fail if precompiled code is in the repository
+        shell: bash
+        run: |
+          found=$(git ls-files | grep -iE '\.(dll|lib|exp|exe|obj|o|a|so|dylib|pdb|ilk|ocx|sys|zip|7z|rar|cab|gz|tgz|bz2|xz|zst|tar|msi|jar)$' || true)
+          while IFS= read -r -d '' file; do
+            [ -f "$file" ] || continue
+            signature=$(head -c 8 -- "$file" | od -An -tx1 | tr -d ' \n')
+            # A plain tar file has no mark at its start. Its mark, "ustar", is 257 bytes in.
+            tar_mark=$(head -c 262 -- "$file" | tail -c +258 | od -An -tx1 | tr -d ' \n')
+            case "$signature" in
+              4d5a*)                                   ;; # Windows program or DLL
+              7f454c46*)                               ;; # Linux program
+              feedface*|feedfacf*|cefaedfe*|cffaedfe*) ;; # macOS program
+              cafebabe*)                               ;; # macOS universal program, or Java class
+              213c617263683e*)                         ;; # static library
+              0061736d*)                               ;; # WebAssembly
+              4c01*|6486*|64aa*)                       ;; # Windows object file
+              504b0304*|504b0506*|504b0708*)           ;; # zip, and files built on it such as jar
+              377abcaf271c*)                           ;; # 7z
+              526172211a07*)                           ;; # rar
+              4d534346*)                               ;; # cab
+              1f8b*)                                   ;; # gzip
+              d0cf11e0a1b11ae1*)                       ;; # msi
+              425a683[1-9]31415926*)                   ;; # bzip2
+              fd377a585a00*)                           ;; # xz
+              28b52ffd*)                               ;; # zstd
+              *) [ "$tar_mark" = 7573746172 ] || continue ;;
+            esac
+            found="$found"$'\n'"$file"
+          done < <(git ls-files -z)
+          if [ -n "$found" ]; then
+            echo "$found"
+            echo "::error::Precompiled code, or an archive that could hold it, is in the repository"
+            exit 1
+          fi
+          echo "No precompiled code found."
+
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Snyk recognises nothing here today, and that is expected: the only vendored code is Barry Duncan's decoders in
+      # dependencies/, which are FFmpeg forks it can't match, so they were reviewed by hand. This step stays to catch
+      # any open-source code added later. It prints no "Tested N" line when it matches nothing, so we check a scan really
+      # ran. The proof that SCA recognises libraries is in the "Snyk on the vcpkg libraries" job.
+      - name: Snyk Open Source (SCA, vendored C/C++)
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -o pipefail
+          # Snyk exits 0 for clean, 1 for findings, 2 or more for an error such as a service failure. Only an error is
+          # retried, and it still fails if it never clears: a scan that didn't finish is not a clean scan.
+          for attempt in 1 2 3; do
+            if snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif | tee sca.log; then rc=0; else rc=$?; fi
+            if [ "$rc" -lt 2 ]; then break; fi
+            echo "Snyk Open Source error (exit $rc) on attempt $attempt"
+            sleep 30
+          done
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          if ! grep -q 'Testing ' sca.log; then
+            echo "::error::Snyk Open Source did not run a scan"
+            exit 1
+          fi
+
+      - name: Upload Snyk Open Source results
+        if: ${{ !cancelled() && hashFiles('snyk-open-source.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
+        with:
+          sarif_file: snyk-open-source.sarif
+          category: snyk-open-source
+
+  # The two jobs below scan what the game is really built from: vcpkg fetches each library (every download is checked
+  # against the SHA512 in its port), applies its patches and ours, and compiles it. That needs Windows, so Windows
+  # collects the patched sources and Linux scans them with the same pinned Snyk setup as above.
+  vcpkg-sources:
+    name: Build the vcpkg libraries
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
+      # bootstrap-vcpkg validates the signature of the vcpkg tool it downloads.
+      - name: Get vcpkg at the manifest's baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $root checkout -q FETCH_HEAD
+          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Build the pinned libraries, keeping their sources
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          # --binarysource=clear: always build from source. A library restored from a cache has no sources to scan.
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows --binarysource=clear `
+            --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Everything vcpkg built is collected, so a new library is scanned without anyone changing this file. A library with
+      # no source to collect fails, because a library we can't read is a blind spot. The only folders passed over are the
+      # ones named here, which aren't libraries we compile: Microsoft's D3DX is a binary package, the two vcpkg-cmake ones
+      # are build helpers, and the last two are vcpkg's own working folders.
+      - name: Collect each library's patched source
+        shell: pwsh
+        run: |
+          $bt = Join-Path $env:RUNNER_TEMP 'bt'
+          $out = Join-Path $env:RUNNER_TEMP 'libsrc'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $notLibraries = 'dxsdk-d3dx', 'vcpkg-cmake', 'vcpkg-cmake-config', 'detect_compiler', 'versioning_'
+          $failed = $false
+          foreach ($port in Get-ChildItem $bt -Directory) {
+            if ($notLibraries -contains $port.Name) { continue }
+            $src = Join-Path $port.FullName 'src'
+            $folders = if (Test-Path $src) { @(Get-ChildItem $src -Directory) } else { @() }
+            if ($folders.Count -eq 0) {
+              Write-Output "::error::$($port.Name) was built but has no source to scan"
+              $failed = $true
+            }
+            foreach ($d in $folders) {
+              Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
+              "$($port.Name)/$($d.Name)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Hand the sources to the scan job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-library-sources
+          path: ${{ runner.temp }}/libsrc
+          # Without this the upload silently leaves out hidden files. Source in a hidden folder would go unscanned, and
+          # the check for .snyk files in the next job could never find one.
+          include-hidden-files: true
+          retention-days: 1
+
+  vcpkg-scan:
+    name: Snyk on the vcpkg libraries
+    needs: vcpkg-sources
+    # GitHub counts a skipped job as a passing check, so without this a failed library build would skip this job and
+    # let the pull request through unscanned. always() makes it run anyway: with no sources to download, it fails.
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the security gate
+    steps:
+      - name: Check out the accepted-reports list
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          persist-credentials: false
+
+      - name: Download the collected sources
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vcpkg-library-sources
+          path: libsrc
+
+      - name: Install the pinned Snyk CLI
+        run: |
+          curl -fsSL "https://downloads.snyk.io/cli/$SNYK_CLI_VERSION/snyk-linux" -o "$RUNNER_TEMP/snyk"
+          echo "$SNYK_CLI_SHA256  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Every library that was collected is scanned, even if an earlier one fails, so one run shows everything; the job
+      # fails at the end if any scan found anything. The six we know of must be present by name, so a broken hand-over
+      # can't pass as clean, and a new library is scanned without anyone adding it here. No library may carry a comment or
+      # a settings file that tells a scanner to look away.
+      - name: SAST and SCA on each library's source
+        shell: bash
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -o pipefail
+          mkdir -p results
+          failed=0
+          # Snyk exits 0 for clean, 1 for findings, 2 or more for an error such as an API timeout. Only an error is
+          # retried, and it still fails if it never clears: a scan that didn't finish is not a clean scan.
+          code_scan() {
+            local attempt rc
+            for attempt in 1 2 3; do
+              if snyk code test "$1" --sarif-file-output="$2"; then return 0; else rc=$?; fi
+              if [ "$rc" -eq 1 ]; then return 1; fi
+              echo "Snyk Code error (exit $rc) on attempt $attempt"
+              sleep 30
+            done
+            return "$rc"
+          }
+          for lib in enet fmt libogg libvorbis openal-soft pthreads; do
+            if [ ! -d "libsrc/$lib" ]; then
+              echo "::error::No source collected for $lib"
+              failed=1
+            fi
+          done
+          for libdir in libsrc/*/; do
+            lib=$(basename "$libdir")
+            echo "================ $lib"
+            dirs=$(find "libsrc/$lib" -mindepth 1 -maxdepth 1 -type d 2>/dev/null || true)
+            if [ -z "$dirs" ]; then
+              echo "::error::No source collected for $lib"
+              failed=1
+              continue
+            fi
+            for d in $dirs; do
+              # Each source folder gets its own reports, so a library with two folders can't overwrite one with the other.
+              name="$lib.$(basename "$d")"
+              if grep -rIliE 'deepcode ignore|snyk:ignore' "$d"; then
+                echo "::error::$lib has a comment that suppresses a scanner"
+                failed=1
+              fi
+              settings=$(find "$d" \( -name .snyk -o -name .dcignore \) -print)
+              if [ -n "$settings" ]; then
+                echo "$settings"
+                echo "::error::$lib has a file that tells a scanner to look away"
+                failed=1
+              fi
+              if ! code_scan "$d" "results/$name.code.sarif"; then failed=1; fi
+              for attempt in 1 2 3; do
+                if (cd "$d" && snyk test --unmanaged --print-dep-paths --json-file-output="$GITHUB_WORKSPACE/results/$name.sca.json") | tee sca.log; then rc=0; else rc=$?; fi
+                if [ "$rc" -lt 2 ]; then break; fi
+                echo "Snyk Open Source error (exit $rc) on attempt $attempt"
+                sleep 30
+              done
+              # The one exception in this gate: .github/snyk-accepted.json lists 4 reports by ID, for one library, with
+              # an expiry date, and says why. Any other report, or any report after that date, still fails. It stays shut
+              # if its own data is wrong: the expiry must be a real date, and Snyk's report must list something, because
+              # an empty or unreadable report has not shown that only the accepted IDs were found.
+              if [ "$rc" -eq 1 ] && [ "$lib" = "$(jq -r .library repo/.github/snyk-accepted.json)" ]; then
+                expires=$(jq -r .expires repo/.github/snyk-accepted.json)
+                found=$(jq -r 'if type == "array" then .[] else . end | .vulnerabilities[]?.id' "results/$name.sca.json" | sort -u || true)
+                other=$(comm -23 <(printf '%s\n' "$found") <(jq -r '.reports[]' repo/.github/snyk-accepted.json | sort -u))
+                if [[ "$expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [ "$(date -u -d "$expires" +%F)" = "$expires" ] && \
+                   [ "$(date -u +%F)" \< "$expires" ] && [ -n "$found" ] && [ -z "$other" ]; then
+                  echo "::warning::$lib: only the accepted reports were found (see .github/snyk-accepted.json)"
+                  rc=0
+                fi
+              fi
+              if [ "$rc" -ne 0 ]; then failed=1; fi
+              tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
+              if [ "$tested" -lt 1 ]; then
+                echo "::error::Snyk Open Source did not recognise $lib"
+                failed=1
+              fi
+            done
+          done
+          exit $failed
+
+      - name: Keep the reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vcpkg-scan-results
+          path: results
+          retention-days: 7

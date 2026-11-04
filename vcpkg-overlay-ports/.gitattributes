@@ -1,0 +1,3 @@
+# Patches must reach the patch tool byte for byte, and the port files must keep the hashes they
+# have in the vcpkg registry, so git must not change the line endings of anything in this folder.
+* -text

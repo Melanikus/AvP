@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it
+
 #ifndef _obchunk_hpp
 #define _obchunk_hpp 1
 
@@ -51,10 +55,6 @@ public:
 
 	// constructor from buffer
 	Object_Chunk (Chunk_With_Children * parent,const char *, size_t);
-
-	// constructor from data
-
-	Object_Chunk (Chunk_With_Children * parent, ChunkObject &obj);
 
 	// destructor
 	virtual ~Object_Chunk();
@@ -150,17 +150,12 @@ private:
 
 
 
-	// constructor from data
-	Object_Header_Chunk (Object_Chunk * parent);
 
 };
 
 
 ///////////////////////////////////////////////
 
-
-// automatically constructed when Object_Chunks are constructed from
-// data
 
 class Object_Interface_Data_Chunk : public Chunk_With_Children
 {
@@ -170,11 +165,6 @@ public:
 private:
 
 	friend class Object_Chunk;
-
-
-
-	// constructor from Object_Chunks
-	Object_Interface_Data_Chunk (Object_Chunk * parent);
 
 };
 
@@ -462,7 +452,6 @@ class Object_Alternate_Locations_Chunk : public Chunk
 {
 public :
 	Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data, size_t);
-	Object_Alternate_Locations_Chunk(Chunk_With_Children* parent);
 	~Object_Alternate_Locations_Chunk();
 
 	void fill_data_block(char* data);

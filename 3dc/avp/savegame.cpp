@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   every block of a save file is checked before it is read: its header, its size and the compressed data;
+//   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
+//   saved, instead of overwriting another slot, and that does not cost the player a save
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -32,9 +37,11 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include <assert.h>
+#include "logString.h"
+#include "utilities.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
-extern void GetFilenameForSaveSlot(int i, char *filenamePtr);
+extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
 void ScanSaveSlots(void);
 void RestartLevel();
 extern void StartFMVAtFrame(int number, int frame);
@@ -409,6 +416,15 @@ void SaveGame()
 		return;
 	}
 
+	//Work out the save file's name first. If it cannot be made, nothing can be saved, so the
+	//player is told, and this comes before the check below so that it does not cost them a save.
+	if(!GetFilenameForSaveSlot(SaveGameRequest,filename))
+	{
+		SaveGameRequest = SAVELOAD_REQUEST_NONE;
+		NewOnScreenMessage("GAME NOT SAVED: ITS FILE PATH CANNOT BE USED");
+		return;
+	}
+
 	//check that we are allowed to save at this point
 	if(!SaveGameAllowed())
 	{
@@ -447,8 +463,6 @@ void SaveGame()
 	Save_WeaponsCGlobals();
 
 
-	//get the filename
-	GetFilenameForSaveSlot(SaveGameRequest,filename);
 	
 	//clear the save request
 	SaveGameRequest = SAVELOAD_REQUEST_NONE;
@@ -596,7 +610,13 @@ void LoadSavedGame()
 		//read the next header
 		SAVE_BLOCK_HEADER* header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
 
-		if(header->size>LoadInfo.BufferSpaceLeft)
+		//the header must fit in the file before it is read, and its size must at least cover it
+		if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER) || header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+		{
+			LogErrorString("LoadSavedGame - invalid level header (file size " + Util::IntToString(LoadInfo.BufferSize) + ")");
+			terminal_error = TRUE;
+		}
+		else if(header->size>LoadInfo.BufferSpaceLeft)
 		{
 			//oh dear, dodgy file
 			GLOBALASSERT("Invalid save game header size"==0);
@@ -623,13 +643,23 @@ void LoadSavedGame()
 	
 	if (!terminal_error)
 	{
-		if (!strncmp (LoadInfo.BufferPos, "REBCRIF1", 8))
+		//the rest of the file is one Huffman package; it must at least hold the package header
+		if (LoadInfo.BufferSpaceLeft >= (int)sizeof(HuffmanPackage) && !strncmp (LoadInfo.BufferPos, "REBCRIF1", 8))
 		{
-			char *uncompressedBufferPtr = (char*)HuffmanDecompress((HuffmanPackage*)(LoadInfo.BufferPos)); 		
-			LoadInfo.BufferSpaceLeft = ((HuffmanPackage*)LoadInfo.BufferPos)->UncompressedDataSize;
-			DeallocateMem(LoadInfo.BufferStart);
-			LoadInfo.BufferStart=uncompressedBufferPtr;
-			LoadInfo.BufferPos = LoadInfo.BufferStart;
+			//checked decompression: rejects sizes and code tables that would overrun, never reads past the file
+			char *uncompressedBufferPtr = HuffmanDecompressChecked((HuffmanPackage*)(LoadInfo.BufferPos), LoadInfo.BufferSpaceLeft);
+			if (uncompressedBufferPtr)
+			{
+				LoadInfo.BufferSpaceLeft = ((HuffmanPackage*)LoadInfo.BufferPos)->UncompressedDataSize;
+				DeallocateMem(LoadInfo.BufferStart);
+				LoadInfo.BufferStart=uncompressedBufferPtr;
+				LoadInfo.BufferPos = LoadInfo.BufferStart;
+			}
+			else
+			{
+				LogErrorString("LoadSavedGame - the compressed save data is invalid");
+				terminal_error = TRUE;
+			}
 		}
 		else
 		{
@@ -642,6 +672,15 @@ void LoadSavedGame()
 	{
 		//read the next header
 		SAVE_BLOCK_HEADER* header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
+
+		//the header itself must fit in what is left, and a block must at least hold its header: a size of 0 never
+		//advances (the load hangs) and a negative one moves backwards
+		if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER) || header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+		{
+			LogErrorString("LoadSavedGame - invalid save block header (space left " + Util::IntToString(LoadInfo.BufferSpaceLeft) + ")");
+			terminal_error = TRUE;
+			break;
+		}
 
 		if(header->size>LoadInfo.BufferSpaceLeft)
 		{
@@ -807,8 +846,19 @@ SAVE_BLOCK_HEADER* GetNextBlockIfOfType(SAVE_BLOCK_TYPE type)
 		return 0;
 	}
 	
-	//look at the next header in the buffer
+	//look at the next header in the buffer (it must fit in what is left, and a block must at least hold its header:
+	//a size of 0 would be returned again and again by the loops that call this)
+	if(LoadInfo.BufferSpaceLeft < (int)sizeof(SAVE_BLOCK_HEADER))
+	{
+		LogErrorString("GetNextBlockIfOfType - save data ends inside a block header");
+		return 0;
+	}
 	header = (SAVE_BLOCK_HEADER*) LoadInfo.BufferPos;
+	if(header->size < (int)sizeof(SAVE_BLOCK_HEADER))
+	{
+		LogErrorString("GetNextBlockIfOfType - invalid save block size " + Util::IntToString(header->size));
+		return 0;
+	}
 	if(header->size>LoadInfo.BufferSpaceLeft)
 	{
 		//oh dear, dodgy file
@@ -830,6 +880,31 @@ SAVE_BLOCK_HEADER* GetNextBlockIfOfType(SAVE_BLOCK_TYPE type)
 		//out of luck
 		return 0;
 	}
+}
+
+//the count and the size of a "fixed part + array" block both come from the save file: the loaders' own size test
+//(fixed + count * elemSize == header->size, in int) wraps for a large count, and they copy count elements
+BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const int* countPtr, int elemSize, int capacity)
+{
+	int count;
+
+	if(!header || !countPtr || fixedSize < (int)sizeof(SAVE_BLOCK_HEADER) || elemSize <= 0) return FALSE;
+
+	//the fixed part (which holds the count) must be inside the block before the count is read
+	if(header->size < fixedSize)
+	{
+		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + " is smaller than its header");
+		return FALSE;
+	}
+
+	count = *countPtr;
+	if(count < 0 || count > capacity || count > (header->size - fixedSize) / elemSize)
+	{
+		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + ": invalid count " + Util::IntToString(count));
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 static void SaveStrategies()
@@ -1029,6 +1104,9 @@ static void SaveStrategies()
 
 static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
+	//the behaviour type and the name are read from the block, so the whole strategy header must be there
+	if(header->size < (int)sizeof(SAVE_BLOCK_STRATEGY_HEADER)) return;
+
 	switch(header->bhvr_type)
 	{
 		case I_BehaviourMarinePlayer :
@@ -1251,6 +1329,9 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 {
 	DEAD_STRATEGY_SAVE_BLOCK* block = (DEAD_STRATEGY_SAVE_BLOCK*) header;
 
+	//the name is read from the block, so it must be all there
+	if(header->size < (int)sizeof(*block)) return;
+
 	STRATEGYBLOCK* sbPtr = FindSBWithName(block->SBname);
 	if(sbPtr)
 	{
@@ -1317,7 +1398,13 @@ extern void DisplaySavesLeft()
 {
 	char text [100];
 
-	sprintf(text, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), NumberOfSavesLeft);
+	// text holds 100 bytes. The words come from the game's language text file on
+	// disk, so _snprintf stops at 99 characters, and we write the end marker (the
+	// zero byte that ends a text) into the last byte ourselves, because _snprintf
+	// leaves it out when it has to cut the text short. Text that fits comes out
+	// exactly as before.
+	_snprintf(text, sizeof(text) - 1, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), NumberOfSavesLeft);
+	text[sizeof(text) - 1] = '\0';
 
 	NewOnScreenMessage(text);
 }

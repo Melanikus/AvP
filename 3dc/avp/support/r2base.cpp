@@ -7,6 +7,9 @@
  *    HISTORY:  Created 14/11/97
  *
  *******************************************************************/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a function with nothing to do no longer holds two empty blocks; the compiled code is the same
 
 /* Includes ********************************************************/
 #include "3dc.h"
@@ -67,13 +70,7 @@ r2pos operator+ (const r2pos& R2Pos_1, const r2pos& R2Pos_2)
 
 extern void R2BASE_ScreenModeChange_Setup(void)
 {
-	/* PRECONDITION */
-	{
-	}
-
-	/* CODE */
-	{
-	}
+	// nothing to do before the screen mode changes
 }
 
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;

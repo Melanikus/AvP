@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it
+
 #ifndef _miscchunk_hpp
 #define _miscchunk_hpp 1
 
@@ -121,7 +125,6 @@ public:
 	Environment_Data_Chunk * get_env_data();
 
 	Object_Chunk* get_object_by_index(int index);
-	void assign_index_to_object(Object_Chunk* object);
 
 private:
 

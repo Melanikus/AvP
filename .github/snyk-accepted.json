@@ -1,0 +1,11 @@
+{
+  "why": "The only accepted reports in this project. Snyk flags libvorbis 1.3.7 by version, and its ranges are wrong, so no code change can clear them. Three were fixed upstream in 1.3.7; the part of CVE-2008-1419 that is still real is patched in vcpkg-overlay-ports/libvorbis (0014). Reported to Snyk. Approved by Melanikus on 2026-11-03. Remove this file as soon as Snyk corrects its data.",
+  "library": "libvorbis",
+  "expires": "2027-05-03",
+  "reports": [
+    "SNYK-UNMANAGED-XIPHVORBIS-2377273",
+    "SNYK-UNMANAGED-XIPHVORBIS-2377277",
+    "SNYK-UNMANAGED-XIPHVORBIS-2377278",
+    "SNYK-UNMANAGED-XIPHVORBIS-2377280"
+  ]
+}

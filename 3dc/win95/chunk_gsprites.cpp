@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it
+
 #include "chunk_gsprites.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -16,15 +20,6 @@ Children for AllSprites_Chunk :
 "SPRIHEAD"		Sprite_Header_Chunk
 */
 
-
-
-// empty constructor
-AllSprites_Chunk::AllSprites_Chunk (Chunk_With_Children  * parent)
-:Lockable_Chunk_With_Children (parent, "RSPRITES")
-{
-	// as necessary, generated automatically
-	new AllSprites_Header_Chunk (this);
-}
 
 
 BOOL AllSprites_Chunk::file_equals (HANDLE & /*rif_file*/)

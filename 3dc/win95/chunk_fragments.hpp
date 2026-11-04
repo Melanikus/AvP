@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code and declarations only the level editor used: the game itself never runs them
+
 #ifndef _fragchnk_hpp_
 #define _fragchnk_hpp_
 
@@ -9,7 +13,6 @@ class Fragment_Type_Data_Chunk : public Chunk
 {
 public :
 	
-	Fragment_Type_Data_Chunk(Chunk_With_Children* parent,const char* name);
 	Fragment_Type_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 	~Fragment_Type_Data_Chunk();
 	
@@ -64,10 +67,6 @@ public:
 class Fragment_Type_Chunk : public Chunk_With_Children
 {
 public :
-	Fragment_Type_Chunk(Chunk_With_Children * parent,const char* name)
-	: Chunk_With_Children (parent, "FRAGTYPE")
-	{new Fragment_Type_Data_Chunk(this,name);}
-	
 	Fragment_Type_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
 	const char* get_name();

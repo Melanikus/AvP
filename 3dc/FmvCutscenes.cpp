@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the name of a triggered film is built in a buffer with room for any number the level file can hold
 
 #ifdef _XBOX
 	#define _fseeki64 fseek // ensure libvorbis uses fseek and not _fseeki64 for xbox
@@ -285,13 +288,16 @@ void UpdateAllFMVTextures()
 extern void StartTriggerPlotFMV(int number)
 {
 	uint32_t i = NumberOfFMVTextures;
-	char buffer[25];
+	// the number comes from the level file, so it can be any int: this holds the 16 characters of the name, up to 11
+	// for the number, and the end marker, so the name is never cut short and can never run past the end
+	char buffer[32];
 
 	if (CheatMode_Active != CHEATMODE_NONACTIVE) {
 		return;
 	}
 
-	sprintf(buffer, "FMVs/message%d.smk", number);
+	_snprintf(buffer, sizeof(buffer) - 1, "FMVs/message%d.smk", number);
+	buffer[sizeof(buffer) - 1] = '\0';
 
 	FILE *file = avp_fopen(buffer, "rb");
 	if (!file)

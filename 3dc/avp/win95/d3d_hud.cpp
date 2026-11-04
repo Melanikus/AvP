@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   an angle from a save file is kept between 0 and 4095 before a sine or cosine lookup
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -352,8 +355,8 @@ void D3D_BLTMotionTrackerToHUD(int scanLineSize)
 
 	int angle = 4095 - Player->ObEuler.EulerY;
 
-	int widthCos = MUL_FIXED(motionTrackerScaledHalfWidth, GetCos(angle));
-	int widthSin = MUL_FIXED(motionTrackerScaledHalfWidth, GetSin(angle));
+	int widthCos = MUL_FIXED(motionTrackerScaledHalfWidth, GetCos(angle & wrap360));
+	int widthSin = MUL_FIXED(motionTrackerScaledHalfWidth, GetSin(angle & wrap360));
 
 	/* I've put these -1s in here to help clipping 45 degree cases,
 	where two vertices can end up around the clipping line of Y=0 */

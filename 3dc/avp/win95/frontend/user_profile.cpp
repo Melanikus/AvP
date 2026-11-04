@@ -1,4 +1,10 @@
 /* KJL 15:17:31 10/12/98 - user profile stuff */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a saved profile is loaded only when complete, its name ends inside its box and cannot lead outside
+//   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused;
+//   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file;
+//   a profile file whose inner name is not its own file name is skipped, so it cannot delete another profile
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -14,6 +20,7 @@
 #include "pldnet.h"
 #include <time.h>
 #include "utilities.h"
+#include "logString.h"
 
 static int LoadUserProfiles(void);
 
@@ -96,8 +103,31 @@ void EmptyUserProfilesList()
 	}
 }
 
+// A profile's name becomes part of file paths: its .prf file and its .sav files. A name with a folder separator or a
+// drive colon in it, such as ..\..\x, would reach files outside the profile folder. A broken or edited profile file
+// could hold such a name, and it can be typed in the menu, but the file of a real profile cannot be named that way.
+// So those names are never used in a path.
+extern BOOL UserProfileNameIsSafe(const char *name)
+{
+	return (strpbrk(name, "/\\:") == NULL);
+}
+
+// Deleting a profile removes <name>.prf and <name>_1.sav and so on, using the name stored inside the profile. The game
+// always saves a profile as <name>.prf, so that name is also the name of its file. A file where the two differ was
+// made by hand: left in the list, deleting it would remove some other player's profile and saved games.
+static BOOL UserProfileNameMatchesFile(const char *name, const char *fileName)
+{
+	size_t const length = strlen(name);
+
+	return (_strnicmp(fileName, name, length) == 0) && (_stricmp(fileName + length, USER_PROFILES_SUFFIX) == 0);
+}
+
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
 {
+	if (!UserProfileNameIsSafe(profilePtr->Name)) {
+		return 0;
+	}
+
 	// avp_open_userfile will add SaveFolderPath for us
 	char *filename = new char [strlen(USER_PROFILES_PATH) + strlen(profilePtr->Name) + strlen(USER_PROFILES_SUFFIX) + 1];
 
@@ -127,14 +157,12 @@ extern void DeleteUserProfile(int number)
 
 	for (int i=0; i<number; i++) profilePtr = GetNextUserProfile();
 
+	if (!UserProfileNameIsSafe(profilePtr->Name)) {
+		return;
+	}
+
 	char *savePath = GetSaveFolderPath();
 	size_t savePathLength = strlen(savePath);
-
-	size_t fileNameLength = savePathLength + strlen(USER_PROFILES_PATH) + strlen(profilePtr->Name) + strlen(USER_PROFILES_SUFFIX)+1;
-	if (fileNameLength > MAX_PATH)
-	{
-
-	}
 
 	char *filename = new char[savePathLength + strlen(USER_PROFILES_PATH)+strlen(profilePtr->Name)+strlen(USER_PROFILES_SUFFIX)+1];
 	strcpy(filename, savePath);
@@ -151,8 +179,13 @@ extern void DeleteUserProfile(int number)
 
 	for (int i=0; i < NUMBER_OF_SAVE_SLOTS; i++)
 	{
-		sprintf(filename, "%s%s%s_%d.sav", savePath, USER_PROFILES_PATH, profilePtr->Name, i+1);
-		::DeleteFile(filename);
+		// the save folder can be a long path: _snprintf stops at the end of filename and says so with a negative
+		// number. A name that did not fit is skipped, because a shortened name could be some other file.
+		if (_snprintf(filename, MAX_PATH - 1, "%s%s%s_%d.sav", savePath, USER_PROFILES_PATH, profilePtr->Name, i+1) >= 0)
+		{
+			filename[MAX_PATH - 1] = '\0';
+			::DeleteFile(filename);
+		}
 	}
 
 	delete[] filename;
@@ -228,8 +261,14 @@ static int LoadUserProfiles(void)
 
 	TCHAR strPath[MAX_PATH];
 
-	strcpy(strPath, GetSaveFolderPath());
-	strcat(strPath, USER_PROFILES_WILDCARD_NAME);
+	// A save folder path too long to hold the search pattern is not cut short, which could search the wrong
+	// place: it goes to the log, and the game carries on as if there were no profiles.
+	if (_snprintf(strPath, MAX_PATH - 1, "%s%s", GetSaveFolderPath(), USER_PROFILES_WILDCARD_NAME) < 0)
+	{
+		LogErrorString("the path for finding user profiles is too long");
+		return 0;
+	}
+	strPath[MAX_PATH - 1] = '\0';
 
 	const char* load_name = &strPath[0];
 
@@ -294,7 +333,28 @@ static int LoadUserProfiles(void)
 			AVP_USER_PROFILE *profilePtr = new AVP_USER_PROFILE;
 			DWORD bytes_read;
 
-			if (!ReadFile(rif_file, profilePtr, sizeof(AVP_USER_PROFILE), &bytes_read, 0))
+			// A profile file is copied straight into the profile in memory. A broken or
+			// edited file could be shorter than a whole profile, which would leave the
+			// rest of it as leftover memory, so such a file is skipped like an unreadable
+			// one. Every profile the game saved is complete, so it still loads.
+			if (!ReadFile(rif_file, profilePtr, sizeof(AVP_USER_PROFILE), &bytes_read, 0) || bytes_read != sizeof(AVP_USER_PROFILE))
+			{
+				CloseHandle (rif_file);
+				delete[] pszFullPath;
+				delete profilePtr;
+				continue;
+			}
+
+			// The name box holds MAX_SIZE_OF_USERS_NAME (15) characters and then a zero
+			// byte that marks where the name stops. The game never saves a longer name
+			// (its text field stops at 15), but the file might not have that zero byte,
+			// so we always put one in the last place. Without it, code that reads the
+			// name would run on past the end of the box.
+			profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
+
+			// a name that could reach outside the profile folder, or that is not this file's own name: skip the file,
+			// like an unreadable one
+			if (!UserProfileNameIsSafe(profilePtr->Name) || !UserProfileNameMatchesFile(profilePtr->Name, wfd.cFileName))
 			{
 				CloseHandle (rif_file);
 				delete[] pszFullPath;
@@ -373,6 +433,18 @@ extern void GetSettingsFromUserProfile(void)
 	AlienInputSecondaryConfig     = UserProfilePtr->AlienInputSecondaryConfig;
 	ControlMethods                = UserProfilePtr->ControlMethods;
 	JoystickControlMethods        = UserProfilePtr->JoystickControlMethods;
+
+	// the profile is read from a .prf file as raw bytes: keep the look sensitivities in their menu sliders' range
+	// (0 to 3 x the default, menu_data.cpp), since they multiply the mouse / pad deltas every frame (user_io.cpp)
+	if (ControlMethods.MouseXSensitivity > DEFAULT_MOUSEX_SENSITIVITY*3)
+		ControlMethods.MouseXSensitivity = DEFAULT_MOUSEX_SENSITIVITY*3;
+	if (ControlMethods.MouseYSensitivity > DEFAULT_MOUSEY_SENSITIVITY*3)
+		ControlMethods.MouseYSensitivity = DEFAULT_MOUSEY_SENSITIVITY*3;
+	if (JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity > DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3)
+		JoystickControlMethods.JoystickTrackerBallHorizontalSensitivity = DEFAULT_TRACKERBALL_HORIZONTAL_SENSITIVITY*3;
+	if (JoystickControlMethods.JoystickTrackerBallVerticalSensitivity > DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3)
+		JoystickControlMethods.JoystickTrackerBallVerticalSensitivity = DEFAULT_TRACKERBALL_VERTICAL_SENSITIVITY*3;
+
 	MenuDetailLevelOptions        = UserProfilePtr->DetailLevelSettings;
 	FmvSoundVolume                = UserProfilePtr->FmvSoundVolume;
 	EffectsSoundVolume            = UserProfilePtr->EffectsSoundVolume;

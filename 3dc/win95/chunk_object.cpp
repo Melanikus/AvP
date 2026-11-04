@@ -1,3 +1,11 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   object headers in level files are read without going past their end, and names and other text are
+//   copied using their exact measured length, so they always fit; code only the level editor used was removed
+//   a child chunk whose size cannot be real is refused
+//   the copy of an object's name moved to chunk_object_name.hpp
+
+#include <string>
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
@@ -42,7 +50,7 @@ Object_Chunk::Object_Chunk(Chunk_With_Children * parent, const char *data, size_
 	
 	while ((data-buffer_ptr)< (signed) size) {
 
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -54,27 +62,6 @@ Object_Chunk::Object_Chunk(Chunk_With_Children * parent, const char *data, size_
 
 	program_object_index=-1;
 
-}
-
-// from data
-Object_Chunk::Object_Chunk (Chunk_With_Children * parent, ChunkObject &obj)
-: Lockable_Chunk_With_Children (parent, "RBOBJECT"), 
-	object_data (obj)
-{
-	object_data_store = (ChunkObject *) &object_data;
-	object_data_store->index_num=-1;
-
-	new Object_Header_Chunk(this);
-	new Object_Interface_Data_Chunk(this);
-
-	//if the parent is a file_chunk get an object index
-	if(!strcmp(parent->identifier,"REBINFF2"))
-	{
-		((File_Chunk*)parent)->assign_index_to_object(this);
-	}
-	program_object_index=-1;
-
-	CalculateID();
 }
 
 Object_Chunk::~Object_Chunk()
@@ -397,13 +384,12 @@ ObjectID Object_Chunk::CalculateID()
 	if(!chlist.size()) return retval;
 	((Environment_Data_Chunk*)chlist.first_entry())->lookup_child("RIFFNAME",chlist);
 	if(!chlist.size()) return retval;
-	char Name[100];
+	// rif name + object name, hashed; both come from the .rif and have no length limit
+	std::string Name(((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
 
-	strcpy(Name,((RIF_Name_Chunk*)chlist.first_entry())->rif_name);
-
-	strcat(Name,object_data.o_name);
+	Name += object_data.o_name;
 	char buffer[16];
-	md5_buffer(Name,strlen(Name),&buffer[0]);
+	md5_buffer(Name.c_str(),(unsigned int)Name.size(),&buffer[0]);
 	buffer[7]=0;
 	object_data_store->ID=*(ObjectID*)&buffer[0];
 	return 	object_data_store->ID;
@@ -416,11 +402,18 @@ ObjectID Object_Chunk::CalculateID()
 RIF_IMPLEMENT_DYNCREATE("OBJHEAD1",Object_Header_Chunk)
 
 // from buffer
-Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t /*hsize*/)
+Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t hsize)
 : Chunk (parent, "OBJHEAD1"), object_data (((Object_Chunk*)parent)->object_data_store),
 flags(0), version_no (0), associated_shape (0)
 {
 	Object_Chunk* parent_object = (Object_Chunk*) parent;
+
+	// the 60-byte fixed part below is read from a copy that is never longer than the chunk: a chunk shorter than 60
+	// bytes (only a damaged or crafted one) reads as if padded with zeros; the name after it is read from the chunk
+	char const * const chunk_data = hdata;
+	alignas(int) char fixed_part[60] = { 0 };
+	memcpy (fixed_part, hdata, hsize < sizeof(fixed_part) ? hsize : sizeof(fixed_part));
+	hdata = fixed_part;
 
 	flags = *((int *) hdata);
 
@@ -431,8 +424,15 @@ flags(0), version_no (0), associated_shape (0)
 		parent_object->object_data_store->is_base_object = FALSE;
 	}
 
-	strncpy (lock_user, (hdata + 4), 16);
-	lock_user[16] = '\0';
+	// the lock-user name is the 16 bytes after the flags: copy it up to its first zero byte (or all 16 bytes if it
+	// has none), and fill the rest of lock_user with zeros, so it always ends with a zero byte
+	size_t lock_user_length = 0;
+	while (lock_user_length < 16 && hdata[4 + lock_user_length])
+	{
+		lock_user_length++;
+	}
+	memset (lock_user, 0, sizeof(lock_user));
+	memcpy (lock_user, hdata + 4, lock_user_length);
 
 	hdata+=20;
 
@@ -451,21 +451,11 @@ flags(0), version_no (0), associated_shape (0)
 	shape_id_no = *((int *) hdata);
 	hdata+=4;
 
-	strcpy (parent_object->object_data_store->o_name, hdata);
+	// the name fills the rest of the chunk (after the 60 bytes above): copy what fits in o_name, and never read
+	// past the chunk
+	CopyObjectName (parent_object->object_data_store->o_name, chunk_data, hsize);
 	parent_object->object_data_store->ID.id1=0;
 	parent_object->object_data_store->ID.id2=0;
-}
-
-//from data
-
-Object_Header_Chunk::Object_Header_Chunk (Object_Chunk * parent)
-: Chunk (parent, "OBJHEAD1"),
-object_data (parent->object_data_store), 
-flags (0), version_no (0), associated_shape(0)
-{
-	if (object_data->is_base_object) {
-		flags = OBJECT_FLAG_BASE_OBJECT;
-	}
 }
 
 
@@ -528,7 +518,7 @@ void Object_Header_Chunk::fill_data_block ( char * data_start)
 	*((int *) data_start) = shape_id_no;
 	data_start+=4;
 
-	strcpy (data_start, object_data->o_name);
+	memcpy (data_start, object_data->o_name, strlen(object_data->o_name) + 1);
 }
 
 void Object_Header_Chunk::prepare_for_output()
@@ -555,7 +545,7 @@ Object_Interface_Data_Chunk::Object_Interface_Data_Chunk(Chunk_With_Children * p
 
 	while ((data-buffer_ptr)< (signed) size) {
 
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -563,12 +553,6 @@ Object_Interface_Data_Chunk::Object_Interface_Data_Chunk(Chunk_With_Children * p
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
-}
-
-Object_Interface_Data_Chunk::Object_Interface_Data_Chunk (Object_Chunk * parent)
-: Chunk_With_Children (parent, "OBINTDT")
-{
-	new Object_Notes_Chunk (this, "Enter notes here", strlen("Enter notes here") + 1);
 }
 
 
@@ -650,7 +634,7 @@ Object_Module_Data_Chunk::Object_Module_Data_Chunk (Chunk_With_Children * parent
 
 	while ((mdata-buffer_ptr)< (signed) msize) {
 
-		if ((*(int *)(mdata + 8)) + (mdata-buffer_ptr) > (signed) msize) {
+		if (!ChildChunkFits(mdata, buffer_ptr, (signed) msize)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -754,75 +738,6 @@ VModule_Array_Chunk::~VModule_Array_Chunk ()
 	delete[] vmod_array;
 }
 
-///////////////////////////////////////
-#if 0
-void Adjacent_Modules_Chunk::fill_data_block (char *data_start)
-{
-	strncpy (data_start, identifier, 8);
-
-	data_start += 8;
-
-	*((int *) data_start) = chunk_size;
-
-	data_start += 4;
-
-	*((int *) data_start) = adjacent_modules_list.size();
-
-	data_start += 4;
-	
-	for (LIF<Adjacent_Module> ami(&adjacent_modules_list); !ami.done(); ami.next())
-	{
-	
-		*((int *) data_start) = 0;
-		data_start += 4;
-
-		*((int *) data_start) = 0;
-		data_start += 4;
-
-		strcpy (data_start, ami().o_name);
-		data_start += (strlen(ami().o_name) + 1) + (4-(strlen(ami().o_name) + 1)%4)%4;
-		
-	}
-	
-}
-
-size_t Adjacent_Modules_Chunk::size_chunk()
-{
-	int size = 16;
-	
-	for (LIF<Adjacent_Module> ami(&adjacent_modules_list); !ami.done(); ami.next())
-	{
-		size += 8;
-		size += (strlen(ami().o_name) + 1) + (4-(strlen(ami().o_name) + 1)%4)%4;
-	}
-
-	chunk_size = size;
-	return(size);
-		
-}
-
-Adjacent_Modules_Chunk::Adjacent_Modules_Chunk (Object_Module_Data_Chunk * parent, const char * data, size_t /*size*/)
-: Chunk (parent, "ADJMDLST")
-{
-	int num_array_items = *((int *) data);
-
-	data += 4;
-	
-	for (int i=0; i<num_array_items; i++)
-	{
-		Adjacent_Module am;
-
-		data += 8;
-
-		am.o_name = new char [strlen(data) + 1];
-		strcpy (am.o_name, data);
-		data += (strlen(am.o_name) + 1) + (4-(strlen(am.o_name) + 1)%4)%4;
-		
-		adjacent_modules_list.add_entry(am);	
-			
-	}
-}
-#endif
 ///////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("ADJMDLEP",Adjacent_Module_Entry_Points_Chunk)
 
@@ -1156,7 +1071,7 @@ void Object_Track_Sound_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=index;
 	data_start+=4;
 
-	strcpy(data_start,wav_name);
+	memcpy(data_start,wav_name,strlen(wav_name)+1);
 
 }
 
@@ -1191,14 +1106,6 @@ Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Ch
 		locations[i] = *(AltObjectLocation*) data;
 		data+=sizeof(AltObjectLocation);
 	}
-}
-
-Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent)
-:Chunk(parent,"ALTLOCAT")
-{
-	num_locations=0;
-	locations=0;
-	group=spare2=0;
 }
 
 Object_Alternate_Locations_Chunk::~Object_Alternate_Locations_Chunk()

@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
+
 #include <string.h>
 #include "bitmap_names.hpp"
 #include "mishchnk.hpp"
@@ -195,7 +200,7 @@ void Chunk_With_BMPs::fill_data_block (char * data_start)
 		*((int *) data_start) = bl().transparency_colour_union;
 		data_start += 4;
 		
-		strcpy (data_start, bl().filename);
+		memcpy (data_start, bl().filename, strlen(bl().filename) + 1);
 		data_start += (4-strlen(bl().filename)%4) + strlen(bl().filename);
 	}
 }
@@ -323,22 +328,6 @@ void Chunk_With_BMPs::RemoveMD5Val(char const * bname)
 		delete md5c;
 }
 
-void Chunk_With_BMPs::SetMD5Val(BMP_Name const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = GetMD5Chunk(rcbmp.filename);
-	if (md5c)
-	{
-		if (rcbmp.version_num == md5c->version_num)
-		{
-			memcpy(md5c->md5_val,md5id,16);
-			return;
-		}
-		else
-			delete md5c;
-	}
-	CreateMD5Chunk(rcbmp,md5id);
-}
-
 
 /////////////////////////////////////
 // Global_BMP_Name_Chunk
@@ -360,11 +349,6 @@ Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void Global_BMP_Name_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp);
 }
 
 /////////////////////////////////////
@@ -396,18 +380,6 @@ Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void Bitmap_List_Store_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	List<Chunk *> rnlst;
-	parent->lookup_child("RIFFNAME",rnlst);
-	char const * rname = 0;
-	if (rnlst.size())
-	{
-		rname = ((RIF_Name_Chunk *)rnlst.first_entry())->rif_name;
-	}
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rname);
 }
 
 
@@ -535,10 +507,10 @@ External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Chi
 	sdata += Chunk_With_BMPs::size_chunk() -12;
 	unsigned int const l1 = strlen(sdata)+1;
 	rifname = new char [l1];
-	strcpy(rifname,sdata);
+	memcpy(rifname,sdata,l1);
 	unsigned int const l2 = strlen(sdata+l1)+1;
 	shapename = new char [l2];
-	strcpy(shapename,sdata+l1);
+	memcpy(shapename,sdata+l1,l2);
 
 	sdata += l1+l2 +3&~3;
 
@@ -573,12 +545,6 @@ Bitmap_MD5_Chunk * External_Shape_BMPs_Store_Chunk::GetMD5Chunk(char const * bna
 	}
 
 	return 0;
-}
-
-void External_Shape_BMPs_Store_Chunk::CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rifname,shapename);
-	md5c->flags = flags & GBF_SPRITE ? BMD5F_SPRITE : BMD5F_0;
 }
 
 
@@ -865,25 +831,6 @@ ImageDescriptor const & Matching_Images_Chunk::GetLoadImage(ImageDescriptor cons
 
 // Bitmap MD5 Chunk
 RIF_IMPLEMENT_DYNCREATE("BMPMD5ID",Bitmap_MD5_Chunk)
-
-Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, int const * md5id, BMP_Name const & rcbmp, char const * rname, char const * sname)
-: Chunk(parent,"BMPMD5ID"), spare(0), flags(BMD5F_0), version_num(rcbmp.version_num)
-{
-	memcpy(md5_val,md5id,16);
-
-	char const * bname = rcbmp.filename;
-	if (!bname) bname = "";
-	bmpname = new char[strlen(bname)+1];
-	strcpy(bmpname,bname);
-
-	if (!rname) rname = "";
-	rifname = new char[strlen(rname)+1];
-	strcpy(rifname,rname);
-
-	if (!sname) sname = "";
-	shapename = new char[strlen(sname)+1];
-	strcpy(shapename,sname);
-}
 
 Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t)
 : Chunk(parent,"BMPMD5ID"), spare(*(int *)datablock), flags((BMPMD5_Flags)(*(int *)(datablock+4) & BMD5F_MASK)), version_num(*(int *)(datablock+8))

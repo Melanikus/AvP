@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a number conversion between signed and unsigned types is written out explicitly (the value is the same)
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -49,7 +52,7 @@ GAMEOBJECT GameObjects[] =
 	0x5caeb020,0x88620,
 
 	GOT_DATALOG_1,
-	0xbbfbd11a,0x1d34bf,
+	(int)0xbbfbd11a,0x1d34bf,
 
 	GOT_DATALOG_2,
 	0x68045d04,0x69092e,

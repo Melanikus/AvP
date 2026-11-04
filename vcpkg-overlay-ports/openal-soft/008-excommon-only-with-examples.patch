@@ -1,0 +1,42 @@
+Only declare alsoft.excommon when the examples are built.
+
+Our own patch (AvP). This helper library is only used by the example programs,
+but it sat outside the ALSOFT_EXAMPLES check, so CMake needed its source files
+even with the examples turned off. Moving it inside the check lets the port
+delete the examples folder.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2e3acd3..bb0b333 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -2130,18 +2130,19 @@ if(ALSOFT_UTILS)
+ endif()
+ 
+ 
+-# Add a static library with common functions used by multiple example targets
+-add_library(alsoft.excommon STATIC EXCLUDE_FROM_ALL
+-    examples/common/alhelpers.c
+-    examples/common/alhelpers.h
+-    examples/common/alhelpers.hpp)
+-target_compile_definitions(alsoft.excommon PUBLIC ${CPP_DEFS})
+-target_include_directories(alsoft.excommon PUBLIC ${OpenAL_BINARY_DIR} ${OpenAL_SOURCE_DIR}/common)
+-target_compile_options(alsoft.excommon PUBLIC ${C_FLAGS})
+-target_link_libraries(alsoft.excommon PUBLIC Threads::Threads OpenAL PRIVATE ${RT_LIB})
+-set_target_properties(alsoft.excommon PROPERTIES ${ALSOFT_STD_VERSION_PROPS})
+-
+ if(ALSOFT_EXAMPLES)
++    # Add a static library with common functions used by multiple example targets
++    add_library(alsoft.excommon STATIC EXCLUDE_FROM_ALL
++        examples/common/alhelpers.c
++        examples/common/alhelpers.h
++        examples/common/alhelpers.hpp)
++    target_compile_definitions(alsoft.excommon PUBLIC ${CPP_DEFS})
++    target_include_directories(alsoft.excommon PUBLIC ${OpenAL_BINARY_DIR}
++        ${OpenAL_SOURCE_DIR}/common)
++    target_compile_options(alsoft.excommon PUBLIC ${C_FLAGS})
++    target_link_libraries(alsoft.excommon PUBLIC Threads::Threads OpenAL PRIVATE ${RT_LIB})
++    set_target_properties(alsoft.excommon PROPERTIES ${ALSOFT_STD_VERSION_PROPS})
++
+     list(APPEND NEED_ANALYZE_SOURCE_FILES "${OpenAL_SOURCE_DIR}/examples/common/alhelpers.c"
+         "${OpenAL_SOURCE_DIR}/examples/common/alhelpers.h")
+ 

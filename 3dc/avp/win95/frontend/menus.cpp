@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   menu texts (the multiplayer setup, a menu number, the load-game list, the joined LAN game's name and the
+//   custom level name) are copied or written with size limits; a save slot whose file path does not fit is
+//   refused; the credits roll stops at the end of credits.txt; a typed letter's width is looked up with an unsigned
+//   byte
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -29,6 +35,7 @@
 #include "tables.h"
 #include "d3d_render.h"
 #include "OnScreenKeyboard.h"
+#include "logString.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -56,7 +63,7 @@ static void SetBriefingTextForMultiplayer();
 extern bool Net_UpdateSessionList(int &SelectedItem);
 extern void SelectMenuDisplayMode(void);
 extern void DrawMainMenusBackdrop(void);
-extern void GetFilenameForSaveSlot(int i, char *filenamePtr);
+extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
 extern void EndMenuBackgroundFmv(void);
 extern void D3D_DrawColourBar(int yTop, int yBottom, int rScale, int gScale, int bScale);
 extern int AnyCheatModesAllowed(void);
@@ -1772,6 +1779,15 @@ static void RenderLoadGameMenu(void)
 
 	for (e = 0; e < AvPMenus.NumberOfElementsInMenu; e++, elementPtr++)
 	{
+		// buffer holds 100 bytes: up to 99 characters (letters, digits, spaces and so
+		// on), then a zero byte that marks where the text stops (the "end marker").
+		// The lines below that put words from the game's language text file on disk
+		// into buffer use _snprintf, which stops at 99 characters, and then write the
+		// end marker into the last byte themselves, because _snprintf leaves it out
+		// when it has to cut the text short. So a line made very long in that file is
+		// cut short on screen instead of writing past the end of buffer. Text that
+		// fits is shown exactly as before. (The slot number line only writes a
+		// number, which always fits.)
 		char buffer[100];
 		SAVE_SLOT_HEADER *slotPtr = &SaveGameSlot[e];
 		int targetBrightness;
@@ -1832,22 +1848,32 @@ static void RenderLoadGameMenu(void)
 				}
 			}
 
-			sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE + slotPtr->Species)));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE + slotPtr->Species)));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_LEFTXEDGE+30, y, elementPtr->Brightness, AVPMENUFORMAT_LEFTJUSTIFIED);
 			
-			sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(textID+slotPtr->Episode)));
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(textID+slotPtr->Episode)));
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_CENTREX, y, elementPtr->Brightness, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 			if (numberOfBasicEpisodes > slotPtr->Episode)
 			{
-				sprintf(buffer, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_DIFFICULTY_EASY + slotPtr->Difficulty)));
+				// size-limited: see the note where buffer is declared
+				_snprintf(buffer, sizeof(buffer) - 1, "%s", GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_DIFFICULTY_EASY + slotPtr->Difficulty)));
+				buffer[sizeof(buffer) - 1] = '\0';
 				RenderText(buffer, MENU_RIGHTXEDGE-30, y, elementPtr->Brightness, AVPMENUFORMAT_RIGHTJUSTIFIED);
 			}
 
-			sprintf(buffer, "%s %02d:%02d:%02d", GetTextString(TEXTSTRING_GAMESTATS_TIMEELAPSED), slotPtr->ElapsedTime_Hours, slotPtr->ElapsedTime_Minutes, slotPtr->ElapsedTime_Seconds);
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s %02d:%02d:%02d", GetTextString(TEXTSTRING_GAMESTATS_TIMEELAPSED), slotPtr->ElapsedTime_Hours, slotPtr->ElapsedTime_Minutes, slotPtr->ElapsedTime_Seconds);
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_LEFTXEDGE+30, y+HUD_FONT_HEIGHT+1, elementPtr->Brightness, AVPMENUFORMAT_LEFTJUSTIFIED);
 
-			sprintf(buffer, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), slotPtr->SavesLeft);
+			// size-limited: see the note where buffer is declared
+			_snprintf(buffer, sizeof(buffer) - 1, "%s: %d", GetTextString(TEXTSTRING_SAVEGAME_SAVESLEFT), slotPtr->SavesLeft);
+			buffer[sizeof(buffer) - 1] = '\0';
 			RenderText(buffer, MENU_CENTREX, y+HUD_FONT_HEIGHT+1, elementPtr->Brightness, AVPMENUFORMAT_CENTREJUSTIFIED);
 
 			{
@@ -2041,9 +2067,9 @@ static void ActUponUsersInput(void)
 						else
 						{
 							//using small font
-							if (AvPMenus.WidthLeftForText < AAFontWidths[c]) 
+							if (AvPMenus.WidthLeftForText < AAFontWidths[(unsigned char)c]) 
 								break;
-							AvPMenus.WidthLeftForText -= AAFontWidths[c];
+							AvPMenus.WidthLeftForText -= AAFontWidths[(unsigned char)c];
 						}
 
 						elementPtr->TextPtr[AvPMenus.PositionInTextField++] = c;
@@ -2853,7 +2879,12 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
 				// save the 'Previous Game' multiplayer configuration
-				strcpy(MP_Config_Description,GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
+				{
+					const char *previousGame = GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME);
+					size_t const descriptionLength = strnlen(previousGame, sizeof(MP_Config_Description) - 1);
+					memcpy(MP_Config_Description, previousGame, descriptionLength);
+					MP_Config_Description[descriptionLength] = '\0';
+				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
 				
 				AvP.Difficulty = I_Medium; //bjd - was 1;
@@ -2900,7 +2931,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				{
 					// copy the session name, leaving of the player count information
 					char *bracket_pos;
-					strcpy(MP_SessionName, SessionData[s].Name);
+					// The game's name comes from another computer on the LAN and can be up to 39 characters long, but MP_SessionName
+					// holds only 33 bytes, so the copy stops there. A name that fits is copied exactly as before.
+					size_t nameLength = strnlen(SessionData[s].Name, sizeof(MP_SessionName) - 1);
+					memcpy(MP_SessionName, SessionData[s].Name, nameLength);
+					MP_SessionName[nameLength] = '\0';
 
 					bracket_pos = strrchr(MP_SessionName,'(');
 					if (bracket_pos) {
@@ -3488,18 +3523,28 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				static char NumberString[50];
 				if(*elementPtr->NumberPtr!=0 || elementPtr->NumberFieldZeroString==TEXTSTRING_BLANK)
 				{
-					sprintf(NumberString,"%d",*elementPtr->NumberPtr);
 					if(elementPtr->NumberFieldUnitsString!=TEXTSTRING_BLANK)
 					{
-						//add the text for the unit type	
-						strcat(NumberString," ");
-						strcat(NumberString, GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->NumberFieldUnitsString)));
+						//add the text for the unit type
+						_snprintf(NumberString,sizeof(NumberString)-1,"%d %s",*elementPtr->NumberPtr,GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->NumberFieldUnitsString)));
 					}
+					else
+					{
+						_snprintf(NumberString,sizeof(NumberString)-1,"%d",*elementPtr->NumberPtr);
+					}
+					NumberString[sizeof(NumberString)-1] = '\0';
 				}
 				else
 				{
 					//use the special string to represent 0
-					sprintf(NumberString,"%s",GetTextString(elementPtr->NumberFieldZeroString));
+					// The special word shown instead of 0 comes from the game's language text
+					// file on disk. NumberString holds 50 bytes, so a line made very long in that
+					// file must not be copied in whole: _snprintf writes at most 49 characters,
+					// and we always put the end marker (the zero byte that ends a text) into the
+					// last byte ourselves, because _snprintf leaves it out when it cuts the text
+					// short. A word that fits comes out exactly as before.
+					_snprintf(NumberString,sizeof(NumberString)-1,"%s",GetTextString(elementPtr->NumberFieldZeroString));
+					NumberString[sizeof(NumberString)-1] = '\0';
 				}
 				
 				if (elementPtr->TextDescription==TEXTSTRING_BLANK)
@@ -4385,7 +4430,9 @@ void DoCredits(void)
 	int position = 300*2048;
 	BOOL FinishedCredits = FALSE;
 	
-	char *creditsBufferPtr = LoadTextFile("credits.txt");
+	// the buffer ends with an extra 0 byte (LoadTextFileWithSize), which RollCreditsText stops at
+	size_t creditsSize = 0;
+	char *creditsBufferPtr = LoadTextFileWithSize("credits.txt", &creditsSize);
 
 	if (!creditsBufferPtr) {
 		return;
@@ -4395,13 +4442,26 @@ void DoCredits(void)
 
 	if (!strncmp (creditsBufferPtr, "REBCRIF1", 8))
 	{
-		creditsPtr = (char*)HuffmanDecompress((HuffmanPackage*)(creditsBufferPtr));
+		// checked decompression, bounded by the file's size; the result has 16 spare bytes after the data
+		int uncompressedSize = (creditsSize >= sizeof(HuffmanPackage)) ? ((HuffmanPackage*)creditsBufferPtr)->UncompressedDataSize : 0;
+		creditsPtr = HuffmanDecompressChecked((HuffmanPackage*)(creditsBufferPtr), (creditsSize > 0x7fffffff) ? 0x7fffffff : (int)creditsSize);
 		DeallocateMem(creditsBufferPtr);
 		creditsBufferPtr = creditsPtr;
+		if (!creditsPtr) {
+			return;
+		}
+		creditsPtr[uncompressedSize] = 0;
+		creditsSize = uncompressedSize;
 	}
 	else
 	{
 		creditsPtr = creditsBufferPtr;
+	}
+
+	// the text starts 4 bytes in (RollCreditsText(position, creditsPtr+4))
+	if (creditsSize < 4) {
+		UnloadTextFile("credits.txt", creditsPtr);
+		return;
 	}
 
 	do
@@ -4435,7 +4495,9 @@ BOOL RollCreditsText(int position, char *textPtr)
 {
 	int y=0;
 
-	while(*textPtr!='#')
+	// the text ends at the first '#'; it also stops at the 0 byte DoCredits' buffer ends with, so a credits file
+	// without the '#' no longer runs these scans past the buffer
+	while((*textPtr!='#') && (*textPtr!='\0'))
 	{
 		char buffer1[96];
 		char buffer2[96];
@@ -4479,7 +4541,7 @@ BOOL RollCreditsText(int position, char *textPtr)
 						splitText = 0;
 					}
 
-					textPtr++;
+					if (*textPtr!='\0') textPtr++;
 					while(*textPtr=='\n') textPtr++;
 				}
 				
@@ -4515,7 +4577,7 @@ BOOL RollCreditsText(int position, char *textPtr)
 			}
 			else
 			{
-				while(*textPtr++!='\n');
+				while((*textPtr!='\0') && (*textPtr++!='\n'));
 			}
 		}
 		y+=15;
@@ -4612,7 +4674,14 @@ static void UpdateMultiplayerConfigurationMenu()
 	}
 
 	//also need to fill in customLevelName
-	strcpy(netGameData.customLevelName,GetCustomMultiplayerLevelName(netGameData.levelNumber,netGameData.gameType));
+	// (A custom level's name is its file name, up to 259 characters, but customLevelName holds only 40 bytes, so the
+	// copy stops there. A name that fits is copied exactly as before.)
+	{
+		const char *levelName = GetCustomMultiplayerLevelName(netGameData.levelNumber,netGameData.gameType);
+		size_t nameLength = strnlen(levelName, sizeof(netGameData.customLevelName) - 1);
+		memcpy(netGameData.customLevelName, levelName, nameLength);
+		netGameData.customLevelName[nameLength] = '\0';
+	}
 }
 
 static void TestValidityOfCheatMenu(void)
@@ -5013,13 +5082,23 @@ void ScanSaveSlots(void)
 	}
 }
 
-extern void GetFilenameForSaveSlot(int i, char *filenamePtr)
+extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr)
 {
-	char filePath[MAX_PATH];
-
-	strcpy(filePath, GetSaveFolderPath());
-
-	sprintf(filenamePtr, "%s%s%s_%d.sav", filePath, USER_PROFILES_PATH, UserProfilePtr->Name, i+1);
+	// filenamePtr is a MAX_PATH (260) byte buffer at every caller (ScanSaveSlots, savegame.cpp).
+	// A very long save folder path may leave no room for the whole name. It must not be cut short then: the slot
+	// number is near the end of the name, so a cut could make every slot the same file, and saving to one slot would
+	// silently overwrite another. Instead the name is left empty and FALSE comes back. No file has an empty name, so
+	// the slot looks unused when the slots are scanned, and SaveGame refuses to save. The same goes for a profile name
+	// that could lead outside the profile folder (see UserProfileNameIsSafe).
+	if (!UserProfileNameIsSafe(UserProfilePtr->Name) ||
+		_snprintf(filenamePtr, MAX_PATH - 1, "%s%s%s_%d.sav", GetSaveFolderPath(), USER_PROFILES_PATH, UserProfilePtr->Name, i+1) < 0)
+	{
+		LogErrorString(std::string("cannot make a save file path for profile ") + UserProfilePtr->Name);
+		filenamePtr[0] = '\0';
+		return FALSE;
+	}
+	filenamePtr[MAX_PATH - 1] = '\0';
+	return TRUE;
 }
 
 

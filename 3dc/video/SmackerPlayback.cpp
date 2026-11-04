@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a Smacker video with a frame rate below 1, no sound track or an odd sound buffer size can no longer crash
+//   the game or write past its sound buffers
+
 #include "SmackerPlayback.h"
 #include "FmvPlayback.h"
 #include "console.h"
@@ -109,7 +113,12 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 		}
 
 		// we need some temporary audio data storage space and a ring buffer instance
-		_audioData = new(std::nothrow) uint8_t[info.idealBufferSize];
+		// (the audio thread copies whole stream buffers through _audioData, which can be more than idealBufferSize)
+		uint32_t audioDataSize = info.idealBufferSize;
+		if (audioDataSize < _audioStream->GetBufferSize()) {
+			audioDataSize = _audioStream->GetBufferSize();
+		}
+		_audioData = new(std::nothrow) uint8_t[audioDataSize];
 		if (_audioData == NULL)
 		{
 			Con_PrintError("Failed to create _audioData stream buffer for Smacker playback");
@@ -128,6 +137,9 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 	}
 
 	_frameRate = Smacker_GetFrameRate(_handle);
+	if (!(_frameRate >= 1.0f)) {
+		Con_PrintError("Smacker file " + _fileName + " has a frame rate below 1, playing it at 1 frame per second");
+	}
 
 	_fmvPlaying = true;
 	_audioStarted = false;
@@ -212,6 +224,23 @@ void *SmackerDecodeThread(void *args)
 
 	uint32_t nFrames = Smacker_GetNumFrames(fmv->_handle);
 
+	// frame time in ms, 1000 / (int32_t)_frameRate as before. The rate comes from the file: one below 1 (or NaN) made
+	// that an integer division by zero, so treat it as 1 frame per second; a rate too big for an int32_t (undefined
+	// conversion) gives 0 ms, like every rate above 1000. (SmackerPlayback::Open logs such a rate.)
+	int32_t frameTime;
+	if (!(fmv->_frameRate >= 1.0f))
+	{
+		frameTime = 1000;
+	}
+	else if (fmv->_frameRate >= 2147483648.0f)
+	{
+		frameTime = 0;
+	}
+	else
+	{
+		frameTime = 1000 / (int32_t)fmv->_frameRate;
+	}
+
 	while (fmv->_currentFrame < nFrames)
 	{
 		// check if we should still be playing or not
@@ -231,7 +260,16 @@ void *SmackerDecodeThread(void *args)
 
 		pthread_mutex_unlock(&fmv->_frameCriticalSection);
 
-		uint32_t audioSize = Smacker_GetAudioData(fmv->_handle, trackIndex, (int16_t*)fmv->_audioDataBuffer);
+		// without an audio track there is no audio buffer, ring buffer or stream (Open only makes them for
+		// _nAudioTracks > 0), so only ask for audio data when there is a track
+		uint32_t audioSize = 0;
+		if (fmv->_nAudioTracks) {
+			audioSize = Smacker_GetAudioData(fmv->_handle, trackIndex, (int16_t*)fmv->_audioDataBuffer);
+			// the in-tree decoder never returns more than the buffer holds (SM-P1); an older libsmackerdec could
+			if (audioSize > fmv->_audioDataBufferSize) {
+				audioSize = fmv->_audioDataBufferSize;
+			}
+		}
 
 		if (audioSize)
 		{
@@ -258,7 +296,7 @@ void *SmackerDecodeThread(void *args)
 		uint32_t endTime = ::timeGetTime();
 
 		// sleep for frame time minus time to decode frame
-		int32_t timeToSleep = (1000 / (int32_t)fmv->_frameRate) - (endTime - startTime);
+		int32_t timeToSleep = frameTime - (endTime - startTime);
 		if (timeToSleep < 0) {
 			timeToSleep = 1;
 		}

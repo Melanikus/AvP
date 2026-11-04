@@ -56,8 +56,9 @@
  *   BK-P15: free the bundle buffers in the destructor
  *   BK-P16: check handles and track indexes in the exports; stop at the last frame
  *   BK-P17: fail Open when an audio track can't be created
- *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame
+ *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame; Bink_Open deletes a failed decoder in one place
  *   BK-P21: reject a header that claims more data than the file has
+ *   removed an unfinished switched-off (#if 0) block: its bare "class" stopped code-checking tools reading this file
  */
 
 #include "BinkDecoder.h"
@@ -82,22 +83,28 @@ BinkHandle Bink_Open(const char* fileName)
 	newHandle.instanceIndex = -1;
 
 	BinkDecoder *newDecoder = 0;
+	bool opened = false;
 
-	// no C++ exception may leave the DLL: a failed allocation fails the open, and the
-	// decoder (never registered) is deleted together with whatever Open created
+	// No C++ exception may leave the DLL, so anything that goes wrong here, such as running out of memory, simply
+	// fails the open. opened only becomes true once the decoder has opened and is in the list of decoders.
 	try
 	{
 		newDecoder = new BinkDecoder();
-		if (!newDecoder->Open(fileName))
+		if (newDecoder->Open(fileName))
 		{
-			delete newDecoder;
-			return newHandle;
+			// add instance to global instance vector
+			classInstances.push_back(newDecoder);
+			opened = true;
 		}
-
-		// add instance to global instance vector
-		classInstances.push_back(newDecoder);
 	}
 	catch (...)
+	{
+		opened = false;
+	}
+
+	// A decoder that did not open is deleted in this one place, with whatever Open created. If "new" itself failed,
+	// newDecoder is still 0, and deleting 0 does nothing.
+	if (!opened)
 	{
 		delete newDecoder;
 		return newHandle;
@@ -105,16 +112,6 @@ BinkHandle Bink_Open(const char* fileName)
 
 	// loaded ok, make handle valid
 	newHandle.isValid = true;
-#if 0
-	// find a free slot if available
-	for (int i = 0; i < classInstances.size(); i++)
-	{
-		if (!classInstances[i])
-		{
-			class
-		}
-	}
-#endif
 
 	// get a handle ID
 	newHandle.instanceIndex = classInstances.size() - 1;

@@ -1,6 +1,10 @@
 /*KJL************************************************************************************
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
+//   overflowed
 #include "3dc.h"
 #include <math.h>
 #include "module.h"
@@ -1495,7 +1499,7 @@ static void VertexIntensity_Pred_Thermal(RENDERVERTEX *renderVertexPtr)
 		int a = (renderVertexPtr->Z - 5000);
 
 		if (a > 4096) {
-			blueI = (blueI * 80192) / a;
+			blueI = (blueI * 4096) / a;
 		}
 	}
 

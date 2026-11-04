@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   colours are looked up in a way that can't go past the end of the colour table, a colour table too big
+//   to use is refused, and a file with no header reads as an empty picture
+
 #include "RimLoader.h"
 #include <algorithm>
 
@@ -31,7 +35,11 @@ RimLoader::RimLoader()
 	chunkSize = 0;
 	chunkID   = 0;
 
+	// a file can leave out the part that sets these, so they need a safe value: an empty picture
+	memset(&header, 0, sizeof(header));
+
 	colourMap = 0;
+	numColours = 0;
 	destRowStart = 0;
 	rowBytes = 0;
 	destRowIndex = 0;
@@ -110,7 +118,16 @@ bool RimLoader::HandleCMAP()
 
 	uint32_t nEntries = chunkSize / 3;
 
+	// the size comes from the file, so it could be far more memory than the game could ever get
+	if (nEntries > kMaxColours)
+	{
+		return false;
+	}
+
+	// a file can hold more than one table: the last one counts, and the one before it is freed
+	delete[] colourMap;
 	colourMap = new ColourRegister[nEntries];
+	numColours = nEntries;
 
 	// read the values in
 	for (uint32_t i = 0; i < nEntries; i++)
@@ -171,7 +188,10 @@ bool RimLoader::Open(const std::string &fileName)
 				chunkSize = file.GetUint32BE();
 				break;
 			case CMAP:
-				HandleCMAP();
+				if (!HandleCMAP())
+				{
+					return false;
+				}
 				OddChunkSizeCheck();
 				break;
 			case BODY:
@@ -250,6 +270,21 @@ uint32_t RimLoader::GetBody()
 	return bytesDone;
 }
 
+// Looks up a colour in the picture's colour table. The file sets both the size of the table and the numbers looked up
+// in it, so a number could be past the end of the table, or there could be no table at all. Anything not in the table
+// comes out black. All 1028 of the game's own pictures stay inside their tables, so this never changes how they look.
+ColourRegister RimLoader::GetColour(uint32_t index) const
+{
+	ColourRegister colour = { 0, 0, 0 };
+
+	if (index < numColours)
+	{
+		colour = colourMap[index];
+	}
+
+	return colour;
+}
+
 // call once per scanline
 uint32_t RimLoader::GetScanLine()
 {
@@ -292,14 +327,14 @@ uint32_t RimLoader::GetScanLine()
 			}
 		}
 
-		ColourRegister temp = colourMap[pixel];
+		ColourRegister temp = GetColour(pixel);
 
 		// default alpha to 255
 		uint8_t alpha = 255;
 
 		if (header.masking == kMaskTransparentColour)
 		{
-			ColourRegister transColour = colourMap[header.transparentColor];
+			ColourRegister transColour = GetColour(header.transparentColor);
 			if ((transColour.red   == temp.red)   &&
 				(transColour.green == temp.green) &&
 				(transColour.blue  == temp.blue))

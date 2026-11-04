@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a sequence number the list does not have is ignored
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -299,10 +302,20 @@ void SendRequestToPlacedHierarchy(STRATEGYBLOCK* sbptr,BOOL state,int extended_d
 	if(state)
 	{
 		PLACED_HIERARCHY_SEQUENCE* new_sequence;
-		GLOBALASSERT(seq_num<ph_bhv->num_sequences);
+
+		// The sequence number comes from the level file, so the list may not have it, or may have a gap at that
+		// place. Either way there is nothing to play, so the request is ignored.
+		if(seq_num>=ph_bhv->num_sequences)
+		{
+			return;
+		}
 
 		new_sequence=&ph_bhv->sequences[seq_num];
-		GLOBALASSERT(new_sequence->sequence_no!=-1);
+
+		if(new_sequence->sequence_no==-1)
+		{
+			return;
+		}
 
 		if(new_sequence==ph_bhv->current_seq)
 		{

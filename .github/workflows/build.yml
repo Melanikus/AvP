@@ -1,0 +1,99 @@
+# Builds the game for testing, only when the owner asks for it ("Run workflow", on avpx_main).
+#
+# It never runs by itself. Anyone can download what a public repository builds, and nothing is released until it's safe
+# (AvP Tao #1): no published build while any known vulnerability is open, and some still are. So there is no automatic
+# build of each commit and no build from a tag for now. Turning those on is a decision for when the known problems are
+# closed. Before that, a tag must be checked by something a commit can't remove, because this file comes from the commit
+# being built.
+#
+# The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release. To install one, see
+# PLAYTEST.md.
+name: Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: read   # to read the scan results of the commit being built
+
+jobs:
+  build:
+    name: Build the game
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Only scanned code on avpx_main gets built. If this step fails there is no build. A skipped or missing scan counts
+      # as a failure.
+      - name: Refuse anything that is not scanned code on avpx_main
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/avpx_main') { throw 'Builds come only from avpx_main' }
+          $results = gh api --paginate "repos/$env:GITHUB_REPOSITORY/commits/$env:GITHUB_SHA/check-runs?per_page=100" --jq '.check_runs[] | .name + "=" + .conclusion'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the scan results' }
+          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests'
+          foreach ($check in $required) {
+            if ($results -notcontains "$check=success") { throw "'$check' did not pass on this commit" }
+          }
+          "$env:GITHUB_SHA is scanned code on avpx_main."
+
+      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
+      - name: Get vcpkg at the manifest's baseline
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          git init -q $root
+          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $root checkout -q FETCH_HEAD
+          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Build the game (Release, Win32)
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'MSBuild was not found' }
+          & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Only what the game needs, plus a hash of every file so anyone can check their copy.
+      - name: Package the build
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'package'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $release = 'win32\VS2026\Win32\Release'
+          Copy-Item (Join-Path $release 'AvPx.exe') $out
+          Copy-Item (Join-Path $release '*.dll') $out
+          Copy-Item -Recurse shaders (Join-Path $out 'shaders')
+          Copy-Item PLAYTEST.md, License.txt $out
+          if (-not (Test-Path (Join-Path $out 'AvPx.exe'))) { throw 'AvPx.exe was not built' }
+          "$env:GITHUB_REF_NAME $env:GITHUB_SHA" | Out-File -Encoding ascii (Join-Path $out 'BUILD.txt')
+          Push-Location $out
+          # The hashes are worked out first and written after. Writing the list while the folder is being read would make it
+          # hash its own half-written file, and that fails with a sharing violation.
+          $hashes = Get-ChildItem -Recurse -File | Resolve-Path -Relative | ForEach-Object {
+            '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 $_).Hash.ToLower(), ($_ -replace '^\.\\', '' -replace '\\', '/')
+          }
+          $hashes | Out-File -Encoding ascii SHA256SUMS.txt
+          Pop-Location
+          Get-Content (Join-Path $out 'SHA256SUMS.txt')
+
+      - name: Keep the build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: avp-${{ github.ref_name }}
+          path: ${{ runner.temp }}/package
+          retention-days: 30
+          if-no-files-found: error

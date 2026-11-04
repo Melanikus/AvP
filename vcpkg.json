@@ -1,0 +1,14 @@
+{
+  "name": "avpx",
+  "version-string": "0",
+  "description": "Third-party libraries for the AvPx Windows build (x86-windows). Barry Duncan's libbinkdec and libsmackerdec are vendored source in dependencies/.",
+  "dependencies": [
+    "dxsdk-d3dx",
+    "enet",
+    "libogg",
+    "libvorbis",
+    "openal-soft",
+    "pthreads"
+  ],
+  "builtin-baseline": "afa249f12f52ed8a3b919f195495ba8b330288d1"
+}

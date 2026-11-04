@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it
+
 #ifndef _ltchunk_hpp
 #define _ltchunk_hpp 1
 
@@ -80,9 +84,6 @@ class Light_Set_Chunk : public Chunk_With_Children
 {
 public:
 
-	// for user
-
-	Light_Set_Chunk (Chunk_With_Children * parent, char * light_set_name);
 	Light_Set_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 	
 private:
@@ -98,7 +99,6 @@ class Light_Set_Header_Chunk : public Chunk
 {
 public:
 
-	Light_Set_Header_Chunk (Light_Set_Chunk * parent, char l_set_name[8]);
 	Light_Set_Header_Chunk (Chunk_With_Children * parent, const char *, size_t const);
 	char light_set_name[8];
 	

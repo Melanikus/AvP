@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand
 /*******************************************************************
  *
  *    DESCRIPTION: 	ahudgadg.cpp
@@ -272,9 +275,8 @@ void AlienHUDGadget :: Jitter(int FixP_Magnitude)
 
 void AlienHUDGadget :: SetString(const char* text)
 {
-	SCString* string = new SCString(text);
+	RefHolder<SCString> string(new SCString(text));
 	pTextEntryGadg -> SetString(*string);
-	string->R_Release();
 }
 
 void BringDownConsoleWithSayTypedIn()

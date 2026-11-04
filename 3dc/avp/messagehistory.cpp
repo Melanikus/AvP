@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the message history text, which comes from the language file, is written with a size limit, so it always fits;
+//   the message history read from a save file is checked, and an unknown message shows as empty text
 #include "3dc.h"
 #include "3dc.h"
 #include "module.h"
@@ -51,9 +55,12 @@ void MessageHistory_DisplayPrevious(void)
 		char buffer[1024];
 
 		EntryToNextShow--;
-		sprintf
+		// both texts come from the language file, which can hold a line of any length: _snprintf stops at the end of
+		// buffer, and because it leaves out the end marker when it has to cut the text short, we write that ourselves
+		_snprintf
 		(
 			buffer,
+			sizeof(buffer) - 1,
 			"%s %d (%02dh%02dm%02ds) \n \n%s",
 			GetTextString(TEXTSTRING_INGAME_MESSAGENUMBER),
 			EntryToNextShow+1,
@@ -62,6 +69,7 @@ void MessageHistory_DisplayPrevious(void)
 			MessageHistoryStore[EntryToNextShow].Seconds,
 			GetTextString(MessageHistoryStore[EntryToNextShow].StringID)
 		);
+		buffer[sizeof(buffer) - 1] = '\0';
 		NewOnScreenMessage(buffer);
 		MessageHistoryAccessedTimer = 65536*4;
 
@@ -110,11 +118,19 @@ void Load_MessageHistory(SAVE_BLOCK_HEADER* header)
 
 	int expected_size;
 
+	//the entries are copied into MessageHistoryStore[MAX_NO_OF_MESSAGES_IN_HISTORY]: the count must fit it and the block
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumberOfEntriesInMessageHistory, sizeof(MessageHistory), MAX_NO_OF_MESSAGES_IN_HISTORY)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(MessageHistory) * block->NumberOfEntriesInMessageHistory;
 	if(header->size != expected_size) return;
 	
+	//EntryToNextShow indexes the entries (MessageHistory_DisplayPrevious shows entry EntryToNextShow-1): reject a block
+	//whose value could not have been saved. Each entry's StringID only goes to GetTextString, which gives "" for an id
+	//outside the text table, so an entry with a bad id shows an empty message and the rest of the history is kept.
+	if(block->EntryToNextShow < 0 || block->EntryToNextShow > block->NumberOfEntriesInMessageHistory) return;
+
 	//load the stuff then
 	NumberOfEntriesInMessageHistory = block->NumberOfEntriesInMessageHistory;
 	EntryToNextShow = block->EntryToNextShow;

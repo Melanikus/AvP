@@ -1,0 +1,93 @@
+Check the serial number list and the read buffer, and limit streams per link.
+
+Our own patch (AvP). Three fixes in vorbisfile.c. Upstream's main has the same code.
+
+When the list of a link's serial numbers could not grow, _add_serialno wrote a number
+from the file through the failed pointer, at an offset the file chooses by how many
+streams it starts. It now reports the failure and the link is refused.
+
+Each new stream is compared with all the earlier ones, so a crafted file of stream
+starts could stall opening for minutes. A link may now start at most 256 streams.
+
+ogg_sync_buffer returns NULL when it cannot get the memory, and neither caller checked.
+_get_data handed the null pointer to the read function, and _ov_open1 copied into it.
+Both now report an error.
+
+--- a/lib/vorbisfile.c
++++ b/lib/vorbisfile.c
+@@ -69,7 +69,11 @@ static long _get_data(OggVorbis_File *vf){
+   if(!(vf->callbacks.read_func))return(-1);
+   if(vf->datasource){
+     char *buffer=ogg_sync_buffer(&vf->oy,READSIZE);
+-    long bytes=(vf->callbacks.read_func)(buffer,1,READSIZE,vf->datasource);
++    long bytes;
++    /* no memory for the buffer: report a read error, because the read
++       function would otherwise be handed a null pointer */
++    if(buffer==NULL)return(-1);
++    bytes=(vf->callbacks.read_func)(buffer,1,READSIZE,vf->datasource);
+     if(bytes>0)ogg_sync_wrote(&vf->oy,bytes);
+     if(bytes==0 && errno)return(-1);
+     return(bytes);
+@@ -186,17 +190,33 @@ static ogg_int64_t _get_prev_page(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
+   return(offset);
+ }
+ 
+-static void _add_serialno(ogg_page *og,long **serialno_list, int *n){
++/* The most streams one link of a file may start. Each new stream is compared
++   with all the earlier ones, so a crafted file of hundreds of thousands of
++   stream starts could stall opening for minutes. Music is one stream, and a
++   file with other streams beside it has a handful. */
++#define VORBIS_MAX_STREAMS_PER_LINK 256
++
++/* Adds a page's serial number to the list. Returns 0, or -1 if the list is full
++   or cannot grow. On -1 the list is left as it was, for the caller to free:
++   writing through a failed allocation here would put a number from the file at
++   an address the file chooses, because the file sets how long the list is. */
++static int _add_serialno(ogg_page *og,long **serialno_list, int *n){
+   long s = ogg_page_serialno(og);
+-  (*n)++;
++  long *list;
++
++  if(*n>=VORBIS_MAX_STREAMS_PER_LINK)return(-1);
+ 
+   if(*serialno_list){
+-    *serialno_list = _ogg_realloc(*serialno_list, sizeof(**serialno_list)*(*n));
++    list = _ogg_realloc(*serialno_list, sizeof(**serialno_list)*((*n)+1));
+   }else{
+-    *serialno_list = _ogg_malloc(sizeof(**serialno_list));
++    list = _ogg_malloc(sizeof(**serialno_list));
+   }
++  if(list==NULL)return(-1);
+ 
+-  (*serialno_list)[(*n)-1] = s;
++  *serialno_list = list;
++  list[*n] = s;
++  (*n)++;
++  return(0);
+ }
+ 
+ /* returns nonzero if found */
+@@ -321,7 +341,14 @@ static int _fetch_headers(OggVorbis_File *vf,vorbis_info *vi,vorbis_comment *vc,
+         goto bail_header;
+       }
+ 
+-      _add_serialno(og_ptr,serialno_list,serialno_n);
++      if(_add_serialno(og_ptr,serialno_list,serialno_n)){
++        /* too many streams in this link, or no memory for the list */
++        if(*serialno_list)_ogg_free(*serialno_list);
++        *serialno_list=0;
++        *serialno_n=0;
++        ret=OV_EBADHEADER;
++        goto bail_header;
++      }
+     }
+ 
+     if(vf->ready_state<STREAMSET){
+@@ -928,6 +955,7 @@ static int _ov_open1(void *f,OggVorbis_File *vf,const char *initial,
+      non-seekable stream) */
+   if(initial){
+     char *buffer=ogg_sync_buffer(&vf->oy,ibytes);
++    if(buffer==NULL)return(OV_EFAULT);
+     memcpy(buffer,initial,ibytes);
+     ogg_sync_wrote(&vf->oy,ibytes);
+   }

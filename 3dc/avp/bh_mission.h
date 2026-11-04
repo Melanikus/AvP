@@ -1,4 +1,8 @@
-#ifndef bh_mission_h_
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the check that stops this file being read twice now tests the name it sets; the two names
+//   differed by one character, so the check never worked
+#ifndef bh_mission_h
 #define bh_mission_h 1
 
 

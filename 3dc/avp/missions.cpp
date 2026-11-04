@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand
 /*******************************************************************
  *
  *    DESCRIPTION: 	missions.cpp
@@ -448,11 +451,10 @@ void MissionObjective :: TestCompleteNext(void)
 			{
 				#if UseGadgets
 
-				SCString* pSCString_Temp = new SCString("TESTING MISSION COMPLETION HOOK:");
+				RefHolder<SCString> pSCString_Temp(new SCString("TESTING MISSION COMPLETION HOOK:"));
 
 				pSCString_Temp -> SendToScreen();
 
-				pSCString_Temp -> R_Release();
 				#endif // UseGadgets
 
 			}
@@ -465,11 +467,10 @@ void MissionObjective :: TestCompleteNext(void)
 			{
 				#if UseGadgets
 
-				SCString* pSCString_Temp = new SCString("NO INCOMPLETE OBJECTIVES");
+				RefHolder<SCString> pSCString_Temp(new SCString("NO INCOMPLETE OBJECTIVES"));
 
 				pSCString_Temp -> SendToScreen();
 
-				pSCString_Temp -> R_Release();
 				#endif // UseGadgets
 			}
 		}

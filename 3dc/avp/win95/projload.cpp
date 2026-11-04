@@ -1,3 +1,12 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text is copied using the exact length measured when its space was made, and the debug decal save
+//   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
+//   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
+//   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
+//   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
+//   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
+//   number is left out; when two sounds have the same number, the earlier one is given back
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -47,6 +56,7 @@
 #include <vector>
 #include "TextureManager.h"
 #include "utilities.h"
+#include "logString.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -408,8 +418,9 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 
 	GLOBALASSERT (rnc);
 
-	riffname = (char*) PoolAllocateMem(strlen (rnc->rif_name)+1);
-	strcpy (riffname, rnc->rif_name);
+	size_t const riffname_size = strlen (rnc->rif_name)+1;
+	riffname = (char*) PoolAllocateMem(riffname_size);
+	memcpy (riffname, rnc->rif_name, riffname_size);
 
 	rif_hand=h;
 
@@ -426,7 +437,14 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 	for(;!chlif.done();chlif.next())
 	{
 		Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
-		max_index=max(max_index,isc->index);
+		if (isc->index_is_valid())
+		{
+			max_index=max(max_index,isc->index);
+		}
+		else
+		{
+			LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
+		}
 	}
 	//now create a large enough array , and fill it in
 	num_sounds=max_index+1;
@@ -449,7 +467,27 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
 			int index=isc->index;
 
-			GLOBALASSERT(sound_array[index].sound_loaded==0);
+			// A number the list has no place for went to the log above, and that sound stays missing. See index_is_valid.
+			if (!isc->index_is_valid())
+			{
+				continue;
+			}
+
+			// A level file can leave a sound's name blank, and the chunk then holds no name at all. There is nothing
+			// to load, so it stays a missing sound.
+			if (!isc->wav_name)
+			{
+				continue;
+			}
+
+			// Two sounds with the same number: the later one takes the place, and the earlier one is given back. A level
+			// file can do this, and none of the game's own files does.
+			if (sound_array[index].sound_loaded)
+			{
+				LogErrorString("level file gives two sounds the same number: " + Util::IntToString(index));
+				LoseSound(sound_array[index].sound_loaded);
+				sound_array[index].sound_loaded = 0;
+			}
 
 			sound_array[index].s3d.inner_range = (int)(isc->inner_range*local_scale);
 			sound_array[index].s3d.outer_range = (int)(isc->outer_range*local_scale);
@@ -460,7 +498,16 @@ Global_Hierarchy_Store::Global_Hierarchy_Store (RIFFHANDLE h)
 			sound_array[index].volume=isc->max_volume;
 			if (dir_chunk)
 			{
-				sprintf(wavname, "%s/%s", dir_chunk->directory, isc->wav_name);
+				// wavname holds 200 bytes, and both parts of this path come from the level file, so they could be
+				// any length (the longest in the game's own files is 44). A path too long for it is not cut short,
+				// which could load the wrong sound: it goes to the log, and the game carries on with no sound
+				// here, as it does when a sound is missing.
+				if (_snprintf(wavname, sizeof(wavname) - 1, "%s/%s", dir_chunk->directory, isc->wav_name) < 0)
+				{
+					LogErrorString(std::string("sound file path too long: ") + isc->wav_name);
+					continue;
+				}
+				wavname[sizeof(wavname) - 1] = '\0';
 				sound_array[index].sound_loaded = GetSound(wavname);
 			}
 			else
@@ -582,8 +629,9 @@ void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp
 	Object_Hierarchy_Name_Chunk * ohnc = ohc->get_name();
 	if (ohnc)
 	{
-		hd->hierarchy_name = (char*)PoolAllocateMem(strlen (ohnc->hierarchy_name) + 1);
-		strcpy (hd->hierarchy_name, ohnc->hierarchy_name);
+		size_t const hierarchy_name_size = strlen (ohnc->hierarchy_name) + 1;
+		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_size);
+		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_size);
 	}
 	else
 	{ // throw back from old system, no new hierarchies should be created with no name
@@ -621,10 +669,11 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 
 		Hierarchy_Alternate_Shape_Set* hass=(Hierarchy_Alternate_Shape_Set*) PoolAllocateMem(sizeof(Hierarchy_Alternate_Shape_Set));
 		
-		hass->shape_set_name=(char*) PoolAllocateMem(strlen(ohassc->Shape_Set_Name)+1);
+		size_t const shape_set_name_size=strlen(ohassc->Shape_Set_Name)+1;
+		hass->shape_set_name=(char*) PoolAllocateMem(shape_set_name_size);
 		hass->index=ohassc->Shape_Set_Num;
 		hass->num_replaced_shapes=ohassc->Replaced_Shape_List.size();
-		strcpy(hass->shape_set_name,ohassc->Shape_Set_Name);
+		memcpy(hass->shape_set_name,ohassc->Shape_Set_Name,shape_set_name_size);
 
 		hass->flags=ohassc->flags;
 
@@ -633,8 +682,9 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 		HIERARCHY_SHAPE_REPLACEMENT* hsr=hass->replaced_shapes;
 		for(LIF<Replaced_Shape_Details*> rlif(&ohassc->Replaced_Shape_List);!rlif.done();rlif.next(),hsr++)
 		{
-			hsr->replaced_section_name=(char*) PoolAllocateMem(strlen(rlif()->old_object_name)+1);
-			strcpy(hsr->replaced_section_name,rlif()->old_object_name);
+			size_t const section_name_size=strlen(rlif()->old_object_name)+1;
+			hsr->replaced_section_name=(char*) PoolAllocateMem(section_name_size);
+			memcpy(hsr->replaced_section_name,rlif()->old_object_name,section_name_size);
 
 			hsr->replacement_id = 0;
 
@@ -673,7 +723,14 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
-		max_index=max(max_index,coll->Set_Collection_Num);	
+		if(coll->number_is_valid())
+		{
+			max_index=max(max_index,coll->Set_Collection_Num);
+		}
+		else
+		{
+			LogErrorString("level file gives a shape set collection an impossible number: " + Util::IntToString(coll->Set_Collection_Num));
+		}
 	}
 
 	if(max_index==-1) return;
@@ -704,13 +761,27 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 
 	//now go through the list of shape set collections again
 	Hierarchy_Alternate_Shape_Set* found_sets[20];
+
+	// A level file chooses how many sets a collection uses, and how many shapes each set replaces. The sets have to
+	// fit in found_sets, and the shapes in the size sum further down, which would come out far too small if the total
+	// were huge. The game's own files use at most 3 sets, and a set replaces at most 20 shapes, so these limits leave
+	// plenty of room. A set that would go over either limit is left out, and the model keeps those shapes.
+	int const max_found_sets=sizeof(found_sets)/sizeof(found_sets[0]);
+	int const max_shapes_to_replace=65535;
+
 	int num_found_sets;
 	int num_shapes_to_replace;
 	LIF<Hierarchy_Alternate_Shape_Set*> alt_lif(&alternate_shape_set_list);
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
-		GLOBALASSERT(coll->Index_List.size()<20);
+
+		// A number the list has no place for went to the log above, and that collection is left out. See number_is_valid.
+		if(!coll->number_is_valid())
+		{
+			continue;
+		}
+
 		//locate the sets that this collections is using
 		num_found_sets=0;
 		num_shapes_to_replace=0;
@@ -722,10 +793,17 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 			{
 				if(ind_lif()==alt_lif()->index)
 				{
-					found_sets[num_found_sets]=alt_lif();
-					num_found_sets++;
-					num_shapes_to_replace+=alt_lif()->num_replaced_shapes;
-					combined_flags|=alt_lif()->flags;
+					if(num_found_sets<max_found_sets && alt_lif()->num_replaced_shapes<=max_shapes_to_replace-num_shapes_to_replace)
+					{
+						found_sets[num_found_sets]=alt_lif();
+						num_found_sets++;
+						num_shapes_to_replace+=alt_lif()->num_replaced_shapes;
+						combined_flags|=alt_lif()->flags;
+					}
+					else
+					{
+						LogErrorString(std::string("level file gives a shape set collection too many sets or shapes: ") + riffname);
+					}
 					break;
 				}
 			}
@@ -823,8 +901,9 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 	currsection->Hierarchy_Name=hierarchy_name;
 	currsection->Rif_Name=riffname;
 
-	currsection->Section_Name = (char *)PoolAllocateMem (strlen (ohdc->ob_name) + 1);
-	strcpy (currsection->Section_Name, ohdc->ob_name);
+	size_t const section_name_size = strlen (ohdc->ob_name) + 1;
+	currsection->Section_Name = (char *)PoolAllocateMem (section_name_size);
+	memcpy (currsection->Section_Name, ohdc->ob_name, section_name_size);
 
 	if (ohdc->object)
 	{
@@ -2937,7 +3016,8 @@ void LoadModuleData()
 	int pos=0;
 	unsigned long bytesread;
 	{
-		char name[60];
+		// the 60-byte name field; one spare byte, always 0, ends the scans below
+		char name[61] = { 0 };
 		ReadFile(file,name,60,&bytesread,0);
 		
 		int i=0;
@@ -3075,14 +3155,21 @@ void setup_preplaced_decals(File_Chunk* fc,Environment_Data_Chunk* edc)
 	AVP_Decal_Chunk* decal_chunk=(AVP_Decal_Chunk*) soc->lookup_single_child("AVPDECAL");
 	if (!decal_chunk) return;
 
-	GLOBALASSERT(decal_chunk->decals);
+	//decals is 0 when each decal in the file is bigger than the decal this game knows: it cannot read them
+	if (!decal_chunk->decals) return;
 
 	NumFixedDecals=0;
 
 	for (int i = 0;i < decal_chunk->num_decals; i++)
 	{
+		//FixedDecalStorage has a fixed number of places, and a level file can ask for more: stop when it is full
+		if (NumFixedDecals >= MAX_NO_OF_FIXED_DECALS) break;
+
 		FIXED_DECAL* fd=&FixedDecalStorage[NumFixedDecals];
 		AVP_Decal * ad=&decal_chunk->decals[i];
+
+		//the decal's kind picks its entry in the DecalDescription table: skip a kind that is not in the table
+		if (ad->DecalID < 0 || ad->DecalID >= MAX_NO_OF_DECAL_IDS) continue;
 
 		//find the decal's module
 		Object_Chunk* module=fc->get_object_by_index(ad->object_index);
@@ -3179,6 +3266,37 @@ static void MakeBackupFile(File_Chunk* fc)
 #endif
 }
 
+// Copies the level's pre-placed (fixed) decals, kept in FixedDecalStorage, into the decals array,
+// in the form they have in a level file.
+static void Fill_Decal_Data(AVP_Decal* decals, List<Object_Chunk*>& ob_list)
+{
+	for(int i=0;i<NumFixedDecals;i++)
+	{
+		FIXED_DECAL* fd=&FixedDecalStorage[i];
+		AVP_Decal * ad=&decals[i];
+
+		ad->DecalID=(int)fd->DecalID;
+		for(int j=0;j<4;j++)
+		{
+			ad->Vertices[j].x=fd->Vertices[j].vx;
+			ad->Vertices[j].y=fd->Vertices[j].vy;
+			ad->Vertices[j].z=fd->Vertices[j].vz;
+		}
+
+		ad->UOffset=fd->UOffset;
+
+		ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
+	}
+}
+
+// Makes a new AVPDECAL chunk from decal data laid out as in a level file. The chunk adds itself to its parent, soc, as
+// it is made (every chunk does), and soc deletes it later along with the rest of the level file's chunks, so the caller
+// has nothing to free.
+static AVP_Decal_Chunk* Make_Decal_Chunk(Special_Objects_Chunk* soc, const char* data, size_t size)
+{
+	return new AVP_Decal_Chunk(soc, data, size);
+}
+
 void save_preplaced_decals()
 {
 	GLOBALASSERT(env_rif);
@@ -3208,32 +3326,28 @@ void save_preplaced_decals()
 	Special_Objects_Chunk* soc=(Special_Objects_Chunk*) edc->lookup_single_child("SPECLOBJ");
 	if(!soc) soc=new Special_Objects_Chunk(edc);
 	
-	//delete the old decal chunk
-	delete soc->lookup_single_child("AVPDECAL");
+	// Delete the old decal chunks. A level file the game wrote has at most one;
+	// a broken one could hold more, and every one of them goes, so that the
+	// new decals below never end up mixed with old ones. (Deleting a chunk
+	// also takes it off soc's list, so this loop ends.)
+	while (Chunk* old_decal_chunk = soc->lookup_single_child("AVPDECAL"))
+		delete old_decal_chunk;
 
 	if(NumFixedDecals)
 	{
 		List<Object_Chunk*> ob_list;
 		env_rif->fc->list_objects(&ob_list);
 
-		AVP_Decal_Chunk* decal_chunk=new AVP_Decal_Chunk(soc,NumFixedDecals);
-		for(int i=0;i<decal_chunk->num_decals;i++)
-		{
-			FIXED_DECAL* fd=&FixedDecalStorage[i];
-			AVP_Decal * ad=&decal_chunk->decals[i];
+		// Lay the decals out as a level file holds them: how many there are, the size
+		// of one, then the decals themselves. This is the form the chunk reads when a
+		// level loads, so a chunk made here is the same as one loaded from a file.
+		const size_t headerSize = 2 * sizeof(int);
+		std::vector<char> data(headerSize + NumFixedDecals * sizeof(AVP_Decal));
+		((int*)&data[0])[0] = NumFixedDecals;
+		((int*)&data[0])[1] = sizeof(AVP_Decal);
+		Fill_Decal_Data((AVP_Decal*)&data[headerSize], ob_list);
 
-			ad->DecalID=(int)fd->DecalID;
-			for(int j=0;j<4;j++)
-			{
-				ad->Vertices[j].x=fd->Vertices[j].vx;
-				ad->Vertices[j].y=fd->Vertices[j].vy;
-				ad->Vertices[j].z=fd->Vertices[j].vz;
-			}
-
-			ad->UOffset=fd->UOffset;
-
-			ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
-		}
+		Make_Decal_Chunk(soc, &data[0], data.size());
 	}
 
 	if(!env_rif->fc->update_file())

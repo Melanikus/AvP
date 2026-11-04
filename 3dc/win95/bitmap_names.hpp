@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it
+
 #ifndef _bmpnames_hpp_
 #define _bmpnames_hpp_
 
@@ -312,12 +316,10 @@ public:
 	virtual BMP_Names_ExtraData * GetExtendedData(void);
 
 	virtual int const * GetMD5Val(BMP_Name const & rcbmp);
-	virtual void SetMD5Val(BMP_Name const & rcbmp, int const * md5id);
 	virtual void RemoveMD5Val(char const * bname);
 
 protected:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname) = 0;
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id) = 0;
 
 	virtual size_t size_chunk ();
 	virtual void fill_data_block (char * data_start);
@@ -339,7 +341,6 @@ public:
 	: Chunk_With_BMPs (parent, "BMPNAMES", sdata, ssize) {}
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	friend class Environment_Data_Chunk;
 };
@@ -360,7 +361,6 @@ public:
 
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	friend class Shape_External_File_Chunk;
 };
@@ -478,7 +478,6 @@ public:
 
 private:
 	virtual Bitmap_MD5_Chunk * GetMD5Chunk(char const * bname);
-	virtual void CreateMD5Chunk(BMP_Name const & rcbmp, int const * md5id);
 
 	int version_num;
 
@@ -655,7 +654,6 @@ class Bitmap_MD5_Chunk : public Chunk
 public :
 	Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t);
 private:
-	Bitmap_MD5_Chunk(Chunk_With_Children * parent, int const * md5id, BMP_Name const & rcbmp, char const * rname = 0, char const * sname = 0);
 	~Bitmap_MD5_Chunk();
 	int md5_val[4];
 	char * bmpname;

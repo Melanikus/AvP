@@ -1,6 +1,10 @@
 /* Patrick 4/7/97 ----------------------------------------------------
   Source file for Xenoborg AI behaviour functions....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
+//   compiled, so code scanners can read the file; the game runs the same code as before
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -2696,18 +2700,6 @@ static void ComputeDeltaValues(STRATEGYBLOCK *sbPtr)
 		angle=-XENO_HEADPAN_GIMBALL;
 	}
 
-	#if 0
-	angle=angle*2;
-
-	GLOBALASSERT(xenoStatusPointer->head_pan);
-
-	{
-		int fake_timer;
-
-		fake_timer=1024-angle;
-		fake_timer<<=5;
-		if (fake_timer==65536) fake_timer=65535;
-	#else
 	GLOBALASSERT(xenoStatusPointer->head_pan);
 
 	{
@@ -2719,7 +2711,6 @@ static void ComputeDeltaValues(STRATEGYBLOCK *sbPtr)
 		if (fake_timer>=65536) fake_timer=65535;
 		if (fake_timer<=0) fake_timer=0;
 
-	#endif
 
 		GLOBALASSERT(fake_timer>=0);
 		GLOBALASSERT(fake_timer<65536);

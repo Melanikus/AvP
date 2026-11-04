@@ -1,0 +1,7 @@
+# These paths control the security gate, or what the game is built from. A pull request runs the workflow files from
+# the pull request itself, so a change here could weaken its own checks and still pass.
+# Read every change to these paths yourself before merging.
+/.github/                   @Melanikus
+/vcpkg.json                 @Melanikus
+/vcpkg-configuration.json   @Melanikus
+/vcpkg-overlay-ports/       @Melanikus

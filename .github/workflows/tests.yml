@@ -1,0 +1,41 @@
+# Runs the unit tests in tests/. A test that fails or doesn't build stops the merge, for everyone. This is a required check.
+#
+# Each test is a small program that returns 0 only if every check in it passed. tests/build.ps1 explains how to add one, and
+# a new test runs here with no change to this file. How much of the code the tests cover is not a gate: only a failing test is.
+name: Tests
+
+on:
+  push:
+    branches: [avpx_main]
+  pull_request:
+    branches: [avpx_main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the tests
+        shell: pwsh
+        run: ./tests/build.ps1
+
+      # With no tests at all this fails, so a broken build script can't pass as "every test passed".
+      - name: Run every test
+        shell: pwsh
+        run: |
+          $tests = @(Get-ChildItem "$env:RUNNER_TEMP\avp-tests\*.exe")
+          if ($tests.Count -eq 0) { throw 'No tests were built' }
+          foreach ($test in $tests) {
+            "Running $($test.Name)"
+            & $test.FullName
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }

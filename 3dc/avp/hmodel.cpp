@@ -1,5 +1,10 @@
 /***** HModel.c *****/
 /***** CDF 21/10/97 *****/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
+//   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
+//   if-blocks in each #if branch, so code scanners can read it
 
 #include "3dc.h"
 #include "io.h"
@@ -438,25 +443,24 @@ SECTION_DATA *Create_New_Section(SECTION * this_section)
 	this_section_data->Next_Sibling = NULL;
 	this_section_data->replacement_id = 0;
 	/* Init shape animations... */
+	// each #if branch is one whole if-block, so the brackets balance in both (a code scanner reads both branches)
 #if AUTODETECT
-
 	if (this_section->Shape)
 	{
 		if (this_section->Shape->animation_header)
 		{
-#else
-
-	if (this_section->flags & section_has_shape_animation)
-	{
-#endif
 			GLOBALASSERT(this_section->Shape->animation_header);
 			this_section_data->sac_ptr = (SHAPEANIMATIONCONTROLLER *)AllocateMem(sizeof(SHAPEANIMATIONCONTROLLER));
 			InitShapeAnimationController(this_section_data->sac_ptr, this_section->Shape);
 		}
-
-#if AUTODETECT
 	}
-
+#else
+	if (this_section->flags & section_has_shape_animation)
+	{
+		GLOBALASSERT(this_section->Shape->animation_header);
+		this_section_data->sac_ptr = (SHAPEANIMATIONCONTROLLER *)AllocateMem(sizeof(SHAPEANIMATIONCONTROLLER));
+		InitShapeAnimationController(this_section_data->sac_ptr, this_section->Shape);
+	}
 #endif
 	/* Init texture animations. */
 	this_section_data->tac_ptr = 0;
@@ -4779,6 +4783,12 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		const char *Hierarchy_Name;
 		HIERARCHY_SAVE_BLOCK *block = (HIERARCHY_SAVE_BLOCK *) header;
 
+		//the block and both names after it must lie inside the block's size (it comes from the save file)
+		if (header->size < (int)sizeof(*block))
+		{
+			return;
+		}
+
 		//make sure the block is the correct size
 		if (block->structure_size != sizeof(*block))
 		{
@@ -4788,9 +4798,20 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		//get the names from just after the block
 		{
 			char *buffer = (char *) header;
+			char *blockEnd = buffer + header->size;
+			char *nameEnd;
 			buffer += sizeof(*block);
+			nameEnd = (char *) memchr(buffer, 0, blockEnd - buffer);
+			if (!nameEnd)
+			{
+				return;
+			}
 			Hierarchy_Name = buffer;
-			buffer += strlen(Hierarchy_Name) + 1;
+			buffer = nameEnd + 1;
+			if (!memchr(buffer, 0, blockEnd - buffer))
+			{
+				return;
+			}
 			Rif_Name = buffer;
 		}
 		{
@@ -4971,6 +4992,13 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		DELTA_CONTROLLER *delta;
 		HIERARCHY_DELTA_SAVE_BLOCK *block = (HIERARCHY_DELTA_SAVE_BLOCK *) header;
 		char *name = (char *)(block + 1);
+
+		//the block and the name after it must lie inside the block's size (it comes from the save file)
+		if (header->size <= (int)sizeof(*block) || !memchr(name, 0, header->size - sizeof(*block)))
+		{
+			return;
+		}
+
 		delta = Get_Delta_Sequence(controller, name);
 
 		if (!delta)
@@ -5070,6 +5098,27 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		ID number order. Whenever we find any sections without saved data , we need to prunce them
 		(since they will have been blown off the original hierarchy)
 		*/
+
+		/*
+		The first saved section is always the root: SaveHierarchy writes controller->section_data first
+		(SaveHierarchySectionRecursion), and LoadHierarchy only gets here once the controller's root has the saved
+		root_section_id. If that block is missing, the wrong size or for another section (a damaged or edited file),
+		return before the loops below prune the root, which the controller still points at.
+		*/
+		if (section)
+		{
+			if (!header)
+			{
+				return;
+			}
+
+			block = (HIERARCHY_SECTION_SAVE_BLOCK *) header;
+
+			if (block->header.size != sizeof(*block) || block->IDnumber != section->sempai->IDnumber)
+			{
+				return;
+			}
+		}
 
 		while (header && section)
 		{
@@ -5374,6 +5423,31 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	{
 		int i;
 		HIERARCHY_DECAL_SAVE_BLOCK *block = (HIERARCHY_DECAL_SAVE_BLOCK *) header;
+
+		//the counts come from the save file: NumberOfDecals decals are copied into section->Decals[] and
+		//NextDecalToUse is the next index written there (decal.cpp), so both must fit the array, and the block
+		//must hold the decals it claims; otherwise load the section without decals, as if none had been saved
+		const int decalCapacity = (int)(sizeof(section->Decals) / sizeof(section->Decals[0]));
+
+		if (!SaveBlockArrayFits(header, (int)(sizeof(*block) - sizeof(block->Decals)), &block->NumberOfDecals, sizeof(OBJECT_DECAL), decalCapacity)
+		    || block->NextDecalToUse < 0 || block->NextDecalToUse >= decalCapacity)
+		{
+			section->NumberOfDecals = 0;
+			section->NextDecalToUse = 0;
+			return;
+		}
+
+		//DecalDescription[DecalID] is read when each decal is drawn: the same for a decal id the game cannot have saved
+		for (i = 0; i < block->NumberOfDecals; i++)
+		{
+			if ((int)block->Decals[i].DecalID < 0 || (int)block->Decals[i].DecalID >= MAX_NO_OF_DECAL_IDS)
+			{
+				section->NumberOfDecals = 0;
+				section->NextDecalToUse = 0;
+				return;
+			}
+		}
+
 		COPYELEMENT_LOAD(NumberOfDecals);
 		COPYELEMENT_LOAD(NextDecalToUse);
 
@@ -5431,6 +5505,14 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 
 		if (!block)
 		{
+			return;
+		}
+
+		//the whole block is read, so it must all be there (its size comes from the save file); otherwise load the
+		//section without tweening, as if none had been saved
+		if (header->size < (int)sizeof(*block))
+		{
+			section->Tweening = 0;
 			return;
 		}
 

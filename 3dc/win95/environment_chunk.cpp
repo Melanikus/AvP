@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
+
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
 
@@ -38,15 +43,6 @@ Children for Enviornment_Data_Chunk :
 */
 
 
-
-
-// empty constructor
-Environment_Data_Chunk::Environment_Data_Chunk (Chunk_With_Children  * parent)
-:Lockable_Chunk_With_Children (parent, "REBENVDT")
-{
-	// as necessary, generated automatically
-	new Environment_Data_Header_Chunk (this);
-}
 
 
 BOOL Environment_Data_Chunk::file_equals (HANDLE & /*rif_file*/)
@@ -230,7 +226,7 @@ void Sound_Directory_Chunk::fill_data_block(char* data_start)
 	*((int *) data_start) = chunk_size;
 	data_start += 4;
 
-	strcpy(data_start,directory);
+	memcpy(data_start,directory,strlen(directory)+1);
 }
 
 

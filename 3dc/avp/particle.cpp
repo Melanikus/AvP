@@ -3,6 +3,10 @@
  *	Experimental particle system
  *	
  */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   particle, pheromone-trail and explosion counts and ids read from a save file are checked, an unknown
+//   particle type is refused, and two table lookups are guarded
 
 #include "3dc.h"
 #include "inline.h"
@@ -1446,6 +1450,10 @@ static VOLUMETRIC_EXPLOSION* AllocateVolumetricExplosion(void)
 void MakeParticle(VECTORCH *positionPtr, VECTORCH *velocityPtr, enum PARTICLE_ID particleID)
 {
 	PARTICLE *particlePtr;
+
+	//ParticleDescription has MAX_NO_OF_PARTICLE_IDS entries: an id outside it (PARTICLE_NULL from the exit-wound spray
+	//when GetBloodType knows no blood type) would be read past the array, and the switch below frees it again anyway
+	if ((unsigned)particleID >= (unsigned)MAX_NO_OF_PARTICLE_IDS) return;
 
 	if ((particleID == PARTICLE_ALIEN_BLOOD) || (particleID == PARTICLE_PREDATOR_BLOOD) || (particleID == PARTICLE_HUMAN_BLOOD)|| (particleID == PARTICLE_ANDROID_BLOOD))
 		if (NumberOfBloodParticles>MAX_NO_OF_BLOOD_PARTICLES)
@@ -3473,6 +3481,19 @@ void HandleRainInTrench(int numberOfRaindrops)
 	while (--i);
 }
 
+// FastRandom()%range, except that a range of 0 (the module bounds HandleRainShaft uses are equal) gives 0 instead of
+// dividing by zero. FastRandom() is still called once, as before.
+static int RainShaftRandomOffset(int range)
+{
+	int r = FastRandom();
+
+	if (range == 0) {
+		return 0;
+	}
+
+	return r % range;
+}
+
 void HandleRainShaft(MODULE *modulePtr, int bottomY, int topY, int numberOfRaindrops)
 {
 	int i = numberOfRaindrops;
@@ -3503,8 +3524,8 @@ void HandleRainShaft(MODULE *modulePtr, int bottomY, int topY, int numberOfRaind
 		if (particlePtr->LifeTime<=0)
 		{
 			particlePtr->Position.vy = topY;
-			particlePtr->Position.vx = modulePtr->m_world.vx+modulePtr->m_minx+(FastRandom()%(modulePtr->m_maxz-modulePtr->m_minx));
-			particlePtr->Position.vz = modulePtr->m_world.vz+modulePtr->m_minz+(FastRandom()%(modulePtr->m_maxz-modulePtr->m_minz));
+			particlePtr->Position.vx = modulePtr->m_world.vx+modulePtr->m_minx+RainShaftRandomOffset(modulePtr->m_maxz-modulePtr->m_minx);
+			particlePtr->Position.vz = modulePtr->m_world.vz+modulePtr->m_minz+RainShaftRandomOffset(modulePtr->m_maxz-modulePtr->m_minz);
 			particlePtr->Velocity.vy = (FastRandom()&8191)+15000;
 			particlePtr->Velocity.vx = (FastRandom()&1023)-512;
 			particlePtr->Velocity.vz = (FastRandom()&1023)-512;
@@ -4312,7 +4333,7 @@ static void HandleVolumetricExplosion(VOLUMETRIC_EXPLOSION *expPtr)
 	if (expPtr->ExplosionPhase)
 	{
 		int v = (DIV_FIXED(SPHERE_VERTICES, expPtr->NumberVerticesMoving+1)+ONE_FIXED);
-		velocityModifier = MUL_FIXED(GetSin(expPtr->LifeTime/64)/16,v);
+		velocityModifier = MUL_FIXED(GetSin((expPtr->LifeTime/64) & 4095)/16,v);
 		
 		for(int i=0; i<SPHERE_VERTICES; i++)
 		{
@@ -5068,10 +5089,22 @@ void Load_Particles(SAVE_BLOCK_HEADER* header)
 	PARTICLE* saved_particle = (PARTICLE*)(block+1);
 	int expected_size;
 
+	//the particles are copied into ParticleStorage[MAX_NO_OF_PARTICLES]: the count must fit it and the block
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveParticles, sizeof(PARTICLE), MAX_NO_OF_PARTICLES)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(PARTICLE) * block->NumActiveParticles;
 	if(header->size != expected_size) return;
+
+	//ParticleDescription[ParticleID] is read for every active particle: skip a block with an id the game cannot have
+	//saved. No active particle ever holds an id outside the table: MakeParticle refuses one (and before that, freed it
+	//again before returning)
+	for(int i=0;i<block->NumActiveParticles;i++)
+	{
+		int id = (int)saved_particle[i].ParticleID;
+		if(id < 0 || id >= MAX_NO_OF_PARTICLE_IDS) return;
+	}
 
 	//right copy the stuff then
 	NumActiveParticles = block->NumActiveParticles;
@@ -5128,10 +5161,21 @@ void Load_VolumetricExplosions(SAVE_BLOCK_HEADER* header)
 	VOLUMETRIC_EXPLOSION* saved_explosion = (VOLUMETRIC_EXPLOSION*) (block+1);
 	int expected_size;
 
+	//the explosions are read from the block (AllocateVolumetricExplosion never fails, it reuses the ring): the count
+	//must fit the block and ExplosionStorage[MAX_NO_OF_EXPLOSIONS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveExplosions, sizeof(VOLUMETRIC_EXPLOSION), MAX_NO_OF_EXPLOSIONS)) return;
+
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);
 	expected_size += sizeof(VOLUMETRIC_EXPLOSION) * block->NumActiveExplosions;
 	if(header->size != expected_size) return;
+
+	//LifeTime drives GetSin(LifeTime/64) and the explosion's texture offset: skip a block with a value the game cannot
+	//have saved (it sets ONE_FIXED-1 and counts down to 0, and saves only explosions whose LifeTime is not 0)
+	for(int i=0;i<block->NumActiveExplosions;i++)
+	{
+		if(saved_explosion[i].LifeTime < 0 || saved_explosion[i].LifeTime >= ONE_FIXED) return;
+	}
 
 	for(int i=0;i<block->NumActiveExplosions;i++)
 	{
@@ -5199,6 +5243,9 @@ void Load_PheromoneTrails(SAVE_BLOCK_HEADER* header)
 	PHEROMONE_SAVE_BLOCK_HEADER* block = (PHEROMONE_SAVE_BLOCK_HEADER*) header;
 	PHEROMONE_TRAIL* saved_trail = (PHEROMONE_TRAIL*) (block+1);
 	int expected_size;
+
+	//the trails are read from the block: the count must fit the block and TrailStorage[MAX_NO_OF_PHEROMONE_TRAILS]
+	if(!SaveBlockArrayFits(header, sizeof(*block), &block->NumActiveTrails, sizeof(PHEROMONE_TRAIL), MAX_NO_OF_PHEROMONE_TRAILS)) return;
 
 	//make sure the block is the correct size
 	expected_size = sizeof(*block);

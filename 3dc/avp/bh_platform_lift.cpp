@@ -1,6 +1,9 @@
 /*------------------------------Patrick 14/3/97-----------------------------------
   Source for Platform lift behaviour functions
   --------------------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed a repeated "ghostData =" from one line; the game runs exactly as before
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -528,7 +531,7 @@ static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 
 		if(sbPtr->I_SBtype==I_BehaviourNetGhost)
 		{
-			NETGHOSTDATABLOCK *ghostData = 	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
+			NETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
 			LOCALASSERT(ghostData);
 
 			if((ghostData->type==I_BehaviourMarinePlayer)||

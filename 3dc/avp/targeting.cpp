@@ -1,4 +1,7 @@
 /* KJL 14:30:27 06/05/98 - weapon targeting code */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the smart gun's target filter only reads characters whose data it knows how to read
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -886,9 +889,29 @@ int SmartTarget_TargetFilter(STRATEGYBLOCK *candidate)
 	} else if (weaponPtr->WeaponIDNumber == WEAPON_SMARTGUN) {
 		/* Don't target marines if Friendly Fire is disabled. */
 		if (netGameData.disableFriendlyFire && (netGameData.gameType==NGT_CoopDeathmatch || netGameData.gameType==NGT_Coop)) {
-			NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)candidate->SBdataptr;
-			if (ghostDataPtr->type==I_BehaviourMarinePlayer || ghostDataPtr->type==I_BehaviourMarine) {
-				return(0);
+			/* This reads every candidate's data block as a NETGHOSTDATABLOCK. Only the types the switch below can
+			accept are tested (the result for any other type is 0 either way), and only when they have a data block:
+			a candidate without one, or with a smaller block, used to be read through NULL / past its block. The
+			accepted NPC types keep the old reading of their own block, so their targeting does not change. */
+			switch (candidate->I_SBtype) {
+				case I_BehaviourNetGhost:
+				case I_BehaviourPredator:
+				case I_BehaviourAlien:
+				case I_BehaviourQueenAlien:
+				case I_BehaviourFaceHugger:
+				case I_BehaviourXenoborg:
+				case I_BehaviourMarine:
+				case I_BehaviourSeal:
+				case I_BehaviourPredatorAlien:
+					if (candidate->SBdataptr) {
+						NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)candidate->SBdataptr;
+						if (ghostDataPtr->type==I_BehaviourMarinePlayer || ghostDataPtr->type==I_BehaviourMarine) {
+							return(0);
+						}
+					}
+					break;
+				default:
+					break;
 			}
 		}
 	}

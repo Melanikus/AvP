@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text is copied using its exact measured length, so it always fits
+
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
 //#include "animation_objects.hpp"
@@ -215,7 +219,7 @@ void Object_Hierarchy_Name_Chunk::fill_data_block (char *data_start)
 
 	data_start += 4;
 	
-	strcpy (data_start, hierarchy_name);
+	memcpy (data_start, hierarchy_name, strlen(hierarchy_name) + 1);
 	
 }
 
@@ -346,10 +350,10 @@ void Object_Hierarchy_Alternate_Shape_Set_Chunk::fill_data_block(char* data_star
 
 	for(LIF<Replaced_Shape_Details*> rlif(&Replaced_Shape_List);!rlif.done();rlif.next())
 	{
-		strcpy(data_start,rlif()->old_object_name);
+		memcpy(data_start,rlif()->old_object_name,strlen(rlif()->old_object_name)+1);
 		data_start+=(strlen(rlif()->old_object_name)+4)&~3;
 
-		strcpy(data_start,rlif()->new_object_name);
+		memcpy(data_start,rlif()->new_object_name,strlen(rlif()->new_object_name)+1);
 		data_start+=(strlen(rlif()->new_object_name)+4)&~3;
 	}
 

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand
 /*******************************************************************
  *
  *    DESCRIPTION: 	consvar.cpp
@@ -271,11 +274,10 @@ ConsoleVariable::~ConsoleVariable()
 
 /*static*/ void ConsoleVariable :: ListAllVariables(void)
 {
-	SCString* pSCString_Temp = new SCString("LIST OF ALL CONSOLE VARIABLES:");
+	RefHolder<SCString> pSCString_Temp(new SCString("LIST OF ALL CONSOLE VARIABLES:"));
 
 	pSCString_Temp -> SendToScreen();
 
-	pSCString_Temp ->R_Release();
 
 	for
 	(
@@ -334,14 +336,14 @@ void ConsoleVariable :: Display(void)
 
 	SCString* pSCString_Temp3 = MakeRangeString();
 
-	SCString* pSCString_Out = new SCString
+	RefHolder<SCString> pSCString_Out(new SCString
 	(
 		pSCString_Symbol,
 		pSCString_Temp1,
 		pSCString_Temp2,
 		pSCString_Temp3,
 		pSCString_Description
-	);
+	));
 
 	pSCString_Temp3 ->R_Release();
 	pSCString_Temp2 ->R_Release();
@@ -349,7 +351,6 @@ void ConsoleVariable :: Display(void)
 
 	pSCString_Out -> SendToScreen();
 
-	pSCString_Out ->R_Release();
 }
 
 
@@ -409,14 +410,14 @@ void ConsoleVariable :: OutputResultOfSetValue( int OldVal )
 			NewValue
 		);
 
-		SCString* pSCString_Out = new SCString
+		RefHolder<SCString> pSCString_Out(new SCString
 		(
 			pSCString_Symbol,
 			pSCString_Temp1,
 			pSCString_Temp2,
 			pSCString_Temp3,
 			pSCString_Temp4
-		);
+		));
 
 		pSCString_Temp4 ->R_Release();
 		pSCString_Temp3 ->R_Release();
@@ -425,7 +426,6 @@ void ConsoleVariable :: OutputResultOfSetValue( int OldVal )
 
 		pSCString_Out -> SendToScreen();
 		
-		pSCString_Out ->R_Release();
 	}
 	
 }

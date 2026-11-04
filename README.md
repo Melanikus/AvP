@@ -6,15 +6,15 @@ I've updated a couple headers that changed over the years/versions of Platform/W
 
 Right now to compile the code you need:
 
-1 - Visual Studio 2019 Community - https://visualstudio.microsoft.com/vs/community/
+1 - Visual Studio 2026 Community, with the C++ tools and vcpkg - https://visualstudio.microsoft.com/vs/community/
 
-2 - DirectX 9 SDK - Can be found around the web, you want the June 2010 version. 
+2 - DirectX 9 
 
-Note: It is likely that it'll throw S1023 error because you have a newer redistributable VS2010 than the ones it's trying to install, if you get that refer to https://docs.microsoft.com/pt-br/troubleshoot/windows/win32/s1023-error-when-you-install-directx-sdk (run both commands in the doc and try again)
+You no longer need the old DirectX SDK. The Windows SDK that comes with Visual Studio has DirectX 9 itself, and vcpkg fetches Microsoft's D3DX helper library for you as the dxsdk-d3dx package.
 
 3 - OpenAL 
 
-Barry and team implemented AvP's audio using OpenAL, you can get the precompiled Win32 binaries here: https://openal-soft.org/#download 
+Barry and team implemented AvP's audio using OpenAL. vcpkg builds OpenAL Soft from source, so there's nothing to download: https://openal-soft.org/
 
 4 - AV Playback libraries 
 
@@ -24,10 +24,19 @@ Playback
 
 https://github.com/xiph/ogg
 https://github.com/xiph/vorbis
-https://github.com/xiph/theora
 
 Decoding
 
 http://homepage.eircom.net/~duncandsl/avp/ libsmackerdec and libbinkdec 
 
-You need Ogg/Vorbis for Theora and you need Ogg for Vorbis and you need all of the for AvP, Barry's decoders have the .libs and .dlls but I believe you'll need to compile and link the playback libraries, remember to set all of them as multi-threaded DLLs and to copy the DLLs to your output directory (game). The process is pretty smooth as long as you know how to reference include and lib directories in the VS C++ projects. 
+You need Ogg for Vorbis and you need both for AvP. vcpkg builds them from vcpkg.json, and Barry's decoders are in dependencies/ as source, built with the game. No .libs or .dlls are kept in this repository.
+
+To build it, from a Developer Command Prompt for Visual Studio:
+
+```
+git clone https://github.com/Melanikus/AvP.git
+cd AvP
+msbuild win32\VS2026\AvP.sln /p:Configuration=Release /p:Platform=Win32
+```
+
+The first build takes a while, because vcpkg builds the libraries from source. The game and its DLLs end up in win32\VS2026\Win32\Release.

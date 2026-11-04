@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   declares the checked Huffman decoder (see huffman.cpp)
 #ifndef _huffman_hpp_included
 #define _huffman_hpp_included 1
 
@@ -16,6 +19,9 @@ extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length);
 
 /* KJL 16:53:53 19/09/98 - Decompression */
 extern char *HuffmanDecompress(const HuffmanPackage *inpackage);
+/* for untrusted data (save games, text files): packageSize = bytes available from inpackage on; NULL if not safely
+   and completely decodable */
+extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packageSize);
 
 #define COMPRESSED_RIF_IDENTIFIER "REBCRIF1"
 

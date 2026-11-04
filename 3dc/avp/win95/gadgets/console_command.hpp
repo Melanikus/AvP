@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   console commands are made by a small function that hands them back (it works the same as before)
 /*
 	
 	conscmnd.hpp
@@ -28,35 +31,35 @@
 		static void CreateAll(void);
 
 		// Various factory methods:
-		static void Make
+		static ConsoleCommand* Make
 		(
 			ProjChar* pProjCh_ToUse,
 			ProjChar* pProjCh_Description_ToUse,
 			void (&f) (void),
 			bool Cheat = false
 		);
-		static void Make
+		static ConsoleCommand* Make
 		(
 			ProjChar* pProjCh_ToUse,
 			ProjChar* pProjCh_Description_ToUse,
 			void (&f) (int),
 			bool Cheat = false
 		);
-		static void Make
+		static ConsoleCommand* Make
 		(
 			ProjChar* pProjCh_ToUse,
 			ProjChar* pProjCh_Description_ToUse,
 			int (&f) (void),
 			bool Cheat = false
 		);
-		static void Make
+		static ConsoleCommand* Make
 		(
 			ProjChar* pProjCh_ToUse,
 			ProjChar* pProjCh_Description_ToUse,
 			int (&f) (int),
 			bool Cheat = false
 		);
-		static void Make
+		static ConsoleCommand* Make
 		(
 			ProjChar* pProjCh_ToUse,
 			ProjChar* pProjCh_Description_ToUse,

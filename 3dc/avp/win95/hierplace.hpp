@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declaration of unused code for making new level files; added a check on the sequence numbers a
+//   level file gives
+
 #ifndef _hierplace_hpp
 #define _hierplace_hpp 1
 
@@ -10,7 +15,6 @@ class Placed_Hierarchy_Chunk : public Chunk_With_Children
 {
 public :
 
-	Placed_Hierarchy_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation);
 	Placed_Hierarchy_Chunk(Chunk_With_Children * const parent,const char* ,const size_t);
 
 
@@ -81,6 +85,13 @@ public:
 
 	int num_extra_data;
 	int* extra_data;
+
+	// The game keeps a list of an object's sequences, just long enough for the highest number it finds, and uses each
+	// sequence's number as its place in that list. The number comes straight from the level file, so it could be
+	// anything, with the same dangers as Indexed_Sound_Chunk::index_is_valid describes. The game's own files only use
+	// 0, so this limit leaves plenty of room. Anything using index as a place in a list must skip a sequence that fails.
+	static const int Max_Sequence_Number = 4095;
+	bool index_is_valid() const { return index >= 0 && index <= Max_Sequence_Number; }
 };
 
 

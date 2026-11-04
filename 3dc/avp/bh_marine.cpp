@@ -1,6 +1,11 @@
 /*------------------------Patrick 2/7/97-----------------------------
   Source file for Marine and Seal AI behaviour functions....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted old alternative versions of seven if-statements that were switched off with #if 0 (or #if 1 / #else)
+//   and never compiled, so code scanners can read the file; the game runs the same code as before;
+//   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 #include "3dc.h"
 
 #include "inline.h"
@@ -2685,10 +2690,10 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 				if(marineStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) {
 					Sound_Update3d(marineStatusPointer->soundHandle,&(sbPtr->DynPtr->Position));
 				} else {
-					if (ActiveSounds[marineStatusPointer->soundHandle].soundIndex!=SID_FIRE) {
-						Sound_Stop(marineStatusPointer->soundHandle);
-					 	Sound_Play(SID_FIRE,"dlev",&(sbPtr->DynPtr->Position),&marineStatusPointer->soundHandle,127);
-					}
+					/* No sound on the handle: start the fire sound. (This used to test
+					ActiveSounds[soundHandle].soundIndex!=SID_FIRE first, i.e. ActiveSounds[-1], and call
+					Sound_Stop(-1), which returns at once for a negative handle.) */
+				 	Sound_Play(SID_FIRE,"dlev",&(sbPtr->DynPtr->Position),&marineStatusPointer->soundHandle,127);
 				}
 			}
 		}
@@ -5555,11 +5560,7 @@ void MarineIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,
 	if(sbPtr->SBDamageBlock.Health <= 0) {
 		/* marine experiences death */
 		int dice=FastRandom()&65535;
-		#if 0
-		if ((dice<16384)||(marineStatusPointer->Android)) {
-		#else
 		if (marineStatusPointer->Android) {
-		#endif
 			Marine_SwitchExpression(sbPtr,3);
 		} else if (dice<32768) {
 			Marine_SwitchExpression(sbPtr,5);
@@ -8896,11 +8897,7 @@ static void HandleMovingAnimations(STRATEGYBLOCK *sbPtr)
 	}
 
 	if (style==MMS_Sprint) {
-		#if 1
 		if (!can_sprint) {
-		#else
-		if (1) {
-		#endif
 			style=MMS_Combat;
 		}
 	}
@@ -10187,15 +10184,7 @@ static int MarineIsAwareOfTarget(STRATEGYBLOCK *sbPtr)
 				RotateVector(&offset,&WtoL);
 
 				if (offset.vz<=0) {
-					#if 0
-					if (
-						(tDynPtr->Position.vx!=tDynPtr->PrevPosition.vx)
-						||(tDynPtr->Position.vx!=tDynPtr->PrevPosition.vx)
-						||(tDynPtr->Position.vx!=tDynPtr->PrevPosition.vx)
-						) {
-					#else
 					if (ObjectShouldAppearOnMotionTracker(marineStatusPointer->Target)) {
-					#endif
 						int range;
 
 						range=VectorDistance((&marineStatusPointer->Target->DynPtr->Position),(&sbPtr->DynPtr->Position));
@@ -11258,8 +11247,6 @@ STRATEGYBLOCK *Marine_GetNewTarget(VECTORCH *marinepos, STRATEGYBLOCK *me)
 	neardist=ONE_FIXED;
 	newblip=0;
 
-	//#if ANARCHY
-	#if 1
 	for (a=0; a<NumActiveStBlocks; a++) {
 		candidate=ActiveStBlockList[a];
 
@@ -11280,15 +11267,7 @@ STRATEGYBLOCK *Marine_GetNewTarget(VECTORCH *marinepos, STRATEGYBLOCK *me)
 
 					/* It'll wheep, anyway. */
 					if (marineStatusPointer->mtracker_timer==0) {
-						#if 0
-						if (
-							(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							) {
-						#else
 						if (ObjectShouldAppearOnMotionTracker(candidate)) {
-						#endif
 
 							dist=Approximate3dMagnitude(&offset);
 							if (dist<MOTIONTRACKER_RANGE) {
@@ -11327,15 +11306,7 @@ STRATEGYBLOCK *Marine_GetNewTarget(VECTORCH *marinepos, STRATEGYBLOCK *me)
 							if (marineStatusPointer->mtracker_timer==0) {
 								/* Hey, the tracker's on. */
 								if (dist<MOTIONTRACKER_RANGE) {
-									#if 0
-									if (
-										(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-										||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-										||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-										) {
-									#else
 									if (ObjectShouldAppearOnMotionTracker(candidate)) {
-									#endif
 										newblip=1;
 										marineStatusPointer->suspect_point=candidate->DynPtr->Position;
 										/* Set this to zero when you get a *new* suspicion. */
@@ -11350,7 +11321,6 @@ STRATEGYBLOCK *Marine_GetNewTarget(VECTORCH *marinepos, STRATEGYBLOCK *me)
 			}
 		}
 	}
-	#endif
 
 	if (nearest==NULL) {
 		if (newblip) {
@@ -11407,15 +11377,7 @@ void FakeTrackerWheepGenerator(VECTORCH *marinepos, STRATEGYBLOCK *me) {
 
 					if (offset.vz<=0) {
 						/* It'll wheep, anyway. */
-						#if 0
-						if (
-							(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							||(candidate->DynPtr->Position.vx!=candidate->DynPtr->PrevPosition.vx)
-							) {
-						#else
 						if (ObjectShouldAppearOnMotionTracker(candidate)) {
-						#endif
 							dist=Approximate3dMagnitude(&offset);
 							if (dist<MOTIONTRACKER_RANGE) {
 								tracker_noise=2;
@@ -11979,14 +11941,7 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeShotgun(STRATEGYBLOCK *sbPtr)
 		return(SRC_No_Change);
 	}
 
-	#if 0
-	if ((marineStatusPointer->HModelController.keyframe_flags)
-		||(marineStatusPointer->HModelController.Playing==0)) {
-
-		marineStatusPointer->HModelController.Playing=0;
-	#else
 	if (marineStatusPointer->HModelController.Playing==0) {
-	#endif
 
 		/* Only terminate if you haven't fired yet... */
 		if(!MarineCanSeeTarget(sbPtr))

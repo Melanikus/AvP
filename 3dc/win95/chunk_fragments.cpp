@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it;
+//   text is copied using its exact measured length, so it always fits
+
 #include "chunk_fragments.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -29,14 +34,6 @@ const char* Fragment_Type_Chunk::get_name()
 
 ////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("FRGTYPDC",Fragment_Type_Data_Chunk)
-
-Fragment_Type_Data_Chunk::Fragment_Type_Data_Chunk(Chunk_With_Children* parent,const char* name)
-:Chunk(parent,"FRGTYPDC")
-{
-	frag_type_name=new char[strlen(name)+1];
-	strcpy(frag_type_name,name);
-	pad1=pad2=pad3=0;
-}
 
 Fragment_Type_Data_Chunk::Fragment_Type_Data_Chunk(Chunk_With_Children* const parent, const char* data, size_t const )
 :Chunk(parent,"FRGTYPDC")
@@ -216,7 +213,7 @@ void Fragment_Type_Sound_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=pad;
 	data_start+=4;
 
-	strcpy(data_start,wav_name);
+	memcpy(data_start,wav_name,strlen(wav_name)+1);
 
 }
 

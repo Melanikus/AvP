@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the degree signs in comments are plain text now, and four calls are split so each #if branch is a whole
+//   statement; both let code scanners read the file (the compiled code is the same);
+//   angles received from the network are kept between 0 and 4095 before a sine or cosine lookup
 
 #include "3dc.h"
 #include "inline.h"
@@ -325,13 +330,13 @@ void CreateEulerMatrix(EULER *e, MATRIXCH *m1)
 	int t, sx, sy, sz, cx, cy, cz;
 
 
-	sx = GetSin(e->EulerX);
-	sy = GetSin(e->EulerY);
-	sz = GetSin(e->EulerZ);
+	sx = GetSin(e->EulerX & wrap360);
+	sy = GetSin(e->EulerY & wrap360);
+	sz = GetSin(e->EulerZ & wrap360);
 
-	cx = GetCos(e->EulerX);
-	cy = GetCos(e->EulerY);
-	cz = GetCos(e->EulerZ);
+	cx = GetCos(e->EulerX & wrap360);
+	cy = GetCos(e->EulerY & wrap360);
+	cz = GetCos(e->EulerZ & wrap360);
 
 
 	#if 0
@@ -411,13 +416,13 @@ void CreateEulerVector(EULER *e, VECTORCH *v)
 {
 	int t, sx, sy, sz, cx, cy, cz;
 
-	sx = GetSin(e->EulerX);
-	sy = GetSin(e->EulerY);
-	sz = GetSin(e->EulerZ);
+	sx = GetSin(e->EulerX & wrap360);
+	sy = GetSin(e->EulerY & wrap360);
+	sz = GetSin(e->EulerZ & wrap360);
 
-	cx = GetCos(e->EulerX);
-	cy = GetCos(e->EulerY);
-	cz = GetCos(e->EulerZ);
+	cx = GetCos(e->EulerX & wrap360);
+	cy = GetCos(e->EulerY & wrap360);
+	cz = GetCos(e->EulerZ & wrap360);
 
 	/* x = -sy*cz + sx*cy*sz */
 	v->vx  = MUL_FIXED(-sy, cz);
@@ -837,24 +842,24 @@ void MatrixToEuler(MATRIXCH *m, EULER *e)
 
 		else CosMatrixPitch = 1;
 
-		SineMatrixYaw = WideMulNarrowDiv(
-			#if j_and_r_change
-			m->mat31 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-			#else
-			m->mat13 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-			#endif
+		// each branch is one whole statement, so the brackets balance in both (a code scanner reads both branches)
+		#if j_and_r_change
+		SineMatrixYaw = WideMulNarrowDiv(m->mat31 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+		#else
+		SineMatrixYaw = WideMulNarrowDiv(m->mat13 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+		#endif
 
 		CosMatrixYaw = WideMulNarrowDiv(
 			m->mat33 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
 
 		/* Roll */
 
-		SineMatrixRoll = WideMulNarrowDiv(
-			#if j_and_r_change
-			m->mat12 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-			#else
-			m->mat21 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-			#endif
+		// each branch is one whole statement, so the brackets balance in both (a code scanner reads both branches)
+		#if j_and_r_change
+		SineMatrixRoll = WideMulNarrowDiv(m->mat12 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+		#else
+		SineMatrixRoll = WideMulNarrowDiv(m->mat21 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+		#endif
 
 		CosMatrixRoll = WideMulNarrowDiv(
 			m->mat22 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
@@ -1098,12 +1103,12 @@ void MatrixToEuler2(MATRIXCH *m, EULER *e)
 
 	/* Yaw */
 
-	SineMatrixYaw = WideMulNarrowDiv(
-		#if j_and_r_change_2
-		m->mat31 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-		#else
-		m->mat13 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-		#endif
+	// each branch is one whole statement, so the brackets balance in both (a code scanner reads both branches)
+	#if j_and_r_change_2
+	SineMatrixYaw = WideMulNarrowDiv(m->mat31 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+	#else
+	SineMatrixYaw = WideMulNarrowDiv(m->mat13 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+	#endif
 
 	#if 0
 	textprint("SineMatrixYaw = %d\n", SineMatrixYaw);
@@ -1121,12 +1126,12 @@ void MatrixToEuler2(MATRIXCH *m, EULER *e)
 
 	/* Roll */
 
-	SineMatrixRoll = WideMulNarrowDiv(
-		#if j_and_r_change_2
-		m->mat12 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-		#else
-		m->mat21 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
-		#endif
+	// each branch is one whole statement, so the brackets balance in both (a code scanner reads both branches)
+	#if j_and_r_change_2
+	SineMatrixRoll = WideMulNarrowDiv(m->mat12 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+	#else
+	SineMatrixRoll = WideMulNarrowDiv(m->mat21 >> m2e_scale, ONE_FIXED_S, CosMatrixPitch);
+	#endif
 
 	#if 0
 	textprint("SineMatrixRoll = %d\n", SineMatrixRoll);
@@ -1287,7 +1292,7 @@ void MatrixToEuler2(MATRIXCH *m, EULER *e)
  Normalise a Matrix
 
  Dot the three vectors together (XY, XZ, YZ) and take the two nearest to
- 90ø from each other. Cross them to create a new third vector, then cross
+ 90 degrees from each other. Cross them to create a new third vector, then cross
  the first and third to create a new second.
 
 */
@@ -1342,11 +1347,11 @@ void MNormalise(MATRIXCH *m)
 	#endif
 
 
-	/* Find the two vectors nearest 90ø */
+	/* Find the two vectors nearest 90 degrees */
 	if (dotxy > dotxz && dotxy > dotyz)
 	{
 
-		/* xy are the closest to 90ø */
+		/* xy are the closest to 90 degrees */
 
 		/*textprint("xy\n");*/
 
@@ -1366,7 +1371,7 @@ void MNormalise(MATRIXCH *m)
 
 	else if(dotxz > dotxy && dotxz > dotyz)
 	{
-		/* xz are the closest to 90ø */
+		/* xz are the closest to 90 degrees */
 
 		/*textprint("xz\n");*/
 
@@ -1386,7 +1391,7 @@ void MNormalise(MATRIXCH *m)
 	}
 	else
 	{
-		/* yz are the closest to 90ø */
+		/* yz are the closest to 90 degrees */
 
 		/*textprint("yz\n");*/
 
@@ -1527,10 +1532,10 @@ int ArcSin(int s)
 
  And ATN(x/z) is returned such that:
 
- 000ø is Map North
- 090ø is Map East
- 180ø is Map South
- 270ø is Map West
+ 000 degrees is Map North
+ 090 degrees is Map East
+ 180 degrees is Map South
+ 270 degrees is Map West
 
 */
 

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed two switched-off blocks of placeholder code that could never run
 /*******************************************************************
  *
  *    DESCRIPTION: 	trepgadg.cpp - text report gadget
@@ -186,25 +189,6 @@ void TextReportGadget :: Render
 			);
 		}
 
-		#if 0
-		{
-			SCString* pSCStr_Temp = new SCString("PLACEHOLDER STRING");
-			r2pos R2Pos_Cursor = R2Rect_ClipForText . GetPos();
-
-			TestStringRender_Unclipped
-			(
-				R2Pos_Cursor, // r2pos& R2Pos_Cursor,
-					// start position for string;
-					// gets written back to with final position
-
-					// Renders as a single line; it is asserted that the result is fully within
-					// the physical screen (i.e. already clipped)
-				*pSCStr_Temp // const SCString& SCStr
-			);
-
-			pSCStr_Temp -> R_Release();
-		}
-		#endif
 
 		// Calculate y-displacement based upon number of lines:
 		int HeightOfLines = (List_pTeletypeGadg_Displaying . size() * FontHeight);
@@ -458,30 +442,7 @@ void TextReportGadget :: ClearQueue(void)
 	// clears the queue of buffered messages; could be handy if you've
 	// started a listing of 300 module names
 
-	int NumKilled = RefList_SCString_ToAppear . NumEntries();
-
 	RefList_SCString_ToAppear . EmptyYourself();
-
-	#if 0
-	{
-		SCString* pSCString_Temp1 = new SCString("CLEARED MESSAGE DISPLAY QUEUE; NUM LINES=");
-			// LOCALISEME()
-		SCString* pSCString_Temp2 = new SCString(NumKilled);
-
-		SCString* pSCString_Feedback = new SCString
-		(
-			pSCString_Temp1,
-			pSCString_Temp2
-		);
-
-		pSCString_Temp2	-> R_Release();
-		pSCString_Temp1	-> R_Release();
-
-		pSCString_Feedback -> SendToScreen();
-
-		pSCString_Feedback -> R_Release();
-	}	
-	#endif
 }
 
 /*static*/ void TextReportGadget :: ClearTheQueue(void)

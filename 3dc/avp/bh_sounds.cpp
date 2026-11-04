@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text is copied using the exact length measured when its space was made, so it always fits
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -37,8 +40,9 @@ void * SoundBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 		
 	sbb->sound_not_started = 1;
 	
-	sbb->wav_name = (char *) AllocateMem (strlen (stt->sound_name) + 1);
-	strcpy (sbb->wav_name, stt->sound_name);
+	size_t const wav_name_size = strlen (stt->sound_name) + 1;
+	sbb->wav_name = (char *) AllocateMem (wav_name_size);
+	memcpy (sbb->wav_name, stt->sound_name, wav_name_size);
 
 	sbb->playing=stt->playing;
 	sbb->loop=stt->loop;

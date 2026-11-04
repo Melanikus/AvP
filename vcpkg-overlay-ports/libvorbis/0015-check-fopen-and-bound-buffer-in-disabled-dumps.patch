@@ -1,0 +1,113 @@
+Check fopen and bound a buffer in libvorbis's disabled debug dumps.
+
+Our own patch (AvP), for 6 Snyk Code findings in code that is only compiled
+with TRAIN_FLOOR1, TRAIN_RES, TRAIN_RESAUX or ANALYSIS defined, which no normal
+build does. A dump file that fails to open is skipped, and the dump's file name
+can no longer run past its 80-byte buffer.
+
+--- a/lib/analysis.c
++++ b/lib/analysis.c
+@@ -71,10 +71,16 @@
+   FILE *of;
+   char buffer[80];
+ 
+-  sprintf(buffer,"%s_%d.m",base,i);
++  /* buffer holds 80 bytes: snprintf cuts a longer name short instead of
++     writing past the end. */
++  snprintf(buffer,sizeof(buffer),"%s_%d.m",base,i);
+   of=fopen(buffer,"w");
+ 
+-  if(!of)perror("failed to open data dump file");
++  /* an optional debug dump: if the file cannot be opened, say so and skip it */
++  if(!of){
++    perror("failed to open data dump file");
++    return;
++  }
+ 
+   for(j=0;j<n;j++){
+     if(bark){
+--- a/lib/floor1.c
++++ b/lib/floor1.c
+@@ -887,8 +887,11 @@
+           sprintf(buffer,"line_%dx%ld_class%d.vqd",
+                   vb->pcmend/2,posts-2,class);
+           of=fopen(buffer,"a");
+-          fprintf(of,"%d\n",cval);
+-          fclose(of);
++          /* an optional debug dump: if the file cannot be opened, just skip it */
++          if(of){
++            fprintf(of,"%d\n",cval);
++            fclose(of);
++          }
+         }
+ #endif
+       }
+@@ -911,8 +914,11 @@
+             sprintf(buffer,"line_%dx%ld_%dsub%d.vqd",
+                     vb->pcmend/2,posts-2,class,bookas[k]);
+             of=fopen(buffer,"a");
+-            fprintf(of,"%d\n",out[j+k]);
+-            fclose(of);
++            /* an optional debug dump: if the file cannot be opened, just skip it */
++            if(of){
++              fprintf(of,"%d\n",out[j+k]);
++              fclose(of);
++            }
+           }
+ #endif
+         }
+--- a/lib/res0.c
++++ b/lib/res0.c
+@@ -91,10 +91,13 @@
+             sprintf(buffer,"res_sub%d_part%d_pass%d.vqd",look->submap,j,k);
+             of=fopen(buffer,"a");
+ 
+-            for(l=0;l<statebook->entries;l++)
+-              fprintf(of,"%d:%ld\n",l,look->training_data[k][j][l]);
++            /* an optional debug dump: if the file cannot be opened, just skip it */
++            if(of){
++              for(l=0;l<statebook->entries;l++)
++                fprintf(of,"%d:%ld\n",l,look->training_data[k][j][l]);
+ 
+-            fclose(of);
++              fclose(of);
++            }
+ 
+             /*fprintf(stderr,"%d(%.2f|%.2f) ",k,
+               look->training_min[k][j],look->training_max[k][j]);*/
+@@ -455,10 +458,13 @@
+     for(i=0;i<ch;i++){
+       sprintf(buffer,"resaux_%d.vqd",look->train_seq);
+       of=fopen(buffer,"a");
+-      for(j=0;j<partvals;j++)
+-        fprintf(of,"%ld, ",partword[i][j]);
+-      fprintf(of,"\n");
+-      fclose(of);
++      /* an optional debug dump: if the file cannot be opened, just skip it */
++      if(of){
++        for(j=0;j<partvals;j++)
++          fprintf(of,"%ld, ",partword[i][j]);
++        fprintf(of,"\n");
++        fclose(of);
++      }
+     }
+   }
+ #endif
+@@ -514,10 +520,13 @@
+ #ifdef TRAIN_RESAUX
+   sprintf(buffer,"resaux_%d.vqd",look->train_seq);
+   of=fopen(buffer,"a");
+-  for(i=0;i<partvals;i++)
+-    fprintf(of,"%ld, ",partword[0][i]);
+-  fprintf(of,"\n");
+-  fclose(of);
++  /* an optional debug dump: if the file cannot be opened, just skip it */
++  if(of){
++    for(i=0;i<partvals;i++)
++      fprintf(of,"%ld, ",partword[0][i]);
++    fprintf(of,"\n");
++    fclose(of);
++  }
+ #endif
+ 
+   look->frames++;

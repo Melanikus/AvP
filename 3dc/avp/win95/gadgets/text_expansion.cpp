@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   text expansions are made by a small function that hands them back (it works the same as before)
 /*******************************************************************
  *
  *    DESCRIPTION: 	textexp.cpp
@@ -76,7 +80,7 @@ void TextExpansion :: Display(void)
 
 		if ( List_pSCString . size () == 2)
 		{
-			TextExpansion* pTextExp_New = new TextExpansion
+			TextExpansion* pTextExp_New = Make
 			(
 				List_pSCString[0], // pSCString_Short
 				List_pSCString[1] // pSCString_Expansion				
@@ -86,24 +90,22 @@ void TextExpansion :: Display(void)
 				SCString* pSCString_Temp = new SCString("EXPANSION DEFINED: ");
 					// LOCALISEME();
 
-				SCString* pSCString_Feedback = new SCString
+				RefHolder<SCString> pSCString_Feedback(new SCString
 				(
 					pSCString_Temp,
 					pTextExp_New -> pSCString_Description_Val
-				);
+				));
 
 				pSCString_Temp -> R_Release();
 
 				pSCString_Feedback -> SendToScreen();
-				pSCString_Feedback -> R_Release();
 			}
 		}
 		else
 		{
-			SCString* pSCString_Feedback = new SCString("EXPECTING TWO ARGUMENTS");
+			RefHolder<SCString> pSCString_Feedback(new SCString("EXPECTING TWO ARGUMENTS"));
 				// LOCALISEME();
 			pSCString_Feedback -> SendToScreen();
-			pSCString_Feedback -> R_Release();			
 		}
 		
 		for
@@ -204,11 +206,11 @@ void TextExpansion :: Display(void)
 			// See if it matches an expansion; if so, replace as much as you can:
 			// (watch out for the string getting too long)
 
-			SCString* pSCString_Compare = new SCString
+			RefHolder<SCString> pSCString_Compare(new SCString
 			(
 				&( pTextInputState_In->ProjCh[ StartOfWordPos ]),
 				( EndOfWordPos - StartOfWordPos )
-			);
+			));
 
 			TextExpansion* pTextExp_Found = NULL;
 
@@ -234,7 +236,6 @@ void TextExpansion :: Display(void)
 				}
 			}
 
-			pSCString_Compare -> R_Release();
 
 			if ( !pTextExp_Found )
 			{
@@ -253,16 +254,15 @@ void TextExpansion :: Display(void)
 					);
 						// LOCALISEME();
 
-					SCString* pSCString_Feedback = new SCString
+					RefHolder<SCString> pSCString_Feedback(new SCString
 					(
 						pSCString_Temp,
 						pTextExp_Found -> pSCString_Expansion_Val
-					);
+					));
 
 					pSCString_Temp -> R_Release();
 
 					pSCString_Feedback -> SendToScreen();
-					pSCString_Feedback -> R_Release();
 				}
 					// for now
 
@@ -413,16 +413,15 @@ TextExpansion :: TextExpansion
 				SCString* pSCString_Temp = new SCString("EXPANSION REMOVED: ");
 					// LOCALISEME();
 
-				SCString* pSCString_Feedback = new SCString
+				RefHolder<SCString> pSCString_Feedback(new SCString
 				(
 					pSCString_Temp,
 					pTextExp_ToKill -> pSCString_Description_Val
-				);
+				));
 
 				pSCString_Temp -> R_Release();
 
 				pSCString_Feedback -> SendToScreen();
-				pSCString_Feedback -> R_Release();
 
 			}
 

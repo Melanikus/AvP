@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the TLTCONFG data in a level file is read without going past its end, text is copied using its exact
+//   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
+//   a child chunk whose size cannot be real is refused
+
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
 
@@ -284,8 +290,9 @@ Environment_TLT_Chunk::Environment_TLT_Chunk (Chunk_With_Children * parent, cons
 
 	if (flags & ChunkTLTFlag_ExternalFile)
 	{
-		filename = new char[strlen(sdata+32)+1];
-		strcpy(filename,sdata+32);
+		size_t const filename_size = strlen(sdata+32)+1;
+		filename = new char[filename_size];
+		memcpy(filename,sdata+32,filename_size);
 	}
 	else if ((signed) ssize >= 32 + width*num_levels)
 	{
@@ -352,7 +359,7 @@ void Environment_TLT_Chunk::fill_data_block (char * data_start)
 	if (flags & ChunkTLTFlag_ExternalFile)
 	{
 		if (filename)
-			strcpy(data_start,filename);
+			memcpy(data_start,filename,strlen(filename)+1);
 		else
 			*data_start = 0;
 	}
@@ -399,24 +406,55 @@ RIF_IMPLEMENT_DYNCREATE("TLTCONFG",TLT_Config_Chunk)
 
 TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * sdata, size_t ssize)
 : Chunk (parent, "TLTCONFG")
-, num_shades_white(*(unsigned int const *)sdata)
-, table_size(*(unsigned int const *)(sdata+4))
-, palette_size(*(unsigned int const *)(sdata+12))
-, flags(*(unsigned int const *)(sdata+8))
+, srcrifname(0)
+, num_shades_white(0)
+, table_size(256)
+, palette_size(0)
+, flags(0)
 {
+	reserved[0] = reserved[1] = reserved[2] = 0;
+
+	// sdata is ssize bytes of a .rif file (level data, possibly a custom level): read nothing past it.
+	// A chunk too short for a field keeps the defaults, or the blocks that fit.
+	char const * const sdata_end = sdata + ssize;
+
+	if (ssize < 28) {
+		return;
+	}
+
+	num_shades_white = *(unsigned int const *)sdata;
+	table_size       = *(unsigned int const *)(sdata+4);
+	flags            = TLTCC_Flags(*(unsigned int const *)(sdata+8));
+	palette_size     = *(unsigned int const *)(sdata+12);
 	if (!table_size) table_size = 256;
 
 	sdata+=16;
 
 	for (int i=0; i<3; ++i, sdata+=4) reserved[i] = *(int *)sdata;
 	
-	unsigned int const len = strlen(sdata)+4&~3;
+	// the name, its NUL and its padding must all be inside the chunk (a name with no NUL gives len > room)
+	size_t const room = sdata_end - sdata;
+	size_t const name_length = strnlen(sdata, room);
+	unsigned int const len = name_length+4&~3;
+	if (len > room) {
+		return;
+	}
 	srcrifname = new char[len];
 	memcpy(srcrifname,sdata,len);
+	// len > name_length, so the copy holds the name's NUL; the last byte (that NUL or padding after it) is 0 as well
+	srcrifname[len-1] = 0;
 	sdata += len;
 	
+	if (sdata_end - sdata < 4) {
+		return;
+	}
 	unsigned int listsize = *(int *)sdata;
 	sdata += 4;
+
+	// keep only the blocks that fit (TLTConfigBlock::Size() is 48)
+	size_t const blocks_that_fit = (sdata_end - sdata) / 48;
+	bool const blocks_dropped = listsize > blocks_that_fit;
+	if (blocks_dropped) listsize = (unsigned int)blocks_that_fit;
 
 	while (listsize)
 	{
@@ -427,8 +465,8 @@ TLT_Config_Chunk::TLT_Config_Chunk (Chunk_With_Children * parent, const char * s
 	}
 	
 	// hmm, size_chunk was wrong so allow sizes which were wrong in that way to pass
-	size_t srcrifname_length = strlen(srcrifname);
-	assert (ssize + 12 == size_chunk() || ssize + 12 + (44+srcrifname_length+4&~3) - (44+srcrifname_length+4&~4) == size_chunk());
+	// (and a chunk whose last blocks were dropped above, such as one of those old short chunks, cannot match its size)
+	assert (blocks_dropped || ssize + 12 == size_chunk() || ssize + 12 + (44+name_length+4&~3) - (44+name_length+4&~4) == size_chunk());
 }
 
 size_t TLT_Config_Chunk::size_chunk()
@@ -509,7 +547,7 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 {
 	const char * buffer_ptr = data;
 	while ((data-buffer_ptr)< (signed) size) {
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -517,24 +555,6 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
-}
-
-char * Environment_Game_Mode_Chunk::ExpandedIdentifier() const
-{
-	char const * full_fname = header->flags & GameModeFlag_Editable ? ((File_Chunk *)GetRootChunk())->filename : header->get_safe_source();
-	char const * skip = strrchr(full_fname,'/');
-	if (skip) full_fname = skip+1;
-	skip = strrchr(full_fname,'/');
-	if (skip) full_fname = skip+1;
-	skip = strrchr(full_fname,':');
-	if (skip) full_fname = skip+1;
-	char * retp = new char[strlen(full_fname)+strlen(header->mode_identifier)+3];
-	strcpy(retp,full_fname);
-	char * dotpos = strrchr(retp,'.');
-	if (dotpos) *dotpos = 0;
-	strcat(retp,"::");
-	strcat(retp,header->mode_identifier);
-	return retp;
 }
 
 // header chunk
@@ -565,9 +585,7 @@ Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_Wit
 	{
 		size_t len = strlen(pdata)+1;
 
-		char * riffn = new char[len];
-		strcpy(riffn,pdata);
-		rif_files.add_entry(riffn);
+		rif_files.push_back(pdata);
 
 		pdata += len;
 	}
@@ -579,12 +597,6 @@ Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_Wit
 Environment_Game_Mode_Header_Chunk::~Environment_Game_Mode_Header_Chunk()
 {
 	delete[] mode_identifier;
-
-	while (rif_files.size())
-	{
-		delete[] rif_files.first_entry();
-		rif_files.delete_first_entry();
-	}
 }
 	
 
@@ -613,11 +625,11 @@ void Environment_Game_Mode_Header_Chunk::fill_data_block ( char * data_start)
 
 	data_start += strlen(mode_identifier) + 1;
 
-	for (LIF<char *> li(&rif_files); !li.done(); li.next())
+	for (size_t i = 0; i < rif_files.size(); ++i)
 	{
-		strcpy(data_start,li());
+		memcpy(data_start,rif_files[i].c_str(),rif_files[i].size()+1);
 
-		data_start += strlen(li())+1;
+		data_start += rif_files[i].size()+1;
 	}
 
 	*data_start = 0; // double 0-byte terminator
@@ -628,9 +640,9 @@ size_t Environment_Game_Mode_Header_Chunk::size_chunk ()
 {
 	chunk_size = 12+20+(strlen(mode_identifier)+1);
 
-	for (LIF<char *> li(&rif_files); !li.done(); li.next())
+	for (size_t i = 0; i < rif_files.size(); ++i)
 	{
-		chunk_size += strlen(li())+1;
+		chunk_size += rif_files[i].size()+1;
 	}
 
 	chunk_size += 4; // 1 byte terminator, 3(max) to pad
@@ -688,7 +700,7 @@ void RIF_Child_Chunk::fill_data_block(char * data_start)
 
 	data_start += 4;
 
-	strcpy(data_start,filename);
+	memcpy(data_start,filename,strlen(filename)+1);
 	data_start += strlen(filename)+1 +3 &~3;
 
 	*((int *) data_start) = bmps.size();
@@ -701,7 +713,7 @@ void RIF_Child_Chunk::fill_data_block(char * data_start)
 		*((int *) data_start) = li().version_num & BMPFLAGS_VERSION_NUM_MASK | li().enum_id << BMPFLAGS_ENUMID_SHIFT;
 		data_start += 4;
 
-		strcpy(data_start, li().filename);
+		memcpy(data_start, li().filename, strlen(li().filename)+1);
 		data_start += strlen(li().filename)+1 +3 &~3;
 	}
 
@@ -723,22 +735,6 @@ void RIF_Child_Chunk::RemoveMD5Val(char const * bname)
 		delete md5c;
 }
 
-void RIF_Child_Chunk::SetMD5Val(BMP_Flags const & rcbmp, int const * md5id)
-{
-	Bitmap_MD5_Chunk * md5c = GetMD5Chunk(rcbmp.filename);
-	if (md5c)
-	{
-		if (rcbmp.version_num == md5c->version_num)
-		{
-			memcpy(md5c->md5_val,md5id,16);
-			return;
-		}
-		else
-			delete md5c;
-	}
-	CreateMD5Chunk(rcbmp,md5id);
-}
-
 Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 {
 	List<Chunk *> chlst;
@@ -755,11 +751,6 @@ Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 	}
 
 	return 0;
-}
-
-void RIF_Child_Chunk::CreateMD5Chunk(BMP_Flags const & rcbmp, int const * md5id)
-{
-	new Bitmap_MD5_Chunk(parent,md5id,rcbmp,rifname);
 }
 
 RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const /*ssize*/)
@@ -909,8 +900,9 @@ Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Child
 
 	if (flags & ChunkCPLUFlag_ExternalFile)
 	{
-		filename = new char[strlen(sdata+32)+1];
-		strcpy(filename,sdata+32);
+		size_t const filename_size = strlen(sdata+32)+1;
+		filename = new char[filename_size];
+		memcpy(filename,sdata+32,filename_size);
 	}
 	else
 	{
@@ -973,7 +965,7 @@ void Coloured_Polygons_Lookup_Chunk::fill_data_block (char * data_start)
 	if (flags & ChunkCPLUFlag_ExternalFile)
 	{
 		if (filename)
-			strcpy(data_start,filename);
+			memcpy(data_start,filename,strlen(filename)+1);
 		else // escape
 			*data_start = 0;
 	}

@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the character sound files are read only inside their size, and one that is too large or cannot be loaded
+//   is refused; the folder and sound names are copied with size limits, so they can never overflow
 #include "3dc.h"
 #include "ourasert.h"
 #include "psndplat.h"
@@ -6,6 +10,7 @@
 #include "scream.h"
 #include "dxlog.h"
 #include "menus.h"
+#include "logString.h"
 
 extern DISPLAYBLOCK* Player;
 
@@ -55,13 +60,93 @@ static CharacterSoundEffects QueenSounds={0,0,0,SID_NOSOUND};
 #define ScreamFilePath "sound/"
 #endif
 
+// far above the stock files (422 to 7,372 bytes), and small enough that no count bounded by the file size below can
+// overflow an allocation size, and that the buffer for the whole file is a small allocation
+static const uint32_t kMaxScreamFileSize = 0x100000;
+
+// reads an int of a character sound file at pos, if 4 bytes are left before end
+static bool ReadScreamInt(const char *&pos, const char *end, int &value)
+{
+	if (end - pos < 4)
+	{
+		return false;
+	}
+	memcpy(&value, pos, 4);
+	pos += 4;
+	return true;
+}
+
+/*
+	Checks the layout of a character sound file (after its 8-byte "MARSOUND" tag) before LoadSounds parses it:
+	num_voice_types and num_voice_cats, then for each voice type and category a sound count and that many entries of
+	a 0-terminated WAV name, a pitch and a volume (all ints). False if a count is negative or does not fit in the
+	data, or if anything lies past end. Nothing is changed.
+*/
+static bool ScreamFileLayoutIsValid(const char *pos, const char *end)
+{
+	int numVoiceTypes, numVoiceCats;
+
+	if (!ReadScreamInt(pos, end, numVoiceTypes) || !ReadScreamInt(pos, end, numVoiceCats))
+	{
+		return false;
+	}
+
+	// every category of every voice type takes at least 4 bytes (its count): this also bounds the loops and the
+	// allocations in LoadSounds
+	if (numVoiceTypes < 0 || numVoiceCats < 0 ||
+		numVoiceTypes > (end - pos) / 4 || numVoiceCats > (end - pos) / 4 ||
+		(long long)numVoiceTypes * numVoiceCats > (end - pos) / 4)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < numVoiceTypes; i++)
+	{
+		for (int j = 0; j < numVoiceCats; j++)
+		{
+			int numSounds;
+
+			// every entry takes at least 9 bytes (an empty name, a pitch and a volume)
+			if (!ReadScreamInt(pos, end, numSounds) || numSounds < 0 || numSounds > (end - pos) / 9)
+			{
+				return false;
+			}
+
+			for (int k = 0; k < numSounds; k++)
+			{
+				const char *nameEnd = (const char *)memchr(pos, 0, end - pos);
+				int pitch, volume;
+
+				if (!nameEnd)
+				{
+					return false;
+				}
+				pos = nameEnd + 1;
+
+				if (!ReadScreamInt(pos, end, pitch) || !ReadScreamInt(pos, end, volume))
+				{
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
 void CharacterSoundEffects::LoadSounds(const char* filename, const char* directory)
 {
 	if (voice_types) 
 		return;
 
-	char path[MAX_PATH] = ScreamFilePath;
-	strcat(path, filename);
+	// The path is the sound folder followed by one of the four short file names built into this file, so it fits
+	// today. It is still written with a size limit, so that it can never run past the end of path.
+	char path[MAX_PATH];
+	if (_snprintf(path, sizeof(path) - 1, "%s%s", ScreamFilePath, filename) < 0)
+	{
+		LOGDXFMT(("Path too long for %s",filename));
+		return;
+	}
+	path[sizeof(path) - 1] = '\0';
 
 	HANDLE file = avp_CreateFile(path, GENERIC_READ, 0, 0, OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 	if (file == INVALID_HANDLE_VALUE)
@@ -75,12 +160,40 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	DWORD bytes_read;
 
 	file_size = GetFileSize(file, 0);
-	buffer = new char[file_size+1];
-	ReadFile(file,buffer, file_size, &bytes_read, 0);
+	if (file_size == INVALID_FILE_SIZE || file_size > kMaxScreamFileSize)
+	{
+		CloseHandle(file);
+		LogErrorString(std::string("LoadSounds - cannot read or too large, no sounds loaded from it: ") + path);
+		return;
+	}
+	buffer = new(std::nothrow) char[file_size+1];
+	if (!buffer)
+	{
+		CloseHandle(file);
+		LogErrorString(std::string("LoadSounds - out of memory, no sounds loaded from it: ") + path);
+		return;
+	}
+	if (!ReadFile(file,buffer, file_size, &bytes_read, 0))
+	{
+		bytes_read = 0;
+	}
 	CloseHandle(file);
 
-	if (strncmp("MARSOUND", buffer, 8))
+	// everything below stays inside the bytes read; the 0 after them ends a name cut off by the end of the file
+	buffer[bytes_read] = 0;
+
+	if (bytes_read < 8 || strncmp("MARSOUND", buffer, 8))
 	{
+		delete[] buffer;
+		return;
+	}
+
+	// the counts and names come from the file: check that all of it lies inside the data before parsing it (the parse
+	// below reads exactly what the check walked through)
+	if (!ScreamFileLayoutIsValid(buffer + 8, buffer + bytes_read))
+	{
+		LogErrorString(std::string("LoadSounds - damaged file, no sounds loaded from it: ") + path);
+		delete[] buffer;
 		return;
 	}
 
@@ -94,8 +207,10 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 	voice_types = (ScreamVoiceType*) PoolAllocateMem(num_voice_types * sizeof(ScreamVoiceType));
 	
 	char wavpath[MAX_PATH];
-	strcpy(wavpath, directory);
-	char* wavname = &wavpath[strlen(wavpath)];
+	size_t const directory_length = strnlen(directory, MAX_PATH - 1);
+	memcpy(wavpath, directory, directory_length);
+	wavpath[directory_length] = '\0';
+	char* wavname = &wavpath[directory_length];
 	
 	for (int i=0;i<num_voice_types;i++)	
 	{
@@ -120,15 +235,26 @@ void CharacterSoundEffects::LoadSounds(const char* filename, const char* directo
 			{
 				ScreamSound * sound=&cat->sounds[k];
 
-				strcpy(wavname,bufpos);
-				bufpos+=strlen(bufpos)+1;
+				// bounded: the name must fit in wavpath after the directory, or this entry is skipped like a sound
+				// that does not load
+				size_t nameLength = strlen(bufpos);
+				bool nameFits = nameLength < (size_t)(&wavpath[MAX_PATH] - wavname);
+				if (nameFits)
+				{
+					memcpy(wavname, bufpos, nameLength + 1);
+				}
+				else
+				{
+					LogErrorString(std::string("LoadSounds - sound name too long, skipped: ") + path + ": " + bufpos);
+				}
+				bufpos+=nameLength+1;
 
 				sound->pitch=*(int*)bufpos;
 				bufpos+=4;
 				sound->volume=*(int*)bufpos;
 				bufpos+=4;
 
-				sound->sound_loaded = GetSound(wavpath);
+				sound->sound_loaded = nameFits ? GetSound(wavpath) : 0;
 				if (sound->sound_loaded)
 				{
 					k++;

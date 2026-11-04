@@ -1,3 +1,10 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
+//   names and other text are copied using their exact measured length; level-editor code was removed
+//   a child chunk whose size cannot be real is refused
+
+#include <string>
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "mishchnk.hpp"
@@ -443,7 +450,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code)
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)file_size-12))
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)file_size-12)))
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -524,10 +531,12 @@ BOOL File_Chunk::write_file (const char * fname)
 	}
 	if(!fname[filename_start_pos]) return FALSE;
 	
-	char* temp_name=new char[strlen(fname)+7];
-	strcpy(temp_name,fname);
-	strcpy(&temp_name[filename_start_pos],"~temp~");
-	strcpy(&temp_name[filename_start_pos+6],&fname[filename_start_pos]);
+	// temp_name = the directory part of fname + "~temp~" + the file name part + NUL
+	size_t const fname_length = strlen(fname);
+	char* temp_name=new char[fname_length+7];
+	memcpy(temp_name,fname,filename_start_pos);
+	memcpy(&temp_name[filename_start_pos],"~temp~",6);
+	memcpy(&temp_name[filename_start_pos+6],&fname[filename_start_pos],fname_length-filename_start_pos+1);
 
 	prepare_for_output();
 
@@ -1024,8 +1033,8 @@ BOOL File_Chunk::update_file()
 	#if DisableLock
 	if (!filename) return FALSE;
 
-	char tempname [256];
-	strcpy (tempname, filename);
+	// a copy, because write_file frees filename before it uses its argument; a level path can be 259 characters
+	std::string tempname (filename);
 
 	List<Shape_Chunk *> slist;
 	list_shapes(&slist);
@@ -1048,7 +1057,7 @@ BOOL File_Chunk::update_file()
 		}
 	}
 
-	return(write_file(tempname));
+	return(write_file(tempname.c_str()));
 
 	#else
 
@@ -1555,32 +1564,6 @@ Object_Chunk* File_Chunk::get_object_by_index(int index)
 	return object_array[index];
 }
 
-void File_Chunk::assign_index_to_object(Object_Chunk* object)
-{
-	assert(object);
-
-	if (!object_array) build_object_array();
-	//see if there is a free index
-
-	for (int i=0;i<object_array_size;i++)
-	{
-		if (!object_array[i])
-		{
-			object->object_data_store->index_num=i;
-			object_array[i]=object;
-			return;
-		}
-	}
-
-	//add a new entry on the end of the array
-	object_array_size++;
-
-	object_array=(Object_Chunk**) realloc(object_array,sizeof(Object_Chunk*)*object_array_size);
-
-	object->object_data_store->index_num=object_array_size-1;;
-	object_array[object_array_size-1]=object;
-}
-
 /////////////////////////////////////////
 
 // Class GodFather_Chunk functions
@@ -1609,7 +1592,7 @@ GodFather_Chunk::GodFather_Chunk(char * buffer, size_t size)
 
 	while ((buffer_ptr-buffer)< ((signed)size-12) && !error_code) 
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)size-12)) 
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)size-12))) 
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1674,7 +1657,7 @@ void RIF_Name_Chunk::fill_data_block (char * data_start)
 
 	data_start += 4;
 
-	strcpy (data_start, rif_name);
+	memcpy (data_start, rif_name, strlen(rif_name) + 1);
 }
 
 
@@ -1808,7 +1791,7 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code)
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)file_size-12))
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)file_size-12)))
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;

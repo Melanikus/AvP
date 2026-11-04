@@ -22,6 +22,11 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   when the settings file is read, the spaces in each setting's name are taken out by a simple loop
+//   (it works the same as before);
+//   a setting with nothing after its = sign is read as empty, instead of crashing the game at start-up
+
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -92,13 +97,18 @@ bool Config_Load()
 				continue;
 			}
 
-			// get the variable part and remove any spaces
-			std::string variable = tempLine.substr(0, equalsPosition);
-			variable.erase(std::remove(variable.begin(), variable.end(),' '), variable.end());
+			// get the variable part, without its spaces
+			std::string variable;
+			for (size_t i = 0; i < equalsPosition; i++) {
+				if (tempLine[i] != ' ') {
+					variable += tempLine[i];
+				}
+			}
 
 			// get the value part, skipping the = character and a single space after that if present. we dont want to remove any spaces after that (as they may be part of a file path)
+			// (a line ending in '=' has an empty value: value.at(0) threw std::out_of_range, which nothing catches)
 			std::string value = tempLine.substr(equalsPosition + 1, std::string::npos);
-			if (value.at(0) == ' ') {
+			if (!value.empty() && value.at(0) == ' ') {
 				value.erase(value.begin(), value.begin() + 1);
 			}
 

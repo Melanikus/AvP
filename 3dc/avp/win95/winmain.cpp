@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   LevelName has room for any custom level name and the "-n" name from the command line is limited to
+//   it; the Debug build's console output is closed properly on every way the game exits; the "-ip" address
+//   from the command line is limited to its buffer
 
 #include "3dc.h"
 #include "module.h"
@@ -61,7 +66,8 @@ extern BOOL ForceLoad_SentryGun;
 BOOL UseMouseCentreing = FALSE;
 BOOL KeepMainRifFile = FALSE;
 
-char LevelName[] = {"predbit6\0QuiteALongNameActually"};
+// The name of the level to load. MAX_PATH (260) bytes leaves room for "Custom/" and any custom level's file name.
+char LevelName[MAX_PATH] = {"predbit6"};
 
 int VideoModeNotAvailable = 0;
 int QuickStartMultiplayer = 1;
@@ -123,6 +129,28 @@ extern bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinIn
 STICKYKEYS startupStickyKeys = {sizeof(STICKYKEYS), 0};
 STICKYKEYS skOff;
 
+#ifdef _ALLOC_CONSOLE
+// The Debug build opens a console window and sends the game's printed text
+// (printf) to it. This is that text stream, kept here so it can be closed.
+static FILE *debugConsole = 0;
+#endif
+
+// Closes the Debug build's console text stream, if it is open. WinMain calls
+// this on each of its own ways out: its normal end and its three early exit()
+// calls. Nothing in the game prints after that point, so no text is lost. Code
+// elsewhere that stops the game with exit() leaves the stream to the C runtime,
+// which closes every open stream when the program ends.
+static void CloseDebugConsole(void)
+{
+#ifdef _ALLOC_CONSOLE
+	if (debugConsole)
+	{
+		fclose(debugConsole);
+		debugConsole = 0;
+	}
+#endif
+}
+
 // entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
@@ -136,7 +164,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 #ifdef _ALLOC_CONSOLE
 	AllocConsole();
-	freopen("CONOUT$", "wb", stdout);
+	debugConsole = freopen("CONOUT$", "wb", stdout);
 #endif
 
 	skOff = startupStickyKeys;
@@ -280,6 +308,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LobbiedGame = LobbiedGame_Server;
 		if (!Net_InitLobbiedGame())
 		{
+			CloseDebugConsole();
 			exit(0x6364);
 		}
 	}
@@ -289,6 +318,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LobbiedGame = LobbiedGame_Client;
 		if (!Net_InitLobbiedGame())
 		{
+			CloseDebugConsole();
 			exit(0x6364);
 		}
 	}
@@ -299,8 +329,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	if (instr = strstr(command_line, "-ip"))
 	{
-		char buffer[100];
-		sscanf(instr, "-ip %s", buffer);
+		// buffer starts empty, in case nothing follows "-ip"; %99s stops after 99 characters, which leaves room for
+		// the end marker, so a long command line cannot run past the end of buffer
+		char buffer[100] = "";
+		sscanf(instr, "-ip %99s", buffer);
 		strncpy(CommandLineIPAddressString,buffer,15);
 		CommandLineIPAddressString[15] = 0;
 	}
@@ -357,6 +389,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 		std::string error = "Failed to initialise Direct3D backend.\n" + GetLastErrorMessage();
 		MessageBox(hWndMain, error.c_str(), "Couldn't create render device!", MB_OK | MB_ICONSTOP);
+		CloseDebugConsole();
 		exit(-1);
 	}
 
@@ -423,7 +456,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		#if !(PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO)
 		if (instr = strstr(command_line, "-n"))
 		{
-			sscanf(instr, "-n %s", LevelName);
+			sscanf(instr, "-n %259s", LevelName); // reads at most 259 characters: LevelName holds 260 bytes
 		}
 		#endif
 
@@ -692,6 +725,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	{
 		FinishCentreMouseThread();
 	}
+
+	CloseDebugConsole();
 
 	return 0;
 }

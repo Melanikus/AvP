@@ -22,6 +22,12 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the switched-off (#if 0) code inside Net_ConnectToAddress; the "connect" console command still
+//   does nothing;
+//   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
+//   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
+
 #include "3dc.h"
 #include "enet\enet.h"
 #include "console.h"
@@ -51,6 +57,17 @@ PlayerDetails thisClientPlayer;
 // used to hold message data
 const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;
 static uint8_t packetBuffer[kPacketBufferSize];
+
+// For a log line that any peer or LAN machine can cause once per packet or datagram: counts the event in count and
+// says whether to log this one. The first kDropsLoggedInFull are logged, then only the 8th, 16th, 32nd, ... (each
+// power of two), so a flood adds a few dozen lines to avp_log.txt at most, each with the running total.
+static const unsigned long long kDropsLoggedInFull = 5;
+
+static bool LogThisDrop(unsigned long long &count)
+{
+	count++;
+	return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);
+}
 
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
@@ -150,10 +167,33 @@ static void Net_AddSession(SessionDescription &session)
 	uint16_t gameStyle = session.gameStyle;
 	uint16_t level     = session.level;
 
+	// the session description comes from any machine on the LAN: SessionData (and the session menu,
+	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
+	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
+	{
+		static unsigned long long ignoredSessions = 0;
+		if (LogThisDrop(ignoredSessions))
+		{
+			std::stringstream sstream;
+			sstream << "Net_AddSession - session list is full, ignoring session info (" << ignoredSessions << " so far)";
+			Con_PrintError(sstream.str());
+		}
+		return;
+	}
+
+	// the host sends both names NUL-terminated (Net_CreateSession); make sure of it
+	session.levelName[kLevelNameSize - 1]     = '\0';
+	session.sessionName[kSessionNameSize - 1] = '\0';
+
+	char *name = SessionData[NumberOfSessionsFound].Name;
+	const size_t nameSize = sizeof(SessionData[NumberOfSessionsFound].Name);
+
 	SessionData[NumberOfSessionsFound].host = session.host;
 	SessionData[NumberOfSessionsFound].port = session.port;
 
-	sprintf(SessionData[NumberOfSessionsFound].Name,"%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
+	// bounded: a long session name used to overflow Name (40 bytes) into host/port
+	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
+	name[nameSize - 1] = '\0';
 
 	SessionData[NumberOfSessionsFound].Guid	= session.guidInstance;
 
@@ -169,7 +209,8 @@ static void Net_AddSession(SessionDescription &session)
 	{
 		float version = 1.0f + session.version / 100.0f;
 		SessionData[NumberOfSessionsFound].AllowedToJoin = false;
- 		sprintf(SessionData[NumberOfSessionsFound].Name, "%s (V %.2f)", session.sessionName, version);
+ 		_snprintf(name, nameSize - 1, "%s (V %.2f)", session.sessionName, version);
+		name[nameSize - 1] = '\0';
 	}
 	else
 	{
@@ -419,6 +460,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
+			// no packet the game sends is larger than its message buffer (Net_Send builds each one in
+			// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
+			host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
+
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
 			if (IsCustomLevel(level, gameStyle))
@@ -520,136 +565,6 @@ uint32_t Net_JoinGame()
 // called from the console
 void Net_ConnectToAddress()
 {
-#if 0
-	if (Con_GetNumArguments() == 0)
-	{
-		Con_PrintMessage("usage: connect <ip>:<port>, eg 192.168.0.1:1234");
-		return;
-	}
-
-	// make sure we're not already connected
-	//Net_Disconnect();
-
-	if (host)
-	{
-		// TODO
-		Con_PrintError("already connected to something!");
-	}
-
-	// parse the argument list
-	std::string addressString = Con_GetArgument(0);
-	std::string tempString;
-	static ENetAddress connectionAddress;
-	size_t colonPos = 0;
-	ENetEvent eEvent;
-
-	colonPos = addressString.find(":");
-	tempString = addressString.substr(0, colonPos);
-
-	Con_PrintMessage(tempString);
-
-	enet_address_set_host(&connectionAddress, tempString.c_str());
-	connectionAddress.port = (uint16_t)Util::StringToInt(addressString.substr(colonPos + 1));
-
-	// try connect
-	host = enet_host_create(NULL,           // create a client host
-					1,                      // only allow 1 outgoing connection
-					0,                      // channel limit
-					incomingBandwidth,      // 57600 / 8 - 56K modem with 56 Kbps downstream bandwidth
-					outgoingBandwidth);     // 14400 / 8 - 56K modem with 14 Kbps upstream bandwidth
-
-	if (NULL == host)
-	{
-		Con_PrintError("Net_ConnectToAddress - Failed to create Enet client");
-		return;
-	}
-	
-	ServerPeer = enet_host_connect(host, &connectionAddress, 2, 0);
-	if (NULL == ServerPeer)
-	{
-		Con_PrintError("Net_ConnectToAddress - Failed to init connection to server host");
-		return;
-	}
-
-	// Wait up to 3 seconds for the connection attempt to succeed.
-	if ((enet_host_service(host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_CONNECT))
-	{	
-		Con_PrintDebugMessage("Net_ConnectToAddress - we connected to server!");
-	}
-	else
-	{
-		Con_PrintError("Net_ConnectToAddress - failed to connect to server!");
-		return;
-	}
-
-	// ask for session info
-	Net_SendSystemMessage(AVP_REQUEST_SESSION_INFO, 0, 0, NULL, 0);
-
-	if ((enet_host_service (host, &eEvent, 3000) > 0) && (eEvent.type == ENET_EVENT_TYPE_RECEIVE))
-	{
-		Con_PrintDebugMessage("Net_ConnectToAddress - we got something from the server!");
-		MemoryReadStream rs(eEvent.packet->data, eEvent.packet->dataLength);
-
-		MessageHeader newHeader;
-		rs.GetBytes(&newHeader, kMessageHeaderSize);
-
-		if (newHeader.messageType == AVP_SESSION_DATA)
-		{
-			// get the hosts ip address for later use
-//			enet_address_get_host_ip(&eEvent.peer->address, SessionData[NumberOfSessionsFound].hostAddress, 16);
-
-			SessionDescription tempSession;
-
-			// grab the session description struct
-			rs.GetBytes(&tempSession, sizeof(SessionDescription));
-
-			uint16_t gameStyle = tempSession.gameStyle;
-			uint16_t level     = tempSession.level;
-
-			sprintf(SessionData[NumberOfSessionsFound].Name,"%s (%d/%d)", tempSession.sessionName, tempSession.nPlayers, tempSession.maxPlayers);
-
-			SessionData[NumberOfSessionsFound].Guid	= tempSession.guidInstance;
-
-			if (tempSession.nPlayers < tempSession.maxPlayers) {
-				SessionData[NumberOfSessionsFound].AllowedToJoin = true;
-			}
-			else {
-				SessionData[NumberOfSessionsFound].AllowedToJoin = false;
-			}
-
-			// multiplayer version number (possibly)
-			if (tempSession.version != kMultiplayerVersion)
-			{
-				float version = 1.0f + tempSession.version / 100.0f;
-				SessionData[NumberOfSessionsFound].AllowedToJoin = false;
-				sprintf(SessionData[NumberOfSessionsFound].Name, "%s (V %.2f)", tempSession.sessionName, version);
-			}
-			else
-			{
-				// get the level number in our list of levels (assuming we have the level)
-				int local_index = GetLocalMultiplayerLevelIndex(level, tempSession.levelName, gameStyle); // bjd - CHECKME
-
-				if (local_index < 0)
-				{
-					// we don't have the level, so ignore this session
-					//return;
-				}
-
-				SessionData[NumberOfSessionsFound].levelIndex = local_index;
-			}
-/*
-			if (!Net_CreatePlayer("TestName"))
-				return;
-*/
-			InitAVPNetGameForJoin();
-
-			netGameData.levelNumber = SessionData[NumberOfSessionsFound].levelIndex;
-			netGameData.joiningGameStatus = JOINNETGAME_WAITFORSTART;
-		}
-
-		enet_packet_destroy(eEvent.packet);
-	}
-#endif
 }
 
 int Net_InitLobbiedGame()
@@ -757,6 +672,24 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				case ENET_EVENT_TYPE_RECEIVE:
 				{
 					NewOnScreenMessage("Enet received a packet!\n");
+
+					// the caller's buffer holds NET_MESSAGEBUFFERSIZE bytes (every message we send fits in it, see
+					// Net_Send). The hosts are created with maximumPacketSize = NET_MESSAGEBUFFERSIZE, so ENet should
+					// not hand us a larger packet; drop one anyway instead of overrunning the buffer.
+					if (eEvent.packet->dataLength > (size_t)NET_MESSAGEBUFFERSIZE)
+					{
+						static unsigned long long droppedPackets = 0;
+						if (LogThisDrop(droppedPackets))
+						{
+							std::stringstream sstream;
+							sstream << "Net_Receive - dropped a packet of " << eEvent.packet->dataLength
+							        << " bytes (larger than the " << NET_MESSAGEBUFFERSIZE << " byte message buffer; "
+							        << droppedPackets << " so far)";
+							Con_PrintError(sstream.str());
+						}
+						enet_packet_destroy(eEvent.packet);
+						break;
+					}
 
 					// copy it in, header and all
 					memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);
@@ -910,6 +843,10 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		Con_PrintError("Net_ConnectToSession - Failed to create Enet client");
 		return NET_FAIL;
 	}
+
+	// no packet the game sends is larger than its message buffer (Net_Send builds each one in
+	// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
+	host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
 
 	ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);
 	if (ServerPeer == NULL)

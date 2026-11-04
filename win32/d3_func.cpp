@@ -22,6 +22,11 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the debug text that prints a matrix is written with a size limit, so it always fits;
+//   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone);
+//   the menu font's letters are limited to what its texture can hold
+
 #include "d3_func.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
@@ -861,7 +866,7 @@ void ToggleFrustumCull()
 void PrintD3DMatrix(const char* name, D3DXMATRIX &mat)
 {
 	char buf[300];
-	sprintf(buf, "Printing D3D Matrix: - %s\n"
+	_snprintf(buf, sizeof(buf) - 1, "Printing D3D Matrix: - %s\n"
 	"\t %f \t %f \t %f \t %f\n"
 	"\t %f \t %f \t %f \t %f\n"
 	"\t %f \t %f \t %f \t %f\n"
@@ -870,6 +875,7 @@ void PrintD3DMatrix(const char* name, D3DXMATRIX &mat)
 	mat._21, mat._22, mat._23, mat._24,
 	mat._31, mat._32, mat._33, mat._34,
 	mat._41, mat._42, mat._43, mat._44);
+	buf[sizeof(buf) - 1] = '\0';
 
 	OutputDebugString(buf);
 }
@@ -998,6 +1004,17 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	}
 
 	uint32_t numTotalChars = tex.height / charHeight;
+
+	// The letters go into the texture in rows, nRows letters to a row, from the top down. How many letters there are
+	// comes from the size of the font picture, so a very tall picture would be written past the bottom of the texture.
+	// Any letters with no row left are left out. The game's own font fits: 224 letters, with room for 225.
+	const uint32_t maxChars = IntroFont_Light.nRows * (padHeight / charHeight);
+
+	if (numTotalChars > maxChars)
+	{
+		Con_PrintError("The menu font has more letters than its texture can hold. Leaving the last ones out");
+		numTotalChars = maxChars;
+	}
 
 	LastError = d3d.lpD3DDevice->CreateTexture(padWidth, padHeight, 1, textureUsage, colourFormat, texturePool, &texture.texture, NULL);
 	if (FAILED(LastError))
@@ -1261,7 +1278,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	if (FAILED(LastError))
 	{
 		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
-		LogErrorString("DX Error- " + std::string(DXGetErrorString(LastError)) + " " + std::string(DXGetErrorDescription(LastError)));
+		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
@@ -1353,7 +1370,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	if (FAILED(LastError))
 	{
 		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
-		LogErrorString("DX Error- " + std::string(DXGetErrorString(LastError)) + " " + std::string(DXGetErrorDescription(LastError)));
+		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{

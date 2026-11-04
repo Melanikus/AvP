@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed switched-off font load and unload code that could never run
 /*******************************************************************
  *
  *    DESCRIPTION: 	indexfnt.cpp
@@ -979,106 +982,6 @@ void IndexedFont_Proportional_PF :: RenderChar_Unclipped
 }
 #endif
 
-#if 0
-/*static*/ void IndexedFont_Proportional_PF :: PFLoadHook
-(
-	FontIndex I_Font_New/*,
-	PFFONT *pffont_New*/
-)
-{
-	/* PRECONDITION */
-	{
-	}
-
-	/* CODE */
-	{
-		new IndexedFont_Proportional_PF
-		(
-			I_Font_New,
-			pffont_New
-		);
-
-		SCString :: UpdateAfterFontChange( I_Font_New );
-	}
-}
-
-/*static*/ void IndexedFont_Proportional_PF :: PFUnLoadHook
-(
-	FontIndex // I_Font_Old
-)
-{
-	#if 0
-	delete 
-	SCString :: UpdateAfterFontChange( I_Font_Old );
-	#endif
-}
-
-// private:
-IndexedFont_Proportional_PF :: IndexedFont_Proportional_PF
-(
-	FontIndex I_Font_New,
-	PFFONT *pffont_New
-) : IndexedFont_Proportional
-	(
-		I_Font_New
-	),
-	MaxWidth_Val(0)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( pffont_New );
-	}
-
-	/* CODE */
-	{
-		pffont_Val = pffont_New;
-
-		// Calculate MaxWidth_Val:
-		int i=(pffont_New -> num_chars_in_font);
-		int Offset = pffont_New -> GetOffset();
-		
-		while (i>0)
-		{
-			i--;
-
-			int ThisWidth = pffont_Val -> GetWidth
-			(
-				(ProjChar) (i + Offset )
-			);
-			if ( MaxWidth_Val < ThisWidth)
-			{
-				MaxWidth_Val = ThisWidth;
-			}
-		}
-	}
-}
-
-
-
-
-void INDEXFNT_PFLoadHook
-(
-	FontIndex I_Font_New/*,
-	PFFONT *pffont_New*/
-)
-{
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( I_Font_New < IndexedFonts_MAX_NUMBER_OF_FONTS );
-//		GLOBALASSERT( pffont_New );
-	}
-
-	/* CODE */
-	{
-		IndexedFont_Proportional_PF :: PFLoadHook
-		(
-			I_Font_New/*,
-			pffont_New // PFFONT *pffont_New*/
-		);
-
-	}
-}
-#endif
 
 void IndexedFont_HUD :: RenderString_Clipped
 (

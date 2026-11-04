@@ -1,6 +1,10 @@
 /*KJL****************************************************************************************
 *                                         	hud.c                                           *
 ****************************************************************************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   angles read from a save file are kept between 0 and 4095 before a sine or cosine lookup, and the
+//   zoom-level search stops at the last zoom level
 
 
 /*
@@ -656,8 +660,8 @@ static void DoMotionTracker(void)
 	{
 		DYNAMICSBLOCK *playerDynPtr = Player->ObStrategyBlock->DynPtr;
 		int phi = playerDynPtr->OrientEuler.EulerY;
-		int cosPhi = MUL_FIXED(GetCos(phi),MOTIONTRACKER_SCALE);
-		int sinPhi = MUL_FIXED(GetSin(phi),MOTIONTRACKER_SCALE);
+		int cosPhi = MUL_FIXED(GetCos(phi & wrap360),MOTIONTRACKER_SCALE);
+		int sinPhi = MUL_FIXED(GetSin(phi & wrap360),MOTIONTRACKER_SCALE);
     	int i;
     	/* made more awkward because we want to draw the brightest last */
 		i=0;
@@ -770,8 +774,8 @@ static int DoMotionTrackerBlips(void)
 	int nearestDistance=MOTIONTRACKER_RANGE;
 	{
 		int phi = playerDynPtr->OrientEuler.EulerY;
-		cosPhi = MUL_FIXED(GetCos(phi),MOTIONTRACKER_SCALE);
-		sinPhi = MUL_FIXED(GetSin(phi),MOTIONTRACKER_SCALE);
+		cosPhi = MUL_FIXED(GetCos(phi & wrap360),MOTIONTRACKER_SCALE);
+		sinPhi = MUL_FIXED(GetSin(phi & wrap360),MOTIONTRACKER_SCALE);
 	}
 
 	while (numberOfObjects--)
@@ -2054,7 +2058,7 @@ void MaintainZoomingLevel(void)
 	float requestedZoomScale;
 
 	i = 0;
-	while (CameraZoomScale<=ZoomLevels[++i]);
+	while (i < 3 && CameraZoomScale<=ZoomLevels[++i]); // stops at the last entry (3): at full zoom it used to read ZoomLevels[4]
 
 	assert(i < 4);
 

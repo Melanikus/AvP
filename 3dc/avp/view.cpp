@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   angles from a save file are kept between 0 and 4095 before a sine or cosine lookup, and an object's light
+//   list has room for every light
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -62,7 +66,9 @@ VECTORCH LocalView;
 
 /* KJL 11:16:37 06/06/97 - lights */
 int NumLightSourcesForObject;
-LIGHTBLOCK *LightSourcesForObject[MaxLightsPerObject];
+// room for every light that can reach an object: up to MaxLightsPerObject lights attached to objects (the first loop
+// of LightSourcesInRangeOfObject stops there) plus every light element (at most MAX_NO_OF_LIGHTELEMENTS are active)
+LIGHTBLOCK *LightSourcesForObject[MaxLightsPerObject + MAX_NO_OF_LIGHTELEMENTS];
 int GlobalAmbience;
 int LightScale = ONE_FIXED;
 int DrawingAReflection;
@@ -198,7 +204,9 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		int i = NumActiveLightElements;
 		LIGHTELEMENT *lightElementPtr = LightElementStorage;
-		while (i--)
+		// bounded by the size of LightSourcesForObject, which has room for every active light element after the
+		// object lights, so no light in range is left out
+		while (i-- && NumLightSourcesForObject < (int)(sizeof(LightSourcesForObject) / sizeof(LightSourcesForObject[0])))
 		{
 			LIGHTBLOCK *lptr = &(lightElementPtr->LightBlock);
 			VECTORCH vertexToLight;
@@ -469,8 +477,8 @@ void InteriorType_Body()
 void UpdateCamera(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
-	int cos = GetCos(playerStatusPtr->ViewPanX); // the looking up/down value that used to be in displayblock
-	int sin = GetSin(playerStatusPtr->ViewPanX);
+	int cos = GetCos(playerStatusPtr->ViewPanX & wrap360); // the looking up/down value that used to be in displayblock
+	int sin = GetSin(playerStatusPtr->ViewPanX & wrap360);
 
 	DISPLAYBLOCK *dptr_s = Player;
 

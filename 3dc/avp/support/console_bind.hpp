@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   key bindings are made by a small function that hands them back (it works the same as before);
+//   a comment now says correctly who frees them
 /*
 	
 	consbind.hpp
@@ -113,6 +117,17 @@
 			SCString* pSCString_ToBind
 		);
 		~KeyBinding();
+
+		// creates a binding, which adds itself to List_pKeyBindings. The list only holds a pointer and frees nothing:
+		// ParseUnbindCommand, UnbindAll and WriteToConfigFile each delete the bindings they remove
+		static KeyBinding* Make
+		(
+			BindableKey theKey_ToUse,
+			SCString* pSCString_ToBind
+		)
+		{
+			return new KeyBinding(theKey_ToUse, pSCString_ToBind);
+		}
 
 		static void ErrorDontRecogniseKey( SCString* pSCString_Key );
 

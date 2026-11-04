@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code only the level editor used: the game itself never runs it
+
 #include "chunk_dummy.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -15,12 +19,6 @@ Children for Dummy_Object_Chunk :
 */
 
 
-
-Dummy_Object_Chunk::Dummy_Object_Chunk(Chunk_With_Children* parent,const char* _name,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient)
-:Chunk_With_Children(parent,"DUMMYOBJ")
-{
-	new Dummy_Object_Data_Chunk(this,_name,_location,min,max,orient);
-}
 
 Dummy_Object_Data_Chunk* Dummy_Object_Chunk::get_data_chunk()
 {
@@ -41,47 +39,10 @@ const char* Dummy_Object_Chunk::get_text()
 	return text_chunk->get_text();
 }
 
-void Dummy_Object_Chunk::set_text(const char* text)
-{
-	// find the text chunk
-	Dummy_Object_Text_Chunk* text_chunk = (Dummy_Object_Text_Chunk*) lookup_single_child("DUMOBJTX");
-
-	if (!text || text[0] == '\0')
-	{
-		//delete the text chunk if it exists
-		delete text_chunk;
-	}
-	else
-	{
-		if (text_chunk)
-		{
-			//alter the existing text
-			text_chunk->set_text(text);
-		}
-		else
-		{
-			//create a new text chunk
-			new Dummy_Object_Text_Chunk(this, text);
-		}
-	}
-}
-
 
 //////////////////////////////Dummy_Object_Data_Chunk////////////////////////////////
 
 RIF_IMPLEMENT_DYNCREATE("DUMOBJDT",Dummy_Object_Data_Chunk)
-
-Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Dummy_Object_Chunk* parent,const char* _name ,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient)
-:Chunk(parent,"DUMOBJDT")
-{
-	location=_location;
-	min_extents=min;
-	max_extents=max;
-	orientation=orient;
-
-	name=new char[strlen(_name)+1];
-	strcpy(name,_name);
-}
 
 
 Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t)
@@ -125,12 +86,6 @@ size_t Dummy_Object_Data_Chunk::size_chunk()
 //////////////////////////////Dummy_Object_Text_Chunk////////////////////////////////
 
 RIF_IMPLEMENT_DYNCREATE("DUMOBJTX",Dummy_Object_Text_Chunk)
-
-Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Dummy_Object_Chunk* parent,const char* _text)
-:Chunk(parent,"DUMOBJTX"),text(NULL)
-{
-	set_text(_text);	
-}
 
 Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"DUMOBJTX")

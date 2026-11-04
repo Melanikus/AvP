@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
+//   this file never declares, and a never-compiled #else branch
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -1781,14 +1785,7 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 			if (playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber==WEAPON_PRED_DISC) {
 				if (playerStatusPtr->WeaponSlot[requestedSlot].PrimaryRoundsRemaining==0 
 					&& playerStatusPtr->WeaponSlot[requestedSlot].PrimaryMagazinesRemaining==0) {
-					#if 0
-					sprintf(tempstring,"NO AMMO FOR %s\n",GetTextString(
-						TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-					);			
-					NewOnScreenMessage(tempstring);
-					#else
 					//NewOnScreenMessage(GetTextString(TEXTSTRING_NOAMMOFORWEAPON));
-					#endif
 					return 0;
 				}
 			}
@@ -1833,16 +1830,7 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 
 	    	playerStatusPtr->SwapToWeaponSlot = requestedSlot;
 		  	return 1;
-    	} else if( (requestedSlot != playerStatusPtr->SelectedWeaponSlot)
-          &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
-		{
-			#if 0
-			sprintf(tempstring,"%s NOT AVAILABLE IN DEMO\n",GetTextString(
-				TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-			);			
-			NewOnScreenMessage(tempstring);
-			#endif
-		}
+    	}
     }
 
    	return 0;
@@ -2067,14 +2055,7 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
 			if (playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber==WEAPON_PRED_DISC) {
 				if (playerStatusPtr->WeaponSlot[requestedSlot].PrimaryRoundsRemaining==0 
 					&& playerStatusPtr->WeaponSlot[requestedSlot].PrimaryMagazinesRemaining==0) {
-					#if 0
-					sprintf(tempstring,"NO AMMO FOR %s\n",GetTextString(
-						TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-					);			
-					NewOnScreenMessage(tempstring);
-					#else
 					//NewOnScreenMessage(GetTextString(TEXTSTRING_NOAMMOFORWEAPON));
-					#endif
 					return 0;
 				}
 			}
@@ -2112,16 +2093,7 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
 
 	    	playerStatusPtr->SwapToWeaponSlot = requestedSlot;
 			return 1;
-    	} else if( (requestedSlot != currentSlot)
-          &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == -1) )
-        {
-			#if 0
-			sprintf(tempstring,"%s NOT AVAILABLE IN DEMO\n",GetTextString(
-				TemplateWeapon[playerStatusPtr->WeaponSlot[requestedSlot].WeaponIDNumber].Name)
-			);			
-			NewOnScreenMessage(tempstring);
-			#endif
-		}
+    	}
     }
 
    	return 0;
@@ -6289,7 +6261,6 @@ void PredPistol_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 	/* Are we running? */
 
-	#if 1
 	if ( (Player->ObStrategyBlock->DynPtr->LinVelocity.vx!=0)
 		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vy!=0)
 		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vz!=0) ) {
@@ -6305,9 +6276,6 @@ void PredPistol_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 			}
 		}
 	} else {
-	#else
-	{
-	#endif
 		TEMPLATE_WEAPON_DATA *twPtr;
 
 		twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];

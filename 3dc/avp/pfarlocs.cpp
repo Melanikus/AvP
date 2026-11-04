@@ -2,6 +2,9 @@
   Source file for FAR AI alien module locations, as used by far alien
   behaviours....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed debug logging code that was switched off and could never run
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -62,10 +65,6 @@ static VECTORCH	*FL_AuxData = (VECTORCH *)0;
 static FILE *logfile;
 #endif
 
-#define logFarLocPositions	0
-#if logFarLocPositions
-static FILE *logfile2;
-#endif
 
 /*----------------------Patrick 16/12/96------------------------
   This function builds a list of entry points and auxilary
@@ -228,38 +227,6 @@ void BuildFarModuleLocs(void)
 	fclose(logfile);
 	#endif
 
-	#if logFarLocPositions && 0 //this log will need to updated for the ai modules.
-	logfile2 = fopen("D:/PATRICK/FARLOCS2.TXT","w");
-	fprintf(logfile2, "MODULE EPs AND AUXILARY LOCATIONS \n");
-	fprintf(logfile2, "ENV: %s \n", Env_List[AvP.CurrentEnv]->main);
-	fprintf(logfile2, "************************* \n \n");
-
-	for(moduleCounter = 0; moduleCounter < ModuleArraySize; moduleCounter++)
-	{
-		int i;
-		fprintf(logfile2, "MODULE INDEX: %d \n",moduleCounter);
-		fprintf(logfile2, "  EPs: \n");
-		for(i=0;i<FALLP_EntryPoints[moduleCounter].numEntryPoints;i++)
-		{
-			VECTORCH posn;
-			int index;
-			posn = (FALLP_EntryPoints[moduleCounter].entryPointsList)[i].position;
-			index = (FALLP_EntryPoints[moduleCounter].entryPointsList)[i].donorIndex; 
-			fprintf(logfile2, "  %d %d %d FROM %d \n", posn.vx, posn.vy, posn.vz, index);
-		}
-		fprintf(logfile2, "  AUX: \n");
-		for(i=0;i<FALLP_AuxLocs[moduleCounter].numLocations;i++)
-		{
-			VECTORCH posn;
-			posn = (FALLP_AuxLocs[moduleCounter].locationsList)[i];
-			fprintf(logfile2, "  %d %d %d \n", posn.vx, posn.vy, posn.vz);
-		}
-		fprintf(logfile2, "\n");
-	}
-	fprintf(logfile2, "************************* \n");
-	fprintf(logfile2, "END \n ");
-	fclose(logfile2);
-	#endif
 }
 
 /* allocates and initialises primitive data areas */

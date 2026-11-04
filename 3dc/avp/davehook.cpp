@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   the message font is made by a small function that hands it back (it works the same as before);
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 /*******************************************************************
  *
  *    DESCRIPTION: 	davehook.cpp
@@ -208,12 +213,6 @@
 	#if 0
 	Make
 	(
-		"LISTMOD",
-		"LIST ALL MODULES",
-		ModuleCommands :: ListModules
-	);
-	Make
-	(
 		"C-KILL",
 		"CLEAR TEXT REPORT QUEUE",
 		TextReportGadget :: ClearTheQueue
@@ -271,7 +270,7 @@ void DAVEHOOK_Init(void)
 //		AmmoDaemon :: Init();
 	}
 
-	new IndexedFont_HUD(DATABASE_MESSAGE_FONT);
+	IndexedFont_HUD :: Load(DATABASE_MESSAGE_FONT);
 	
 	GADGET_Init();
 
@@ -397,22 +396,10 @@ int Testing :: IITest(int i)
 // Diagnostic hook for reference counting system:
 void Testing :: DumpRefCounts(void)
 {
-	#if TrackReferenceCounted
 	{
-		SCString* pSCString_Feedback = new SCString("DUMPING REFCOUNT INFO");
+		RefHolder<SCString> pSCString_Feedback(new SCString("REFCOUNT INFO DISABLED AT COMPILE-TIME"));
 		pSCString_Feedback -> SendToScreen();
-		pSCString_Feedback -> R_Release();
-
-		LogFile tempLog("REFDUMP.TXT");
-		RefCountObject :: DumpAll(tempLog);
 	}
-	#else
-	{
-		SCString* pSCString_Feedback = new SCString("REFCOUNT INFO DISABLED AT COMPILE-TIME");
-		pSCString_Feedback -> SendToScreen();
-		pSCString_Feedback -> R_Release();
-	}
-	#endif
 }
 
 /*

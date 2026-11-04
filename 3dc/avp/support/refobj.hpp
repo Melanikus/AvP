@@ -7,6 +7,10 @@
 	Reference-counted base class to be used by e.g. strings
 
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   added RefHolder, a helper that lets go of a shared object automatically when the code using it ends;
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 
 #ifndef _refobj
 #define _refobj 1
@@ -17,24 +21,9 @@
 	#endif
 
 /* Version settings *****************************************************/
-	#define TrackReferenceCounted FALSE
-		/*
-			This is a debug option that has a fair amount of run-time
-			cost.
-
-			It maintains a list of all reference-counted objects, and
-			data on when references were added or released.
-
-			Data on a particular object can be sent to a log file;
-			there is a function to do this for all that exist.			
-		*/
 
 /* Macros ***************************************************************/
 
-#if TrackReferenceCounted
-	#define R_AddRef()		imp_R_AddRef(__FILE__,__LINE__)
-	#define R_Release()		imp_R_Release(__FILE__,__LINE__)
-#endif
 	
 /* Imported globals *****************************************************/
 
@@ -46,77 +35,26 @@
 /* Type definitions *****************************************************/
 	class R_DumpContext; // fully declared in DCONTEXT.HPP
 
-	class RefCountObject_TrackData; // fully declared within REFOBJ.CPP
-
 	class RefCountObject
 	{
 	// {{{ Private data
 	private:
 		int RefCount;
 
-		#if TrackReferenceCounted
-		RefCountObject_TrackData* pTrackData;
-			// done as a non-NULL pointer rather than a ref so as to hide
-			// definition (avoiding compiler dependency)
-		#endif
 
 	// }}}
 
 
 	// {{{ Private functions
 	private:
-		// Private fns for the tracking system are complex and defined in REFOBJ.CPP
-		#if TrackReferenceCounted
-		void Track_Construct(void);
-		void Track_R_AddRef(char* theFilename, int theLineNum);
-		void Track_R_Release(char* theFilename, int theLineNum);
-		void Track_Destroy(void);
-		#endif
 	// }}}
 
 	public:
 		RefCountObject() :
-			#if TrackReferenceCounted
-			pTrackData(NULL),
-			#endif
 			RefCount(1)
 		{
-			#if TrackReferenceCounted
-			Track_Construct();
-			#endif
 		}
 
-		#if TrackReferenceCounted
-		void imp_R_AddRef(char* theFilename, int theLineNum)
-		{
-			#ifndef NDEBUG
-			if ( RefCount <= 0)
-			{
-				fail(refobj_fail_addref);
-			}
-			#endif
-			RefCount++;
-
-			Track_R_AddRef(theFilename,theLineNum);
-		}
-
-		void imp_R_Release(char* theFilename, int theLineNum)
-		{
-			#ifndef NDEBUG
-			if ( RefCount <= 0)
-			{
-				fail(refobj_fail_release);
-			}
-			#endif
-
-			Track_R_Release(theFilename,theLineNum);
-
-			if ( (--RefCount) == 0 )
-			{
-				delete this;
-			}
-		}
-		#else
 		void R_AddRef(void)
 		{
 			#ifndef NDEBUG
@@ -142,7 +80,6 @@
 				delete this;
 			}
 		}
-		#endif
 
 		#if debug
 		int CheckRef() const
@@ -152,11 +89,6 @@
 			// Handy way to examine reference count for debugging only
 		#endif
 
-		#if TrackReferenceCounted
-		virtual void DumpIDForReferenceDump(R_DumpContext& theContext) const = 0;
-		void ReferenceDump(R_DumpContext& theContext) const;
-		static void DumpAll(R_DumpContext& theContext);
-		#endif
 
 	protected:
 		// Destructors must be protected; only derived classes may use the
@@ -170,10 +102,29 @@
 			}
 			#endif
 
-			#if TrackReferenceCounted
-			Track_Destroy();
-			#endif
 		}
+	};
+
+	// A shared object counts who is using it, and deletes itself when the count reaches zero. A new object starts with a
+	// count of one. RefHolder looks after that one count: it gives it back by itself when the code holding it ends,
+	// on every way out. For example:
+	//     RefHolder<SCString> pSCString(new SCString("TEXT")); pSCString -> SendToScreen();
+	template <class RC> class RefHolder
+	{
+	public:
+		explicit RefHolder(RC* pRC_New) : pRC(pRC_New) {}
+		~RefHolder() { if (pRC) pRC -> R_Release(); }
+
+		RC* operator->() const { return pRC; }
+		RC& operator*() const { return *pRC; }
+		operator RC*() const { return pRC; }
+
+	private:
+		RC* pRC;
+
+		// a holder cannot be copied: two copies would each give the same count back, once too often
+		RefHolder(const RefHolder&);
+		RefHolder& operator=(const RefHolder&);
 	};
 
 

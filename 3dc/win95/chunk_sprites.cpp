@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the PC, Saturn and PlayStation sprite parts of a level file are read by one shared loader, not three
+//   identical loops
+//   a child chunk whose size cannot be real is refused
+
 #include "chunk_sprites.hpp"
 #include "mishchnk.hpp"
 
@@ -244,7 +250,7 @@ Sprite_Header_Chunk::Sprite_Header_Chunk(const char * file_name, Chunk_With_Chil
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code) 
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed) file_size-12)) 
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed) file_size-12))) 
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -300,32 +306,42 @@ BOOL Sprite_Header_Chunk::output_chunk(HANDLE & hand)
 	return TRUE;
 }
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITEPC",PC_Sprite_Chunk,"SPRIHEAD",Sprite_Header_Chunk)
+// A child of a PC, Saturn or PlayStation sprite chunk: SPRACTIO is a Sprite_Action_Chunk, and any other id is kept as
+// raw data in a Miscellaneous_Chunk (never handed to another registered chunk class, as DynCreate would). Like every
+// chunk, the new one links itself into parent's children (Chunk::Chunk), and parent's destructor deletes it.
+static Chunk * Create_Sprite_Child_Chunk(Chunk_With_Children * parent, const char * data)
+{
+	if (!strncmp(data, "SPRACTIO",8))
+	{
+		return new Sprite_Action_Chunk (parent, (data + 12), (*(int *) (data + 8))-12);
+	}
+	return new Miscellaneous_Chunk (parent, data, (data + 12), (*(int *) (data + 8)) -12);
+}
 
-PC_Sprite_Chunk::PC_Sprite_Chunk(Sprite_Header_Chunk* parent,const char* data,size_t datasize)
-:Chunk_With_Children(parent,"SPRITEPC")
+// the loader the three sprite chunks share (it was three identical loops)
+static void Load_Sprite_Child_Chunks(Chunk_With_Children * parent, const char * data, size_t datasize)
 {
 	const char * buffer_ptr = data;
 
-	while ((data-buffer_ptr)< (signed) datasize) 
+	while ((data-buffer_ptr)< (signed) datasize)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) datasize) 
+		if (!ChildChunkFits(data, buffer_ptr, (signed) datasize))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
 
-		if (!strncmp(data, "SPRACTIO",8)) 
-		{
-			new Sprite_Action_Chunk (this, (data + 12), (*(int *) (data + 8))-12);
-			data += *(int *)(data + 8);
-		}
-		else 
-		{
-			new Miscellaneous_Chunk (this, data, (data + 12), (*(int *) (data + 8)) -12);
-			data += *(int *)(data + 8);
-		}
+		Create_Sprite_Child_Chunk(parent, data);
+		data += *(int *)(data + 8);
 	}
+}
+
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITEPC",PC_Sprite_Chunk,"SPRIHEAD",Sprite_Header_Chunk)
+
+PC_Sprite_Chunk::PC_Sprite_Chunk(Sprite_Header_Chunk* parent,const char* data,size_t datasize)
+:Chunk_With_Children(parent,"SPRITEPC")
+{
+	Load_Sprite_Child_Chunks(this, data, datasize);
 }
 /////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITESA",Saturn_Sprite_Chunk,"SPRIHEAD",Sprite_Header_Chunk)
@@ -334,27 +350,7 @@ RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITESA",Saturn_Sprite_Chunk,"SPRIHEAD"
 Saturn_Sprite_Chunk::Saturn_Sprite_Chunk(Sprite_Header_Chunk* parent,const char* data,size_t datasize)
 :Chunk_With_Children(parent,"SPRITESA")
 {
-	const char * buffer_ptr = data;
-	
-	while ((data-buffer_ptr)< (signed) datasize) 
-	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) datasize) 
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-		}
-
-		if (!strncmp(data, "SPRACTIO",8)) 
-		{
-			new Sprite_Action_Chunk (this, (data + 12), (*(int *) (data + 8))-12);
-			data += *(int *)(data + 8);
-		}
-		else 
-		{
-			new Miscellaneous_Chunk (this, data, (data + 12), (*(int *) (data + 8)) -12 );
-			data += *(int *)(data + 8);
-		}
-	}
+	Load_Sprite_Child_Chunks(this, data, datasize);
 }
 /////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITEPS",Playstation_Sprite_Chunk,"SPRIHEAD",Sprite_Header_Chunk)
@@ -362,27 +358,7 @@ RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SPRITEPS",Playstation_Sprite_Chunk,"SPRI
 Playstation_Sprite_Chunk::Playstation_Sprite_Chunk(Sprite_Header_Chunk* parent,const char* data,size_t datasize)
 :Chunk_With_Children(parent,"SPRITEPS")
 {
-	const char * buffer_ptr = data;
-	
-	while ((data-buffer_ptr)< (signed) datasize) 
-	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) datasize) 
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-		}
-
-		if (!strncmp(data, "SPRACTIO",8)) 
-		{
-			new Sprite_Action_Chunk (this, (data + 12), (*(int *) (data + 8))-12);
-			data += *(int *)(data + 8);
-		}
-		else
-		{
-			new Miscellaneous_Chunk (this, data, (data + 12), (*(int *) (data + 8)) -12 );
-			data += *(int *)(data + 8);
-		}
-	}
+	Load_Sprite_Child_Chunks(this, data, datasize);
 }
 
 

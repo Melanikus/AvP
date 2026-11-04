@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed the declarations of code only the level editor used: the game itself never runs it
 
 #ifndef _DummyObjectChunk_hpp
 #define _DummyObjectChunk_hpp 1
@@ -12,15 +15,12 @@ class Dummy_Object_Chunk : public Chunk_With_Children
 {
 public:
 
-	Dummy_Object_Chunk(Chunk_With_Children* parent,const char* _name ,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient);
-
 	// constructor from buffer
 	Dummy_Object_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
 	Dummy_Object_Data_Chunk * get_data_chunk();//gets data chunk (name and location)
 
 	const char* get_text(); //get text attached to a dummy object
-	void set_text(const char* text); //change the text attached to a dummy object
 	
 };
 
@@ -28,7 +28,6 @@ public:
 class  Dummy_Object_Data_Chunk : public Chunk
 {
 public :
-	Dummy_Object_Data_Chunk(Dummy_Object_Chunk* parent,const char* _name ,ChunkVectorInt& _location,ChunkVectorInt& min ,ChunkVectorInt& max ,ChunkQuat& orient);
 	Dummy_Object_Data_Chunk (Chunk_With_Children * parent, const char * data, size_t );
 	~Dummy_Object_Data_Chunk();
 
@@ -61,7 +60,6 @@ private :
 class Dummy_Object_Text_Chunk : public Chunk
 {
 public :
-	Dummy_Object_Text_Chunk(Dummy_Object_Chunk* parent,const char* _text);
 	Dummy_Object_Text_Chunk(Chunk_With_Children * parent, const char * data, size_t );
 	~Dummy_Object_Text_Chunk();
 

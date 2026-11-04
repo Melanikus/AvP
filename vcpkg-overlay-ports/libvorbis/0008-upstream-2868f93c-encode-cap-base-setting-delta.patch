@@ -1,0 +1,57 @@
+From 2868f93ce55ceff151455c289ee17dc49cd0b7b6 Mon Sep 17 00:00:00 2001
+From: "Timothy B. Terriberry" <tterribe@xiph.org>
+Date: Sun, 10 May 2026 15:18:54 -0700
+Subject: [PATCH] [encode] Cap base_setting delta.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The requested quality-or-bitrate is specified in double precision,
+ but the fractional delta between mapping levels was computed in
+ single precision, leaving the possibility that rounding would
+ produce a delta of exactly 1.0F.
+This could promote mapping j to j+1, which causes problems when j
+ is already the last defined mapping for a particular setup
+ template.
+Instead, cap the delta at 1-FLT_EPSILON.
+This ensures that the resulting (double-precision) base_setting
+ remains smaller than j+1.
+
+We could have chosen a cap of 0.999, to match the cap of j-0.001
+ imposed when the requested quality exceeds the maximum of any
+ mapping in the template, but this would introduce a step
+ discontinuity at the boundary of each mapping point where there was
+ not one before.
+1-FLT_EPSILON is the smallest value distinct from 1.0F that could
+ have been reached by the old code, so this should not add any new
+ discontinuities.
+
+Thanks to Tamás Zolnai for the report.
+
+Fixes #2358
+---
+ lib/vorbisenc.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/lib/vorbisenc.c b/lib/vorbisenc.c
+index cf3806a6e..34f34898c 100644
+--- a/lib/vorbisenc.c
++++ b/lib/vorbisenc.c
+@@ -17,6 +17,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <math.h>
++#include <float.h>
+ 
+ #include "vorbis/codec.h"
+ #include "vorbis/vorbisenc.h"
+@@ -658,7 +659,8 @@ static const void *get_setup_template(long ch,long srate,
+           float low=map[j];
+           float high=map[j+1];
+           float del=(req-low)/(high-low);
+-          *base_setting=j+del;
++          if(del>1-FLT_EPSILON)del=1-FLT_EPSILON;
++          *base_setting=j+(double)del;
+         }
+ 
+         return(setup_list[i]);

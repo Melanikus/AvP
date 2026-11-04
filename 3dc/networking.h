@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
+
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
 
@@ -52,7 +55,7 @@ void      Net_FindAvPSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
-NetResult Net_Receive(uint8_t *messageData, size_t &dataSize);
+NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();

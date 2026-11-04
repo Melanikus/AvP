@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   multiplayer level and settings names and paths have size limits, and so do the texts read from a settings
+//   file; a path that does not fit counts as a missing file, a name with dots in it stays whole, the custom
+//   level name list is freed in full, a negative level number in a settings file counts as 0, and a byte below the
+//   space in a description becomes a space
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -5,6 +11,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "pldnet.h"
+#include "menu_data.h"
 #include "mp_config.h"
 #include "env_info.h"
 #include "menus.h"
@@ -12,6 +19,7 @@
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "..\3dc\FileStream.h"
+#include "logString.h"
 
 extern void SetDefaultMultiplayerConfig();
 extern char MP_SessionName[];
@@ -30,6 +38,43 @@ char* LastDescriptionText = 0;
 
 AVPMENU_ELEMENT* AvPMenu_Multiplayer_LoadConfig=0;
 
+// Builds a settings file's path, "<folder><dir>/<name><extension>", in a buffer of MAX_PATH (260) bytes.
+// The name is one found in the folder, up to 259 characters long, or one the player typed, so the whole path may not
+// fit. A path cut short could name a different file, so in that case nothing is used: one line goes to the log, the
+// buffer is left empty, FALSE comes back, and the caller acts as if the file were missing.
+static BOOL BuildConfigPath(char *buffer, const char *folder, const char *dir, const char *name, const char *extension)
+{
+	if (_snprintf(buffer, MAX_PATH - 1, "%s%s/%s%s", folder, dir, name, extension) < 0)
+	{
+		LogErrorString(std::string("configuration file path too long: ") + folder + dir + "/" + name + extension);
+		buffer[0] = 0;
+		return FALSE;
+	}
+	buffer[MAX_PATH - 1] = 0;
+	return TRUE;
+}
+
+// Makes a copy of a text in new memory. The file name lists below keep these copies and free them later.
+static char* NewStringCopy(const char* str)
+{
+	size_t const size = strlen(str) + 1;
+	char* copy = new char[size];
+	memcpy(copy, str, size);
+	return copy;
+}
+
+// Makes a copy of a found file's name without its extension. It is cut at the last '.', so my.game.cfg keeps the
+// whole name "my.game", and the path built from that name later finds the same file.
+static char* NewNameWithoutExtension(const char* fileName)
+{
+	char* name = NewStringCopy(fileName);
+	char* dotpos = strrchr(name, '.');
+	if (dotpos) {
+		*dotpos = 0;
+	}
+	return name;
+}
+
 BOOL BuildLoadMPConfigMenu()
 {
 	//delete the old list of filenames
@@ -45,7 +90,6 @@ BOOL BuildLoadMPConfigMenu()
 
 	// grab the home directory path
 	char filePath[MAX_PATH];
-	strcpy(filePath, GetSaveFolderPath());
 
 	// do a search for all the configuration in the configuration directory
 	const char *load_name = MP_CONFIG_WILDCARD;
@@ -53,7 +97,13 @@ BOOL BuildLoadMPConfigMenu()
 		load_name = SKIRMISH_CONFIG_WILDCARD;
 	}
 
-	strcat(filePath, load_name);
+	// (A save folder path too long to hold the search pattern finds nothing, as if the folder were empty.)
+	if (_snprintf(filePath, sizeof(filePath) - 1, "%s%s", GetSaveFolderPath(), load_name) < 0)
+	{
+		LogErrorString(std::string("configuration search path too long: ") + GetSaveFolderPath() + load_name);
+		return FALSE;
+	}
+	filePath[sizeof(filePath) - 1] = 0;
 
 	// allow a wildcard search
 	WIN32_FIND_DATA wfd;
@@ -92,12 +142,7 @@ BOOL BuildLoadMPConfigMenu()
 				// not a directory, hidden or system file
 		)
 		{
-			char *name = new char[strlen(wfd.cFileName)+1];
-			strcpy(name, wfd.cFileName);
-			char *dotpos = strchr(name,'.');
-			if (dotpos) {
-				*dotpos = 0;
-			}
+			char *name = NewNameWithoutExtension(wfd.cFileName);
 
 			ConfigurationFilenameList.add_entry(name);
 
@@ -157,6 +202,20 @@ BOOL BuildLoadMPConfigMenu()
 	return TRUE;
 }
 
+// The small font has no letters below the space, so a byte like that in a description would be drawn from the wrong
+// place in the font picture. The game never writes one: only a damaged or edited settings file has them, and a space
+// takes the place of each one. text must end with the usual zero byte.
+static void ReplaceBytesBelowSpace(char *text)
+{
+	for (; *text; text++)
+	{
+		if ((unsigned char)*text < ' ')
+		{
+			*text = ' ';
+		}
+	}
+}
+
 const char* GetMultiplayerConfigDescription(int index)
 {
 	if (index < 0 || index >= ConfigurationFilenameList.size()) {
@@ -181,8 +240,11 @@ const char* GetMultiplayerConfigDescription(int index)
 		}
 	}
 
-	LastDescriptionFile = new char[strlen(name)+1];
-	strcpy(LastDescriptionFile, name);
+	// Copy the name into memory made exactly big enough for it: its length plus
+	// one byte for the end marker (the zero byte that marks where a text stops).
+	size_t const nameSize = strlen(name) + 1;
+	LastDescriptionFile = new char[nameSize];
+	memcpy(LastDescriptionFile, name, nameSize);
 	
 	// see if this is one of the default language localised configurations
 	if (!strncmp(name, "Config", 6))
@@ -190,19 +252,18 @@ const char* GetMultiplayerConfigDescription(int index)
 		if (name[6] >= '1' && name[6] <= '7' && name[7] == '\0')
 		{
 			TEXTSTRING_ID string_index = (TEXTSTRING_ID)(TEXTSTRING_MPCONFIG1_DESCRIPTION+(name[6]-'1'));
-			LastDescriptionText = new char[strlen(GetTextString(string_index))+1];
-			strcpy(LastDescriptionText,GetTextString(string_index));
+			const char *descriptionText = GetTextString(string_index);
+			size_t const descriptionSize = strlen(descriptionText)+1;
+			LastDescriptionText = new char[descriptionSize];
+			memcpy(LastDescriptionText,descriptionText,descriptionSize);
 			
 			return LastDescriptionText;
 		}
 	}
 
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s/%s.skirmish_cfg", MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s/%s.cfg", MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, "", MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return 0;
 	}
 
 	// TODO - fixme
@@ -216,16 +277,48 @@ const char* GetMultiplayerConfigDescription(int index)
 	fseek(file, 169, SEEK_SET);
 
 	int description_length = 0;
-	fread(&description_length,sizeof(int),1,file);
+	if (fread(&description_length,sizeof(int),1,file) != 1) {
+		description_length = 0;
+	}
 	
-	if (description_length)
+	// The length comes from the file, so it cannot be trusted. A normal file holds the description (up to 202 bytes) with
+	// its end marker, the zero byte that marks where a text stops. A length of zero or less means no description, a longer
+	// one keeps the first 202 bytes, and the text always gets an end marker after the bytes read.
+	if (description_length > 0)
 	{
-		LastDescriptionText = new char[description_length];
-		fread(LastDescriptionText, 1, description_length, file);
+		size_t toRead = ((size_t)description_length < sizeof(MP_Config_Description)) ? (size_t)description_length : sizeof(MP_Config_Description);
+		// Ask for the memory without the "crash if there is none" behaviour of a plain new (std::nothrow): if the
+		// allocation fails, LastDescriptionText stays empty (0) and the menu simply shows no description, as for a file
+		// with no description, instead of the game ending.
+		LastDescriptionText = new(std::nothrow) char[toRead + 1];
+		if (LastDescriptionText)
+		{
+			size_t bytesRead = fread(LastDescriptionText, 1, toRead, file);
+			LastDescriptionText[bytesRead] = 0;
+			ReplaceBytesBelowSpace(LastDescriptionText);
+		}
 	}
 	fclose(file);
 	
 	return LastDescriptionText;
+}
+
+// Reads a text from a settings file. length is how many bytes the file says the text takes, with its end marker (the
+// zero byte that marks where a text stops). A text that fits in buffer is read as it was written. A longer one, which
+// only a damaged or edited file has, keeps the first bufferSize bytes and the rest is skipped, so that the values after
+// it are still read from the right place. The last byte of buffer is always set to 0, so the text ends inside it.
+static void ReadConfigString(FileStream &file, char *buffer, size_t bufferSize, int length)
+{
+	if (length > 0)
+	{
+		size_t toRead = ((size_t)length < bufferSize) ? (size_t)length : bufferSize;
+		file.ReadBytes((uint8_t*)buffer, toRead);
+		if ((size_t)length > toRead)
+		{
+			file.SkipBytes((int64_t)length - (int64_t)toRead);
+		}
+	}
+	buffer[bufferSize - 1] = 0;
 }
 
 void LoadMultiplayerConfigurationByIndex(int index)
@@ -240,11 +333,8 @@ void LoadMultiplayerConfigurationByIndex(int index)
 void LoadMultiplayerConfiguration(const char* name)
 {
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 
 	FileStream file;
@@ -258,6 +348,11 @@ void LoadMultiplayerConfiguration(const char* name)
 
 	netGameData.gameType    = (NETGAME_TYPE)file.GetUint32LE();
 	netGameData.levelNumber = file.GetInt32LE();
+	// (bounded: the number indexes the level name and episode arrays, and the menu only reduces it with %=, which
+	// keeps a negative number negative; SaveMultiplayerConfiguration never writes a negative one)
+	if (netGameData.levelNumber < 0) {
+		netGameData.levelNumber = 0;
+	}
 	netGameData.scoreLimit  = file.GetInt32LE();
 	netGameData.timeLimit   = file.GetInt32LE();
 	netGameData.invulnerableTime = file.GetInt32LE();
@@ -303,8 +398,10 @@ void LoadMultiplayerConfiguration(const char* name)
 
 	netGameData.gameSpeed = file.GetInt32LE();
 
+	// the length comes from the file, so the read stops at the 202 bytes of MP_Config_Description
 	int description_length = file.GetInt32LE();
-	file.ReadBytes((uint8_t*)MP_Config_Description, description_length);
+	ReadConfigString(file, MP_Config_Description, sizeof(MP_Config_Description), description_length);
+	ReplaceBytesBelowSpace(MP_Config_Description);
 
 	netGameData.preDestroyLights    = file.GetInt32LE();
 	netGameData.disableFriendlyFire = file.GetInt32LE();
@@ -319,10 +416,10 @@ void LoadMultiplayerConfiguration(const char* name)
 	netGameData.specialistPistols  = file.GetInt32LE();
 #endif
 
-	// read the custom level name
+	// read the custom level name: the length comes from the file, so the read stops at customLevelName's 40 bytes
 	int length = file.GetInt32LE();
-	if (length) {
-		file.ReadBytes((uint8_t*)netGameData.customLevelName, length);
+	if (length > 0) {
+		ReadConfigString(file, netGameData.customLevelName, sizeof(netGameData.customLevelName), length);
 	}
 	else {
 		netGameData.customLevelName[0] = 0;
@@ -347,11 +444,8 @@ void LoadMultiplayerConfiguration(const char* name)
 void SaveMultiplayerConfiguration(const char* name)
 {
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, name);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, name, netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 	
 	::CreateDirectory(MP_CONFIG_DIR, 0);
@@ -454,11 +548,8 @@ void DeleteMultiplayerConfigurationByIndex(int index)
 	}
 
 	char filename[MAX_PATH];
-	if (netGameData.skirmishMode) {
-		sprintf(filename, "%s%s/%s.skirmish_cfg", GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index]);
-	}
-	else {
-		sprintf(filename, "%s%s/%s.cfg", GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index]);
+	if (!BuildConfigPath(filename, GetSaveFolderPath(), MP_CONFIG_DIR, ConfigurationFilenameList[index], netGameData.skirmishMode ? ".skirmish_cfg" : ".cfg")) {
+		return;
 	}
 
 	::DeleteFile(filename);
@@ -520,12 +611,7 @@ BOOL BuildLoadIPAddressMenu()
 				// not a directory, hidden or system file
 		)
 		{
-			char *name = new char[strlen(wfd.cFileName)+1];
-			strcpy(name, wfd.cFileName);
-			char *dotpos = strchr(name,'.');
-			if (dotpos) {
-				*dotpos = 0;
-			}
+			char *name = NewNameWithoutExtension(wfd.cFileName);
 			IPAddFilenameList.add_entry(name);
 		}
 	
@@ -565,7 +651,9 @@ void SaveIPAddress(const char* name, const char* address)
 	if (!strlen(address)) return;
 
 	char filename[MAX_PATH];
-	sprintf(filename, "%s/%s.IP Address", IP_ADDRESS_DIR,name);
+	if (!BuildConfigPath(filename, "", IP_ADDRESS_DIR, name, ".IP Address")) {
+		return;
+	}
 	
 	::CreateDirectory(IP_ADDRESS_DIR, 0);
 	FILE* file = avp_fopen(filename,"wb");
@@ -581,7 +669,9 @@ void LoadIPAddress(const char* name)
 	if (!name) return;
 
 	char filename[MAX_PATH];
-	sprintf(filename,"%s/%s.IP Address",IP_ADDRESS_DIR,name);
+	if (!BuildConfigPath(filename, "", IP_ADDRESS_DIR, name, ".IP Address")) {
+		return;
+	}
 
 	FILE* file = avp_fopen(filename,"rb");
 	if (!file) return;
@@ -608,7 +698,9 @@ List<char*> CustomLevelNameList;
 
 void ClearMultiplayerLevelNameArray()
 {
-	for (int i = 0; i < CustomLevelNameList.size(); i++)
+	// (This goes by the list's size because each step takes a name off the list. Counting up to the size instead would
+	// stop halfway, and leave about half the names in memory.)
+	while (CustomLevelNameList.size())
 	{
 		delete[] CustomLevelNameList.first_entry();
 		CustomLevelNameList.delete_first_entry();
@@ -617,7 +709,9 @@ void ClearMultiplayerLevelNameArray()
 
 void BuildMultiplayerLevelNameArray()
 {
-	char buffer[256];
+	// Holds a level's name for the menu: a custom level's file name (up to 259 characters) or a stock level's name, then a
+	// note in brackets from language.txt. Every write into it below stops at its end.
+	char buffer[MAX_PATH + 64];
 
 	// only want to do this once
 	if (MultiplayerLevelNames) {
@@ -646,17 +740,17 @@ void BuildMultiplayerLevelNameArray()
 					// not a directory, hidden or system file
 			)
 			{
-				strcpy(buffer, wfd.cFileName);
-				char *dotpos = strchr(buffer,'.');
+				strncpy(buffer, wfd.cFileName, sizeof(buffer) - 1);
+				buffer[sizeof(buffer) - 1] = 0;
+				char *dotpos = strrchr(buffer,'.'); // the last '.', as in NewNameWithoutExtension
 				if (dotpos) {
 					*dotpos = 0;
 				}
-				strcat(buffer," (");
-				strcat(buffer,custom_string);
-				strcat(buffer,")");
+				size_t used = strlen(buffer);
+				_snprintf(buffer + used, sizeof(buffer) - 1 - used, " (%s)", custom_string);
+				buffer[sizeof(buffer) - 1] = 0;
 
-				char *name = new char[strlen(buffer)+1];
-				strcpy(name, buffer);
+				char *name = NewStringCopy(buffer);
 
 				CustomLevelNameList.add_entry(name);
 			}
@@ -681,11 +775,14 @@ void BuildMultiplayerLevelNameArray()
 		{
 			// a new level
 			char *new_string = GetTextString(TEXTSTRING_NEW_LEVEL);
-			sprintf(buffer, "%s (%s)", level_name, new_string);
+			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
+			buffer[sizeof(buffer) - 1] = 0;
 
-			// allocate memory and copy the string.
-			MultiplayerLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
-			strcpy(MultiplayerLevelNames[i], buffer);
+			// Copy the name into memory made exactly big enough for it: its length plus
+			// one byte for the end marker (the zero byte that marks where a text stops).
+			size_t const nameSize = strlen(buffer) + 1;
+			MultiplayerLevelNames[i] = (char*) AllocateMem(nameSize);
+			memcpy(MultiplayerLevelNames[i], buffer, nameSize);
 		}
 		else {
 			MultiplayerLevelNames[i] = level_name;
@@ -702,11 +799,14 @@ void BuildMultiplayerLevelNameArray()
 		{
 			//a new level
 			char *new_string = GetTextString(TEXTSTRING_NEW_LEVEL);
-			sprintf(buffer, "%s (%s)", level_name, new_string);
+			_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", level_name, new_string);
+			buffer[sizeof(buffer) - 1] = 0;
 
-			//allocate memory and copy the string.
-			CoopLevelNames[i] = (char*) AllocateMem(strlen(buffer)+1);
-			strcpy(CoopLevelNames[i], buffer);
+			// Copy the name into memory made exactly big enough for it: its length plus
+			// one byte for the end marker (the zero byte that marks where a text stops).
+			size_t const nameSize = strlen(buffer) + 1;
+			CoopLevelNames[i] = (char*) AllocateMem(nameSize);
+			memcpy(CoopLevelNames[i], buffer, nameSize);
 		}
 		else {
 			CoopLevelNames[i] = level_name;
@@ -763,8 +863,13 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 {
 	char buffer[256];
 	// tack ( custom) onto the end of the name, before doing the string compare
+	// (The names passed in are at most 39 characters, but the note in brackets comes from language.txt and could be long.
+	// If the result does not fit, the level counts as not found.)
 	char *custom_string = GetTextString(TEXTSTRING_CUSTOM_LEVEL); 
-	sprintf(buffer,"%s (%s)", name, custom_string);
+	if (_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", name, custom_string) < 0) {
+		return -1;
+	}
+	buffer[sizeof(buffer) - 1] = 0;
 
 	// find the index of a custom level from its name
 	if (gameType == NGT_Coop)
@@ -812,7 +917,9 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 {
 	bool isCustom = false;
 
-	static char return_string[100];
+	// Big enough for any name BuildMultiplayerLevelNameArray makes, and every copy into it stops at its end.
+	// (At 100 bytes, a custom level file name of about 90 characters or more would not fit.)
+	static char return_string[MAX_PATH + 64];
 	return_string[0] = 0;
 	
 	// find the index of a custom level from its name
@@ -822,7 +929,7 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 			isCustom = true;
 		}
 
-		strcpy(return_string, CoopLevelNames[index]);
+		strncpy(return_string, CoopLevelNames[index], sizeof(return_string) - 1);
 	}
 	else
 	{
@@ -830,8 +937,9 @@ char *GetCustomMultiplayerLevelName(int index, int gameType)
 			isCustom = true;
 		}
 
-		strcpy(return_string, MultiplayerLevelNames[index]);
+		strncpy(return_string, MultiplayerLevelNames[index], sizeof(return_string) - 1);
 	}
+	return_string[sizeof(return_string) - 1] = 0;
 
 	// need to remove ' (custom)' from the end of the level name
 	if (isCustom) {

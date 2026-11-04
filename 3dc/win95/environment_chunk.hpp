@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   removed code and declarations only the level editor used: the game itself never runs them
+
 #ifndef _envchunk_hpp
 #define _envchunk_hpp 1
 
@@ -12,8 +16,6 @@ class Environment_Data_Chunk : public Lockable_Chunk_With_Children
 {
 public:
 
-	// empty constructor
-	Environment_Data_Chunk (Chunk_With_Children * parent);
 	// constructor from buffer
 	Environment_Data_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
 
@@ -70,11 +72,6 @@ private:
 	char lock_user[17];
 	
 	
-	// constructor from parent
-	Environment_Data_Header_Chunk (Environment_Data_Chunk * parent)
-	: Chunk (parent, "ENDTHEAD"),
-	flags (0), version_no (0)
-	{}
 	
 };
 	

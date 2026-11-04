@@ -7,6 +7,10 @@
  *    HISTORY:  Created 13/11/97 
  *
  *******************************************************************/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a function with nothing to do no longer holds two empty blocks, and switched-off test code is removed;
+//   the root gadget is made by a small function that hands it back (it works the same as before)
 
 /* Includes ********************************************************/
 #include "3dc.h"
@@ -90,7 +94,7 @@ extern void GADGET_Init(void)
 
 	/* CODE */
 	{
-		new RootGadget;
+		RootGadget :: Make();
 	}
 }
 
@@ -121,10 +125,6 @@ extern void GADGET_Render(void)
 
 	/* CODE */
 	{
-		#if 0
-		textprint("GADGET_Render()\n");
-		#endif
-
 		// under construction...
 		GLOBALASSERT( RootGadget :: GetRoot() );
 		RootGadget :: GetRoot() -> Render
@@ -133,30 +133,6 @@ extern void GADGET_Render(void)
 			r2rect :: PhysicalScreen(), // const struct r2rect& R2Rect_Clip,
 			ONE_FIXED // int FixP_Alpha
 		);
-
-		#if 0
-		// Test all the fonts:
-		{
-			SCString* pSCString_Test = new SCString("FONT TEST STRING");
-
-			for (int i=0;i<NUM_FONTS;i++)
-			{
-				IndexedFont* pFont = IndexedFont :: GetFont( (fonts)i );
-				GLOBALASSERT(pFont);
-
-				r2pos R2Pos_TempCursor(0,i*20);
-
-				pFont -> Render_Unclipped
-				(
-					R2Pos_TempCursor, // struct r2pos& R2Pos_Cursor,
-					ONE_FIXED, // int FixP_Alpha,
-					*pSCString_Test// const SCString& SCStr
-				);
-			}
-
-			pSCString_Test -> R_Release();
-		}
-		#endif
 	}
 }
 
@@ -166,13 +142,7 @@ extern void GADGET_ScreenModeChange_Setup(void)
 	/* expects to be called immediately before anything happens to the screen
 	mode */
 
-	/* PRECONDITION */
-	{
-	}
-
-	/* CODE */
-	{
-	}
+	// nothing to do before the screen mode changes
 }
 
 
