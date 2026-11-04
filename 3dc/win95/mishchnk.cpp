@@ -669,7 +669,9 @@ void File_Chunk::post_input_processing()
 	{
 		Object_Header_Chunk * object_header = ol()->get_header();
 
-		if (!object_header || !ol()->index_num_is_valid() || object_header->shape_id_no < 0 ||
+		// Only an object number too big for the object list is refused. A negative one is allowed: the original tools
+		// could leave -1 on an object that had no number yet, and build_object_array leaves those out of its list.
+		if (!object_header || ol()->object_data.index_num > Object_Chunk::Max_Index_Num || object_header->shape_id_no < 0 ||
 			object_header->shape_id_no > highest_shape_number || !shape_array[object_header->shape_id_no])
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;

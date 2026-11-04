@@ -339,6 +339,23 @@ static void TestObjectsAndShapes()
 		Check(file.get_object_by_index(5) == object, "and the object can be found by its number");
 	}
 
+	{
+		// The original tools could leave -1 on an object that had no number yet. It joins up as usual, and stays out of
+		// the list of objects by number.
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		Shape_Chunk * shape = new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		size_t const bytes = BuildObject(-1, 7);
+		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		file.post_input_processing();
+
+		Check(file.error_code == 0, "an object numbered -1 is accepted");
+		Check(object->get_assoc_shape() == shape, "and the object is joined to its shape");
+		Check(file.get_object_by_index(0) == 0, "and it stays out of the list of objects by number");
+	}
+
 	struct BadLevel { int objectNumber; int shapeItNames; int shapeNumber; char const * what; };
 	BadLevel const badLevels[] =
 	{
@@ -347,7 +364,6 @@ static void TestObjectsAndShapes()
 		{          5,         -1,          7, "an object naming a negative shape number is refused" },
 		{          5, 0x7FFFFFFF,          7, "an object naming a huge shape number is refused" },
 		{ 0x40000000,          7,          7, "an object number too big for the list is refused" },
-		{         -1,          7,          7, "a negative object number is refused" },
 		{          5,         -1,         -1, "a negative shape number is refused" },
 		{          5, 0x7FFFFFFF, 0x7FFFFFFF, "a huge shape number is refused" },
 	};
