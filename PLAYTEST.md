@@ -4,8 +4,9 @@
 safe, and known security bugs are still open: read "Stay safe" below before you play.
 
 ## Which build?
-- `avpx_main` is **test**. Every commit there has passed the security scans, and each one gets a build.
-- Tags (`v1.2.3`) are **stable**. A tag only builds if it is on `avpx_main` and the scans passed on that exact commit.
+Builds are made only when the project's owner starts one, from `avpx_main`, and only if the security scans passed on that
+commit. There may be none to download: known security bugs are still open, so automatic builds and stable tags stay off
+until those are closed.
 
 ## What you need
 - Windows 8 or later.
@@ -15,7 +16,7 @@ safe, and known security bugs are still open: read "Stay safe" below before you 
 ## Install, by hand
 1. **Copy your game to a new folder.** Don't install into the Steam folder: a test build replaces the game's program, and
    Steam may overwrite it. A copy keeps your real game untouched. This folder is your *test folder*.
-2. **Get the build.** On GitHub, open **Actions**, then **Build**, then the run for the commit or tag you want, and download
+2. **Get the build.** On GitHub, open **Actions**, then **Build**, then the run you want, and download
    the `avp-...` file under **Artifacts**. GitHub asks you to sign in, and keeps each build for 30 days.
 3. **Check it.** Unzip it, then, in PowerShell, in the unzipped folder:
    ```powershell
@@ -36,7 +37,7 @@ Install Visual Studio 2026 with the C++ tools and vcpkg, then:
 ```
 git clone https://github.com/Melanikus/AvP.git
 cd AvP
-git checkout <tag or commit>
+git checkout <commit>
 msbuild win32\VS2026\AvP.sln /p:Configuration=Release /p:Platform=Win32
 ```
 The game and its DLLs are in `win32\VS2026\Win32\Release`. The first build takes a while, because it builds the libraries
