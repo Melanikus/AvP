@@ -21,6 +21,9 @@
 # Our own code has no build mode none job. It would only guess at what the traced job knows, so it would report problems
 # nobody could fix. Instead the gate requires that every C/C++ file in git really was read by the real build.
 #
+# The last job checks that a finding in a library header, seen while building the game, really was reported on the library's
+# side too. Those findings are fixed in the library, so one the library jobs missed would otherwise fall between the two.
+#
 # ANY finding, or any code CodeQL could not read, fails the job (.github/scripts/codeql-gate.ps1 decides). A finding is
 # resolved only by fixing it in the code: we don't ignore, park or exclude findings. D3DX is the one thing not read:
 # it's Microsoft's binary package, with no source to scan.
@@ -424,3 +427,34 @@ jobs:
             ${{ runner.temp }}/codeql_databases/*/log
             ${{ runner.temp }}/codeql_databases/*/diagnostic
           retention-days: 7
+
+  codeql-library-headers:
+    name: CodeQL (SAST) on library headers we use
+    needs: [codeql-own, codeql-libs]
+    # Always runs, for the same reason as the jobs above: a skipped required check counts as passed. If either report is
+    # missing, the check below fails.
+    if: ${{ always() }}
+    runs-on: windows-2025-vs2026   # pinned: the same machine as the other jobs
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the report on our code
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: codeql-own-report
+          path: reports/own
+
+      - name: Download the report on the libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: codeql-libs-report
+          path: reports/libs
+
+      - name: Fail if a library header's finding reached no library job
+        shell: pwsh
+        run: >-
+          ./.github/scripts/codeql-header-check.ps1 -OwnReport reports/own/codeql-report
+          -LibraryReport reports/libs/codeql-report

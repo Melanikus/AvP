@@ -32,7 +32,11 @@ param(
     [string] $Manifest = 'vcpkg.json',
 
     # The Visual Studio solution that builds the game.
-    [string] $Solution = 'win32/VS2026/AvP.sln'
+    [string] $Solution = 'win32/VS2026/AvP.sln',
+
+    # For the traced library scan: how many real source files CodeQL must read in each library, written as
+    # name=number,name=number. See the comment where codeql.yml sets it.
+    [string] $LibraryFloors = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,11 +74,20 @@ function Test-FileType([string] $Path, [string[]] $Types) {
 # meant to fail. Others aren't code at all: CMake's notes from looking for C++ modules, which CodeQL tries to read anyway.
 # None of them is part of a library, none ends up in the game, and no fix of ours could reach them. So in the traced
 # library scan they don't decide anything, in either direction: a problem in one can't fail the scan, and seeing one
-# doesn't prove a library was read. They are still listed, in cmake-files-set-aside.tsv, so nothing vanishes silently.
-# The match is exact on purpose: CMakeFiles straight inside a build folder such as enet/x86-windows-rel/. A file in a
-# library's own source can never match it, even if a library had a folder with that name.
-function Test-CMakeWorkFile([string] $Path) {
-    return ($Kind -eq 'libs') -and ($Path -match '^[^/]+/[^/]+-(rel|dbg)/CMakeFiles/')
+# doesn't prove a library was read.
+#
+# Our own build has a similar case. It reads the libraries' headers from vcpkg_installed/, and a finding there can't be
+# fixed in our code. The library jobs read those same headers, and the "library headers" job in codeql.yml checks that
+# every such finding really shows up there, so nothing is lost. The one exception is Microsoft's D3DX, which is outside
+# this gate by the project's ruling: the check lists it but doesn't judge it.
+#
+# All of these are listed in set-aside.tsv, so nothing vanishes silently. Each match is exact on purpose. CMakeFiles must
+# sit straight inside a build folder such as enet/x86-windows-rel/, so a file in a library's own source can never match,
+# even if a library had a folder with that name.
+function Test-SetAsideFile([string] $Path) {
+    if ($Kind -eq 'libs') { return $Path -match '^[^/]+/[^/]+-(rel|dbg)/CMakeFiles/' }
+    if ($Kind -eq 'own') { return $Path -match '^vcpkg_installed/' }
+    return $false
 }
 
 # Turns a location from the report into a plain file name such as 3dc/avp/weapons.cpp.
@@ -114,8 +127,8 @@ foreach ($file in $sarifFiles) {
 }
 
 # Findings: any at all fails the scan, whatever their level.
-$setAsideFindings = @($findings | Where-Object { Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0]) })
-$findings = @($findings | Where-Object { -not (Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0])) })
+$setAsideFindings = @($findings | Where-Object { Test-SetAsideFile (Get-ReportPath @($_.locations)[0]) })
+$findings = @($findings | Where-Object { -not (Test-SetAsideFile (Get-ReportPath @($_.locations)[0])) })
 $findingLines = foreach ($finding in $findings) {
     $place = @($finding.locations)[0]
     $firstLine = ([string] $finding.message.text -split "`n")[0]
@@ -132,13 +145,13 @@ if ($findings.Count -gt 0) {
 $noticesByKind = @($notices | Group-Object -Property { $_.descriptor.id } | Sort-Object -Property Count -Descending)
 Write-ReportList 'notices-by-kind.txt' @($noticesByKind | ForEach-Object { '{0,7}  {1}' -f $_.Count, $_.Name })
 $readProblems = @($notices | Where-Object { $_.descriptor.id -match $readProblemNotice })
-$setAsideProblems = @($readProblems | Where-Object { Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0]) })
-$readProblems = @($readProblems | Where-Object { -not (Test-CMakeWorkFile (Get-ReportPath @($_.locations)[0])) })
+$setAsideProblems = @($readProblems | Where-Object { Test-SetAsideFile (Get-ReportPath @($_.locations)[0]) })
+$readProblems = @($readProblems | Where-Object { -not (Test-SetAsideFile (Get-ReportPath @($_.locations)[0])) })
 $setAsideLines = foreach ($item in @($setAsideFindings) + @($setAsideProblems)) {
     $rule = if ($item.ruleId) { $item.ruleId } else { $item.descriptor.id }
     '{0}{1}{2}' -f $rule, "`t", (Get-ReportPath @($item.locations)[0])
 }
-Write-ReportList 'cmake-files-set-aside.tsv' @($setAsideLines)
+Write-ReportList 'set-aside.tsv' @($setAsideLines)
 $readProblemLines = foreach ($problem in $readProblems) {
     $place = @($problem.locations)[0]
     $firstLine = ([string] $problem.message.text -split "`n")[0]
@@ -226,15 +239,36 @@ if ($Kind -eq 'own') {
     # What we can demand is that every library was seen, which catches CodeQL losing sight of a library's whole build.
     $libraries = @(Get-ChildItem -LiteralPath $SourceRoot -Directory | Where-Object { $notLibraries -notcontains $_.Name })
     if ($libraries.Count -eq 0) { $failures.Add('No libraries were built') }
+
+    # The list of what each library must show. With no list at all the scan fails, so dropping the setting from the
+    # workflow can't quietly switch this check off.
+    $floors = @{}
+    foreach ($entry in ($LibraryFloors -split ',' | Where-Object { $_ })) {
+        $name, $number = $entry -split '='
+        $floors[$name.Trim()] = [int] $number
+    }
+    if ($floors.Count -eq 0) { $failures.Add('No library floors were given') }
+
     $libraryLines = foreach ($library in $libraries) {
         $count = @($seen | Where-Object {
                 $_.StartsWith("$($library.Name)/", [System.StringComparison]::OrdinalIgnoreCase) -and
-                (Test-FileType $_ $sourceTypes) -and -not (Test-CMakeWorkFile $_)
+                (Test-FileType $_ $sourceTypes) -and -not (Test-SetAsideFile $_)
             }).Count
-        if ($count -eq 0) { $failures.Add("CodeQL saw no compiled source for the library $($library.Name)") }
+        if (-not $floors.ContainsKey($library.Name)) {
+            $failures.Add("The library $($library.Name) has no floor in codeql.yml, so a partial read of it would go unnoticed")
+        } elseif ($count -lt $floors[$library.Name]) {
+            $failures.Add("CodeQL read $count source files in $($library.Name), fewer than the $($floors[$library.Name]) it must read")
+        }
         '{0,7}  {1}' -f $count, $library.Name
     }
     Write-ReportList 'source-files-by-library.txt' @($libraryLines)
+
+    # A library with a floor that never turned up at all is the worst case of a partial read.
+    foreach ($name in $floors.Keys) {
+        if (@($libraries | Where-Object { $_.Name -eq $name }).Count -eq 0) {
+            $failures.Add("The library $name has a floor but was never built")
+        }
+    }
 }
 
 $missed = @($expected | Where-Object { -not $seen.Contains($_) })
@@ -300,7 +334,7 @@ $summary = @(
     "  findings:        $($findings.Count)",
     "  read problems:   $($readProblems.Count)",
     "  look-away notes: $($suppressions.Count)",
-    "  CMake set aside: $(@($setAsideFindings).Count + @($setAsideProblems).Count)",
+    "  set aside:       $(@($setAsideFindings).Count + @($setAsideProblems).Count) (see set-aside.tsv)",
     "  unreached code:  $($unreached.Count) blocks (measured, not judged)"
 )
 Write-ReportList 'summary.txt' $summary
