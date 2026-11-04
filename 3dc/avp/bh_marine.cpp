@@ -8,6 +8,7 @@
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
 //   a sentry sent back to a spot outside every module keeps the module it has
+//   a marine whose muzzle is missing from its model fires nothing, or stays on the muzzle it has
 #include "3dc.h"
 
 #include "inline.h"
@@ -13241,9 +13242,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSADAR(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;
@@ -18611,10 +18614,19 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeTwoPistols(STRATEGYBLOCK *sbP
 		marineStatusPointer->roundsForThisTarget++;
 
 		/* Alternate gun flash. */
-		if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
-		} else {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+		// the other muzzle is a named part of the model. If it's missing, the marine goes on firing from this one
+		{
+			SECTION_DATA *otherFlash;
+
+			if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
+			} else {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+			}
+
+			if (otherFlash) {
+				marineStatusPointer->My_Gunflash_Section=otherFlash;
+			}
 		}
 
 		/* look after the gun flash */
@@ -18956,9 +18968,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSkeeter(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;
