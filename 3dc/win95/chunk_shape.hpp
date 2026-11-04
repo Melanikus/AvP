@@ -161,6 +161,9 @@ public:
 
 	Console_Shape_Chunk* get_console_shape_data(Console_Type);
 
+	// refuses the level if the numbers that give this sub-shape's size can't be real
+	virtual void post_input_processing();
+
 	// Number stored for list_pos when loading
 
 	int list_pos_number;

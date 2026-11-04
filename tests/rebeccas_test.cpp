@@ -23,7 +23,7 @@
 // After a level is read, the game joins each object to its shape, using numbers from the file. So tests 7 and 8 build
 // real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that doesn't
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
-// Test 10 does the same for the corners of a polygon.
+// Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing.
 //
 // HOW IT RUNS
 //
@@ -540,8 +540,9 @@ static void TestBakedColours()
 	Parent_File = 0;
 }
 
-// Room for the data of a whole shape: its header, its points and its polygons, laid out as in a level file.
-alignas(int) static char wholeShape[16384];
+// Room for the data of a whole shape: its header, its points and its polygons, laid out as in a level file. The biggest
+// one here has 10001 points, at 12 bytes each.
+alignas(int) static char wholeShape[130000];
 
 // Writes a chunk's header and gives back where its data goes. The data starts as all zeros.
 static char * PutChunk(char * where, char const * name, size_t dataBytes)
@@ -603,6 +604,69 @@ static void TestPolygons()
 	Parent_File = 0;
 }
 
+// 11. Sub-shapes become shapes in the game, so they get the same checks. A sub-shape used as a morph frame must also have
+// as many points as the shape that morphs, and that shape must fit the game's list of 1024 morphed points.
+static void TestSubShapes()
+{
+	puts("11. sub-shapes");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const badCorner[5] = { 0, 1, 9, -1, -1 };
+
+	struct SubShapeRow { int points; int const * corners; bool accepted; char const * what; };
+	SubShapeRow const rows[] =
+	{
+		{     4, triangle,  true,  "a sub-shape with sensible numbers is accepted" },
+		{ 10000, triangle,  true,  "a sub-shape with as many points as the game can hold is accepted" },
+		{ 10001, triangle,  false, "a sub-shape with one point too many is refused" },
+		{     4, badCorner, false, "a sub-shape with a corner past its last point is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, rows[i].points, rows[i].corners);
+		new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes);
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+	}
+
+	struct MorphRow { int shapePoints; int framePoints; bool accepted; char const * what; };
+	MorphRow const morphRows[] =
+	{
+		{    4,    4, true,  "a morph frame the same size as its shape is accepted" },
+		{ 1024, 1024, true,  "a morphing shape that just fits the list is accepted" },
+		{    4,    3, false, "a morph frame with too few points is refused" },
+		{    4,    5, false, "a morph frame with too many points is refused" },
+		{ 1025, 1025, false, "a morphing shape too big for the list is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(morphRows) / sizeof(morphRows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		// the frame is built first, and copied in once its size is known
+		alignas(int) static char frame[16384];
+		size_t const frameBytes = BuildShapeData(frame, true, morphRows[i].framePoints, triangle);
+		size_t const mainBytes = BuildShapeData(wholeShape, false, morphRows[i].shapePoints, triangle);
+
+		char * morph = PutChunk(wholeShape + mainBytes, "SHPMORPH", ChunkHeaderBytes + frameBytes);
+		char * subShape = PutChunk(morph, "SUBSHAPE", frameBytes);
+		memcpy(subShape, frame, frameBytes);
+
+		new Shape_Chunk(&file, wholeShape, mainBytes + 2 * ChunkHeaderBytes + frameBytes);
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == morphRows[i].accepted, morphRows[i].what);
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -618,6 +682,7 @@ int main()
 	TestHierarchySections();
 	TestBakedColours();
 	TestPolygons();
+	TestSubShapes();
 
 	if (checksFailed)
 	{

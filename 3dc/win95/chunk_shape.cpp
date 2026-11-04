@@ -4,7 +4,8 @@
 //   text is copied using its exact measured length, so it always fits
 //   a child chunk whose size cannot be real is refused
 //   added a check on how many points a shape claims
-//   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points
+//   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points;
+//   sub-shapes get the same checks, and a morphing shape must fit the morph list and match its frames
 
 #include <math.h>
 
@@ -144,6 +145,31 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 			int const corner = shape.poly_list[i].vert_ind[j];
 
 			if (corner < 0 || corner >= point_count)
+			{
+				return false;
+			}
+		}
+	}
+
+	// A shape that morphs blends its points with those of its morph frames, and writes the result into MorphedPts, another
+	// list of a fixed size and a smaller one. The blend goes by the shape's count, so every frame needs that many points.
+	// All 860 morph frames in the game's own levels match their shape, and the biggest has 808 points. Sub-shapes anywhere
+	// else don't have to match: fragments of a shape are shapes of their own, and nearly all of them are smaller.
+	Chunk_With_Children * morphing = (Chunk_With_Children *) shape_chunk->lookup_single_child ("SHPMORPH");
+
+	if (morphing)
+	{
+		if (point_count > maxmorphPts)
+		{
+			return false;
+		}
+
+		List<Chunk *> frames;
+		morphing->lookup_child ("SUBSHAPE", frames);
+
+		for (LIF<Chunk *> frame(&frames); !frame.done(); frame.next())
+		{
+			if (((Shape_Sub_Shape_Chunk *) frame())->shape_data.num_verts != point_count)
 			{
 				return false;
 			}
@@ -1819,6 +1845,18 @@ Shape_Sub_Shape_Chunk::Shape_Sub_Shape_Chunk(Chunk_With_Children * parent, const
 
 Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 {
+}
+
+// A sub-shape becomes a shape in the game like any other, so it has to pass the same checks. It can sit in several
+// different places inside a shape, and this step reaches every one of them. load_rif sees the error and stops the level.
+void Shape_Sub_Shape_Chunk::post_input_processing()
+{
+	if (!shape_numbers_are_valid (shape_data, this))
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	Chunk_With_Children::post_input_processing();
 }
 
 Shape_Sub_Shape_Header_Chunk * Shape_Sub_Shape_Chunk::get_header()
