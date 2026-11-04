@@ -5,7 +5,8 @@
 //   decals are limited to the room the game has for them, and unknown kinds of decal are skipped;
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
-//   a shape set collection is limited to the sets and shapes the game has room for
+//   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
+//   number is left out
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -712,7 +713,10 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
-		max_index=max(max_index,coll->Set_Collection_Num);	
+		if(coll->number_is_valid())
+		{
+			max_index=max(max_index,coll->Set_Collection_Num);
+		}
 	}
 
 	if(max_index==-1) return;
@@ -757,6 +761,14 @@ void Global_Hierarchy_Store::setup_alternate_shape_sets(List <Object_ShapeNum_Pa
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Hierarchy_Shape_Set_Collection_Chunk* coll=(Hierarchy_Shape_Set_Collection_Chunk*)chlif();
+
+		// A number the list has no place for goes to the log, and that collection is left out. See number_is_valid.
+		if(!coll->number_is_valid())
+		{
+			LogErrorString("level file gives a shape set collection an impossible number: " + Util::IntToString(coll->Set_Collection_Num));
+			continue;
+		}
+
 		//locate the sets that this collections is using
 		num_found_sets=0;
 		num_shapes_to_replace=0;
