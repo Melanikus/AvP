@@ -13,12 +13,11 @@
 [CmdletBinding()]
 param(
     # Which scan this is. It sets the list of files we expect to see in the report:
-    #   own         = every source file the game's Visual Studio projects compile;
-    #   own-all     = every C/C++ file in git, compiled or not;
+    #   own         = every source file the game's Visual Studio projects compile, and every C/C++ file in git;
     #   libs        = the libraries as really compiled: each one must have at least one source file in the report;
     #   all-sources = every C/C++ file of the libraries, compiled or not;
     #   actions     = this repository's workflows: there is no list to compare with, but it must have read something.
-    [Parameter(Mandatory)] [ValidateSet('own', 'own-all', 'libs', 'all-sources', 'actions')] [string] $Kind,
+    [Parameter(Mandatory)] [ValidateSet('own', 'libs', 'all-sources', 'actions')] [string] $Kind,
 
     # The folder CodeQL wrote its report (.sarif) into.
     [Parameter(Mandatory)] [string] $SarifFolder,
@@ -53,6 +52,10 @@ $readProblemNotice = '/diagnostics/(failed-extractor-invocations|extraction-warn
 # the gate. Whoever adds one should add a CodeQL job for its language and take it off this list.
 $unscannedTypes = '.cs', '.cshtml', '.razor', '.go', '.java', '.kt', '.kts', '.py', '.rb', '.erb', '.rs', '.swift',
     '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.html', '.htm', '.xhtml'
+
+# C/C++ files git tracks that no compiler should read. The only one: resource.h belongs to the Windows resource file
+# win32/AvP.rc, which holds the game's icon and is built by a different tool.
+$notCompiledHeaders = @('win32/resource.h')
 
 # Helper entries in vcpkg's build folder that hold no library code. D3DX is Microsoft's binary package: it has no source
 # to scan, and it is the one exception the project accepts.
@@ -190,12 +193,22 @@ if ($Kind -eq 'own') {
             }
         })
     if ($expected.Count -eq 0) { $failures.Add("The projects in $Solution list no source files") }
-} elseif ($Kind -eq 'own-all') {
-    # Git's list of our files is the truth: anything tracked must have been read. We ask for every file and pick out the
-    # C/C++ ones ourselves, because git's own filter would miss a name in capitals like OLDFILE.CPP.
+
+    # Git's list of our files is the truth for what exists. We ask for every file and pick out the C/C++ ones ourselves,
+    # because git's own filter would miss a name in capitals like OLDFILE.CPP.
     $tracked = @(git -C $SourceRoot ls-files)
     if ($LASTEXITCODE -ne 0) { $failures.Add('git could not list the tracked files') }
-    $expected = @($tracked | Where-Object { (Test-FileType $_ $sourceTypes) -or (Test-FileType $_ $headerTypes) })
+
+    # A source file no project builds, or a header nothing includes, is code nobody reads. Either it's dead and should
+    # go, or it's missing from the build. Headers are compared with what CodeQL really read during the build.
+    $trackedSources = @($tracked | Where-Object { Test-FileType $_ $sourceTypes })
+    $notInBuild = @($trackedSources | Where-Object { $expected -notcontains $_ })
+    $trackedHeaders = @($tracked | Where-Object { (Test-FileType $_ $headerTypes) -and ($notCompiledHeaders -notcontains $_) })
+    $unreadHeaders = @($trackedHeaders | Where-Object { -not $seen.Contains($_) })
+    Write-ReportList 'not-in-the-build.txt' (@($notInBuild) + @($unreadHeaders))
+    if ($notInBuild.Count -gt 0) { $failures.Add("$($notInBuild.Count) source files are in no project (see not-in-the-build.txt)") }
+    if ($unreadHeaders.Count -gt 0) { $failures.Add("$($unreadHeaders.Count) headers were read by no compile (see not-in-the-build.txt)") }
+
     $unscanned = @($tracked | Where-Object { Test-FileType $_ $unscannedTypes })
     Write-ReportList 'languages-not-scanned.txt' $unscanned
     if ($unscanned.Count -gt 0) {
