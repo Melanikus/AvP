@@ -4,7 +4,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
-//   overflowed
+//   overflowed;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 #include "3dc.h"
 #include "logString.h"
 #include <math.h>
@@ -56,10 +57,10 @@ extern fixed_t SmartTargetSightX, SmartTargetSightY;
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 
 extern SHAPEHEADER *Global_ShapeHeaderPtr;
-extern int *Global_ShapePoints;
+extern VECTORCH *Global_ShapePoints;
 extern int **Global_ShapeItems;
 extern int *Global_ShapeNormals;
-extern int *Global_ShapeVNormals;
+extern VECTORCH *Global_ShapeVNormals;
 extern int **Global_ShapeTextures;
 
 extern MATRIXCH LToVMat;
@@ -232,7 +233,7 @@ extern void InitialiseLightIntensityStamps(void)
 void SetupShapePipeline(void)
 {
 	/* Set up these global pointers */
-	Global_ShapePoints    = *(Global_ShapeHeaderPtr->points);
+	Global_ShapePoints    = (VECTORCH *)*(Global_ShapeHeaderPtr->points);
 	Global_ShapeTextures  = Global_ShapeHeaderPtr->sh_textures;
 
 	if (Global_ODB_Ptr->ObEIDPtr) {
@@ -250,7 +251,7 @@ void SetupShapePipeline(void)
 	}
 
 	if (Global_ShapeHeaderPtr->sh_vnormals) {
-		Global_ShapeVNormals = *(Global_ShapeHeaderPtr->sh_vnormals);
+		Global_ShapeVNormals = (VECTORCH *)*(Global_ShapeHeaderPtr->sh_vnormals);
 	} else {
 		Global_ShapeVNormals = 0;
 	}
@@ -1454,8 +1455,8 @@ static void VertexIntensity_Pred_Thermal(RENDERVERTEX *renderVertexPtr)
 	}
 
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1557,7 +1558,7 @@ static void VertexIntensity_Pred_SeeAliens(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1642,7 +1643,7 @@ static void VertexIntensity_Pred_SeePredatorTech(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1718,8 +1719,8 @@ static void VertexIntensity_ImageIntensifier(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -1878,8 +1879,8 @@ static void VertexIntensity_Standard_Opt(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -2072,8 +2073,8 @@ static void VertexIntensity_DiscoInferno(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -2183,7 +2184,7 @@ static void VertexIntensity_DiscoInferno(RENDERVERTEX *renderVertexPtr)
 	{
 		int i = (redI + greenI + blueI);
 		int si = (specularR + specularG + specularB);
-		VECTORCH vertex = *(((VECTORCH *)Global_ShapePoints) + vertexNumber);
+		VECTORCH vertex = Global_ShapePoints[vertexNumber];
 		int r, g, b;
 		vertex.vx += Global_ODB_Ptr->ObWorld.vx;
 		vertex.vy += Global_ODB_Ptr->ObWorld.vy;
@@ -2271,8 +2272,8 @@ static void VertexIntensity_Underwater(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -3347,7 +3348,7 @@ void MorphPoints(SHAPEINSTR *shapeinstrptr)
 			SHAPEHEADER *shape2Ptr;
 			shape2Ptr = MorphDisplay.md_sptr2;
 			srcPtr = (VECTORCH *)*shape2Ptr->points;
-			Global_ShapePoints = *(shape2Ptr->points);
+			Global_ShapePoints = (VECTORCH *)*(shape2Ptr->points);
 		} else {
 			SHAPEHEADER *shape2Ptr;
 			shape2Ptr = MorphDisplay.md_sptr2;
@@ -3376,7 +3377,7 @@ void MorphPoints(SHAPEINSTR *shapeinstrptr)
 					morphedPointsPtr++;
 				}
 			}
-			Global_ShapePoints = (int *)MorphedPts;
+			Global_ShapePoints = MorphedPts;
 			srcPtr = (VECTORCH *)MorphedPts;
 		}
 	}

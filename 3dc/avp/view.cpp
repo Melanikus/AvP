@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles from a save file are kept between 0 and 4095 before a sine or cosine lookup, and an object's light
-//   list has room for every light
+//   list has room for every light;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -73,10 +74,12 @@ int GlobalAmbience;
 int LightScale = ONE_FIXED;
 int DrawingAReflection;
 
-int *Global_ShapePoints = 0;
+// The shape being drawn. These two are lists of VECTORCH, one entry for each point in the shape. The shape's own data
+// keeps them as int **, so they are turned into what they really are once, where they are set, in kshape.cpp.
+VECTORCH *Global_ShapePoints = 0;
 int **Global_ShapeItems = 0;
 int *Global_ShapeNormals = 0;
-int *Global_ShapeVNormals = 0;
+VECTORCH *Global_ShapeVNormals = 0;
 int **Global_ShapeTextures = 0;
 VIEWDESCRIPTORBLOCK *Global_VDB_Ptr = 0;
 DISPLAYBLOCK *Global_ODB_Ptr = 0;
