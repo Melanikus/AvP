@@ -96,9 +96,6 @@
     <ClCompile Include="..\..\3dc\mathline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\mem3dcpp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\module.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
