@@ -25,7 +25,8 @@
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
-// animated shapes, test 16 the lists of texture coordinates, and test 17 the lists of normals.
+// animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, and test 18 whether a lift has all
+// its parts.
 //
 // HOW IT RUNS
 //
@@ -46,6 +47,9 @@
 #include "chunk_light.hpp"
 #include "hierarchy_chunk.hpp"
 #include "mishchnk.hpp"
+#include "module.h"
+#include "strategy_def.h"
+#include "bh_lift.h"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
@@ -1298,6 +1302,54 @@ static void TestNormals()
 	}
 }
 
+// 18. A lift's stations, doors and modules are found by numbers and names from the level file, so any of them can be missing,
+// and the code that runs a lift reads through all of them with no check. A lift with a part missing has to stay still.
+static void TestLifts()
+{
+	puts("18. lifts");
+
+	LIFT_STATION stations[2];
+	LIFT_STATION *list[2] = { &stations[0], &stations[1] };
+
+	// only ever compared with nothing, never read through
+	STRATEGYBLOCK *const someDoor = (STRATEGYBLOCK *)&stations[0];
+	MODULE *const someModule = (MODULE *)&stations[0];
+
+	memset(stations, 0, sizeof(stations));
+	stations[0].lift_door = someDoor;
+	stations[0].lift_module = someModule;
+	stations[1].lift_door = someDoor;
+	stations[1].lift_module = someModule;
+
+	LIFT_CONTROL_BLOCK lift;
+	memset(&lift, 0, sizeof(lift));
+	lift.num_stations = 2;
+	lift.lift_stations = list;
+	Check(LiftIsComplete(&lift) != 0, "a lift with all its parts can run");
+
+	lift.num_stations = 0;
+	Check(LiftIsComplete(&lift) == 0, "a lift with no stations can't run");
+
+	lift.num_stations = -1;
+	Check(LiftIsComplete(&lift) == 0, "a lift with a negative number of stations can't run");
+
+	lift.num_stations = 2;
+	lift.lift_stations = 0;
+	Check(LiftIsComplete(&lift) == 0, "a lift with no list of stations can't run");
+
+	lift.lift_stations = list;
+	list[1] = 0;
+	Check(LiftIsComplete(&lift) == 0, "a lift with a floor left empty can't run");
+
+	list[1] = &stations[1];
+	stations[1].lift_door = 0;
+	Check(LiftIsComplete(&lift) == 0, "a lift with a door missing can't run");
+
+	stations[1].lift_door = someDoor;
+	stations[1].lift_module = 0;
+	Check(LiftIsComplete(&lift) == 0, "a lift with a module missing can't run");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1320,6 +1372,7 @@ int main()
 	TestAnimatedShapes();
 	TestTextureCoordinates();
 	TestNormals();
+	TestLifts();
 
 	if (checksFailed)
 	{

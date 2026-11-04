@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a floor number from the level file must fit the list of stations before it is written there
+//   a lift with a station, door or module missing stays still, where it used to crash on its first frame or first move
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -132,13 +133,19 @@ void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 
 		// fill in the number of floors
 		
-		lcont->num_stations	= lift_tt->num_stations;
-  		lcont->lift_stations = (LIFT_STATION**)AllocateMem(sizeof(LIFT_STATION*)*lcont->num_stations);											
+		// this count comes from the level file. A lift with no stations gets no list, and LiftIsComplete keeps it still
+		lcont->num_stations	= (lift_tt->num_stations > 0) ? lift_tt->num_stations : 0;
+		lcont->lift_stations = NULL;
 
-		if(!lcont->lift_stations) 
+		if(lcont->num_stations)
 		{
-			memoryInitialisationFailure = 1;
-			return ((void *)NULL);
+			lcont->lift_stations = (LIFT_STATION**)AllocateMem(sizeof(LIFT_STATION*)*lcont->num_stations);
+
+			if(!lcont->lift_stations)
+			{
+				memoryInitialisationFailure = 1;
+				return ((void *)NULL);
+			}
 		}
 
 		//and init that array
@@ -210,6 +217,11 @@ void LiftBehaveFun(STRATEGYBLOCK* sbptr)
 		
 	if(lift_bhv->controller)
    	{
+		// everything below reads through the lift's list, its doors and its modules with no check of its own
+		if(!LiftIsComplete(lift_ctrl))
+		{
+			return;
+		}
 
    		// HACK	- RWH - if this is true the data is broken and this fix won't always work
 

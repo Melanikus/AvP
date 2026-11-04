@@ -70,6 +70,30 @@ typedef struct lift_control
 
 } LIFT_CONTROL_BLOCK;
 
+// Whether a lift has everything it needs to run. Its stations, and each station's door and module, are found by numbers and names
+// from the level file, so any of them can be missing, and the code that runs a lift reads through all of them with no check. So a
+// lift that isn't complete doesn't run at all. No level that comes with the game has a lift of this kind, so this comes from how
+// the code uses them, not from measuring levels. It's here and not in bh_lift.cpp so that a test can call it.
+inline BOOL LiftIsComplete(const LIFT_CONTROL_BLOCK *lift)
+{
+	if (lift->num_stations < 1 || !lift->lift_stations)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < lift->num_stations; i++)
+	{
+		const LIFT_STATION *station = lift->lift_stations[i];
+
+		if (!station || !station->lift_door || !station->lift_module)
+		{
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 
 typedef struct lift_behaviour
 {
