@@ -689,7 +689,7 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 
 						D3D_ZBufferedGouraudPolygon_Output(polyPtr, RenderPolygon.Vertices);
 					} else {
-						D3D_ZBufferedGouraudPolygon_Output(polyPtr, VerticesBuffer);
+						D3D_ZBufferedGouraudPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 					}
 
 					break;

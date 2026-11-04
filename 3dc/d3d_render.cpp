@@ -1411,6 +1411,18 @@ void DrawParticles()
 	}
 }
 
+// Writes down a polygon's normals, if it goes in the surface pictures. Only a real polygon of the shape being drawn has normals to look up,
+// and shapePolygon is its place in that shape. The other callers make their polygons up on the spot, like an explosion's, and those have no
+// corner numbers, so they leave it at -1. A see-through polygon can be drawn long after its shape, when the shape's normals are no longer
+// the current ones. It never reaches the pictures, and nor does the weapon, so neither needs a normal.
+static void WriteSurfaceNormals(const POLYHEADER *polygon, int shapePolygon)
+{
+	if (shapePolygon >= 0 && !gunLayer && RenderPolygon.TranslucencyMode == TRANSLUCENCY_OFF)
+	{
+		SurfaceNormals_WritePolygon(polygon, shapePolygon, vb, RenderPolygon.NumberOfVertices);
+	}
+}
+
 void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr, int shapePolygon)
 {
 	// bjd - This is the function responsible for drawing level geometry and the players weapon
@@ -1434,14 +1446,7 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 		mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
 	}
 
-	// Only a real polygon of the shape being drawn has normals to look up, and shapePolygon is its place in that shape. The other callers make
-	// their polygons up on the spot, like an explosion's, and those have no corner numbers, so they leave it at -1. A see-through polygon can
-	// be drawn long after its shape, when the shape's normals are no longer the current ones. It never reaches the surface pictures, and nor
-	// does the weapon, so neither needs a normal.
-	if (shapePolygon >= 0 && !gunLayer && RenderPolygon.TranslucencyMode == TRANSLUCENCY_OFF)
-	{
-		SurfaceNormals_WritePolygon(inputPolyPtr, shapePolygon, vb, RenderPolygon.NumberOfVertices);
-	}
+	WriteSurfaceNormals(inputPolyPtr, shapePolygon);
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -1470,7 +1475,7 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 	}
 }
 
-void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
+void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr, int shapePolygon)
 {
 	// responsible for drawing predators lock on triangle, for one
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
@@ -1483,6 +1488,10 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	int32_t flags = inputPolyPtr->PolyFlags;
 
 	mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, RenderPolygon.TranslucencyMode);
+
+	// With no texture, this reads the white one, so the surface pictures hold it as white. It's still a real surface, and the lights left out
+	// of the game's lighting for its shape are added from those pictures.
+	WriteSurfaceNormals(inputPolyPtr, shapePolygon);
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
