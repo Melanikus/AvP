@@ -148,6 +148,78 @@ static bool ToyLightIsAddedLater(const LIGHTBLOCK *light)
 	return !gunLayer && !DrawingAReflection && !ToyShadowsInMirror && ToyShadows_LightIsByPixel(light);
 }
 
+// One live light for the table surfaceScene.vsh reads. It leaves out the same lights LightSourcesInRangeOfObject leaves out of a wall: one with no light in it, one
+// that's added per pixel, and one of the level's own, which is already baked into a wall. The second line of numbers is the light's brightness and colour
+// together, already taken down to what 1 means in the shader: the game multiplies these by 65536 twice over, and then divides by 256 and by 255.
+static bool AddLightToWallTable(const LIGHTBLOCK *light, float *table, int place, int mostLights)
+{
+	if (place >= mostLights || !light->LightBright || !(light->RedScale || light->GreenScale || light->BlueScale))
+	{
+		return false;
+	}
+
+	if ((light->LightFlags & LFlag_PreLitSource) || ToyShadows_LightIsByPixel(light))
+	{
+		return false;
+	}
+
+	float const scale = (float)light->BrightnessOverRange / 65536.0f / 65536.0f / (256.0f * 255.0f);
+	float *numbers = table + place * 8;
+
+	numbers[0] = (float)light->LightWorld.vx;
+	numbers[1] = (float)light->LightWorld.vy;
+	numbers[2] = (float)light->LightWorld.vz;
+	numbers[3] = (float)light->LightRange;
+	numbers[4] = (float)light->RedScale * scale;
+	numbers[5] = (float)light->GreenScale * scale;
+	numbers[6] = (float)light->BlueScale * scale;
+	numbers[7] = (light->LightFlags & LFlag_NoSpecular) ? 0.0f : 1.0f;
+
+	return true;
+}
+
+// Fills the table, eight numbers for each light, and gives back how many there are. Past the limit the rest go without, and passedLimit says so. Light elements
+// go first, because they're what the player's own actions make, like a muzzle flash, and they're the ones that would be missed.
+int StaticScene_GatherLights(float *table, int mostLights, bool *passedLimit)
+{
+	int count = 0;
+	int wanted = 0;
+
+	for (int i = 0; i < NumActiveLightElements; i++)
+	{
+		LIGHTBLOCK const *light = &LightElementStorage[i].LightBlock;
+
+		if (AddLightToWallTable(light, table, count, mostLights))
+		{
+			count++;
+		}
+		else if (count == mostLights)
+		{
+			wanted++;
+		}
+	}
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK const *block = ActiveBlockList[i];
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			if (AddLightToWallTable(block->ObLights[j], table, count, mostLights))
+			{
+				count++;
+			}
+			else if (count == mostLights)
+			{
+				wanted++;
+			}
+		}
+	}
+
+	*passedLimit = wanted > 0;
+	return count;
+}
+
 void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 {
 	DISPLAYBLOCK **aptr;

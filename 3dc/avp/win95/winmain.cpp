@@ -280,6 +280,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			StaticSceneOn = 1;
 		}
+		extern int StaticSceneNoLiveLights;
+		if (strstr(command_line, "-staticnolivelights"))
+		{
+			StaticSceneNoLiveLights = 1;
+		}
 		extern int StaticSurfaceCompare;
 		if (strstr(command_line, "-staticcompare"))
 		{

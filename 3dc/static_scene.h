@@ -17,6 +17,9 @@ void StaticScene_StartChoosing();
 void StaticScene_OfferModule(const struct displayblock *block);
 void StaticScene_FinishChoosing();
 
+// -staticnolivelights: the walls from the buffer get only what's baked into them. The user decides which it stays as.
+extern int StaticSceneNoLiveLights;
+
 // Whether this frame took this module.
 bool StaticScene_TookModule(int moduleNumber);
 

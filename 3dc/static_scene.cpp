@@ -15,6 +15,11 @@
 // need them behind them. If the list fills up and goes early, they go with that first part, or glass drawn early would stop the wall behind it being drawn.
 // They're known before any of that, so this is always possible.
 //
+// LIGHT: the light baked into a wall is in the buffer. Lights that are added per pixel go on as they do for everything. The rest of the live lights, like a
+// muzzle flash or a lamp that wasn't chosen, go in a table of numbers, and surfaceScene.vsh adds them up for each corner with the game's own sum. So all
+// the lights are at hand on the card at once, and nothing is worked out corner by corner on the processor. The gamma curve is done there too, last, because
+// a sum of light has to go through it after it's added up, and not before.
+//
 // IF THE CARD REFUSES: the old route has already been skipped, so that frame has lost its walls. So after one failure, this route stays off for the rest of the
 // level, and one bad frame stays one bad frame.
 
@@ -40,10 +45,13 @@ extern bool MirroringActive;
 extern int RequestedGammaSetting;
 
 bool StaticScene_ViewAllows();      // d3d_render.cpp: is this a view of the real picture, on a frame that isn't being compared?
+int StaticScene_GatherLights(float *table, int mostLights, bool *passedLimit);   // view.cpp, where the game's own list of lights lives
 
 int StaticSceneOn = 0;              // -staticscene
+int StaticSceneNoLiveLights = 0;    // -staticnolivelights
 
 static const int kMostRanges = 16384;
+static const int kMostLightsOnWalls = 64;   // Lights in surfaceScene.vsh holds this many
 
 static StaticRange ranges[kMostRanges];
 static int numRanges = 0;
@@ -54,7 +62,6 @@ static uint32_t frameNumber = 0;
 static bool choosing = false;
 static bool wallsAreDue = false;
 static bool refused = false;               // something failed on this level, so this route is off until the next one
-static int gammaOfColours = -1;
 static int modulesNotLit = 0;
 static bool toldAboutNotLit = false;
 
@@ -71,12 +78,11 @@ void StaticScene_StartLevel()
 {
 	refused = false;
 	toldAboutNotLit = false;
-	gammaOfColours = RequestedGammaSetting;
 }
 
 static bool FrameCanUseThisRoute()
 {
-	if (!StaticSceneOn || refused || !StaticLevel_Ready() || !d3d.surfaceSceneDecl || d3d.surfaceSceneEffect == kNullEffectID)
+	if (!StaticSceneOn || refused || !StaticLevel_Ready() || !StaticLevel_ColourBuffer() || !d3d.surfaceSceneDecl || d3d.surfaceSceneEffect == kNullEffectID)
 	{
 		return false;
 	}
@@ -89,18 +95,6 @@ static bool FrameCanUseThisRoute()
 	if (MIRROR_CHEATMODE || TRIPTASTIC_CHEATMODE || UNDERWATER_CHEATMODE || DISCOINFERNO_CHEATMODE || MOTIONBLUR_CHEATMODE)
 	{
 		return false;
-	}
-
-	// the colours on the card went through the gamma table, so if the slider has moved they have to be written again
-	if (RequestedGammaSetting != gammaOfColours)
-	{
-		if (!StaticLevel_RewriteColours())
-		{
-			RefuseForThisLevel("the colours couldn't be written again");
-			return false;
-		}
-
-		gammaOfColours = RequestedGammaSetting;
 	}
 
 	return true;
@@ -207,12 +201,41 @@ bool StaticScene_WallsAreDue()
 	return wallsAreDue;
 }
 
+// The gamma slider and the table of lights, straight into surfaceScene.vsh's registers.
+static void SetLightNumbers(LPDIRECT3DDEVICE9 device)
+{
+	static float table[kMostLightsOnWalls * 8];
+	static bool toldAboutLimit = false;
+
+	bool passedLimit = false;
+	int const count = StaticSceneNoLiveLights ? 0 : StaticScene_GatherLights(table, kMostLightsOnWalls, &passedLimit);
+
+	if (passedLimit && !toldAboutLimit)
+	{
+		LogString("static scene: more than " + std::to_string(kMostLightsOnWalls) + " live lights at once, so the walls go without the rest");
+		toldAboutLimit = true;
+	}
+
+	float const gamma[4] = { (float)RequestedGammaSetting / 256.0f, 0.0f, 0.0f, 0.0f };
+	device->SetVertexShaderConstantF(7, gamma, 1);
+
+	if (count)
+	{
+		device->SetVertexShaderConstantF(8, table, count * 2);
+	}
+
+	// for an int register: how many times round, where the count starts, and how far it steps
+	int const loop[4] = { count, 0, 1, 0 };
+	device->SetVertexShaderConstantI(0, loop, 1);
+}
+
 // inScene says these go through the game's own calls, which remember what's set. The comparison runs inside the shadow pass, where the card is set by hand and
 // put back at the end, so those calls would think nothing needed changing.
 static bool DrawRuns(LPDIRECT3DDEVICE9 device, const StaticRange *runs, int count, effectID_t effect, bool inScene)
 {
 	d3d.effectSystem->SetActive(effect);
 	SurfaceStatic_SetShaderNumbers(device);
+	SetLightNumbers(device);
 
 	bool worked = d3d.surfaceSceneDecl->Set();
 	worked = SUCCEEDED(device->SetStreamSource(0, StaticLevel_VertexBuffer(), 0, sizeof(StaticVertex))) && worked;
