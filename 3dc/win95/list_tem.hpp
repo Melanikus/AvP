@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the list's index is always freed and cleared in one step, so its pointer is never left aimed at freed memory
 // Doubly linked list class.
 //
 // Inserts new entries at the *end* of the list -- so add_entry()
@@ -181,15 +184,13 @@ public:
   List<T>& operator= (const List<T>& l) {
     while(n_entries != 0) delete_last_entry();
 
-    delete[] entry_pointers;
+    cleanup();
 
     List_Member_Base<T>* m = l.sentinel->next;
     while (m != l.sentinel) {
       add_entry(data(m));
       m = m->next;
     }
-    calculated_indices = false;
-    entry_pointers = 0;
     return *this;
   }
     
@@ -411,7 +412,7 @@ public:
 
     if (!calculated_indices) {
 
-        delete[] entry_pointers;
+      cleanup();
       entry_pointers = new T*[n_entries+1];
       List_Member_Base<T>*e = sentinel->next;
       int j = 0;
@@ -455,7 +456,9 @@ public:
     
   int size() const { return n_entries; }
 
-  void cleanup() { calculated_indices = false; delete[] entry_pointers; entry_pointers = 0;}
+  // forgets the index of the list: frees it and clears the pointer in one step, so the pointer can never be left aimed
+  // at freed memory (it is const because operator[] rebuilds the index, which changes nothing a caller can see)
+  void cleanup() const { calculated_indices = false; delete[] entry_pointers; entry_pointers = 0;}
 
   bool operator==(const List <T> &l1) const
   {
