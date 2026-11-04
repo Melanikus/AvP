@@ -5723,6 +5723,13 @@ int ToyShadows_PickLights(float *lights, int most)
 		lights[i * 7 + 5] = bright * ToyFraction(light->GreenScale);
 		lights[i * 7 + 6] = bright * ToyFraction(light->BlueScale);
 
+		// A flare flickers, and on the screen it's still the light that matters most, so its shadows are always strong. Only a
+		// flare has an order below 0. This is a weight in a share, not a colour: it has no effect on what any light looks like.
+		if (steady[i].order < 0)
+		{
+			lights[i * 7 + 4] = lights[i * 7 + 5] = lights[i * 7 + 6] = 6.0f;
+		}
+
 		toyChosenLastFrame[i] = steady[i].light;
 		toyChosen[i].distance = steady[i].distance;
 		toyChosen[i].range = light->LightRange;

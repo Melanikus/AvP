@@ -367,11 +367,17 @@ float cot(float in)
 }
 
 static bool toyFinalFlush = false;
+static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static void ToyShadows_Draw();
 void ToyShadows_NoteFrameLights();
 
 static bool ExecuteBuffer()
 {
+	if (!toyFinalFlush)
+	{
+		toyEarlyFlushes++;
+	}
+
 	// sort the list of render objects
 	particleList->Sort();
 	decalList->Sort();
@@ -3526,7 +3532,8 @@ extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
-int ToyShadowsDarkness = 80;  // -shadowdark=N, 0 to 100: how much of a pixel a full-strength white light can take away, right beside it
+int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
+int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 
 struct ToyVec
@@ -3748,12 +3755,13 @@ struct ToyFrameReport
 
 static void ToyLogFrame(const ToyFrameReport &report)
 {
-	char line[280];
+	char line[320];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame",
+		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes",
 		report.frame, kToyViewNames[ToyShadowsMode], report.casters, toyCastersLeftOut, report.lights, report.verts, toyPrismsLeftOut,
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
-		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds);
+		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes);
+	toyEarlyFlushes = 0;
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -3819,7 +3827,8 @@ static unsigned int ToyAskCard(IDirect3DQuery9 *countQuery)
 	return counted;
 }
 
-static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+// One flat colour over the whole screen. The blend and stencil settings decide what that does.
+static HRESULT ToyDrawScreenQuad(LPDIRECT3DDEVICE9 device, DWORD colour)
 {
 	struct ToyScreenVertex
 	{
@@ -3832,12 +3841,36 @@ static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, 
 
 	ToyScreenVertex const quad[4] =
 	{
-		{ 0.0f, 0.0f, 0.0f, 1.0f, shade },
-		{ w,    0.0f, 0.0f, 1.0f, shade },
-		{ 0.0f, h,    0.0f, 1.0f, shade },
-		{ w,    h,    0.0f, 1.0f, shade },
+		{ 0.0f, 0.0f, 0.0f, 1.0f, colour },
+		{ w,    0.0f, 0.0f, 1.0f, colour },
+		{ 0.0f, h,    0.0f, 1.0f, colour },
+		{ w,    h,    0.0f, 1.0f, colour },
 	};
 
+	device->SetVertexShader(NULL);
+	device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+
+	return device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(ToyScreenVertex));
+}
+
+// Everything drawn so far, turned down together. Particles, the weapon and the HUD come after this, so they keep their brightness.
+static void ToyDimWorld(LPDIRECT3DDEVICE9 device)
+{
+	int const level = ToyShadowsWorld * 255 / 100;
+
+	ToySetVolumeState(device);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	ToyDrawScreenQuad(device, D3DCOLOR_ARGB(255, level, level, level));
+}
+
+static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+{
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -3846,15 +3879,13 @@ static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, 
 	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
 	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	device->SetVertexShader(NULL);
-	device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
 
 	if (countQuery)
 	{
 		countQuery->Issue(D3DISSUE_BEGIN);
 	}
 
-	HRESULT const result = device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(ToyScreenVertex));
+	HRESULT const result = ToyDrawScreenQuad(device, shade);
 
 	if (countQuery)
 	{
@@ -4013,23 +4044,41 @@ static inline void ToyPutLevelVertex(D3DLVERTEX &vertex, const ToyVec &point, D3
 }
 
 // The stencil now marks the pixels this light can't reach. This draws the level's polygons again, exactly where the game drew
-// them, and shadow.psh darkens each marked pixel by what this light would have given it. So a light that hardly reaches a
-// pixel hardly changes it, and a room blocked from several far-off lights doesn't go black.
+// them, and shadow.psh takes this light's share of the light on each marked pixel out of it. So a lamp in the next room hardly
+// changes a room with its own lamp, and a spot blocked from all its lamps goes right down to the glow.
 // A pixel is darkened once for each light: the first polygon to touch it clears its mark. Models are in front of the polygons,
 // so they keep their light for now.
-static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *light, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
+	float const *light = &lights[thisLight * kToyLightFloats];
+
 	d3d.effectSystem->SetActive(d3d.shadowEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowEffect, 0, CONST_MATRIX, &d3d.matProjection);
 	d3d.mainDecl->Set();
 
-	float const darkness = (float)ToyShadowsDarkness / 100.0f;
-	float const constants[8] =
+	// see shadow.psh for what each of these is. A light's weight is how bright it is, all three colours together. Lights that
+	// weren't chosen stay at weight 0, so they add nothing.
+	float constants[18 * 4] = { 0.0f };
+
+	for (int i = 0; i < numLights; i++)
 	{
-		light[0], light[1], light[2], 1.0f / light[3],
-		light[4] * darkness, light[5] * darkness, light[6] * darkness, 0.0f,
-	};
-	device->SetPixelShaderConstantF(0, constants, 2);
+		float const *other = &lights[i * kToyLightFloats];
+
+		constants[i * 4 + 0] = other[0];
+		constants[i * 4 + 1] = other[1];
+		constants[i * 4 + 2] = other[2];
+		constants[i * 4 + 3] = 1.0f / other[3];
+		constants[(8 + i) * 4] = (other[4] + other[5] + other[6]) / 3.0f;
+	}
+
+	constants[16 * 4 + 0] = light[0];
+	constants[16 * 4 + 1] = light[1];
+	constants[16 * 4 + 2] = light[2];
+	constants[16 * 4 + 3] = 1.0f / light[3];
+	constants[17 * 4 + 0] = constants[(8 + thisLight) * 4];
+	constants[17 * 4 + 1] = 1.0f - (float)ToyShadowsDarkness / 100.0f;
+
+	device->SetPixelShaderConstantF(0, constants, 18);
 
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -4288,7 +4337,7 @@ static void ToyShadows_Draw()
 		}
 		else if (haveShader)
 		{
-			darkened = ToyShadeLevel(device, thisLight, countQuery, &pixelsByLight[light]);
+			darkened = ToyShadeLevel(device, lights, report.lights, light, countQuery, &pixelsByLight[light]);
 		}
 		else
 		{
@@ -4305,6 +4354,10 @@ static void ToyShadows_Draw()
 	if (ToyShadowsMode == kToyViewEdges || ToyShadowsMode == kToyViewPolygons)
 	{
 		ToyDrawLightMarkers(device, lights, report.lights);
+	}
+	else
+	{
+		ToyDimWorld(device);
 	}
 
 	if (countQuery)

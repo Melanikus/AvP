@@ -6,22 +6,48 @@ struct PS_INPUT
 };
 
 // Global variables
-float4 LightPosition : register(c0);   // x y z, and one over the light's range
-float4 LightStrength : register(c1);   // how much of red, green and blue this light can take away, right beside it
+float4 Lights[8]    : register(c0);    // each chosen light: x y z, and one over its range
+float4 Weights[8]   : register(c8);    // x: how much each light counts when the light on a pixel is shared out
+float4 ThisLight    : register(c16);   // the light this pass is for: x y z, and one over its range
+float4 ThisSettings : register(c17);   // x: its weight. y: what's left of a pixel no light reaches, the glow of the wall's own colour
+
+
+// How much light one lamp gives this spot: nothing at its range, and nothing on a surface turned away from it. This is the fade
+// the level's lighting was baked with.
+float LightHere(float4 light, float weight, float3 position, float3 normal)
+{
+    float3 toLight = light.xyz - position;
+    float  howFar  = length(toLight);
+    float  fade    = cos(1.5707963f * saturate(howFar * light.w));
+    float  facing  = saturate(dot(normal, toLight / max(howFar, 1.0f)));
+
+    return weight * fade * facing;
+}
 
 
 // Name: Shadow pixel shader
 // Type: Pixel shader
-// Desc: Runs on pixels a light can't reach. Works out what that light would have given this pixel, and gives back how much of
-// the pixel to keep, so it loses that much. The fade and the angle are the ones the level's lighting was baked with: a cosine
-// that reaches nothing at the light's range, times how squarely the surface faces the light.
+// Desc: Runs on pixels one light can't reach. Works out that light's share of all the light on this spot, and takes that share
+// away. A spot with its own lamp keeps most of its light when a lamp in the next room is blocked, but a spot blocked from all its
+// lamps goes right down to the glow.
+//
+// The pixel is multiplied by glow to the power of share, once for each blocked light. Powers add when they're multiplied, and
+// the shares of all the lights add up to 1, so however many lights are blocked the result can't go below the glow, and reaches
+// it exactly when all of them are.
 
 float4 ps_main(in PS_INPUT In) : COLOR0
 {
-    float3 toLight  = LightPosition.xyz - In.ViewPosition;
-    float  howFar   = length(toLight);
-    float  fade     = cos(1.5707963f * saturate(howFar * LightPosition.w));
-    float  facing   = saturate(dot(normalize(In.Normal), toLight / max(howFar, 1.0f)));
+    float3 normal = normalize(In.Normal);
+    float  all    = 0.0f;
 
-    return float4(1.0f - LightStrength.rgb * fade * facing, 1.0f);
+    for (int i = 0; i < 8; i++)
+    {
+        all += LightHere(Lights[i], Weights[i].x, In.ViewPosition, normal);
+    }
+
+    float mine  = LightHere(ThisLight, ThisSettings.x, In.ViewPosition, normal);
+    float share = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
+    float keep  = pow(ThisSettings.y, share);
+
+    return float4(keep, keep, keep, 1.0f);
 }

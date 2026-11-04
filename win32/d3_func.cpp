@@ -1269,7 +1269,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 						NULL,            // macro's
 						NULL,            // includes
 						"vs_main",       // main function
-						"vs_2_0",        // shader profile
+						(fileName == "shadow.vsh") ? "vs_3_0" : "vs_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -1361,7 +1361,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 						NULL,            // macro's
 						NULL,            // includes
 						"ps_main",       // main function
-						"ps_2_0",        // shader profile
+						(fileName == "shadow.psh") ? "ps_3_0" : "ps_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
