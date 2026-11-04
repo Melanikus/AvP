@@ -6,14 +6,17 @@
 
 #include <vector>
 
-// How far from the camera a place is: under 5 metres, 5 to 20, 20 to 50, and further. A small flickering patch far away is lost in a number for the whole
-// screen, and depth is much coarser far away, so that's where to look.
-enum { kFlickerBands = 4 };
+// How far ahead of the camera a place is: under 5 metres, 5 to 20, 20 to 50 and further, and a band of its own for places whose distance isn't known. A small
+// flickering patch far away is lost in a number for the whole screen, and depth is much coarser far away, so that's where to look. It's measured straight ahead,
+// not in a line to the place, because straight ahead is what sets how coarse depth is.
+enum { kFlickerBands = 5 };
 
-// Which band a distance is in. The game's units are millimetres. A place with no surface counts as the furthest.
+// Which band a distance is in. The game's units are millimetres. The distance picture starts each frame filled with 1, and nothing can be drawn nearer than 64.
+// So 1 or less means the picture holds nothing for that place: there's no surface there, or there is one and the picture left it out. It could be near, so it
+// can't be counted with the far places, where it would look like far flicker.
 inline int FlickerBandFor(float distance)
 {
-	return (distance <= 1.0f || distance >= 50000.0f) ? 3 : (distance >= 20000.0f) ? 2 : (distance >= 5000.0f) ? 1 : 0;
+	return (distance <= 1.0f) ? 4 : (distance >= 50000.0f) ? 3 : (distance >= 20000.0f) ? 2 : (distance >= 5000.0f) ? 1 : 0;
 }
 
 struct FlickerCounts

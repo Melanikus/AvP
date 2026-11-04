@@ -324,10 +324,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			extern float ShadowSurfaceBias;
 			extern int ShadowBiasSteps;
-			int const asked = atoi(biasSwitch + strlen("-shadowbiassteps="));
-			ShadowBiasSteps = (asked < 1) ? 1 : (asked > 64) ? 64 : asked;
-			ShadowSurfaceBias = -(float)ShadowBiasSteps / 16777216.0f;
-			LogString("shadows: the surface pictures' margin was set by -shadowbiassteps");
+			// anything but a number from 1 to 64 leaves the margin as it was, rather than quietly testing a margin nobody asked for
+			long const asked = strtol(biasSwitch + strlen("-shadowbiassteps="), NULL, 10);
+
+			if (asked >= 1 && asked <= 64)
+			{
+				ShadowBiasSteps = (int)asked;
+				ShadowSurfaceBias = -(float)ShadowBiasSteps / 16777216.0f;
+				LogString("shadows: the surface pictures' margin is " + std::to_string(asked) + " depth steps (-shadowbiassteps)");
+			}
+			else
+			{
+				LogString("shadows: -shadowbiassteps needs a number from 1 to 64, so it was ignored");
+			}
 		}
 		extern int KeptSnap;
 		// the longer word first, because the shorter one is inside it

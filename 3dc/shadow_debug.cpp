@@ -302,9 +302,9 @@ void Flicker_WriteReport()
 
 	// where it was. This is the number to compare, because a small patch far away is lost in the totals
 	_snprintf(line, sizeof(line) - 1,
-		"flicker:   came back per frame while moving, by distance from the camera: mask under 5 m %.1f, 5 to 20 m %.1f, 20 to 50 m %.1f, over 50 m %.1f; screen %.1f, %.1f, %.1f, %.1f",
-		movingFrames.cameBackInBand[kFlickerMask][0] / moving, movingFrames.cameBackInBand[kFlickerMask][1] / moving, movingFrames.cameBackInBand[kFlickerMask][2] / moving, movingFrames.cameBackInBand[kFlickerMask][3] / moving,
-		movingFrames.cameBackInBand[kFlickerScreen][0] / moving, movingFrames.cameBackInBand[kFlickerScreen][1] / moving, movingFrames.cameBackInBand[kFlickerScreen][2] / moving, movingFrames.cameBackInBand[kFlickerScreen][3] / moving);
+		"flicker:   came back per frame while moving, by depth ahead of the camera: mask under 5 m %.1f, 5 to 20 m %.1f, 20 to 50 m %.1f, over 50 m %.1f, not known %.1f; screen %.1f, %.1f, %.1f, %.1f, %.1f",
+		movingFrames.cameBackInBand[kFlickerMask][0] / moving, movingFrames.cameBackInBand[kFlickerMask][1] / moving, movingFrames.cameBackInBand[kFlickerMask][2] / moving, movingFrames.cameBackInBand[kFlickerMask][3] / moving, movingFrames.cameBackInBand[kFlickerMask][4] / moving,
+		movingFrames.cameBackInBand[kFlickerScreen][0] / moving, movingFrames.cameBackInBand[kFlickerScreen][1] / moving, movingFrames.cameBackInBand[kFlickerScreen][2] / moving, movingFrames.cameBackInBand[kFlickerScreen][3] / moving, movingFrames.cameBackInBand[kFlickerScreen][4] / moving);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 

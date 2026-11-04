@@ -32,7 +32,8 @@ enum FlickerPicture
 	kNumFlickerPictures
 };
 
-// How far from the camera each sample is, for the pictures that follow. They all have to be the same size.
+// How far ahead of the camera each sample is, for the pictures that follow. They all have to be the same size. An empty list means the distances couldn't be
+// read, and then those pictures aren't counted by distance at all.
 void Flicker_SetDistances(const std::vector<float> &distances);
 
 void Flicker_AddPicture(FlickerPicture picture, const std::vector<float> &samples);

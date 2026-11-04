@@ -3646,7 +3646,7 @@ int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen l
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
-int ShadowsDepthGap = 0;      // -shadowdepthgap: a shadow also starts further behind its polygon as depth gets coarser, on prisms made each frame
+int ShadowsDepthGap = 0;      // -shadowdepthgap: a shadow also starts further behind its polygon as depth gets coarser. Only on prisms made each frame in the view's numbers: not kept prisms, and not the walls -staticscene walks. The tag says PART if some can be those
 float ShadowSurfaceBias = -0.000001f;   // -shadowbiassteps=N: how much nearer the surface pictures draw, in the depth buffer's own numbers
 int ShadowBiasSteps = 0;      // what -shadowbiassteps asked for, for the tag, or 0
 int ShadowsEvenGap = 0;       // -shadowevengap: a shadow starts the same distance behind every part of its polygon. See shadow_gap.h
@@ -6065,6 +6065,13 @@ static float ToyHalfFloat(unsigned short half)
 }
 
 // Failing to read is no harm: read stays false, and the log says so. A picture with several samples to a pixel can't be read this way.
+// Says whether the readers below know how big this kind of picture's pixels are. They walk along a row by that size, so a kind they don't know could take them past
+// the end of the copy. The screen can be one: the game falls back to a display format of three bytes a pixel if the four-byte ones fail (DisplayFormats, in d3_func.cpp).
+static bool CanReadPicture(D3DFORMAT format)
+{
+	return format == D3DFMT_R32F || format == D3DFMT_R16F || format == D3DFMT_A16B16G16R16F || format == D3DFMT_A8R8G8B8 || format == D3DFMT_X8R8G8B8;
+}
+
 static void ToyReadPicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, float over, ToyPictureReading *reading)
 {
 	D3DSURFACE_DESC size;
@@ -6077,6 +6084,7 @@ static void ToyReadPicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture,
 	reading->partOver = 0.0f;
 
 	if (FAILED(picture->GetDesc(&size))
+		|| !CanReadPicture(size.Format)
 		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 	{
 		return;
@@ -6143,6 +6151,7 @@ static bool ReadSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, st
 	bool read = false;
 
 	if (FAILED(picture->GetDesc(&size))
+		|| !CanReadPicture(size.Format)
 		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
 	{
 		return false;
@@ -6375,7 +6384,7 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
 	{
-		_snprintf(lines[numLines++], kLineLength - 1, "%s%sBIAS %d", ShadowsDepthGap ? "DEPTH GAP " : "", ShadowsEvenGap ? "EVEN GAP " : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
+		_snprintf(lines[numLines++], kLineLength - 1, "%s%sBIAS %d", ShadowsDepthGap ? ((StaticSceneOn || !KeptPrismsOff) ? "DEPTH GAP PART " : "DEPTH GAP ") : "", ShadowsEvenGap ? "EVEN GAP " : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
 	}
 
 	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);
@@ -6837,10 +6846,22 @@ static void ToyShadows_Draw()
 			{
 				static std::vector<float> distances;
 
-				if (ReadSamples(device, toyDepthSurface, distances))
+				if (!ReadSamples(device, toyDepthSurface, distances))
 				{
-					Flicker_SetDistances(distances);
+					// Last frame's distances could be wrong for this frame, so there are none. The pictures still count, but not by distance. The bands would
+					// read 0 beside totals that aren't, so the log says why, once.
+					static bool toldAboutDistances = false;
+
+					if (!toldAboutDistances)
+					{
+						LogString("flicker: the distance picture couldn't be read, so the frames it failed on aren't counted by distance");
+						toldAboutDistances = true;
+					}
+
+					distances.clear();
 				}
+
+				Flicker_SetDistances(distances);
 
 				ReadPictureSamples(device, toyMaskSurface, kFlickerMask);
 			}

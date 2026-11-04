@@ -145,7 +145,15 @@ int main()
 		Check(outside.cameBack == 1 && outside.cameBackInBand[3] == 0, "a band that doesn't exist counts nowhere");
 
 		Check(FlickerBandFor(4999.0f) == 0 && FlickerBandFor(5000.0f) == 1 && FlickerBandFor(20000.0f) == 2 && FlickerBandFor(50000.0f) == 3, "the bands start where they say");
-		Check(FlickerBandFor(1.0f) == 3 && FlickerBandFor(0.0f) == 3, "no surface counts as the furthest");
+		Check(FlickerBandFor(1.0f) == 4 && FlickerBandFor(0.0f) == 4, "a place the distance picture holds nothing for has a band of its own");
+		Check(FlickerBandFor(64.0f) == 0 && FlickerBandFor(1000000.0f) == 3, "the nearest and furthest real surfaces aren't in it");
+
+		FlickerMeter fourth(0.05f);
+		fourth.Add(Picture(0.0f, 0.0f, 0.0f), std::vector<unsigned char>(3, 4));
+		fourth.Add(Picture(1.0f, 0.0f, 0.0f), std::vector<unsigned char>(3, 4));
+
+		FlickerCounts const unplaced = fourth.Add(Picture(0.0f, 0.0f, 0.0f), std::vector<unsigned char>(3, 4));
+		Check(unplaced.cameBack == 1 && unplaced.cameBackInBand[4] == 1 && unplaced.cameBackInBand[3] == 0, "flicker at a place of unknown distance doesn't look like far flicker");
 	}
 
 	if (checksFailed)
