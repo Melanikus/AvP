@@ -20,9 +20,9 @@
 // Right after the name in ChunkObject comes index_num, which is filled in before the name is copied. So a name that
 // runs past its end lands on a real field, and these tests would see index_num change.
 //
-// After a level is read, the game joins each object to its shape, using numbers from the file. So the last two tests
-// build real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that
-// doesn't join up is refused.
+// After a level is read, the game joins each object to its shape, using numbers from the file. So tests 7 and 8 build
+// real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that doesn't
+// join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 //
 // HOW IT RUNS
 //
@@ -39,6 +39,7 @@
 #include "chunk_type.hpp"
 #include "chunk_object.hpp"
 #include "chunk_shape.hpp"
+#include "chunk_light.hpp"
 #include "hierarchy_chunk.hpp"
 #include "mishchnk.hpp"
 
@@ -460,6 +461,60 @@ static void TestHierarchySections()
 	Parent_File = 0;
 }
 
+// 9. An object's baked colours: a chunk with a light set's name, a spare number, a count, then the colours. Here the
+// chunk's data has room for 4 colours after its 16 bytes of fixed data.
+static void TestBakedColours()
+{
+	puts("9. baked colours");
+
+	struct ColourChunk { int count; size_t bytes; bool accepted; char const * what; };
+	ColourChunk const colourChunks[] =
+	{
+		{           4, 32, true,  "a count that fills the chunk exactly is accepted" },
+		{           3, 32, true,  "a count that leaves room over is accepted" },
+		{           0, 16, true,  "no colours at all is accepted" },
+		{           5, 32, false, "one colour too many for the chunk is refused" },
+		{          -1, 32, false, "a negative count is refused" },
+		{  0x40000000, 32, false, "a count that would wrap a size sum is refused" },
+		{  0x7FFFFFFF, 32, false, "a huge count is refused" },
+		{           0, 15, false, "a chunk too short for its fixed data is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(colourChunks) / sizeof(colourChunks[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		alignas(int) char bytes[32] = { 'N', 'O', 'R', 'M', 'A', 'L', 'L', 'T' };
+		memcpy(bytes + 12, &colourChunks[i].count, sizeof(colourChunks[i].count));
+
+		Shape_Vertex_Intensities_Chunk * colours = new Shape_Vertex_Intensities_Chunk(&file, bytes, colourChunks[i].bytes);
+
+		int const expected = colourChunks[i].accepted ? colourChunks[i].count : 0;
+
+		Check((file.error_code == 0) == colourChunks[i].accepted, colourChunks[i].what);
+		Check(colours->num_vertices == expected, "and the chunk says how many colours it really holds");
+	}
+
+	// How many places a shape's list needs, using real numbers from the game's own levels: colours, points, places.
+	int const counts[][3] = { { 224, 228, 228 }, { 1430, 402, 1430 }, { 100, 100, 100 } };
+	alignas(int) static char bigChunk[16 + 4 * 1430];
+
+	for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		memcpy(bigChunk + 12, &counts[i][0], sizeof(counts[i][0]));
+
+		Shape_Vertex_Intensities_Chunk * colours = new Shape_Vertex_Intensities_Chunk(&file, bigChunk, sizeof(bigChunk));
+
+		Check(colours->colour_places_for_shape(counts[i][1]) == counts[i][2], "the list has a place for every point and colour");
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -473,6 +528,7 @@ int main()
 	TestImpossibleChildSize();
 	TestObjectsAndShapes();
 	TestHierarchySections();
+	TestBakedColours();
 
 	if (checksFailed)
 	{

@@ -6,7 +6,8 @@
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
-//   number is left out; when two sounds have the same number, the earlier one is given back
+//   number is left out; when two sounds have the same number, the earlier one is given back; a shape's list of
+//   baked colours has a place for every point, even if the file has fewer colours
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -1334,6 +1335,38 @@ int Global_Hierarchy_Store::get_time_from_sequence_id(int id)
 }
 
 
+// Gives a shape its baked colours, the lighting worked out when the level was made. The game looks up a colour for each
+// point of the shape, so the list has a place for every point, even if the level file has fewer colours than that. The
+// list starts empty, so a point with no colour reads as unlit, not as whatever was in that memory before.
+static BOOL set_up_baked_colours(SHAPEHEADER * shape, Shape_Vertex_Intensities_Chunk * svic)
+{
+	size_t const list_bytes = svic->colour_places_for_shape(shape->numpoints) * sizeof(EXTRAITEMDATA);
+
+	shape->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(list_bytes);
+	if (!shape->sh_extraitemdata)
+	{
+		memoryInitialisationFailure = 1;
+		return FALSE;
+	}
+
+	memset(shape->sh_extraitemdata, 0, list_bytes);
+
+	for (int vn = 0; vn < svic->num_vertices; vn++)
+	{
+		//convert coloured light to a brightness value
+		int ir = svic->intensity_array[vn]>>16;
+		int ig = svic->intensity_array[vn]>>8 &0xff;
+		int ib = svic->intensity_array[vn] &0xff;
+		int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
+
+		shape->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
+	}
+
+	shape->shapeflags |= ShapeFlag_PreLit;
+
+	return TRUE;
+}
+
 static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_start,int progress_interval)
 {
  //////////////////////////
@@ -1410,26 +1443,9 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 			}
 		}
 
-		if (svic)
+		if (svic && !set_up_baked_colours(mainshapelist[osnp->sh_num], svic))
 		{
-			mainshapelist[osnp->sh_num]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-			if (!mainshapelist[osnp->sh_num]->sh_extraitemdata)
-			{
-				memoryInitialisationFailure = 1;
-				return FALSE;
-			}
-
-			for (int vn = 0; vn < svic->num_vertices; vn++) 
-			{
-				//convert coloured light to a brightness value
-				int ir = svic->intensity_array[vn]>>16;
-				int ig = svic->intensity_array[vn]>>8 &0xff;
-				int ib = svic->intensity_array[vn] &0xff;
-				int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-				mainshapelist[osnp->sh_num]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-			}
-			mainshapelist[osnp->sh_num]->shapeflags |= ShapeFlag_PreLit;
+			return FALSE;
 		}
 	}
 	/*-----------------------------**
@@ -1963,28 +1979,10 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 							}
 						}
 
-						if (svic)
+						//if this object has prelighting , set up extra item data
+						if (svic && !set_up_baked_colours(mainshapelist[list_pos], svic))
 						{
-							//this object has prelighting , so set up extra item data
-							mainshapelist[list_pos]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-							if (!mainshapelist[list_pos]->sh_extraitemdata)
-							{
-								memoryInitialisationFailure = 1;
-								return FALSE;
-							}
-
-							for (int vn = 0; vn < svic->num_vertices; vn++) 
-							{
-								//convert coloured light to a brightness value
-								int ir=svic->intensity_array[vn]>>16;
-								int ig=svic->intensity_array[vn]>>8 &0xff;
-								int ib=svic->intensity_array[vn] &0xff;
-								int mag =(int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-								mainshapelist[list_pos]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-							}
-
-							mainshapelist[list_pos]->shapeflags |= ShapeFlag_PreLit;
+							return FALSE;
 						}
 
 						int AnimationShape=-1;
