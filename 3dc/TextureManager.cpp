@@ -27,6 +27,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a picture whose texture can't be locked lets go of the texture
+
 #include <sstream>
 #include "renderer.h"
 #include "console.h"
@@ -282,6 +285,7 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	if (!R_LockTexture(newTexture, &dest, &pitch, TextureLock_Normal))
 	{
 		// log error
+		R_ReleaseTexture(newTexture);
 		return MISSING_TEXTURE;
 	}
 

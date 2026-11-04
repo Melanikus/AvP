@@ -32,6 +32,8 @@
 //   makes the list and the shader for shadow prisms kept between frames
 //   waiting for the graphics card to come back asks it again each time round, so it can't wait forever, and the wait ends if
 //   the player closes the game. A buffer that couldn't be made can't be locked
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a texture smaller than a picture or film needs is refused, because writing the picture into it ran past its end
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the settings file can't say where shaders come from
@@ -51,6 +53,7 @@
 #include <XInput.h> // XInput API
 #include "user_profile.h"
 #include "console.h"
+#include "texture_size_check.h"
 
 extern void RenderListInit();
 extern void RenderListDeInit();
@@ -2053,6 +2056,13 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 	uint32_t realHeight = height;
 
 	D3DXCheckTextureRequirements(d3d.lpD3DDevice, &realWidth, &realHeight, NULL, textureUsage, &textureFormat, texturePool);
+
+	// That can answer with less than was asked for, and whoever asked is going to write the size they asked for. See texture_size_check.h
+	if (!TextureSize_IsEnough(width, height, bitsPerPixel, realWidth, realHeight, TextureSize_BitsPerPixel(textureFormat)))
+	{
+		Con_PrintError("This graphics card can't hold texture " + texture.name + " at " + std::to_string(width) + " x " + std::to_string(height) + ", so it's left out");
+		return false;
+	}
 
 	// create the d3d9 texture
 	LastError = d3d.lpD3DDevice->CreateTexture(realWidth, realHeight, 1, textureUsage, textureFormat, texturePool, &d3dTexture, NULL);
