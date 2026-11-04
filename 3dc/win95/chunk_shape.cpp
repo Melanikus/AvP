@@ -4,7 +4,7 @@
 //   text is copied using its exact measured length, so it always fits
 //   a child chunk whose size cannot be real is refused
 //   added a check on how many points a shape claims
-//   a polygon's corners are limited to the 4 places it has for them
+//   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points
 
 #include <math.h>
 
@@ -104,22 +104,58 @@ Shape_Header_Chunk * Shape_Chunk::get_header()
 	return (Shape_Header_Chunk *) this->lookup_single_child ("SHPHEAD1");
 }
 
-// Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
-// many there are. The number comes from the level file, so a shape with too many would be written past the end of that
-// list. The header also gives a count of its own, which has to agree with the points really in the file. The biggest
-// shape in the game's own levels has 2421 points, and the two counts agree in all of them.
-bool Shape_Chunk::point_count_is_valid()
+// Checks the numbers that say how big a shape is, all of which come from the level file.
+// - Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
+//   many there are, so a shape with too many would be written past the end of that list. The biggest shape in the game's
+//   own levels has 2421 points.
+// - The header gives counts of its own, which have to agree with the points and polygons really in the file. If they
+//   didn't, the code that loops on those counts would run past the end of the shape's lists.
+// - Each corner of a polygon is a place in the shape's list of points, and in the lists built from it. A corner past the
+//   end of those lists would read whatever memory comes next. Every corner of all 952940 polygons in the game's own
+//   levels is in range, and all the counts agree.
+static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Children const * shape_chunk)
 {
-	int const point_count = shape_data.num_verts;
+	int const point_count = shape.num_verts;
 
 	if (point_count < 0 || point_count > maxrotpts)
 	{
 		return false;
 	}
 
-	Shape_Vertex_Chunk * points = (Shape_Vertex_Chunk *) this->lookup_single_child ("SHPRAWVT");
+	Shape_Vertex_Chunk * points = (Shape_Vertex_Chunk *) shape_chunk->lookup_single_child ("SHPRAWVT");
 
-	return !points || points->num_verts == point_count;
+	if (points && points->num_verts != point_count)
+	{
+		return false;
+	}
+
+	Shape_Polygon_Chunk * polygons = (Shape_Polygon_Chunk *) shape_chunk->lookup_single_child ("SHPPOLYS");
+	int const polygon_count = polygons ? polygons->num_polys : 0;
+
+	if (shape.num_polys != polygon_count || (polygon_count && !points))
+	{
+		return false;
+	}
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		for (int j = 0; j < shape.poly_list[i].num_verts; j++)
+		{
+			int const corner = shape.poly_list[i].vert_ind[j];
+
+			if (corner < 0 || corner >= point_count)
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+bool Shape_Chunk::numbers_are_valid()
+{
+	return shape_numbers_are_valid (shape_data, this);
 }
 
 List<Object_Chunk *> const & Shape_Chunk::list_assoc_objs()

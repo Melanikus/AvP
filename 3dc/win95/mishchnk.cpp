@@ -647,7 +647,7 @@ void File_Chunk::post_input_processing()
 	{
 		Shape_Header_Chunk * shape_header = sli()->get_header();
 
-		if (!shape_header || !shape_header->file_id_num_is_valid() || !sli()->point_count_is_valid())
+		if (!shape_header || !shape_header->file_id_num_is_valid() || !sli()->numbers_are_valid())
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			return;

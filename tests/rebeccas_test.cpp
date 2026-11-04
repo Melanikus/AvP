@@ -584,6 +584,8 @@ static void TestPolygons()
 		{ { 0, 1, 2, -1, -1 }, true,  "a polygon with 3 corners is accepted" },
 		{ { 0, 1, 2,  3, -1 }, true,  "a polygon with 4 corners is accepted" },
 		{ { 0, 1, 2,  3,  0 }, false, "a polygon with no end marker is refused" },
+		{ { 0, 1, 4, -1, -1 }, false, "a corner past the last point is refused" },
+		{ { 0, 1, -2, -1, -1 }, false, "a negative corner is refused" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
