@@ -369,7 +369,8 @@ float cot(float in)
 static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static void ToyShadows_Draw();
-void ToyShadows_NoteFrameLights();
+void ToyShadows_NoteFrameLights(int frame);
+static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
 
 static bool ExecuteBuffer()
 {
@@ -2587,7 +2588,7 @@ void ThisFramesRenderingHasFinished()
 
 	Con_Draw();
 
-	ToyShadows_NoteFrameLights();
+	ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
 
 	UnlockExecuteBufferAndPrepareForUse();
 	toyFinalFlush = true;
@@ -3695,6 +3696,20 @@ static const float kToyPositions[8][3] =
 // While a light's prisms are built from one of its positions, this is where the light really is. Otherwise it's empty.
 static float const *toyLightCentre = 0;
 
+// What one light did on a report frame, so that the log shows what reached the screen and not only what the stencil marked. Marked
+// isn't the same as darkened: a prism runs on past the light's range, and a pixel out there is marked and loses nothing.
+struct ToyLightReport
+{
+	bool drawn;            // it got as far as its passes. A light whose whole range is off screen doesn't
+	int polygonsInReach;   // added up over all its passes, like the prisms
+	int prismsBuilt;
+	float nearestCaster;   // how close any corner of a polygon that cast came to the light
+	float maskRise;        // for a lamp, how much the mask's average went up. For a flare, the average of its own mask
+};
+
+// the light being counted, on a report frame. The rest of the time it's empty, and nothing is counted
+static ToyLightReport *toyNoteLight = 0;
+
 static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 {
 	toyVerts[toyNumVerts++] = a;
@@ -3744,6 +3759,11 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool m
 	if (planeDistance >= light[3])
 	{
 		return;
+	}
+
+	if (toyNoteLight)
+	{
+		toyNoteLight->polygonsInReach++;
 	}
 
 	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
@@ -3818,6 +3838,11 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool m
 			return;
 		}
 
+		if (toyNoteLight && (toyNoteLight->nearestCaster == 0.0f || length < toyNoteLight->nearestCaster))
+		{
+			toyNoteLight->nearestCaster = length;
+		}
+
 		dx /= length;
 		dy /= length;
 		dz /= length;
@@ -3858,6 +3883,11 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool m
 		ToyTri(nearPts[i], farPts[next], nearPts[next]);
 		ToyTri(nearPts[i], farPts[i], farPts[next]);
 	}
+
+	if (toyNoteLight)
+	{
+		toyNoteLight->prismsBuilt++;
+	}
 }
 
 // through the game's own vertex shader and declaration, so these land exactly where the world's polygons do
@@ -3890,6 +3920,8 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 	return result;
 }
 
+static int toyQueriesUnanswered = 0;   // a count that never came reads as 0, so the log has to say how many didn't
+
 // How long the pass really takes, measured on a frame with no counting in it. Below 0 until there's an answer.
 static float toyPassMilliseconds = -1.0f;   // the processor, building and sending it
 static float toyCardMilliseconds = -1.0f;   // the graphics card, drawing it
@@ -3909,12 +3941,12 @@ struct ToyFrameReport
 
 static void ToyLogFrame(const ToyFrameReport &report)
 {
-	char line[360];
+	char line[400];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d, pass %.1f ms, card %.1f ms",
+		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d, pass %.1f ms, card %.1f ms, %d counts unanswered",
 		report.frame, kToyViewNames[ToyShadowsMode], report.casters, toyCastersLeftOut, report.lights, report.verts, toyPrismsLeftOut,
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
-		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyPassMilliseconds, toyCardMilliseconds);
+		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyPassMilliseconds, toyCardMilliseconds, toyQueriesUnanswered);
 	toyEarlyFlushes = 0;
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
@@ -3963,8 +3995,6 @@ static void ToySetVolumeState(LPDIRECT3DDEVICE9 device)
 	device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
 }
-
-static int toyQueriesUnanswered = 0;
 
 // The card answers when it gets there, which for the first question of a frame means finishing everything drawn so far. So
 // this waits by the clock, half a second at most, and says whether the answer came.
@@ -5009,6 +5039,98 @@ static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSu
 	}
 }
 
+// What's in a picture on the card, read back on report frames only, because it makes the processor wait for the card. Every fourth
+// pixel each way is plenty for an average.
+struct ToyPictureReading
+{
+	bool read;
+	float average;
+	float largest;
+	float partOver;   // how much of the picture is over the amount that was asked about, 0 to 1
+};
+
+// A 16-bit float as the card stores it: a sign, 5 bits of size and 10 of detail.
+static float ToyHalfFloat(unsigned short half)
+{
+	int const size = (half >> 10) & 31;
+	int const detail = half & 1023;
+	float const value = (size == 0) ? ldexpf((float)detail, -24)
+		: (size == 31) ? 65536.0f
+		: ldexpf(1.0f + (float)detail / 1024.0f, size - 15);
+
+	return (half & 0x8000) ? -value : value;
+}
+
+// Failing to read is no harm: read stays false, and the log says so. A picture with several samples to a pixel can't be read this way.
+static void ToyReadPicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, float over, ToyPictureReading *reading)
+{
+	D3DSURFACE_DESC size;
+	IDirect3DSurface9 *copy = 0;
+	D3DLOCKED_RECT locked;
+
+	reading->read = false;
+	reading->average = 0.0f;
+	reading->largest = 0.0f;
+	reading->partOver = 0.0f;
+
+	if (FAILED(picture->GetDesc(&size))
+		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
+	{
+		return;
+	}
+
+	if (SUCCEEDED(device->GetRenderTargetData(picture, copy)) && SUCCEEDED(copy->LockRect(&locked, NULL, D3DLOCK_READONLY)))
+	{
+		double total = 0.0;
+		int samples = 0, overCount = 0;
+
+		for (UINT y = 0; y < size.Height; y += 4)
+		{
+			unsigned char const *row = (unsigned char const *)locked.pBits + y * locked.Pitch;
+
+			for (UINT x = 0; x < size.Width; x += 4)
+			{
+				float value;
+
+				if (size.Format == D3DFMT_R16F)
+				{
+					value = ToyHalfFloat(*(unsigned short const *)(row + x * 2));
+				}
+				else if (size.Format == D3DFMT_A16B16G16R16F)
+				{
+					value = ToyHalfFloat(*(unsigned short const *)(row + x * 8));
+				}
+				else
+				{
+					// blue, green, red, and one spare. For the screen this is a simple average of the colours, 0 to 255
+					unsigned char const *pixel = row + x * 4;
+					value = ((float)pixel[0] + (float)pixel[1] + (float)pixel[2]) / 3.0f;
+					if (size.Format == D3DFMT_A8R8G8B8 && picture == toyMaskSurface)
+					{
+						value = (float)pixel[2] / 255.0f;
+					}
+				}
+
+				total += value;
+				samples++;
+				overCount += (value > over) ? 1 : 0;
+				reading->largest = (value > reading->largest) ? value : reading->largest;
+			}
+		}
+
+		copy->UnlockRect();
+
+		if (samples)
+		{
+			reading->read = true;
+			reading->average = (float)(total / samples);
+			reading->partOver = (float)overCount / (float)samples;
+		}
+	}
+
+	copy->Release();
+}
+
 static void ToyForgetCasters()
 {
 	ToyShadows_NextCollectingFrame();
@@ -5050,7 +5172,6 @@ static void ToyShadows_Draw()
 	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
 		&& d3d.shadowFlareEffect != kNullEffectID && toyNumCasters > 0;
 
-	static int toyFrame = 0;
 	bool const logThisFrame = (++toyFrame % 300) == 0;
 
 	ToyFrameReport report = { toyFrame, toyNumCasters, 0, 0, S_OK, S_OK, S_OK, S_OK, S_OK, 0, 0.0f, 0.0f };
@@ -5170,6 +5291,18 @@ static void ToyShadows_Draw()
 		screen = 0;
 	}
 
+	// On a report frame, what each light did, and what reached the screen. A mask under this size of number has no effect worth
+	// counting as a shadow. All of this only reads: nothing here changes what's drawn.
+	float const kToyMaskCounts = 0.02f;
+	bool const noting = logThisFrame && screen != 0;
+	ToyLightReport lightReports[kToyMostLights];
+	ToyPictureReading maskReading = { false, 0.0f, 0.0f, 0.0f };
+	ToyPictureReading screenBefore = maskReading, screenDarkened = maskReading, screenAtEnd = maskReading;
+	int lastLampNoted = -1;
+	float maskSoFar = 0.0f;
+
+	memset(lightReports, 0, sizeof(lightReports));
+
 	for (int light = 0; light < report.lights; light++)
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
@@ -5191,6 +5324,22 @@ static void ToyShadows_Draw()
 
 			device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 			device->SetScissorRect(&reach);
+		}
+
+		// the mask before this light is the mask after the one before it
+		if (noting)
+		{
+			ToyReadPicture(device, toyMaskSurface, kToyMaskCounts, &maskReading);
+
+			if (lastLampNoted >= 0)
+			{
+				lightReports[lastLampNoted].maskRise = maskReading.average - maskSoFar;
+			}
+
+			maskSoFar = maskReading.average;
+			lastLampNoted = light;
+			lightReports[light].drawn = true;
+			toyNoteLight = &lightReports[light];
 		}
 
 		// a light drawn from several positions, which only the mask can add up
@@ -5261,6 +5410,18 @@ static void ToyShadows_Draw()
 
 	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 
+	toyNoteLight = 0;
+
+	if (noting)
+	{
+		ToyReadPicture(device, toyMaskSurface, kToyMaskCounts, &maskReading);
+
+		if (lastLampNoted >= 0)
+		{
+			lightReports[lastLampNoted].maskRise = maskReading.average - maskSoFar;
+		}
+	}
+
 	if (ToyShadowsMode == kToyViewEdges || ToyShadowsMode == kToyViewPolygons)
 	{
 		ToyDrawLightMarkers(device, lights, report.lights);
@@ -5271,7 +5432,18 @@ static void ToyShadows_Draw()
 		{
 			device->SetRenderTarget(0, screen);
 			device->SetViewport(&viewport);
+
+			if (noting)
+			{
+				ToyReadPicture(device, screen, 255.0f, &screenBefore);
+			}
+
 			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
+
+			if (noting)
+			{
+				ToyReadPicture(device, screen, 255.0f, &screenDarkened);
+			}
 		}
 
 		if (ToyShadowsMode == kToyViewFinal)
@@ -5289,10 +5461,24 @@ static void ToyShadows_Draw()
 				device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 				device->SetScissorRect(&reach);
 
+				if (noting)
+				{
+					lightReports[light].drawn = true;
+					toyNoteLight = &lightReports[light];
+				}
+
 				int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
 				if (positions > 1)
 				{
 					ToyPaintFlareFromEveryPosition(device, screen, &viewport, &reach, thisLight, lightOwners[light], positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
+
+					if (noting)
+					{
+						ToyPictureReading flareMask;
+						ToyReadPicture(device, toyMaskSurface, kToyMaskCounts, &flareMask);
+						lightReports[light].maskRise = flareMask.average;
+					}
+
 					ToyAddFlareLight(device, lights, report.lights, light, true);
 					report.pixels += pixelsByLight[light];
 					device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
@@ -5313,6 +5499,13 @@ static void ToyShadows_Draw()
 						ToyMarkShadow(device, &report);
 						ToyPaintFlareMask(device, screen, &viewport, &reach, true, kToyCloakedShadow, 0, &notCounted);
 					}
+
+					if (noting)
+					{
+						ToyPictureReading flareMask;
+						ToyReadPicture(device, toyMaskSurface, kToyMaskCounts, &flareMask);
+						lightReports[light].maskRise = flareMask.average;
+					}
 				}
 				ToyAddFlareLight(device, lights, report.lights, light, screen != 0);
 				report.pixels += pixelsByLight[light];
@@ -5321,8 +5514,15 @@ static void ToyShadows_Draw()
 			}
 		}
 
+		toyNoteLight = 0;
+
 		if (screen)
 		{
+			if (noting)
+			{
+				ToyReadPicture(device, screen, 255.0f, &screenAtEnd);
+			}
+
 			screen->Release();
 		}
 	}
@@ -5369,7 +5569,7 @@ static void ToyShadows_Draw()
 		report.milliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
 		ToyLogFrame(report);
 
-		char line[240];
+		char line[400];
 
 		// the number that says what the positions are costing: each pass is its own prisms, stencil and mask
 		int passes = 0;
@@ -5381,6 +5581,56 @@ static void ToyShadows_Draw()
 			passes, report.lights, ToyShadowsPositions, ToyShadowsNearLights, ToyShadowsLampSize, ToyShadowsFlareSize);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
+
+		if (noting)
+		{
+			// Each light's own numbers, all from this one frame. Pixels are added up over its passes, and they count every surface
+			// the light can't reach, including surfaces turned away from it, and everything past its range. The share and the keep
+			// are what the marked pixels really lost, on average: the mask's rise spread back over the pixels that caused it.
+			float const screenPixels = (float)viewport.Width * (float)viewport.Height;
+			float const darkest = (float)ToyShadowsDarkness / 100.0f;
+
+			for (int i = 0; i < report.lights; i++)
+			{
+				float const *thisLight = &lights[i * kToyLightFloats];
+				ToyLightReport const *did = &lightReports[i];
+				int const passesHere = ToyPositionsForLight(lights, i);
+				float const kind = thisLight[7];
+				float const distance = sqrtf(thisLight[0] * thisLight[0] + thisLight[1] * thisLight[1] + thisLight[2] * thisLight[2]);
+				float const weight = (thisLight[4] + thisLight[5] + thisLight[6]) / 3.0f;
+				float const perPass = (float)pixelsByLight[i] / (float)passesHere;
+				float const share = (kind != 2.0f && pixelsByLight[i]) ? did->maskRise * screenPixels * (float)passesHere / (float)pixelsByLight[i] : 0.0f;
+
+				if (kind == 2.0f)
+				{
+					_snprintf(line, sizeof(line) - 1,
+						"toy-shadows: frame %d, light %d, added per pixel: %.0f away at %.0f %.0f %.0f, range %.0f, strength %.2f, %s, %d passes marked %u pixels (%.1f%% of the screen a pass), %d polygons in reach, %d prisms, nearest caster %.0f, its mask averages %.3f",
+						report.frame, i, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
+						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise);
+				}
+				else
+				{
+					_snprintf(line, sizeof(line) - 1,
+						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes marked %u pixels (%.1f%% of the screen a pass), %d polygons in reach, %d prisms, nearest caster %.0f, mask rose %.4f, so a marked pixel lost a share of %.3f and keeps %.3f",
+						report.frame, i, kind, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
+						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
+				}
+
+				line[sizeof(line) - 1] = 0;
+				LogString(line);
+			}
+
+			// The mask is before softening. The screen is an average of its colours, 0 to 255: before darkening, after it, and at the
+			// end of the pass with the world dimmed and the flares added. -1 means it couldn't be read.
+			_snprintf(line, sizeof(line) - 1,
+				"toy-shadows: frame %d, end result: mask %s, average %.3f, largest %.3f, over %.2f on %.1f%% of the screen, so the screen keeps %.3f on average; screen %.1f before, %.1f darkened, %.1f at the end",
+				report.frame, maskReading.read ? "read" : "NOT READ", maskReading.average, maskReading.largest, kToyMaskCounts, 100.0f * maskReading.partOver,
+				1.0f - darkest * (maskReading.average < 1.0f ? maskReading.average : 1.0f),
+				screenBefore.read ? screenBefore.average : -1.0f, screenDarkened.read ? screenDarkened.average : -1.0f, screenAtEnd.read ? screenAtEnd.average : -1.0f);
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
+		}
+
 		if (measuredThisFrame)
 		{
 			float const distance = sqrtf(lights[0] * lights[0] + lights[1] * lights[1] + lights[2] * lights[2]);

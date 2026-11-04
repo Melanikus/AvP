@@ -5900,7 +5900,7 @@ void ToyShadows_WorldAxes(float *axes)
 
 // Breaks "active" down by kind, so the count means something. Writes a line each time the total passes its record, and every
 // 300 frames. "Active" is the test LightSourcesInRangeOfObject starts from: lit, and on something the game is keeping active.
-void ToyShadows_NoteFrameLights()
+void ToyShadows_NoteFrameLights(int frame)
 {
 	if (!ToyShadowsMode)
 	{
@@ -5971,7 +5971,7 @@ void ToyShadows_NoteFrameLights()
 		toyMostLightsInAFrame = total;
 	}
 
-	if (!isRecord && (GlobalFrameCounter % 300) != 0)
+	if (!isRecord && (frame % 300) != 0)
 	{
 		return;
 	}
@@ -5993,7 +5993,7 @@ void ToyShadows_NoteFrameLights()
 	char line[256];
 	_snprintf(line, sizeof(line) - 1,
 		"toy-lights: frame %d%s: %d active = %d level + %d objects + %d flares + %d brief + %d elements + %d on the player; camera inside the range of %d, %d can reach the view, %d share a spot",
-		GlobalFrameCounter, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot);
+		frame, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 
