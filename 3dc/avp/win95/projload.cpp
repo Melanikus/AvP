@@ -1913,6 +1913,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 					int start_shape_no = list_pos;
 					#endif
 
+					// An imported shape, such as a crate or a console, gets its list of polygon facts too. Several objects can share the
+					// shape, at different angles, and that's fine: the list is in the shape's own numbers, and each object turns it.
+					if ((flags & CCF_ENVIRONMENT) && !rt_temp.mc)
+					{
+						SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+					}
+
 					int AnimationShape=-1;
 					if (shplif()->lookup_single_child("TEXTANIM"))
 					{

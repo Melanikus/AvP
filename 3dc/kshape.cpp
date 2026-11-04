@@ -160,7 +160,7 @@ VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner);
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane);
 void ToyShadows_NoteModelPart(const void *model, int polygons);
 
 /*
@@ -5529,6 +5529,7 @@ void ToyShadows_NoteObjectLights()
 
 // The camera and the view of the frame the polygons came from, kept for when the lights are chosen at the end of the frame.
 static float toyViewMatrix[12];
+static float toyCameraPlace[3];   // where the camera was when toyViewMatrix was kept
 static VECTORCH toyCameraWorld;
 
 // Which modules ToyShadows_Collect took polygons from. Each module has a place here holding the number of the frame it was last
@@ -5783,6 +5784,9 @@ static void ToyHoldFlaresToTheirCap()
 void ToyShadows_ChooseLights()
 {
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
+	toyCameraPlace[0] = (float)Global_VDB_Ptr->VDB_World.vx;
+	toyCameraPlace[1] = (float)Global_VDB_Ptr->VDB_World.vy;
+	toyCameraPlace[2] = (float)Global_VDB_Ptr->VDB_World.vz;
 	toyCameraWorld = Global_VDB_Ptr->VDB_World;
 
 	// The log prints this on every report, menus too. A room's name lives in the level's memory, which is given back when the level
@@ -5871,6 +5875,9 @@ void ToyShadows_ChooseLights()
 		bool const live = !(light->LightFlags & LFlag_PreLitSource);
 		out[7] = live ? 1.0f : 0.0f;
 		out[8] = 1.0f;
+		out[kToyLightWorld + 0] = source[0];
+		out[kToyLightWorld + 1] = source[1];
+		out[kToyLightWorld + 2] = source[2];
 
 		// A live light can be brighter than 1: an explosion is 4. What matters here is what the game really adds to the wall, so a
 		// live light counts at its real brightness, worked out as the game works it out (view.cpp, UpdateObjectLights).
@@ -5954,6 +5961,11 @@ void ToyShadows_WorldAxes(float *axes)
 		axes[axis * 3 + 1] = -toyViewMatrix[4 + axis];
 		axes[axis * 3 + 2] = toyViewMatrix[8 + axis];
 	}
+}
+
+void ToyShadows_CameraPlace(float *place)
+{
+	memcpy(place, toyCameraPlace, sizeof(toyCameraPlace));
 }
 
 // Breaks "active" down by kind, so the count means something. Writes a line each time the total passes its record, and every
@@ -6116,6 +6128,31 @@ static int ToyChooseKind(const DISPLAYBLOCK *block, int kind)
 // - A block with neither a piece of the level nor an owner. Those are made up for one draw, such as the alien's teeth, which
 //   are drawn while gunLayer is off. ShapePipeline reads the same two blanks as "part of the player's own view". A spear stuck
 //   in a wall and the grappling hook are made the same way, so they cast nothing either.
+// Which shapes can use the planes they keep. A plane is in the shape's own numbers, and all that's added here is where the object is, so the
+// object has to line up with the world, and a morphing object's corners don't stay still. Anything else works its planes out from its corners.
+// So does everything while the mirror cheat is on: it flips the view left to right, which makes the list the same way round as the shape
+// and not a mirror image of it, so every stored arrow would point the wrong way.
+static SurfacePolygon const *ToyStoredPlanes(const SHAPEHEADER *shape, const MATRIXCH &matrix, bool morphing)
+{
+	extern MATRIXCH IdentityMatrix;
+
+	if (!shape->sh_surfacepolygons || morphing || MIRROR_CHEATMODE || memcmp(&matrix, &IdentityMatrix, sizeof(MATRIXCH)) != 0)
+	{
+		return 0;
+	}
+
+	return shape->sh_surfacepolygons;
+}
+
+// A stored plane, moved to where its object is. Four numbers, as ToyShadows_AddCaster wants them.
+static void ToyPlaneInWorld(const SurfacePolygon &polygon, const VECTORCH &place, float *plane)
+{
+	plane[0] = polygon.nx;
+	plane[1] = polygon.ny;
+	plane[2] = polygon.nz;
+	plane[3] = polygon.distance + polygon.nx * (float)place.vx + polygon.ny * (float)place.vy + polygon.nz * (float)place.vz;
+}
+
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 {
 	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
@@ -6148,11 +6185,13 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 		ToyNoteModuleCollected(dptr->ObMyModule);
 	}
 
+	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
 	while (numitems-- > 0)
 	{
+		int const polygonNumber = shapePtr->numitems - 1 - numitems;
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 
 		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
@@ -6184,7 +6223,14 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 		if (pointsAreSafe)
 		{
-			ToyShadows_AddCaster(pts, count, whatItMayDo, owner);
+			float plane[4];
+
+			if (stored)
+			{
+				ToyPlaneInWorld(stored[polygonNumber], dptr->ObWorld, plane);
+			}
+
+			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, stored ? plane : 0);
 			polygonsKept++;
 		}
 	}
@@ -6307,12 +6353,16 @@ static int ToyCollectUnseenModule(const MODULE *module)
 		point += 3;
 	}
 
+	extern MATRIXCH IdentityMatrix;
+
+	SurfacePolygon const *stored = ToyStoredPlanes(shape, IdentityMatrix, false);   // a module always lines up with the world
 	int polygonsAdded = 0;
 	int numitems = shape->numitems;
 	int **itemArrayPtr = shape->items;
 
 	while (numitems-- > 0)
 	{
+		int const polygonNumber = shape->numitems - 1 - numitems;
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 
 		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
@@ -6342,7 +6392,14 @@ static int ToyCollectUnseenModule(const MODULE *module)
 
 		if (pointsAreSafe)
 		{
-			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0);  // a wall has no owner
+			float plane[4];
+
+			if (stored)
+			{
+				ToyPlaneInWorld(stored[polygonNumber], place, plane);
+			}
+
+			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, stored ? plane : 0);  // a wall has no owner
 			polygonsAdded++;
 		}
 	}

@@ -3582,17 +3582,25 @@ struct ToyVec
 	float x, y, z;
 };
 
-// A polygon's flat surface. Working out which way it faces takes a square root, and there can be thousands of polygons, several lights
-// and several positions for each light. So it's worked out once a frame for each polygon, when the polygon is collected, and every light
-// and position reads the answer.
-// It comes from the polygon's corners, not from the normal stored with the shape. A prism's inside and outside are decided by the order of
-// the corners, and on 1,688 stock polygons the stored normal points the other way from that order, mostly on models.
+// A polygon's flat surface, which is all the prism builder asks of it: which way it faces, and which side of it a place is on. Working that
+// out takes a square root, and there can be thousands of polygons, several lights and several positions for each light. So no light ever
+// works it out. A level's polygon keeps its surface in its shape, made once at load, and that's in the world's numbers. Anything else works it
+// out from its corners once a frame, when it's collected, and that's in the numbers of the light list. Every light reads the answer.
+// It's never the normal the level file stores for a polygon. A prism's inside and outside are decided by the order of the corners, and on
+// 1,688 stock polygons that normal points the other way from that order, mostly on models.
 struct ToyFlatSurface
 {
-	float nx, ny, nz;   // an arrow straight out of the surface. It isn't shortened to a length of 1
-	float length;       // how long that arrow is. Almost nothing means the polygon has no area
-	float halfSize;     // half the longer of its first two sides, which says how big the polygon is
+	float nx, ny, nz;   // an arrow straight through the surface, 1 long. All zero means the polygon has no area, and casts nothing
+	float distance;     // how far the surface is from the middle of its numbers, along that arrow. See ToyDistanceFrom
+	float halfSize;     // half the longer of its first two sides, which says how big the polygon is. Only a model's is kept
+	bool inWorld;       // true if these are the world's numbers, and false if they're the light list's
 };
+
+// How far a place is from a flat surface, and the sign says which side it's on. The place has to be in the surface's own numbers.
+static inline float ToyDistanceFrom(const ToyFlatSurface &surface, const float *place)
+{
+	return surface.nx * place[0] + surface.ny * place[1] + surface.nz * place[2] - surface.distance;
+}
 
 static const int   kToyMostPolyPoints  = 16;
 static const int   kToyMaxCasters      = 60000;
@@ -3610,6 +3618,7 @@ static ToyVec toyCasterPoints[kToyMaxCasterPoints];
 static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
 static ToyFlatSurface toyCasterSurface[kToyMaxCasters];
+static float toyCameraInWorld[3];   // where the camera is, in the world's numbers. In the light list's numbers it's always 0 0 0
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
 static int toyCasterModule[kToyMaxCasters];  // for a cast-only polygon, which of toyUnseenModules it belongs to
@@ -3636,6 +3645,7 @@ static int toyStretchCorners = 0;
 
 int ToyShadows_ChosenLights(float *lights, const void **owners);
 void ToyShadows_WorldAxes(float *axes);
+void ToyShadows_CameraPlace(float *place);
 void ToyShadows_CollectOutOfView(const float *lights, int numLights);
 void ToyShadows_NextCollectingFrame();
 
@@ -3667,25 +3677,42 @@ bool ToyShadows_StartUnseenModule(const float *centre, float radius)
 	return true;
 }
 
-// pts holds at least three points
-static void ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
+// pts holds at least three points. Gives back twice the area of the triangle they make.
+static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
 {
 	float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
 	float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
-
-	surface.nx = ay * bz - az * by;
-	surface.ny = az * bx - ax * bz;
-	surface.nz = ax * by - ay * bx;
-	surface.length = sqrtf(surface.nx * surface.nx + surface.ny * surface.ny + surface.nz * surface.nz);
+	float const nx = ay * bz - az * by;
+	float const ny = az * bx - ax * bz;
+	float const nz = ax * by - ay * bx;
+	float const length = sqrtf(nx * nx + ny * ny + nz * nz);
 
 	float const sideA = ax * ax + ay * ay + az * az;
 	float const sideB = bx * bx + by * by + bz * bz;
 	surface.halfSize = sqrtf(sideA > sideB ? sideA : sideB) * 0.5f;
+	surface.inWorld = false;
+
+	if (length < 0.001f)
+	{
+		surface.nx = 0.0f;
+		surface.ny = 0.0f;
+		surface.nz = 0.0f;
+		surface.distance = 0.0f;
+		return length;
+	}
+
+	surface.nx = nx / length;
+	surface.ny = ny / length;
+	surface.nz = nz / length;
+	surface.distance = surface.nx * pts[0].x + surface.ny * pts[0].y + surface.nz * pts[0].z;
+
+	return length;
 }
 
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
 // kind is one of ToyCasterKind. owner is what the polygon belongs to, or nothing for the level.
-void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner)
+// storedPlane is the polygon's plane if its shape keeps one: an arrow and a distance, four numbers, in the world's numbers. If not, it's empty.
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane)
 {
 	if (count < 3 || count > kToyMostPolyPoints || kind < 0 || kind >= kToyCasterKinds)
 	{
@@ -3715,8 +3742,79 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		toyNumCasterPoints++;
 	}
 
-	ToyWorkOutSurface(&toyCasterPoints[firstPoint], toyCasterSurface[toyNumCasters]);
+	ToyFlatSurface &surface = toyCasterSurface[toyNumCasters];
+
+	// a model needs its polygons' sizes, which aren't stored
+	if (storedPlane && kind != kToyCasterModel)
+	{
+		surface.nx = storedPlane[0];
+		surface.ny = storedPlane[1];
+		surface.nz = storedPlane[2];
+		surface.distance = storedPlane[3];
+		surface.halfSize = 0.0f;
+		surface.inWorld = true;
+	}
+	else
+	{
+		ToyWorkOutSurface(&toyCasterPoints[firstPoint], surface);
+	}
+
 	toyNumCasters++;
+}
+
+// The proof that a stored plane and the polygon's corners agree, on a report frame. The corners on the list are a mirror image of the shape,
+// and the stored arrow was made to allow for that, so turning it to match the camera has to give the same arrow the corners give. Only the
+// sign matters, so that's what's counted. A polygon can disagree without anything being wrong: the game rounds its corners to whole numbers,
+// and a thin enough sliver can come out flipped or with no area at all, which is why the largest area is on the line.
+static void ToyCheckStoredPlanes(const float *axes)
+{
+	int compared = 0, opposite = 0, oneHasNoArea = 0;
+	float largest = 0.0f;
+
+	for (int caster = 0; caster < toyNumCasters; caster++)
+	{
+		ToyFlatSurface const &stored = toyCasterSurface[caster];
+
+		if (!stored.inWorld)
+		{
+			continue;
+		}
+
+		ToyFlatSurface corners;
+		float const area = ToyWorkOutSurface(&toyCasterPoints[toyCasterStart[caster]], corners) * 0.5f;
+
+		float const x = stored.nx * axes[0] + stored.ny * axes[3] + stored.nz * axes[6];
+		float const y = stored.nx * axes[1] + stored.ny * axes[4] + stored.nz * axes[7];
+		float const z = stored.nx * axes[2] + stored.ny * axes[5] + stored.nz * axes[8];
+
+		bool const storedHasArea = stored.nx != 0.0f || stored.ny != 0.0f || stored.nz != 0.0f;
+		bool const cornersHaveArea = corners.nx != 0.0f || corners.ny != 0.0f || corners.nz != 0.0f;
+
+		compared++;
+
+		if (storedHasArea != cornersHaveArea)
+		{
+			oneHasNoArea++;
+		}
+		else if (storedHasArea && x * corners.nx + y * corners.ny + z * corners.nz <= 0.0f)
+		{
+			opposite++;
+		}
+		else
+		{
+			continue;
+		}
+
+		if (area > largest)
+		{
+			largest = area;
+		}
+	}
+
+	char line[200] = { 0 };
+	_snprintf(line, sizeof(line) - 1, "toy-shadows: frame %d: %d stored planes checked against their corners, %d point the other way, %d have no area on one side only, largest of those %.0f",
+		toyFrame, compared, opposite, oneHasNoArea, largest);
+	LogString(line);
 }
 
 // Adds one body part to the log's count of how big each model is. All the parts of one model arrive together, so a new owner
@@ -3786,13 +3884,18 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	}
 
 	float const nx = surface.nx, ny = surface.ny, nz = surface.nz;
-	float const normalLength = surface.length;
+
+	// Three places are held against the surface, and they have to be in its own numbers. That's the only difference between the two kinds.
+	static const float kCameraOnTheList[3] = { 0.0f, 0.0f, 0.0f };
+	float const *lightPlace = surface.inWorld ? light + kToyLightWorld : light;
+	float const *centrePlace = surface.inWorld ? centre + kToyLightWorld : centre;
+	float const *cameraPlace = surface.inWorld ? toyCameraInWorld : kCameraOnTheList;
 
 	float const lx = light[0] - pts[0].x, ly = light[1] - pts[0].y, lz = light[2] - pts[0].z;
-	float const facing = nx * lx + ny * ly + nz * lz;
+	float const facing = ToyDistanceFrom(surface, lightPlace);
 	float const lightDistance = sqrtf(lx * lx + ly * ly + lz * lz);
 
-	if (normalLength < 0.001f || lightDistance < 1.0f || facing == 0.0f)
+	if ((nx == 0.0f && ny == 0.0f && nz == 0.0f) || lightDistance < 1.0f || facing == 0.0f)
 	{
 		return;
 	}
@@ -3800,7 +3903,7 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	// A position can land behind a surface the light is really in front of: a flare lying on the floor, or a lamp just under a
 	// ceiling. That surface would then block the position from the whole room, and part of the light would go, in the shape of
 	// the floor. So a polygon whose flat surface lies between the light and the position doesn't cast for that position.
-	float const centreFacing = nx * (centre[0] - pts[0].x) + ny * (centre[1] - pts[0].y) + nz * (centre[2] - pts[0].z);
+	float const centreFacing = ToyDistanceFrom(surface, centrePlace);
 
 	if ((centreFacing < 0.0f) != (facing < 0.0f))
 	{
@@ -3808,7 +3911,7 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	}
 
 	// the polygon's flat surface is out of the light's reach
-	float const planeDistance = fabsf(facing) / normalLength;
+	float const planeDistance = fabsf(facing);
 	if (planeDistance >= light[3])
 	{
 		return;
@@ -3822,7 +3925,7 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
 	// it from the whole room. So a polygon that close doesn't cast for that flare, or for any other light added per pixel, measured
 	// from where the light really is. A light's eighth number is its kind, and 2 means added per pixel.
-	if (light[7] == 2.0f && fabsf(centreFacing) / normalLength < kToyFlareTouching)
+	if (light[7] == 2.0f && fabsf(centreFacing) < kToyFlareTouching)
 	{
 		return;
 	}
@@ -3851,7 +3954,7 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	}
 
 	// the lower the light hits the surface, the further the start has to move to get behind it by the same amount
-	float const angle = fabsf(facing) / (normalLength * lightDistance);
+	float const angle = fabsf(facing) / lightDistance;
 	float gap = startGap / (angle > 0.01f ? angle : 0.01f);
 	if (gap > kToyWidestGap)
 	{
@@ -3861,8 +3964,8 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	// The game adds a live light to every point in range, walls or no walls, even a point turned away from it. So a surface we
 	// see from the side the light can't reach has to be in that light's shadow, even with nothing else in the way, as when
 	// the light is behind it. Its prism starts just in front of it, towards the light, and takes the surface in. The camera
-	// is at 0 0 0.
-	float const cameraSide = -(nx * pts[0].x + ny * pts[0].y + nz * pts[0].z);
+	// is at 0 0 0 on the list.
+	float const cameraSide = ToyDistanceFrom(surface, cameraPlace);
 	// A model doesn't need this. lightShapes.fxh gives a surface turned away from a lamp or a flare nothing to lose, and
 	// on a model all it would do is leave a thin dark strip along every edge of the lit part.
 	bool const takeSurfaceIn = !model && (cameraSide < 0.0f) != (facing < 0.0f);
@@ -4778,6 +4881,7 @@ static void ToyLightAtPosition(const float *light, int position, const float *ax
 	for (int i = 0; i < 3; i++)
 	{
 		moved[i] = light[i] + radius * (place[0] * axes[0 + i] + place[1] * axes[3 + i] + place[2] * axes[6 + i]);
+		moved[kToyLightWorld + i] = light[kToyLightWorld + i] + radius * place[i];
 	}
 }
 
@@ -5062,6 +5166,7 @@ static void ToyShadows_Draw()
 	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)report.lights);
 	float worldAxes[9];
 	ToyShadows_WorldAxes(worldAxes);
+	ToyShadows_CameraPlace(toyCameraInWorld);
 	DWORD const flatShare = (DWORD)((1.0f - keepPerLight) * 255.0f) << 24;
 
 	// once in a while, ask the card how many pixels the stencil let through
@@ -5137,6 +5242,12 @@ static void ToyShadows_Draw()
 	// counting as a shadow. All of this only reads: nothing here changes what's drawn.
 	float const kToyMaskCounts = 0.02f;
 	bool const noting = logThisFrame && screen != 0;
+
+	if (noting)
+	{
+		ToyCheckStoredPlanes(worldAxes);
+	}
+
 	ToyLightReport lightReports[kToyMostLights];
 	ToyPictureReading maskReading = { false, 0.0f, 0.0f, 0.0f };
 	ToyPictureReading screenBefore = maskReading, screenDarkened = maskReading, screenAtEnd = maskReading;
