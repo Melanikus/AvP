@@ -6150,7 +6150,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
-	while (numitems--)
+	while (numitems-- > 0)
 	{
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 
@@ -6168,7 +6168,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 		{
 			// this number comes from a game file, so it's checked before it's used to find a point
 			int const pointNumber = *vertexNumberPtr++;
-			if (pointNumber < 0 || pointNumber >= maxrotpts)
+			if (pointNumber < 0 || pointNumber >= shapePtr->numpoints || pointNumber >= maxrotpts)
 			{
 				pointsAreSafe = false;
 				break;
@@ -6231,9 +6231,10 @@ static bool ToyModuleCanCastUnseen(const MODULE *module)
 // A ball is rougher than the module's box, but it can only let in too many, and the prism builder tests each polygon anyway.
 static void ToyMakeModuleBall(const MODULE *module, float *ball)
 {
-	float const halfX = (float)(module->m_maxx - module->m_minx) * 0.5f;
-	float const halfY = (float)(module->m_maxy - module->m_miny) * 0.5f;
-	float const halfZ = (float)(module->m_maxz - module->m_minz) * 0.5f;
+	// These come from the level file, so they're made floats first: adding or taking away whole numbers that big can overflow.
+	float const halfX = ((float)module->m_maxx - (float)module->m_minx) * 0.5f;
+	float const halfY = ((float)module->m_maxy - (float)module->m_miny) * 0.5f;
+	float const halfZ = ((float)module->m_maxz - (float)module->m_minz) * 0.5f;
 
 	float const centre[3] =
 	{
@@ -6295,7 +6296,7 @@ static int ToyCollectUnseenModule(const MODULE *module)
 
 	for (int i = 0; i < shape->numpoints; i++)
 	{
-		float const source[3] = { (float)(place.vx + point[0]), (float)(place.vy + point[1]), (float)(place.vz + point[2]) };
+		float const source[3] = { (float)place.vx + (float)point[0], (float)place.vy + (float)point[1], (float)place.vz + (float)point[2] };
 		float view[3];
 
 		TranslatePoint(source, view, toyViewMatrix);
