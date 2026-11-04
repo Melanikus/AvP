@@ -266,6 +266,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ShadowsFullReport = 1;
 		}
+		extern int KeptPrismsOff;
+		// not -nokeptprisms, for the same reason as -shadowsoff
+		if (strstr(command_line, "-keptprismsoff"))
+		{
+			KeptPrismsOff = 1;
+		}
 		extern int ToyShadowsDarkness;
 		char const *darkSwitch = strstr(command_line, "-shadowdark=");
 		if (darkSwitch)

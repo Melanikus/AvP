@@ -3602,6 +3602,7 @@ int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen l
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
+int KeptPrismsOff = 0;        // -keptprismsoff: every prism is worked out every frame, as if nothing could be kept
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 int ToyShadowsPositions = 4;   // -shadowpositions=N, 1, 4 or 8: how many places a light is treated as shining from. 1 is a point of light, with no penumbra
 int ToyShadowsNearLights = 2;  // -shadownearlights=N, 0 to 12: how many lights besides flares get those positions, nearest first
@@ -5017,7 +5018,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 	bool moduleCanShow = false;
 
 	// Kept prisms were made without the camera, so they're only right on a frame that doesn't use it. A cloaked model is never kept.
-	bool const keeping = prismsForPictures && !cloakedOnly && ShadowVolumesCard_Ready();
+	bool const keeping = prismsForPictures && !cloakedOnly && !KeptPrismsOff && ShadowVolumesCard_Ready();
 	int groupGoingTheOrdinaryWay = -1;
 	int keptCorners = 0;
 
@@ -5104,6 +5105,13 @@ static void StartKeptPrisms(const float *lights, int numLights)
 
 static void ReportKeptPrisms()
 {
+	// without this, a run with the switch on would log all zeros, which reads like a store that's broken
+	if (KeptPrismsOff)
+	{
+		LogString("shadows: kept prisms are off (-keptprismsoff)");
+		return;
+	}
+
 	ShadowVolumeCounts counts;
 	ShadowVolumes_TakeCounts(&counts);
 
