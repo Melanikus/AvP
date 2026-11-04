@@ -1410,7 +1410,7 @@ void DrawParticles()
 	}
 }
 
-void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
+void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr, bool isShapePolygon)
 {
 	// bjd - This is the function responsible for drawing level geometry and the players weapon
 	if (!mainList->Check(RenderPolygon.NumberOfVertices)) {
@@ -1433,9 +1433,10 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 		mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
 	}
 
-	// A see-through polygon can be drawn long after its shape, when the shape's normals are no longer the current ones. It never reaches
-	// the surface pictures, and nor does the weapon, so neither needs a normal.
-	if (!gunLayer && RenderPolygon.TranslucencyMode == TRANSLUCENCY_OFF)
+	// Only a real polygon of the shape being drawn has normals to look up. The other callers make their polygons up on the spot, like an
+	// explosion's, and those have no corner numbers. A see-through polygon can be drawn long after its shape, when the shape's normals are
+	// no longer the current ones. It never reaches the surface pictures, and nor does the weapon, so neither needs a normal.
+	if (isShapePolygon && !gunLayer && RenderPolygon.TranslucencyMode == TRANSLUCENCY_OFF)
 	{
 		SurfaceNormals_WritePolygon(inputPolyPtr, vb, RenderPolygon.NumberOfVertices);
 	}

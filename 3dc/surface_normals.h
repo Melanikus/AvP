@@ -20,7 +20,8 @@ void SurfaceNormals_Unlock();
 // Says a new shape is about to be drawn. The polygons that follow belong to it.
 void SurfaceNormals_StartObject();
 
-// Writes a polygon's normals. firstVertex is the place its first corner has in the game's list of vertices.
+// Writes a polygon's normals. firstVertex is the place its first corner has in the game's list of vertices. The polygon has to be a real
+// one of the shape being drawn, because its corner numbers are looked up in that shape.
 void SurfaceNormals_WritePolygon(const struct polyheader *polygon, uint32_t firstVertex, uint32_t corners);
 
 // Hands the list to the graphics card, or takes it back, for a pass that reads it.
