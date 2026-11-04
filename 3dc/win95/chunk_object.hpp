@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed the declarations of code only the level editor used: the game itself never runs it
+//   removed the declarations of code only the level editor used: the game itself never runs it; added a
+//   check on the object numbers a level file gives
 
 #ifndef _obchunk_hpp
 #define _obchunk_hpp 1
@@ -93,6 +94,13 @@ public:
 	void destroy(File_Chunk *);
 
 	ObjectID CalculateID();
+
+	// File_Chunk keeps a list of objects, just long enough for the highest number it finds, and uses each object's number
+	// as its place in that list. The number comes straight from the level file, so it could be anything. A huge one would
+	// need more memory than the size sum can count, which leaves a list far too short. Numbers in the game's own files run
+	// from 0 to 903, so this limit leaves plenty of room.
+	static const int Max_Index_Num = 65535;
+	bool index_num_is_valid() const { return object_data.index_num >= 0 && object_data.index_num <= Max_Index_Num; }
 
 	//program_object_index can be set by the program using the chunks , so you can find where
 	//the object has been put.

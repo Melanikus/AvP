@@ -3,6 +3,8 @@
 //   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
 //   names and other text are copied using their exact measured length; level-editor code was removed
 //   a child chunk whose size cannot be real is refused
+//   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
+//   rely on a whole level; object numbers are limited to what the object list can hold
 
 #include <string>
 #include "chunk.hpp"
@@ -472,7 +474,12 @@ File_Chunk::File_Chunk(const char * file_name)
 
 	CloseHandle (rif_file);
 
-	post_input_processing();
+	// After a failed load the tree is only part of a level, and this step relies on all of it being there. load_rif
+	// sees error_code and stops the level with its error message.
+	if (!error_code)
+	{
+		post_input_processing();
+	}
 }
 
 File_Chunk::File_Chunk()
@@ -627,26 +634,55 @@ void File_Chunk::post_input_processing()
 		child_lists.delete_first_entry();
 	}
 
+	// Next, each object is joined to its shape, by the number it gives. All of these numbers come from the level file, so
+	// they are checked first. In all 86 of the game's own levels every shape and object has its header, and every object
+	// names a shape in its own file. Anything else means the file is damaged, so the whole level is refused: error_code
+	// makes load_rif stop with its error message. Leaving out just the bad object wouldn't be safe, because the code that
+	// builds the level relies on every object having a shape.
+	int highest_shape_number = 0;
+
 	LIF<Shape_Chunk *> sli(&shplist);
 	for (; !sli.done(); sli.next())
 	{
-		Shape_Chunk::max_id = max (Shape_Chunk::max_id,sli()->get_header()->file_id_num);	
+		Shape_Header_Chunk * shape_header = sli()->get_header();
+
+		if (!shape_header || !shape_header->file_id_num_is_valid())
+		{
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		highest_shape_number = max (highest_shape_number,shape_header->file_id_num);
+		Shape_Chunk::max_id = max (Shape_Chunk::max_id,shape_header->file_id_num);
 	}
-	Shape_Chunk** shape_array=new Shape_Chunk*[Shape_Chunk::max_id+1];
+
+	// a list with a place for every number up to the highest; the () makes every place start empty, so a number
+	// that no shape uses reads as "no shape", not as whatever was in that memory before
+	Shape_Chunk** shape_array=new Shape_Chunk*[highest_shape_number+1]();
 
 	for(sli.restart();!sli.done();sli.next())
 	{
 		shape_array[sli()->get_header()->file_id_num]=sli();
 	}
-	
+
 	for (LIF<Object_Chunk *> ol(&objlist); !ol.done(); ol.next())
 	{
-		ol()->assoc_with_shape(shape_array[ol()->get_header()->shape_id_no]);
+		Object_Header_Chunk * object_header = ol()->get_header();
+
+		if (!object_header || !ol()->index_num_is_valid() || object_header->shape_id_no < 0 ||
+			object_header->shape_id_no > highest_shape_number || !shape_array[object_header->shape_id_no])
+		{
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			delete[] shape_array;
+			return;
+		}
+
+		ol()->assoc_with_shape(shape_array[object_header->shape_id_no]);
 	}
 
 	delete[] shape_array;
 
-	Chunk_With_Children::post_input_processing();	
+	Chunk_With_Children::post_input_processing();
 }
 
 
@@ -1531,10 +1567,14 @@ void File_Chunk::build_object_array()
 
 	LIF<Object_Chunk*> oblif(&oblist);
 
-	//find the highest object index
+	// find the highest object index. The numbers come from the level file, and a huge one would make the size sum below
+	// wrap round to a tiny list, which the loop after it would then write far past. See index_num_is_valid.
 	for (oblif.restart();!oblif.done();oblif.next())
 	{
-		object_array_size=max(object_array_size,oblif()->object_data.index_num+1);
+		if(oblif()->index_num_is_valid())
+		{
+			object_array_size=max(object_array_size,oblif()->object_data.index_num+1);
+		}
 	}
 
 	if (object_array_size<=0) return;
@@ -1549,10 +1589,9 @@ void File_Chunk::build_object_array()
 
 	for(oblif.restart();!oblif.done();oblif.next())
 	{
-		int index=oblif()->object_data.index_num;
-		if(index>=0)
+		if(oblif()->index_num_is_valid())
 		{
-			object_array[index]=oblif();
+			object_array[oblif()->object_data.index_num]=oblif();
 		}
 	}
 }
@@ -1813,7 +1852,11 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 
 	CloseHandle (rif_file);
 
-	post_input_processing();
+	// after a failed load the tree is only part of a level, and this step relies on all of it being there
+	if (!error_code)
+	{
+		post_input_processing();
+	}
 
 	Parent_File = ParentFileStore;
 }
@@ -1862,7 +1905,11 @@ void RIF_File_Chunk::post_input_processing()
 
 	for (LIF<Shape_Chunk *> sli(&shplist); !sli.done(); sli.next())
 	{
-		Shape_Chunk::max_id = max (Shape_Chunk::max_id,sli()->get_header()->file_id_num);
+		// a level file can leave a shape's header out
+		if (sli()->get_header())
+		{
+			Shape_Chunk::max_id = max (Shape_Chunk::max_id,sli()->get_header()->file_id_num);
+		}
 	}
 
 	Chunk_With_Children::post_input_processing();

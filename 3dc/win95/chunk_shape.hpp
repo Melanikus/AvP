@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed code and declarations only the level editor used: the game itself never runs them
+//   removed code and declarations only the level editor used: the game itself never runs them; added a
+//   check on the shape numbers a level file gives
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -560,6 +561,13 @@ public:
 	List<char *> object_names_store;
 
 	int flags;
+
+	// File_Chunk joins objects to shapes through a list with a place for every shape number, up to the highest it finds.
+	// The number comes straight from the level file, so it could be anything: a negative one would point in front of the
+	// list, and a huge one would ask for a list too big to make. Numbers in the game's own files run from 1 to 7304, so
+	// this limit leaves plenty of room. A file that fails this check is refused.
+	static const int Max_File_Id_Num = 65535;
+	bool file_id_num_is_valid() const { return file_id_num >= 0 && file_id_num <= Max_File_Id_Num; }
 
 private:
 
