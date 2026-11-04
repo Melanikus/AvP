@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   adds a checked Huffman decoder for save games and text files: it refuses data that does not fit or
 //   decodes to fewer bytes than it claims; the room for compressed data allows for data that grows when compressed;
-//   the memory for compressing a save comes from AllocateMem, which stops the game with a message if there is none left
+//   the memory for compressing a save comes from AllocateMem, which stops the game with a message if there is none left;
+//   the decoder picks its table entry as an int, which is what the table holds
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -548,8 +549,9 @@ static void MakeHuffmanDecodeTable(const int *depth, int depthmax, const unsigne
 }
 
 
-#define EDXMASK ((((1 << (MAX_DEPTH + 1)) - 1) ^ 1) ^ -1)
-
+// table holds one int for each possible code. A code is the next MAX_DEPTH bits of the data, just above the lowest bit
+// of bits, which is kept spare. In an int, the lowest byte is how many bits that code really takes, and the next byte is
+// the letter it stands for. p points at the int, so p[0] and p[1] are those two bytes.
 // sourceEnd: the end of the compressed data (words at or after it are read as 0)
 static int HuffmanDecode(unsigned char *dest, const int *source, const int *sourceEnd, const int *table, int length)
 {
@@ -595,7 +597,7 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *sour
         {
             bits      >>= wid;
             *dest++   = p[1];
-lpent:      p         = (const unsigned char *)(((const short *)table)+(bits & ~EDXMASK));
+lpent:      p         = (const unsigned char *)(table + ((bits >> 1) & ((1 << MAX_DEPTH) - 1)));
         }
         while ((available  -= (wid = *p)) >= 0 && (dest-start)!=length);
 
