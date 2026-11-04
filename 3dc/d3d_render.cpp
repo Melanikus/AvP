@@ -3646,7 +3646,10 @@ int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
 int ShadowsEvenGap = 0;       // -shadowevengap: a shadow starts the same distance behind every part of its polygon. See shadow_gap.h
-int KeptPrismsOff = 0;        // -keptprismsoff: every prism is worked out every frame, as if nothing could be kept
+// Whether every prism is worked out every frame, as if nothing could be kept. This is the default for now, because the user saw shadows flicker with
+// kept prisms and not without them. -keptprismson turns them back on for testing. It doesn't change the aim, which is that a still light keeps its
+// volumes: this goes back once a fix is proven and the user has seen it.
+int KeptPrismsOff = 1;
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 int ToyShadowsPositions = 4;   // -shadowpositions=N, 1, 4 or 8: how many places a light is treated as shining from. 1 is a point of light, with no penumbra
 int ToyShadowsNearLights = 2;  // -shadownearlights=N, 0 to 12: how many lights besides flares get those positions, nearest first
@@ -3878,7 +3881,7 @@ static int polygonsReachKept = 0;
 static int polygonsReachLeftOut = 0;
 
 // What leaving out polygons beyond a light's range saved this frame, added up over every pass. Prisms taken from the store aren't counted, because
-// they were never built: with -keptprismsoff these cover the whole frame.
+// they were never built: with kept prisms off, as they are by default, these cover the whole frame.
 static int prismsOutOfRange = 0;
 static int vertsOutOfRange = 0;
 
@@ -5638,7 +5641,7 @@ static void ReportKeptPrisms()
 	// without this, a run with the switch on would log all zeros, which reads like a store that's broken
 	if (KeptPrismsOff)
 	{
-		LogString("shadows: kept prisms are off (-keptprismsoff)");
+		LogString("shadows: kept prisms are off, so nothing is kept (-keptprismson turns them on)");
 		return;
 	}
 
@@ -6262,7 +6265,7 @@ static void ShadowStatus_Draw()
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
-	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s", KeptPrismsOff ? "OFF" : "ON");
+	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE");
 	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF %s", (textureRelief.IsReady() && ToyShadowsMode != kViewFinalNoRelief) ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);

@@ -307,9 +307,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 		extern int KeptPrismsOff;
 		// not -nokeptprisms, for the same reason as -shadowsoff
-		if (strstr(command_line, "-keptprismsoff"))
+		// they're off unless this says otherwise, and -keptprismsoff is still accepted, so that an old launch option does no harm
+		if (strstr(command_line, "-keptprismson"))
 		{
-			KeptPrismsOff = 1;
+			KeptPrismsOff = 0;
 		}
 		extern int ToyShadowsDarkness;
 		char const *darkSwitch = strstr(command_line, "-shadowdark=");

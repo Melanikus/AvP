@@ -747,7 +747,13 @@ bool CreateVolatileResources()
 	if (SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
 	{
 		SurfaceNormals_Create(kMaxVertices*5);
-		ShadowVolumesCard_Create();
+		// off means off: nothing is made on the card
+		extern int KeptPrismsOff;
+
+		if (!KeptPrismsOff)
+		{
+			ShadowVolumesCard_Create();
+		}
 	}
 	else
 	{
