@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
-//   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound
+//   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
+//   an impossible sequence number is skipped too, and an object with no usable sequence is left out
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -1014,15 +1015,30 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Placed_Hierarchy_Sequence_Chunk* phsc=(Placed_Hierarchy_Sequence_Chunk*)chlif();
-		phtt->num_sequences=max(phtt->num_sequences,phsc->index+1);
+		if(phsc->index_is_valid())
+		{
+			phtt->num_sequences=max(phtt->num_sequences,phsc->index+1);
+		}
 	}
 
-	GLOBALASSERT(phtt->num_sequences);
+	// The game starts an object's first sequence as soon as the object is made, so an object with no usable sequence
+	// goes to the log and is left out of the level.
+	if(!phtt->num_sequences)
+	{
+		LogErrorString("level file has a placed object with no usable sequence");
+		return;
+	}
 
+	// A number the level file doesn't use leaves a gap in this list, so every part of every entry gets a safe value.
 	phtt->sequences=(PLACED_HIERARCHY_SEQUENCE*)PoolAllocateMem(sizeof(PLACED_HIERARCHY_SEQUENCE)*phtt->num_sequences);
 	for(i=0;i<phtt->num_sequences;i++)
 	{
 		phtt->sequences[i].sequence_no=-1;
+		phtt->sequences[i].sub_sequence_no=0;
+		phtt->sequences[i].time=0;
+		phtt->sequences[i].loop=0;
+		phtt->sequences[i].num_sound_times=0;
+		phtt->sequences[i].sound_times=0;
 	}
 	phtt->first_sequence=&phtt->sequences[0];
 	phtt->playing=0;
@@ -1030,6 +1046,14 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(chlif.restart();!chlif.done();chlif.next())
 	{
 		Placed_Hierarchy_Sequence_Chunk* phsc=(Placed_Hierarchy_Sequence_Chunk*)chlif();
+
+		// A number the list has no place for goes to the log, and that sequence is left out. See index_is_valid.
+		if(!phsc->index_is_valid())
+		{
+			LogErrorString("level file gives a sequence an impossible number: " + Util::IntToString(phsc->index));
+			continue;
+		}
+
 		PLACED_HIERARCHY_SEQUENCE* ph_seq=&phtt->sequences[phsc->index];
 
 		ph_seq->sequence_no=phsc->sequence;
