@@ -8,6 +8,7 @@
 #include "3dc.h"
 #include "logString.h"
 #include <math.h>
+#include <vector>
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -5519,6 +5520,36 @@ void ToyShadows_NoteObjectLights()
 static float toyViewMatrix[12];
 static VECTORCH toyCameraWorld;
 
+// Which modules ToyShadows_Collect took polygons from. Each module has a place here holding the number of the frame it was last
+// collected on, so nothing needs wiping between frames, and "was it collected?" is only "does its number match this frame's?".
+extern int ModuleArraySize;
+static std::vector<unsigned int> toyModuleLastCollected;
+static unsigned int toyCollectingFrame = 1;
+
+static void ToyNoteModuleCollected(const MODULE *module)
+{
+	if (toyModuleLastCollected.size() != (size_t)ModuleArraySize)
+	{
+		toyModuleLastCollected.assign(ModuleArraySize, 0);
+	}
+
+	if (module->m_index >= 0 && module->m_index < ModuleArraySize)
+	{
+		toyModuleLastCollected[module->m_index] = toyCollectingFrame;
+	}
+}
+
+static bool ToyModuleWasCollected(const MODULE *module)
+{
+	return module->m_index >= 0 && (size_t)module->m_index < toyModuleLastCollected.size()
+		&& toyModuleLastCollected[module->m_index] == toyCollectingFrame;
+}
+
+void ToyShadows_NextCollectingFrame()
+{
+	toyCollectingFrame++;
+}
+
 // A chosen light stays chosen until another is clearly nearer: a light picked last frame counts as this many quarters of
 // its real distance. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
 // from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
@@ -6051,6 +6082,11 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	void const *owner = ToyOwnerOf(dptr);
 	int polygonsKept = 0;
 
+	if (dptr->ObMyModule)
+	{
+		ToyNoteModuleCollected(dptr->ObMyModule);
+	}
+
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -6095,5 +6131,203 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	if (kind == kToyCasterModel)
 	{
 		ToyShadows_NoteModelPart(dptr->ObStrategyBlock, polygonsKept);
+	}
+}
+
+// A wall only reaches ToyShadows_Collect if it's drawn, so a wall that leaves the screen would stop casting, and its shadow would
+// vanish from what's still on screen. The code below finds those walls and adds them as casters that are never drawn.
+
+bool ToyShadows_StartUnseenModule(const float *centre, float radius);
+
+// The most polygons a frame adds here. It only matters for lights with a huge range, which can reach most of a level. If the log
+// shows exactly this many out of view, the limit was reached, and some walls were left out.
+static const int kToyMostOutOfView = 20000;
+
+// Whether this module can cast while it isn't drawn. It has to be a wall that stays put. Anything with a strategy block moves, or
+// can, as doors and lifts do, and its shape here wouldn't match where it really is. A morphing shape's points change too. So those
+// still cast only while drawn. An infinite module is the level's outer box and has no shape of its own, a dormant one is switched
+// off, and one marked not visible wouldn't be drawn when in view either.
+static bool ToyModuleCanCastUnseen(const MODULE *module)
+{
+	if (!module || !module->m_mapptr)
+	{
+		return false;
+	}
+
+	if ((module->m_flags & (m_flag_infinite | m_flag_dormant)) || module->m_sbptr || module->m_mapptr->MapMorphHeader)
+	{
+		return false;
+	}
+
+	if (module->m_mapptr->MapFlags & ObFlag_NotVis)
+	{
+		return false;
+	}
+
+	return !ToyModuleWasCollected(module);
+}
+
+// Works out a ball round this module, in the same space as the lights and polygons: x y z in ball[0] to [2], and its size in ball[3].
+// A ball is rougher than the module's box, but it can only let in too many, and the prism builder tests each polygon anyway.
+static void ToyMakeModuleBall(const MODULE *module, float *ball)
+{
+	float const halfX = (float)(module->m_maxx - module->m_minx) * 0.5f;
+	float const halfY = (float)(module->m_maxy - module->m_miny) * 0.5f;
+	float const halfZ = (float)(module->m_maxz - module->m_minz) * 0.5f;
+
+	float const centre[3] =
+	{
+		(float)module->m_world.vx + (float)module->m_minx + halfX,
+		(float)module->m_world.vy + (float)module->m_miny + halfY,
+		(float)module->m_world.vz + (float)module->m_minz + halfZ
+	};
+
+	float view[3];
+	TranslatePoint(centre, view, toyViewMatrix);
+
+	ball[0] = view[0];
+	ball[1] = -view[1];
+	ball[2] = view[2];
+	ball[3] = sqrtf(halfX * halfX + halfY * halfY + halfZ * halfZ);
+}
+
+// Whether any of the chosen lights can reach the ball.
+static bool ToyBallTouchesALight(const float *ball, const float *lights, int numLights)
+{
+	for (int i = 0; i < numLights; i++)
+	{
+		float const *light = &lights[i * kToyLightFloats];
+		float const dx = ball[0] - light[0];
+		float const dy = ball[1] - light[1];
+		float const dz = ball[2] - light[2];
+		float const reach = ball[3] + light[3];
+
+		if (dx * dx + dy * dy + dz * dz < reach * reach)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Adds this module's solid polygons as casters, and gives back how many. Its points go through a list of our own, because
+// RotatedPts holds what was last drawn, and the rest of the frame may still want it. All modules line up with the world's axes,
+// so a point's place in the world is only the module's place plus the point.
+static int ToyCollectUnseenModule(const MODULE *module)
+{
+	static float viewPoints[maxrotpts * 3];
+
+	SHAPEHEADER const *shape = GetShapeData(module->m_mapptr->MapShape);
+
+	if (!shape || !shape->points || !shape->points[0] || !shape->items)
+	{
+		return 0;
+	}
+
+	if (shape->numpoints < 0 || shape->numpoints > maxrotpts || (shape->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR)))
+	{
+		return 0;
+	}
+
+	VECTORCH const &place = module->m_mapptr->MapWorld;
+	int const *point = shape->points[0];
+
+	for (int i = 0; i < shape->numpoints; i++)
+	{
+		float const source[3] = { (float)(place.vx + point[0]), (float)(place.vy + point[1]), (float)(place.vz + point[2]) };
+		float view[3];
+
+		TranslatePoint(source, view, toyViewMatrix);
+		viewPoints[i * 3 + 0] = view[0];
+		viewPoints[i * 3 + 1] = -view[1];
+		viewPoints[i * 3 + 2] = view[2];
+		point += 3;
+	}
+
+	int polygonsAdded = 0;
+	int numitems = shape->numitems;
+	int **itemArrayPtr = shape->items;
+
+	while (numitems-- > 0)
+	{
+		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
+
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+		{
+			continue;
+		}
+
+		float pts[maxpolypts * 3];
+		int count = 0;
+		int *vertexNumberPtr = &polyPtr->Poly1stPt;
+		bool pointsAreSafe = true;
+
+		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
+		{
+			// this number comes from a game file, so it's checked before it's used to find a point
+			int const pointNumber = *vertexNumberPtr++;
+
+			if (pointNumber < 0 || pointNumber >= shape->numpoints)
+			{
+				pointsAreSafe = false;
+				break;
+			}
+
+			memcpy(&pts[count * 3], &viewPoints[pointNumber * 3], 3 * sizeof(float));
+			count++;
+		}
+
+		if (pointsAreSafe)
+		{
+			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0);  // a wall has no owner
+			polygonsAdded++;
+		}
+	}
+
+	return polygonsAdded;
+}
+
+// Called once a frame, after the lights are read and everything that's on screen has been collected.
+void ToyShadows_CollectOutOfView(const float *lights, int numLights)
+{
+	extern SCENE Global_Scene;
+
+	// -shadowcasters can turn the level off, and these are the level
+	if (!(ToyShadowsCasters & (1 << kToyCasterLevel)) || !Global_ModulePtr)
+	{
+		return;
+	}
+
+	SCENEMODULE const *scene = Global_ModulePtr[Global_Scene];
+
+	if (!scene || !scene->sm_marray)
+	{
+		return;
+	}
+
+	int polygonsAdded = 0;
+
+	for (int i = 0; i < ModuleArraySize && polygonsAdded < kToyMostOutOfView; i++)
+	{
+		MODULE const *module = scene->sm_marray[i];
+
+		if (!ToyModuleCanCastUnseen(module))
+		{
+			continue;
+		}
+
+		float ball[4];
+		ToyMakeModuleBall(module, ball);
+
+		if (ToyBallTouchesALight(ball, lights, numLights))
+		{
+			if (!ToyShadows_StartUnseenModule(ball, ball[3]))
+			{
+				break;
+			}
+
+			polygonsAdded += ToyCollectUnseenModule(module);
+		}
 	}
 }

@@ -14,7 +14,8 @@ enum ToyCasterKind
 	kToyCasterObject = 1,       // a placed object, such as a crate or a machine: the same
 	kToyCasterModel = 2,        // a body part of a model, such as an alien: the same
 	kToyCasterCloaked = 3,      // a cloaked Predator: casts only a faint shadow
-	kToyCasterKinds = 4
+	kToyCasterCastOnly = 4,     // a wall that wasn't drawn this frame: casts a shadow, and is never drawn by the shadow pass
+	kToyCasterKinds = 5
 };
 
 // How many lights the shadow toy handles in one frame. Steady lights are lamps and flares. Brief lights are muzzle flashes, fires

@@ -3572,6 +3572,7 @@ static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
+static int toyCasterModule[kToyMaxCasters];  // for a cast-only polygon, which of toyUnseenModules it belongs to
 static int toyNumCasters = 0;
 static int toyNumCasterPoints = 0;
 static int toyCastersLeftOut = 0;
@@ -3595,6 +3596,36 @@ static int toyStretchCorners = 0;
 
 int ToyShadows_ChosenLights(float *lights, const void **owners);
 void ToyShadows_WorldAxes(float *axes);
+void ToyShadows_CollectOutOfView(const float *lights, int numLights);
+void ToyShadows_NextCollectingFrame();
+
+// Walls out of view arrive a module at a time, each with a ball round it. There can be thousands of their polygons and up to 26
+// stencil passes a frame, so a pass asks the ball once, and if its light can't reach the ball, it skips every polygon in that module.
+struct ToyBall
+{
+	float x, y, z, radius;
+};
+
+static const int kToyMostUnseenModules = 4096;
+static ToyBall toyUnseenModules[kToyMostUnseenModules];
+static int toyNumUnseenModules = 0;
+
+// Starts a new module of walls out of view. The cast-only polygons added after this belong to it. centre is x y z in the same space
+// as the polygons. Gives back false if there's no room for another module, and then its polygons should be left out.
+bool ToyShadows_StartUnseenModule(const float *centre, float radius)
+{
+	if (toyNumUnseenModules == kToyMostUnseenModules)
+	{
+		return false;
+	}
+
+	ToyBall &ball = toyUnseenModules[toyNumUnseenModules++];
+	ball.x = centre[0];
+	ball.y = centre[1];
+	ball.z = centre[2];
+	ball.radius = radius;
+	return true;
+}
 
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
 // kind is one of ToyCasterKind. owner is what the polygon belongs to, or nothing for the level.
@@ -3615,6 +3646,7 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 	toyCasterCount[toyNumCasters] = count;
 	toyCasterKind[toyNumCasters] = kind;
 	toyCasterOwner[toyNumCasters] = owner;
+	toyCasterModule[toyNumCasters] = toyNumUnseenModules - 1;
 	toyPolygonsOfKind[kind]++;
 	toyNumCasters++;
 
@@ -3890,11 +3922,11 @@ static void ToyLogFrame(const ToyFrameReport &report)
 	// What each kind cost. Verts are the real price, and they're added up over every light: a polygon outside all the lights
 	// costs none, however many polygons it belongs with.
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, polygons: %d level, %d objects, %d models, %d cloaked; verts: %d level, %d objects, %d models, %d cloaked; %d models drawn, the largest %d polygons",
+		"toy-shadows: frame %d, polygons: %d level, %d objects, %d models, %d cloaked, %d out of view; verts: %d level, %d objects, %d models, %d cloaked, %d out of view; %d models drawn, the largest %d polygons",
 		report.frame, toyPolygonsOfKind[kToyCasterLevel], toyPolygonsOfKind[kToyCasterObject], toyPolygonsOfKind[kToyCasterModel],
-		toyPolygonsOfKind[kToyCasterCloaked],
+		toyPolygonsOfKind[kToyCasterCloaked], toyPolygonsOfKind[kToyCasterCastOnly],
 		toyVertsOfKind[kToyCasterLevel], toyVertsOfKind[kToyCasterObject], toyVertsOfKind[kToyCasterModel],
-		toyVertsOfKind[kToyCasterCloaked], toyNumModels, toyLargestModel);
+		toyVertsOfKind[kToyCasterCloaked], toyVertsOfKind[kToyCasterCastOnly], toyNumModels, toyLargestModel);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4204,6 +4236,12 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 	{
 		// shadows pass through a cloaked model to the wall behind it: landing on it would draw the outline of something invisible
 		if (toyCasterKind[caster] == kToyCasterCloaked)
+		{
+			continue;
+		}
+
+		// a wall that wasn't drawn isn't on the screen, so going over it here would paint something that isn't there
+		if (toyCasterKind[caster] == kToyCasterCastOnly)
 		{
 			continue;
 		}
@@ -4528,6 +4566,17 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
+// Whether this light, x y z range first, can reach anything inside the ball.
+static bool ToyBallInReach(const ToyBall &ball, const float *light)
+{
+	float const dx = ball.x - light[0];
+	float const dy = ball.y - light[1];
+	float const dz = ball.z - light[2];
+	float const reach = ball.radius + light[3];
+
+	return dx * dx + dy * dy + dz * dz < reach * reach;
+}
+
 // Fills toyVerts with this light's prisms. A cloaked model casts only a faint shadow, and a stencil only knows yes or no, so its
 // prisms go through a pass of their own: cloakedOnly picks those, and leaving it false picks all the others.
 // owner is what carries this light, or nothing. Anything carrying a light sits around it, so it would block that light in every
@@ -4535,6 +4584,9 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport *report, bool cloakedOnly)
 {
 	toyNumVerts = 0;
+	int moduleAsked = -1;
+	bool moduleInReach = false;
+
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
 		int const kind = toyCasterKind[caster];
@@ -4542,6 +4594,21 @@ static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport
 		if ((kind == kToyCasterCloaked) != cloakedOnly || (owner && toyCasterOwner[caster] == owner))
 		{
 			continue;
+		}
+
+		// a module's polygons sit together in the list, so its ball only has to be asked when the module changes
+		if (kind == kToyCasterCastOnly)
+		{
+			if (toyCasterModule[caster] != moduleAsked)
+			{
+				moduleAsked = toyCasterModule[caster];
+				moduleInReach = ToyBallInReach(toyUnseenModules[moduleAsked], light);
+			}
+
+			if (!moduleInReach)
+			{
+				continue;
+			}
 		}
 
 		int const vertsBefore = toyNumVerts;
@@ -4944,6 +5011,8 @@ static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSu
 
 static void ToyForgetCasters()
 {
+	ToyShadows_NextCollectingFrame();
+	toyNumUnseenModules = 0;
 	toyNumCasters = 0;
 	toyNumCasterPoints = 0;
 	toyCastersLeftOut = 0;
@@ -5017,6 +5086,9 @@ static void ToyShadows_Draw()
 		ToyForgetCasters();
 		return;
 	}
+
+	// These go after everything that was drawn, so if the lists fill up, it's these that miss out.
+	ToyShadows_CollectOutOfView(lights, report.lights);
 
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
