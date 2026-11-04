@@ -19,7 +19,7 @@ void SurfacePictures_Release();
 // Draws the frame's solid polygons into the pictures. depthPicture is where each pixel's distance goes, and it has already been cleared.
 // worldAxes holds the world's three directions in the light list's space, three numbers each.
 // The caller has set the depth test and the rest of the device up. Says false if nothing was drawn.
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes);
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted);
 
 // Puts the picture of which way each pixel faces on the screen, for checking by eye. Each direction shows as a colour: red for right, green for
 // up and blue for away from the camera, with grey for a normal of zero, and black where there's no surface.

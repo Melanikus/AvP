@@ -22,6 +22,7 @@
 #include "kshape.h"
 #include "pixel_lights.h"
 #include "shadow_reach.h"
+#include "frame_timing.h"
 #include "kzsort.h"
 #include "frustum.h"
 #include "io.h"
@@ -325,6 +326,8 @@ void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
 **********************************************************************************KJL*/
 void ShapePipeline(SHAPEHEADER *shapePtr)
 {
+	ProcessorStageClock clock(kProcessorShapes);
+
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -6704,10 +6707,11 @@ static int ToyCollectUnseenModule(const MODULE *module)
 
 // Called once a frame, after the lights are read and everything that's on screen has been collected. Only a module whose shadow can land on
 // something on screen is kept, because the rest would be work for the card with nothing to show for it. Gives back how many polygons that is.
-// axes holds the world's three directions on the list. On a report frame, collectAllInReach also brings in every other module in reach of a
-// light, so the log can say what the test saved. Those are never drawn, and they don't count against the limit.
-int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, bool collectAllInReach)
+// axes holds the world's three directions on the list. polygonsLeftOut gets how many were in a light's range and left out, for the log.
+int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, int *polygonsLeftOut)
 {
+	*polygonsLeftOut = 0;
+
 	extern SCENE Global_Scene;
 
 	// -shadowcasters can turn the level off, and these are the level
@@ -6735,22 +6739,20 @@ int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float 
 		}
 
 		ShadowReachBall const ball = ToyModuleBallOnTheList(module);
-		bool const canShow = ModuleShadowCanShow(ball, lights, numLights, axes);
 
-		if (canShow || collectAllInReach)
+		if (!ModuleShadowCanShow(ball, lights, numLights, axes))
 		{
-			if (!ToyShadows_StartUnseenModule(ball))
-			{
-				break;
-			}
-
-			int const polygons = ToyCollectUnseenModule(module);
-
-			if (canShow)
-			{
-				polygonsKept += polygons;
-			}
+			SHAPEHEADER const *shape = GetShapeData(module->m_mapptr->MapShape);
+			*polygonsLeftOut += shape ? shape->numitems : 0;
+			continue;
 		}
+
+		if (!ToyShadows_StartUnseenModule(ball))
+		{
+			break;
+		}
+
+		polygonsKept += ToyCollectUnseenModule(module);
 	}
 
 	return polygonsKept;

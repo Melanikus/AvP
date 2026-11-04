@@ -261,6 +261,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsMode = 0;
 		}
+		extern int ShadowsFullReport;
+		if (strstr(command_line, "-shadowreport"))
+		{
+			ShadowsFullReport = 1;
+		}
 		extern int ToyShadowsDarkness;
 		char const *darkSwitch = strstr(command_line, "-shadowdark=");
 		if (darkSwitch)

@@ -1,0 +1,67 @@
+// How long each part of a frame takes, on the graphics card and on the processor. Written 2026-11-04 by Melanikus for the AvP port.
+// See frame_timing.cpp for how it works. None of this waits for the card, so it's cheap enough to leave on.
+
+#ifndef FRAME_TIMING_H
+#define FRAME_TIMING_H
+
+#include <d3d9.h>
+#include <stdint.h>
+
+// The parts of a frame on the card. Marking one says that everything the card has done since the last mark belongs to it.
+enum FrameStage
+{
+	kStageScene,            // the solid polygons and decals
+	kStageSurfacePictures,  // the second draw of the solid polygons, into the pictures
+	kStageLightTotal,
+	kStagePrismsSent,       // shadow prisms sent to the card this frame
+	kStagePrismsKept,       // shadow prisms already on the card
+	kStageShading,          // clearing the stencil, and putting each light's share into the mask
+	kStageSoftening,        // blurring the mask and applying it
+	kStageDimming,
+	kStageAddingLights,
+	kStageAfter,            // glass, particles, the weapon and the display
+	kNumFrameStages
+};
+
+// Starts a frame, after the scene has begun. Most frames this only asks whether any answers have come in.
+void FrameTiming_StartFrame(LPDIRECT3DDEVICE9 device);
+
+// On a frame being timed, says that what the card has done since the last mark belongs to this stage. On any other frame it does nothing.
+void FrameTiming_Mark(FrameStage stage);
+
+// Ends the frame, and every so often writes what the processor did to the log.
+void FrameTiming_EndFrame();
+
+// Counts how many shadow prism corners a frame draws, of each kind. Only a frame being timed keeps them, to go with its times.
+void FrameTiming_CountPrismCorners(int sent, int kept);
+
+// Counts the vertices the game's own lists held when they were drawn.
+void FrameTiming_CountMainVertices(int vertices);
+
+// Gives back what's held on the graphics card, which has to go whenever the device resets.
+void FrameTiming_Release();
+
+// The parts of a frame on the processor. They can overlap: a level drawn inside the drawing counts in both.
+enum ProcessorStage
+{
+	kProcessorShapes,       // turning, lighting and writing out each shape's polygons
+	kProcessorLocks,        // opening and closing the lists of vertices
+	kProcessorDrawing,      // handing the lists to the card, the shadow pass included
+	kProcessorShadowPass,   // the shadow pass alone
+	kProcessorPresent,      // waiting to show the frame: for the card to catch up, and for the screen
+	kNumProcessorStages
+};
+
+// Counts the time from here to the end of the block as this stage.
+class ProcessorStageClock
+{
+public:
+	explicit ProcessorStageClock(ProcessorStage stage);
+	~ProcessorStageClock();
+
+private:
+	ProcessorStage stage;
+	int64_t started;
+};
+
+#endif

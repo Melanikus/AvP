@@ -45,6 +45,7 @@
 #include "d3d_render.h"
 #include "pixel_lights.h"
 #include "shadow_reach.h"
+#include "frame_timing.h"
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
@@ -286,6 +287,8 @@ bool staticDecalsTest = false;
 // we no longer use an execute buffer
 static bool LockExecuteBuffer()
 {
+	ProcessorStageClock clock(kProcessorLocks);
+
 	// lock particle vertex and index buffers
 	d3d.particleVB->Lock((void**)&particleVertex);
 	d3d.particleIB->Lock(&particleIndex);
@@ -348,6 +351,8 @@ static bool LockExecuteBuffer()
 // unlock all dynamic vertex and index buffers. function could be renamed as no longer using execute buffers
 static bool UnlockExecuteBufferAndPrepareForUse()
 {
+	ProcessorStageClock clock(kProcessorLocks);
+
 	// unlock particle vertex and index buffers
 	d3d.particleVB->Unlock();
 	d3d.particleIB->Unlock();
@@ -387,6 +392,10 @@ static int toyFrame = 0;            // counts the shadow pass's frames. Both rep
 
 static bool ExecuteBuffer()
 {
+	ProcessorStageClock clock(kProcessorDrawing);
+
+	FrameTiming_CountMainVertices(vb);
+
 	if (!toyFinalFlush)
 	{
 		toyEarlyFlushes++;
@@ -441,6 +450,9 @@ static bool ExecuteBuffer()
 
 	if (toyFinalFlush)
 	{
+		FrameTiming_Mark(kStageScene);
+
+		ProcessorStageClock shadowClock(kProcessorShadowPass);
 		ToyShadows_Draw();
 	}
 
@@ -2619,6 +2631,7 @@ void ThisFramesRenderingHasBegun()
 {
 	if (R_BeginScene()) // calls a function to perform d3d_device->Begin();
 	{
+		FrameTiming_StartFrame(d3d.lpD3DDevice);
 		LockExecuteBuffer(); // lock vertex buffer
 	}
 }
@@ -2637,7 +2650,9 @@ void ThisFramesRenderingHasFinished()
 	toyFinalFlush = true;
 	ExecuteBuffer();
 	toyFinalFlush = false;
+	FrameTiming_Mark(kStageAfter);
 	R_EndScene();
+	FrameTiming_EndFrame();
 
 	Tex_CheckMemoryUsage();
 
@@ -3568,10 +3583,11 @@ enum ToyShadowsView
 	kToyViewPolygons,   // each light's shadowed pixels filled in that light's colour, blended so overlaps show
 	kToyViewMask,       // just what final multiplies the picture by: white is untouched, black is the full depth of shadow
 	kViewNormals,       // which way each pixel faces, from the surface pictures
+	kViewFinalNoRelief, // the real thing without relief pictures, to compare with
 	kToyViewCount
 };
 
-static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK", "NORMALS" };
+static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK", "NORMALS", "FINAL WITHOUT RELIEF" };
 static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -3650,6 +3666,7 @@ static int toyCasterCount[kToyMaxCasters];
 static ToyFlatSurface toyCasterSurface[kToyMaxCasters];
 static float toyCameraInWorld[3];   // where the camera is, in the world's numbers
 static const float kCameraOnTheList[3] = { 0.0f, 0.0f, 0.0f };   // and in the light list's numbers it's always here
+static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
 static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
 static bool casterDrawnOneSided[kToyMaxCasters];  // only on a report frame: true for a polygon the game draws and hides the back of. See CheckNoPolygonSeenFromBehind
 
@@ -3699,7 +3716,7 @@ void ToyShadows_WorldAxes(float *axes);
 void ToyShadows_ViewMatrix(float *matrix);
 int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners);
 void ToyShadows_CameraPlace(float *place);
-int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, bool collectAllInReach);
+int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, int *polygonsLeftOut);
 void ToyShadows_NextCollectingFrame();
 
 // Walls out of view arrive a module at a time, each with a ball round it. There can be thousands of their polygons and up to 26
@@ -3793,10 +3810,13 @@ static void MakeShadowReachView()
 	ShadowReach_AddCameraView(&shadowReachView, d3d.matProjection._11, d3d.matProjection._22);
 }
 
-// On a report frame, what the shadow reach test saved, for the log. These walls are collected and built only to count them, and never drawn.
-static bool noteWhatReachSaves = false;
+// What the shadow reach test did this frame, for the log.
 static int polygonsReachKept = 0;
-static int vertsReachLeftOut = 0;
+static int polygonsReachLeftOut = 0;
+
+// -shadowreport: the full report, with a count of pixels from the card and a reading of its pictures on every report frame. Each of those makes the
+// game wait for the card, so a report frame then takes many times as long, and it shows as a hitch every few seconds. It's off unless asked for.
+int ShadowsFullReport = 0;
 
 // pts holds at least three points. Gives back twice the area of the triangle they make.
 static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
@@ -4323,6 +4343,9 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	HRESULT result = S_OK;
 
+	FrameTiming_Mark(kStageShading);
+	FrameTiming_CountPrismCorners(toyNumVerts, 0);
+
 	for (int start = 0; start < toyNumVerts; start += kToyVertsPerDraw)
 	{
 		int const verts = (toyNumVerts - start < kToyVertsPerDraw) ? toyNumVerts - start : kToyVertsPerDraw;
@@ -4345,6 +4368,8 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 		}
 	}
 
+	FrameTiming_Mark(kStagePrismsSent);
+
 	if (ShadowVolumes_NumRuns() > 0)
 	{
 		HRESULT const kept = ShadowVolumesCard_Draw(d3d.lpD3DDevice, colour);
@@ -4354,16 +4379,14 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 		}
 
 		ToySetVolumeProgram(d3d.lpD3DDevice);
+		FrameTiming_CountPrismCorners(0, keptCornersThisPass);
+		FrameTiming_Mark(kStagePrismsKept);
 	}
 
 	return result;
 }
 
 static int toyQueriesUnanswered = 0;   // a count that never came reads as 0, so the log has to say how many didn't
-
-// How long the pass really takes, measured on a frame with no counting in it. Below 0 until there's an answer.
-static float toyPassMilliseconds = -1.0f;   // the processor, building and sending it
-static float toyCardMilliseconds = -1.0f;   // the graphics card, drawing it
 
 // What one frame did. The hr values stay S_OK unless a call failed.
 struct ToyFrameReport
@@ -4382,10 +4405,10 @@ static void ToyLogFrame(const ToyFrameReport &report)
 {
 	char line[400];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d, pass %.1f ms, card %.1f ms, %d counts unanswered",
+		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d, %d counts unanswered",
 		report.frame, kToyViewNames[ToyShadowsMode], report.casters, toyCastersLeftOut, report.lights, report.verts, toyPrismsLeftOut,
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
-		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyPassMilliseconds, toyCardMilliseconds, toyQueriesUnanswered);
+		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyQueriesUnanswered);
 	toyEarlyFlushes = 0;
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
@@ -4401,11 +4424,10 @@ static void ToyLogFrame(const ToyFrameReport &report)
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 
-	// Before and after, from this one frame. "Before" is everything in a light's range, the old test, with a light's reach a little wider for
-	// the size of the light. The verts are added up over every pass, and those it saved were built only to be counted.
+	// Modules in a light's range, and what the reach test did with them. The polygons it left out are only counted, never built.
 	_snprintf(line, sizeof(line) - 1,
-		"shadow volumes: frame %d, out of view: before the reach test %d polygons and %d verts, after it %d polygons and %d verts; %d things drawn",
-		report.frame, toyPolygonsOfKind[kToyCasterCastOnly], toyVertsOfKind[kToyCasterCastOnly] + vertsReachLeftOut, polygonsReachKept, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes);
+		"shadow volumes: frame %d, out of view: %d polygons kept and %d left out by the reach test, %d verts; %d things drawn",
+		report.frame, polygonsReachKept, polygonsReachLeftOut, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4814,7 +4836,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes)
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, ToyShadowsMode != kViewFinalNoRelief);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -4905,31 +4927,6 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
-// Whether this light, x y z range first, can reach anything inside the ball. This was the whole test once, and it's kept to count against.
-static bool ToyBallInReach(const ShadowReachBall &ball, const float *light)
-{
-	float const dx = ball.x - light[0];
-	float const dy = ball.y - light[1];
-	float const dz = ball.z - light[2];
-	float const reach = ball.radius + light[3];
-
-	return dx * dx + dy * dy + dz * dz < reach * reach;
-}
-
-// On a report frame, what this polygon would have cost if the shadow reach test hadn't left it out. It's built, measured and forgotten.
-static void NotePrismReachLeftOut(int caster, const float *light, const float *centre)
-{
-	ToyLightReport *const noted = toyNoteLight;
-	int const vertsBefore = toyNumVerts;
-
-	toyNoteLight = 0;
-	ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], toyCasterSurface[caster], light, centre, false);
-	toyNoteLight = noted;
-
-	vertsReachLeftOut += toyNumVerts - vertsBefore;
-	toyNumVerts = vertsBefore;
-}
-
 // Works out a group's prisms for a light, in the world's numbers, and puts them on the card. false means they aren't kept, and nothing has changed.
 static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, const float *light, const float *centre, ShadowVolumeRun *run)
 {
@@ -5018,7 +5015,6 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 	toyNumVerts = 0;
 	int moduleAsked = -1;
 	bool moduleCanShow = false;
-	bool moduleWouldHaveCast = false;
 
 	// Kept prisms were made without the camera, so they're only right on a frame that doesn't use it. A cloaked model is never kept.
 	bool const keeping = prismsForPictures && !cloakedOnly && ShadowVolumesCard_Ready();
@@ -5043,16 +5039,10 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 			{
 				moduleAsked = toyCasterModule[caster];
 				moduleCanShow = ShadowReach_CanReach(shadowReachView, drawnBoxes, numDrawnBoxes, toyUnseenModules[moduleAsked], light);
-				moduleWouldHaveCast = noteWhatReachSaves && !moduleCanShow && ToyBallInReach(toyUnseenModules[moduleAsked], light);
 			}
 
 			if (!moduleCanShow)
 			{
-				if (moduleWouldHaveCast)
-				{
-					NotePrismReachLeftOut(caster, light, centre);
-				}
-
 				continue;
 			}
 		}
@@ -5084,6 +5074,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 		ToyAddTestBox(light, centre);
 	}
 	report->verts += toyNumVerts + keptCorners;
+	keptCornersThisPass = keptCorners;
 }
 
 // Tells the store which lights there are this frame, and tells the card where the camera is.
@@ -5534,7 +5525,7 @@ static void ToyForgetCasters()
 	toyStretchTotal = 0.0;
 	toyStretchCorners = 0;
 	polygonsReachKept = 0;
-	vertsReachLeftOut = 0;
+	polygonsReachLeftOut = 0;
 	numDrawnBoxes = 0;
 }
 
@@ -5579,7 +5570,7 @@ static void ToyShadows_Draw()
 
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
-	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals)
+	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief)
 		&& toyNumCasters > 0 && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
@@ -5625,8 +5616,7 @@ static void ToyShadows_Draw()
 	// These go after everything that was drawn, so if the lists fill up, it's these that miss out. By now everything drawn is known, which is
 	// what the view needs.
 	MakeShadowReachView();
-	noteWhatReachSaves = logThisFrame;
-	polygonsReachKept = ToyShadows_CollectOutOfView(lights, report.lights, worldAxes, logThisFrame);
+	polygonsReachKept = ToyShadows_CollectOutOfView(lights, report.lights, worldAxes, &polygonsReachLeftOut);
 
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
@@ -5661,27 +5651,12 @@ static void ToyShadows_Draw()
 	ToyShadows_CameraPlace(toyCameraInWorld);
 	DWORD const flatShare = (DWORD)((1.0f - keepPerLight) * 255.0f) << 24;
 
-	// once in a while, ask the card how many pixels the stencil let through
+	// with the full report, ask the card how many pixels the stencil let through
+	bool const fullReport = logThisFrame && ShadowsFullReport != 0;
 	IDirect3DQuery9 *countQuery = 0;
-	if (logThisFrame && FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
+	if (fullReport && FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
 	{
 		countQuery = 0;
-	}
-
-	// Half way between reports, the card is asked how long the pass really took. It's kept apart from the frames with counts in
-	// them, because waiting for those changes the answer.
-	enum { kTimerSpoiled, kTimerStart, kTimerEnd, kTimerFrequency, kNumTimers };
-	IDirect3DQuery9 *timers[kNumTimers] = { 0 };
-	bool const timing = (toyFrame % 300) == 150
-		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &timers[kTimerSpoiled]))
-		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &timers[kTimerStart]))
-		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &timers[kTimerEnd]))
-		&& SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &timers[kTimerFrequency]));
-
-	if (timing)
-	{
-		timers[kTimerSpoiled]->Issue(D3DISSUE_BEGIN);
-		timers[kTimerStart]->Issue(D3DISSUE_END);
 	}
 
 	ToyMeasurements measured = { 0, 0, 0, 0, 0, 0 };
@@ -5697,7 +5672,7 @@ static void ToyShadows_Draw()
 	IDirect3DSurface9 *screen = 0;
 	D3DVIEWPORT9 viewport;
 
-	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
+	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief;
 	bool const haveCloaked = toyPolygonsOfKind[kToyCasterCloaked] > 0;
 
 	if (darkening && ToyPicturesCanRun(device)
@@ -5709,7 +5684,9 @@ static void ToyShadows_Draw()
 
 		if (ToyDrawPictures(device, worldAxes))
 		{
+			FrameTiming_Mark(kStageSurfacePictures);
 			PixelLights_DrawTotal(device, lights, report.lights, toyDepthTexture);
+			FrameTiming_Mark(kStageLightTotal);
 
 			// the mask starts at nothing blocked
 			device->SetRenderTarget(0, toyMaskSurface);
@@ -5734,12 +5711,13 @@ static void ToyShadows_Draw()
 	// On a report frame, what each light did, and what reached the screen. A mask under this size of number has no effect worth
 	// counting as a shadow. All of this only reads: nothing here changes what's drawn.
 	float const kToyMaskCounts = 0.02f;
-	bool const noting = logThisFrame && screen != 0;
+	bool const noting = fullReport && screen != 0;
 
 	// Every prism this frame is built after this line. The edges view draws no pictures, but it's there to show what a frame with them would use.
 	prismsForPictures = screen != 0 || (ToyShadowsMode == kToyViewEdges && ToyPicturesCanRun(device));
 
-	if (noting)
+	// these only read what's already on the processor's side, so they don't wait for anything
+	if (logThisFrame && screen != 0)
 	{
 		ToyCheckStoredPlanes(worldAxes);
 		CheckNoPolygonSeenFromBehind();
@@ -5891,7 +5869,9 @@ static void ToyShadows_Draw()
 				ToyReadPicture(device, screen, 255.0f, &screenBefore);
 			}
 
+			FrameTiming_Mark(kStageShading);
 			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
+			FrameTiming_Mark(kStageSoftening);
 
 			if (noting)
 			{
@@ -5899,9 +5879,10 @@ static void ToyShadows_Draw()
 			}
 		}
 
-		if (ToyShadowsMode == kToyViewFinal)
+		if (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kViewFinalNoRelief)
 		{
 			ToyDimWorld(device);
+			FrameTiming_Mark(kStageDimming);
 		}
 
 		for (int light = 0; light < report.lights; light++)
@@ -5967,6 +5948,7 @@ static void ToyShadows_Draw()
 		}
 
 		toyNoteLight = 0;
+		FrameTiming_Mark(kStageAddingLights);
 
 		if (screen)
 		{
@@ -5982,34 +5964,6 @@ static void ToyShadows_Draw()
 
 			screen->Release();
 		}
-	}
-
-	if (timing)
-	{
-		timers[kTimerEnd]->Issue(D3DISSUE_END);
-		timers[kTimerFrequency]->Issue(D3DISSUE_END);
-		timers[kTimerSpoiled]->Issue(D3DISSUE_END);
-
-		QueryPerformanceCounter(&finished);
-		toyPassMilliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
-
-		// "spoiled" means the card's clock changed speed while it was timing, so the times can't be trusted
-		UINT64 start = 0, end = 0, frequency = 0;
-		BOOL spoiled = TRUE;
-
-		if (ToyWaitForCard(timers[kTimerSpoiled], &spoiled, sizeof(spoiled))
-			&& ToyWaitForCard(timers[kTimerStart], &start, sizeof(start))
-			&& ToyWaitForCard(timers[kTimerEnd], &end, sizeof(end))
-			&& ToyWaitForCard(timers[kTimerFrequency], &frequency, sizeof(frequency))
-			&& !spoiled && frequency)
-		{
-			toyCardMilliseconds = (float)((double)(end - start) * 1000.0 / (double)frequency);
-		}
-	}
-
-	for (int timer = 0; timer < kNumTimers; timer++)
-	{
-		ToyRelease(timers[timer]);
 	}
 
 	if (countQuery)
@@ -6118,6 +6072,7 @@ static void ToyShadows_Draw()
 
 		if (counting)
 		{
+			// (only the full report counts pixels)
 			_snprintf(line, sizeof(line) - 1, "toy-shadows: pixels in shadow by light: %u %u %u %u %u %u %u %u %u %u %u %u",
 				pixelsByLight[0], pixelsByLight[1], pixelsByLight[2], pixelsByLight[3],
 				pixelsByLight[4], pixelsByLight[5], pixelsByLight[6], pixelsByLight[7],
@@ -6125,7 +6080,7 @@ static void ToyShadows_Draw()
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
 		}
-		else
+		else if (fullReport)
 		{
 			LogString("toy-shadows: the card gave no occlusion query, so every pixel count on this frame means nothing");
 		}

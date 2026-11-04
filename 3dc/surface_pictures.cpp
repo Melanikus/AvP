@@ -147,7 +147,7 @@ bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device)
 	return true;
 }
 
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes)
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted)
 {
 	if (!SurfacePictures_Ready(device))
 	{
@@ -167,7 +167,7 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 
 	// THE CHOICE: with relief pictures, or exactly as it was without them. Without them this draws with surface.vsh and surface.psh, from the same lists it
 	// always did, so turning relief off leaves nothing of it behind.
-	bool const withRelief = textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
+	bool const withRelief = reliefWanted && textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
 
 	d3d.effectSystem->SetActive(effect);

@@ -32,6 +32,7 @@
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
+#include "frame_timing.h"
 #include "surface_pictures.h"
 #include "texture_relief.h"
 #include "shader_model.h"
@@ -193,6 +194,7 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	FrameTiming_Release();
 	extern void ToyShadows_ReleaseTargets();
 	ToyShadows_ReleaseTargets();
 
@@ -2706,6 +2708,8 @@ void SetTransforms()
 
 void FlipBuffers()
 {
+	ProcessorStageClock clock(kProcessorPresent);
+
 	LastError = d3d.lpD3DDevice->Present(NULL, NULL, NULL, NULL);
 	if (FAILED(LastError))
 	{
