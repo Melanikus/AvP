@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level that asks for more memory than a pool block holds gets it separately, instead of writing past
-//   the block
+//   the block; running out of memory stops the game in AllocMem, so nothing here has to handle it
 #include "ourasert.h"
 #include "mem3dc.h"
 #include "mempool.h"
@@ -40,13 +40,13 @@ static char* AllocateExtra(size_t amount)
 {
 	union ExtraAllocationHeader *header;
 
+	// AllocMem stops the game if the memory cannot be found, so the answer is never empty. A request this close to the
+	// largest possible size would wrap round to a small one when the header is added, so ask for the largest size
+	// instead: AllocMem is certain to refuse that, and the game stops with its message
 	if (amount > ((size_t)-1) - sizeof(union ExtraAllocationHeader)) {
-		return 0;
-	}
-
-	header = (union ExtraAllocationHeader*)AllocateMem(sizeof(union ExtraAllocationHeader) + amount);
-	if (!header) {
-		return 0;
+		header = (union ExtraAllocationHeader*)AllocateMem((size_t)-1);
+	} else {
+		header = (union ExtraAllocationHeader*)AllocateMem(sizeof(union ExtraAllocationHeader) + amount);
 	}
 
 	header->next = ExtraAllocations;
@@ -71,11 +71,7 @@ void* PoolAllocateMem(size_t amount)
 			LoggedLargeRequest = true;
 		}
 
-		retval = AllocateExtra(amount);
-		if (!retval) {
-			LogErrorString("PoolAllocateMem - out of memory");
-		}
-		return (void*)retval;
+		return (void*)AllocateExtra(amount);
 	}
 
 	if (amount > MemoryLeft)
@@ -85,12 +81,6 @@ void* PoolAllocateMem(size_t amount)
 		if (CurrentMemoryBlock + 1 < MAX_NUM_MEMORY_BLOCK)
 		{
 			block = (char*)AllocateMem(MEMORY_BLOCK_SIZE);
-			if (!block)
-			{
-				// keep the pool as it was; the caller gets NULL
-				LogErrorString("PoolAllocateMem - out of memory");
-				return 0;
-			}
 			CurrentMemoryBlock++;
 			GLOBALASSERT(CurrentMemoryBlock < MAX_NUM_MEMORY_BLOCK);
 			MemoryBlocks[CurrentMemoryBlock] = block;
@@ -106,11 +96,6 @@ void* PoolAllocateMem(size_t amount)
 			}
 
 			block = AllocateExtra(MEMORY_BLOCK_SIZE);
-			if (!block)
-			{
-				LogErrorString("PoolAllocateMem - out of memory");
-				return 0;
-			}
 		}
 
 		MemoryLeft = MEMORY_BLOCK_SIZE;
