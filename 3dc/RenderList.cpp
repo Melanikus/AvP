@@ -24,6 +24,7 @@
 
 #include "RenderList.h"
 #include "TextureManager.h"
+#include "texture_relief.h"
 #include "renderer.h"
 #include <algorithm>
 #include <assert.h>
@@ -279,7 +280,7 @@ void RenderList::Reset()
 // Draws this list's solid polygons a second time, for a pass that adds light to them. The caller has set the shaders and
 // the blending. This goes straight to the device, because the caller puts the device back afterwards, and the game's own
 // record of its settings has to stay true.
-void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
+void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief)
 {
 	declaration->Set();
 	(**vb).Set();
@@ -306,7 +307,22 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
 		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, filter);
 		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, filter);
 
+		// the relief picture lies exactly over its texture, so it's read the same way
+		if (withRelief)
+		{
+			d3d.lpD3DDevice->SetTexture(1, Tex_GetTexture(textureRelief.PictureFor(get_texID(it->sortKey))));
+			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, addressing);
+			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, addressing);
+			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_MINFILTER, filter);
+			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, filter);
+		}
+
 		R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
+	}
+
+	if (withRelief)
+	{
+		d3d.lpD3DDevice->SetTexture(1, NULL);
 	}
 }
 

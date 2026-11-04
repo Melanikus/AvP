@@ -21,6 +21,10 @@
 // in play, and a door that morphs, which swaps its polygons as well. Models have none either, because a model is meant to look smooth and
 // its stored polygon normals aren't reliable. Anything without a list does without, or works things out as it goes.
 //
+// THE TANGENTS: relief pictures need to know which way a polygon's texture runs across it. That's a third list, four more numbers for each vertex, made only
+// while relief pictures are on, so that with them off nothing here is any different. Unlike the list of normals it isn't cleared each frame, because a
+// polygon nobody wrote down is already kept out of the pictures by its normal's fourth number, whatever this list holds.
+//
 // THE WAY ROUND: a polygon's arrow here points out of its back, the opposite way from the way it faces. The game's list of vertices has y
 // turned over, which makes it a mirror image of the shape, and in a mirror image corners that went round clockwise go round the other way. The
 // shadow code works on that list, so it reads a polygon's corners the other way round from the shape. This arrow is the one that agrees with it.
@@ -32,6 +36,7 @@
 
 #include "surface_normals.h"
 #include "surface_tangent.h"
+#include "texture_relief.h"
 #include "d3_func.h"
 #include "VertexBuffer.h"
 #include "mempool.h"
@@ -55,6 +60,11 @@ static const int kCornersInList = 4;   // flatCorners has room for this many
 static VertexBuffer *normalList = 0;
 static uint32_t verticesInList = 0;
 static float *openList = 0;   // only while the list is open: four numbers for each vertex
+
+static const uint32_t kTangentNumbersPerVertex = 4;
+
+static VertexBuffer *tangentList = 0;
+static float *openTangents = 0;   // only while the list is open: four numbers for each vertex
 
 // A moving object's normals, after turning. Polygons that meet at a point share its normal, so the same one comes up several times while
 // an object is drawn. It's turned the first time and kept here with the number of that drawing, and every polygon after that reads it
@@ -87,6 +97,18 @@ void SurfaceNormals_Create(uint32_t vertices)
 	{
 		delete normalList;
 		normalList = 0;
+		return;
+	}
+
+	if (textureRelief.IsOn())
+	{
+		tangentList = new VertexBuffer;
+
+		if (!tangentList->Create(vertices, kTangentNumbersPerVertex * sizeof(float), USAGE_DYNAMIC))
+		{
+			delete tangentList;
+			tangentList = 0;
+		}
 	}
 }
 
@@ -96,6 +118,10 @@ void SurfaceNormals_Release()
 	normalList = 0;
 	verticesInList = 0;
 	openList = 0;
+
+	delete tangentList;
+	tangentList = 0;
+	openTangents = 0;
 }
 
 bool SurfaceNormals_Ready()
@@ -112,6 +138,11 @@ void SurfaceNormals_Lock()
 		openList = (float *)memory;
 		memset(openList, 0, verticesInList * kNumbersPerVertex * sizeof(float));
 	}
+
+	if (tangentList && tangentList->Lock(&memory))
+	{
+		openTangents = (float *)memory;
+	}
 }
 
 void SurfaceNormals_Unlock()
@@ -122,6 +153,13 @@ void SurfaceNormals_Unlock()
 	}
 
 	openList = 0;
+
+	if (tangentList && openTangents)
+	{
+		tangentList->Unlock();
+	}
+
+	openTangents = 0;
 }
 
 // Works out one polygon's entry. Every number here comes from the level file, so each is checked before it's used. A polygon that fails a
@@ -415,6 +453,20 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, u
 		*place++ = normal[2];
 		*place++ = 1.0f;   // this polygon goes in the pictures
 	}
+
+	// one tangent for the whole polygon, repeated at each corner. The checks above cover this list too: it's the same length.
+	if (openTangents)
+	{
+		float tangent[kTangentNumbersPerVertex];
+		SurfaceNormals_PolygonTangent(polygonNumber, tangent);
+
+		float *tangentPlace = openTangents + firstVertex * kTangentNumbersPerVertex;
+
+		for (uint32_t corner = 0; corner < corners; corner++, tangentPlace += kTangentNumbersPerVertex)
+		{
+			memcpy(tangentPlace, tangent, sizeof(tangent));
+		}
+	}
 }
 
 void SurfaceNormals_UseList()
@@ -428,4 +480,22 @@ void SurfaceNormals_UseList()
 void SurfaceNormals_StopUsingList()
 {
 	d3d.lpD3DDevice->SetStreamSource(1, NULL, 0, 0);
+}
+
+bool SurfaceNormals_TangentsReady()
+{
+	return tangentList != 0;
+}
+
+void SurfaceNormals_UseTangents()
+{
+	if (tangentList)
+	{
+		d3d.lpD3DDevice->SetStreamSource(2, tangentList->_vertexBuffer.vertexBuffer, 0, kTangentNumbersPerVertex * sizeof(float));
+	}
+}
+
+void SurfaceNormals_StopUsingTangents()
+{
+	d3d.lpD3DDevice->SetStreamSource(2, NULL, 0, 0);
 }

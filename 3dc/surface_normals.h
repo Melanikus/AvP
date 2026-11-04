@@ -43,4 +43,9 @@ void SurfaceNormals_PolygonTangent(int polygonNumber, float *tangent);
 void SurfaceNormals_UseList();
 void SurfaceNormals_StopUsingList();
 
+// The same for the list of tangents, which only exists while relief pictures are on: see "THE TANGENTS" in surface_normals.cpp.
+bool SurfaceNormals_TangentsReady();
+void SurfaceNormals_UseTangents();
+void SurfaceNormals_StopUsingTangents();
+
 #endif

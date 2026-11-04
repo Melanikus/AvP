@@ -5,6 +5,7 @@
 //   from the command line is limited to its buffer
 
 #include "3dc.h"
+#include "texture_relief.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -245,6 +246,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 			strpos = strstr(strpos, "-l");
 		}
+	}
+
+	// not -norelief, for the same reason as -shadowsoff below
+	if (strstr(command_line, "-reliefoff"))
+	{
+		textureRelief.TurnOff();
 	}
 
 	{

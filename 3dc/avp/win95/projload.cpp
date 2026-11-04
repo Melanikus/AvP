@@ -34,6 +34,7 @@
 #include "chunk_sprites.hpp"
 #include <math.h>
 #include "chunk_waypoint.hpp"
+#include "texture_relief.h"
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
 #include "sequences.h"
@@ -2736,11 +2737,17 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 		);
 */
 	ingameTextureList.push_back(textureID);
+
+	// a picture of the shape its painting shows, for the lights to use
+	textureRelief.Build(textureID);
+
 	return textureID;
 }
 
 void release_rif_bitmaps()
 {
+	textureRelief.ReleaseAll();
+
 	for (size_t i = 0; i < ingameTextureList.size(); i++)
 	{
 		Tex_Release(ingameTextureList[i]);

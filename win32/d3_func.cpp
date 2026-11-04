@@ -30,6 +30,7 @@
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "surface_pictures.h"
+#include "texture_relief.h"
 #include "shader_model.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
@@ -722,6 +723,11 @@ bool CreateVolatileResources()
 	if (SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
 	{
 		SurfaceNormals_Create(kMaxVertices*5);
+	}
+	else
+	{
+		// relief pictures are only ever read by the surface pictures, so this card would make them for nothing
+		textureRelief.TurnOff();
 	}
 
 	d3d.mainIB = new IndexBuffer;
@@ -2496,6 +2502,20 @@ bool InitialiseDirect3D()
 	d3d.surfaceDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
 	d3d.surfaceDecl->Create();
 
+	d3d.surfaceReliefDecl = 0;
+
+	if (textureRelief.IsOn())
+	{
+		d3d.surfaceReliefDecl = new VertexDeclaration;
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    1);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+		d3d.surfaceReliefDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+		d3d.surfaceReliefDecl->Add(2, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+		d3d.surfaceReliefDecl->Create();
+	}
+
 	d3d.orthoDecl = new VertexDeclaration;
 	d3d.orthoDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.orthoDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
@@ -2608,6 +2628,12 @@ bool InitialiseDirect3D()
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
 
 	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
+	d3d.surfaceReliefEffect = kNullEffectID;
+
+	if (d3d.surfaceReliefDecl)
+	{
+		d3d.surfaceReliefEffect = d3d.effectSystem->Add("surfaceRelief", "surfaceRelief.vsh", "surfaceRelief.psh", d3d.surfaceReliefDecl);
+	}
 
 	// These draw one rectangle over the screen, and read the pictures the surface pass made.
 	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
@@ -2687,6 +2713,7 @@ void ReleaseDirect3D()
 	// release vertex declarations
 	delete d3d.mainDecl;
 	delete d3d.surfaceDecl;
+	delete d3d.surfaceReliefDecl;
 	delete d3d.orthoDecl;
 	delete d3d.decalDecl;
 	delete d3d.fmvDecl;

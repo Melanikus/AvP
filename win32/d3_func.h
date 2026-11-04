@@ -217,6 +217,8 @@ typedef struct D3DInfo
 	class VertexBuffer		*mainVB;
 	class VertexDeclaration	*surfaceDecl;
 	effectID_t				surfaceEffect;
+	class VertexDeclaration	*surfaceReliefDecl;     // these two stay empty with relief pictures off
+	effectID_t				surfaceReliefEffect;
 	effectID_t				lightTotalEffect;
 	effectID_t				lightShareEffect;
 	effectID_t				lightOneEffect;
