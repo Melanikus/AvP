@@ -60,6 +60,7 @@
 #include "utilities.h"
 #include "logString.h"
 #include "surface_normals.h"
+#include "shadow_reach.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -2186,6 +2187,19 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 				mod->m_minx=world_min.vx - mod->m_world.vx;
 				mod->m_miny=world_min.vy - mod->m_world.vy;
 				mod->m_minz=world_min.vz - mod->m_world.vz;
+
+				// The shadow pass asks about this ball many times a frame, so it's worked out once, here. These numbers come from the level
+				// file, so they're made floats first: adding whole numbers that big can overflow.
+				float const smallest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_minx, (float)mod->m_world.vy + (float)mod->m_miny, (float)mod->m_world.vz + (float)mod->m_minz
+				};
+				float const largest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_maxx, (float)mod->m_world.vy + (float)mod->m_maxy, (float)mod->m_world.vz + (float)mod->m_maxz
+				};
+
+				ShadowReach_BallRoundBox(smallest, largest, mod->m_ball);
 			}
 
 			Chunk * pChunk = o_chunk_array[i]->lookup_single_child ("MODULEDT");

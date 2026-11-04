@@ -18,6 +18,7 @@
 #include "chunk_textures.h"
 #include "kshape.h"
 #include "pixel_lights.h"
+#include "shadow_reach.h"
 #include "kzsort.h"
 #include "frustum.h"
 #include "io.h"
@@ -6406,7 +6407,11 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 // A wall only reaches ToyShadows_Collect if it's drawn, so a wall that leaves the screen would stop casting, and its shadow would
 // vanish from what's still on screen. The code below finds those walls and adds them as casters that are never drawn.
 
-bool ToyShadows_StartUnseenModule(const float *centre, float radius);
+bool ToyShadows_StartUnseenModule(const ShadowReachBall &ball);
+bool ModuleShadowCanShow(const ShadowReachBall &ball, const float *lights, int numLights, const float *axes);
+
+extern int ToyShadowsLampSize;
+extern int ToyShadowsFlareSize;
 
 // The most polygons a frame adds here. It only matters for lights with a huge range, which can reach most of a level. If the log
 // shows exactly this many out of view, the limit was reached, and some walls were left out.
@@ -6436,34 +6441,15 @@ static bool ToyModuleCanCastUnseen(const MODULE *module)
 	return !ToyModuleWasCollected(module);
 }
 
-// Works out a ball round this module, in the same space as the lights and polygons: x y z in ball[0] to [2], and its size in ball[3].
-// A ball is rougher than the module's box, but it can only let in too many, and the prism builder tests each polygon anyway.
-static void ToyMakeModuleBall(const MODULE *module, float *ball)
+// Whether any of the chosen lights can reach this module's ball, which it's had since the level loaded. A ball is rougher than the module's box,
+// but it can only let in too many, and the prism builder tests each polygon anyway. Both are in the world's numbers, so nothing has to be turned
+// to match the camera just to find out that no light's anywhere near. A light drawn from several positions reaches a little further than its
+// range, by the size of the light, so that's added.
+static bool ToyModuleTouchesALight(const MODULE *module, const float *lights, int numLights)
 {
-	// These come from the level file, so they're made floats first: adding or taking away whole numbers that big can overflow.
-	float const halfX = ((float)module->m_maxx - (float)module->m_minx) * 0.5f;
-	float const halfY = ((float)module->m_maxy - (float)module->m_miny) * 0.5f;
-	float const halfZ = ((float)module->m_maxz - (float)module->m_minz) * 0.5f;
+	float const *ball = module->m_ball;
+	float const lightSize = (float)((ToyShadowsLampSize > ToyShadowsFlareSize) ? ToyShadowsLampSize : ToyShadowsFlareSize) * 0.5f;
 
-	float const centre[3] =
-	{
-		(float)module->m_world.vx + (float)module->m_minx + halfX,
-		(float)module->m_world.vy + (float)module->m_miny + halfY,
-		(float)module->m_world.vz + (float)module->m_minz + halfZ
-	};
-
-	float view[3];
-	TranslatePoint(centre, view, toyViewMatrix);
-
-	ball[0] = view[0];
-	ball[1] = -view[1];
-	ball[2] = view[2];
-	ball[3] = sqrtf(halfX * halfX + halfY * halfY + halfZ * halfZ);
-}
-
-// Whether any of the chosen lights can reach the ball.
-static bool ToyBallTouchesALight(const float *ball, const float *lights, int numLights)
-{
 	for (int i = 0; i < numLights; i++)
 	{
 		float const *light = &lights[i * kToyLightFloats];
@@ -6473,10 +6459,10 @@ static bool ToyBallTouchesALight(const float *ball, const float *lights, int num
 			continue;
 		}
 
-		float const dx = ball[0] - light[0];
-		float const dy = ball[1] - light[1];
-		float const dz = ball[2] - light[2];
-		float const reach = ball[3] + light[3];
+		float const dx = ball[0] - light[kToyLightWorld + 0];
+		float const dy = ball[1] - light[kToyLightWorld + 1];
+		float const dz = ball[2] - light[kToyLightWorld + 2];
+		float const reach = ball[3] + light[3] + lightSize;
 
 		if (dx * dx + dy * dy + dz * dz < reach * reach)
 		{
@@ -6485,6 +6471,16 @@ static bool ToyBallTouchesALight(const float *ball, const float *lights, int num
 	}
 
 	return false;
+}
+
+// This module's ball, turned to match the camera, in the same numbers as the lights and polygons.
+static ShadowReachBall ToyModuleBallOnTheList(const MODULE *module)
+{
+	float view[3];
+	TranslatePoint(module->m_ball, view, toyViewMatrix);
+
+	ShadowReachBall const ball = { view[0], -view[1], view[2], module->m_ball[3] };
+	return ball;
 }
 
 // Adds this module's solid polygons as casters, and gives back how many. Its points go through a list of our own, because
@@ -6575,46 +6571,56 @@ static int ToyCollectUnseenModule(const MODULE *module)
 	return polygonsAdded;
 }
 
-// Called once a frame, after the lights are read and everything that's on screen has been collected.
-void ToyShadows_CollectOutOfView(const float *lights, int numLights)
+// Called once a frame, after the lights are read and everything that's on screen has been collected. Only a module whose shadow can land on
+// something on screen is kept, because the rest would be work for the card with nothing to show for it. Gives back how many polygons that is.
+// axes holds the world's three directions on the list. On a report frame, collectAllInReach also brings in every other module in reach of a
+// light, so the log can say what the test saved. Those are never drawn, and they don't count against the limit.
+int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, bool collectAllInReach)
 {
 	extern SCENE Global_Scene;
 
 	// -shadowcasters can turn the level off, and these are the level
 	if (!(ToyShadowsCasters & (1 << kToyCasterLevel)) || !Global_ModulePtr)
 	{
-		return;
+		return 0;
 	}
 
 	SCENEMODULE const *scene = Global_ModulePtr[Global_Scene];
 
 	if (!scene || !scene->sm_marray)
 	{
-		return;
+		return 0;
 	}
 
-	int polygonsAdded = 0;
+	int polygonsKept = 0;
 
-	for (int i = 0; i < ModuleArraySize && polygonsAdded < kToyMostOutOfView; i++)
+	for (int i = 0; i < ModuleArraySize && polygonsKept < kToyMostOutOfView; i++)
 	{
 		MODULE const *module = scene->sm_marray[i];
 
-		if (!ToyModuleCanCastUnseen(module))
+		if (!ToyModuleCanCastUnseen(module) || !ToyModuleTouchesALight(module, lights, numLights))
 		{
 			continue;
 		}
 
-		float ball[4];
-		ToyMakeModuleBall(module, ball);
+		ShadowReachBall const ball = ToyModuleBallOnTheList(module);
+		bool const canShow = ModuleShadowCanShow(ball, lights, numLights, axes);
 
-		if (ToyBallTouchesALight(ball, lights, numLights))
+		if (canShow || collectAllInReach)
 		{
-			if (!ToyShadows_StartUnseenModule(ball, ball[3]))
+			if (!ToyShadows_StartUnseenModule(ball))
 			{
 				break;
 			}
 
-			polygonsAdded += ToyCollectUnseenModule(module);
+			int const polygons = ToyCollectUnseenModule(module);
+
+			if (canShow)
+			{
+				polygonsKept += polygons;
+			}
 		}
 	}
+
+	return polygonsKept;
 }

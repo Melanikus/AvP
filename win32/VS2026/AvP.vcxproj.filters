@@ -135,6 +135,9 @@
     <ClCompile Include="..\..\3dc\pixel_lights.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_reach.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\RimLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

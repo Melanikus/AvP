@@ -41,6 +41,7 @@
 #include "frustum.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
+#include "shadow_reach.h"
 #include "bh_types.h"
 
 bool frustumCull = false;
@@ -3656,36 +3657,58 @@ static int toyStretchCorners = 0;
 int ToyShadows_ChosenLights(float *lights, const void **owners);
 void ToyShadows_WorldAxes(float *axes);
 void ToyShadows_CameraPlace(float *place);
-void ToyShadows_CollectOutOfView(const float *lights, int numLights);
+int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, bool collectAllInReach);
 void ToyShadows_NextCollectingFrame();
 
 // Walls out of view arrive a module at a time, each with a ball round it. There can be thousands of their polygons and up to 26
-// stencil passes a frame, so a pass asks the ball once, and if its light can't reach the ball, it skips every polygon in that module.
-struct ToyBall
-{
-	float x, y, z, radius;
-};
-
+// stencil passes a frame, so a pass asks the ball once, and if that module's shadow can't show, it skips every polygon in it.
 static const int kToyMostUnseenModules = 4096;
-static ToyBall toyUnseenModules[kToyMostUnseenModules];
+static ShadowReachBall toyUnseenModules[kToyMostUnseenModules];
 static int toyNumUnseenModules = 0;
 
-// Starts a new module of walls out of view. The cast-only polygons added after this belong to it. centre is x y z in the same space
-// as the polygons. Gives back false if there's no room for another module, and then its polygons should be left out.
-bool ToyShadows_StartUnseenModule(const float *centre, float radius)
+// Starts a new module of walls out of view. The cast-only polygons added after this belong to it. ball is in the same numbers as the
+// polygons. Gives back false if there's no room for another module, and then its polygons should be left out.
+bool ToyShadows_StartUnseenModule(const ShadowReachBall &ball)
 {
 	if (toyNumUnseenModules == kToyMostUnseenModules)
 	{
 		return false;
 	}
 
-	ToyBall &ball = toyUnseenModules[toyNumUnseenModules++];
-	ball.x = centre[0];
-	ball.y = centre[1];
-	ball.z = centre[2];
-	ball.radius = radius;
+	toyUnseenModules[toyNumUnseenModules++] = ball;
 	return true;
 }
+
+// Where a shadow can show this frame: see shadow_reach.cpp.
+static ShadowReachView shadowReachView;
+
+// A box round everything drawn this frame, in the same numbers as the polygons, for that view. It always holds the camera, which is at 0 0 0.
+static float drawnBoxSmallest[3];
+static float drawnBoxLargest[3];
+
+// How far the box stands out from what's in it. A few things are drawn without being on the list: a sprite, or a spear stuck in a wall. They sit
+// among things that are on it, so this is enough to take them in.
+static const float kDrawnBoxMargin = 500.0f;
+
+static void MakeShadowReachView()
+{
+	float smallest[3], largest[3];
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		smallest[axis] = drawnBoxSmallest[axis] - kDrawnBoxMargin;
+		largest[axis] = drawnBoxLargest[axis] + kDrawnBoxMargin;
+	}
+
+	ShadowReach_StartView(&shadowReachView);
+	ShadowReach_AddCameraView(&shadowReachView, d3d.matProjection._11, d3d.matProjection._22);
+	ShadowReach_AddBox(&shadowReachView, smallest, largest);
+}
+
+// On a report frame, what the shadow reach test saved, for the log. These walls are collected and built only to count them, and never drawn.
+static bool noteWhatReachSaves = false;
+static int polygonsReachKept = 0;
+static int vertsReachLeftOut = 0;
 
 // pts holds at least three points. Gives back twice the area of the triangle they make.
 static float ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
@@ -3727,6 +3750,25 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 	if (count < 3 || count > kToyMostPolyPoints || kind < 0 || kind >= kToyCasterKinds)
 	{
 		return;
+	}
+
+	// this comes ahead of the limits: something left off the list is still on screen, and a shadow can still land on it
+	if (kind != kToyCasterCastOnly)
+	{
+		for (int i = 0; i < count * 3; i++)
+		{
+			int const axis = i % 3;
+
+			if (pts[i] < drawnBoxSmallest[axis])
+			{
+				drawnBoxSmallest[axis] = pts[i];
+			}
+
+			if (pts[i] > drawnBoxLargest[axis])
+			{
+				drawnBoxLargest[axis] = pts[i];
+			}
+		}
 	}
 
 	if (toyNumCasters == kToyMaxCasters || toyNumCasterPoints + count > kToyMaxCasterPoints)
@@ -4121,6 +4163,14 @@ static void ToyLogFrame(const ToyFrameReport &report)
 		toyPolygonsOfKind[kToyCasterCloaked], toyPolygonsOfKind[kToyCasterCastOnly],
 		toyVertsOfKind[kToyCasterLevel], toyVertsOfKind[kToyCasterObject], toyVertsOfKind[kToyCasterModel],
 		toyVertsOfKind[kToyCasterCloaked], toyVertsOfKind[kToyCasterCastOnly], toyNumModels, toyLargestModel);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	// Before and after, from this one frame. "Before" is everything in a light's range, the old test, with a light's reach a little wider for
+	// the size of the light. The verts are added up over every pass, and those it saved were built only to be counted.
+	_snprintf(line, sizeof(line) - 1,
+		"shadow volumes: frame %d, out of view: before the reach test %d polygons and %d verts, after it %d polygons and %d verts",
+		report.frame, toyPolygonsOfKind[kToyCasterCastOnly], toyVertsOfKind[kToyCasterCastOnly] + vertsReachLeftOut, polygonsReachKept, toyVertsOfKind[kToyCasterCastOnly]);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4621,8 +4671,8 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
-// Whether this light, x y z range first, can reach anything inside the ball.
-static bool ToyBallInReach(const ToyBall &ball, const float *light)
+// Whether this light, x y z range first, can reach anything inside the ball. This was the whole test once, and it's kept to count against.
+static bool ToyBallInReach(const ShadowReachBall &ball, const float *light)
 {
 	float const dx = ball.x - light[0];
 	float const dy = ball.y - light[1];
@@ -4630,6 +4680,20 @@ static bool ToyBallInReach(const ToyBall &ball, const float *light)
 	float const reach = ball.radius + light[3];
 
 	return dx * dx + dy * dy + dz * dz < reach * reach;
+}
+
+// On a report frame, what this polygon would have cost if the shadow reach test hadn't left it out. It's built, measured and forgotten.
+static void NotePrismReachLeftOut(int caster, const float *light, const float *centre)
+{
+	ToyLightReport *const noted = toyNoteLight;
+	int const vertsBefore = toyNumVerts;
+
+	toyNoteLight = 0;
+	ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], toyCasterSurface[caster], light, centre, false);
+	toyNoteLight = noted;
+
+	vertsReachLeftOut += toyNumVerts - vertsBefore;
+	toyNumVerts = vertsBefore;
 }
 
 // Fills toyVerts with this light's prisms. A cloaked model casts only a faint shadow, and a stencil only knows yes or no, so its
@@ -4641,7 +4705,8 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 {
 	toyNumVerts = 0;
 	int moduleAsked = -1;
-	bool moduleInReach = false;
+	bool moduleCanShow = false;
+	bool moduleWouldHaveCast = false;
 
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
@@ -4658,11 +4723,17 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 			if (toyCasterModule[caster] != moduleAsked)
 			{
 				moduleAsked = toyCasterModule[caster];
-				moduleInReach = ToyBallInReach(toyUnseenModules[moduleAsked], light);
+				moduleCanShow = ShadowReach_CanReach(shadowReachView, toyUnseenModules[moduleAsked], light);
+				moduleWouldHaveCast = noteWhatReachSaves && !moduleCanShow && ToyBallInReach(toyUnseenModules[moduleAsked], light);
 			}
 
-			if (!moduleInReach)
+			if (!moduleCanShow)
 			{
+				if (moduleWouldHaveCast)
+				{
+					NotePrismReachLeftOut(caster, light, centre);
+				}
+
 				continue;
 			}
 		}
@@ -4879,6 +4950,41 @@ static void ToyLightAtPosition(const float *light, int position, const float *ax
 	}
 }
 
+// Could this module's shadow show, from any light on the list? A position moves a shadow, so each one a light is drawn from gets asked about,
+// as well as the light's true place, which a cloaked Predator's shadow and any single-position pass are cast from.
+bool ModuleShadowCanShow(const ShadowReachBall &ball, const float *lights, int numLights, const float *axes)
+{
+	for (int i = 0; i < numLights; i++)
+	{
+		float const *light = &lights[i * kToyLightFloats];
+
+		if (LightOnListIsDark(light))
+		{
+			continue;
+		}
+
+		if (ShadowReach_CanReach(shadowReachView, ball, light))
+		{
+			return true;
+		}
+
+		int const positions = ToyPositionsForLight(light);
+
+		for (int position = 0; positions > 1 && position < positions; position++)
+		{
+			float moved[kToyLightFloats];
+			ToyLightAtPosition(light, position, axes, moved);
+
+			if (ShadowReach_CanReach(shadowReachView, ball, moved))
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 // One lamp, from all its positions. Each adds its part of the lamp's share to the mask, through the same stencil and shader as a
 // single position. Where the lamp's light falls on a pixel doesn't change: only how much of it gets blocked.
 static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *light, const void *owner, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
@@ -5053,6 +5159,14 @@ static void ToyForgetCasters()
 	toyNumVerts = 0;
 	toyStretchTotal = 0.0;
 	toyStretchCorners = 0;
+	polygonsReachKept = 0;
+	vertsReachLeftOut = 0;
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		drawnBoxSmallest[axis] = 0.0f;
+		drawnBoxLargest[axis] = 0.0f;
+	}
 }
 
 // Whether the depth buffer the game was given has stencil bits, which is where a light's shadow marks go. The game asks for only two
@@ -5135,8 +5249,14 @@ static void ToyShadows_Draw()
 		return;
 	}
 
-	// These go after everything that was drawn, so if the lists fill up, it's these that miss out.
-	ToyShadows_CollectOutOfView(lights, report.lights);
+	float worldAxes[9];
+	ToyShadows_WorldAxes(worldAxes);
+
+	// These go after everything that was drawn, so if the lists fill up, it's these that miss out. By now everything drawn is known, which is
+	// what the view needs.
+	MakeShadowReachView();
+	noteWhatReachSaves = logThisFrame;
+	polygonsReachKept = ToyShadows_CollectOutOfView(lights, report.lights, worldAxes, logThisFrame);
 
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
@@ -5168,8 +5288,6 @@ static void ToyShadows_Draw()
 
 	// Without the pictures, each light takes a flat share, so that a pixel none of them reach ends up at the full darkness.
 	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)(litLights ? litLights : 1));
-	float worldAxes[9];
-	ToyShadows_WorldAxes(worldAxes);
 	ToyShadows_CameraPlace(toyCameraInWorld);
 	DWORD const flatShare = (DWORD)((1.0f - keepPerLight) * 255.0f) << 24;
 

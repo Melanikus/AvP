@@ -404,6 +404,7 @@
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
+    <ClCompile Include="..\..\3dc\shadow_reach.cpp" />
     <ClCompile Include="..\..\3dc\RimLoader.cpp" />
     <ClCompile Include="..\..\3dc\RingBuffer.cpp" />
     <ClCompile Include="..\..\3dc\ShaderManager.cpp" />
