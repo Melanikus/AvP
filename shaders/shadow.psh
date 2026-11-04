@@ -6,10 +6,10 @@ struct PS_INPUT
 };
 
 // Global variables
-float4 Lights[8]  : register(c0);    // each chosen light: x y z, and one over its range
-float4 Weights[8] : register(c8);    // x: how bright each light is. y: 0 for a light baked into the walls, 1 for one worked out live
-float4 ThisLight  : register(c16);   // the light this pass is for: x y z, and one over its range
-float4 ThisWeight : register(c17);   // its x and y, as above. z: how much of its share to take, 1 for an ordinary shadow
+float4 Lights[12]  : register(c0);    // each chosen light: x y z, and one over its range
+float4 Weights[12] : register(c12);    // x: how bright each light is. y: 0 for a light baked into the walls, 1 for one worked out live
+float4 ThisLight  : register(c24);   // the light this pass is for: x y z, and one over its range
+float4 ThisWeight : register(c25);   // its x and y, as above. z: how much of its share to take, 1 for an ordinary shadow
 
 
 // How much light one lamp gives this spot. The game lights the world in two ways, and each is copied here. Baked lights fade
@@ -40,7 +40,7 @@ float4 ps_main(in PS_INPUT In) : COLOR0
     float3 normal = normalize(In.Normal);
     float  all    = 0.0f;
 
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 12; i++)
     {
         all += LightHere(Lights[i], Weights[i], In.ViewPosition, normal);
     }

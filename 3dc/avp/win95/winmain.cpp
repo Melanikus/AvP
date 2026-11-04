@@ -329,6 +329,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
 			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
 		}
+		extern int ToyShadowsMaxBrief;
+		char const *briefSwitch = strstr(command_line, "-shadowbrief=");
+		if (briefSwitch)
+		{
+			int const asked = atoi(briefSwitch + strlen("-shadowbrief="));
+			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;
+		}
 		extern int ToyShadowsCasters;
 		char const *castersSwitch = strstr(command_line, "-shadowcasters=");
 		if (castersSwitch)

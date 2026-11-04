@@ -1,5 +1,5 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
-// added the kinds of polygon the shadow toy keeps.
+// added the kinds of polygon the shadow toy keeps, and how many lights it handles.
 #ifndef _included_d3d_render_h_ /* Is this your first time? */
 #define _included_d3d_render_h_ 1
 
@@ -13,9 +13,22 @@ enum ToyCasterKind
 	kToyCasterLevel = 0,        // part of the level, such as a wall or a door: casts a shadow, and shadows fall on it
 	kToyCasterObject = 1,       // a placed object, such as a crate or a machine: the same
 	kToyCasterModel = 2,        // a body part of a model, such as an alien: the same
-	kToyCasterReceiveOnly = 3,  // something carrying a light: shadows fall on it, but it casts none
-	kToyCasterCloaked = 4,      // a cloaked Predator: casts only a faint shadow
-	kToyCasterKinds = 5
+	kToyCasterCloaked = 3,      // a cloaked Predator: casts only a faint shadow
+	kToyCasterKinds = 4
+};
+
+// How many lights the shadow toy handles in one frame. Steady lights are lamps and flares. Brief lights are muzzle flashes, fires
+// and explosions, which get places of their own, so that one can't push out a steady light and make that light's shadows jump.
+// shadow.psh and shadowFlare.psh are sized for kToyMostLights, so they have to change along with it.
+enum
+{
+	kToyMostSteadyLights = 8,
+	kToyMostBriefLights = 4,
+	kToyMostLights = kToyMostSteadyLights + kToyMostBriefLights,
+
+	// each light is 9 numbers: x y z, range, red green blue, its kind (0 baked into the walls, 1 live, in the game's lighting,
+	// 2 live, added per pixel), then 1 if it's lit the way the game lights it, or 0 for the look chosen for flares
+	kToyLightFloats = 9
 };
 
 extern void D3D_DrawBackdrop();

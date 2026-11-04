@@ -127,7 +127,18 @@ void UpdateRunTimeLights(void)
 	HandleLightElementSystem();
 }
 
-extern int ToyShadowsFlaresByPixel;
+extern int ToyShadowsLightsByPixel;
+extern bool gunLayer;
+bool ToyBlockIsFlare(const DISPLAYBLOCK *block);
+bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light);
+void ToyShadows_ChooseLights();
+
+// Is this chosen light added per pixel on what's being drawn now, instead of here? The per-pixel pass redraws the main list, so
+// that's what has to leave the light out, or it would be lit twice. The player's weapon isn't in that list, and keeps its light.
+static bool ToyLightIsAddedLater(const LIGHTBLOCK *light)
+{
+	return !gunLayer && ToyShadows_LightIsByPixel(light);
+}
 
 void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 {
@@ -151,8 +162,9 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		dptr2 = *aptr++;
 
-		// while shadows are on, a flare's light is added per pixel instead, only where it can really reach
-		if (ToyShadowsFlaresByPixel && dptr2->ObStrategyBlock && dptr2->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade)
+		// While shadows are on, a flare's light is added per pixel instead, only where it can really reach. This is for the weapon
+		// too, which gets no flare light at all, because the game's flare is a bright white and not the dim red the user chose.
+		if (ToyShadowsLightsByPixel && ToyBlockIsFlare(dptr2))
 		{
 			continue;
 		}
@@ -192,7 +204,7 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 
 						distanceToLight = Approximate3dMagnitude(&vertexToLight);
 
-						if (distanceToLight < (lptr->LightRange + dptr->ObRadius))
+						if (distanceToLight < (lptr->LightRange + dptr->ObRadius) && !ToyLightIsAddedLater(lptr))
 						{
 
 							LightSourcesForObject[NumLightSourcesForObject] = lptr;
@@ -226,7 +238,7 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 
 			distanceToLight = Approximate3dMagnitude(&vertexToLight);
 
-			if (distanceToLight < (lptr->LightRange + dptr->ObRadius) )
+			if (distanceToLight < (lptr->LightRange + dptr->ObRadius) && !ToyLightIsAddedLater(lptr))
 			{
 
 				LightSourcesForObject[NumLightSourcesForObject] = lptr;
@@ -648,6 +660,9 @@ void AvpShowViews(void)
 
 	/* lights associated with the player may have changed */
 	UpdateObjectLights(Player);
+
+	// every light is in place now, and nothing has been lit yet
+	ToyShadows_ChooseLights();
 
 	if (NumOnScreenBlocks)
 	{

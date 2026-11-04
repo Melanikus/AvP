@@ -156,7 +156,7 @@ VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddCaster(const float *pts, int count, int kind);
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner);
 void ToyShadows_NoteModelPart(const void *model, int polygons);
 
 /*
@@ -5490,7 +5490,10 @@ extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
 extern bool gunLayer;
 extern int GlobalFrameCounter;
-extern int ToyShadowsFlaresByPixel;
+extern int ToyShadowsLightsByPixel;
+extern int ToyShadowsMaxLights;
+extern int ToyShadowsMaxBrief;
+extern int LightScale;
 extern int ToyShadowsFlareCap;
 extern int ToyShadowsFlareReach;
 extern int ToyShadowsCasters;
@@ -5521,38 +5524,58 @@ static VECTORCH toyCameraWorld;
 // from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
 // been thrown away does no harm.
 static const int kToyStayQuarters = 3;
-static const int kToyMostChosen = 8;
 
 struct ToyFoundLight
 {
 	LIGHTBLOCK *light;
-	int order;      // lowest first
-	int distance;   // from the camera
+	void const *owner;  // what carries it, or nothing
+	int order;          // lowest first
+	int distance;       // from the camera
 };
 
-static LIGHTBLOCK *toyChosenLastFrame[kToyMostChosen];
+static LIGHTBLOCK *toyChosenLastFrame[kToyMostLights];
 static int toyNumChosenLastFrame = 0;
 
-// What the log says about the lights chosen most recently. These are copies, because the log comes a frame later, when a
-// brief light has gone.
+// What the log says about the lights chosen most recently. These are copies, so the log never reads a light that may have gone.
 struct ToyChosenNote
 {
 	int distance, range, bright, flags;
 };
 
-static ToyChosenNote toyChosen[kToyMostChosen];
+static ToyChosenNote toyChosen[kToyMostLights];
 static int toyNumChosen = 0;
 
 // A light that only lasts a moment: a muzzle flash, remade with a new brightness every frame, or a light element such as
-// sparks or an explosion. Letting one take a place, even for a frame, would make all the steady shadows jump.
+// sparks or an explosion. These have places of their own, because one taking a steady light's place, even for a frame, would
+// make that light's shadows jump.
 static bool ToyLightIsBrief(const LIGHTBLOCK *light)
 {
 	return (light->LightFlags & LFlag_Deallocate) != 0;
 }
 
-static bool ToyBlockIsFlare(const DISPLAYBLOCK *block)
+// Is this a flare? Another player's flare arrives as a ghost, and is a flare all the same.
+bool ToyBlockIsFlare(const DISPLAYBLOCK *block)
 {
-	return block->ObStrategyBlock && block->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade;
+	STRATEGYBLOCK const *owner = block->ObStrategyBlock;
+
+	if (!owner)
+	{
+		return false;
+	}
+
+	if (owner->I_SBtype == I_BehaviourNetGhost && owner->SBdataptr)
+	{
+		return ((NETGHOSTDATABLOCK const *)owner->SBdataptr)->type == I_BehaviourFlareGrenade;
+	}
+
+	return owner->I_SBtype == I_BehaviourFlareGrenade;
+}
+
+// What this block's lights and polygons belong to, which tells a body from the lights it carries. A piece of the level belongs to
+// nothing, even a door, which has a strategy block: it holds the lights of its room, and its polygons must still block them.
+static void const *ToyOwnerOf(const DISPLAYBLOCK *block)
+{
+	return block->ObMyModule ? 0 : block->ObStrategyBlock;
 }
 
 // Could any of this light's range be on screen? The test is a deliberately wide view, about 127 degrees across in both
@@ -5596,8 +5619,9 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 }
 
 // Keeps the best lights seen so far, in order. A light marked first goes ahead of every other, nearest of those first, and
-// none of the tests below apply to it: a flare is always chosen, near or far.
-static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most, bool first)
+// none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
+// light element, which is on no block.
+static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most)
 {
 	if (!ToyLightIsLit(light))
 	{
@@ -5607,14 +5631,16 @@ static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFo
 	int const distance = ToyDistanceToCamera(light);
 	int order = distance;
 
-	if (first)
+	if (block && ToyBlockIsFlare(block))
 	{
 		order = distance - 0x40000000;
 	}
 	else
 	{
-		// a light on the camera throws every shadow straight away from the eye, where it can't be seen
-		if (distance < 300 || !ToyLightCanReachTheView(light))
+		// Something at the camera throws every shadow straight away from the eye, where it can't be seen, so it isn't worth a
+		// place. That keeps out the glow on the alien's teeth, which is a light element at the player's spot. The player's own
+		// lights, such as a muzzle flash, still count: they have to leave the game's lighting to be blocked like any other.
+		if (block != Player && (distance < 300 || !ToyLightCanReachTheView(light)))
 		{
 			return;
 		}
@@ -5647,6 +5673,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFo
 	}
 
 	found[place].light = light;
+	found[place].owner = block ? ToyOwnerOf(block) : 0;
 	found[place].order = order;
 	found[place].distance = distance;
 }
@@ -5658,30 +5685,44 @@ static float ToyFraction(int fixedPoint)
 	return (fraction < 0.0f) ? 0.0f : (fraction > 1.0f) ? 1.0f : fraction;
 }
 
-// Fills lights with x y z range red green blue kind for each light chosen, 8 numbers each, in the space the polygons were collected
-// in. Gives back how many. Flares come first, near or far, so that a flare in flight always moves its shadows: the player can
-// have 4 going at once (pmove.cpp). Then steady lights, nearest the camera first. Brief lights only get the places left over.
-int ToyShadows_PickLights(float *lights, int most)
+// The lights chosen for this frame, already in the space the polygons are collected in. ToyShadows_ChooseLights works them out once
+// and the shadow pass reads this copy at the end of the frame, so the lighting and the pass always agree on the same list.
+static float toyChosenLights[kToyMostLights * kToyLightFloats];
+static void const *toyChosenOwners[kToyMostLights];
+static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
+static int toyNumLightsByPixel = 0;
+
+// Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
+// before: a live light can only leave the game's lighting for a frame it hasn't been used in yet, and a muzzle flash only has that
+// one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
+// once, before this.
+//
+// Up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
+// flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 4 brief lights of their own. A live
+// light past those limits simply stays in the game's lighting, so nothing vanishes.
+void ToyShadows_ChooseLights()
 {
-	ToyFoundLight steady[kToyMostChosen];
-	ToyFoundLight brief[kToyMostChosen];
+	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
+	toyCameraWorld = Global_VDB_Ptr->VDB_World;
+
+	toyNumChosen = 0;
+	toyNumLightsByPixel = 0;
+
+	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
+	{
+		return;
+	}
+
+	ToyFoundLight steady[kToyMostSteadyLights];
+	ToyFoundLight brief[kToyMostBriefLights];
 	int numSteady = 0;
 	int numBrief = 0;
-
-	if (most > kToyMostChosen)
-	{
-		most = kToyMostChosen;
-	}
+	int const mostSteady = (ToyShadowsMaxLights < kToyMostSteadyLights) ? ToyShadowsMaxLights : kToyMostSteadyLights;
+	int const mostBrief = (ToyShadowsMaxBrief < kToyMostBriefLights) ? ToyShadowsMaxBrief : kToyMostBriefLights;
 
 	for (int i = 0; i < NumActiveBlocks; i++)
 	{
 		DISPLAYBLOCK *block = ActiveBlockList[i];
-
-		if (block == Player)
-		{
-			continue;
-		}
-
 		bool const isFlare = ToyBlockIsFlare(block);
 
 		for (int j = 0; j < block->ObNumLights; j++)
@@ -5690,37 +5731,40 @@ int ToyShadows_PickLights(float *lights, int most)
 
 			if (!isFlare && ToyLightIsBrief(light))
 			{
-				// A muzzle flash or a fire on a body is made here at the centre of that body, so the body would block it in
-				// every direction. It takes no place, which leaves it shining as it always has, with no shadow of its own.
-				if (!block->HModelControlBlock)
-				{
-					ToyConsiderLight(light, brief, &numBrief, most, false);
-				}
+				ToyConsiderLight(light, block, brief, &numBrief, mostBrief);
 			}
 			else
 			{
-				ToyConsiderLight(light, steady, &numSteady, most, isFlare);
+				ToyConsiderLight(light, block, steady, &numSteady, mostSteady);
 			}
 		}
 	}
 
 	for (int i = 0; i < NumActiveLightElements; i++)
 	{
-		ToyConsiderLight(&LightElementStorage[i].LightBlock, brief, &numBrief, most, false);
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, 0, brief, &numBrief, mostBrief);
 	}
 
-	int numFound = numSteady;
-	for (int i = 0; i < numBrief && numFound < most; i++)
+	ToyFoundLight chosen[kToyMostLights];
+	int numChosen = 0;
+
+	for (int i = 0; i < numSteady; i++)
 	{
-		steady[numFound++] = brief[i];
+		chosen[numChosen++] = steady[i];
 	}
 
-	toyNumChosenLastFrame = numFound;
-	toyNumChosen = numFound;
-
-	for (int i = 0; i < numFound; i++)
+	for (int i = 0; i < numBrief; i++)
 	{
-		LIGHTBLOCK const *light = steady[i].light;
+		chosen[numChosen++] = brief[i];
+	}
+
+	toyNumChosenLastFrame = numChosen;
+	toyNumChosen = numChosen;
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		LIGHTBLOCK const *light = chosen[i].light;
+		float *out = &toyChosenLights[i * kToyLightFloats];
 		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
 		float view[3];
 
@@ -5728,59 +5772,86 @@ int ToyShadows_PickLights(float *lights, int most)
 
 		float const bright = ToyFraction(light->LightBright);
 
-		lights[i * 8 + 0] = view[0];
-		lights[i * 8 + 1] = -view[1];
-		lights[i * 8 + 2] = view[2];
-		lights[i * 8 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
-		lights[i * 8 + 4] = bright * ToyFraction(light->RedScale);
-		lights[i * 8 + 5] = bright * ToyFraction(light->GreenScale);
-		lights[i * 8 + 6] = bright * ToyFraction(light->BlueScale);
+		out[0] = view[0];
+		out[1] = -view[1];
+		out[2] = view[2];
+		out[3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+		out[4] = bright * ToyFraction(light->RedScale);
+		out[5] = bright * ToyFraction(light->GreenScale);
+		out[6] = bright * ToyFraction(light->BlueScale);
 
-		// 0 for a light baked into the walls, 1 for one the game works out live, like a flare
+		// 0 for a light baked into the walls, 1 for one the game works out live, like a muzzle flash
 		bool const live = !(light->LightFlags & LFlag_PreLitSource);
-		lights[i * 8 + 7] = live ? 1.0f : 0.0f;
+		out[7] = live ? 1.0f : 0.0f;
+		out[8] = 1.0f;
 
-		// A live light can be brighter than 1: a new flare is about 4, fading to nothing. What matters here is what the game
-		// really adds to the wall, so a live light counts at its real brightness. This is a weight in a share, not a colour:
-		// it has no effect on what any light looks like.
+		// A live light can be brighter than 1: an explosion is 4. What matters here is what the game really adds to the wall, so a
+		// live light counts at its real brightness, worked out as the game works it out (view.cpp, UpdateObjectLights).
 		if (live)
 		{
-			float const liveBright = (float)light->LightBright / 65536.0f;
+			float const liveBright = (float)MUL_FIXED(light->LightBright, LightScale) / 65536.0f;
 			float const weight = (liveBright < 0.0f) ? 0.0f : (liveBright > 8.0f) ? 8.0f : liveBright;
 
-			lights[i * 8 + 4] = weight * ToyFraction(light->RedScale);
-			lights[i * 8 + 5] = weight * ToyFraction(light->GreenScale);
-			lights[i * 8 + 6] = weight * ToyFraction(light->BlueScale);
+			out[4] = weight * ToyFraction(light->RedScale);
+			out[5] = weight * ToyFraction(light->GreenScale);
+			out[6] = weight * ToyFraction(light->BlueScale);
 		}
 
-		// 2: a flare left out of the game's lighting, which the shadow pass adds per pixel. Only a flare has an order below 0.
-		if (ToyShadowsFlaresByPixel && steady[i].order < 0)
+		// 2: a live light left out of the game's lighting, which the shadow pass adds per pixel
+		if (ToyShadowsLightsByPixel && live)
 		{
-			lights[i * 8 + 7] = 2.0f;
+			out[7] = 2.0f;
+			toyLightsByPixel[toyNumLightsByPixel++] = light;
 
-			// A flare's brightness is its seconds left divided by 4, from 4 down to nothing over 16 seconds, with a flicker on
-			// top. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6 seconds, and then fades out.
-			// The cap is also what gives a flare its look: its colour is a pink, and the game only makes it white by being
-			// so bright that all three colours clip. The user chose this dim red look, so don't raise it to match the game.
-			float const cap = (float)ToyShadowsFlareCap / 100.0f;
-			float const flareBright = (float)light->LightBright / 65536.0f;
+			// Only a flare has an order below 0. A flare's brightness is its seconds left divided by 4, from 4 down to nothing over
+			// 16 seconds, with a flicker on top. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6
+			// seconds, and then fades out. The cap is also what gives a flare its look: its colour is a pink, and the game only
+			// makes it white by being so bright that all three colours clip. The user chose this dim red look, so don't raise it
+			// to match the game.
+			if (chosen[i].order < 0)
+			{
+				float const cap = (float)ToyShadowsFlareCap / 100.0f;
+				float const flareBright = (float)light->LightBright / 65536.0f;
+				float const held = (flareBright < cap) ? flareBright : cap;
 
-			lights[i * 8 + 3] *= (float)ToyShadowsFlareReach / 100.0f;
-			float const held = (flareBright < cap) ? flareBright : cap;
-
-			lights[i * 8 + 4] = held * ToyFraction(light->RedScale);
-			lights[i * 8 + 5] = held * ToyFraction(light->GreenScale);
-			lights[i * 8 + 6] = held * ToyFraction(light->BlueScale);
+				out[3] *= (float)ToyShadowsFlareReach / 100.0f;
+				out[4] = held * ToyFraction(light->RedScale);
+				out[5] = held * ToyFraction(light->GreenScale);
+				out[6] = held * ToyFraction(light->BlueScale);
+				out[8] = 0.0f;
+			}
 		}
 
-		toyChosenLastFrame[i] = steady[i].light;
-		toyChosen[i].distance = steady[i].distance;
+		toyChosenOwners[i] = chosen[i].owner;
+		toyChosenLastFrame[i] = chosen[i].light;
+		toyChosen[i].distance = chosen[i].distance;
 		toyChosen[i].range = light->LightRange;
 		toyChosen[i].bright = light->LightBright;
 		toyChosen[i].flags = light->LightFlags;
 	}
+}
 
-	return numFound;
+// Gives the shadow pass this frame's list, and how many are on it. lights and owners have room for kToyMostLights each.
+int ToyShadows_ChosenLights(float *lights, const void **owners)
+{
+	memcpy(lights, toyChosenLights, sizeof(toyChosenLights));
+	memcpy(owners, toyChosenOwners, sizeof(toyChosenOwners));
+
+	return toyNumChosen;
+}
+
+// Is this light being added per pixel this frame? If so, the game's own lighting has to leave it out, or it would count twice.
+bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light)
+{
+	for (int i = 0; i < toyNumLightsByPixel; i++)
+	{
+		if (toyLightsByPixel[i] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 // Gives the world's x, y and z directions in the space the light list uses, three numbers each. A light's positions are set out
@@ -5929,52 +6000,10 @@ static bool ToyBlockIsCloaked(const DISPLAYBLOCK *block)
 	return false;
 }
 
-// Is this object or body part carrying a light that could be chosen? Anything carrying a light sits around it, so it would
-// block that light in every direction, and the light would go dark everywhere. A body part's own block always says it has no
-// lights, because hmodel.cpp makes it up for one draw, so the question goes to the block of the whole body, through its owner.
-// A brief light on a body doesn't count: it can't be chosen (see ToyShadows_PickLights), and it comes and goes with each shot,
-// so a marine's shadow would flicker off as they fired.
-static bool ToyBlockCarriesLight(const DISPLAYBLOCK *block, bool isBodyPart)
-{
-	if (ToyBlockIsFlare(block))
-	{
-		return true;  // always, by type, which is how the light picker treats a flare too
-	}
-
-	DISPLAYBLOCK const *whole = block;
-
-	if (block->ObStrategyBlock && block->ObStrategyBlock->SBdptr)
-	{
-		whole = block->ObStrategyBlock->SBdptr;
-	}
-
-	for (int i = 0; i < whole->ObNumLights; i++)
-	{
-		if (!isBodyPart || !ToyLightIsBrief(whole->ObLights[i]))
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-// What may this polygon do? kind says where it came from: the level, an object or a model. The level is never asked about
-// lights, because a piece of the level holds the lights of its room, and walls are what cast the shadows. If something is both
-// carrying a light and cloaked, the light wins, because casting even a faint shadow would still block that light.
+// What may this polygon do? kind says where it came from: the level, an object or a model.
 static int ToyChooseKind(const DISPLAYBLOCK *block, int kind)
 {
-	if (kind == kToyCasterLevel)
-	{
-		return kind;
-	}
-
-	if (ToyBlockCarriesLight(block, kind == kToyCasterModel))
-	{
-		return kToyCasterReceiveOnly;
-	}
-
-	if (ToyBlockIsCloaked(block))
+	if (kind != kToyCasterLevel && ToyBlockIsCloaked(block))
 	{
 		return kToyCasterCloaked;
 	}
@@ -6019,10 +6048,8 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 	}
 
 	int const whatItMayDo = ToyChooseKind(dptr, kind);
+	void const *owner = ToyOwnerOf(dptr);
 	int polygonsKept = 0;
-
-	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
-	toyCameraWorld = Global_VDB_Ptr->VDB_World;
 
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
@@ -6060,7 +6087,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 		if (pointsAreSafe)
 		{
-			ToyShadows_AddCaster(pts, count, whatItMayDo);
+			ToyShadows_AddCaster(pts, count, whatItMayDo, owner);
 			polygonsKept++;
 		}
 	}

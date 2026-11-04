@@ -3527,16 +3527,17 @@ enum ToyShadowsView
 };
 
 static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK" };
-static DWORD const kToyLightColours[8] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF };
+static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
 
 extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
-int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
+int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8: how many steady lights
+int ToyShadowsMaxBrief = 4;   // -shadowbrief=N, 0 to 4: how many brief lights on top of those, such as muzzle flashes and explosions
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
 int ToyShadowsFlareReach = 100; // -shadowflarereach=N, 50 to 400: how far a flare's light goes, in percent of the game's 10 metres
-int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
-int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
+int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_ChooseLights
+int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen live lights leave the game's lighting, and are added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
@@ -3552,8 +3553,6 @@ struct ToyVec
 	float x, y, z;
 };
 
-static const int   kToyMostLights      = 8;
-static const int   kToyLightFloats     = 8;         // each light is x y z range red green blue kind (0 baked, 1 live)
 static const int   kToyMostPolyPoints  = 16;
 static const int   kToyMaxCasters      = 60000;
 static const int   kToyMaxCasterPoints = 240000;
@@ -3571,6 +3570,7 @@ static ToyVec toyCasterPoints[kToyMaxCasterPoints];
 static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
+static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
 static int toyNumCasters = 0;
 static int toyNumCasterPoints = 0;
 static int toyCastersLeftOut = 0;
@@ -3592,12 +3592,12 @@ static int toyPrismsLeftOut = 0;
 static double toyStretchTotal = 0.0;   // how far corners were thrown past their polygon, for the log
 static int toyStretchCorners = 0;
 
-int ToyShadows_PickLights(float *lights, int most);
+int ToyShadows_ChosenLights(float *lights, const void **owners);
 void ToyShadows_WorldAxes(float *axes);
 
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
-// kind is one of ToyCasterKind
-void ToyShadows_AddCaster(const float *pts, int count, int kind)
+// kind is one of ToyCasterKind. owner is what the polygon belongs to, or nothing for the level.
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner)
 {
 	if (count < 3 || count > kToyMostPolyPoints || kind < 0 || kind >= kToyCasterKinds)
 	{
@@ -3613,6 +3613,7 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind)
 	toyCasterStart[toyNumCasters] = toyNumCasterPoints;
 	toyCasterCount[toyNumCasters] = count;
 	toyCasterKind[toyNumCasters] = kind;
+	toyCasterOwner[toyNumCasters] = owner;
 	toyPolygonsOfKind[kind]++;
 	toyNumCasters++;
 
@@ -3713,8 +3714,8 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	}
 
 	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
-	// it from the whole room. So a polygon that close doesn't cast for that flare, measured from where the flare really is. A
-	// light's eighth number is its kind, and 2 is a flare.
+	// it from the whole room. So a polygon that close doesn't cast for that flare, or for any other light added per pixel, measured
+	// from where the light really is. A light's eighth number is its kind, and 2 means added per pixel.
 	if (light[7] == 2.0f && fabsf(centreFacing) / normalLength < kToyFlareTouching)
 	{
 		return;
@@ -3866,11 +3867,11 @@ static void ToyLogFrame(const ToyFrameReport &report)
 	LogString(line);
 
 	// What each kind cost. Verts are the real price, and they're added up over every light: a polygon outside all the lights
-	// costs none, however many polygons it belongs with. Receive only has no verts, because it builds no prisms.
+	// costs none, however many polygons it belongs with.
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, polygons: %d level, %d objects, %d models, %d receive only, %d cloaked; verts: %d level, %d objects, %d models, %d cloaked; %d models drawn, the largest %d polygons",
+		"toy-shadows: frame %d, polygons: %d level, %d objects, %d models, %d cloaked; verts: %d level, %d objects, %d models, %d cloaked; %d models drawn, the largest %d polygons",
 		report.frame, toyPolygonsOfKind[kToyCasterLevel], toyPolygonsOfKind[kToyCasterObject], toyPolygonsOfKind[kToyCasterModel],
-		toyPolygonsOfKind[kToyCasterReceiveOnly], toyPolygonsOfKind[kToyCasterCloaked],
+		toyPolygonsOfKind[kToyCasterCloaked],
 		toyVertsOfKind[kToyCasterLevel], toyVertsOfKind[kToyCasterObject], toyVertsOfKind[kToyCasterModel],
 		toyVertsOfKind[kToyCasterCloaked], toyNumModels, toyLargestModel);
 	line[sizeof(line) - 1] = 0;
@@ -4270,7 +4271,8 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 
 	// see shadow.psh for what each of these is. A light's weight is how bright it is, all three colours together. Lights that
 	// weren't chosen stay at weight 0, so they add nothing.
-	float constants[18 * 4] = { 0.0f };
+	enum { kFirstWeight = kToyMostLights, kThisLight = kFirstWeight + kToyMostLights, kThisWeight = kThisLight + 1, kConstants = kThisWeight + 1 };
+	float constants[kConstants * 4] = { 0.0f };
 
 	for (int i = 0; i < numLights; i++)
 	{
@@ -4280,20 +4282,20 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 		constants[i * 4 + 1] = other[1];
 		constants[i * 4 + 2] = other[2];
 		constants[i * 4 + 3] = 1.0f / other[3];
-		// a flare added per pixel isn't in the picture yet, so it has no share of what's there. Its weight stays 0.
-		constants[(8 + i) * 4 + 0] = (other[7] == 2.0f) ? 0.0f : (other[4] + other[5] + other[6]) / 3.0f;
-		constants[(8 + i) * 4 + 1] = other[7];
+		// a light added per pixel isn't in the picture yet, so it has no share of what's there. Its weight stays 0.
+		constants[(kFirstWeight + i) * 4 + 0] = (other[7] == 2.0f) ? 0.0f : (other[4] + other[5] + other[6]) / 3.0f;
+		constants[(kFirstWeight + i) * 4 + 1] = other[7];
 	}
 
-	constants[16 * 4 + 0] = light[0];
-	constants[16 * 4 + 1] = light[1];
-	constants[16 * 4 + 2] = light[2];
-	constants[16 * 4 + 3] = 1.0f / light[3];
-	constants[17 * 4 + 0] = constants[(8 + thisLight) * 4 + 0];
-	constants[17 * 4 + 1] = constants[(8 + thisLight) * 4 + 1];
-	constants[17 * 4 + 2] = strength;
+	constants[kThisLight * 4 + 0] = light[0];
+	constants[kThisLight * 4 + 1] = light[1];
+	constants[kThisLight * 4 + 2] = light[2];
+	constants[kThisLight * 4 + 3] = 1.0f / light[3];
+	constants[kThisWeight * 4 + 0] = constants[(kFirstWeight + thisLight) * 4 + 0];
+	constants[kThisWeight * 4 + 1] = constants[(kFirstWeight + thisLight) * 4 + 1];
+	constants[kThisWeight * 4 + 2] = strength;
 
-	device->SetPixelShaderConstantF(0, constants, 18);
+	device->SetPixelShaderConstantF(0, constants, kConstants);
 
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -4507,15 +4509,16 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 
 // Fills toyVerts with this light's prisms. A cloaked model casts only a faint shadow, and a stencil only knows yes or no, so its
 // prisms go through a pass of their own: cloakedOnly picks those, and leaving it false picks all the others.
-static void ToyBuildPrisms(const float *light, ToyFrameReport *report, bool cloakedOnly)
+// owner is what carries this light, or nothing. Anything carrying a light sits around it, so it would block that light in every
+// direction, and the light would go dark everywhere. So it casts no shadow from its own light, and still casts from all the others.
+static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport *report, bool cloakedOnly)
 {
 	toyNumVerts = 0;
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
 		int const kind = toyCasterKind[caster];
 
-		// something carrying a light sits around it, so it would block that light in every direction
-		if (kind == kToyCasterReceiveOnly || (kind == kToyCasterCloaked) != cloakedOnly)
+		if ((kind == kToyCasterCloaked) != cloakedOnly || (owner && toyCasterOwner[caster] == owner))
 		{
 			continue;
 		}
@@ -4688,9 +4691,9 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 	device->SetScissorRect(reach);
 }
 
-// Adds one flare's light to the picture. With a mask, the shader takes the blocked part out, softly. Without one, the stencil
-// does it, with a hard edge. Either way it lights nothing it can't see. Each flare does this for itself, so where one is
-// blocked another can still light the same place.
+// Adds one light to the picture: a flare, or any other live light chosen this frame. With a mask, the shader takes the blocked
+// part out, softly. Without one, the stencil does it, with a hard edge. Either way it lights nothing it can't see. Each light does
+// this for itself, so where one is blocked another can still light the same place.
 static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, bool haveMask)
 {
 	float const *light = &lights[thisLight * kToyLightFloats];
@@ -4708,8 +4711,9 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	float const bright = max(light[4], max(light[5], light[6]));
 	float const perBright = (bright > 0.0f) ? 1.0f / bright : 0.0f;
 
-	// see shadowFlare.psh for what each of these is. Places with no flare stay at 0, so they add nothing.
-	float constants[11 * 4] =
+	// see shadowFlare.psh for what each of these is. Places with no light stay at 0, so they add nothing.
+	enum { kFirstLight = 3, kFirstBright = kFirstLight + kToyMostLights, kMine = kFirstBright + kToyMostLights, kConstants = kMine + 1 };
+	float constants[kConstants * 4] =
 	{
 		light[0], light[1], light[2], 1.0f / light[3],
 		light[4] * perBright, light[5] * perBright, light[6] * perBright, bright,
@@ -4717,23 +4721,27 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int 
 		haveMask ? (float)ToyShadowsSoft : -1.0f, kToySoftStaysWideTo,
 	};
 
-	int flares = 0;
-	for (int i = 0; i < numLights && flares < 4; i++)
+	int numAdded = 0;
+	for (int i = 0; i < numLights && numAdded < kToyMostLights; i++)
 	{
 		float const *other = &lights[i * kToyLightFloats];
 
 		if (other[7] == 2.0f)
 		{
-			constants[(3 + flares) * 4 + 0] = other[0];
-			constants[(3 + flares) * 4 + 1] = other[1];
-			constants[(3 + flares) * 4 + 2] = other[2];
-			constants[(3 + flares) * 4 + 3] = 1.0f / other[3];
-			constants[(7 + flares) * 4 + 0] = max(other[4], max(other[5], other[6]));
-			flares++;
+			constants[(kFirstLight + numAdded) * 4 + 0] = other[0];
+			constants[(kFirstLight + numAdded) * 4 + 1] = other[1];
+			constants[(kFirstLight + numAdded) * 4 + 2] = other[2];
+			constants[(kFirstLight + numAdded) * 4 + 3] = 1.0f / other[3];
+			constants[(kFirstBright + numAdded) * 4 + 0] = max(other[4], max(other[5], other[6]));
+			constants[(kFirstBright + numAdded) * 4 + 1] = other[8];
+			numAdded++;
 		}
 	}
 
-	device->SetPixelShaderConstantF(0, constants, 11);
+	constants[kMine * 4 + 0] = bright;
+	constants[kMine * 4 + 1] = light[8];
+
+	device->SetPixelShaderConstantF(0, constants, kConstants);
 
 	if (haveMask)
 	{
@@ -4785,14 +4793,24 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	}
 }
 
-// How many positions this light is drawn from: every flare, and the nearest few of the others. Flares come first in the list, and
-// the others go nearest first. A light with no size is a point, so one position is all it can have.
+// Is this a flare being added per pixel? Only those have a ninth number of 0. The kind can't say: 2 covers every light added per
+// pixel, such as a muzzle flash too.
+static bool ToyLightIsFlare(const float *light)
+{
+	return light[8] == 0.0f;
+}
+
+// How many positions this light is drawn from: every flare, and the nearest few of the lamps. Flares come first in the list, and
+// the others go nearest first. Any other light added per pixel stays a point: a muzzle flash or an explosion is gone too soon for
+// the shape of its shadow's edge to be seen, and each position is another stencil pass. A light with no size is a point too, so
+// one position is all it can have.
 static int ToyPositionsForLight(const float *lights, int thisLight)
 {
-	bool const flare = lights[thisLight * kToyLightFloats + 7] == 2.0f;
+	float const *light = &lights[thisLight * kToyLightFloats];
+	bool const flare = ToyLightIsFlare(light);
 	int const size = flare ? ToyShadowsFlareSize : ToyShadowsLampSize;
 
-	if (size <= 0 || ToyShadowsPositions < 4)
+	if (size <= 0 || ToyShadowsPositions < 4 || (!flare && light[7] == 2.0f))
 	{
 		return 1;
 	}
@@ -4821,7 +4839,7 @@ static int ToyPositionsForLight(const float *lights, int thisLight)
 // Fills moved with a copy of the light at one of its positions. axes holds the world's three directions, in the light list's space.
 static void ToyLightAtPosition(const float *light, int position, const float *axes, float *moved)
 {
-	float const radius = (float)((light[7] == 2.0f) ? ToyShadowsFlareSize : ToyShadowsLampSize) * 0.5f;
+	float const radius = (float)(ToyLightIsFlare(light) ? ToyShadowsFlareSize : ToyShadowsLampSize) * 0.5f;
 	float const *place = kToyPositions[position];
 
 	memcpy(moved, light, kToyLightFloats * sizeof(float));
@@ -4834,7 +4852,7 @@ static void ToyLightAtPosition(const float *light, int position, const float *ax
 
 // One lamp, from all its positions. Each adds its part of the lamp's share to the mask, through the same stencil and shader as a
 // single position. Where the lamp's light falls on a pixel doesn't change: only how much of it gets blocked.
-static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, const void *owner, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	float const *light = &lights[thisLight * kToyLightFloats];
 	float const part = 1.0f / (float)positions;
@@ -4847,7 +4865,7 @@ static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *
 		float moved[kToyLightFloats];
 		ToyLightAtPosition(light, position, axes, moved);
 
-		ToyBuildPrisms(moved, report, false);
+		ToyBuildPrisms(moved, owner, report, false);
 		ToyMarkShadow(device, report);
 
 		HRESULT const darkened = ToyShadeLevel(device, lights, numLights, thisLight, part, countQuery, pixels);
@@ -4864,7 +4882,7 @@ static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *
 	{
 		unsigned int notCounted = 0;
 
-		ToyBuildPrisms(light, report, true);
+		ToyBuildPrisms(light, owner, report, true);
 		ToyMarkShadow(device, report);
 		ToyShadeLevel(device, lights, numLights, thisLight, kToyCloakedShadow, 0, &notCounted);
 	}
@@ -4874,7 +4892,7 @@ static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *
 
 // One flare's mask, from all its positions. The first clears the picture, and the rest add to it. The flare's colour, strength and
 // cap don't come into this: they stay with the flare's true place, so a flare out in the open looks the same as a single point.
-static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, const float *light, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, const float *light, const void *owner, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	float const part = 1.0f / (float)positions;
 
@@ -4885,7 +4903,7 @@ static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSu
 		float moved[kToyLightFloats];
 		ToyLightAtPosition(light, position, axes, moved);
 
-		ToyBuildPrisms(moved, report, false);
+		ToyBuildPrisms(moved, owner, report, false);
 		ToyMarkShadow(device, report);
 		ToyPaintFlareMask(device, screen, viewport, reach, position != 0, part, countQuery, pixels);
 	}
@@ -4897,7 +4915,7 @@ static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSu
 	{
 		unsigned int notCounted = 0;
 
-		ToyBuildPrisms(light, report, true);
+		ToyBuildPrisms(light, owner, report, true);
 		ToyMarkShadow(device, report);
 		ToyPaintFlareMask(device, screen, viewport, reach, true, kToyCloakedShadow, 0, &notCounted);
 	}
@@ -4937,9 +4955,9 @@ static void ToyShadows_Draw()
 		LogString(message);
 	}
 
-	// Flares are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to the game.
-	// This takes effect from the next frame, since this frame's lighting is already done.
-	bool const flaresOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
+	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
+	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
+	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
 		&& d3d.shadowFlareEffect != kNullEffectID && toyNumCasters > 0;
 
 	static int toyFrame = 0;
@@ -4963,9 +4981,10 @@ static void ToyShadows_Draw()
 		lastReport = started;
 	}
 
+	// chosen before this frame's lighting ran: see ToyShadows_ChooseLights
 	float lights[kToyMostLights * kToyLightFloats];
-	int const most = ToyShadowsMaxLights > kToyMostLights ? kToyMostLights : ToyShadowsMaxLights;
-	report.lights = toyNumCasters ? ToyShadows_PickLights(lights, most) : 0;
+	void const *lightOwners[kToyMostLights];
+	report.lights = toyNumCasters ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
 
 	if (!report.lights)
 	{
@@ -4973,7 +4992,7 @@ static void ToyShadows_Draw()
 		{
 			ToyLogFrame(report);
 		}
-		ToyShadowsFlaresByPixel = flaresOurs;
+		ToyShadowsLightsByPixel = lightsOurs;
 		ToyForgetCasters();
 		return;
 	}
@@ -4989,7 +5008,7 @@ static void ToyShadows_Draw()
 		{
 			ToyLogFrame(report);
 		}
-		ToyShadowsFlaresByPixel = flaresOurs;
+		ToyShadowsLightsByPixel = lightsOurs;
 		ToyForgetCasters();
 		return;
 	}
@@ -5062,7 +5081,7 @@ static void ToyShadows_Draw()
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
 
-		// flares come after the world has been darkened
+		// lights added per pixel come after the world has been darkened
 		if (thisLight[7] == 2.0f)
 		{
 			continue;
@@ -5085,7 +5104,7 @@ static void ToyShadows_Draw()
 		int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
 		if (positions > 1)
 		{
-			HRESULT const darkened = ToyShadeFromEveryPosition(device, lights, report.lights, light, positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
+			HRESULT const darkened = ToyShadeFromEveryPosition(device, lights, report.lights, light, lightOwners[light], positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
 			if (FAILED(darkened))
 			{
 				report.quad = darkened;
@@ -5094,7 +5113,7 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
-		ToyBuildPrisms(thisLight, &report, false);
+		ToyBuildPrisms(thisLight, lightOwners[light], &report, false);
 
 		if (ToyShadowsMode == kToyViewEdges)
 		{
@@ -5130,7 +5149,7 @@ static void ToyShadows_Draw()
 			{
 				unsigned int notCounted = 0;
 
-				ToyBuildPrisms(thisLight, &report, true);
+				ToyBuildPrisms(thisLight, lightOwners[light], &report, true);
 				ToyMarkShadow(device, &report);
 				ToyShadeLevel(device, lights, report.lights, light, kToyCloakedShadow, 0, &notCounted);
 			}
@@ -5180,14 +5199,14 @@ static void ToyShadows_Draw()
 				int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
 				if (positions > 1)
 				{
-					ToyPaintFlareFromEveryPosition(device, screen, &viewport, &reach, thisLight, positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
+					ToyPaintFlareFromEveryPosition(device, screen, &viewport, &reach, thisLight, lightOwners[light], positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
 					ToyAddFlareLight(device, lights, report.lights, light, true);
 					report.pixels += pixelsByLight[light];
 					device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 					continue;
 				}
 
-				ToyBuildPrisms(thisLight, &report, false);
+				ToyBuildPrisms(thisLight, lightOwners[light], &report, false);
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
@@ -5197,7 +5216,7 @@ static void ToyShadows_Draw()
 					{
 						unsigned int notCounted = 0;
 
-						ToyBuildPrisms(thisLight, &report, true);
+						ToyBuildPrisms(thisLight, lightOwners[light], &report, true);
 						ToyMarkShadow(device, &report);
 						ToyPaintFlareMask(device, screen, &viewport, &reach, true, kToyCloakedShadow, 0, &notCounted);
 					}
@@ -5290,9 +5309,10 @@ static void ToyShadows_Draw()
 
 		if (counting)
 		{
-			_snprintf(line, sizeof(line) - 1, "toy-shadows: pixels in shadow by light: %u %u %u %u %u %u %u %u",
+			_snprintf(line, sizeof(line) - 1, "toy-shadows: pixels in shadow by light: %u %u %u %u %u %u %u %u %u %u %u %u",
 				pixelsByLight[0], pixelsByLight[1], pixelsByLight[2], pixelsByLight[3],
-				pixelsByLight[4], pixelsByLight[5], pixelsByLight[6], pixelsByLight[7]);
+				pixelsByLight[4], pixelsByLight[5], pixelsByLight[6], pixelsByLight[7],
+				pixelsByLight[8], pixelsByLight[9], pixelsByLight[10], pixelsByLight[11]);
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
 		}
@@ -5302,6 +5322,6 @@ static void ToyShadows_Draw()
 		}
 	}
 
-	ToyShadowsFlaresByPixel = flaresOurs;
+	ToyShadowsLightsByPixel = lightsOurs;
 	ToyForgetCasters();
 }

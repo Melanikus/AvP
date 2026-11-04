@@ -8,14 +8,15 @@ struct PS_INPUT
 
 // Global variables
 sampler2D Tex0   : register(s0);       // the polygon's own texture
-sampler2D Mask   : register(s1);       // where this flare is blocked, 0 to 1
+sampler2D Mask   : register(s1);       // where this light is blocked, 0 to 1
 sampler2D Depth  : register(s2);       // how far away each pixel of the level is
-float4    Light  : register(c0);       // this flare: x y z, and one over its range
+float4    Light  : register(c0);       // this light: x y z, and one over its range
 float4    Colour : register(c1);       // its colour in x y z, and how bright it is in w
 float4    Soft   : register(c2);       // x y: one pixel, as a distance on the texture. z: how wide the soft edge is, in pixels, up
                                        // close, or below 0 for no mask at all. w: how far away it stays that wide
-float4    Flares[4] : register(c3);    // every flare this frame: x y z, and one over its range
-float4    Bright[4] : register(c7);    // x: how bright each of those is. Places not in use stay at 0
+float4    Lights[12] : register(c3);   // every light added per pixel this frame: x y z, and one over its range
+float4    Bright[12] : register(c15);  // x: how bright each of those is. y: 0 for a flare, 1 for any other. Places not in use stay at 0
+float4    Mine       : register(c27);  // the same two numbers for this light
 
 // where to look around a pixel: spread evenly over a circle of radius 1
 static const float2 kPlaces[12] =
@@ -26,7 +27,7 @@ static const float2 kPlaces[12] =
 };
 
 
-// How much of this flare's light is blocked here, softened by averaging the mask around the pixel. A neighbour on a different
+// How much of this light is blocked here, softened by averaging the mask around the pixel. A neighbour on a different
 // surface is left out, so a shadow doesn't bleed from a wall onto something in front of it.
 float BlockedHere(float2 place, float here)
 {
@@ -47,28 +48,37 @@ float BlockedHere(float2 place, float here)
     return total / count;
 }
 
-// How much light one flare gives this spot. It stays strong for most of its reach and falls away near the end, so flares across
-// a room count for something next to one close by. A surface turned away from a flare gets none.
-float FlareHere(float4 flare, float bright, float3 position, float3 normal)
+// How much light one light gives this spot, in one of two shapes. bright.x is how bright it is, and bright.y picks the shape.
+// A flare stays strong for most of its reach and falls away near the end, so flares across a room count for something next to one
+// close by, and a surface turned away from it gets none. Any other light is worked out the way the game works it out at each corner
+// of a polygon (kshape.cpp, VertexIntensity_Standard): it fades in a straight line, and a surface turned away still gets an eighth.
+float LightHere(float4 light, float2 bright, float3 position, float3 normal)
 {
-    float3 toLight = flare.xyz - position;
+    float3 toLight = light.xyz - position;
     float  howFar  = length(toLight);
-    float  reach   = saturate(howFar * flare.w);
+    float  reach   = saturate(howFar * light.w);
     float  turned  = dot(normal, toLight / max(howFar, 1.0f));
 
-    return bright * (1.0f - reach * reach) * ((turned > 0.0f) ? (turned + 0.25f) * 0.5f : 0.0f);
+    float  flare   = (1.0f - reach * reach) * ((turned > 0.0f) ? (turned + 0.25f) * 0.5f : 0.0f);
+    float  game    = (1.0f - reach) * ((turned > 0.0f) ? (turned + 0.25f) * 0.5f : 0.125f);
+
+    return bright.x * lerp(flare, game, bright.y);
 }
 
 
-// Name: Flare light pixel shader
+// Name: Per-pixel light shader
 // Type: Pixel shader
-// Desc: The light of one flare on one pixel, added to the picture. While shadows are on, flares are left out of the game's
-// lighting of the walls, and this is the only light they give. The mask says where the flare is blocked, so a flare lights
-// nothing it can't see, and the edge of its shadow is soft.
+// Desc: The light of one light on one pixel, added to the picture. While shadows are on, chosen live lights are left out of the
+// game's lighting, and this is the only light they give. The mask says where the light is blocked, so it lights nothing it can't
+// see, and the edge of its shadow is soft.
 //
-// All the flares together can only light a pixel up to its own texture, and each gives its share of that. Just adding them
-// would hide a shadow: once a close flare has used up the room, a pixel lit by one flare looks the same as one lit by two, so
-// the far flare's shadow can't be seen. With shares, blocking a flare always takes out exactly its part, so each one shows.
+// All these lights together only give so much, and each takes its share of that. Just adding them would hide a shadow: once a
+// close light has used up the room, a pixel lit by one light looks the same as one lit by two, so the far light's shadow can't be
+// seen. With shares, blocking a light always takes out exactly its part, so each one shows.
+//
+// A flare is the dim red the user chose: all of them together light a pixel up to its own texture, in the flare's own colour.
+// Any other light gives what the game would give: the texture lit by it, each colour stopping at full, plus a quarter of it again
+// with no texture, which is the glow.
 
 float4 ps_main(in PS_INPUT In) : COLOR0
 {
@@ -81,18 +91,23 @@ float4 ps_main(in PS_INPUT In) : COLOR0
 
     float all = 0.0f;
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 12; i++)
     {
-        all += FlareHere(Flares[i], Bright[i].x, In.ViewPosition, normal);
+        all += LightHere(Lights[i], Bright[i].xy, In.ViewPosition, normal);
     }
 
-    float mine  = FlareHere(Light, Colour.w, In.ViewPosition, normal);
-    float given = (all > 0.0001f) ? saturate(all) * saturate(mine / all) : 0.0f;
+    float mine  = LightHere(Light, Mine.xy, In.ViewPosition, normal);
+    float share = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
 
     if (Soft.z >= 0.0f)
     {
-        given *= saturate(1.0f - BlockedHere((In.ScreenPlace + 0.5f) * Soft.xy, In.ViewPosition.z));
+        share *= saturate(1.0f - BlockedHere((In.ScreenPlace + 0.5f) * Soft.xy, In.ViewPosition.z));
     }
 
-    return float4(tex2D(Tex0, In.Texture).rgb * Colour.rgb * given, 0.0f);
+    float3 texel = tex2D(Tex0, In.Texture).rgb;
+    float3 lit   = all * Colour.rgb;
+    float3 flare = texel * Colour.rgb * saturate(all);
+    float3 game  = texel * saturate(lit) + saturate(lit * 0.25f);
+
+    return float4(lerp(flare, game, Mine.y) * share, 0.0f);
 }
