@@ -83,7 +83,7 @@ class RenderList
 
 		void Reset();
 		void Init(size_t size);
-		void DrawOpaqueAgain(class VertexDeclaration *declaration = 0);
+		void DrawOpaqueAgain(class VertexDeclaration *declaration);
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }

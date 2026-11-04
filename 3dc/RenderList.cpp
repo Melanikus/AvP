@@ -281,15 +281,7 @@ void RenderList::Reset()
 // record of its settings has to stay true.
 void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
 {
-	if (declaration)
-	{
-		declaration->Set();
-	}
-	else
-	{
-		(**decl).Set();
-	}
-
+	declaration->Set();
 	(**vb).Set();
 	(**ib).Set();
 
