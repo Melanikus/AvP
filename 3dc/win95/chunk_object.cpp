@@ -3,6 +3,7 @@
 //   object headers in level files are read without going past their end, and names and other text are
 //   copied using their exact measured length, so they always fit; code only the level editor used was removed
 //   a child chunk whose size cannot be real is refused
+//   the copy of an object's name moved to chunk_object_name.hpp
 
 #include <string>
 #include "chunk.hpp"
@@ -409,7 +410,7 @@ flags(0), version_no (0), associated_shape (0)
 
 	// the 60-byte fixed part below is read from a copy that is never longer than the chunk: a chunk shorter than 60
 	// bytes (only a damaged or crafted one) reads as if padded with zeros; the name after it is read from the chunk
-	char const * const name_data = hsize > 60 ? hdata + 60 : hdata;
+	char const * const chunk_data = hdata;
 	alignas(int) char fixed_part[60] = { 0 };
 	memcpy (fixed_part, hdata, hsize < sizeof(fixed_part) ? hsize : sizeof(fixed_part));
 	hdata = fixed_part;
@@ -451,15 +452,8 @@ flags(0), version_no (0), associated_shape (0)
 	hdata+=4;
 
 	// the name fills the rest of the chunk (after the 60 bytes above): copy what fits in o_name, and never read
-	// past the chunk (a stock level, hadleyshope.rif, has a 53-character name)
-	size_t const name_room = hsize > 60 ? hsize - 60 : 0;
-	size_t name_length = 0;
-	while (name_length < name_room && name_length < sizeof(parent_object->object_data_store->o_name) - 1 && name_data[name_length])
-	{
-		name_length++;
-	}
-	memcpy (parent_object->object_data_store->o_name, name_data, name_length);
-	parent_object->object_data_store->o_name[name_length] = '\0';
+	// past the chunk
+	CopyObjectName (parent_object->object_data_store->o_name, chunk_data, hsize);
 	parent_object->object_data_store->ID.id1=0;
 	parent_object->object_data_store->ID.id2=0;
 }
