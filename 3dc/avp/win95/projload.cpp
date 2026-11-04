@@ -7,6 +7,8 @@
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
 //   number is left out; when two sounds have the same number, the earlier one is given back
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   each of a level's own shapes gets its list of polygon facts once it's finished.
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -57,6 +59,7 @@
 #include "TextureManager.h"
 #include "utilities.h"
 #include "logString.h"
+#include "surface_normals.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -1946,6 +1949,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 						int list_pos = copy_to_mainshapelist(h,shplif(),flags,&ob->object_data);
 						int start_shape_no = list_pos;
 						#endif
+
+						// A level's own shape gets its list of polygon facts here, now that it's finished. Models never come through here. A door
+						// that morphs doesn't get one, because its polygons are swapped for another shape's as it's made.
+						if ((flags & CCF_ENVIRONMENT) && !mc)
+						{
+							SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+						}
 
 						//see if object has prelighting data
 						Shape_Vertex_Intensities_Chunk * svic = 0;

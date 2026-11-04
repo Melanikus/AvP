@@ -790,7 +790,7 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 							// bjd - glass rendering goes through here
 							AddToTranslucentPolyList(polyPtr, VerticesBuffer);
 						} else {
-							D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, true);
+							D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 						}
 					}
 
@@ -895,7 +895,7 @@ void PredatorSeeAliensVision_ShapePipeline(SHAPEHEADER *shapePtr)
 					                        if (RenderPolygon.NumberOfVertices<3) continue;
 					                        D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, RenderPolygon.Vertices);
 					                    }
-					                    else*/ D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, true);
+					                    else*/ D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 				}
 
 				break;

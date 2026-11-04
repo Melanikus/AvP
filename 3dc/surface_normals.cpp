@@ -15,7 +15,17 @@
 // each frame full of zeros, so a polygon nobody wrote down stays out of them, and keeps the light the game gave it. A reflection does that
 // on purpose. A shape can also really hold a normal of zero: that's a surface like any other, with a fourth number of 1, and the shaders
 // light it the way the game does, as a surface turned side-on.
+//
+// THE LIST OF POLYGONS: a level's shape also keeps one entry for each polygon, worked out once when the shape is loaded and never again.
+// It only works if a polygon's corners can't move within its shape, so these shapes have none: a shape that animates, which swaps its points
+// in play, and a door that morphs, which swaps its polygons as well. Models have none either, because a model is meant to look smooth and
+// its stored polygon normals aren't reliable. Anything without a list does without, or works things out as it goes.
+//
+// THE WAY ROUND: a polygon's arrow here points out of its back, the opposite way from the way it faces. The game's list of vertices has y
+// turned over, which makes it a mirror image of the shape, and in a mirror image corners that went round clockwise go round the other way. The
+// shadow code works on that list, so it reads a polygon's corners the other way round from the shape. This arrow is the one that agrees with it.
 
+#include <math.h>
 #include <string.h>
 
 #include "3dc.h"
@@ -23,6 +33,7 @@
 #include "surface_normals.h"
 #include "d3_func.h"
 #include "VertexBuffer.h"
+#include "mempool.h"
 
 extern DISPLAYBLOCK *Global_ODB_Ptr;
 extern SHAPEHEADER *Global_ShapeHeaderPtr;
@@ -32,6 +43,13 @@ extern int DrawingAReflection;     // a piece of the level or an object is being
 extern int ToyShadowsInMirror;     // the same, for a body part
 
 static const uint32_t kNumbersPerVertex = 4;
+
+// Polygons that meet at a point share its normal, so at the edge of a wall, the normal is an average of the wall and whatever meets it. The
+// game's lighting only uses it at the corners, where it hardly shows. Lit pixel by pixel, the whole wall would curve like a pillow. So a
+// corner this many degrees from its polygon uses the polygon's own normal, and the wall stays flat.
+static const double kMostCornerLean = 30.0;
+
+static const int kCornersInList = 4;   // flatCorners has room for this many
 
 static VertexBuffer *normalList = 0;
 static uint32_t verticesInList = 0;
@@ -103,6 +121,104 @@ void SurfaceNormals_Unlock()
 	}
 
 	openList = 0;
+}
+
+// Works out one polygon's entry. Every number here comes from the level file, so each is checked before it's used. A polygon that fails a
+// check keeps an empty entry, which casts no shadow and uses its points' own normals.
+static void WorkOutPolygon(const SHAPEHEADER *shape, int polygonNumber, SurfacePolygon &facts)
+{
+	memset(&facts, 0, sizeof(facts));
+
+	const POLYHEADER *polygon = (const POLYHEADER *)shape->items[polygonNumber];
+	const VECTORCH *points = (const VECTORCH *)*shape->points;
+	const int *corners = &polygon->Poly1stPt;
+
+	for (int corner = 0; corner < 3; corner++)
+	{
+		if (corners[corner] < 0 || corners[corner] >= shape->numpoints)
+		{
+			return;
+		}
+	}
+
+	VECTORCH const &first = points[corners[0]];
+	VECTORCH const &second = points[corners[1]];
+	VECTORCH const &third = points[corners[2]];
+
+	double const ax = (double)second.vx - first.vx, ay = (double)second.vy - first.vy, az = (double)second.vz - first.vz;
+	double const bx = (double)third.vx - first.vx, by = (double)third.vy - first.vy, bz = (double)third.vz - first.vz;
+
+	// the way the polygon faces, from two of its sides
+	double const faceX = ay * bz - az * by;
+	double const faceY = az * bx - ax * bz;
+	double const faceZ = ax * by - ay * bx;
+	double const faceLength = sqrt(faceX * faceX + faceY * faceY + faceZ * faceZ);
+
+	if (faceLength < 0.001)
+	{
+		return;   // three corners in a line: no area, no flat surface
+	}
+
+	double const nx = -faceX / faceLength, ny = -faceY / faceLength, nz = -faceZ / faceLength;
+
+	facts.nx = (float)nx;
+	facts.ny = (float)ny;
+	facts.nz = (float)nz;
+	facts.distance = (float)(nx * first.vx + ny * first.vy + nz * first.vz);
+
+	// The rest decides which corners lean too far. It compares a corner with the normal stored for the polygon. That one is left out if it's
+	// empty, or points the other way from the corners, because then which way the polygon faces is in doubt, and the game's normals stay.
+	int const place = polygon->PolyNormalIndex;   // counted in single numbers, three for each polygon
+
+	if (!shape->sh_normals || !*shape->sh_normals || !shape->sh_vnormals || !*shape->sh_vnormals || place < 0 || place > (shape->numitems - 1) * 3)
+	{
+		return;
+	}
+
+	VECTORCH const &stored = *(const VECTORCH *)(*shape->sh_normals + place);
+	double const storedLength = sqrt((double)stored.vx * stored.vx + (double)stored.vy * stored.vy + (double)stored.vz * stored.vz);
+
+	if (storedLength <= 0.0 || (stored.vx * faceX + stored.vy * faceY + stored.vz * faceZ) <= 0.0)
+	{
+		return;
+	}
+
+	double const mostLean = cos(kMostCornerLean * 3.14159265358979 / 180.0);
+	const VECTORCH *pointNormals = (const VECTORCH *)*shape->sh_vnormals;
+
+	for (int corner = 0; corner < kCornersInList && corners[corner] >= 0 && corners[corner] < shape->numpoints; corner++)
+	{
+		VECTORCH const &normal = pointNormals[corners[corner]];
+		double const length = sqrt((double)normal.vx * normal.vx + (double)normal.vy * normal.vy + (double)normal.vz * normal.vz);
+
+		// a zero here is left as it is: the game lights that corner as a surface turned side-on
+		if (length > 0.0 && ((double)normal.vx * stored.vx + (double)normal.vy * stored.vy + (double)normal.vz * stored.vz) / (length * storedLength) < mostLean)
+		{
+			facts.flatCorners |= 1u << corner;
+		}
+	}
+}
+
+void SurfaceNormals_PrepareShape(SHAPEHEADER *shape)
+{
+	if (!shape || shape->animation_header || shape->numitems <= 0 || shape->numpoints <= 0 || !shape->items || !shape->points || !*shape->points)
+	{
+		return;
+	}
+
+	SurfacePolygon *list = (SurfacePolygon *)PoolAllocateMem(shape->numitems * sizeof(SurfacePolygon));
+
+	if (!list)
+	{
+		return;
+	}
+
+	for (int polygonNumber = 0; polygonNumber < shape->numitems; polygonNumber++)
+	{
+		WorkOutPolygon(shape, polygonNumber, list[polygonNumber]);
+	}
+
+	shape->sh_surfacepolygons = list;
 }
 
 void SurfaceNormals_StartObject()
@@ -179,15 +295,42 @@ static void PointNormal(int point, float *normal)
 	normal[2] = turned.z;
 }
 
-// THE CHOICE OF NORMAL: which normal a corner of a polygon uses. This is the only place that decides, so a different rule goes here and
-// nothing else has to change. Today it's the point's own normal, the one the game lights that corner with. It's handed the polygon as well
-// as the point so that a rule can look at both.
-static void ChooseNormal(const POLYHEADER * /*polygon*/, int point, float *normal)
+// The way a polygon faces, in the world's directions. Its arrow is stored pointing the other way: the top of this file says why.
+static void PolygonNormal(const SurfacePolygon &facts, float *normal)
 {
+	float const x = -facts.nx, y = -facts.ny, z = -facts.nz;
+
+	if (objectIsTurned)
+	{
+		normal[0] = turning[0] * x + turning[1] * y + turning[2] * z;
+		normal[1] = turning[3] * x + turning[4] * y + turning[5] * z;
+		normal[2] = turning[6] * x + turning[7] * y + turning[8] * z;
+	}
+	else
+	{
+		normal[0] = x;
+		normal[1] = y;
+		normal[2] = z;
+	}
+}
+
+// THE CHOICE OF NORMAL: which normal a corner of a polygon uses. This is the only place that decides. A corner marked as leaning too far uses
+// its polygon's normal, and every other corner uses its point's own, the one the game lights it with. polygonNormal only holds an answer if
+// one of the polygon's corners is marked.
+static void ChooseNormal(const SurfacePolygon *facts, uint32_t corner, int point, const float *polygonNormal, float *normal)
+{
+	if (facts && corner < (uint32_t)kCornersInList && (facts->flatCorners & (1u << corner)))
+	{
+		normal[0] = polygonNormal[0];
+		normal[1] = polygonNormal[1];
+		normal[2] = polygonNormal[2];
+		return;
+	}
+
 	PointNormal(point, normal);
 }
 
-void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, uint32_t firstVertex, uint32_t corners)
+void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, uint32_t firstVertex, uint32_t corners)
 {
 	// With no list open there's nowhere to write. A reflection stays out of the pictures on purpose.
 	if (!openList || DrawingAReflection || ToyShadowsInMirror)
@@ -218,12 +361,27 @@ void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, uint32_t firstVertex
 		return;
 	}
 
+	const SurfacePolygon *facts = 0;
+
+	if (Global_ShapeHeaderPtr->sh_surfacepolygons && polygonNumber >= 0 && polygonNumber < Global_ShapeHeaderPtr->numitems)
+	{
+		facts = &Global_ShapeHeaderPtr->sh_surfacepolygons[polygonNumber];
+	}
+
+	// worked out once, however many of the polygon's corners use it
+	float polygonNormal[3] = { 0.0f, 0.0f, 0.0f };
+
+	if (facts && facts->flatCorners)
+	{
+		PolygonNormal(*facts, polygonNormal);
+	}
+
 	float *place = openList + firstVertex * kNumbersPerVertex;
 
 	for (uint32_t corner = 0; corner < corners; corner++)
 	{
 		float normal[3];
-		ChooseNormal(polygon, cornerNumbers[corner], normal);
+		ChooseNormal(facts, corner, cornerNumbers[corner], polygonNormal, normal);
 
 		*place++ = normal[0];
 		*place++ = normal[1];
