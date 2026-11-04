@@ -3,8 +3,8 @@
 # Three jobs run for every pull request into avpx_main. All must pass before anything can merge:
 #   - Snyk Code (SAST) reads our own source. It also fails if Snyk skipped even one C/C++ file, because a file the
 #     scanner could not read is a blind spot, not a pass.
-#   - Snyk Open Source (SCA) recognises vendored open-source code (enet/, dependencies/) by file hashes and reports
-#     known vulnerabilities. It also fails if precompiled code (DLLs, libraries, executables) is in the repository.
+#   - Snyk Open Source (SCA) recognises vendored open-source code by file hashes and reports known vulnerabilities. It
+#     also fails if precompiled code (DLLs, libraries, executables) is in the repository.
 #   - Snyk on the vcpkg libraries builds our open-source dependencies exactly as the game does, then runs SAST and SCA
 #     on the patched source that was really compiled. Microsoft's D3DX is a binary package with no source to read, so
 #     it is not scanned.
@@ -119,7 +119,10 @@ jobs:
           chmod +x "$RUNNER_TEMP/snyk"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # "Tested 0 dependencies" would pass as clean, so we also check Snyk recognised something (ENet in enet/).
+      # Snyk recognises nothing here today, and that is expected: the only vendored code is Barry Duncan's decoders in
+      # dependencies/, which are FFmpeg forks it can't match, so they were reviewed by hand. This step stays to catch
+      # any open-source code added later. It prints no "Tested N" line when it matches nothing, so we check a scan really
+      # ran. The proof that SCA recognises libraries is in the "Snyk on the vcpkg libraries" job.
       - name: Snyk Open Source (SCA, vendored C/C++)
         shell: bash
         env:
@@ -127,9 +130,8 @@ jobs:
         run: |
           set -o pipefail
           snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif | tee sca.log
-          tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
-          if [ "$tested" -lt 1 ]; then
-            echo "::error::Snyk Open Source recognised no dependencies"
+          if ! grep -q 'Testing ' sca.log; then
+            echo "::error::Snyk Open Source did not run a scan"
             exit 1
           fi
 
@@ -139,12 +141,6 @@ jobs:
         with:
           sarif_file: snyk-open-source.sarif
           category: snyk-open-source
-
-      - name: Snapshot vendored dependencies in the Snyk dashboard
-        if: github.event_name == 'push' && github.ref == 'refs/heads/avpx_main'
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk monitor --unmanaged --project-name=Melanikus/AvP
 
   # The two jobs below scan what the game is really built from: vcpkg fetches each library (every download is checked
   # against the SHA512 in its port), applies its patches and ours, and compiles it. That needs Windows, so Windows
