@@ -4474,6 +4474,36 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 
 	ToySetVolumeState(device);
 
+	// A prism's inside faces add one where they're hidden, and its outside faces take one away. If the card can do both from
+	// a single draw, that saves drawing every prism twice.
+	static DWORD toyStencilCaps = 0;
+	if (!toyStencilCaps)
+	{
+		D3DCAPS9 caps;
+		device->GetDeviceCaps(&caps);
+		toyStencilCaps = caps.StencilCaps | 0x80000000;
+	}
+
+	if (toyStencilCaps & D3DSTENCILCAPS_TWOSIDED)
+	{
+		device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, TRUE);
+		device->SetRenderState(D3DRS_CCW_STENCILFUNC, D3DCMP_ALWAYS);
+		device->SetRenderState(D3DRS_CCW_STENCILFAIL, D3DSTENCILOP_KEEP);
+		device->SetRenderState(D3DRS_CCW_STENCILPASS, D3DSTENCILOP_KEEP);
+		device->SetRenderState(D3DRS_CCW_STENCILZFAIL, D3DSTENCILOP_INCR);
+		device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_DECR);
+
+		HRESULT const both = ToyDrawVolumes(0);
+		if (FAILED(both))
+		{
+			report->back = both;
+		}
+
+		device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+		return;
+	}
+
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_INCR);
 	HRESULT const back = ToyDrawVolumes(0);
@@ -4491,18 +4521,71 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 	}
 }
 
+// Works out the part of the screen a light can reach: the box round its range, seen from the camera. It's a little bigger than
+// it needs to be, never smaller, because the corners of a box stick out past a sphere. Says false if the light can't reach the
+// screen at all. A light gives nothing past its range, so limiting its work to this part changes nothing in the picture.
+static bool ToyLightRectangle(LPDIRECT3DDEVICE9 device, const float *light, RECT *rectangle)
+{
+	float const x = light[0], y = light[1], z = light[2], range = light[3];
+
+	if (z + range < zNear)
+	{
+		return false;  // all of it is behind the camera
+	}
+
+	float left = -1.0f, right = 1.0f, bottom = -1.0f, top = 1.0f;
+
+	// with the camera inside the box, or the box round the camera's side, the whole screen is the safe answer
+	if (z - range > zNear)
+	{
+		float const nearZ = z - range, farZ = z + range;
+		float const across = d3d.matProjection._11, up = d3d.matProjection._22;
+
+		left   = across * min((x - range) / nearZ, (x - range) / farZ);
+		right  = across * max((x + range) / nearZ, (x + range) / farZ);
+		bottom = up * min((y - range) / nearZ, (y - range) / farZ);
+		top    = up * max((y + range) / nearZ, (y + range) / farZ);
+
+		if (left >= 1.0f || right <= -1.0f || bottom >= 1.0f || top <= -1.0f)
+		{
+			return false;
+		}
+
+		left   = (left < -1.0f) ? -1.0f : left;
+		right  = (right > 1.0f) ? 1.0f : right;
+		bottom = (bottom < -1.0f) ? -1.0f : bottom;
+		top    = (top > 1.0f) ? 1.0f : top;
+	}
+
+	D3DVIEWPORT9 viewport;
+	device->GetViewport(&viewport);
+
+	rectangle->left   = viewport.X + (LONG)floor((left + 1.0f) * 0.5f * viewport.Width);
+	rectangle->right  = viewport.X + (LONG)ceil((right + 1.0f) * 0.5f * viewport.Width);
+	rectangle->top    = viewport.Y + (LONG)floor((1.0f - top) * 0.5f * viewport.Height);
+	rectangle->bottom = viewport.Y + (LONG)ceil((1.0f - bottom) * 0.5f * viewport.Height);
+
+	return true;
+}
+
 // Turns the stencil's marks for this flare into a picture: white where it's blocked. The flare's shader softens that as it
 // reads it, which a stencil can't do: a stencil is only ever yes or no.
-static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, bool faint, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, bool faint, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	device->SetRenderTarget(0, toyMaskSurface);
 	device->SetViewport(viewport);
 
-	// a faint shadow goes on top of what this flare has already painted, so it adds to it, and the mask stays
+	// a faint shadow goes on top of what this flare has already painted, so it adds to it, and the mask stays. The whole mask
+	// is cleared, not just this flare's part, or the last flare's marks would still be there.
 	if (!faint)
 	{
+		device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+		device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 	}
+
+	// changing the picture being drawn on can reset this
+	device->SetScissorRect(reach);
 
 	DWORD const grey = (DWORD)(kToyCloakedShadow * 255.0f);
 
@@ -4533,6 +4616,7 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 
 	device->SetRenderTarget(0, screen);
 	device->SetViewport(viewport);
+	device->SetScissorRect(reach);
 }
 
 // Adds one flare's light to the picture. With a mask, the shader takes the blocked part out, softly. Without one, the stencil
@@ -4795,6 +4879,19 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
+		// a light that can't reach the screen has nothing to do. The edges view still shows it.
+		if (ToyShadowsMode != kToyViewEdges)
+		{
+			RECT reach;
+			if (!ToyLightRectangle(device, thisLight, &reach))
+			{
+				continue;
+			}
+
+			device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+			device->SetScissorRect(&reach);
+		}
+
 		ToyBuildPrisms(thisLight, &report, false);
 
 		if (ToyShadowsMode == kToyViewEdges)
@@ -4848,6 +4945,8 @@ static void ToyShadows_Draw()
 		report.pixels += pixelsByLight[light];
 	}
 
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+
 	if (ToyShadowsMode == kToyViewEdges || ToyShadowsMode == kToyViewPolygons)
 	{
 		ToyDrawLightMarkers(device, lights, report.lights);
@@ -4870,13 +4969,17 @@ static void ToyShadows_Draw()
 		{
 			float const *thisLight = &lights[light * kToyLightFloats];
 
-			if (thisLight[7] == 2.0f)
+			RECT reach;
+			if (thisLight[7] == 2.0f && ToyLightRectangle(device, thisLight, &reach))
 			{
+				device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+				device->SetScissorRect(&reach);
+
 				ToyBuildPrisms(thisLight, &report, false);
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
-					ToyPaintFlareMask(device, screen, &viewport, false, countQuery, &pixelsByLight[light]);
+					ToyPaintFlareMask(device, screen, &viewport, &reach, false, countQuery, &pixelsByLight[light]);
 
 					if (haveCloaked)
 					{
@@ -4884,11 +4987,13 @@ static void ToyShadows_Draw()
 
 						ToyBuildPrisms(thisLight, &report, true);
 						ToyMarkShadow(device, &report);
-						ToyPaintFlareMask(device, screen, &viewport, true, 0, &notCounted);
+						ToyPaintFlareMask(device, screen, &viewport, &reach, true, 0, &notCounted);
 					}
 				}
 				ToyAddFlareLight(device, lights, report.lights, light, screen != 0);
 				report.pixels += pixelsByLight[light];
+
+				device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 			}
 		}
 
