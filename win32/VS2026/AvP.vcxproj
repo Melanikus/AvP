@@ -406,6 +406,8 @@
     <ClCompile Include="..\..\3dc\texture_relief.cpp" />
     <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
     <ClCompile Include="..\..\3dc\shadow_reach.cpp" />
+    <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
+    <ClCompile Include="..\..\3dc\shadow_volumes_card.cpp" />
     <ClCompile Include="..\..\3dc\surface_tangent.cpp" />
     <ClCompile Include="..\..\3dc\RimLoader.cpp" />
     <ClCompile Include="..\..\3dc\RingBuffer.cpp" />
@@ -699,6 +701,7 @@
     <None Include="..\..\shaders\tallText.psh" />
     <None Include="..\..\shaders\tallText.vsh" />
     <None Include="..\..\shaders\vertex.vsh" />
+    <None Include="..\..\shaders\volume.vsh" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\dependencies\libbinkdec\win32\VS2026\binkdec_dynamic.vcxproj">

@@ -8,6 +8,7 @@
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the shadow code is told which polygons show both sides, and on a report frame which ones the game draws
+//   the shadow code is told which shapes are staying still, so their prisms can be kept
 #include "3dc.h"
 #include "surface_normals.h"
 #include "logString.h"
@@ -163,7 +164,8 @@ VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const float *storedPlane, bool twoSided, bool drawn);
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const CasterFacts &facts);
+int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *place);
 bool ShadowReportIsDue();
 void ToyShadows_NoteModelPart(const void *model, int polygons);
 
@@ -6170,6 +6172,11 @@ void ToyShadows_WorldAxes(float *axes)
 	}
 }
 
+void ToyShadows_ViewMatrix(float *matrix)
+{
+	memcpy(matrix, toyViewMatrix, sizeof(toyViewMatrix));
+}
+
 void ToyShadows_CameraPlace(float *place)
 {
 	memcpy(place, toyCameraPlace, sizeof(toyCameraPlace));
@@ -6375,6 +6382,57 @@ static void ToyPlaneInWorld(const SurfacePolygon &polygon, const VECTORCH &place
 
 void ShadowReach_StartDrawnThing(const void *owner);
 
+// Is this block staying where it is? One with no dynamics can't move by itself. Where it is doesn't matter here: a new place is simply a new shadow.
+static bool BlockIsStill(const DISPLAYBLOCK *dptr)
+{
+	STRATEGYBLOCK const *owner = dptr->ObStrategyBlock;
+
+	if (!owner || !owner->DynPtr)
+	{
+		return true;
+	}
+
+	DYNAMICSBLOCK const *dynamics = owner->DynPtr;
+
+	return dynamics->Position.vx == dynamics->PrevPosition.vx && dynamics->Position.vy == dynamics->PrevPosition.vy && dynamics->Position.vz == dynamics->PrevPosition.vz;
+}
+
+// The corners of one polygon of a shape standing at place, in the world's numbers, written as x y z. Gives back how many there are, or 0 if the
+// polygon can't be used. These are the shape's own numbers, not the rounded ones on the light list, so a corner two polygons share is the same
+// corner to the last digit, whenever each of their prisms was made, and no crack of light can open between them.
+int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners)
+{
+	SHAPEHEADER const *shape = (SHAPEHEADER const *)shapePointer;
+
+	if (polygonNumber < 0 || polygonNumber >= shape->numitems)
+	{
+		return 0;
+	}
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+	VECTORCH const *points = (VECTORCH const *)*shape->points;
+	int const *vertexNumberPtr = &polygon->Poly1stPt;
+	int count = 0;
+
+	while (*vertexNumberPtr != kTerminationMarker)
+	{
+		// this number comes from a game file, so it's checked before it's used to find a point
+		int const pointNumber = *vertexNumberPtr++;
+
+		if (count == mostCorners || pointNumber < 0 || pointNumber >= shape->numpoints)
+		{
+			return 0;
+		}
+
+		corners[count * 3 + 0] = (float)place[0] + (float)points[pointNumber].vx;
+		corners[count * 3 + 1] = (float)place[1] + (float)points[pointNumber].vy;
+		corners[count * 3 + 2] = (float)place[2] + (float)points[pointNumber].vz;
+		count++;
+	}
+
+	return count;
+}
+
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 {
 	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
@@ -6411,6 +6469,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
 	bool const reportDue = ShadowReportIsDue();
+	int const keptGroup = (stored && (whatItMayDo == kToyCasterLevel || whatItMayDo == kToyCasterObject) && BlockIsStill(dptr)) ? ShadowGroup_Start(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx) : -1;
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -6457,9 +6516,9 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 			// PolygonWithinFrustum is the game's own test, the one it's about to make on this polygon anyway, so the report can't disagree
 			// with what really happens. That's why it's only asked on a report frame.
-			bool const drawn = reportDue && PolygonWithinFrustum(polyPtr) != 0;
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber };
 
-			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, drawn);
+			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, facts);
 			polygonsKept++;
 		}
 	}
@@ -6586,6 +6645,7 @@ static int ToyCollectUnseenModule(const MODULE *module)
 	extern MATRIXCH IdentityMatrix;
 
 	SurfacePolygon const *stored = ToyStoredPlanes(shape, IdentityMatrix, false);   // a module always lines up with the world
+	int const keptGroup = stored ? ShadowGroup_Start(shape, shape->sh_surfacelistnumber, &place.vx) : -1;
 	int polygonsAdded = 0;
 	int numitems = shape->numitems;
 	int **itemArrayPtr = shape->items;
@@ -6630,7 +6690,9 @@ static int ToyCollectUnseenModule(const MODULE *module)
 			}
 
 			// a wall has no owner, and this one isn't being drawn
-			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false);
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber };
+
+			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, facts);
 			polygonsAdded++;
 		}
 	}

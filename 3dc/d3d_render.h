@@ -40,6 +40,16 @@ enum
 	kToyMostRange = 100000
 };
 
+// What a polygon brings with it to ToyShadows_AddCaster, besides its corners.
+struct CasterFacts
+{
+	const float *storedPlane;   // its plane if its shape keeps one: an arrow and a distance, four numbers, in the world's numbers. If not, it's empty
+	bool twoSided;              // the game shows both sides of it
+	bool drawn;                 // the game is drawing it this frame. Only asked on a report frame
+	int keptGroup;              // which group its prisms are kept with, from ShadowGroup_Start, or -1
+	int polygonNumber;          // its place in its shape
+};
+
 // A place on the list can have nothing in it, and a lamp that's dark for the moment keeps its place: see ToyShadows_ChooseLights. Neither has
 // any colour, so nothing it did could be seen, and everything that goes through the list steps over it.
 inline bool LightOnListIsDark(const float *light)

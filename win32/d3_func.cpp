@@ -26,9 +26,12 @@
 //   the debug text that prints a matrix is written with a size limit, so it always fits;
 //   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone);
 //   the menu font's letters are limited to what its texture can hold
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   makes the list and the shader for shadow prisms kept between frames
 
 #include "d3_func.h"
 #include "surface_normals.h"
+#include "shadow_volumes_card.h"
 #include "surface_pictures.h"
 #include "texture_relief.h"
 #include "shader_model.h"
@@ -197,6 +200,7 @@ bool ReleaseVolatileResources()
 
 	SAFE_DELETE(d3d.mainVB);
 	SurfaceNormals_Release();
+	ShadowVolumesCard_Release();
 	SAFE_DELETE(d3d.mainIB);
 
 	SAFE_DELETE(d3d.orthoVB);
@@ -723,6 +727,7 @@ bool CreateVolatileResources()
 	if (SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
 	{
 		SurfaceNormals_Create(kMaxVertices*5);
+		ShadowVolumesCard_Create();
 	}
 	else
 	{
@@ -2516,6 +2521,10 @@ bool InitialiseDirect3D()
 		d3d.surfaceReliefDecl->Create();
 	}
 
+	d3d.volumeDecl = new VertexDeclaration;
+	d3d.volumeDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.volumeDecl->Create();
+
 	d3d.orthoDecl = new VertexDeclaration;
 	d3d.orthoDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.orthoDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
@@ -2635,6 +2644,9 @@ bool InitialiseDirect3D()
 		d3d.surfaceReliefEffect = d3d.effectSystem->Add("surfaceRelief", "surfaceRelief.vsh", "surfaceRelief.psh", d3d.surfaceReliefDecl);
 	}
 
+	// the pixel shader is never used: a prism only marks the stencil, so this runs with none, as the ordinary prisms do
+	d3d.volumeEffect = d3d.effectSystem->Add("volume", "volume.vsh", "pixel.psh", d3d.volumeDecl);
+
 	// These draw one rectangle over the screen, and read the pictures the surface pass made.
 	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
 	d3d.lightShareEffect = d3d.effectSystem->Add("lightShare", "shadowBlur.vsh", "lightShare.psh", d3d.mainDecl);
@@ -2714,6 +2726,8 @@ void ReleaseDirect3D()
 	delete d3d.mainDecl;
 	delete d3d.surfaceDecl;
 	delete d3d.surfaceReliefDecl;
+
+	delete d3d.volumeDecl;
 	delete d3d.orthoDecl;
 	delete d3d.decalDecl;
 	delete d3d.fmvDecl;

@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   no longer includes the DirectX SDK's error-text header (our own DxErrorToString replaces it)
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   holds the shader for shadow prisms kept between frames
 #ifdef _WIN32
 
 #ifndef _included_d3_func_h_
@@ -219,6 +221,8 @@ typedef struct D3DInfo
 	effectID_t				surfaceEffect;
 	class VertexDeclaration	*surfaceReliefDecl;     // these two stay empty with relief pictures off
 	effectID_t				surfaceReliefEffect;
+	class VertexDeclaration	*volumeDecl;      // shadow prisms kept between frames: see shadow_volumes.cpp
+	effectID_t				volumeEffect;
 	effectID_t				lightTotalEffect;
 	effectID_t				lightShareEffect;
 	effectID_t				lightOneEffect;

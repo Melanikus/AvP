@@ -141,6 +141,12 @@
     <ClCompile Include="..\..\3dc\shadow_reach.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_volumes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_volumes_card.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\surface_tangent.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1456,6 +1462,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\vertex.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\volume.vsh">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
