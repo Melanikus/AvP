@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the small font's letter widths are looked up with an unsigned byte, so it no longer matters how the compiler
 //   treats a plain char; the wrapped text function stops counting a word's width at a limit, so a huge word in a
-//   file cannot make the sum overflow; the size of the menu font picture is checked before it is used
+//   file cannot make the sum overflow; the size of the menu font picture is checked before it is used, and its
+//   memory is given back afterwards; the menu font's letter widths are looked up with an unsigned byte too
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
@@ -226,6 +227,9 @@ static void LoadMenuFont(void)
 
 	// we're going to try create a square texture
 	IntroFont_Light.textureID = Tex_CreateTallFontTexture("graphics/Menus/IntroFont.RIM", image, TextureUsage_Normal);
+
+	// the texture has its own copy of the letters now
+	delete[] srcBuffer;
 }
 
 extern int LengthOfMenuText(const char *textPtr)
@@ -234,8 +238,11 @@ extern int LengthOfMenuText(const char *textPtr)
 	
 	while (textPtr && *textPtr) 
 	{
-		width += IntroFont_Light.FontWidth[(unsigned int) *textPtr];
-		
+		// The game is built with the /J setting, which makes a char run from 0 to 255, so every character has its slot
+		// in FontWidth. Going through unsigned char keeps that true in a build without /J, where an accented letter
+		// would be a negative number, and so a place in front of the list.
+		width += IntroFont_Light.FontWidth[(unsigned char) *textPtr];
+
 		textPtr++;
 	}
 	return width;
