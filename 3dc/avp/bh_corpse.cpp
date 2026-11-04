@@ -1,4 +1,7 @@
 /* bh_corpse.c 19/8/98 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a corpse in a save that cannot get a dynamics block is left out, instead of crashing
 #include "3dc.h"
 
 #include "inline.h"
@@ -935,6 +938,13 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//get a dynamics block
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
+
+	// there is a fixed number of these, and a save can hold more corpses than there are left. This one is then left out
+	if (!sbPtr->DynPtr)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
 
 
 	//start copying stuff

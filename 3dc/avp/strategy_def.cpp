@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   carrying objects to the next level stops if the strategy blocks run out
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -393,6 +396,12 @@ void AddPreservedSBsToActiveList()
 	for(i = 0; i < Num_SB_Preserved; i++)
 		{
 			new_sbptr =	CreateActiveStrategyBlock();
+
+			// the strategy blocks have just been cleared, so there is room for these, but the list is a fixed size
+			if (!new_sbptr)
+			{
+				return;
+			}
 
 			*new_sbptr = SB_Preserved[i];
 

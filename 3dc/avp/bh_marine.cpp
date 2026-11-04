@@ -7,6 +7,7 @@
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
+//   a sentry sent back to a spot outside every module keeps the module it has
 #include "3dc.h"
 
 #include "inline.h"
@@ -5906,7 +5907,14 @@ static STATE_RETURN_CONDITION Execute_MFS_SentryMode(STRATEGYBLOCK *sbPtr)
 
 			if (dist>SENTRY_SENSITIVITY) {
 				sbPtr->DynPtr->Position=marineStatusPointer->my_spot;
-				sbPtr->containingModule = (ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule));
+				// the spot comes from the level and may be outside every module. Then it keeps the module it has
+				{
+					MODULE *spotModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule);
+					if (spotModule)
+					{
+						sbPtr->containingModule = spotModule;
+					}
+				}
 
 			}
 		}

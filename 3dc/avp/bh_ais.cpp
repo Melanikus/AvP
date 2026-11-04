@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
+//   an NPC with no movement data stops speeding up, instead of crashing
 
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
@@ -713,6 +714,8 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
         } else {
                 int accelerationThisFrame,deltaVMag,dotProduct;
                 VECTORCH deltaV,targetV,yDirection,movementOffset;
+                /* These lookups can't fail today: each one is in the table in movement.cpp. If one were taken out of
+                   that table, the NPC would stop speeding up, and the game would carry on. */
                 const MOVEMENT_DATA *movementData;
 
                 /* Mode 2, for marines 'n' predators.  And xenoborgs. */
@@ -731,11 +734,11 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                                 ||((predatorStatusPointer->behaviourState==PBS_Avoidance)&&(predatorStatusPointer->lastState==PBS_Wandering))) {
                                                 movementData=GetThisMovementData(MDI_Casual_Predator);
                                                 /* Fix reduced max speed. */
-                                                speed=movementData->maxSpeed;
+                                                if (movementData) speed=movementData->maxSpeed;
                                         } else {
                                                 movementData=GetThisMovementData(MDI_Predator);
                                         }
-                                        accelerationThisFrame=movementData->acceleration;
+                                        accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 }
                                 break;
                         case I_BehaviourMarine:
@@ -750,7 +753,7 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                 break;
                         case I_BehaviourXenoborg:
                                 movementData=GetThisMovementData(MDI_Xenoborg);
-                                accelerationThisFrame=movementData->acceleration;
+                                accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 break;
                         default:
                                 GLOBALASSERT(0);

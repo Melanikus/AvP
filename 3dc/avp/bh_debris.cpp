@@ -1,4 +1,7 @@
 /* KJL 15:01:53 02/25/97 - bh_debri.c */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   debris in a save that cannot get a dynamics block is left out, instead of crashing
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -1622,6 +1625,13 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 		memset(hdebrisStatusPointer,0,sizeof(*hdebrisStatusPointer));
 		dispPtr->HModelControlBlock=&hdebrisStatusPointer->HModelController;
 
+		// there is a fixed number of dynamics blocks, and a save can hold more debris than there are left. This comes after
+		// the behaviour block on purpose: removing a fragment reads that block.
+		if (!sbPtr->DynPtr)
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 	}
 
 

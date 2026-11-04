@@ -5,6 +5,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
 //   compiled, so code scanners can read the file; the game runs the same code as before
+//   the arms' tilt is limited with min and max
+//   a Xenoborg placed outside every module is left out, instead of crashing
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -207,6 +209,12 @@ void CreateXenoborg(VECTORCH *Position,int type)
 
 	sbPtr->maintainVisibility = 1;
 	sbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);
+	if (!sbPtr->containingModule)
+	{
+		/* it isn't inside any module, and the lines below need one, so it can't be placed */
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
 
 	/* create, initialise and attach an alien data block */
 	sbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));
@@ -497,6 +505,12 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 	sbPtr->maintainVisibility = 1;
 	sbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);
+	if (!sbPtr->containingModule)
+	{
+		/* it isn't inside any module, and the lines below need one, so it can't be placed */
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
 
 	/* create, initialise and attach a xeno data block */
 	sbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));
