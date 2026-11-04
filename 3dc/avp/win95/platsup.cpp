@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   a loaded text file always ends with a 0 byte, and a second loader also returns the file's size
+//   a loaded text file always ends with a 0 byte, and a second loader also returns the file's size; a file whose
+//   size cannot be read counts as unreadable, and a file that fails to load no longer leaves its memory allocated
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -231,7 +232,15 @@ char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 	fseek(fp, 0L, SEEK_END);
 	size_of_file = ftell(fp);
 
-	bufferPtr = (char*)AllocateMem(size_of_file + 1);
+	// ftell answers -1 when it cannot say where it is in the file. That is a "don't know", not a size: used as a size
+	// it would ask for no memory at all and then try to read a huge amount into it. So the file counts as unreadable.
+	if (size_of_file < 0)
+	{
+		fclose(fp);
+		goto error;
+	}
+
+	bufferPtr = (char*)AllocateMem((size_t)size_of_file + 1);
 	if (!bufferPtr)
 	{
 		memoryInitialisationFailure = 1;
@@ -242,6 +251,8 @@ char *LoadTextFileWithSize(const char *filename, size_t *sizePtr)
 	
 	if (!fread(bufferPtr, size_of_file,1,fp))
 	{
+		// The file is empty or could not be read, so nobody will ever get this memory to free it. Free it here.
+		DeallocateMem(bufferPtr);
 		fclose(fp);
 		goto error;
 	}
