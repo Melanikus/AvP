@@ -298,8 +298,7 @@ TRACK_CONTROLLER* setup_track_controller(Object_Chunk* oc)
 		tsd->pivot_travel=(cts->pivot_end-cts->pivot_start)*local_scale;
 		tsd->object_offset=cts->object_offset*local_scale;
 
-		// A track's timer is worked through a section at a time, so a section of no time at all could never use it up, and the game would hang.
-		tsd->time_for_section=max(cts->time_for_section,ONE_FIXED/1000);
+		tsd->time_for_section=cts->time_for_section;
 	}
 
    	if(otc->flags & TrackFlag_Loop)
@@ -1864,11 +1863,10 @@ static void add_placed_light(Object_Chunk* ob,int list_pos,AVP_Strategy_Chunk* a
 	pltd->colour_diff_green-=pltd->colour_green;
 	pltd->colour_diff_blue-=pltd->colour_blue;
 
-	// These are multiplied, so a big enough time from the file wraps round to nothing, and a light that takes no time at all to change would change for ever.
-	pltd->fade_up_time=max((max(lchunk->light.fade_up_time,1)*ONE_FIXED)/1000,1);
-	pltd->fade_down_time=max((max(lchunk->light.fade_down_time,1)*ONE_FIXED)/1000,1);
-	pltd->up_time=max((max(lchunk->light.up_time,1)*ONE_FIXED)/1000,1);
-	pltd->down_time=max((max(lchunk->light.down_time,1)*ONE_FIXED)/1000,1);
+	pltd->fade_up_time=(max(lchunk->light.fade_up_time,1)*ONE_FIXED)/1000;
+	pltd->fade_down_time=(max(lchunk->light.fade_down_time,1)*ONE_FIXED)/1000;
+	pltd->up_time=(max(lchunk->light.up_time,1)*ONE_FIXED)/1000;
+	pltd->down_time=(max(lchunk->light.down_time,1)*ONE_FIXED)/1000;
 	pltd->timer=(max(lchunk->light.start_time,1)*ONE_FIXED)/1000;
 
 	pltd->type=(LIGHT_TYPE)lchunk->light.light_type;

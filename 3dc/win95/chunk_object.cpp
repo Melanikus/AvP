@@ -8,6 +8,7 @@
 //   an object's header is only made inside an object, because it writes through its parent
 //   a jump in a module's list of what it can see has to go forward
 //   a track's sound has to be its middle, start or end sound
+//   a track's times have to be ones the game can work through
 
 #include <string>
 #include "chunk.hpp"
@@ -1000,6 +1001,25 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 	flags=*(int*)data;
 	data+=4;
 	timer_start=*(int*)data;
+
+	// The game works through a track's timer a section at a time, until what's left fits inside a section. So a section has to take some time, or the timer
+	// would never be used up, and the game would hang. 65 is about a thousandth of a second, and the shortest in the game's own levels is 3,276. A start
+	// time that's negative or huge could keep that going as well, and the game's own go up to 524,288.
+	int const shortest_section=65;
+	int const latest_start=1<<24;
+
+	for(i=0;i<num_sections;i++)
+	{
+		if(sections[i].time_for_section<shortest_section)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
+
+	if(timer_start<0 || timer_start>latest_start)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 
 	if(!(flags & TrackFlag_QuatProblemSorted))
 	{

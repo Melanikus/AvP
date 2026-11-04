@@ -3,9 +3,11 @@
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
+//   a level's paths each need a number of their own
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
+#include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(environment_chunk)
@@ -297,6 +299,35 @@ size_t Random_Texture_ID_Chunk::size_chunk()
 RIF_IMPLEMENT_DYNCREATE("SPECLOBJ",Special_Objects_Chunk)
 
 CHUNK_WITH_CHILDREN_LOADER("SPECLOBJ",Special_Objects_Chunk)
+
+// A path's number is its place in the game's list of paths. Two paths with one number would share that place, and the second one's shorter list would then be
+// filled to the length of the first. So each number can only be used once. A number outside the list has refused the level already: see AVP_Path_Chunk.
+void Special_Objects_Chunk::post_input_processing()
+{
+	bool number_taken[MostPathNumbers] = { false };
+
+	List<Chunk *> paths;
+	lookup_child ("AVPPATH2", paths);
+
+	for (LIF<Chunk *> path (&paths); !path.done(); path.next())
+	{
+		int const number = path()->r_u_miscellaneous() ? -1 : ((AVP_Path_Chunk *) path())->PathID;
+
+		if (number < 0 || number >= MostPathNumbers)
+		{
+			continue;
+		}
+
+		if (number_taken[number])
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
+		number_taken[number] = true;
+	}
+
+	Chunk_With_Children::post_input_processing();
+}
 /*
 Children for Special_Objects_Chunk :
 "AVPGENER"		AVP_Generator_Chunk

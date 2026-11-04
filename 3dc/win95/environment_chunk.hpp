@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
+//   a level's paths each need a number of their own
 
 #ifndef _envchunk_hpp
 #define _envchunk_hpp 1
@@ -125,6 +126,9 @@ public:
 	{}
 	// constructor from buffer
 	Special_Objects_Chunk (Chunk_With_Children * const parent,const char *, size_t const);
+
+	// Refuses the level if two of its paths have one number. See the .cpp.
+	virtual void post_input_processing();
 private:
 
 	friend class Environment_Data_Chunk;

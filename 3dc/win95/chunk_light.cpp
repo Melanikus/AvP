@@ -3,6 +3,7 @@
 //   removed code only the level editor used: the game itself never runs it; the count of baked colours in a
 //   level file is checked against the size of its chunk
 //   counted lists are measured against their chunks before they're made
+//   a light's times have to be ones that don't wrap round
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -354,6 +355,19 @@ Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * paren
 	char const * const start = data;
 	light=*(Placed_Object_Light_Data*) data;
 	data+=sizeof(Placed_Object_Light_Data);
+
+	// A light's times are in thousandths of a second, and the game multiplies each one by 65536. A bigger number than this wraps round, and a light whose times
+	// all came to nothing would change state for ever, which would hang the game. The largest in the game's own levels is 10,000.
+	int const most_light_time=32767;
+	int const light_times[]={light.fade_up_time,light.fade_down_time,light.up_time,light.down_time,light.start_time};
+
+	for(size_t time=0;time<sizeof(light_times)/sizeof(light_times[0]);time++)
+	{
+		if(light_times[time]<0 || light_times[time]>most_light_time)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
 
 	num_extra_data=ReadListCount(start,data,size,sizeof(int));
 

@@ -1,5 +1,5 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
-//   a path checks that no other path has its number
+//   says how many numbers a path can have
 
 #ifndef pathchnk_hpp
 #define pathchnk_hpp 1
@@ -21,6 +21,9 @@ struct ChunkPathPoint
 
 #define PathFlag_LoopPath 0x00000001
 #define PathFlag_BackAndForth 0x00000002
+
+// A path's number is its place in the game's list of paths, and a switch can only name a path up to 255.
+enum { MostPathNumbers = 256 };
  
 class AVP_Path_Chunk : public Chunk
 {
@@ -28,9 +31,6 @@ class AVP_Path_Chunk : public Chunk
 	AVP_Path_Chunk(Chunk_With_Children*,const char *,size_t);
 	AVP_Path_Chunk(Chunk_With_Children*);
 	~AVP_Path_Chunk();
-
-	// Refuses the level if another path has this one's number. See the .cpp.
-	virtual void post_input_processing();
 
 	virtual size_t size_chunk();
 	virtual void fill_data_block(char* data_start);

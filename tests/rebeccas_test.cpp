@@ -2639,7 +2639,6 @@ static void TestCountedLists()
 		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
 		{ MakeChunk<VModule_Array_Chunk>,                     0,  4 * sizeof(int),              "a module's list of what it can see is accepted" },
 		{ MakeChunk<Adjacent_Module_Entry_Points_Chunk>,      0,  20,                           "a module's list of neighbours is accepted" },
-		{ MakeChunk<Object_Track_Chunk2>,                     0,  sizeof(ChunkTrackSection),    "a track with sections is accepted" },
 		{ MakeChunk<Object_Alternate_Locations_Chunk>,        8,  sizeof(AltObjectLocation),    "an object's other places are accepted" },
 		{ MakeChunk<Object_Animation_Sequence_Frame_Chunk>,   40, sizeof(int),                  "an animation frame's extra numbers are accepted" },
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,  12, sizeof(int),                  "a sequence header's extra numbers are accepted" },
@@ -3107,7 +3106,7 @@ static bool PathNumberAccepted(int number)
 	return ChunkAccepted(MakeChunk<AVP_Path_Chunk>, bytes, 20);
 }
 
-// Two paths side by side, with these numbers.
+// Two of a level's paths, with these numbers.
 static bool TwoPathsAccepted(int first, int second)
 {
 	alignas(int) static char bytes[64];
@@ -3115,12 +3114,14 @@ static bool TwoPathsAccepted(int first, int second)
 	File_Chunk file;
 	Parent_File = &file;
 
+	Special_Objects_Chunk * paths = new Special_Objects_Chunk(&file);
+
 	memset(bytes, 0, sizeof(bytes));
 	PutNumber(bytes, 4, first);
-	new AVP_Path_Chunk(&file, bytes, 20);
+	new AVP_Path_Chunk(paths, bytes, 20);
 
 	PutNumber(bytes, 4, second);
-	new AVP_Path_Chunk(&file, bytes, 20);
+	new AVP_Path_Chunk(paths, bytes, 20);
 
 	file.post_input_processing();
 
@@ -3129,6 +3130,34 @@ static bool TwoPathsAccepted(int first, int second)
 	Parent_File = 0;
 
 	return accepted;
+}
+
+// A track with room for two sections, of these times, starting at this time.
+static bool TrackAccepted(int count, int firstTime, int secondTime, int start)
+{
+	alignas(int) static char bytes[512];
+	size_t const sectionBytes = sizeof(ChunkTrackSection);
+	size_t const timeAt = offsetof(ChunkTrackSection, time_for_section);
+	size_t const flagsAt = sizeof(int) + 2 * sectionBytes;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, count);
+	PutNumber(bytes, sizeof(int) + timeAt, firstTime);
+	PutNumber(bytes, sizeof(int) + sectionBytes + timeAt, secondTime);
+	PutNumber(bytes, flagsAt + sizeof(int), start);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Chunk2>, bytes, flagsAt + 2 * sizeof(int));
+}
+
+// A placed light with one of its times set.
+static bool LightTimeAccepted(size_t at, int time)
+{
+	alignas(int) static char bytes[128];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, at, time);
+
+	return ChunkAccepted(MakeChunk<Placed_Object_Light_Chunk>, bytes, sizeof(Placed_Object_Light_Data) + sizeof(int));
 }
 
 static void TestNumbersUsedAsPlaces()
@@ -3192,7 +3221,55 @@ static void TestNumbersUsedAsPlaces()
 	Check(!PathNumberAccepted(-1), "a negative path is refused");
 	Check(!PathNumberAccepted(0x1fffffff), "a path number whose list wraps round is refused");
 	Check(TwoPathsAccepted(1, 2), "two paths with their own numbers are accepted");
+	Check(TwoPathsAccepted(0, 255), "the first and last paths together are accepted");
 	Check(!TwoPathsAccepted(3, 3), "two paths with one number are refused");
+	Check(!TwoPathsAccepted(255, 255), "two paths with the last number are refused");
+
+	// Every section of a track has to take some time, or the game would never use up the track's timer.
+	{
+		int const quickest = 65;
+		int const latest = 1 << 24;
+		size_t const sectionBytes = sizeof(ChunkTrackSection);
+
+		Check(TrackAccepted(2, quickest, quickest, 0), "a track of the shortest sections is accepted");
+		Check(TrackAccepted(2, 3276, 1310720000, 524288), "a track with the game's own longest and shortest times is accepted");
+		Check(TrackAccepted(2, quickest, quickest, latest), "a track with the latest start is accepted");
+		Check(TrackAccepted(0, 0, 0, 0), "a track with no sections has no times to be wrong");
+		Check(!TrackAccepted(2, quickest - 1, quickest, 0), "a first section too short is refused");
+		Check(!TrackAccepted(2, quickest, quickest - 1, 0), "a last section too short is refused");
+		Check(!TrackAccepted(2, 0, quickest, 0), "a section of no time is refused");
+		Check(!TrackAccepted(2, -1, quickest, 0), "a section of negative time is refused");
+		Check(!TrackAccepted(2, quickest, quickest, latest + 1), "a start too late is refused");
+		Check(!TrackAccepted(2, quickest, quickest, -1), "a negative start is refused");
+		Check(!TrackAccepted(2, quickest, quickest, (int)0x80000000), "the start that can't be turned round is refused");
+
+		int const badCounts[] = { -1, 0x7fffffff, (int)(0x100000000ULL / sectionBytes) + 1, (int)(0x7ffff000UL / sectionBytes), 3, 4000 };
+
+		for (size_t i = 0; i < sizeof(badCounts) / sizeof(badCounts[0]); i++)
+		{
+			Check(!TrackAccepted(badCounts[i], quickest, quickest, 0), "a count that doesn't fit its chunk is refused");
+		}
+	}
+
+	// All five of a light's times are multiplied by the game, and any of them could wrap round.
+	{
+		size_t const lightTimes[] =
+		{
+			offsetof(Placed_Object_Light_Data, fade_up_time),
+			offsetof(Placed_Object_Light_Data, fade_down_time),
+			offsetof(Placed_Object_Light_Data, up_time),
+			offsetof(Placed_Object_Light_Data, down_time),
+			offsetof(Placed_Object_Light_Data, start_time),
+		};
+
+		for (size_t i = 0; i < sizeof(lightTimes) / sizeof(lightTimes[0]); i++)
+		{
+			Check(LightTimeAccepted(lightTimes[i], 0), "a light time of nothing is accepted");
+			Check(LightTimeAccepted(lightTimes[i], 32767), "the longest light time is accepted");
+			Check(!LightTimeAccepted(lightTimes[i], 32768), "a light time that wraps round is refused");
+			Check(!LightTimeAccepted(lightTimes[i], -1), "a negative light time is refused");
+		}
+	}
 
 	Check(ImageIndexAccepted(0), "the first image's index is accepted");
 	Check(ImageIndexAccepted(73), "the largest image index in the game's own levels is accepted");
