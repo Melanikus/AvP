@@ -38,6 +38,7 @@
 #include "RenderList.h"
 #include "console.h"
 #include "logString.h"
+#include "texture_relief.h"
 
 extern uint32_t GetNumIndices(uint32_t numVerts);
 
@@ -218,6 +219,30 @@ void ChangeFilteringMode(uint32_t, enum FILTERING_MODE_ID)
 }
 
 void ChangeTextureAddressMode(uint32_t, enum TEXTURE_ADDRESS_MODE)
+{
+}
+
+// RenderList::DrawOpaqueAgain, which draws a list a second time for the shadow work, needs these names to link. It talks
+// to the graphics card directly, so this test never calls it, and these are never used.
+D3DInfo d3d;
+TextureRelief textureRelief;
+
+TextureRelief::TextureRelief(size_t)
+{
+}
+
+texID_t TextureRelief::PictureFor(texID_t) const
+{
+	return 0;
+}
+
+r_Texture const &Tex_GetTexture(texID_t)
+{
+	static r_Texture none = 0;
+	return none;
+}
+
+void NoteTextureUse(texID_t)
 {
 }
 
