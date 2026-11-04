@@ -184,6 +184,22 @@ static void TestDamagedPackages()
 	Refused(package, 0, headerBytes + package->CompressedDataSize / 2);
 	Check(true, "a package cut in half isn't read past its end");
 
+	// A level's chunks can read past the end of the data, so the decoder leaves zeros there. The block is made dirty first, so zeros there aren't luck.
+	void * dirty = malloc((size_t)package->UncompressedDataSize + HUFFMAN_SPARE_BYTES);
+	memset(dirty, 0xee, (size_t)package->UncompressedDataSize + HUFFMAN_SPARE_BYTES);
+	free(dirty);
+
+	char * unpacked = HuffmanDecompressChecked(package, packageSize);
+	bool spareIsZero = (unpacked != 0);
+
+	for (int i = 0; unpacked && i < HUFFMAN_SPARE_BYTES; i++)
+	{
+		spareIsZero = spareIsZero && unpacked[package->UncompressedDataSize + i] == 0;
+	}
+
+	Check(spareIsZero, "the spare bytes after the data are all zero");
+	free(unpacked);
+
 	free(package);
 }
 

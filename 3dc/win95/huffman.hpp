@@ -5,6 +5,11 @@
 #define _huffman_hpp_included 1
 
 #define MAX_DEPTH 11
+
+// How many bytes of zeros come after decoded data, and after a level read from a file. Most chunks read a fixed set of numbers, or a name, with no
+// look at their own size. A chunk can be anywhere in a file, and the reading only stops at a zero byte, or when the numbers run out, so
+// these bytes mean none of that can leave the block of memory. The longest fixed read is 32768 bytes (Coloured_Polygons_Lookup_Chunk).
+#define HUFFMAN_SPARE_BYTES 65536
 typedef struct
 {
 	char			Identifier[8];

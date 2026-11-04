@@ -100,7 +100,7 @@ void InitTextStrings(void)
 			return;
 		}
 
-		// the decompressed buffer has 16 spare bytes after the data (HuffmanDecompressChecked): end it with a 0
+		// the decompressed buffer has spare bytes after the data (HuffmanDecompressChecked): end it with a 0
 		textEnd = textPtr + uncompressedSize;
 		*textEnd = 0;
 	}

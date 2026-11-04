@@ -473,7 +473,7 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 	MakeHuffmanDecodeTable(inpackage->CodelengthCount, MAX_DEPTH, inpackage->ByteAssignment);
 
 	// Step 2: Decode data, reading no further than the end of the package
-	uncompressedData = (unsigned char*)AllocateMemory(inpackage->UncompressedDataSize+16);
+	uncompressedData = (unsigned char*)AllocateMemory((size_t)inpackage->UncompressedDataSize+HUFFMAN_SPARE_BYTES);
 	if (uncompressedData)
 	{
 		const int *source = (const int*)(inpackage+1);
@@ -483,6 +483,8 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 			free(uncompressedData);
 			return NULL;
 		}
+
+		memset(uncompressedData+inpackage->UncompressedDataSize,0,HUFFMAN_SPARE_BYTES);
 	}
 
 	return (char*)uncompressedData;

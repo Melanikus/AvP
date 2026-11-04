@@ -5,6 +5,7 @@
 //   a child chunk whose size cannot be real is refused
 //   a compressed level goes through the checked decoder, which knows the size of the file
 //   a module's points have to fit the box stored with its shape
+//   a level read from a file has zero bytes after it, so that no chunk's fixed reads or names can leave the buffer
 //   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
 //   rely on a whole level; object numbers are limited to what the object list can hold; so is a level with a
 //   shape that has more points than the game's list of points can hold
@@ -405,7 +406,7 @@ File_Chunk::File_Chunk(const char * file_name)
 		return;
 	}
 
-	buffer = new char [file_size];
+	buffer = new char [file_size + HUFFMAN_SPARE_BYTES];
 
 	/* KJL 17:57:44 19/09/98 - if the rif is compressed, we must load the whole
 	file in and then pass it to the decompression routine, which will return a
@@ -452,6 +453,8 @@ File_Chunk::File_Chunk(const char * file_name)
 			CloseHandle (rif_file);
 			return;
 		}
+
+		memset (buffer, 0, file_size + HUFFMAN_SPARE_BYTES);
 
 		if (!ReadFile(rif_file, buffer, (file_size-12), &bytes_read, 0))
 		{
@@ -1792,7 +1795,7 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 		return;
 	}
 
-	buffer = new char [file_size];
+	buffer = new char [file_size + HUFFMAN_SPARE_BYTES];
 	
 	/* KJL 17:57:44 19/09/98 - if the rif is compressed, we must load the whole
 	file in and then pass it to the decompression routine, which will return a
@@ -1849,6 +1852,8 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 		}
 
 		//read the rest of the file into the buffer
+		memset (buffer, 0, file_size + HUFFMAN_SPARE_BYTES);
+
 		if (!ReadFile(rif_file, buffer, (file_size-12), &bytes_read, 0))
 		{
 			error_code = CHUNK_FAILED_ON_LOAD;

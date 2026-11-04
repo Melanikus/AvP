@@ -2236,6 +2236,23 @@ static void TestPlacedHierarchies()
 	memset(bytes, 'x', sizeof(bytes));
 	Check(!ConstructedAtTheWall(bytes, 60, 0), "a name with no end is refused");
 
+	// That chunk would be refused anyway, because its count can't be right. The one way past that takes a count with no zero byte in it, and a
+	// chunk big enough to hold that many numbers, so this one is 67 MB of 1s. Only the check on the name can refuse it.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const hugeBytes = 44 + 4 * (size_t)0x01010101;
+		char * huge = (char *)malloc(hugeBytes);
+		memset(huge, 1, hugeBytes);
+
+		new Placed_Hierarchy_Data_Chunk(&file, huge, hugeBytes);
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a huge chunk with no zero byte at all is refused");
+		free(huge);
+		Parent_File = 0;
+	}
+
 	// Five numbers, the count of sounds, 12 bytes for each sound, the count of extra numbers, then those.
 	size_t const soundCountAt = 20;
 
