@@ -387,9 +387,9 @@ void FrameTiming_WriteStalls()
 		char line[500];
 
 		_snprintf(line, sizeof(line) - 1,
-			"stall: frame %d took %.1f ms%s: shapes %.1f, locks %.1f, drawing %.1f of which shadow pass %.1f, present %.1f, game %.1f, log %.1f; room %s; %d places changed, %d kept groups made, %d polygons collected, %d textures first used (%u KB, first %s), first use of effects: %s",
+			"stall: frame %d took %.1f ms%s: shapes %.1f, locks %.1f, drawing %.1f of which shadow pass %.1f, present %.1f, starting the scene %.1f, game %.1f, log %.1f; room %s; %d places changed, %d kept groups made, %d polygons collected, %d textures first used (%u KB, first %s), first use of effects: %s",
 			stall.frame, stall.milliseconds, stall.deviceReset ? " with a device reset" : "", stall.stage[kProcessorShapes], stall.stage[kProcessorLocks], stall.stage[kProcessorDrawing],
-			stall.stage[kProcessorShadowPass], stall.stage[kProcessorPresent], stall.stage[kProcessorGame], stall.stage[kProcessorLog], stall.room,
+			stall.stage[kProcessorShadowPass], stall.stage[kProcessorPresent], stall.stage[kProcessorBeginScene], stall.stage[kProcessorGame], stall.stage[kProcessorLog], stall.room,
 			stall.placesChanged, stall.keptGroupsMade, stall.polygonsCollected, stall.texturesNew, stall.textureBytesNew / 1024, stall.firstNewTexture, stall.effectsNew);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
@@ -418,10 +418,11 @@ static void ReportProcessorTimes()
 		char line[300];
 
 		_snprintf(line, sizeof(line) - 1,
-			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that",
+			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f, waiting to present %.1f, starting the scene %.1f, game %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that",
 			framesCounted, ClockMilliseconds(now - lastReportClock) / frames, ClockMilliseconds(processorTotal[kProcessorShapes]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorLocks]) / frames, ClockMilliseconds(processorTotal[kProcessorDrawing]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorShadowPass]) / frames, ClockMilliseconds(processorTotal[kProcessorPresent]) / frames,
+			ClockMilliseconds(processorTotal[kProcessorBeginScene]) / frames, ClockMilliseconds(processorTotal[kProcessorGame]) / frames,
 			(double)mainVerticesTotal / frames, (double)drawsTotal / frames);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);

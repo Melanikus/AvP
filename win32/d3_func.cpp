@@ -300,6 +300,8 @@ void BuildFrustum()
 
 bool R_BeginScene()
 {
+	ProcessorStageClock clock(kProcessorBeginScene);
+
 	// check for lost device
 	LastError = d3d.lpD3DDevice->TestCooperativeLevel();
 	if (FAILED(LastError))
