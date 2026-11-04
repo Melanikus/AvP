@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the PC, Saturn and PlayStation sprite parts of a level file are read by one shared loader, not three
 //   identical loops
+//   a child chunk whose size cannot be real is refused
 
 #include "chunk_sprites.hpp"
 #include "mishchnk.hpp"
@@ -249,7 +250,7 @@ Sprite_Header_Chunk::Sprite_Header_Chunk(const char * file_name, Chunk_With_Chil
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code) 
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed) file_size-12)) 
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed) file_size-12))) 
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -324,7 +325,7 @@ static void Load_Sprite_Child_Chunks(Chunk_With_Children * parent, const char * 
 
 	while ((data-buffer_ptr)< (signed) datasize)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) datasize)
+		if (!ChildChunkFits(data, buffer_ptr, (signed) datasize))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;

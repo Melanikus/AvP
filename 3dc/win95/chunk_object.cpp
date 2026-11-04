@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   object headers in level files are read without going past their end, and names and other text are
 //   copied using their exact measured length, so they always fit; code only the level editor used was removed
+//   a child chunk whose size cannot be real is refused
 
 #include <string>
 #include "chunk.hpp"
@@ -48,7 +49,7 @@ Object_Chunk::Object_Chunk(Chunk_With_Children * parent, const char *data, size_
 	
 	while ((data-buffer_ptr)< (signed) size) {
 
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -550,7 +551,7 @@ Object_Interface_Data_Chunk::Object_Interface_Data_Chunk(Chunk_With_Children * p
 
 	while ((data-buffer_ptr)< (signed) size) {
 
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}
@@ -639,7 +640,7 @@ Object_Module_Data_Chunk::Object_Module_Data_Chunk (Chunk_With_Children * parent
 
 	while ((mdata-buffer_ptr)< (signed) msize) {
 
-		if ((*(int *)(mdata + 8)) + (mdata-buffer_ptr) > (signed) msize) {
+		if (!ChildChunkFits(mdata, buffer_ptr, (signed) msize)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}

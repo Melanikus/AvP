@@ -3,6 +3,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a group of helper macros that nothing used
+//   added ChildChunkFits, which checks that a child chunk's size from the file can be real
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
@@ -345,6 +346,26 @@ protected:
 
 extern Chunk * Parent_File;
 
+// A chunk's children sit one after another inside it. Each child starts with a 12-byte header, an 8-byte name and then
+// its own size, and that size counts the header. All of this comes from the file, so before a child is used the
+// loaders ask this function whether it can be real: there must be room left for a header, the size must at least hold
+// the header, and the child must end inside its parent. A size below 12 would make the loaders walk backwards or spin
+// on the same spot, and would hand the child a "size minus 12" that wraps round to about 4 GB.
+// child is where the child starts, start is where the parent's data starts, total is the size of the parent's data.
+inline bool ChildChunkFits(char const * child, char const * start, signed int total)
+{
+	signed int const bytes_left = total - (signed int)(child - start);
+
+	if (bytes_left < 12)
+	{
+		return false;
+	}
+
+	signed int const child_size = *(int const *)(child + 8);
+
+	return child_size >= 12 && child_size <= bytes_left;
+}
+
 ///////////////////////////////////////////////
 //macros for use in chunk construction from buffer, assume buffer is called data
 
@@ -493,7 +514,7 @@ chunk_class::chunk_class(Chunk_With_Children * const parent, char const * __data
 {\
 	const char * __buffer_ptr = __data;\
 	while ((__data-__buffer_ptr)< (signed) __size) {\
-		if ((*(int *)(__data + 8)) + (__data-__buffer_ptr) > (signed) __size) {\
+		if (!ChildChunkFits(__data, __buffer_ptr, (signed) __size)) {\
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\
 			break;\
 		}\
@@ -512,7 +533,7 @@ chunk_class::chunk_class(Chunk_With_Children * const parent,char const * __data,
 {\
 	const char * __buffer_ptr = __data;\
 	while ((__data-__buffer_ptr)< (signed) __size) {\
-		if ((*(int *)(__data + 8)) + (__data-__buffer_ptr) > (signed) __size) {\
+		if (!ChildChunkFits(__data, __buffer_ptr, (signed) __size)) {\
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\
 			break;\
 		}\

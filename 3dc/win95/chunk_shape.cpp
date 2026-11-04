@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a large amount of code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
+//   a child chunk whose size cannot be real is refused
 
 #include <math.h>
 
@@ -54,7 +55,7 @@ Shape_Chunk::Shape_Chunk(Chunk_With_Children * parent, const char *data, size_t 
 	
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1477,7 +1478,7 @@ Shape_Morphing_Data_Chunk::Shape_Morphing_Data_Chunk (Shape_Chunk * parent, cons
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1495,7 +1496,7 @@ Shape_Morphing_Data_Chunk::Shape_Morphing_Data_Chunk (Shape_Sub_Shape_Chunk * pa
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1754,7 +1755,7 @@ Shape_Sub_Shape_Chunk::Shape_Sub_Shape_Chunk(Chunk_With_Children * parent, const
 
 	while ((data-buffer_ptr)< (signed)size) 
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size) 
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size)) 
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2202,7 +2203,7 @@ Anim_Shape_Sequence_Chunk::Anim_Shape_Sequence_Chunk(Chunk_With_Children * const
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2344,7 +2345,7 @@ Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk *const 
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2474,7 +2475,7 @@ Anim_Shape_Alternate_Texturing_Chunk::Anim_Shape_Alternate_Texturing_Chunk(Chunk
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -2601,7 +2602,7 @@ Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children * const parent, con
 
 	while ((data-buffer_ptr)< (signed)size)
 	{
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed)size)
+		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;

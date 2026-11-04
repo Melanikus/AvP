@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the TLTCONFG data in a level file is read without going past its end, text is copied using its exact
 //   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
+//   a child chunk whose size cannot be real is refused
 
 #include "chunk_palette.hpp"
 #include "mishchnk.hpp"
@@ -546,7 +547,7 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 {
 	const char * buffer_ptr = data;
 	while ((data-buffer_ptr)< (signed) size) {
-		if ((*(int *)(data + 8)) + (data-buffer_ptr) > (signed) size) {
+		if (!ChildChunkFits(data, buffer_ptr, (signed) size)) {
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
 		}

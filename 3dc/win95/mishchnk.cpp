@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
 //   names and other text are copied using their exact measured length; level-editor code was removed
+//   a child chunk whose size cannot be real is refused
 
 #include <string>
 #include "chunk.hpp"
@@ -449,7 +450,7 @@ File_Chunk::File_Chunk(const char * file_name)
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code)
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)file_size-12))
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)file_size-12)))
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1591,7 +1592,7 @@ GodFather_Chunk::GodFather_Chunk(char * buffer, size_t size)
 
 	while ((buffer_ptr-buffer)< ((signed)size-12) && !error_code) 
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)size-12)) 
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)size-12))) 
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -1790,7 +1791,7 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 
 	while ((buffer_ptr-buffer)< ((signed) file_size-12) && !error_code)
 	{
-		if ((*(int *)(buffer_ptr + 8)) + (buffer_ptr-buffer) > ((signed)file_size-12))
+		if (!ChildChunkFits(buffer_ptr, buffer, ((signed)file_size-12)))
 		{
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
