@@ -133,6 +133,14 @@ static void TestTextureSequences()
 	Check(!Save_TextureSequenceIsValid(0, 0), "no list at all");
 }
 
+static void TestRanges()
+{
+	Check(Save_NumberIsInRange(1, 1, 255), "the lowest number in a range");
+	Check(Save_NumberIsInRange(255, 1, 255), "the highest number in a range");
+	Check(!Save_NumberIsInRange(0, 1, 255), "one below a range");
+	Check(!Save_NumberIsInRange(256, 1, 255), "one above a range");
+}
+
 static void MakeLive(DYNAMICSBLOCK &live)
 {
 	memset(&live, 0, sizeof(live));
@@ -228,6 +236,7 @@ int main()
 	TestNames();
 	TestMorphFrames();
 	TestTextureSequences();
+	TestRanges();
 	TestDynamics();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");

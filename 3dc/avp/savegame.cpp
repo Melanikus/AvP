@@ -3,6 +3,8 @@
 //   every block of a save file is checked before it is read: its header, its size and the compressed data;
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save can't list the player as dead and take their strategy block away
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -1332,8 +1334,9 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 	//the name is read from the block, so it must be all there
 	if(header->size < (int)sizeof(*block)) return;
 
+	//The game runs on the player's block being there, so a save can't take it away. A dead player is never saved.
 	STRATEGYBLOCK* sbPtr = FindSBWithName(block->SBname);
-	if(sbPtr)
+	if(sbPtr && sbPtr != Player->ObStrategyBlock)
 	{
 		DestroyAnyStrategyBlock(sbPtr);
 	}

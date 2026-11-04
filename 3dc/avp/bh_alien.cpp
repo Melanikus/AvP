@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved curve of no length is worked out again, because the game divides by its length
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -2364,6 +2365,11 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(CurveRadius)
 	COPYELEMENT_LOAD(CurveLength)
 	COPYELEMENT_LOAD(CurveTimeOut)
+	if(alienStatusPointer->CurveLength <= 0)
+	{
+		//the length gets divided by, so this makes the alien work out a new curve
+		alienStatusPointer->CurveTimeOut = 0;
+	}
 	COPYELEMENT_LOAD(FarStateTimer)
 	COPYELEMENT_LOAD(NearStateTimer)
 	COPYELEMENT_LOAD(IAmCrouched)

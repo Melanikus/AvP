@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
 //   an NPC with no movement data stops speeding up, instead of crashing
+//   a saved place on a path has to be a real path and a real step on it
 
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
@@ -12,6 +13,7 @@
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -2048,6 +2050,19 @@ AIMODULE *GetNextModuleForLink_Core(AIMODULE *source,AIMODULE *target, int max_d
 bool PathCanBeFollowed(int path)
 {
 	return PathArray && path >= 0 && path < PathArraySize && PathArray[path].path_length > 0;
+}
+
+// A path and a step come from a save, and they pick entries in lists that are only checked in a debug build. -1 means no path, and the code
+// that walks a path already goes off wandering when it sees that, so a place that isn't real becomes no path.
+void NPC_CheckSavedPath(int *path, int *stepnumber)
+{
+	*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;
+	*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;
+
+	if (*stepnumber < 0)
+	{
+		*path = -1;
+	}
 }
 
 int GetNextModuleInPath(int current_module, int path) {

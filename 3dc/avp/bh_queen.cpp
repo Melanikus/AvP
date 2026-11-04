@@ -9,6 +9,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   the object a saved Queen is holding has to be one of the objects in the level
+//   a saved Queen's biases are divided by, so they have to be 1 or more
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -5077,8 +5078,15 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//this picks an entry in QueenObjectList, and the Queen writes to whatever is there, so it has to be one of them
 	queenStatusPointer->CurrentQueenObject = Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects);
 	COPYELEMENT_LOAD(QueenStateTimer)
-	COPYELEMENT_LOAD(QueenObjectBias)
-	COPYELEMENT_LOAD(QueenPlayerBias)
+	//the game divides by these two, and keeps them at 1 or more
+	if(block->QueenObjectBias >= 1)
+	{
+		COPYELEMENT_LOAD(QueenObjectBias)
+	}
+	if(block->QueenPlayerBias >= 1)
+	{
+		COPYELEMENT_LOAD(QueenPlayerBias)
+	}
 	COPYELEMENT_LOAD(QueenTauntTimer)
 	COPYELEMENT_LOAD(QueenFireTimer)
 	COPYELEMENT_LOAD(LastVelocity)

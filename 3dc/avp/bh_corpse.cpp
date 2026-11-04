@@ -5,6 +5,7 @@
 //   a corpse that a save file leaves without a model is left out of the game
 //   a corpse with no plain model to trim to is left as it is
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved corpse has to name one of the hit location tables
 #include "3dc.h"
 
 #include "inline.h"
@@ -838,6 +839,7 @@ void CorpseIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct corpse_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -971,13 +973,16 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
 	//hit location table
-	if(block->hltable_index>=0)
 	{
-		corpseDataPtr->hltable = &Global_Hitlocation_Tables[block->hltable_index];
-	}
-	else
-	{
-		corpseDataPtr->hltable = NULL;
+		//the tables end with one that has no name
+		int numberOfTables = 0;
+		while(Global_Hitlocation_Tables[numberOfTables].id != NULL)
+		{
+			numberOfTables++;
+		}
+
+		int const place = Save_PlaceInListOrNone(block->hltable_index, numberOfTables);
+		corpseDataPtr->hltable = (place >= 0) ? &Global_Hitlocation_Tables[place] : NULL;
 	}
 
 	// get death_data

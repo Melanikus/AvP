@@ -8,6 +8,7 @@ Source file for predator AI
 //   a save file can no longer give a predator a weapon that does not exist
 //   the elevation animation and the pistol muzzle are checked before use, because either can be missing
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved predator has to be on a real path, and its personal number has to pick one of the predators' settings
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -7115,7 +7116,10 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(obstruction)
 	COPYELEMENT_LOAD(wanderData)
 	COPYELEMENT_LOAD(IAmCrouched)
-	COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))
+	{
+		COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	}
 	COPYELEMENT_LOAD(nearSpeed)
 	COPYELEMENT_LOAD(GibbFactor)
 	COPYELEMENT_LOAD(incidentFlag)
@@ -7131,6 +7135,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Explode)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);
 
 	//load ai module pointers
 	predatorStatusPointer->missionmodule = GetPointerFromAIModuleIndex(block->missionmodule_index);

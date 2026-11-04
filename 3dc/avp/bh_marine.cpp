@@ -14,6 +14,7 @@
 //   a save can no longer put someone with no firing code into a firing state
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved marine has to be on a real path
 #include "3dc.h"
 
 #include "inline.h"
@@ -18278,6 +18279,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(lastframe_fallingspeed)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);
 	COPYELEMENT_LOAD(stateTimer)
 	COPYELEMENT_LOAD(internalState)
 	COPYELEMENT_LOAD(weaponTarget)		/* position for firing weapon at */

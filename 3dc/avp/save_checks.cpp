@@ -113,6 +113,11 @@ bool Save_TextureSequenceIsValid(const int *animationList, int sequence)
 	return true;
 }
 
+bool Save_NumberIsInRange(int number, int lowest, int highest)
+{
+	return number >= lowest && number <= highest;
+}
+
 // A dynamics block says where an object is and how it moves. Nearly all of it is only numbers, and strange numbers just give a strange
 // object. These are the parts that can do real harm:
 //

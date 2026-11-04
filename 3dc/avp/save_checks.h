@@ -27,6 +27,9 @@ int Save_MorphFrameOrOwn(int saved, int own, int maxFrames);
 // Is this one of the sequences in a texture animation's list? The list can be empty, and then nothing is.
 bool Save_TextureSequenceIsValid(const int *animationList, int sequence);
 
+// Is this number between these two, both included?
+bool Save_NumberIsInRange(int number, int lowest, int highest);
+
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
 void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
 
