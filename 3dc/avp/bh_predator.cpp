@@ -1,6 +1,9 @@
 /* Patrick 4/7/97 ---------------------------------------------------
 Source file for predator AI
 ---------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a dormant predator keeps its own copy of its level data, not a pointer to it
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -878,7 +881,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         pred_bhv=(DORMANT_PREDATOR_STATUS_BLOCK*)AllocateMem(sizeof(DORMANT_PREDATOR_STATUS_BLOCK));
 
         pred_bhv->bhvr_type=I_BehaviourDormantPredator;
-        pred_bhv->toolsData=bhdata;
+        pred_bhv->toolsData=*(TOOLS_DATA_PREDATOR*)bhdata;
 
         sbPtr->SBdataptr=(void*) pred_bhv;
 
@@ -887,7 +890,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
 {
         DORMANT_PREDATOR_STATUS_BLOCK* pred_bhv;
-        void* toolsData;
+        TOOLS_DATA_PREDATOR toolsData;
 
         GLOBALASSERT(sbPtr);
         GLOBALASSERT(sbPtr->SBdataptr);
@@ -898,7 +901,7 @@ void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
         DeallocateMem(pred_bhv);
         InitialiseSBValues(sbPtr);
         sbPtr->I_SBtype = I_BehaviourPredator;
-        EnableBehaviourType(sbPtr,I_BehaviourPredator ,toolsData );
+        EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );
 
         //find strategyblock of death target
         {

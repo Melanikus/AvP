@@ -5,6 +5,9 @@
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
 //   if-blocks in each #if branch, so code scanners can read it
+//   finds the data after a save block with DataAfterBlock, which says what it means
+//   a delta sequence's name is copied by the length measured for it
+//   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
 
 #include "3dc.h"
 #include "io.h"
@@ -73,7 +76,10 @@ int GlobalLevelOfDetail_Hierarchical;
 
 STRATEGYBLOCK *Global_HModel_Sptr;
 HMODELCONTROLLER *Global_Controller_Ptr;
-static DISPLAYBLOCK *Global_HModel_DispPtr;
+// Two settings of the object being drawn, for Process_Section to hand to each body part. DoHModel copies them, because
+// some of the objects it draws are local variables that no longer exist once their function returns.
+static int Global_HModel_ObFlags2;
+static unsigned int Global_HModel_SpecialFXFlags;
 
 DAMAGEBLOCK Default_Damageblock =
 {
@@ -1384,7 +1390,7 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		dummy_displayblock.ObEuler.EulerZ = 0;
 		dummy_displayblock.ObMat = this_section_data->SecMat;
 		dummy_displayblock.ObFlags = ObFlag_VertexHazing | ObFlag_MultLSrc;
-		dummy_displayblock.ObFlags2 = Global_HModel_DispPtr->ObFlags2;
+		dummy_displayblock.ObFlags2 = Global_HModel_ObFlags2;
 		dummy_displayblock.ObFlags3 = 0;
 		dummy_displayblock.ObNumLights = 0;
 		dummy_displayblock.ObVDBPtr = NULL;
@@ -1409,7 +1415,7 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		dummy_displayblock.ShapeAnimControlBlock = this_section_data->sac_ptr;
 		dummy_displayblock.HModelControlBlock = NULL; /* Don't even want to think about that. */
 		dummy_displayblock.ObMyModule = NULL;
-		dummy_displayblock.SpecialFXFlags = Global_HModel_DispPtr->SpecialFXFlags;
+		dummy_displayblock.SpecialFXFlags = Global_HModel_SpecialFXFlags;
 		MakeVector(&dummy_displayblock.ObWorld, &Global_VDB_Ptr->VDB_World, &dummy_displayblock.ObView);
 		RotateVector(&dummy_displayblock.ObView, &Global_VDB_Ptr->VDB_Mat);
 		/* Whilst we're here... */
@@ -2104,7 +2110,8 @@ void DoHModel(HMODELCONTROLLER *controller, DISPLAYBLOCK *dptr)
 	GLOBALASSERT(dptr);
 
 	Global_HModel_Sptr    = dptr->ObStrategyBlock;
-	Global_HModel_DispPtr = dptr;
+	Global_HModel_ObFlags2 = dptr->ObFlags2;
+	Global_HModel_SpecialFXFlags = dptr->SpecialFXFlags;
 
 	/* Check the object is in a sensible place. */
 	if (!((dptr->ObWorld.vx < 1000000 && dptr->ObWorld.vx > -1000000)
@@ -4458,7 +4465,6 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		/* */
 		Global_HModel_Sptr = sbPtr;
 		Global_Controller_Ptr = controller;
-		Global_HModel_DispPtr = sbPtr->SBdptr;
 		Verify_Positions_Recursion(controller, controller->section_data, &sbPtr->DynPtr->Position, callCode);
 	}
 
