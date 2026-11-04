@@ -4419,7 +4419,8 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 
 	// Painting a pixel clears its mark, so a mark still here is a pixel that was marked and never got any darker. Some are expected: a
 	// polygon past this light's reach isn't painted, because it has no light to lose, and the sky and sprites aren't on our list. The
-	// colour is off, so this only counts them. Whatever draws next marks the stencil afresh and sets everything up again first.
+	// opposite doesn't hold: a surface turned away from the lamp gets painted with nothing, so read this beside how far the mask rose.
+	// The colour is off, so this only counts them, and whatever draws next sets everything it needs first.
 	if (countQuery && toyNoteLight)
 	{
 		device->SetPixelShader(NULL);
