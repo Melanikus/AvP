@@ -2123,8 +2123,8 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	}
 
 	//A save with no model for the weapon leaves the player with the one they have, the same as a model it isn't allowed to
-	//load. LoadSavedGame waits for the level's first frame, which gives them one. If there's still none, nothing may point
-	//at it, because the code that draws and changes a weapon's model relies on that model having parts.
+	//load. LoadSavedGame waits for the level's first frame, which gives them one. If there's still none, the pointer is left
+	//as it was, because the code that draws and changes a weapon's model relies on that model having parts.
 	if(PlayersWeaponHModelController.section_data)
 	{
 		PlayersWeapon.HModelControlBlock = &PlayersWeaponHModelController;
