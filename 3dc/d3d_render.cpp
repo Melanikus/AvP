@@ -3540,6 +3540,7 @@ int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a fla
 int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen live lights leave the game's lighting, and are added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
+int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 int ToyShadowsPositions = 4;   // -shadowpositions=N, 1, 4 or 8: how many places a light is treated as shining from. 1 is a point of light, with no penumbra
 int ToyShadowsNearLights = 2;  // -shadownearlights=N, 0 to 12: how many lights besides flares get those positions, nearest first
@@ -3669,8 +3670,8 @@ static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 	toyVerts[toyNumVerts++] = c;
 }
 
-// light holds x y z range
-static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
+// light holds x y z range. model says this polygon is part of a model, such as an alien
+static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool model)
 {
 	int const needed = ((count - 2) * 2 + count * 2) * 3;
 	if (toyNumVerts + needed > kToyMaxVerts)
@@ -3730,9 +3731,27 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	// A polygon facing the other way is read backwards, so that every prism is built the same way round.
 	bool const backwards = facing < 0.0f;
 
+	// A model is many small polygons, about 110 units along an edge, so starting just behind each one lets every rib and buckle
+	// cast a hard little shadow on the next, and the model speckles. So its shadow starts further back, and only something well
+	// clear of the surface, like an arm across a chest, shadows it. Half the polygon's own size is the limit: a facehugger's
+	// polygons are about 48, and with a fixed gap all of its shadow would start below the floor it sits on.
+	float startGap = kToyStartGap;
+	if (model)
+	{
+		float const sideA = ax * ax + ay * ay + az * az;
+		float const sideB = bx * bx + by * by + bz * bz;
+		float const halfSize = sqrtf(sideA > sideB ? sideA : sideB) * 0.5f;
+
+		startGap = ((float)ToyShadowsModelGap < halfSize) ? (float)ToyShadowsModelGap : halfSize;
+		if (startGap < kToyStartGap)
+		{
+			startGap = kToyStartGap;
+		}
+	}
+
 	// the lower the light hits the surface, the further the start has to move to get behind it by the same amount
 	float const angle = fabsf(facing) / (normalLength * lightDistance);
-	float gap = kToyStartGap / (angle > 0.01f ? angle : 0.01f);
+	float gap = startGap / (angle > 0.01f ? angle : 0.01f);
 	if (gap > kToyWidestGap)
 	{
 		gap = kToyWidestGap;
@@ -3743,7 +3762,9 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	// the light is behind it. Its prism starts just in front of it, towards the light, and takes the surface in. The camera
 	// is at 0 0 0.
 	float const cameraSide = -(nx * pts[0].x + ny * pts[0].y + nz * pts[0].z);
-	bool const takeSurfaceIn = (cameraSide < 0.0f) != (facing < 0.0f);
+	// A model doesn't need this. shadow.psh and shadowFlare.psh give a surface turned away from a lamp or a flare nothing to lose, and
+	// on a model all it would do is leave a thin dark strip along every edge of the lit part.
+	bool const takeSurfaceIn = !model && (cameraSide < 0.0f) != (facing < 0.0f);
 	if (takeSurfaceIn)
 	{
 		gap = -kToyStartGap;
@@ -4092,7 +4113,7 @@ static void ToyAddTestBox(const float *light)
 	for (int face = 0; face < 6; face++)
 	{
 		ToyVec const points[4] = { corners[kFaces[face][0]], corners[kFaces[face][1]], corners[kFaces[face][2]], corners[kFaces[face][3]] };
-		ToyAddPrism(points, 4, light);
+		ToyAddPrism(points, 4, light, false);
 	}
 }
 
@@ -4524,7 +4545,7 @@ static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport
 		}
 
 		int const vertsBefore = toyNumVerts;
-		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light);
+		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light, kind == kToyCasterModel);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
 	if (ToyShadowsTest && !cloakedOnly)
