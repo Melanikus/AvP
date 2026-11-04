@@ -949,7 +949,9 @@ static void TestMergeData()
 	int const secondTriangle[5] = { 0, 2, 3, -1, -1 };
 	int const thirdTriangle[5] = { 1, 2, 3, -1, -1 };
 
-	int const farAway = 0x10000000;
+	// Each place is 4 bytes, so this is 2 GB from wherever the list is, which is outside the addresses a program like this one
+	// can read, in either direction. A partner that's only a little way off reads whatever is there, which could refuse it by luck.
+	int const farAway = 0x20000000;
 
 	struct MergeRow { int entries; int merge[4]; bool accepted; char const * what; };
 	MergeRow const rows[] =
@@ -1079,7 +1081,7 @@ static void TestAnimatedShapes()
 
 	// A frame's number is its place in the list of frames. The game already throws away a sequence with a number too big. A
 	// number just below the list would be thrown away by luck, so the second row is so far below that looking there would crash.
-	int const negativeFrames[] = { -1, -0x10000000 };
+	int const negativeFrames[] = { -1, -0x20000000 };
 
 	for (size_t i = 0; i < sizeof(negativeFrames) / sizeof(negativeFrames[0]); i++)
 	{
@@ -3298,13 +3300,17 @@ static void TestNumbersUsedAsPlaces()
 	int const repeated[2] = { 1, 1 };
 	int const pastTheEnd[2] = { 0, 2 };
 	int const negative[2] = { -1, 0 };
-	int const farBelow[2] = { -100000000, 0 };   // just below zero could read a byte that happens to refuse it, and this can't
+	// Just past either end could read a byte that happens to refuse it. A program like this one can only read the first 2 GB
+	// of addresses, and this far from anywhere in that, in either direction, is outside them. So without the check, these crash.
+	int const farPast[2] = { 0, 0x7ffffff0 };
+	int const farBelow[2] = { -0x7ffffff0, 0 };
 
 	Check(FramePlacesAccepted(inOrder, 2), "frames in order are accepted");
 	Check(FramePlacesAccepted(swapped, 2), "frames out of order are accepted");
 	Check(FramePlacesAccepted(inOrder, 0), "a sequence with no frames is accepted");
 	Check(!FramePlacesAccepted(repeated, 2), "two frames in one place are refused");
 	Check(!FramePlacesAccepted(pastTheEnd, 2), "a frame past the end of its sequence is refused");
+	Check(!FramePlacesAccepted(farPast, 2), "a frame far past the end of its sequence is refused");
 	Check(!FramePlacesAccepted(negative, 2), "a frame in a negative place is refused");
 	Check(!FramePlacesAccepted(farBelow, 2), "a frame far below the start of its sequence is refused");
 }

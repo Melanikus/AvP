@@ -20,7 +20,7 @@ static char * MemoryEndingAtAWall(size_t bytes)
 	GetSystemInfo(&system);
 
 	size_t const page = system.dwPageSize;
-	size_t const readable = 256 * page;
+	size_t const readable = 1024 * page;
 
 	if (!block)
 	{

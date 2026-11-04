@@ -114,7 +114,7 @@ static HuffmanPackage * MakePackage(int * packageSize)
 // A package that unpacks to far more than the spare bytes kept after a package's data. It's all one byte value, so it packs down to a size that fits the wall.
 static HuffmanPackage * MakeBigPackage(int * packageSize)
 {
-	int const bytes = 4 * 1024 * 1024;
+	int const bytes = 16 * 1024 * 1024;
 	unsigned char * data = (unsigned char *)calloc(bytes, 1);
 
 	HuffmanPackage * package = HuffmanCompression(data, bytes);
