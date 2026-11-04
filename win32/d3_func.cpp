@@ -185,6 +185,9 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	extern void ToyShadows_ReleaseTargets();
+	ToyShadows_ReleaseTargets();
+
 	Tex_ReleaseDynamicTextures();
 
 	SAFE_DELETE(d3d.mainVB);
@@ -1269,7 +1272,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 						NULL,            // macro's
 						NULL,            // includes
 						"vs_main",       // main function
-						(fileName == "shadow.vsh") ? "vs_3_0" : "vs_2_0",        // shader profile
+						(fileName.compare(0, 6, "shadow") == 0) ? "vs_3_0" : "vs_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -1361,7 +1364,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 						NULL,            // macro's
 						NULL,            // includes
 						"ps_main",       // main function
-						(fileName == "shadow.psh") ? "ps_3_0" : "ps_2_0",        // shader profile
+						(fileName.compare(0, 6, "shadow") == 0) ? "ps_3_0" : "ps_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -2580,6 +2583,8 @@ bool InitialiseDirect3D()
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
 
 	d3d.shadowEffect = d3d.effectSystem->Add("shadow", "shadow.vsh", "shadow.psh", d3d.mainDecl);
+	d3d.shadowDepthEffect = d3d.effectSystem->Add("shadowDepth", "shadow.vsh", "shadowDepth.psh", d3d.mainDecl);
+	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
 
 	// we should bail out if the shaders can't be loaded
 	if ((d3d.mainEffect  == kNullShaderID)    ||

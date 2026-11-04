@@ -3534,6 +3534,7 @@ int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
+int ToyShadowsSoft = 6;       // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 
 struct ToyVec
@@ -3757,10 +3758,10 @@ static void ToyLogFrame(const ToyFrameReport &report)
 {
 	char line[320];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes",
+		"toy-shadows: frame %d, view %s: %d polygons (%d left out), %d lights, %d verts (%d prisms left out), state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow, %.1f ms here, %.1f ms a frame, %d early flushes, soft %d",
 		report.frame, kToyViewNames[ToyShadowsMode], report.casters, toyCastersLeftOut, report.lights, report.verts, toyPrismsLeftOut,
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
-		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes);
+		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft);
 	toyEarlyFlushes = 0;
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
@@ -4032,6 +4033,17 @@ static void ToySetFloatState(LPDIRECT3DDEVICE9 device, D3DRENDERSTATETYPE state,
 	device->SetRenderState(state, asBits);
 }
 
+static inline void ToyPutScreenCorner(D3DLVERTEX &vertex, float x, float y, float u, float v)
+{
+	vertex.x = x;
+	vertex.y = y;
+	vertex.z = 0.0f;
+	vertex.color = 0;
+	vertex.specular = 0;
+	vertex.u = u;
+	vertex.v = v;
+}
+
 static inline void ToyPutLevelVertex(D3DLVERTEX &vertex, const ToyVec &point, D3DCOLOR packedNormal)
 {
 	vertex.x = point.x;
@@ -4041,6 +4053,82 @@ static inline void ToyPutLevelVertex(D3DLVERTEX &vertex, const ToyVec &point, D3
 	vertex.specular = 0;
 	vertex.u = 0.0f;
 	vertex.v = 0.0f;
+}
+
+// Draws the level's polygons again, exactly where the game drew them. With a light, only the ones in its reach.
+static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light)
+{
+	HRESULT result = S_OK;
+	int used = 0;
+
+	for (int caster = 0; caster < toyNumCasters; caster++)
+	{
+		ToyVec const *pts = &toyCasterPoints[toyCasterStart[caster]];
+		int const count = toyCasterCount[caster];
+
+		float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
+		float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
+		float nx = ay * bz - az * by;
+		float ny = az * bx - ax * bz;
+		float nz = ax * by - ay * bx;
+		float const normalLength = sqrtf(nx * nx + ny * ny + nz * nz);
+
+		if (normalLength < 0.001f)
+		{
+			continue;
+		}
+
+		nx /= normalLength;
+		ny /= normalLength;
+		nz /= normalLength;
+
+		if (light)
+		{
+			float const planeDistance = nx * (light[0] - pts[0].x) + ny * (light[1] - pts[0].y) + nz * (light[2] - pts[0].z);
+			if (fabsf(planeDistance) >= light[3])
+			{
+				continue;
+			}
+		}
+
+		// the normal has to point at the side we can see. The camera is at 0 0 0, and polygons don't all wind the same way.
+		if (nx * pts[0].x + ny * pts[0].y + nz * pts[0].z > 0.0f)
+		{
+			nx = -nx;
+			ny = -ny;
+			nz = -nz;
+		}
+
+		D3DCOLOR const packedNormal = D3DCOLOR_ARGB(255, (int)((nx * 0.5f + 0.5f) * 255.0f), (int)((ny * 0.5f + 0.5f) * 255.0f), (int)((nz * 0.5f + 0.5f) * 255.0f));
+
+		for (int i = 1; i < count - 1; i++)
+		{
+			if (used + 3 > kToyVertsPerDraw)
+			{
+				HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, used / 3, toyChunk, sizeof(D3DLVERTEX));
+				if (FAILED(drawn))
+				{
+					result = drawn;
+				}
+				used = 0;
+			}
+
+			ToyPutLevelVertex(toyChunk[used++], pts[0], packedNormal);
+			ToyPutLevelVertex(toyChunk[used++], pts[i], packedNormal);
+			ToyPutLevelVertex(toyChunk[used++], pts[i + 1], packedNormal);
+		}
+	}
+
+	if (used)
+	{
+		HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, used / 3, toyChunk, sizeof(D3DLVERTEX));
+		if (FAILED(drawn))
+		{
+			result = drawn;
+		}
+	}
+
+	return result;
 }
 
 // The stencil now marks the pixels this light can't reach. This draws the level's polygons again, exactly where the game drew
@@ -4099,72 +4187,7 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 		countQuery->Issue(D3DISSUE_BEGIN);
 	}
 
-	HRESULT result = S_OK;
-	int used = 0;
-
-	for (int caster = 0; caster < toyNumCasters; caster++)
-	{
-		ToyVec const *pts = &toyCasterPoints[toyCasterStart[caster]];
-		int const count = toyCasterCount[caster];
-
-		float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
-		float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
-		float nx = ay * bz - az * by;
-		float ny = az * bx - ax * bz;
-		float nz = ax * by - ay * bx;
-		float const normalLength = sqrtf(nx * nx + ny * ny + nz * nz);
-
-		if (normalLength < 0.001f)
-		{
-			continue;
-		}
-
-		nx /= normalLength;
-		ny /= normalLength;
-		nz /= normalLength;
-
-		float const planeDistance = nx * (light[0] - pts[0].x) + ny * (light[1] - pts[0].y) + nz * (light[2] - pts[0].z);
-		if (fabsf(planeDistance) >= light[3])
-		{
-			continue;
-		}
-
-		// the normal has to point at the side we can see. The camera is at 0 0 0, and polygons don't all wind the same way.
-		if (nx * pts[0].x + ny * pts[0].y + nz * pts[0].z > 0.0f)
-		{
-			nx = -nx;
-			ny = -ny;
-			nz = -nz;
-		}
-
-		D3DCOLOR const packedNormal = D3DCOLOR_ARGB(255, (int)((nx * 0.5f + 0.5f) * 255.0f), (int)((ny * 0.5f + 0.5f) * 255.0f), (int)((nz * 0.5f + 0.5f) * 255.0f));
-
-		for (int i = 1; i < count - 1; i++)
-		{
-			if (used + 3 > kToyVertsPerDraw)
-			{
-				HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, used / 3, toyChunk, sizeof(D3DLVERTEX));
-				if (FAILED(drawn))
-				{
-					result = drawn;
-				}
-				used = 0;
-			}
-
-			ToyPutLevelVertex(toyChunk[used++], pts[0], packedNormal);
-			ToyPutLevelVertex(toyChunk[used++], pts[i], packedNormal);
-			ToyPutLevelVertex(toyChunk[used++], pts[i + 1], packedNormal);
-		}
-	}
-
-	if (used)
-	{
-		HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, used / 3, toyChunk, sizeof(D3DLVERTEX));
-		if (FAILED(drawn))
-		{
-			result = drawn;
-		}
-	}
+	HRESULT const result = ToyDrawLevelPolygons(device, light);
 
 	if (countQuery)
 	{
@@ -4176,6 +4199,144 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
 
 	return result;
+}
+
+// Soft edges need two pictures the size of the screen: the mask, which says how much of each pixel to keep, and how far away
+// each pixel is. They live on the graphics card, so they're lost whenever the device resets: Alt-Tab, or a new screen size.
+static IDirect3DTexture9 *toyMaskTexture = 0;
+static IDirect3DTexture9 *toyDepthTexture = 0;
+static IDirect3DSurface9 *toyMaskSurface = 0;
+static IDirect3DSurface9 *toyDepthSurface = 0;
+static bool toyTargetsFailed = false;
+
+template <class T> static void ToyRelease(T *&thing)
+{
+	if (thing)
+	{
+		thing->Release();
+		thing = 0;
+	}
+}
+
+// Called just before the device resets, which Direct3D won't do while these exist. They're made again when next needed.
+void ToyShadows_ReleaseTargets()
+{
+	ToyRelease(toyMaskSurface);
+	ToyRelease(toyDepthSurface);
+	ToyRelease(toyMaskTexture);
+	ToyRelease(toyDepthTexture);
+	toyTargetsFailed = false;
+}
+
+static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
+{
+	if (toyMaskSurface && toyDepthSurface)
+	{
+		return true;
+	}
+
+	if (toyTargetsFailed)
+	{
+		return false;
+	}
+
+	IDirect3DSurface9 *screen = 0;
+	D3DSURFACE_DESC size;
+
+	if (FAILED(device->GetRenderTarget(0, &screen)))
+	{
+		toyTargetsFailed = true;
+		return false;
+	}
+
+	HRESULT const measured = screen->GetDesc(&size);
+	screen->Release();
+
+	if (FAILED(measured)
+		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &toyMaskTexture, NULL))
+		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT, &toyDepthTexture, NULL))
+		|| FAILED(toyMaskTexture->GetSurfaceLevel(0, &toyMaskSurface))
+		|| FAILED(toyDepthTexture->GetSurfaceLevel(0, &toyDepthSurface)))
+	{
+		ToyShadows_ReleaseTargets();
+		toyTargetsFailed = true;
+		LogString("toy-shadows: couldn't make the pictures for soft edges, so shadow edges stay hard");
+		return false;
+	}
+
+	return true;
+}
+
+// Writes down how far away each pixel of the level is. The bias is the one the darkening uses, for the same reason.
+static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device)
+{
+	ToySetVolumeState(device);
+
+	d3d.effectSystem->SetActive(d3d.shadowDepthEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowDepthEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
+	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
+
+	ToyDrawLevelPolygons(device, 0);
+
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
+	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
+}
+
+// Puts the mask on the screen through the softening shader, multiplying what's there. The mask holds what to keep.
+static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device)
+{
+	D3DSURFACE_DESC size;
+	toyMaskSurface->GetDesc(&size);
+
+	float const pixelAcross = 1.0f / (float)size.Width;
+	float const pixelDown   = 1.0f / (float)size.Height;
+
+	ToySetVolumeState(device);
+
+	d3d.effectSystem->SetActive(d3d.shadowBlurEffect);
+	d3d.mainDecl->Set();
+
+	float const constants[4] = { pixelAcross, pixelDown, (float)ToyShadowsSoft, 3000.0f };
+	device->SetPixelShaderConstantF(0, constants, 1);
+
+	device->SetTexture(0, toyMaskTexture);
+	device->SetTexture(1, toyDepthTexture);
+
+	for (int sampler = 0; sampler < 2; sampler++)
+	{
+		device->SetSamplerState(sampler, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		device->SetSamplerState(sampler, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		device->SetSamplerState(sampler, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		device->SetSamplerState(sampler, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		device->SetSamplerState(sampler, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	}
+
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+
+	// half a pixel on each way, or every pixel would read the corner of its place in the mask rather than the middle
+	float const left = pixelAcross * 0.5f, top = pixelDown * 0.5f;
+
+	ToyPutScreenCorner(toyChunk[0], -1.0f,  1.0f, left,        top);
+	ToyPutScreenCorner(toyChunk[1],  1.0f,  1.0f, 1.0f + left, top);
+	ToyPutScreenCorner(toyChunk[2], -1.0f, -1.0f, left,        1.0f + top);
+	ToyPutScreenCorner(toyChunk[3],  1.0f, -1.0f, 1.0f + left, 1.0f + top);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, toyChunk, sizeof(D3DLVERTEX));
+
+	device->SetTexture(0, NULL);
+	device->SetTexture(1, NULL);
 }
 
 static void ToyForgetCasters()
@@ -4272,6 +4433,29 @@ static void ToyShadows_Draw()
 	ToyVec sampleNear = { 0.0f, 0.0f, 0.0f };
 	ToyVec sampleFar = { 0.0f, 0.0f, 0.0f };
 
+	// For soft edges the darkening below goes into the mask instead of straight onto the screen.
+	bool const canSoften = d3d.shadowDepthEffect != kNullEffectID && d3d.shadowBlurEffect != kNullEffectID;
+	IDirect3DSurface9 *screen = 0;
+	D3DVIEWPORT9 viewport;
+
+	if (ToyShadowsMode == kToyViewFinal && ToyShadowsSoft > 0 && haveShader && canSoften && ToyMakeTargets(device)
+		&& SUCCEEDED(device->GetRenderTarget(0, &screen)) && SUCCEEDED(device->GetViewport(&viewport)))
+	{
+		device->SetRenderTarget(0, toyDepthSurface);
+		device->SetViewport(&viewport);
+		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+		ToyDrawDepthForSoftening(device);
+
+		device->SetRenderTarget(0, toyMaskSurface);
+		device->SetViewport(&viewport);
+		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+	}
+	else if (screen)
+	{
+		screen->Release();
+		screen = 0;
+	}
+
 	for (int light = 0; light < report.lights; light++)
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
@@ -4357,6 +4541,14 @@ static void ToyShadows_Draw()
 	}
 	else
 	{
+		if (screen)
+		{
+			device->SetRenderTarget(0, screen);
+			device->SetViewport(&viewport);
+			screen->Release();
+			ToyApplySoftenedMask(device);
+		}
+
 		ToyDimWorld(device);
 	}
 

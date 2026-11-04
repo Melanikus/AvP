@@ -261,6 +261,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			int const asked = atoi(darkSwitch + strlen("-shadowdark="));
 			ToyShadowsDarkness = (asked < 0) ? 0 : (asked > 99) ? 99 : asked;
 		}
+		extern int ToyShadowsSoft;
+		char const *softSwitch = strstr(command_line, "-shadowsoft=");
+		if (softSwitch)
+		{
+			int const asked = atoi(softSwitch + strlen("-shadowsoft="));
+			ToyShadowsSoft = (asked < 0) ? 0 : (asked > 32) ? 32 : asked;
+		}
 		extern int ToyShadowsWorld;
 		char const *worldSwitch = strstr(command_line, "-shadowworld=");
 		if (worldSwitch)
