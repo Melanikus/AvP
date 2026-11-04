@@ -58,6 +58,7 @@
  *   BK-P17: fail Open when an audio track can't be created
  *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame
  *   BK-P21: reject a header that claims more data than the file has
+ *   removed an unfinished switched-off (#if 0) block: its bare "class" stopped code-checking tools reading this file
  */
 
 #include "BinkDecoder.h"
@@ -105,16 +106,6 @@ BinkHandle Bink_Open(const char* fileName)
 
 	// loaded ok, make handle valid
 	newHandle.isValid = true;
-#if 0
-	// find a free slot if available
-	for (int i = 0; i < classInstances.size(); i++)
-	{
-		if (!classInstances[i])
-		{
-			class
-		}
-	}
-#endif
 
 	// get a handle ID
 	newHandle.instanceIndex = classInstances.size() - 1;
