@@ -17,6 +17,7 @@ struct PS_OUTPUT
 
 // Global variables
 sampler2D Tex0 : register(s0);
+float4    WorldAxes[3] : register(c0);    // the world's x, y and z directions, as the camera sees them
 
 
 // Name: Surface pixel shader
@@ -46,8 +47,11 @@ PS_OUTPUT ps_main(in PS_INPUT In)
 
     // A shape can really have a zero normal. Normalising zero gives nonsense, so that's kept as zero. The game lights such a point as a
     // surface turned side-on, and so do the light shaders.
-    float size = dot(In.Normal, In.Normal);
-    float3 facing = (size > 0.0f) ? In.Normal / sqrt(size) : float3(0.0f, 0.0f, 0.0f);
+    // Normals arrive in the world's directions, and the lights are in the camera's. This pass runs once a frame, so this is the one place
+    // they're turned to match.
+    float3 normal = In.Normal.x * WorldAxes[0].xyz + In.Normal.y * WorldAxes[1].xyz + In.Normal.z * WorldAxes[2].xyz;
+    float  size   = dot(normal, normal);
+    float3 facing = (size > 0.0f) ? normal / sqrt(size) : float3(0.0f, 0.0f, 0.0f);
 
     Out.Normal = float4(facing * 0.5f + 0.5f, 1.0f);
 

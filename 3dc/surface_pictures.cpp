@@ -166,14 +166,16 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	d3d.effectSystem->SetActive(d3d.surfaceEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.surfaceEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
-	// the world's three directions, for surface.vsh to turn each normal to face the way the camera does. This is the only place that happens.
+	// The world's three directions, for surface.psh to turn each normal to face the way the camera does. This is the only place that happens.
+	// They go straight into the shader's registers. A vertex shader's numbers go through a list whose order the compiler picks, so a second
+	// one there could land on top of WorldViewProj.
 	float const axes[3 * 4] =
 	{
 		worldAxes[0], worldAxes[1], worldAxes[2], 0.0f,
 		worldAxes[3], worldAxes[4], worldAxes[5], 0.0f,
 		worldAxes[6], worldAxes[7], worldAxes[8], 0.0f,
 	};
-	device->SetVertexShaderConstantF(4, axes, 3);
+	device->SetPixelShaderConstantF(0, axes, 3);
 
 	SurfaceNormals_UseList();
 	mainList->DrawOpaqueAgain(d3d.surfaceDecl);

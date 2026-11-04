@@ -20,13 +20,11 @@ struct VS_OUTPUT
 
 // Global variables
 float4x4 WorldViewProj;
-float4   WorldAxes[3] : register(c4);    // the world's x, y and z directions, as the camera sees them
 
 
 // Name: Surface vertex shader
 // Type: Vertex shader
-// Desc: Puts a polygon of the game's main list exactly where the game drew it, and hands the pixel shader what the pictures need. Normals
-// arrive in the world's directions. This is the one place each frame where they're turned to match the camera's.
+// Desc: Puts a polygon of the game's main list exactly where the game drew it, and hands the pixel shader what the pictures need.
 
 VS_OUTPUT vs_main(in VS_INPUT In)
 {
@@ -34,7 +32,7 @@ VS_OUTPUT vs_main(in VS_INPUT In)
 
     Out.Position     = mul(In.Position, WorldViewProj);
     Out.ViewPosition = In.Position.xyz;
-    Out.Normal       = In.Normal.x * WorldAxes[0].xyz + In.Normal.y * WorldAxes[1].xyz + In.Normal.z * WorldAxes[2].xyz;
+    Out.Normal       = In.Normal.xyz;
     Out.Texture      = In.Texture;
     Out.Keep         = float3(In.Normal.w, In.Diffuse.a, In.Specular.a);
 
