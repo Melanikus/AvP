@@ -20,6 +20,10 @@ on:
   pull_request:
     branches: [avpx_main]
   workflow_dispatch:
+  # Weekly, so a new vulnerability in a library we already pin gets noticed even when nobody is committing.
+  # Scheduled runs use this file on the default branch. A failure here blocks nothing by itself; GitHub emails the owner.
+  schedule:
+    - cron: "23 6 * * 1"
 
 permissions:
   contents: read
