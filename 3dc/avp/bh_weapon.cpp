@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
 //   so code scanners can read the file; the game runs the same code as before
+//   a disc whose model has no disc part no longer crashes
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -3029,8 +3030,11 @@ void InitialiseDiscBehaviour(STRATEGYBLOCK *target,SECTION_DATA *disc_section) {
 
 		/* Match disks. */
 		local_disc=GetThisSectionData(bblk->HModelController.section_data,"disk");
-		local_disc->World_Offset=disc_section->World_Offset;
-		local_disc->SecMat=disc_section->SecMat;
+		// the disc is a named part of the model and may be missing
+		if (local_disc) {
+			local_disc->World_Offset=disc_section->World_Offset;
+			local_disc->SecMat=disc_section->SecMat;
+		}
 		InitHModelTweening(&bblk->HModelController,(ONE_FIXED>>2),HMSQT_MarineStand,MSSS_Minigun_Delta,ONE_FIXED,1);
 	}
 

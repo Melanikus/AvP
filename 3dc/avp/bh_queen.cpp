@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
 //   simply skipped
+//   the Queen copes with a model missing a foot, a hand or an animation; her hit animation is the
+//   one set to not playing when she is made, where the attack was set twice
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -351,11 +353,15 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		queenStatus->attack_delta=Add_Delta_Sequence(&queenStatus->HModelController,"attack",
 			(int)HMSQT_QueenRightStanceTemplate,(int)QRSTSS_LeftSwipe,Queen_Step_Time);
-		queenStatus->attack_delta->Playing=0;
+		if (queenStatus->attack_delta) {
+			queenStatus->attack_delta->Playing=0;
+		}
 
 		queenStatus->hit_delta=Add_Delta_Sequence(&queenStatus->HModelController,"hit",
 			(int)HMSQT_QueenRightStanceTemplate,(int)QRSTSS_LeftHit,Queen_Step_Time);
-		queenStatus->attack_delta->Playing=0;
+		if (queenStatus->hit_delta) {
+			queenStatus->hit_delta->Playing=0;
+		}
 
 		queenStatus->TempTarget=FALSE;
 		queenStatus->CurrentQueenObject=-1;
@@ -428,15 +434,19 @@ void SetQueenFoot(STRATEGYBLOCK *sbPtr, QUEEN_FOOT foot) {
 			queenStatusPointer->fixed_foot=LeftFoot;
 			queenStatusPointer->fixed_foot_section=GetThisSectionData(queenStatusPointer->HModelController.section_data,
 				"left foot");
-			GLOBALASSERT(queenStatusPointer->fixed_foot_section);
-			queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			// the foot is a named part of the model and may be missing: SetQueenMovement_FromFoot allows for that too
+			if (queenStatusPointer->fixed_foot_section) {
+				queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			}
 			break;
 		case (RightFoot):
 			queenStatusPointer->fixed_foot=RightFoot;
 			queenStatusPointer->fixed_foot_section=GetThisSectionData(queenStatusPointer->HModelController.section_data,
 				"right foot");
-			GLOBALASSERT(queenStatusPointer->fixed_foot_section);
-			queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			// the foot is a named part of the model and may be missing: SetQueenMovement_FromFoot allows for that too
+			if (queenStatusPointer->fixed_foot_section) {
+				queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			}
 			break;
 		default:
 			GLOBALASSERT(0);
@@ -549,6 +559,11 @@ void SetQueenMovement_FromFoot(STRATEGYBLOCK *sbPtr) {
 
 	dPtr=sbPtr->SBdptr;
 	GLOBALASSERT(dPtr);
+
+	// a model with no foot gives her nothing to move by, and this also covers one read from a save
+	if (!queenStatusPointer->fixed_foot_section) {
+		return;
+	}
 
 	real_pos=queenStatusPointer->fixed_foot_section->World_Offset;
 
@@ -2315,7 +2330,7 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 	QUEEN_STATUS_BLOCK *queenStatusPointer;
 	VECTORCH vectohand,targetpos;
 	int range_to_player;
-	SECTION_DATA *hand_section;
+	SECTION_DATA *hand_section = NULL;
 
 
 	
@@ -2381,6 +2396,11 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 				LOCALASSERT(1==0);
 		}
 			
+
+		// the hand is a named part of the model and may be missing. The rest of this function needs it, so the swipe does nothing
+		if (!hand_section) {
+			return;
+		}
 
 		GetTargetingPointOfObject(Player,&targetpos);
 		vectohand.vx=targetpos.vx-hand_section->World_Offset.vx;

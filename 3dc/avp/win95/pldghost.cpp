@@ -4,6 +4,7 @@ d  ----------------------------------------------------------------------*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles received from other players are kept between 0 and 4095 before a sine or cosine lookup
+//   a ghost whose model has no elevation animation no longer crashes
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -3278,6 +3279,19 @@ int ExtractTimerFromElevation(int elevation) {
 }
 
 /* KJL 17:11:43 26/01/98 - weapon elevation */
+/*
+	Gets a ghost's elevation animation, which is looked up by name in its model. The long lists of settings below all
+	write to it, so a model without one gets a spare to write to instead. Nothing ever plays the spare.
+*/
+static DELTA_CONTROLLER *GetGhostElevation(HMODELCONTROLLER *controller)
+{
+	static DELTA_CONTROLLER spareElevation;
+
+	DELTA_CONTROLLER *elevation = Get_Delta_Sequence(controller, "Elevation");
+
+	return elevation ? elevation : &spareElevation;
+}
+
 void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 {
 	NETGHOSTDATABLOCK *ghostDataPtr;
@@ -3300,9 +3314,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
 	
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1;
 		switch(ghostDataPtr->currentAnimSequence) {
 			case MSQ_StandDieFront:
@@ -3484,9 +3497,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			CreatePredatorHModel(ghostDataPtr, weapon);
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1; /* enabled? */
 		switch(ghostDataPtr->currentAnimSequence) {
 			case PredSQ_Taunt:
@@ -3556,9 +3568,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
 		
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1; /* enabled? */
 		switch(ghostDataPtr->currentAnimSequence) {
 			case ASQ_Pain:
