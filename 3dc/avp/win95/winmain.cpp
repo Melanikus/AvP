@@ -268,6 +268,34 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			int const asked = atoi(softSwitch + strlen("-shadowsoft="));
 			ToyShadowsSoft = (asked < 0) ? 0 : (asked > 32) ? 32 : asked;
 		}
+		extern int ToyShadowsPositions;
+		char const *positionsSwitch = strstr(command_line, "-shadowpositions=");
+		if (positionsSwitch)
+		{
+			int const asked = atoi(positionsSwitch + strlen("-shadowpositions="));
+			ToyShadowsPositions = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+		}
+		extern int ToyShadowsNearLights;
+		char const *nearSwitch = strstr(command_line, "-shadownearlights=");
+		if (nearSwitch)
+		{
+			int const asked = atoi(nearSwitch + strlen("-shadownearlights="));
+			ToyShadowsNearLights = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;
+		}
+		extern int ToyShadowsLampSize;
+		char const *lampSwitch = strstr(command_line, "-shadowlampsize=");
+		if (lampSwitch)
+		{
+			int const asked = atoi(lampSwitch + strlen("-shadowlampsize="));
+			ToyShadowsLampSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
+		}
+		extern int ToyShadowsFlareSize;
+		char const *flareSizeSwitch = strstr(command_line, "-shadowflaresize=");
+		if (flareSizeSwitch)
+		{
+			int const asked = atoi(flareSizeSwitch + strlen("-shadowflaresize="));
+			ToyShadowsFlareSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
+		}
 		extern int ToyShadowsFlareReach;
 		char const *reachSwitch = strstr(command_line, "-shadowflarereach=");
 		if (reachSwitch)

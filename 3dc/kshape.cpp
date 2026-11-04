@@ -5783,6 +5783,19 @@ int ToyShadows_PickLights(float *lights, int most)
 	return numFound;
 }
 
+// Gives the world's x, y and z directions in the space the light list uses, three numbers each. A light's positions are set out
+// along these, so they stay put in the world while the camera turns. The matrix's last column is its movement, which a direction
+// doesn't have, and its middle row is the height, which that space has upside down.
+void ToyShadows_WorldAxes(float *axes)
+{
+	for (int axis = 0; axis < 3; axis++)
+	{
+		axes[axis * 3 + 0] = toyViewMatrix[0 + axis];
+		axes[axis * 3 + 1] = -toyViewMatrix[4 + axis];
+		axes[axis * 3 + 2] = toyViewMatrix[8 + axis];
+	}
+}
+
 // Breaks "active" down by kind, so the count means something. Writes a line each time the total passes its record, and every
 // 300 frames. "Active" is the test LightSourcesInRangeOfObject starts from: lit, and on something the game is keeping active.
 void ToyShadows_NoteFrameLights()

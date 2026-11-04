@@ -3540,6 +3540,10 @@ int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
+int ToyShadowsPositions = 4;   // -shadowpositions=N, 1, 4 or 8: how many places a light is treated as shining from. 1 is a point of light, with no penumbra
+int ToyShadowsNearLights = 2;  // -shadownearlights=N, 0 to 12: how many lights besides flares get those positions, nearest first
+int ToyShadowsLampSize = 300;  // -shadowlampsize=N, 0 to 2000: how wide a lamp or other light is, in the game's units. The levels don't say
+int ToyShadowsFlareSize = 200; // -shadowflaresize=N, 0 to 2000: how wide a flare's light is
 int ToyShadowsCasters = 7;    // -shadowcasters=N, 0 to 7: what may cast and take shadows. Add up 1 for the level, 2 for objects and 4 for models, so that one run can compare what each costs
 int ToyShadowsInMirror = 0;   // set by kzsort.cpp while a body part is drawn a second time, as its reflection in a mirror
 
@@ -3589,6 +3593,7 @@ static double toyStretchTotal = 0.0;   // how far corners were thrown past their
 static int toyStretchCorners = 0;
 
 int ToyShadows_PickLights(float *lights, int most);
+void ToyShadows_WorldAxes(float *axes);
 
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
 // kind is one of ToyCasterKind
@@ -3639,6 +3644,23 @@ void ToyShadows_NoteModelPart(const void *model, int polygons)
 	}
 }
 
+// A real light isn't a point, and that's what makes the edge of a shadow soft: a spot near the edge can see part of the light.
+// So a light is drawn from several positions around its true place, each taking its part of the light. A spot blocked from all
+// of them is full shadow. One blocked from some is the soft edge, the penumbra. Its width comes out right without being worked out:
+// narrow where a shadow touches what casts it, wider further away, and wider for a bigger light.
+//
+// These are the corners of a cube, and the first four are every other corner, so 4 and 8 positions both balance around the true
+// place, and neither lies flat: a flat ring would shrink to a line when seen from the side. They're directions in the world, so
+// the shadows stay still while the camera turns.
+static const float kToyPositions[8][3] =
+{
+	{  0.577f,  0.577f,  0.577f }, {  0.577f, -0.577f, -0.577f }, { -0.577f,  0.577f, -0.577f }, { -0.577f, -0.577f,  0.577f },
+	{ -0.577f, -0.577f, -0.577f }, { -0.577f,  0.577f,  0.577f }, {  0.577f, -0.577f,  0.577f }, {  0.577f,  0.577f, -0.577f },
+};
+
+// While a light's prisms are built from one of its positions, this is where the light really is. Otherwise it's empty.
+static float const *toyLightCentre = 0;
+
 static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 {
 	toyVerts[toyNumVerts++] = a;
@@ -3672,6 +3694,17 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 		return;
 	}
 
+	// A position can land behind a surface the light is really in front of: a flare lying on the floor, or a lamp just under a
+	// ceiling. That surface would then block the position from the whole room, and part of the light would go, in the shape of
+	// the floor. So a polygon whose flat surface lies between the light and the position doesn't cast for that position.
+	float const *centre = toyLightCentre ? toyLightCentre : light;
+	float const centreFacing = nx * (centre[0] - pts[0].x) + ny * (centre[1] - pts[0].y) + nz * (centre[2] - pts[0].z);
+
+	if ((centreFacing < 0.0f) != (facing < 0.0f))
+	{
+		return;
+	}
+
 	// the polygon's flat surface is out of the light's reach
 	float const planeDistance = fabsf(facing) / normalLength;
 	if (planeDistance >= light[3])
@@ -3680,9 +3713,9 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	}
 
 	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
-	// it from the whole room. So a polygon that close doesn't cast for that flare. A light's eighth number is its kind, and 2
-	// is a flare.
-	if (light[7] == 2.0f && planeDistance < kToyFlareTouching)
+	// it from the whole room. So a polygon that close doesn't cast for that flare, measured from where the flare really is. A
+	// light's eighth number is its kind, and 2 is a flare.
+	if (light[7] == 2.0f && fabsf(centreFacing) / normalLength < kToyFlareTouching)
 	{
 		return;
 	}
@@ -4322,6 +4355,41 @@ void ToyShadows_ReleaseTargets()
 	toyTargetsFailed = false;
 }
 
+// The mask is added to many times, in small amounts, so eight bits would round them away. A float picture is better, but only if
+// the card can blend on one. Failing that, it's the old picture: it still works, with slightly rougher soft edges.
+static D3DFORMAT ToyBestMaskFormat(LPDIRECT3DDEVICE9 device)
+{
+	static D3DFORMAT const wanted[2] = { D3DFMT_R16F, D3DFMT_A16B16G16R16F };
+
+	D3DFORMAT chosen = D3DFMT_A8R8G8B8;
+	IDirect3D9 *direct3D = 0;
+	D3DDEVICE_CREATION_PARAMETERS created;
+	D3DDISPLAYMODE mode;
+
+	if (SUCCEEDED(device->GetDirect3D(&direct3D)))
+	{
+		if (SUCCEEDED(device->GetCreationParameters(&created)) && SUCCEEDED(device->GetDisplayMode(0, &mode)))
+		{
+			for (int i = 1; i >= 0; i--)
+			{
+				if (direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format,
+					D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING, D3DRTYPE_TEXTURE, wanted[i]) == D3D_OK)
+				{
+					chosen = wanted[i];
+				}
+			}
+		}
+
+		direct3D->Release();
+	}
+
+	LogString(chosen == D3DFMT_R16F ? "toy-shadows: the mask is one 16-bit float"
+		: chosen == D3DFMT_A16B16G16R16F ? "toy-shadows: the mask is four 16-bit floats"
+		: "toy-shadows: the card can't blend on a float picture, so the mask stays 8 bits");
+
+	return chosen;
+}
+
 static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 {
 	if (toyMaskSurface && toyDepthSurface)
@@ -4347,7 +4415,7 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 	screen->Release();
 
 	if (FAILED(measured)
-		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &toyMaskTexture, NULL))
+		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, ToyBestMaskFormat(device), D3DPOOL_DEFAULT, &toyMaskTexture, NULL))
 		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_R32F, D3DPOOL_DEFAULT, &toyDepthTexture, NULL))
 		|| FAILED(toyMaskTexture->GetSurfaceLevel(0, &toyMaskSurface))
 		|| FAILED(toyDepthTexture->GetSurfaceLevel(0, &toyDepthSurface)))
@@ -4569,15 +4637,15 @@ static bool ToyLightRectangle(LPDIRECT3DDEVICE9 device, const float *light, RECT
 }
 
 // Turns the stencil's marks for this flare into a picture: white where it's blocked. The flare's shader softens that as it
-// reads it, which a stencil can't do: a stencil is only ever yes or no.
-static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, bool faint, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+// reads it, which a stencil can't do: a stencil is only ever yes or no. amount is how much each mark counts for, and addToMask
+// puts it on top of what this flare has already painted, as a cloaked shadow or a further position of the flare does.
+static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, bool addToMask, float amount, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	device->SetRenderTarget(0, toyMaskSurface);
 	device->SetViewport(viewport);
 
-	// a faint shadow goes on top of what this flare has already painted, so it adds to it, and the mask stays. The whole mask
-	// is cleared, not just this flare's part, or the last flare's marks would still be there.
-	if (!faint)
+	// the whole mask is cleared, not just this flare's part, or the last flare's marks would still be there
+	if (!addToMask)
 	{
 		device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
@@ -4587,13 +4655,14 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 	// changing the picture being drawn on can reset this
 	device->SetScissorRect(reach);
 
-	DWORD const grey = (DWORD)(kToyCloakedShadow * 255.0f);
+	// rounded up, so that all the positions together reach all the way: a spot blocked from every one gets none of the flare
+	DWORD const grey = (DWORD)ceilf(amount * 255.0f);
 
 	device->SetPixelShader(NULL);
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	device->SetRenderState(D3DRS_ALPHABLENDENABLE, faint ? TRUE : FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, addToMask ? TRUE : FALSE);
 	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 	device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_NOTEQUAL);
@@ -4606,7 +4675,7 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 		countQuery->Issue(D3DISSUE_BEGIN);
 	}
 
-	ToyDrawScreenQuad(device, faint ? D3DCOLOR_ARGB(255, grey, grey, grey) : 0xFFFFFFFF);
+	ToyDrawScreenQuad(device, D3DCOLOR_ARGB(255, grey, grey, grey));
 
 	if (countQuery)
 	{
@@ -4716,6 +4785,124 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	}
 }
 
+// How many positions this light is drawn from: every flare, and the nearest few of the others. Flares come first in the list, and
+// the others go nearest first. A light with no size is a point, so one position is all it can have.
+static int ToyPositionsForLight(const float *lights, int thisLight)
+{
+	bool const flare = lights[thisLight * kToyLightFloats + 7] == 2.0f;
+	int const size = flare ? ToyShadowsFlareSize : ToyShadowsLampSize;
+
+	if (size <= 0 || ToyShadowsPositions < 4)
+	{
+		return 1;
+	}
+
+	if (!flare)
+	{
+		int nearer = 0;
+
+		for (int i = 0; i < thisLight; i++)
+		{
+			if (lights[i * kToyLightFloats + 7] != 2.0f)
+			{
+				nearer++;
+			}
+		}
+
+		if (nearer >= ToyShadowsNearLights)
+		{
+			return 1;
+		}
+	}
+
+	return (ToyShadowsPositions < 8) ? 4 : 8;
+}
+
+// Fills moved with a copy of the light at one of its positions. axes holds the world's three directions, in the light list's space.
+static void ToyLightAtPosition(const float *light, int position, const float *axes, float *moved)
+{
+	float const radius = (float)((light[7] == 2.0f) ? ToyShadowsFlareSize : ToyShadowsLampSize) * 0.5f;
+	float const *place = kToyPositions[position];
+
+	memcpy(moved, light, kToyLightFloats * sizeof(float));
+
+	for (int i = 0; i < 3; i++)
+	{
+		moved[i] = light[i] + radius * (place[0] * axes[0 + i] + place[1] * axes[3 + i] + place[2] * axes[6 + i]);
+	}
+}
+
+// One lamp, from all its positions. Each adds its part of the lamp's share to the mask, through the same stencil and shader as a
+// single position. Where the lamp's light falls on a pixel doesn't change: only how much of it gets blocked.
+static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+{
+	float const *light = &lights[thisLight * kToyLightFloats];
+	float const part = 1.0f / (float)positions;
+	HRESULT result = S_OK;
+
+	toyLightCentre = light;
+
+	for (int position = 0; position < positions; position++)
+	{
+		float moved[kToyLightFloats];
+		ToyLightAtPosition(light, position, axes, moved);
+
+		ToyBuildPrisms(moved, report, false);
+		ToyMarkShadow(device, report);
+
+		HRESULT const darkened = ToyShadeLevel(device, lights, numLights, thisLight, part, countQuery, pixels);
+		if (FAILED(darkened))
+		{
+			result = darkened;
+		}
+	}
+
+	toyLightCentre = 0;
+
+	// a cloaked Predator's shadow is faint, from something that can barely be seen, so one position is plenty
+	if (haveCloaked)
+	{
+		unsigned int notCounted = 0;
+
+		ToyBuildPrisms(light, report, true);
+		ToyMarkShadow(device, report);
+		ToyShadeLevel(device, lights, numLights, thisLight, kToyCloakedShadow, 0, &notCounted);
+	}
+
+	return result;
+}
+
+// One flare's mask, from all its positions. The first clears the picture, and the rest add to it. The flare's colour, strength and
+// cap don't come into this: they stay with the flare's true place, so a flare out in the open looks the same as a single point.
+static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, const RECT *reach, const float *light, int positions, const float *axes, bool haveCloaked, ToyFrameReport *report, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+{
+	float const part = 1.0f / (float)positions;
+
+	toyLightCentre = light;
+
+	for (int position = 0; position < positions; position++)
+	{
+		float moved[kToyLightFloats];
+		ToyLightAtPosition(light, position, axes, moved);
+
+		ToyBuildPrisms(moved, report, false);
+		ToyMarkShadow(device, report);
+		ToyPaintFlareMask(device, screen, viewport, reach, position != 0, part, countQuery, pixels);
+	}
+
+	toyLightCentre = 0;
+
+	// a cloaked Predator's shadow is faint, from something that can barely be seen, so one position is plenty
+	if (haveCloaked)
+	{
+		unsigned int notCounted = 0;
+
+		ToyBuildPrisms(light, report, true);
+		ToyMarkShadow(device, report);
+		ToyPaintFlareMask(device, screen, viewport, reach, true, kToyCloakedShadow, 0, &notCounted);
+	}
+}
+
 static void ToyForgetCasters()
 {
 	toyNumCasters = 0;
@@ -4809,6 +4996,8 @@ static void ToyShadows_Draw()
 
 	// With no shader to do it properly, each light takes a flat share, so that a pixel none of them reach ends up at the full darkness.
 	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)report.lights);
+	float worldAxes[9];
+	ToyShadows_WorldAxes(worldAxes);
 	DWORD const flatShare = (DWORD)((1.0f - keepPerLight) * 255.0f) << 24;
 	bool const haveShader = d3d.shadowEffect != kNullEffectID;
 
@@ -4890,6 +5079,19 @@ static void ToyShadows_Draw()
 
 			device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 			device->SetScissorRect(&reach);
+		}
+
+		// a light drawn from several positions, which only the mask can add up
+		int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
+		if (positions > 1)
+		{
+			HRESULT const darkened = ToyShadeFromEveryPosition(device, lights, report.lights, light, positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
+			if (FAILED(darkened))
+			{
+				report.quad = darkened;
+			}
+			report.pixels += pixelsByLight[light];
+			continue;
 		}
 
 		ToyBuildPrisms(thisLight, &report, false);
@@ -4975,11 +5177,21 @@ static void ToyShadows_Draw()
 				device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 				device->SetScissorRect(&reach);
 
+				int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
+				if (positions > 1)
+				{
+					ToyPaintFlareFromEveryPosition(device, screen, &viewport, &reach, thisLight, positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
+					ToyAddFlareLight(device, lights, report.lights, light, true);
+					report.pixels += pixelsByLight[light];
+					device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+					continue;
+				}
+
 				ToyBuildPrisms(thisLight, &report, false);
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
-					ToyPaintFlareMask(device, screen, &viewport, &reach, false, countQuery, &pixelsByLight[light]);
+					ToyPaintFlareMask(device, screen, &viewport, &reach, false, 1.0f, countQuery, &pixelsByLight[light]);
 
 					if (haveCloaked)
 					{
@@ -4987,7 +5199,7 @@ static void ToyShadows_Draw()
 
 						ToyBuildPrisms(thisLight, &report, true);
 						ToyMarkShadow(device, &report);
-						ToyPaintFlareMask(device, screen, &viewport, &reach, true, 0, &notCounted);
+						ToyPaintFlareMask(device, screen, &viewport, &reach, true, kToyCloakedShadow, 0, &notCounted);
 					}
 				}
 				ToyAddFlareLight(device, lights, report.lights, light, screen != 0);
@@ -5046,6 +5258,17 @@ static void ToyShadows_Draw()
 		ToyLogFrame(report);
 
 		char line[240];
+
+		// the number that says what the positions are costing: each pass is its own prisms, stencil and mask
+		int passes = 0;
+		for (int i = 0; i < report.lights; i++)
+		{
+			passes += darkening ? ToyPositionsForLight(lights, i) : 1;
+		}
+		_snprintf(line, sizeof(line) - 1, "toy-shadows: %d passes for %d lights; %d positions, on flares and the nearest %d others; lamp size %d, flare size %d",
+			passes, report.lights, ToyShadowsPositions, ToyShadowsNearLights, ToyShadowsLampSize, ToyShadowsFlareSize);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
 		if (measuredThisFrame)
 		{
 			float const distance = sqrtf(lights[0] * lights[0] + lights[1] * lights[1] + lights[2] * lights[2]);

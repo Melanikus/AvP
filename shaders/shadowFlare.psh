@@ -91,7 +91,7 @@ float4 ps_main(in PS_INPUT In) : COLOR0
 
     if (Soft.z >= 0.0f)
     {
-        given *= 1.0f - BlockedHere((In.ScreenPlace + 0.5f) * Soft.xy, In.ViewPosition.z);
+        given *= saturate(1.0f - BlockedHere((In.ScreenPlace + 0.5f) * Soft.xy, In.ViewPosition.z));
     }
 
     return float4(tex2D(Tex0, In.Texture).rgb * Colour.rgb * given, 0.0f);
