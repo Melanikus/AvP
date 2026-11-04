@@ -5,7 +5,8 @@
 // the depth buffer's own steps. A prism's cap sitting within about a step of the wall is the fight that makes a shadow flicker.
 //
 // F10 stops the polygon last shot from casting from any light, and F5 undoes the newest stop. The polygon shot shows green and a stopped one shows red, so anyone can see it's the one
-// they meant. Stops and tints only last until the level ends, because a polygon's number only means something in its own level.
+// they meant. Stops and tints last until the level is unloaded, because a polygon's number only means something in its own level. A restart, a death or a load of the same
+// level doesn't unload it, so they carry on through those, and the tag still counts them. A tint stays where it was put, even if the thing it was on has moved since.
 //
 // THE TWO SIDES OF A BLOCK: the crossings are worked out here by hand, from the same corners the card was given. Then the card is asked what its stencil counter really says at that pixel,
 // and what the mask really holds. The two should agree. If they don't, that's a finding too, and a pass that disagrees also says how many triangles only just missed the ray.
@@ -231,6 +232,9 @@ const char *ShadowShoot_UndoStop()
 		return "SHOOT: NOTHING IS STOPPED";
 	}
 
+	// a stop that's gone has nothing left to report on, and what's left would be reported as if it were new
+	newStopToReportOn = false;
+
 	Write("shoot: the newest stop was undone, and %d are left", stops.count);
 
 	_snprintf(wordsForTheScreen, sizeof(wordsForTheScreen) - 1, "SHOOT: UNDONE, %d STILL STOPPED", stops.count);
@@ -263,7 +267,7 @@ const char *ShadowShoot_EndOfEveryFrame()
 
 	if (matchesOfNewStop > 0)
 	{
-		Write("shoot: that stop matched %d polygons being cast on this frame, one for each pass that reached it", matchesOfNewStop);
+		Write("shoot: that stop matched %d polygons in this frame's lists, before each light's reach is asked. So it shows the stop found them, not that they would have cast", matchesOfNewStop);
 		return 0;
 	}
 
