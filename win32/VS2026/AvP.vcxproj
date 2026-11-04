@@ -180,6 +180,9 @@
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
       <SDLCheck>true</SDLCheck>
+      <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
+           the Debug build uses Edit and Continue, which cannot be combined with it. -->
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
