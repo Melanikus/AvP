@@ -120,13 +120,13 @@ that too.
 
 | What was removed | To bring it back | What a port would need it for |
 |---|---|---|
-| `vq/`, `examples/`, `lib/psytune.c`, `lib/misc.c` | Remove them from the list. They aren't in the library's own build, so you would build them yourself | Nothing: tools for designing and tuning the encoder, sample programs and a debug memory tracker |
+| `vq/`, `examples/`, `test/`, `contrib/`, `lib/psytune.c`, `lib/misc.c` | Remove them from the list. They aren't in the library's own build, so you would build them yourself | Nothing: tools for designing and tuning the encoder, sample programs, upstream's tests and fuzz setup, and a debug memory tracker |
 
 ### pthreads4w (threads on Windows)
 
 | What was removed | To bring it back | What a port would need it for |
 |---|---|---|
-| A switched-off logging block in two test programs, `tests/exception3.c` and `tests/exception3_0.c` | Remove `remove-disabled-log-blocks-from-tests.patch` from the portfile | Nothing. Other systems have threads built in, so a port drops this library altogether |
+| `tests/` and `signal.c` | Remove them from the list in the portfile, and remove the two `vcpkg_replace_string` lines under it, which take `tests/` out of the Makefile's `clean` targets | Nothing. Other systems have threads built in, so a port drops this library altogether |
 
 ## Do not bring back
 

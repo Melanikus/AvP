@@ -28,9 +28,21 @@ vcpkg_from_sourceforge(
     fix-pthread_getname_np.patch
     fix-install.patch
     whitespace_in_path.patch
-    remove-disabled-log-blocks-from-tests.patch # our own fix
     ${PATCH_FILES}
 )
+
+# Delete source files that are never built, so that they are not scanned as if we shipped them.
+# - tests/: upstream's test programs. Only Makefile's "all-tests" targets build them.
+# - signal.c: in no source list (common.mk and pthread.c name only pthread_cond_signal.c), and
+#   its code is switched off anyway (HAVE_SIGSET_T).
+file(REMOVE_RECURSE
+    "${SOURCE_PATH}/tests"
+    "${SOURCE_PATH}/signal.c"
+)
+# Makefile's "all" target runs "clean", and "clean" goes into tests/, which would now stop the
+# build. Those two lines only tidy up after the test programs, so they go too.
+vcpkg_replace_string("${SOURCE_PATH}/Makefile" [[cd tests && $(MAKE) clean]] "")
+vcpkg_replace_string("${SOURCE_PATH}/Makefile" [[cd tests && $(MAKE) realclean]] "")
 
 file(TO_NATIVE_PATH "${CURRENT_PACKAGES_DIR}/debug" DESTROOT_DEBUG)
 file(TO_NATIVE_PATH "${CURRENT_PACKAGES_DIR}" DESTROOT_RELEASE)
