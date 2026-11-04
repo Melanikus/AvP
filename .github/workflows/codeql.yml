@@ -1,25 +1,21 @@
 # Second security gate for this repository (AvP Tao #1: security is paramount, the goal is zero vulnerabilities).
 #
 # Snyk (snyk.yml) can't parse a lot of modern C++. CodeQL reads C and C++ the way a compiler does, so it reaches code
-# Snyk can't, and two different readers miss different things. It runs in two ways:
-#   - "Traced" watches the real compiler while it builds. It's the most exact way to read code, but it only sees what
-#     the build compiles.
-#   - "Build mode none" reads files straight from disk, guessing the compiler's settings. It reaches every file, even
-#     ones the build never uses, but the guesses make it less exact. So it only adds to a traced scan, it never replaces one.
+# Snyk can't, and two different readers miss different things. It watches the real compiler while it builds ("tracing"),
+# the most exact way to read code. A trace only sees what the build compiles, so the gate also demands that nothing is
+# left out of the build: code nobody compiles is either dead and should go, or it's a mistake.
+#
+# CodeQL can also read code without building it ("build mode none"), by guessing the compiler's settings. We tried it,
+# and it's not used here: it reported thousands of problems in code the traced jobs read cleanly, so it could only ever
+# stay red, and after the unbuilt files were deleted it read nothing the traced jobs don't.
 #
 # The jobs:
 #   - CodeQL (SAST) on our code watches the real build of the game in every configuration of the solution (Debug and
 #     Release, x86), which also proves that the game builds on a clean machine.
-#   - Get the vcpkg libraries for CodeQL builds our open-source dependencies once and hands their source and headers to
-#     the build mode none job. It finds nothing by itself, but that job can't run without it.
 #   - CodeQL (SAST) on the vcpkg libraries watches vcpkg build the libraries, with the same flags and patches the game
-#     uses. Tracing matters most here: only a real build creates files such as openal-soft's generated headers.
-#   - CodeQL (SAST) on all library source reads every file of those libraries with build mode none, including tests,
-#     examples and other operating systems' code, which the traced job can't see because they are never compiled.
+#     uses.
 #   - CodeQL (SAST) on actions reads this repository's own workflows, because a security gate is worth attacking too.
-#
-# Our own code has no build mode none job. It would only guess at what the traced job knows, so it would report problems
-# nobody could fix. Instead the gate requires that every C/C++ file in git really was read by the real build.
+#   - CodeQL (SAST) on library headers we use checks that nothing falls between the first two.
 #
 # The last job checks that a finding in a library header, seen while building the game, really was reported on the library's
 # side too. Those findings are fixed in the library, so one the library jobs missed would otherwise fall between the two.
@@ -142,72 +138,6 @@ jobs:
             ${{ runner.temp }}/codeql_databases/*/diagnostic
           retention-days: 7
 
-  codeql-prepare:
-    name: Get the vcpkg libraries for CodeQL
-    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
-      # bootstrap-vcpkg validates the signature of the vcpkg tool it downloads.
-      - name: Get vcpkg at the manifest's baseline
-        shell: pwsh
-        run: |
-          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
-          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
-          git init -q $root
-          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
-          git -C $root checkout -q FETCH_HEAD
-          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
-          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-      # --binarysource=clear refuses ready-built libraries from any cache: a library restored from a cache has no source
-      # on disk, so the scan jobs below would never see it.
-      - name: Build the pinned libraries, keeping their sources
-        shell: pwsh
-        run: |
-          $bt = Join-Path $env:RUNNER_TEMP 'bt'
-          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows --binarysource=clear `
-            --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      # Skips D3DX: Microsoft's binary package, with no source to scan.
-      - name: Collect each library's patched source
-        shell: pwsh
-        run: |
-          $bt = Join-Path $env:RUNNER_TEMP 'bt'
-          $out = Join-Path $env:RUNNER_TEMP 'libsrc'
-          New-Item -ItemType Directory -Force $out | Out-Null
-          foreach ($port in Get-ChildItem $bt -Directory) {
-            if ($port.Name -eq 'dxsdk-d3dx') { continue }
-            $src = Join-Path $port.FullName 'src'
-            if (-not (Test-Path $src)) { continue }
-            foreach ($d in Get-ChildItem $src -Directory) {
-              Copy-Item -Recurse $d.FullName (Join-Path $out (Join-Path $port.Name $d.Name))
-              "$($port.Name)/$($d.Name)"
-            }
-          }
-
-      - name: Hand the sources to the scan jobs
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: codeql-library-sources
-          path: ${{ runner.temp }}/libsrc
-          retention-days: 1
-
-      # Build mode none guesses, so it needs the libraries' headers on disk to resolve lines like #include <AL/al.h>.
-      - name: Hand the installed headers to the scan jobs
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: codeql-library-headers
-          path: ${{ runner.temp }}/installed/x86-windows/include
-          retention-days: 1
-
   codeql-libs:
     name: CodeQL (SAST) on the vcpkg libraries
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
@@ -217,7 +147,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # Same steps as the job at the top, before CodeQL starts watching, so it doesn't sit through vcpkg's own setup.
+      # Before CodeQL starts watching, so it doesn't sit through vcpkg's own setup.
       - name: Get vcpkg at the manifest's baseline
         shell: pwsh
         run: |
@@ -288,87 +218,24 @@ jobs:
           upload: never
           upload-database: false
 
+      # LibraryFloors says how many real source files CodeQL must read in each library. Unlike our code, there is no list
+      # of what vcpkg compiled that survives the build, so these numbers stand in for one: if CodeQL loses sight of part
+      # of a library, its count drops and the job fails. Changing a number is a visible edit that someone must review,
+      # like a pinned hash, so only change one when a library really changed. pthreads counts double because it compiles a
+      # copy of itself for each configuration.
       - name: Fail on any finding, or any code CodeQL could not read
         if: ${{ !cancelled() }}
         shell: pwsh
         run: >-
           ./.github/scripts/codeql-gate.ps1 -Kind libs -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
           -SourceRoot "$env:GITHUB_WORKSPACE\libbuild" -ReportFolder "$env:RUNNER_TEMP\codeql-report"
+          -LibraryFloors 'enet=9,fmt=3,libogg=2,libvorbis=22,openal-soft=104,pthreads=292'
 
       - name: Keep the reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codeql-libs-report
-          path: |
-            ${{ runner.temp }}/codeql-report
-            ${{ runner.temp }}/codeql-sarif
-            ${{ runner.temp }}/codeql_databases/*/log
-            ${{ runner.temp }}/codeql_databases/*/diagnostic
-          retention-days: 7
-
-  codeql-libs-all:
-    name: CodeQL (SAST) on all library source
-    needs: codeql-prepare
-    # Always runs, for the same reason as the job on our code: a skipped required check counts as passed.
-    if: ${{ always() }}
-    runs-on: windows-2025-vs2026   # pinned: CodeQL's docs say to read Windows code on Windows
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Download the collected sources
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: codeql-library-sources
-          path: libsrc
-
-      - name: Download the installed headers
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: codeql-library-headers
-          path: libsrc/installed-include
-
-      - name: Set up the x86 compiler
-        uses: ./.github/actions/msvc-x86
-
-      - name: Get the pinned CodeQL tools
-        id: tools
-        uses: ./.github/actions/codeql-bundle
-
-      - name: Start CodeQL
-        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
-        with:
-          tools: ${{ steps.tools.outputs.path }}
-          languages: c-cpp
-          build-mode: none
-          source-root: libsrc
-          queries: security-and-quality,./.github/codeql/read-problems
-          trap-caching: false
-
-      # Not uploaded to code scanning, same as Snyk's library job: these files aren't in our repository.
-      - name: Analyse all library source
-        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
-        with:
-          category: codeql-libs-all
-          output: ${{ runner.temp }}/codeql-sarif
-          upload: never
-          upload-database: false
-
-      - name: Fail on any finding, or any code CodeQL could not read
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: >-
-          ./.github/scripts/codeql-gate.ps1 -Kind all-sources -SarifFolder "$env:RUNNER_TEMP\codeql-sarif"
-          -SourceRoot "$env:GITHUB_WORKSPACE\libsrc" -ReportFolder "$env:RUNNER_TEMP\codeql-report"
-
-      - name: Keep the reports
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: codeql-libs-all-report
           path: |
             ${{ runner.temp }}/codeql-report
             ${{ runner.temp }}/codeql-sarif

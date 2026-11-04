@@ -14,10 +14,9 @@
 param(
     # Which scan this is. It sets the list of files we expect to see in the report:
     #   own         = every source file the game's Visual Studio projects compile, and every C/C++ file in git;
-    #   libs        = the libraries as really compiled: each one must have at least one source file in the report;
-    #   all-sources = every C/C++ file of the libraries, compiled or not;
+    #   libs        = the libraries: every source file in each one's patched tree, plus a minimum count per library;
     #   actions     = this repository's workflows: there is no list to compare with, but it must have read something.
-    [Parameter(Mandatory)] [ValidateSet('own', 'libs', 'all-sources', 'actions')] [string] $Kind,
+    [Parameter(Mandatory)] [ValidateSet('own', 'libs', 'actions')] [string] $Kind,
 
     # The folder CodeQL wrote its report (.sarif) into.
     [Parameter(Mandatory)] [string] $SarifFolder,
@@ -227,16 +226,7 @@ if ($Kind -eq 'own') {
     if ($unscanned.Count -gt 0) {
         $failures.Add("$($unscanned.Count) files are in a language CodeQL can read but no job scans (see languages-not-scanned.txt)")
     }
-} elseif ($Kind -eq 'all-sources') {
-    # installed-include is only there so the libraries' #include lines resolve. It is not a library of its own.
-    $root = (Resolve-Path -LiteralPath $SourceRoot).Path.TrimEnd('\', '/')
-    $expected = @(Get-ChildItem -LiteralPath $root -Recurse -File |
-        Where-Object { (Test-FileType $_.Name $sourceTypes) -or (Test-FileType $_.Name $headerTypes) } |
-        ForEach-Object { $_.FullName.Substring($root.Length + 1).Replace('\', '/') } |
-        Where-Object { -not $_.StartsWith('installed-include/') })
 } elseif ($Kind -eq 'libs') {
-    # A compiled build only uses the files the library's build asks for, so there is no exact list to compare with here.
-    # What we can demand is that every library was seen, which catches CodeQL losing sight of a library's whole build.
     $libraries = @(Get-ChildItem -LiteralPath $SourceRoot -Directory | Where-Object { $notLibraries -notcontains $_.Name })
     if ($libraries.Count -eq 0) { $failures.Add('No libraries were built') }
 
@@ -263,6 +253,30 @@ if ($Kind -eq 'own') {
     }
     Write-ReportList 'source-files-by-library.txt' @($libraryLines)
 
+    # Every source file in a library's patched tree must really have been compiled. A file that isn't is code the game
+    # doesn't use and CodeQL doesn't read, so the library's overlay port should delete it. Most libraries compile in
+    # <library>/src/<version>/, but pthreads compiles a copy in each build folder, so either place counts.
+    $notCompiled = [System.Collections.Generic.List[string]]::new()
+    foreach ($library in $libraries) {
+        $sourceFolder = Join-Path $library.FullName 'src'
+        if (-not (Test-Path -LiteralPath $sourceFolder)) { continue }
+        foreach ($tree in (Get-ChildItem -LiteralPath $sourceFolder -Directory)) {
+            foreach ($file in (Get-ChildItem -LiteralPath $tree.FullName -Recurse -File | Where-Object { Test-FileType $_.Name $sourceTypes })) {
+                $relative = $file.FullName.Substring($tree.FullName.Length + 1).Replace('\', '/')
+                $inTree = "$($library.Name)/src/$($tree.Name)/$relative"
+                $inRelease = "$($library.Name)/x86-windows-rel/$relative"
+                $inDebug = "$($library.Name)/x86-windows-dbg/$relative"
+                if (-not ($seen.Contains($inTree) -or $seen.Contains($inRelease) -or $seen.Contains($inDebug))) {
+                    $notCompiled.Add($inTree)
+                }
+            }
+        }
+    }
+    Write-ReportList 'library-sources-not-compiled.txt' @($notCompiled)
+    if ($notCompiled.Count -gt 0) {
+        $failures.Add("$($notCompiled.Count) library source files were never compiled (see library-sources-not-compiled.txt)")
+    }
+
     # A library with a floor that never turned up at all is the worst case of a partial read.
     foreach ($name in $floors.Keys) {
         if (@($libraries | Where-Object { $_.Name -eq $name }).Count -eq 0) {
@@ -280,7 +294,7 @@ if ($missedHeaders.Count -gt 0) { $failures.Add("$($missedHeaders.Count) header 
 
 # A library that never reached this scan must not pass just because it left no folder behind, so the list of what we
 # expect comes from vcpkg.json, not from what happens to be on disk.
-if ($Kind -eq 'libs' -or $Kind -eq 'all-sources') {
+if ($Kind -eq 'libs') {
     $dependencies = (Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json).dependencies
     foreach ($dependency in $dependencies) {
         $name = if ($dependency -is [string]) { $dependency } else { $dependency.name }
