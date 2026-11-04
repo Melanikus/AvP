@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the player remembers that a music file could not be decoded, so it never tries to read that file again
+
 #ifndef _VorbisPlayer_h_
 #define _VorbisPlayer_h_
 
@@ -49,6 +52,7 @@ class VorbisPlayback
 		uint32_t  _halfBufferSize;
 		uint8_t	  *_audioData;
 		bool	  _isPlaying;
+		bool	  _readFailed;	// the file could not be decoded: it must not be read again
 
 		VorbisPlayback() :
 			_vorbisFile(0),
@@ -58,6 +62,7 @@ class VorbisPlayback
 			_halfBufferSize(0),
 			_audioData(0),
 			_isPlaying(false),
+			_readFailed(false),
 			_decodeThreadInited(false)
 		{
 			memset(&_oggFile, 0, sizeof(OggVorbis_File));

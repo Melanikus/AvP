@@ -23,7 +23,8 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open
+//   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open;
+//   a file that cannot be decoded, or that holds no audio, is refused instead of being read again
 
 #include <stdio.h>
 #include "VorbisPlayer.h"
@@ -96,6 +97,11 @@ bool VorbisPlayback::Open(const std::string &fileName)
 
 	GetVorbisData(kBufferSize);
 
+	if (_readFailed) {
+		Con_PrintError("File " + fileName + " could not be played");
+		return false;
+	}
+
 	// fill the first buffer
 	_audioStream->WriteData(_audioData, kBufferSize);
 
@@ -129,6 +135,7 @@ uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 {
 	uint32_t bytesReadTotal = 0;
 	int32_t bytesReadPerLoop = 0;
+	bool gotAudioThisPass = true;	// whether audio has come out since we last went back to the start of the file
 
 	while (bytesReadTotal < sizeToRead)
 	{
@@ -142,25 +149,38 @@ uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 			0
 		);
 
-		if (bytesReadPerLoop < 0)
-		{
-			LogErrorString("ov_read encountered an error", __LINE__, __FILE__);
-		}
-		// if we reach the end of the file, go back to start
-		else if (bytesReadPerLoop == 0)
-		{
-			ov_raw_seek(&_oggFile, 0);
-		}
-		else if (bytesReadPerLoop == OV_HOLE)
+		// a gap in the data: the decoder carries on after it, so this is not the end of the file
+		if (bytesReadPerLoop == OV_HOLE)
 		{
 			LogErrorString("OV_HOLE", __LINE__, __FILE__);
 		}
-		else if (bytesReadPerLoop == OV_EBADLINK)
+		// any other negative number is an error, not a count of bytes, so it never goes into the total. The file can't
+		// be decoded, and asking again is not safe: the decoder can then carry on with half-built tables, which crashes
+		// or hangs the game. So we remember it, and nothing reads this file again.
+		else if (bytesReadPerLoop < 0)
 		{
-			LogErrorString("OV_EBADLINK", __LINE__, __FILE__);
+			LogErrorString("ov_read encountered an error", __LINE__, __FILE__);
+			_readFailed = true;
+			break;
 		}
-
-		bytesReadTotal += bytesReadPerLoop;
+		// if we reach the end of the file, go back to start. Reaching the end again with no audio in between means
+		// the file holds none, and going round again would never finish.
+		else if (bytesReadPerLoop == 0)
+		{
+			if (!gotAudioThisPass)
+			{
+				LogErrorString("ogg vorbis file holds no audio", __LINE__, __FILE__);
+				_readFailed = true;
+				break;
+			}
+			gotAudioThisPass = false;
+			ov_raw_seek(&_oggFile, 0);
+		}
+		else
+		{
+			gotAudioThisPass = true;
+			bytesReadTotal += bytesReadPerLoop;
+		}
 	}
 
 	return bytesReadTotal;
@@ -178,10 +198,14 @@ void *VorbisUpdateThread(void *argument)
 	{
 		uint32_t numBuffersFree = vorbis->_audioStream->GetNumFreeBuffers();
 
-		if (numBuffersFree)
+		// once a read has failed, the file is left alone: what is already queued plays out, then there is silence
+		if (numBuffersFree && !vorbis->_readFailed)
 		{
 			vorbis->GetVorbisData(kBufferSize);
-			vorbis->_audioStream->WriteData(vorbis->_audioData, kBufferSize);
+			if (!vorbis->_readFailed)
+			{
+				vorbis->_audioStream->WriteData(vorbis->_audioData, kBufferSize);
+			}
 		}
 
 		::Sleep(kQuantum);
