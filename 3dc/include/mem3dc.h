@@ -1,6 +1,7 @@
 /* mem3dc.h */
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   added ReallocMem and AllocArrayMem, which stop the game with a message when there is no memory left
+//   added ReallocMem, AllocArrayMem and StopGameIfNewFails, which stop the game with a message when there is no
+//   memory left
 #ifndef MEM3DC_H_INCLUDED
 #define MEM3DC_H_INCLUDED
 
@@ -64,6 +65,7 @@ extern void *AllocMem(size_t __size);
 extern void DeallocMem(void *__ptr);
 extern void *ReallocMem(void *__ptr, size_t __size);
 extern void *AllocArrayMem(size_t __count, size_t __size);
+extern void StopGameIfNewFails(void);
 
 /* mem.c public functions */
 #if COPY_FILENAME
