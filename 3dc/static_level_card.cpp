@@ -133,6 +133,15 @@ void StaticLevel_BuildThisLevel()
 {
 	StaticLevel_Release();
 
+	// Off means off: with neither switch, nothing is built, and the level loads as it always has.
+	extern int StaticSurfaceOn;
+	extern int StaticSurfaceCompare;
+
+	if (!StaticSurfaceOn && !StaticSurfaceCompare)
+	{
+		return;
+	}
+
 	char line[300] = { 0 };
 
 	if (!d3d.lpD3DDevice || !SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
