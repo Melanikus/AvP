@@ -1506,5 +1506,8 @@
     <None Include="..\..\shaders\volume.vsh">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="..\..\shaders\volumeCut.vsh">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

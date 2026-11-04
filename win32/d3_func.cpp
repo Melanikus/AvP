@@ -2566,6 +2566,10 @@ bool InitialiseDirect3D()
 	d3d.volumeDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.volumeDecl->Create();
 
+	d3d.volumeCutDecl = new VertexDeclaration;
+	d3d.volumeCutDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.volumeCutDecl->Create();
+
 	d3d.orthoDecl = new VertexDeclaration;
 	d3d.orthoDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.orthoDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
@@ -2693,6 +2697,7 @@ bool InitialiseDirect3D()
 
 	// the pixel shader is never used: a prism only marks the stencil, so this runs with none, as the ordinary prisms do
 	d3d.volumeEffect = d3d.effectSystem->Add("volume", "volume.vsh", "pixel.psh", d3d.volumeDecl);
+	d3d.volumeCutEffect = d3d.effectSystem->Add("volumeCut", "volumeCut.vsh", "pixel.psh", d3d.volumeCutDecl);
 
 	// These draw one rectangle over the screen, and read the pictures the surface pass made.
 	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
@@ -2784,6 +2789,7 @@ void ReleaseDirect3D()
 	delete d3d.surfaceSceneDecl;
 
 	delete d3d.volumeDecl;
+	delete d3d.volumeCutDecl;
 	delete d3d.orthoDecl;
 	delete d3d.decalDecl;
 	delete d3d.fmvDecl;

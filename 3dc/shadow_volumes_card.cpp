@@ -5,21 +5,37 @@
 // starts again from the beginning, the card is told the whole list can go, so it never has to wait for a draw to finish.
 //
 // The corners are in the world's numbers, so one matrix takes them to the screen, however many there are: see volume.vsh.
+//
+// WHY A CORNER CAN BE CUT
+//
+// The game cuts every corner of the walls it draws to a whole number, in the view's numbers, and how it falls changes as the camera moves. A prism made each
+// frame starts from those same cut corners, so it stays in step with its wall. A prism kept in the world's numbers doesn't: its wall moves about it by up to
+// a unit along each direction. The thin gap between a wall and its own prism then changes width from frame to frame, and close to a wall a unit is several
+// pixels, so the shadow flickers there. With -keptsnap, the world's numbers stay on the card, and volumeCut.vsh makes the game's cut and then ToyAddPrism's
+// sum each frame, so a kept prism lands exactly where a prism made this frame would. Only the view is new each frame: nothing else is worked out again.
+//
+// The sides of a prism made that way all pass through the light, so two neighbours' sides lie in one flat surface and nothing can show between them. The price
+// is that a far end moves with the cut too, so a shadow's far edge swims a little, as it does on prisms made each frame. -keptsnapfar leaves far ends where the
+// world says, which stops that, but then a side no longer passes through the light, and neighbours with different reaches can leave a hair between them.
 
 #include "shadow_volumes_card.h"
 #include "shadow_volumes.h"
 #include "d3_func.h"
 #include "ShaderManager.h"
+#include "surface_static.h"
 
 #include <string.h>
 
-static const int kBytesEachCorner = 3 * sizeof(float);
+static const int kBytesEachCorner = sizeof(KeptCorner);
+
+int KeptSnap = 0;   // -keptsnap makes this 1, and -keptsnapfar makes it 2. 0 leaves a kept prism's corners exact
 
 // The ordinary route never sends more than this in one draw, because some cards have a limit
 static const int kMostCornersInOneDraw = 60000 * 3;
 
 static IDirect3DVertexBuffer9 *cornerList = 0;
 static D3DXMATRIX worldToClip;
+static float lightForCutCorners[4];   // what volumeCut.vsh reads: see LightOnList
 
 void ShadowVolumesCard_Create()
 {
@@ -61,7 +77,30 @@ void ShadowVolumesCard_SetView(const float *view)
 	D3DXMatrixMultiply(&worldToClip, &worldToList, &d3d.matProjection);
 }
 
-bool ShadowVolumesCard_Write(int first, const float *corners, int count)
+void ShadowVolumesCard_SetLight(const float *light)
+{
+	lightForCutCorners[0] = light[0];
+	lightForCutCorners[1] = light[1];
+	lightForCutCorners[2] = light[2];
+	lightForCutCorners[3] = (KeptSnap == 2) ? 1.0f : 0.0f;
+}
+
+bool ShadowVolumesCard_CornersAreCut()
+{
+	return KeptSnap != 0 && d3d.volumeCutEffect != kNullEffectID && d3d.volumeCutDecl != 0;
+}
+
+const char *ShadowVolumesCard_CornerWords()
+{
+	if (!ShadowVolumesCard_CornersAreCut())
+	{
+		return (KeptSnap != 0) ? "corners exact, because the shader for -keptsnap isn't there" : "corners exact";
+	}
+
+	return (KeptSnap == 2) ? "corners cut, far ends exact" : "corners cut";
+}
+
+bool ShadowVolumesCard_Write(int first, const float *corners, const float *ends, int count)
 {
 	if (!cornerList || first < 0 || count <= 0 || count > kShadowVolumeMostCorners - first)
 	{
@@ -76,13 +115,22 @@ bool ShadowVolumesCard_Write(int first, const float *corners, int count)
 		return false;
 	}
 
-	memcpy(memory, corners, count * kBytesEachCorner);
+	KeptCorner *out = (KeptCorner *)memory;
+
+	for (int i = 0; i < count; i++)
+	{
+		out[i].x = corners[i * 3 + 0];
+		out[i].y = corners[i * 3 + 1];
+		out[i].z = corners[i * 3 + 2];
+		out[i].end = ends[i];
+	}
+
 	cornerList->Unlock();
 
 	return true;
 }
 
-HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const float *worldCorners, int numWorldCorners)
+HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const KeptCorner *worldCorners, int numWorldCorners)
 {
 	HRESULT result = S_OK;
 
@@ -91,9 +139,21 @@ HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const 
 		return E_FAIL;
 	}
 
-	d3d.effectSystem->SetActive(d3d.volumeEffect);
-	d3d.effectSystem->SetVertexShaderConstant(d3d.volumeEffect, 0, CONST_MATRIX, &worldToClip);
-	d3d.volumeDecl->Set();
+	if (ShadowVolumesCard_CornersAreCut())
+	{
+		d3d.effectSystem->SetActive(d3d.volumeCutEffect);
+		SurfaceStatic_SetShaderNumbers(device);
+		device->SetVertexShaderConstantF(7, lightForCutCorners, 1);
+		d3d.volumeCutDecl->Set();
+	}
+	else
+	{
+		// this shader only asks for x y z, so the fourth number of a corner goes unread
+		d3d.effectSystem->SetActive(d3d.volumeEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.volumeEffect, 0, CONST_MATRIX, &worldToClip);
+		d3d.volumeDecl->Set();
+	}
+
 	device->SetPixelShader(NULL);
 	device->SetStreamSource(0, cornerList, 0, kBytesEachCorner);
 
@@ -122,7 +182,7 @@ HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const 
 	for (int done = 0; done < numWorldCorners; done += kMostCornersInOneDraw)
 	{
 		int const corners = (numWorldCorners - done < kMostCornersInOneDraw) ? numWorldCorners - done : kMostCornersInOneDraw;
-		HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, corners / 3, worldCorners + done * 3, kBytesEachCorner);
+		HRESULT const drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, corners / 3, worldCorners + done, kBytesEachCorner);
 
 		if (FAILED(drawn))
 		{

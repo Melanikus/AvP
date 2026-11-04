@@ -230,6 +230,8 @@ typedef struct D3DInfo
 	effectID_t				surfaceSceneReplayEffect;
 	class VertexDeclaration	*volumeDecl;      // shadow prisms kept between frames: see shadow_volumes.cpp
 	effectID_t				volumeEffect;
+	class VertexDeclaration	*volumeCutDecl;   // the same, finished each frame from the same cut corners as the walls
+	effectID_t				volumeCutEffect;
 	effectID_t				lightTotalEffect;
 	effectID_t				lightShareEffect;
 	effectID_t				lightOneEffect;

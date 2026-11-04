@@ -715,6 +715,7 @@
     <None Include="..\..\shaders\tallText.vsh" />
     <None Include="..\..\shaders\vertex.vsh" />
     <None Include="..\..\shaders\volume.vsh" />
+    <None Include="..\..\shaders\volumeCut.vsh" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\dependencies\libbinkdec\win32\VS2026\binkdec_dynamic.vcxproj">

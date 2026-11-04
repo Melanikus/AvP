@@ -11,6 +11,7 @@
 //   the shadow code is told which shapes are staying still, so their prisms can be kept
 //   the rule for a module that never moves is one function, which the static level uses too
 //   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
+//   a shape the game places by the camera is never kept
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -6552,7 +6553,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
 	bool const reportDue = ShadowReportIsDue();
-	int const keptGroup = (stored && (whatItMayDo == kToyCasterLevel || whatItMayDo == kToyCasterObject) && BlockIsStill(dptr)) ? ShadowGroup_Start(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx) : -1;
+	int const keptGroup = (stored && (whatItMayDo == kToyCasterLevel || whatItMayDo == kToyCasterObject) && BlockIsStill(dptr) && !(dptr->ObFlags & ObFlag_ArbRot)) ? ShadowGroup_Start(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx) : -1;
 	CasterSource const source = { dptr->ObShape, { dptr->ObWorld.vx, dptr->ObWorld.vy, dptr->ObWorld.vz }, dptr->ObStrategyBlock ? (int)dptr->ObStrategyBlock->I_SBtype : -1,
 		stored ? "stored plane" : !shapePtr->sh_surfacepolygons ? "its shape has no list" : dptr->ObMorphCtrl ? "it's morphing" : "it's turned" };
 	int numitems = shapePtr->numitems;

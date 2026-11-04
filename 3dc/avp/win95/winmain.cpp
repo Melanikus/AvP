@@ -5,6 +5,7 @@
 //   from the command line is limited to its buffer
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the level's still polygons are built and sent to the graphics card once a level has loaded
+//   -keptsnap and -keptsnapfar
 
 #include "3dc.h"
 #include "texture_relief.h"
@@ -311,6 +312,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (strstr(command_line, "-keptprismson"))
 		{
 			KeptPrismsOff = 0;
+		}
+		extern int KeptSnap;
+		// the longer word first, because the shorter one is inside it
+		if (strstr(command_line, "-keptsnapfar"))
+		{
+			KeptSnap = 2;
+		}
+		else if (strstr(command_line, "-keptsnap"))
+		{
+			KeptSnap = 1;
 		}
 		extern int ToyShadowsDarkness;
 		char const *darkSwitch = strstr(command_line, "-shadowdark=");

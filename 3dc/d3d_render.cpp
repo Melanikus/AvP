@@ -7,6 +7,7 @@
 //   a still light and a still shape keep their shadow prisms on the graphics card, and the prisms are only worked out again if something moves
 //   the same for a polygon's flat surface worked out each frame
 //   walls drawn from the fixed buffer cast shadows from their shapes, with nothing on the caster list
+//   with -keptsnap, a kept prism is finished each frame in the shader, from the same cut corners as the walls
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -3746,7 +3747,8 @@ static KeptGroup keptGroups[kMostKeptGroups];
 static int numKeptGroups = 0;
 static int walkedGroups[kMostKeptGroups];   // which of keptGroups are walked
 static int numWalkedGroups = 0;
-static ToyVec worldPrisms[kToyMaxVerts];   // this frame's prisms for a walked group that isn't kept, in the world's numbers, for one light
+static KeptCorner worldPrisms[kToyMaxVerts];   // this frame's prisms for a walked group that isn't kept, in the world's numbers, for one light
+static bool prismsAsKeptCorners = false;   // true while prisms are being made for the card with their corners to be cut: see ToyAddPrism
 static int numWorldCorners = 0;
 static int worldCornersSinceReport = 0;    // how many of those there have been, added up, for the log
 static int casterGroup[kToyMaxCasters];     // which of keptGroups a polygon is in, or -1
@@ -3771,6 +3773,7 @@ static const int kToyVertsPerDraw = 60000 * 3;
 static D3DLVERTEX toyChunk[kToyVertsPerDraw];
 
 static ToyVec toyVerts[kToyMaxVerts];
+static float toyVertEnds[kToyMaxVerts];   // each of those corners' KeptCorner end. Only a prism made for the card reads it
 static int toyNumVerts = 0;
 static int toyPrismsLeftOut = 0;
 static double toyStretchTotal = 0.0;   // how far corners were thrown past their polygon, for the log
@@ -4261,6 +4264,14 @@ static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 	toyVerts[toyNumVerts++] = c;
 }
 
+// Says what ends the last three corners from ToyTri have: see KeptCorner.
+static inline void NoteCornerEnds(float a, float b, float c)
+{
+	toyVertEnds[toyNumVerts - 3] = a;
+	toyVertEnds[toyNumVerts - 2] = b;
+	toyVertEnds[toyNumVerts - 1] = c;
+}
+
 // Is every point of this polygon out of the light's range? light holds x y z range.
 static bool PolygonIsOutOfRange(const ToyVec *pts, int count, const float *light)
 {
@@ -4418,6 +4429,10 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	}
 
 	ToyVec nearPts[kToyMostPolyPoints], farPts[kToyMostPolyPoints];
+	float nearEnds[kToyMostPolyPoints], farEnds[kToyMostPolyPoints];
+
+	// A kept corner's length changes a little from frame to frame with the cut, so its far end stands further clear of its near end.
+	float const farEndClear = prismsAsKeptCorners ? 4.0f : 1.0f;
 
 	for (int i = 0; i < count; i++)
 	{
@@ -4462,9 +4477,9 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 		{
 			reach = kToyMostReach;
 		}
-		if (reach < length + start + 1.0f)
+		if (reach < length + start + farEndClear)
 		{
-			reach = length + start + 1.0f;   // the far end must stay behind the near end, or the prism turns inside out
+			reach = length + start + farEndClear;   // the far end must stay behind the near end, or the prism turns inside out
 		}
 
 		toyStretchTotal += reach - length;
@@ -4476,19 +4491,33 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 		farPts[i].x  = light[0] + dx * reach;
 		farPts[i].y  = light[1] + dy * reach;
 		farPts[i].z  = light[2] + dz * reach;
+
+		nearEnds[i] = start;
+		farEnds[i] = -(kKeptCornerFarMark + reach);
+
+		// a corner the shader will finish stays as the wall's own corner: see KeptCorner
+		if (prismsAsKeptCorners)
+		{
+			nearPts[i] = point;
+			farPts[i] = point;
+		}
 	}
 
 	for (int i = 1; i < count - 1; i++)
 	{
 		ToyTri(nearPts[0], nearPts[i], nearPts[i + 1]);
+		NoteCornerEnds(nearEnds[0], nearEnds[i], nearEnds[i + 1]);
 		ToyTri(farPts[0], farPts[i + 1], farPts[i]);
+		NoteCornerEnds(farEnds[0], farEnds[i + 1], farEnds[i]);
 	}
 
 	for (int i = 0; i < count; i++)
 	{
 		int const next = (i + 1) % count;
 		ToyTri(nearPts[i], farPts[next], nearPts[next]);
+		NoteCornerEnds(nearEnds[i], farEnds[next], nearEnds[next]);
 		ToyTri(nearPts[i], farPts[i], farPts[next]);
+		NoteCornerEnds(nearEnds[i], farEnds[i], farEnds[next]);
 	}
 
 	if (toyNoteLight)
@@ -4540,7 +4569,7 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 
 	if (ShadowVolumes_NumRuns() > 0 || numWorldCorners > 0)
 	{
-		HRESULT const kept = ShadowVolumesCard_Draw(d3d.lpD3DDevice, colour, &worldPrisms[0].x, numWorldCorners);
+		HRESULT const kept = ShadowVolumesCard_Draw(d3d.lpD3DDevice, colour, worldPrisms, numWorldCorners);
 		if (FAILED(kept))
 		{
 			result = kept;
@@ -5359,6 +5388,8 @@ static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, con
 	int const leftOutBefore = toyPrismsLeftOut;
 	bool cornersAgree = true;
 
+	prismsAsKeptCorners = ShadowVolumesCard_CornersAreCut();
+
 	if (group.walked)
 	{
 		for (int polygon = 0; polygon < group.numPolygons; polygon++)
@@ -5401,6 +5432,8 @@ static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, con
 		}
 	}
 
+	prismsAsKeptCorners = false;
+
 	*cornersMade = toyNumVerts - vertsBefore;
 	toyNumVerts = vertsBefore;
 
@@ -5420,7 +5453,7 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 
 	int const place = ShadowVolumes_PlaceFor(corners);
 
-	if (place < 0 || (corners > 0 && !ShadowVolumesCard_Write(place, &toyVerts[vertsBefore].x, corners)))
+	if (place < 0 || (corners > 0 && !ShadowVolumesCard_Write(place, &toyVerts[vertsBefore].x, &toyVertEnds[vertsBefore], corners)))
 	{
 		return false;
 	}
@@ -5481,7 +5514,16 @@ static void AddWorldPrisms(const KeptGroup &group, const float *light, const flo
 		return;
 	}
 
-	memcpy(&worldPrisms[numWorldCorners], &toyVerts[vertsBefore], (size_t)corners * sizeof(ToyVec));
+	for (int i = 0; i < corners; i++)
+	{
+		KeptCorner &out = worldPrisms[numWorldCorners + i];
+
+		out.x = toyVerts[vertsBefore + i].x;
+		out.y = toyVerts[vertsBefore + i].y;
+		out.z = toyVerts[vertsBefore + i].z;
+		out.end = toyVertEnds[vertsBefore + i];
+	}
+
 	numWorldCorners += corners;
 	worldCornersSinceReport += corners;
 	toyVertsOfKind[kToyCasterLevel] += corners;
@@ -5515,6 +5557,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 	int keptCorners = 0;
 
 	ShadowVolumes_StartRuns();
+	ShadowVolumesCard_SetLight(light);
 	numWorldCorners = 0;
 
 	for (int caster = 0; caster < toyNumCasters; caster++)
@@ -5649,8 +5692,8 @@ static void ReportKeptPrisms()
 	ShadowVolumes_TakeCounts(&counts);
 
 	char line[200] = { 0 };
-	_snprintf(line, sizeof(line) - 1, "shadows: frame %d: kept prisms: %d found, %d made, %d refused, emptied %d times, %d corners in %d entries",
-		toyFrame, counts.found, counts.kept, counts.refused, counts.emptied, counts.cornersInUse, counts.entriesInUse);
+	_snprintf(line, sizeof(line) - 1, "shadows: frame %d: kept prisms: %d found, %d made, %d refused, emptied %d times, %d corners in %d entries, %s",
+		toyFrame, counts.found, counts.kept, counts.refused, counts.emptied, counts.cornersInUse, counts.entriesInUse, ShadowVolumesCard_CornerWords());
 	LogString(line);
 }
 
