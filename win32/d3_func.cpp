@@ -131,13 +131,14 @@ const D3DFORMAT DisplayFormats32[] =
 	D3DFMT_A8R8G8B8
 };
 
-// list of allowed depth buffer formats
+// list of allowed depth buffer formats, best first. The first two have the stencil bits that shadows need. With any of the others
+// shadows turn themselves off, and the game runs as it always has.
 const D3DFORMAT DepthFormats[] =
 {
-	D3DFMT_D24S8,	// first: toy-shadows needs the stencil bits, and D32 has none
+	D3DFMT_D24S8,
+	D3DFMT_D24FS8,
 	D3DFMT_D32,
 	D3DFMT_D24X8,
-	D3DFMT_D24FS8,
 	D3DFMT_D16
 };
 
@@ -2287,15 +2288,10 @@ bool InitialiseDirect3D()
 		D3DCREATE_SOFTWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 #else
 
-	// toy-shadows: no D3DCREATE_PUREDEVICE, which can't be relied on to give a state block
+	// Not a pure device (D3DCREATE_PUREDEVICE), which can't be relied on to give a state block, and the shadow pass needs one each frame.
 	LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
 		D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 
-	if (FAILED(LastError))
-	{
-		LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
-			D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
-	}
 	if (FAILED(LastError))
 	{
 		LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
@@ -2405,7 +2401,7 @@ bool InitialiseDirect3D()
 			Con_PrintMessage("\t Depth Format set: 24bit and 0bit stencil - D3DFMT_D24X8");
 			break;
 		case D3DFMT_D24FS8:
-			Con_PrintMessage("\t Depth Format set: 24bit and 8bit stencil - D3DFMT_D32");
+			Con_PrintMessage("\t Depth Format set: 24bit and 8bit stencil - D3DFMT_D24FS8");
 			break;
 		case D3DFMT_D32:
 			Con_PrintMessage("\t Depth Format set: 32bit and 0bit stencil - D3DFMT_D32");
