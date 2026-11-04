@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch
+//   the alien tail copes with a model missing its aiming animations
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -7111,6 +7112,14 @@ void AlienClaw_SwapOut(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	/* ...Nothing? */
 }
 
+/* Centres one of the tail's two aiming animations, which are looked up by name and may be missing from the model. */
+static void CentreTailDelta(DELTA_CONTROLLER *delta)
+{
+	if (delta) {
+		delta->timer=32767;
+	}
+}
+
 void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 	/* ...Nothing? */
@@ -7132,8 +7141,8 @@ void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7181,8 +7190,8 @@ void AlienClaw_Recoil(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7513,8 +7522,8 @@ void AlienTail_Poise(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 		}
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 
 		InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>4),HMSQT_AlienHUD,
 			(int)AHSS_TailCome,ONE_FIXED,0);
@@ -7571,6 +7580,11 @@ void ComputeTailDeltaValues(DELTA_CONTROLLER *XDelta,DELTA_CONTROLLER *YDelta)
 {
 	int temp_timer,screenX,screenY;
 	VECTORCH target_pos;
+
+	/* both are looked up by name and may be missing from the model */
+	if (!XDelta || !YDelta) {
+		return;
+	}
 
 	VIEWDESCRIPTORBLOCK *VDBPtr = ActiveVDBList[0];
 
@@ -7639,8 +7653,8 @@ void AlienTail_Strike(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr)
 		}
 		else
 		{
-			XDelta->timer=32767;
-			YDelta->timer=32767;
+			CentreTailDelta(XDelta);
+			CentreTailDelta(YDelta);
 		}
 		
 		/* Don't bother with the next bit. */
