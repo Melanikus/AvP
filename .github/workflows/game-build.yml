@@ -43,3 +43,14 @@ jobs:
       - name: Build the game and make its package
         shell: pwsh
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
+
+      # It works whether or not this machine has its own copy, because it asks Windows which file was loaded: see tests/package_test.cpp.
+      - name: Try the package's shader compiler, as a tester's machine would use it
+        shell: pwsh
+        run: |
+          ./tests/build.ps1
+          $folder = "$env:RUNNER_TEMP\package-test"
+          Copy-Item -Recurse "$env:RUNNER_TEMP\package" $folder
+          Copy-Item "$env:RUNNER_TEMP\avp-tests\package_test.exe" $folder
+          & "$folder\package_test.exe" --here
+          if ($LASTEXITCODE -ne 0) { exit 1 }
