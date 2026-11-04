@@ -17,6 +17,7 @@
 #include "gamedef.h"
 #include "chunk_textures.h"
 #include "kshape.h"
+#include "pixel_lights.h"
 #include "kzsort.h"
 #include "frustum.h"
 #include "io.h"
@@ -1303,6 +1304,10 @@ static void GouraudTexturedPolygon_Construct(POLYHEADER *polyPtr)
 				}
 			} else {
 				VertexIntensity(renderVerticesPtr);
+
+				if (RenderPolygon.TranslucencyMode != TRANSLUCENCY_OFF) {
+					PixelLights_LightSeeThroughCorner(renderVerticesPtr, *VertexNumberPtr);
+				}
 			}
 
 			renderVerticesPtr++;
@@ -1432,6 +1437,10 @@ static void GouraudTexturedPolygon_Construct(POLYHEADER *polyPtr)
 				}
 			} else {
 				VertexIntensity(renderVerticesPtr);
+
+				if (RenderPolygon.TranslucencyMode != TRANSLUCENCY_OFF) {
+					PixelLights_LightSeeThroughCorner(renderVerticesPtr, *VertexNumberPtr);
+				}
 			}
 
 			renderVerticesPtr++;
@@ -5726,13 +5735,12 @@ static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
 static char toyRoomName[32] = "none";
 static int toyNumLightsByPixel = 0;
 
-bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light);
-
-// A flare that wasn't chosen stays in the game's lighting, so it still lights the room, though it casts no shadow. At the game's own
-// brightness it would turn white, because a new flare is so bright that all three colours clip. So it's held to the same cap as a
-// chosen flare, and stays the dim red the user chose. This only changes the number the lighting reads this frame: UpdateObjectLights
-// works that out afresh every frame from the flare's real brightness, so the flare itself isn't touched, and a save is no different.
-static void ToyHoldBackUnchosenFlares()
+// While shadows are on, a flare can still reach the game's lighting: one that wasn't chosen, which lights the room but casts no shadow, and
+// any flare on glass or in a mirror. At the game's own brightness it would turn white, because a new flare is so bright that all three colours
+// clip. So every flare is held to the cap, and stays the dim red the user chose. This only changes the number the lighting reads this frame:
+// UpdateObjectLights works that out afresh every frame from the flare's real brightness, so the flare itself isn't touched, and a save is
+// no different.
+static void ToyHoldFlaresToTheirCap()
 {
 	if (!ToyShadowsLightsByPixel)
 	{
@@ -5754,7 +5762,7 @@ static void ToyHoldBackUnchosenFlares()
 		{
 			LIGHTBLOCK *light = block->ObLights[j];
 
-			if (light->LightBright > cap && light->LightRange > 0 && !ToyShadows_LightIsByPixel(light))
+			if (light->LightBright > cap && light->LightRange > 0)
 			{
 				light->BrightnessOverRange = DIV_FIXED(MUL_FIXED(cap, LightScale), light->LightRange);
 			}
@@ -5770,7 +5778,7 @@ static void ToyHoldBackUnchosenFlares()
 // Up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
 // flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 4 brief lights of their own. A live
 // light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
-// ToyHoldBackUnchosenFlares.
+// ToyHoldFlaresToTheirCap.
 void ToyShadows_ChooseLights()
 {
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
@@ -5787,7 +5795,7 @@ void ToyShadows_ChooseLights()
 
 	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
-		ToyHoldBackUnchosenFlares();
+		ToyHoldFlaresToTheirCap();
 		return;
 	}
 
@@ -5908,7 +5916,7 @@ void ToyShadows_ChooseLights()
 		toyChosen[i].flags = light->LightFlags;
 	}
 
-	ToyHoldBackUnchosenFlares();
+	ToyHoldFlaresToTheirCap();
 }
 
 // Gives the shadow pass this frame's list, and how many are on it. lights and owners have room for kToyMostLights each.

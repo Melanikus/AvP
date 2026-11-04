@@ -40,6 +40,7 @@
 #include "showcmds.h"
 #include "frustum.h"
 #include "d3d_render.h"
+#include "pixel_lights.h"
 #include "bh_types.h"
 
 bool frustumCull = false;
@@ -4394,9 +4395,17 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 // all its lamps goes right down to the glow.
 // A pixel is darkened once for each light: the first polygon to touch it clears its mark. Models are in front of the polygons,
 // so they keep their light for now.
+static bool toyPicturesThisFrame = false;   // the surface pictures and the light total are ready, so lights read those
+static HRESULT ToyShadeFromPictures(LPDIRECT3DDEVICE9 device, const float *light, float strength, IDirect3DQuery9 *countQuery, unsigned int *pixels);
+
 static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, float strength, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	float const *light = &lights[thisLight * kToyLightFloats];
+
+	if (toyPicturesThisFrame)
+	{
+		return ToyShadeFromPictures(device, light, strength, countQuery, pixels);
+	}
 
 	d3d.effectSystem->SetActive(d3d.shadowEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowEffect, 0, CONST_MATRIX, &d3d.matProjection);
@@ -4505,6 +4514,7 @@ void ToyShadows_ReleaseTargets()
 	ToyRelease(toyMaskTexture);
 	ToyRelease(toyDepthTexture);
 	SurfacePictures_Release();
+	PixelLights_Release();
 	toyTargetsFailed = false;
 }
 
@@ -4594,7 +4604,11 @@ static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device, const float *worl
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
 
 	// The surface pass writes the distance along with everything else. A card that can't run it just gets the distance.
-	if (!SurfacePictures_Draw(device, toyDepthSurface, worldAxes))
+	bool const pictures = SurfacePictures_Draw(device, toyDepthSurface, worldAxes);
+
+	toyPicturesThisFrame = pictures && PixelLights_Ready(device);
+
+	if (!pictures)
 	{
 		d3d.effectSystem->SetActive(d3d.shadowDepthEffect);
 		d3d.effectSystem->SetVertexShaderConstant(d3d.shadowDepthEffect, 0, CONST_MATRIX, &d3d.matProjection);
@@ -4605,6 +4619,25 @@ static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device, const float *worl
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
+}
+
+// What ToyShadeLevel does when the surface pictures are there: no polygon is drawn, and the pictures say what's on each marked pixel.
+static HRESULT ToyShadeFromPictures(LPDIRECT3DDEVICE9 device, const float *light, float strength, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+{
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_BEGIN);
+	}
+
+	HRESULT const result = PixelLights_AddShareToMask(device, light, strength, toyDepthTexture);
+
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_END);
+		*pixels += ToyAskCard(countQuery);
+	}
+
+	return result;
 }
 
 // Puts the mask on the screen through the softening shader, multiplying what's there. Or, for the mask view, instead of what's there.
@@ -4882,6 +4915,12 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, bool haveMask)
 {
 	float const *light = &lights[thisLight * kToyLightFloats];
+
+	if (toyPicturesThisFrame && haveMask)
+	{
+		PixelLights_AddLight(device, light, toyMaskTexture, toyDepthTexture, (float)ToyShadowsSoft, kToySoftStaysWideTo);
+		return;
+	}
 
 	d3d.effectSystem->SetActive(d3d.shadowFlareEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowFlareEffect, 0, CONST_MATRIX, &d3d.matProjection);
@@ -5229,7 +5268,7 @@ static void ToyShadows_Draw()
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
 	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
-		&& d3d.shadowFlareEffect != kNullEffectID && toyNumCasters > 0;
+		&& d3d.shadowFlareEffect != kNullEffectID && toyNumCasters > 0 && PixelLights_Ready(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % 300) == 0;
 
@@ -5331,6 +5370,8 @@ static void ToyShadows_Draw()
 	D3DVIEWPORT9 viewport;
 
 	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask;
+
+	toyPicturesThisFrame = false;
 	bool const haveCloaked = toyPolygonsOfKind[kToyCasterCloaked] > 0;
 
 	if (darkening && haveShader && canSoften && ToyMakeTargets(device)
@@ -5340,6 +5381,11 @@ static void ToyShadows_Draw()
 		device->SetViewport(&viewport);
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
 		ToyDrawDepthForSoftening(device, worldAxes);
+
+		if (toyPicturesThisFrame)
+		{
+			PixelLights_DrawTotal(device, lights, report.lights, toyDepthTexture);
+		}
 
 		// the mask starts at nothing blocked
 		device->SetRenderTarget(0, toyMaskSurface);

@@ -1,0 +1,36 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float2 ScreenPlace : VPOS;
+};
+
+#include "lightShapes.fxh"
+
+// Global variables. c0 is Screen: see lightShapes.fxh
+sampler2D Totals : register(s3);       // from lightTotal.psh
+float4 ThisLight  : register(c1);      // the light this pass is for: x y z, and one over its range
+float4 ThisWeight : register(c2);      // x: how bright it is. y: its shape. z: how much of its share to take, 1 for an ordinary shadow
+
+
+// Name: Light share pixel shader
+// Type: Pixel shader
+// Desc: Runs on pixels one light can't reach. Works out that light's share of all the light on this spot, and writes it down. The mask adds
+// these up, one pass for each light, so it ends up holding the part of this pixel's light that is blocked. The shares of all the lights add
+// up to 1, so that can't go over 1, and a spot lit by a second light keeps exactly that light.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    float4 place = PlaceOnPicture(In.ScreenPlace);
+
+    clip(tex2Dlod(Colours, place).a - 0.5f);
+
+    float3 position = PositionHere(In.ScreenPlace, tex2Dlod(Depth, place).r);
+    float3 normal   = NormalHere(place);
+    float  all      = tex2Dlod(Totals, place).r;
+    float  mine     = ThisWeight.x * LightShape(ThisLight, ThisWeight.y, position, normal);
+    float  share    = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
+
+    share *= ThisWeight.z;
+
+    return float4(share, share, share, 1.0f);
+}

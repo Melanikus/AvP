@@ -217,6 +217,9 @@ typedef struct D3DInfo
 	class VertexBuffer		*mainVB;
 	class VertexDeclaration	*surfaceDecl;
 	effectID_t				surfaceEffect;
+	effectID_t				lightTotalEffect;
+	effectID_t				lightShareEffect;
+	effectID_t				lightOneEffect;
 	class IndexBuffer		*mainIB;
 
 	class VertexBuffer		*orthoVB;

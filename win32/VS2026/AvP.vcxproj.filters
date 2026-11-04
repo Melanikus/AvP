@@ -132,6 +132,9 @@
     <ClCompile Include="..\..\3dc\surface_pictures.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\pixel_lights.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\RimLoader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1423,6 +1426,18 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\shadowFlare.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightOne.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightShapes.fxh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightShare.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightTotal.psh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\surface.psh">

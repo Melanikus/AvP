@@ -403,6 +403,7 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
+    <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
     <ClCompile Include="..\..\3dc\RimLoader.cpp" />
     <ClCompile Include="..\..\3dc\RingBuffer.cpp" />
     <ClCompile Include="..\..\3dc\ShaderManager.cpp" />
@@ -688,6 +689,10 @@
     <None Include="..\..\shaders\shadowDepth.psh" />
     <None Include="..\..\shaders\shadowFlare.psh" />
     <None Include="..\..\shaders\shadowFlare.vsh" />
+    <None Include="..\..\shaders\lightOne.psh" />
+    <None Include="..\..\shaders\lightShapes.fxh" />
+    <None Include="..\..\shaders\lightShare.psh" />
+    <None Include="..\..\shaders\lightTotal.psh" />
     <None Include="..\..\shaders\surface.psh" />
     <None Include="..\..\shaders\surface.vsh" />
     <None Include="..\..\shaders\tallText.psh" />
