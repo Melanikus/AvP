@@ -103,6 +103,25 @@ extern AVPMENU_ELEMENT AvPMenu_SinglePlayer[];
 // number, and the lookup would read memory from before the start of the table.
 char AAFontWidths[256];
 
+// The widest a letter of the small font can be, in pixels. CalculateWidthsOfAAFont starts every letter at this width
+// and only ever takes away from it.
+#define MAX_SMALL_LETTER_WIDTH 17
+
+// How wide one letter of the small font is, in pixels. Everything in this file that needs a letter's width asks here,
+// so the rules for a safe lookup are in one place: the letter is used as a number from 0 to 255, and the answer is
+// never more than the widest a letter can be, so any sum of widths can be reasoned about from that one number.
+static int SmallLetterWidth(char letter)
+{
+	int width = AAFontWidths[(unsigned char)letter];
+
+	if (width > MAX_SMALL_LETTER_WIDTH)
+	{
+		width = MAX_SMALL_LETTER_WIDTH;
+	}
+
+	return width;
+}
+
 AVPIndexedFont IntroFont_Light;
 
 static void LoadMenuFont(void)
@@ -336,7 +355,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length;
@@ -349,7 +368,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length/2;
@@ -381,7 +400,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length;
@@ -394,7 +413,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length/2;
@@ -427,7 +446,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length;
@@ -440,7 +459,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned char)*ptr++];
+				length += SmallLetterWidth(*ptr++);
 			}
 
 			x -= length/2;
@@ -478,7 +497,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=AAFontWidths[(unsigned char)*ptr++];
+				length+=SmallLetterWidth(*ptr++);
 			}
 
 			x -= length;
@@ -491,7 +510,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=AAFontWidths[(unsigned char)*ptr++];
+				length+=SmallLetterWidth(*ptr++);
 			}
 
 			x -= length/2;
@@ -560,7 +579,7 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 
 	DrawSmallMenuCharacter(x, y, topLeftU, topLeftV, alphaR, alphaG, alphaB, alphaR);
 
-	return AAFontWidths[(unsigned char)c];
+	return SmallLetterWidth(c);
 }
 
 /*static*/extern int RenderSmallFontString(char *textPtr, int sx, int sy, int alpha, int red, int green, int blue)
@@ -580,7 +599,7 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 
 			DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, alphaR, alphaG, alphaB, alphaR);
 
-			sx += AAFontWidths[(unsigned char)c];
+			sx += SmallLetterWidth(c);
 		}
 	}
 
@@ -592,7 +611,7 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 // would add up to more than an int can hold and wrap round to a wrong width. A million pixels is far wider than any
 // screen, so a word that reaches the limit could not fit whatever its true width is, and no text that can be shown
 // changes. The line count worked out from this width also stays far below the largest number an int can hold.
-static const int MAX_COUNTED_TEXT_WIDTH = 1000000;
+#define MAX_COUNTED_TEXT_WIDTH 1000000
 
 extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
 {
@@ -613,7 +632,7 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2==' ') 
 		{
-			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			wordWidth += SmallLetterWidth(*textPtr2++);
 			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
 				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
@@ -623,7 +642,7 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2!=' ') 
 		{
-			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			wordWidth += SmallLetterWidth(*textPtr2++);
 			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
 				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
@@ -689,13 +708,13 @@ Determine area used by text , so we can draw it centrally
 		wordWidth = 0;
 		
 		while (*textPtr2 && *textPtr2==' ') {
-			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			wordWidth += SmallLetterWidth(*textPtr2++);
 			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
 				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') {
-			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			wordWidth += SmallLetterWidth(*textPtr2++);
 			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
 				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
@@ -727,7 +746,7 @@ Determine area used by text , so we can draw it centrally
 
 		while (*textPtr && *textPtr==' ') 
 		{
-			sx += AAFontWidths[(unsigned char)*textPtr++];
+			sx += SmallLetterWidth(*textPtr++);
 			if (sx > MAX_COUNTED_TEXT_WIDTH)
 				sx = MAX_COUNTED_TEXT_WIDTH;
 		}
@@ -747,7 +766,7 @@ Determine area used by text , so we can draw it centrally
 		while (*textPtr && *textPtr != ' ') 
 		{
 			char c = *textPtr++;
-			int letterWidth = AAFontWidths[(unsigned char)c];
+			int letterWidth = SmallLetterWidth(c);
 			
 			if (sx + letterWidth > area->right) 
 			{
@@ -765,7 +784,7 @@ Determine area used by text , so we can draw it centrally
 
 				DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, ONE_FIXED, ONE_FIXED, ONE_FIXED, alpha);
 
-				sx += AAFontWidths[(unsigned char)c];
+				sx += SmallLetterWidth(c);
 			}
 		}
 	}
@@ -1135,7 +1154,7 @@ extern texID_t AAFontImageNumber;
 		int x1 = 1+((c-32)&15)*16;
 		int y1 = 1+((c-32)>>4)*16;
 
-		AAFontWidths[c] = 17;
+		AAFontWidths[c] = MAX_SMALL_LETTER_WIDTH;
 
 		for (x = x1 + HUD_FONT_WIDTH; x > x1; x--)
 		{
