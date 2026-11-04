@@ -6362,8 +6362,9 @@ static void ShadowStatus_Draw()
 		widest = (width > widest) ? width : widest;
 	}
 
-	// room for the backing and every letter, or none of it
-	if (!orthoList->Check(4 + characters * 4) || widest + margin * 2 > (int)ScreenDescriptorBlock.SDB_Width)
+	// Room for the backing and every letter, or none of it. It leaves half the list free as well, because the tag is only for looking at, and coronas
+	// are added to this list after it.
+	if (!orthoList->Check(2048 + 4 + characters * 4) || widest + margin * 2 > (int)ScreenDescriptorBlock.SDB_Width)
 	{
 		return;
 	}
