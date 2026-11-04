@@ -4,6 +4,7 @@
 //   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
 //   a child chunk whose size cannot be real is refused
 //   a game mode, its header and its children are only made in their right places, and a game mode must have a header
+//   counted lists are measured against their chunks before they're made, and a lighting table's size can't wrap round
 
 #include "chunk_palette.hpp"
 #include "environment_chunk.hpp"
@@ -216,7 +217,7 @@ void Preset_Palette::fill_data_block (char * data_start)
 
 RIF_IMPLEMENT_DYNCREATE("PRSETPAL",Preset_Palette_Chunk)
 
-Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const /*ssize*/)
+Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"PRSETPAL")
 , flags(*(int *)(sdata+4))
 , version_num(*(int *)sdata)
@@ -224,12 +225,23 @@ Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, c
 , reserved2(*(int *)(sdata+12))
 , reserved3(*(int *)(sdata+16))
 {
-	int const pplistsize = *(int *)(sdata+20);
-	sdata += 24;
+	char const * const start = sdata;
+	size_t const smallest_palette = 24;   // five numbers and a name, with no colours
+
+	sdata += 20;
+
+	int const pplistsize = ReadListCount(start, sdata, ssize, smallest_palette);
 
 	for (int i = pplistsize; i; --i)
 	{
-		Preset_Palette current(sdata);
+		// colours can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_palette > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		Preset_Palette current(sdata, ssize - (sdata - start));
 		sdata += current.size_chunk();
 		pplist.add_entry(current);
 	}
@@ -296,8 +308,9 @@ Environment_TLT_Chunk::Environment_TLT_Chunk (Chunk_With_Children * parent, cons
 		filename = new char[filename_size];
 		memcpy(filename,sdata+32,filename_size);
 	}
-	else if ((signed) ssize >= 32 + width*num_levels)
+	else if (width >= 0 && num_levels >= 0 && (unsigned long long)width * num_levels + 32 <= ssize)
 	{
+		// both numbers come from the file, so it's measured with room to spare, and a table that doesn't fit is left out
 		table = new unsigned char [width*num_levels];
 		unsigned char * tableptr = table;
 		unsigned char const * sdataptr = (unsigned char *)(sdata+32);
@@ -765,9 +778,10 @@ Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 	return 0;
 }
 
-RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const /*ssize*/)
+RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const ssize)
 : Chunk(parent,"RIFCHILD"), egm_parent((Environment_Game_Mode_Chunk * const)parent)
 {
+	char const * const start = sdata;
 	int i;
 	for (i=0; i<ChunkRIFChild_NumReserved; i++, sdata+=4)
 	{
@@ -789,11 +803,18 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 	strcpy(filename,sdata);
 	sdata += len+3 &~3;
 
-	int listsize = *(int *)sdata;
-	sdata+=4;
+	size_t const smallest_image = 12;   // two numbers and a name
+	int const listsize = ReadListCount(start, sdata, ssize, smallest_image);
 
 	for (i = listsize; i; --i)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_image > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		BMP_Flags temp;
 		temp.flags = *(BMPN_Flags *)sdata;
 		sdata += 4;
@@ -818,7 +839,7 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 
 RIF_IMPLEMENT_DYNCREATE("SETPALST",Preset_Palette_Store_Chunk)
 
-Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const /*ssize*/)
+Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"SETPALST")
 , flags(*(int *)(sdata+4))
 , version_num(*(int *)sdata)
@@ -826,19 +847,28 @@ Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * con
 , reserved2(*(int *)(sdata+12))
 , reserved3(*(int *)(sdata+16))
 {
+	char const * const start = sdata;
+	size_t const smallest_palette = 24;   // five numbers and a name, with no colours
+
 	sdata += 20;
 
 	size_t const len = strlen(sdata)+1;
 	rifname = new char[len];
 	strcpy(rifname,sdata);
 	sdata += len + 3 &~3;
-	
-	int const pplistsize = *(int *)sdata;
-	sdata += 4;
+
+	int const pplistsize = ReadListCount(start, sdata, ssize, smallest_palette);
 
 	for (int i = pplistsize; i; --i)
 	{
-		Preset_Palette current(sdata);
+		// colours can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_palette > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		Preset_Palette current(sdata, ssize - (sdata - start));
 		sdata += current.size_chunk();
 		pplist.add_entry(current);
 	}

@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using its exact measured length, level file names are kept in a list that grows as
 //   needed, and the declarations of code only the level editor used were removed
+//   a palette's count of colours is measured against its chunk before it's made
 
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
@@ -12,6 +13,9 @@
 #include "bitmap_names.hpp"
 
 class Environment_Data_Chunk;
+static size_t const BytesEachColour = 3;
+
+// ssize has been measured against its chunk by now, so it can't be negative, and multiplying it can't wrap round.
 static const unsigned char * grab_pixel_data(int ssize, unsigned char const * sdata)
 {
 	if (!ssize) return 0;
@@ -34,12 +38,12 @@ class Environment_Palette_Chunk : public Chunk
 public:
 
 	// constructor from buffer
-	Environment_Palette_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const /*ssize*/)
+	Environment_Palette_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const ssize)
 		: Chunk (parent, "ENVPALET")
-		, width (*(int *)sdata)
+		, width (CountIfItFits(*(int *)sdata, BytesEachColour, BytesLeftAfter(ssize, 8)))
 		, height (1)
 		, flags (*(int *)(sdata+4))
-		, pixel_data (grab_pixel_data(*(int *)sdata,(unsigned char *)(sdata+8)))
+		, pixel_data (grab_pixel_data(width,(unsigned char *)(sdata+8)))
 		{}
 	~Environment_Palette_Chunk ();
 															
@@ -119,14 +123,14 @@ private:
 
 	void fill_data_block (char * data_start);
 
-	// constructor from buffer
-	Preset_Palette (char const * sdata)
-		: size (*(int *)sdata)
+	// constructor from buffer. bytes_left is how much of the chunk there is from sdata on.
+	Preset_Palette (char const * sdata, size_t bytes_left)
+		: size (CountIfItFits(*(int *)sdata, BytesEachColour, BytesLeftAfter(bytes_left, 20)))
 		, flags (*(int *)(sdata+4))
 		, reserved1 (*(int *)(sdata+8))
 		, reserved2 (*(int *)(sdata+12))
 		, startpos (*(int *)(sdata+16))
-		, pixel_data (grab_pixel_data(*(int *)sdata,(unsigned char *)(sdata+20)))
+		, pixel_data (grab_pixel_data(size,(unsigned char *)(sdata+20)))
 		{
 			sdata += 20+size*3;
 			name = new char[strlen(sdata)+1];

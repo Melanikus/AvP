@@ -59,6 +59,9 @@
 #include "strategy_chunk.hpp"
 #include "animation_chunk.hpp"
 #include "animation_objects.hpp"
+#include "bitmap_names.hpp"
+#include "chunk_palette.hpp"
+#include "enumsch.hpp"
 #include "chunk_sound.hpp"
 #include "chunk_sprites.hpp"
 #include "chunk_waypoint.hpp"
@@ -2585,6 +2588,44 @@ static void TestBadCounts(MakesChunk make, char * bytes, size_t size, size_t cou
 	}
 }
 
+// How many texture names the last shape below says it has. A copy of a shape reads every name it counts, so it can't count one that was never reached.
+static int textureNamesCounted = 0;
+
+// Loads a shape holding a list of texture names, with zeros and then the wall after it, and says whether the level would be accepted.
+static bool TextureNamesAccepted(bool subShape, int count, char const * names, size_t namesBytes)
+{
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+
+	size_t const shapeBytes = BuildShapeData(wholeShape, subShape, 4, triangle);
+	char * data = PutChunk(wholeShape + shapeBytes, "SHPTEXFN", sizeof(int) + namesBytes);
+	memcpy(data, &count, sizeof(count));
+	memcpy(data + sizeof(int), names, namesBytes);
+
+	size_t const allBytes = shapeBytes + ChunkHeaderBytes + sizeof(int) + namesBytes;
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(allBytes + SpareAfterChunk);
+	memcpy(atTheWall, wholeShape, allBytes);
+	memset(atTheWall + allBytes, 0, SpareAfterChunk);
+
+	if (subShape)
+	{
+		textureNamesCounted = (new Shape_Sub_Shape_Chunk(&file, atTheWall, allBytes))->shape_data.num_texfiles;
+	}
+	else
+	{
+		textureNamesCounted = (new Shape_Chunk(&file, atTheWall, allBytes))->shape_data.num_texfiles;
+	}
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
 static void TestCountedLists()
 {
 	puts("36. counted lists");
@@ -2613,6 +2654,12 @@ static void TestCountedLists()
 		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted" },
 		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
+		{ MakeChunk<Preset_Palette_Chunk>,                    20, 24,                           "a list of palettes is accepted" },
+		{ MakeChunk<Preset_Palette_Store_Chunk>,              24, 24,                           "a store of palettes is accepted" },
+		{ MakeChunk<RIF_Child_Chunk>,                         24, 12,                           "a child file's list of images is accepted" },
+		{ MakeChunk<BMP_Enums_Chunk>,                         12, 12,                           "a list of enums is accepted" },
+		{ MakeChunk<Matching_Images_Chunk>,                   12, 52,                           "a list of matching images is accepted" },
+		{ MakeChunk<Shape_Poly_Change_Info_Chunk>,            4,  3 * sizeof(int),              "a list of polygon changes is accepted" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -2740,6 +2787,169 @@ static void TestCountedLists()
 		PutNumber(bytes, modulesAt, 3);
 		memset(bytes + firstModuleAt, 'x', 15);
 		Check(!ChunkAccepted(make, bytes, firstModuleAt + 3 * smallestModule), "modules that run out of room are refused");
+	}
+
+	// A palette holds a count of colours, then three bytes for each one.
+	{
+		MakesChunk const make = MakeChunk<Environment_Palette_Chunk>;
+		size_t const numbersBytes = 8;
+		size_t const colourBytes = 3;
+		size_t const size = numbersBytes + 2 * colourBytes;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 2);
+		Check(ChunkAccepted(make, bytes, size), "a palette with its colours is accepted");
+		TestBadCounts(make, bytes, size, 0, colourBytes);
+
+		PutNumber(bytes, 0, 1);
+		Check(!ChunkAccepted(make, bytes, numbersBytes - 1), "a palette with no room for its numbers is refused");
+	}
+
+	// A list of palettes, each with its own count of colours in its first number.
+	{
+		struct PaletteRow { MakesChunk make; size_t countAt; };
+		PaletteRow const palettes[] = { { MakeChunk<Preset_Palette_Chunk>, 20 }, { MakeChunk<Preset_Palette_Store_Chunk>, 24 } };
+		size_t const smallestPalette = 24;
+
+		for (size_t i = 0; i < sizeof(palettes) / sizeof(palettes[0]); i++)
+		{
+			MakesChunk const make = palettes[i].make;
+			size_t const firstAt = palettes[i].countAt + sizeof(int);
+			size_t const oneWithColours = firstAt + 20 + 8;
+
+			memset(bytes, 0, sizeof(bytes));
+			PutNumber(bytes, palettes[i].countAt, 1);
+			PutNumber(bytes, firstAt, 2);
+			Check(ChunkAccepted(make, bytes, oneWithColours), "a palette in a list, with its colours, is accepted");
+			TestBadCounts(make, bytes, oneWithColours, firstAt, 3);
+
+			// Two palettes fit by their count, until the first one's colours use up the room the second needed.
+			memset(bytes, 0, sizeof(bytes));
+			PutNumber(bytes, palettes[i].countAt, 2);
+			PutNumber(bytes, firstAt, 9);
+			Check(!ChunkAccepted(make, bytes, firstAt + 2 * smallestPalette), "palettes that run out of room are refused");
+		}
+	}
+
+	// A lighting table is its width times its levels, both from the file, and one that doesn't fit is simply left out.
+	{
+		size_t const numbersBytes = 32;
+
+		struct TableRow { int width; int levels; size_t tableBytes; bool kept; char const * says; };
+		TableRow const tables[] =
+		{
+			{ 4,       2,       8, true,  "a lighting table that fits is kept" },
+			{ 4,       2,       7, false, "a lighting table too big for its chunk is left out" },
+			{ -1,      1,       8, false, "a lighting table with a negative width is left out" },
+			{ 1,       -1,      8, false, "a lighting table with a negative count of levels is left out" },
+			{ -2,      -4,      8, false, "two negatives that multiply to a size that fits are left out" },
+			{ 0x10000, 0x10000, 8, false, "a lighting table whose size wraps round to nothing is left out" },
+			{ 0x10001, 0xffff,  8, false, "a lighting table whose size wraps round to something small is left out" },
+		};
+
+		for (size_t i = 0; i < sizeof(tables) / sizeof(tables[0]); i++)
+		{
+			File_Chunk file;
+			Parent_File = &file;
+
+			size_t const size = numbersBytes + tables[i].tableBytes;
+			char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+			memset(atTheWall, 0, size + SpareAfterChunk);
+			memcpy(atTheWall, &tables[i].width, sizeof(int));
+			memcpy(atTheWall + 4, &tables[i].levels, sizeof(int));
+
+			Environment_TLT_Chunk const * table = new Environment_TLT_Chunk(&file, atTheWall, size);
+
+			Check((table->table != 0) == tables[i].kept, tables[i].says);
+			Parent_File = 0;
+		}
+	}
+
+	// A chunk's list of images. Its count shares a number with a version, so it's the low half of the first number.
+	{
+		MakesChunk const make = MakeChunk<Global_BMP_Name_Chunk>;
+		size_t const smallestImage = 24;
+		size_t const firstNameAt = sizeof(int) + 20;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 2);
+		Check(ChunkAccepted(make, bytes, sizeof(int) + 2 * smallestImage), "a list of images is accepted");
+		TestBadCounts(make, bytes, sizeof(int) + 2 * smallestImage, 0, smallestImage);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 3);
+		memset(bytes + firstNameAt, 'x', 40);
+		Check(!ChunkAccepted(make, bytes, sizeof(int) + 3 * smallestImage), "images that run out of room are refused");
+	}
+
+	// The other lists of names, each with a first name long enough to use up the room the count was measured against.
+	{
+		size_t const firstImageAt = 24 + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 24, 3);
+		memset(bytes + firstImageAt + 8, 'x', 15);
+		Check(!ChunkAccepted(MakeChunk<RIF_Child_Chunk>, bytes, firstImageAt + 3 * 12), "a child file's images that run out of room are refused");
+
+		size_t const firstEnumAt = 16;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 12, 3);
+		memset(bytes + firstEnumAt + 8, 'x', 15);
+		Check(!ChunkAccepted(MakeChunk<BMP_Enums_Chunk>, bytes, firstEnumAt + 3 * 12), "enums that run out of room are refused");
+
+		size_t const firstMatchAt = 16;
+		size_t const firstFileNameAt = firstMatchAt + 12 + 16;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 12, 2);
+		memset(bytes + firstFileNameAt, 'x', 52);
+		Check(!ChunkAccepted(MakeChunk<Matching_Images_Chunk>, bytes, firstMatchAt + 2 * 52), "matching images that run out of room are refused");
+	}
+
+	// A shape's list of texture names, in a whole shape and in a sub-shape. Each name ends with a zero, with nothing after it, so one byte is the least a name takes.
+	{
+		for (int subShape = 0; subShape < 2; subShape++)
+		{
+			char const names[] = "ab\0cd";
+			char const longName[] = "abcdef";
+
+			Check(TextureNamesAccepted(subShape != 0, 2, names, sizeof(names)), "a shape's texture names are accepted");
+			Check(!TextureNamesAccepted(subShape != 0, -1, names, sizeof(names)), "a negative count of names is refused");
+			Check(!TextureNamesAccepted(subShape != 0, 0x7fffffff, names, sizeof(names)), "a count of names too big to make is refused");
+			Check(!TextureNamesAccepted(subShape != 0, 0x40000001, names, sizeof(names)), "a count of names that wraps round is refused");
+			Check(!TextureNamesAccepted(subShape != 0, 7, names, sizeof(names)), "one more name than there are bytes is refused");
+			Check(!TextureNamesAccepted(subShape != 0, 2, longName, sizeof(longName)), "names that run out of room are refused");
+			Check(textureNamesCounted == 1, "a shape only counts the names it really has");
+		}
+	}
+
+	// The names of the objects using a shape come after its header's numbers, each ending with a zero.
+	{
+		struct NameRow { int count; char const * names; size_t bytes; bool good; char const * says; };
+		NameRow const nameRows[] =
+		{
+			{ 2,          "a\0b",  4, true,  "a shape's list of objects is accepted" },
+			{ -1,         "a\0b",  4, false, "a negative count of objects is refused" },
+			{ 0x7fffffff, "a\0b",  4, false, "a count of objects too big is refused" },
+			{ 5,          "a\0b",  4, false, "one more object than there are bytes is refused" },
+			{ 2,          "xy",     3, false, "objects that run out of room are refused" },
+		};
+
+		for (size_t i = 0; i < sizeof(nameRows) / sizeof(nameRows[0]); i++)
+		{
+			char * data = PutChunk(wholeShape, "SHPHEAD1", ShapeHeaderDataBytes + nameRows[i].bytes);
+			memcpy(data + ShapeHeaderDataBytes - sizeof(int), &nameRows[i].count, sizeof(int));
+			memcpy(data + ShapeHeaderDataBytes, nameRows[i].names, nameRows[i].bytes);
+
+			char const * end = data + ShapeHeaderDataBytes + nameRows[i].bytes;
+			Check(ShapeIsAcceptedAtTheWall(end) == nameRows[i].good, nameRows[i].says);
+		}
+
+		// A header that ends partway through its count, at the wall, so that reading the count at all would stop the test.
+		size_t const partOfTheCount = ShapeHeaderDataBytes - 2;
+		char * data = PutChunk(wholeShape, "SHPHEAD1", partOfTheCount);
+		Check(!ShapeIsAcceptedAtTheWall(data + partOfTheCount), "a shape's header with no room for its count of objects is refused");
 	}
 
 	// When a list stops early, the items it never reached are still freed, so each has to start with nothing to free. Each is made here on top of dirty

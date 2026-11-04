@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   is_textured moved here from chunk_load.cpp, because the checks made as a level is read need it too
 //   the texture file names of a shape are copied using their exact measured length, so they always fit
+//   a texture's file name is freed the way it was made, as a list of letters
 
 #include "chunk.hpp"
 #include <math.h>
@@ -443,7 +444,7 @@ ChunkShape::~ChunkShape()
 	{
 		for (int i = 0; i < num_texfiles; i++)
 		{
-			delete texture_fns[i];
+			delete[] texture_fns[i];
 		}
 	}
 }
@@ -563,7 +564,7 @@ ChunkShape& ChunkShape::operator=(const ChunkShape &shp)
 	{
 		for (int i = 0; i < num_texfiles; i++)
 		{
-			delete texture_fns[i];
+			delete[] texture_fns[i];
 		}
 	}
 

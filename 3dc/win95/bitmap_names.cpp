@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
+//   counted lists are measured against their chunks before they're made
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -109,9 +110,12 @@ BOOL operator!=(const BMP_Name &o1, const BMP_Name &o2)
 
 
 
-Chunk_With_BMPs::Chunk_With_BMPs (Chunk_With_Children * parent, const char * const ident, const char * bdata, size_t /*bsize*/)
+Chunk_With_BMPs::Chunk_With_BMPs (Chunk_With_Children * parent, const char * const ident, const char * bdata, size_t bsize)
 : Chunk (parent, ident), max_index (0)
 {
+	char const * const start = bdata;
+	size_t const smallest_image = 24;   // five numbers and a name
+
 	int temp = *(int *)bdata;
 
 	int num = temp & 0xffff;
@@ -122,6 +126,13 @@ Chunk_With_BMPs::Chunk_With_BMPs (Chunk_With_Children * parent, const char * con
 	
 	for (int i=0; i<num; i++)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if ((size_t)(bdata - start) + smallest_image > bsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		int f,j,d1,d2,d3;
 	
 		f = *((int *)bdata);
@@ -769,21 +780,28 @@ Matching_Images_Chunk::Matching_Images_Chunk(Chunk_With_Children * parent, char 
 : Chunk(parent,"MATCHIMG")
 , flags ((MICFlags)(*(int *)(datablock+8) & MICF_MASK))
 {
-	char const * datastart = datablock;
-	
+	char const * const datastart = datablock;
+	size_t const smallest_match = 52;   // three numbers, and two images of at least 20 bytes each
+
 	spares[0] = *(int *)datablock;
 	spares[1] = *(int *)(datablock+4);
 
-	int listsize = *(int *)(datablock+12);
-	datablock += 16;
+	datablock += 12;
+
+	int listsize = ReadListCount(datastart, datablock, size, smallest_match);
 
 	for (;listsize; --listsize)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if ((size_t)(datablock - datastart) + smallest_match > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		mlist.add_entry_end(datablock);
 		datablock += mlist.last_entry().Size();
 	}
-
-	assert(datastart + size == datablock);
 }
 
 size_t Matching_Images_Chunk::size_chunk()

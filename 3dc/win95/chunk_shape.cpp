@@ -18,6 +18,7 @@
 //   a module's points have to fit the box stored with its shape
 //   a shape's centre is only made inside a shape, because it writes into the shape
 //   a chunk of texture animation must fit the polygons it names, and only a shape can have one
+//   a shape's lists of names and polygon changes are measured against their chunks before they're made
 
 #include <math.h>
 #include <vector>
@@ -1409,13 +1410,15 @@ size_t Shape_UV_Coord_Chunk::size_chunk ()
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"REBSHAPE",Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
 // from buffer
-Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Chunk * parent, const char * tfndata, size_t /*tfnsize*/)
+Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Chunk * parent, const char * tfndata, size_t tfnsize)
 : Chunk (parent, "SHPTEXFN"),
-tex_fns (), num_tex_fns (*((int *) tfndata))
+tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (tfnsize, sizeof(int))))
 {
 	int i;
+	char const * const start = tfndata;
 
-	parent->shape_data_store->texture_fns = new char * [num_tex_fns];
+	// the () makes every place start empty: if the list stops early, the ones it didn't reach are still freed
+	parent->shape_data_store->texture_fns = new char * [num_tex_fns] ();
 	*((char***) &tex_fns) = parent->shape_data_store->texture_fns;
 
 	parent->shape_data_store->num_texfiles = num_tex_fns;
@@ -1424,19 +1427,30 @@ tex_fns (), num_tex_fns (*((int *) tfndata))
 
 	for (i=0; i<num_tex_fns; i++)
 	{
+		// A name can take more than the one byte the count was measured with. The shape then only counts the names it really has, because a copy of it
+		// reads every name it counts.
+		if ((size_t)(tfndata - start) + 1 > tfnsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			parent->shape_data_store->num_texfiles = i;
+			break;
+		}
+
 		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
 		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
 		tfndata += (strlen(tfndata)+1);
 	}
 }
 
-Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Sub_Shape_Chunk * parent, const char * tfndata, size_t /*tfnsize*/)
+Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Sub_Shape_Chunk * parent, const char * tfndata, size_t tfnsize)
 : Chunk (parent, "SHPTEXFN"),
-tex_fns (), num_tex_fns (*((int *) tfndata))
+tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (tfnsize, sizeof(int))))
 {
 	int i;
+	char const * const start = tfndata;
 
-	parent->shape_data_store->texture_fns = new char * [num_tex_fns];
+	// the () makes every place start empty: if the list stops early, the ones it didn't reach are still freed
+	parent->shape_data_store->texture_fns = new char * [num_tex_fns] ();
 	*((char***) &tex_fns) = parent->shape_data_store->texture_fns;
 
 	parent->shape_data_store->num_texfiles = num_tex_fns;
@@ -1445,6 +1459,15 @@ tex_fns (), num_tex_fns (*((int *) tfndata))
 
 	for (i=0; i<num_tex_fns; i++)
 	{
+		// A name can take more than the one byte the count was measured with. The shape then only counts the names it really has, because a copy of it
+		// reads every name it counts.
+		if ((size_t)(tfndata - start) + 1 > tfnsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			parent->shape_data_store->num_texfiles = i;
+			break;
+		}
+
 		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
 		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
 		tfndata += (strlen(tfndata)+1);
@@ -1511,10 +1534,11 @@ size_t Shape_Texture_Filenames_Chunk::size_chunk()
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPHEAD1",Shape_Header_Chunk,"REBSHAPE",Shape_Chunk)
 
 
-Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata, size_t /*hsize*/)
+Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata, size_t hsize)
 	: Chunk (parent, "SHPHEAD1"),
 	shape_data (parent->shape_data_store)
 {
+	char const * const start = hdata;
 	int num_as_obj;
 
 	flags = *((int *) hdata);
@@ -1552,13 +1576,19 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	version_no = *((int *) hdata);
 	hdata+=4;
 
-	num_as_obj = *((int *) hdata);
-	hdata+=4;
+	num_as_obj = ReadListCount (start, hdata, hsize, 1);
 
 	char * obj_store;
 
-	for (int i = 0; i< num_as_obj; i++) 
+	for (int i = 0; i< num_as_obj; i++)
 	{
+		// a name can take more than the one byte the count was measured with
+		if ((size_t)(hdata - start) + 1 > hsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		obj_store = new char [strlen (hdata) +1];
 		strcpy (obj_store, (hdata));
 		object_names_store.add_entry(obj_store);
@@ -2443,16 +2473,16 @@ void Shape_Poly_Change_Info_Chunk::fill_data_block(char * data_start)
 	}
 }
 
-Shape_Poly_Change_Info_Chunk::Shape_Poly_Change_Info_Chunk (Chunk_With_Children * parent,const char * data, size_t /*size*/)
+Shape_Poly_Change_Info_Chunk::Shape_Poly_Change_Info_Chunk (Chunk_With_Children * parent,const char * data, size_t size)
 : Chunk (parent, "SHPPCINF")
 {
+	char const * const start = data;
+
 	original_num_verts = *((int *) data);
 
 	data += 4;
 
-	int n_entries = *((int *) data);
-
-	data += 4;
+	int n_entries = ReadListCount (start, data, size, 3 * sizeof(int));
 
 	for (int i=0; i<n_entries; i++)
 	{
