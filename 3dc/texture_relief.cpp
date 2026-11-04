@@ -283,7 +283,7 @@ bool TextureRelief::Calculate(uint8_t const *picture, uint32_t picturePitch, uin
 }
 
 TextureRelief::TextureRelief(size_t mostBytes)
-: mostBytesHeld(mostBytes), on(true), flatPictureMade(false), flatPicture(0), picturesHeld(0), bytesHeld(0)
+: mostBytesHeld(mostBytes), limitWasLogged(false), on(true), flatPictureMade(false), flatPicture(0), picturesHeld(0), bytesHeld(0)
 {
 }
 
@@ -368,6 +368,12 @@ texID_t TextureRelief::CalculatedPictureFor(texID_t picture)
 
 	if (bytes > mostBytesHeld - bytesHeld)
 	{
+		if (!limitWasLogged)
+		{
+			LogString("texture relief: the limit of " + std::to_string(mostBytesHeld) + " bytes is reached, so textures after this one have no relief");
+			limitWasLogged = true;
+		}
+
 		return MISSING_TEXTURE;
 	}
 
@@ -462,13 +468,20 @@ texID_t TextureRelief::PictureFor(texID_t picture) const
 	return flatPicture;
 }
 
+void TextureRelief::LogWhatIsHeld()
+{
+	if (on)
+	{
+		LogString("texture relief: " + std::to_string(picturesHeld) + " pictures held, " + std::to_string(bytesHeld) + " bytes");
+	}
+	else
+	{
+		LogString("texture relief: off");
+	}
+}
+
 void TextureRelief::ReleaseAll()
 {
-	if (picturesHeld)
-	{
-		LogString("texture relief: " + std::to_string(picturesHeld) + " pictures, " + std::to_string(bytesHeld) + " bytes");
-	}
-
 	for (size_t i = 0; i < reliefOf.size(); i++)
 	{
 		Tex_Release(reliefOf[i]);
@@ -481,6 +494,7 @@ void TextureRelief::ReleaseAll()
 
 	reliefOf.clear();
 	flatPictureMade = false;
+	limitWasLogged = false;
 	picturesHeld = 0;
 	bytesHeld = 0;
 }

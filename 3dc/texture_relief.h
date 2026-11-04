@@ -24,7 +24,11 @@
 class TextureRelief
 {
 	public:
-		// mostBytes is the most its relief pictures may add up to. A picture that would go past it goes without.
+		// mostBytes is the most its relief pictures may add up to, over the whole time the game is running, because nothing is given back between levels:
+		// see ReleaseAll. A picture that would go past it goes without relief, and the log says so once. It can't crash anything: the texture just looks flat.
+		// The stock levels and characters can load 50.8 MB of pictures, so a stock game shouldn't meet this limit. Every picture the game has comes to 72.9 MB,
+		// so if that count ever proves short, the last few textures of a very long session would lose their relief.
+		// The limit's other job is to hold back a hostile level: it fits 16 of the largest pictures allowed, about 0.6 seconds of work.
 		explicit TextureRelief(size_t mostBytes = 64 * 1024 * 1024);
 
 		// With -reliefoff on the command line. Nothing is built after this, and the game draws exactly as if none of this existed.
@@ -40,7 +44,12 @@ class TextureRelief
 		// The relief picture to use with a texture. One that has none gets a flat picture, which changes nothing, so anything can be asked for.
 		texID_t PictureFor(texID_t picture) const;
 
-		// Gives every relief picture back, when the level's textures go.
+		// Writes what's held to the log. Called when a level has finished loading.
+		void LogWhatIsHeld();
+
+		// Gives every relief picture back. Only release_rif_bitmaps asks for this, and nothing calls that today: the game keeps a level's textures until it
+		// exits, so that a picture used again later doesn't have to load again, and these stay with them. A picture keeps its number all that time, so a
+		// relief picture can't end up beside the wrong texture.
 		void ReleaseAll();
 
 		size_t PicturesHeld() const;
@@ -59,6 +68,7 @@ class TextureRelief
 		bool MakeFlatPicture();
 
 		size_t mostBytesHeld;
+		bool limitWasLogged;
 		bool on;
 		bool flatPictureMade;
 		texID_t flatPicture;

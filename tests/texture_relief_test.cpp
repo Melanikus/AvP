@@ -53,7 +53,12 @@ static int lockCount = 0;
 static int unlockCount = 0;
 static bool cardShrinksPictures = false;
 
-void LogString(const std::string &) {}
+static std::vector<std::string> logLines;
+
+void LogString(const std::string &text)
+{
+	logLines.push_back(text);
+}
 
 static texID_t AddTexture(const std::string &name, uint32_t width, uint32_t height, uint32_t bits, TextureUsage usage)
 {
@@ -137,6 +142,7 @@ static void StartAgain()
 	lockCount = 0;
 	unlockCount = 0;
 	cardShrinksPictures = false;
+	logLines.clear();
 }
 
 static int TexturesAlive()
@@ -595,10 +601,37 @@ static void CheckTheGameSide()
 
 		Check(relief.PicturesHeld() == 2 && relief.BytesHeld() == size * size * 4 * 2, "pictures that exactly fill the limit are all kept");
 		Check(madeCount == madeBefore, "the next one goes without, and nothing is made for it");
+		Check(logLines.size() == 1 && logLines[0].find("limit") != std::string::npos, "and the log says so");
+
+		relief.Build(Added::Picture(pixels));
+		Check(logLines.size() == 1, "once, however many more go without");
 
 		relief.ReleaseAll();
 		relief.Build(pictures[2]);
 		Check(relief.PicturesHeld() == 1, "the next level starts with the whole limit again");
+
+		relief.Build(Added::Picture(pixels));
+		relief.Build(Added::Picture(pixels));
+		Check(logLines.size() == 2, "and the log can say so again");
+
+		relief.ReleaseAll();
+	}
+
+	// What the log shows when a level finishes loading: it's the only way to tell from a log that relief ran.
+	{
+		StartAgain();
+		TextureRelief relief;
+
+		relief.Build(Added::Picture(pixels));
+		relief.LogWhatIsHeld();
+
+		Check(logLines.size() == 1 && logLines[0] == "texture relief: 1 pictures held, 256 bytes", "the log says what's held");
+
+		relief.TurnOff();
+		logLines.clear();
+		relief.LogWhatIsHeld();
+
+		Check(logLines.size() == 1 && logLines[0] == "texture relief: off", "and turned off, it says that");
 	}
 
 	// A number too high is refused before it's looked up, so the list doesn't grow. There's no texture there, and it would stop the test if it were read.
