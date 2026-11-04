@@ -10,6 +10,8 @@
 //   a polygon needs at least 3 corners; a shape can only have one list of points and one of polygons, and a shape with no
 //   points chunk can't claim any; merge data and animations are checked against the shape; a sub-shape that fails stops
 //   lists of texture coordinates are read within their chunk and their 4 places, and each textured polygon's list is checked
+//   a shape must have one normal for each point and one for each polygon, each normal's numbers must be sensible, and a polygon's
+//   own normal must be one of those in its list
 
 #include <math.h>
 
@@ -106,6 +108,43 @@ Shape_Chunk::~Shape_Chunk ()
 Shape_Header_Chunk * Shape_Chunk::get_header()
 {
 	return (Shape_Header_Chunk *) this->lookup_single_child ("SHPHEAD1");
+}
+
+// One number from a normal. A normal is a direction, so its numbers are small: the longest of all the 2.57 million normals in the
+// game's own levels is 1.09 long. Anything much bigger means nothing, and the game can't turn it into its whole-number form safely,
+// and neither can it turn infinity or "not a number". A normal of all zeros is allowed: the game's own levels have 8619 of them.
+// This reads the float's bits instead of comparing the float itself, because the Release build's fast floating point setting lets
+// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. With the sign
+// taken off, a float's bits count upwards in the same order as its size. 0x40000000 is 2, and infinity and "not a number" come
+// after every real number, so this one test catches all of them.
+static bool normal_number_is_valid (float number)
+{
+	unsigned int bits;
+	memcpy (&bits, &number, sizeof(bits));
+
+	return (bits & 0x7fffffff) <= 0x40000000;
+}
+
+// A shape's normals are in two lists: one for its points and one for its polygons, each read from a chunk with a count of its own.
+// The game reads both using the shape's counts, not theirs, so a list that's short, or isn't there at all, would be read past its
+// end. So its length has to be exactly what the shape needs. All 30673 shapes in the game's own levels have both lists, at
+// exactly the right length.
+static bool normals_are_valid (ChunkVectorFloat const * list, int list_count, int needed)
+{
+	if (list_count != needed)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < list_count; i++)
+	{
+		if (!normal_number_is_valid (list[i].x) || !normal_number_is_valid (list[i].y) || !normal_number_is_valid (list[i].z))
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 // Merge data pairs up triangles that the game joins into four-cornered polygons. There's one entry for each polygon: -1 if it
@@ -259,8 +298,34 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 		return false;
 	}
 
+	// A second chunk of normals would replace the list, just as a second chunk of points would. None of the game's shapes has one.
+	if (shape_chunk->count_children ("SHPVNORM") > 1 || shape_chunk->count_children ("SHPPNORM") > 1)
+	{
+		return false;
+	}
+
+	Shape_Vertex_Normal_Chunk * point_normals = (Shape_Vertex_Normal_Chunk *) shape_chunk->lookup_single_child ("SHPVNORM");
+	Shape_Polygon_Normal_Chunk * polygon_normals = (Shape_Polygon_Normal_Chunk *) shape_chunk->lookup_single_child ("SHPPNORM");
+
+	if (!normals_are_valid (shape.v_normal_list, point_normals ? point_normals->num_verts : 0, point_count))
+	{
+		return false;
+	}
+
+	if (!normals_are_valid (shape.p_normal_list, polygon_normals ? polygon_normals->num_polys : 0, polygon_count))
+	{
+		return false;
+	}
+
 	for (int i = 0; i < polygon_count; i++)
 	{
+		// A polygon says where in the list its own normal is, and the game goes straight there. In the game's own levels each of
+		// the 952940 polygons points at its own place in the list.
+		if (shape.poly_list[i].normal_index < 0 || shape.poly_list[i].normal_index >= polygon_count)
+		{
+			return false;
+		}
+
 		for (int j = 0; j < shape.poly_list[i].num_verts; j++)
 		{
 			int const corner = shape.poly_list[i].vert_ind[j];

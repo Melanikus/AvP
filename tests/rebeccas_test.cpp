@@ -25,7 +25,7 @@
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
-// animated shapes, and test 16 the lists of texture coordinates.
+// animated shapes, test 16 the lists of texture coordinates, and test 17 the lists of normals.
 //
 // HOW IT RUNS
 //
@@ -544,8 +544,8 @@ static void TestBakedColours()
 }
 
 // Room for the data of a whole shape: its header, its points and its polygons, laid out as in a level file. The biggest
-// one here has 10001 points, at 12 bytes each.
-alignas(int) static char wholeShape[130000];
+// one here has 10001 points, at 12 bytes each, with a normal for each point, also 12 bytes.
+alignas(int) static char wholeShape[250000];
 
 // Writes a chunk's header and gives back where its data goes. The data starts as all zeros.
 static char * PutChunk(char * where, char const * name, size_t dataBytes)
@@ -557,6 +557,14 @@ static char * PutChunk(char * where, char const * name, size_t dataBytes)
 	memcpy(where + 8, &chunkBytes, sizeof(chunkBytes));
 
 	return where + ChunkHeaderBytes;
+}
+
+// Writes a shape's two lists of normals, with every normal all zeros, which is allowed, and gives back where the next chunk goes.
+static char * PutNormals(char * where, int points, int polygons)
+{
+	char * polygonNormals = PutChunk(where, "SHPVNORM", 12 * (size_t)points) + 12 * (size_t)points;
+
+	return PutChunk(polygonNormals, "SHPPNORM", 12 * (size_t)polygons) + 12 * (size_t)polygons;
 }
 
 // Builds the data of a shape with this many points and one polygon. A polygon has 5 places for its corners, after 16
@@ -574,7 +582,7 @@ static size_t BuildShapeData(char * where, bool subShape, int points, int const 
 	char * polygon = PutChunk(pointData + 12 * (size_t)points, "SHPPOLYS", 36);
 	memcpy(polygon + 16, corners, 5 * sizeof(int));
 
-	return (polygon + 36) - where;
+	return PutNormals(polygon + 36, points, polygons) - where;
 }
 
 // 10. A polygon's corners. It has 4 places for them, and -1 marks the end.
@@ -627,9 +635,13 @@ static void TestPolygons()
 		File_Chunk file;
 		Parent_File = &file;
 
-		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		size_t const built = BuildShapeData(wholeShape, false, 4, triangle);
 		memcpy(wholeShape + ChunkHeaderBytes + ShapePointCountAt, &countRows[i].points, sizeof(int));
 		memcpy(wholeShape + ChunkHeaderBytes + ShapePolygonCountAt, &countRows[i].polygons, sizeof(int));
+
+		// The normals go with what the header claims, so that only the check on the header can refuse these.
+		char * normals = wholeShape + built - (ChunkHeaderBytes + 12) - (ChunkHeaderBytes + 48);
+		size_t const bytes = PutNormals(normals, countRows[i].points, 1) - wholeShape;
 		std::rotate(wholeShape, wholeShape + headerChunkBytes, wholeShape + bytes); // moves the header to the end
 
 		new Shape_Chunk(&file, wholeShape, bytes);
@@ -702,7 +714,7 @@ static void TestSubShapes()
 		Parent_File = &file;
 
 		// the frame is built first, and copied in once its size is known
-		alignas(int) static char frame[16384];
+		alignas(int) static char frame[32768];
 		size_t const frameBytes = BuildShapeData(frame, true, morphRows[i].framePoints, triangle);
 		size_t const mainBytes = BuildShapeData(wholeShape, false, morphRows[i].shapePoints, triangle);
 
@@ -814,14 +826,25 @@ static void TestRepeatedAndMissingChunks()
 	end = PutPoints(wholeShape, 5);
 	end = PutPoints(end, 4);
 	end = PutPolygons(end, 1, triangle);
+	end = PutNormals(end, 5, 1);
 	end = PutShapeHeader(end, 5, 1);
 	Check(!ShapeIsAccepted(end), "a shape with two chunks of points is refused");
 
 	end = PutPoints(wholeShape, 4);
 	end = PutPolygons(end, 2, triangle);
 	end = PutPolygons(end, 1, triangle);
+	end = PutNormals(end, 4, 2);
 	end = PutShapeHeader(end, 4, 2);
 	Check(!ShapeIsAccepted(end), "a shape with two chunks of polygons is refused");
+
+	// With this check gone, the shape above would go on to read past the end of its short list, so what happened next would be
+	// down to chance. Here the second chunk is the longer one, so nothing else can refuse the shape, and this check is shown to work.
+	end = PutPoints(wholeShape, 4);
+	end = PutPolygons(end, 1, triangle);
+	end = PutPolygons(end, 2, triangle);
+	end = PutNormals(end, 4, 1);
+	end = PutShapeHeader(end, 4, 1);
+	Check(!ShapeIsAccepted(end), "a shape with a longer second chunk of polygons is refused");
 
 	end = PutShapeHeader(wholeShape, 4, 0);
 	Check(!ShapeIsAccepted(end), "a header that claims points with no chunk of points is refused");
@@ -879,6 +902,7 @@ static void TestMergeData()
 		char * end = PutShapeHeader(wholeShape, 4, 3);
 		end = PutPoints(end, 4);
 		end = PutPolygons(end, 3, triangle);
+		end = PutNormals(end, 4, 3);
 
 		char * merge = PutChunk(end, "SHPMRGDT", mergeBytes);
 		memcpy(merge, rows[i].merge, mergeBytes);
@@ -1114,6 +1138,7 @@ static void TestTextureCoordinates()
 		char * end = PutShapeHeader(wholeShape, 4, 1);
 		end = PutPoints(end, 4);
 		end = PutTexturedPolygon(end, indexRows[i].corners, indexRows[i].colour);
+		end = PutNormals(end, 4, 1);
 		end = PutUVLists(end, 2, indexRows[i].listCorners);
 
 		Check(ShapeIsAccepted(end) == indexRows[i].accepted, indexRows[i].what);
@@ -1122,6 +1147,7 @@ static void TestTextureCoordinates()
 	char * end = PutShapeHeader(wholeShape, 4, 1);
 	end = PutPoints(end, 4);
 	end = PutTexturedPolygon(end, triangle, 0);
+	end = PutNormals(end, 4, 1);
 	Check(!ShapeIsAccepted(end), "a textured polygon in a shape with no lists is refused");
 
 	// A polygon with no texture uses its colour for something else, so the same number means nothing.
@@ -1130,7 +1156,146 @@ static void TestTextureCoordinates()
 	char * polygonEnd = PutPolygons(end, 1, triangle);
 	unsigned int const colour = 0x7fff0000;
 	memcpy(polygonEnd - 36 + 12, &colour, sizeof(colour));
-	Check(ShapeIsAccepted(polygonEnd), "a polygon with no texture can have any colour");
+	Check(ShapeIsAccepted(PutNormals(polygonEnd, 4, 1)), "a polygon with no texture can have any colour");
+}
+
+// 17. A shape's normals are in two lists, one for its points and one for its polygons. Each list comes from a chunk with a count of
+// its own, while the game reads both by the shape's counts. So each must be there, at exactly the right length, and only once. Their
+// numbers go through the game's whole-number form and into the shaders, so they have to be sensible. And a polygon says where in
+// its list its own normal is, so that has to be a real place.
+static void TestNormals()
+{
+	puts("17. normals");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+
+	// How many normals each chunk holds, where -1 means there's no chunk at all. This shape has 4 points and 1 polygon.
+	struct CountRow { int forPoints; int forPolygons; bool accepted; char const * what; };
+	CountRow const countRows[] =
+	{
+		{  4,  1, true,  "one normal for each point and each polygon is accepted" },
+		{ -1,  1, false, "a shape with no normals for its points is refused" },
+		{  4, -1, false, "a shape with no normals for its polygons is refused" },
+		{  3,  1, false, "too few normals for the points are refused" },
+		{  5,  1, false, "too many normals for the points are refused" },
+		{  4,  0, false, "too few normals for the polygons are refused" },
+		{  4,  2, false, "too many normals for the polygons are refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(countRows) / sizeof(countRows[0]); i++)
+	{
+		char * end = PutShapeHeader(wholeShape, 4, 1);
+		end = PutPoints(end, 4);
+		end = PutPolygons(end, 1, triangle);
+
+		if (countRows[i].forPoints >= 0)
+		{
+			end = PutChunk(end, "SHPVNORM", 12 * (size_t)countRows[i].forPoints) + 12 * (size_t)countRows[i].forPoints;
+		}
+
+		if (countRows[i].forPolygons >= 0)
+		{
+			end = PutChunk(end, "SHPPNORM", 12 * (size_t)countRows[i].forPolygons) + 12 * (size_t)countRows[i].forPolygons;
+		}
+
+		Check(ShapeIsAccepted(end) == countRows[i].accepted, countRows[i].what);
+	}
+
+	// A second chunk replaces the list as it's read, while the checks look at the first. The danger is a short second chunk, but
+	// here it's the longer one, on purpose. With a short one and this check gone, what came next would be down to whatever memory
+	// lay past the end of the list. With a longer one, nothing else can refuse the shape, so this shows that the check does.
+	char * end = PutShapeHeader(wholeShape, 4, 1);
+	end = PutPoints(end, 4);
+	end = PutPolygons(end, 1, triangle);
+	end = PutNormals(end, 4, 1);
+	end = PutChunk(end, "SHPVNORM", 12 * 5) + 12 * 5;
+	Check(!ShapeIsAccepted(end), "a second chunk of normals for the points is refused");
+
+	end = PutShapeHeader(wholeShape, 4, 1);
+	end = PutPoints(end, 4);
+	end = PutPolygons(end, 1, triangle);
+	end = PutNormals(end, 4, 1);
+	end = PutChunk(end, "SHPPNORM", 12 * 2) + 12 * 2;
+	Check(!ShapeIsAccepted(end), "a second chunk of normals for the polygons is refused");
+
+	// The numbers. These are the bits of a float, since "not a number" can't be written any other way. 0x40000000 is 2.
+	struct NumberRow { unsigned int bits; bool accepted; char const * what; };
+	NumberRow const numberRows[] =
+	{
+		{ 0x00000000, true,  "a normal number of 0 is accepted" },
+		{ 0x3f800000, true,  "a normal number of 1 is accepted" },
+		{ 0x40000000, true,  "a normal number of 2 is accepted" },
+		{ 0xc0000000, true,  "a normal number of -2 is accepted" },
+		{ 0x40000001, false, "the first number above 2 is refused" },
+		{ 0xc0000001, false, "the first number below -2 is refused" },
+		{ 0x7f7fffff, false, "the biggest real number is refused" },
+		{ 0x7f800000, false, "infinity is refused" },
+		{ 0xff800000, false, "minus infinity is refused" },
+		{ 0x7fc00000, false, "a float that isn't a number is refused" },
+	};
+
+	// Every number goes in each of the 3 places of the last normal in each list, so each place and the end of each list are tested.
+	for (size_t i = 0; i < sizeof(numberRows) / sizeof(numberRows[0]); i++)
+	{
+		for (int list = 0; list < 2; list++)
+		{
+			for (int place = 0; place < 3; place++)
+			{
+				end = PutShapeHeader(wholeShape, 4, 1);
+				end = PutPoints(end, 4);
+				end = PutPolygons(end, 1, triangle);
+				end = PutNormals(end, 4, 1);
+
+				// the polygon list is the last thing written, and the point list ends just before its chunk
+				size_t const backFromEnd = (list == 0) ? ChunkHeaderBytes + 12 + 12 : 12;
+				memcpy(end - backFromEnd + place * sizeof(float), &numberRows[i].bits, sizeof(float));
+
+				Check(ShapeIsAccepted(end) == numberRows[i].accepted, numberRows[i].what);
+			}
+		}
+	}
+
+	// A polygon's own normal, for each of 2 polygons. It's the second number of a polygon's record.
+	struct IndexRow { int index; bool accepted; char const * what; };
+	IndexRow const indexRows[] =
+	{
+		{ 0,          true,  "a polygon naming the first normal is accepted" },
+		{ 1,          true,  "a polygon naming the last normal is accepted" },
+		{ 2,          false, "a polygon naming a normal past the end is refused" },
+		{ -1,         false, "a polygon naming a negative place is refused" },
+		{ 0x7fffffff, false, "a polygon naming a place far past the end is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(indexRows) / sizeof(indexRows[0]); i++)
+	{
+		for (int polygon = 0; polygon < 2; polygon++)
+		{
+			end = PutShapeHeader(wholeShape, 4, 2);
+			end = PutPoints(end, 4);
+			end = PutPolygons(end, 2, triangle);
+			memcpy(end - 36 * (2 - polygon) + 4, &indexRows[i].index, sizeof(int));
+			end = PutNormals(end, 4, 2);
+
+			Check(ShapeIsAccepted(end) == indexRows[i].accepted, indexRows[i].what);
+		}
+	}
+
+	// A sub-shape goes through the same checks. Renaming the chunk leaves everything else in place.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, 4, triangle);
+		size_t const pointNormalsAt = bytes - (ChunkHeaderBytes + 12) - (ChunkHeaderBytes + 48);
+		Check(memcmp(wholeShape + pointNormalsAt, "SHPVNORM", 8) == 0, "the test found the sub-shape's normals");
+		memcpy(wholeShape + pointNormalsAt, "NOTNORMS", 8);
+
+		new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a sub-shape with no normals for its points is refused");
+		Parent_File = 0;
+	}
 }
 
 int main()
@@ -1154,6 +1319,7 @@ int main()
 	TestMergeData();
 	TestAnimatedShapes();
 	TestTextureCoordinates();
+	TestNormals();
 
 	if (checksFailed)
 	{
