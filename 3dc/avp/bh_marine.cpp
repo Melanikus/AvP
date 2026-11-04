@@ -8,7 +8,7 @@
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
 //   a sentry sent back to a spot outside every module keeps the module it has
-//   a marine whose muzzle is missing from its model fires nothing, or stays on the muzzle it has
+//   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
 #include "3dc.h"
 
 #include "inline.h"

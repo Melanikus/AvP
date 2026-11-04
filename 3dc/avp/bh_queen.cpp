@@ -2,7 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
 //   simply skipped
-//   the Queen copes with a model missing a foot, a hand or an animation; her hit animation is the
+//   the Queen copes with a model missing a foot or a swiping hand; her hit animation is the
 //   one set to not playing when she is made, where the attack was set twice
 #define DB_LEVEL 2
 

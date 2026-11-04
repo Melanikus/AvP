@@ -4,7 +4,7 @@ Source file for predator AI
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a dormant predator keeps its own copy of its level data, not a pointer to it
-//   a predator whose muzzle is missing from its model fires nothing
+//   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
