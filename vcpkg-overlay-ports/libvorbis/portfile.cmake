@@ -28,16 +28,22 @@ vcpkg_from_github(
         0018-keep-a-failed-decoder-setup-failed.patch
 )
 
-# Delete source files that are never built, so that nothing we do not ship stays in the tree.
+# Delete source files that are never built, so that they are not scanned as if we shipped them.
 # The library is built from the source lists in lib/CMakeLists.txt, and the top-level
 # CMakeLists.txt only adds lib/. None of these is in those lists:
 # - vq/: command-line tools for designing codebooks;
 # - examples/: sample programs;
+# - test/: upstream's test programs;
+# - contrib/: upstream's fuzz test setup;
 # - lib/psytune.c: a command-line tool for tuning the encoder;
 # - lib/misc.c: a debug memory tracker, only for builds with DEBUG_MALLOC, which needs pthread.h.
+# lib/barkmel.c and lib/tone.c are not built either. They stay for now: Snyk recognises this
+# library by how many of its release files are here, and too few would fail the scan.
 file(REMOVE_RECURSE
     "${SOURCE_PATH}/vq"
     "${SOURCE_PATH}/examples"
+    "${SOURCE_PATH}/test"
+    "${SOURCE_PATH}/contrib"
     "${SOURCE_PATH}/lib/psytune.c"
     "${SOURCE_PATH}/lib/misc.c"
 )
