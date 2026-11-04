@@ -4871,8 +4871,9 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 				/*
 				Something that already has a model is a character, a placed object or the player's weapon, and its code
 				relies on the kind of model it was given. In the game, such a model only ever changes for a whole model
-				from the same file. Only debris uses a piece of a model, and debris has no model when it gets here. A save
-				file that asks for anything else is damaged or was made to do harm, so the object keeps the model it has.
+				from the same file. Debris, Molotovs and fragments on a spear use a piece of a model, and none of those
+				has a model when it gets here. A save file that asks for anything else is damaged or was made to do harm,
+				so the object keeps the model it has.
 				*/
 				if (controller->Root_Section)
 				{

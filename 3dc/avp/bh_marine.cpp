@@ -11,6 +11,7 @@
 //   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
 //   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
 //   the head and the elevation animation are checked before use, because either can be missing
+//   a save can no longer put someone with no firing code into a firing state
 #include "3dc.h"
 
 #include "inline.h"
@@ -18150,7 +18151,21 @@ static BOOL Marine_Can_Carry_On(STRATEGYBLOCK *sbPtr, MARINE_STATUS_BLOCK *marin
 	SECTION *model = controller->Root_Section;
 	MARINE_WEAPON_DATA *weapon = marineStatusPointer->My_Weapon;
 
-	if (!model || !weapon || _stricmp(model->Rif_Name, weapon->Riffname) != 0)
+	if (!model || !weapon)
+	{
+		return FALSE;
+	}
+
+	// Someone with no firing code must never reach it, and every mission's firing state calls it unchecked. In the game
+	// they're always a non-combatant, or on fire, and never in that state.
+	if (weapon->WeaponFireFunction == NULL
+		&& ((marineStatusPointer->Mission != MM_NonCom && marineStatusPointer->Mission != MM_RunAroundOnFire)
+			|| marineStatusPointer->behaviourState == MBS_Firing))
+	{
+		return FALSE;
+	}
+
+	if (_stricmp(model->Rif_Name, weapon->Riffname) != 0)
 	{
 		return FALSE;
 	}

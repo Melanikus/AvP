@@ -4,6 +4,7 @@
 //   so code scanners can read the file; the game runs the same code as before
 //   a disc whose model has no disc part no longer crashes
 //   a thrown weapon that a save file leaves without a model is left out of the game
+//   a Molotov starts from cleared memory, so loading one no longer reads a model from random memory
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -4240,6 +4241,9 @@ DISPLAYBLOCK *SpawnMolotovCocktail(SECTION_DATA *root, MATRIXCH *master_orient)
 			RemoveBehaviourStrategy(sbPtr);
 			return (DISPLAYBLOCK*)NULL;
 		}
+
+		// new memory holds whatever was there before, and when loading, nothing below fills in the bottle's model
+		memset(sbPtr->SBdataptr, 0, sizeof(MOLOTOV_BEHAV_BLOCK));
 
 		((MOLOTOV_BEHAV_BLOCK * ) sbPtr->SBdataptr)->counter = 65536;//32767;//FastRandom()&32767;
 

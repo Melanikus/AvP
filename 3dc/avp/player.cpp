@@ -1,5 +1,9 @@
 /* KJL 16:23:20 10/25/96 - I'm moved all the weapon stuff to the newly created weapon.c,
 so player.c is looking a bit bare at the moment. */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save with no model for the weapon leaves the player with the one they have
+
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -2116,13 +2120,15 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 		{
 			LoadHierarchy(hier_header,&PlayersWeaponHModelController);
 		}
-		else
-		{
-			Dispel_HModel(&PlayersWeaponHModelController);
-		}
 	}
 
-	PlayersWeapon.HModelControlBlock = &PlayersWeaponHModelController;
+	//A save with no model for the weapon leaves the player with the one they have, the same as a model it isn't allowed to
+	//load. LoadSavedGame waits for the level's first frame, which gives them one. If there's still none, nothing may point
+	//at it, because the code that draws and changes a weapon's model relies on that model having parts.
+	if(PlayersWeaponHModelController.section_data)
+	{
+		PlayersWeapon.HModelControlBlock = &PlayersWeaponHModelController;
+	}
 
 	//get the section data pointers
 	PWMFSDP=GetThisSectionData(PlayersWeaponHModelController.section_data,"dum flash");
