@@ -1,0 +1,6 @@
+/std:c++17 /EHsc /MD /J /W3
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/Itests/texture_relief_test_stubs /FIgame_stand_ins.h
+/I3dc /Iwin32
+tests/texture_relief_test.cpp
+3dc/texture_relief.cpp
