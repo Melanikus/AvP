@@ -8,6 +8,7 @@
 //   the same for a polygon's flat surface worked out each frame
 //   walls drawn from the fixed buffer cast shadows from their shapes, with nothing on the caster list
 //   with -keptsnap, a kept prism is finished each frame in the shader, from the same cut corners as the walls
+//   particles and coronas are written into their lists before those lists are closed, not after
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -367,6 +368,22 @@ static bool LockExecuteBuffer()
 // unlock all dynamic vertex and index buffers. function could be renamed as no longer using execute buffers
 static bool UnlockExecuteBufferAndPrepareForUse()
 {
+	// Particles and coronas are collected during the frame, and only now are their corners written into the lists.
+	// They have to be written here, before anything below closes those lists. Writing to a closed list means writing
+	// to memory the graphics card's driver has taken back, and the driver may be using that memory for something else.
+	// The two sorts stay ahead of the writing, in the order they've always had, so everything draws in the same order.
+	// This time still counts as drawing on the frame report, where it always has.
+	{
+		ProcessorStageClock writing(kProcessorDrawing);
+
+		particleList->Sort();
+		decalList->Sort();
+//		mainList->Sort();
+
+		DrawParticles();
+		DrawCoronas();
+	}
+
 	ProcessorStageClock clock(kProcessorLocks);
 
 	// unlock particle vertex and index buffers
@@ -419,16 +436,6 @@ static bool ExecuteBuffer()
 		toyEarlyFlushes++;
 		earlyFlushThisFrame = true;
 	}
-
-	// sort the list of render objects
-	particleList->Sort();
-	decalList->Sort();
-//	mainList->Sort();
-
-	// these two just add the vertex data to the below lists (they dont draw anything themselves
-	// and they HAVE to be called before the below code)
-	DrawParticles();
-	DrawCoronas();
 
 	// With shadows on, a frame's last drawing goes in the order solid polygons, decals, shadows, see-through polygons. Glass has to come
 	// after the shadows, or they'd darken it as if it were part of the wall behind.
