@@ -3506,6 +3506,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 // Each prism is closed, so z-fail counts come out right with no edge data, and neighbours' shared sides cancel out.
 
 int ToyShadowsEnabled = 1;
+int ToyShadowsDebug = 0;      // -shadowdebug: shows the volumes as red wires and the shadowed pixels in red
 
 struct ToyVec
 {
@@ -3596,46 +3597,90 @@ void ToyShadows_AddPolygon(const float *pts, int count, const float *light)
 	}
 }
 
-static void ToyDrawVolumes()
+// through the game's own vertex shader and declaration, so these land exactly where the world's polygons do
+static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	const int kVertsPerDraw = 60000 * 3;
+	static D3DLVERTEX chunk[kVertsPerDraw];
+	HRESULT result = S_OK;
 
 	for (int start = 0; start < toyNumVerts; start += kVertsPerDraw)
 	{
 		int const verts = (toyNumVerts - start < kVertsPerDraw) ? toyNumVerts - start : kVertsPerDraw;
-		d3d.lpD3DDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, verts / 3, &toyVerts[start], sizeof(ToyVec));
+
+		for (int i = 0; i < verts; i++)
+		{
+			chunk[i].x = toyVerts[start + i].x;
+			chunk[i].y = toyVerts[start + i].y;
+			chunk[i].z = toyVerts[start + i].z;
+			chunk[i].color = colour;
+			chunk[i].specular = 0;
+			chunk[i].u = 0.0f;
+			chunk[i].v = 0.0f;
+		}
+
+		HRESULT const drawn = d3d.lpD3DDevice->DrawPrimitiveUP(D3DPT_TRIANGLELIST, verts / 3, chunk, sizeof(D3DLVERTEX));
+		if (FAILED(drawn))
+		{
+			result = drawn;
+		}
 	}
+
+	return result;
+}
+
+static void ToyLogLine(int frame, int verts, HRESULT block, HRESULT clear, HRESULT back, HRESULT front, HRESULT quad, unsigned int pixels)
+{
+	char line[160];
+	_snprintf(line, sizeof(line) - 1, "toy-shadows: frame %d: %d verts, state block %08x, clear %08x, back %08x, front %08x, quad %08x, %u pixels in shadow",
+		frame, verts, (unsigned int)block, (unsigned int)clear, (unsigned int)back, (unsigned int)front, (unsigned int)quad, pixels);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
 }
 
 static void ToyShadows_Draw()
 {
+	static int toyFrame = 0;
+	bool const logThisFrame = (++toyFrame % 300) == 0;
+
 	if (!toyNumVerts)
 	{
+		if (logThisFrame && ToyShadowsEnabled)
+		{
+			ToyLogLine(toyFrame, 0, S_OK, S_OK, S_OK, S_OK, S_OK, 0);
+		}
 		return;
 	}
 
+	int const vertsThisFrame = toyNumVerts;
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
 	// The game caches its render states, so everything is put back exactly as it was, whatever happens here.
 	IDirect3DStateBlock9 *savedState = 0;
-	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &savedState)))
+	HRESULT const blockResult = device->CreateStateBlock(D3DSBT_ALL, &savedState);
+	if (FAILED(blockResult))
 	{
+		if (logThisFrame)
+		{
+			ToyLogLine(toyFrame, vertsThisFrame, blockResult, S_OK, S_OK, S_OK, S_OK, 0);
+		}
 		toyNumVerts = 0;
 		return;
 	}
 
-	device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+	HRESULT const clearResult = device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
 
-	D3DXMATRIX identity;
-	D3DXMatrixIdentity(&identity);
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
 
-	device->SetVertexShader(NULL);
 	device->SetPixelShader(NULL);
 	device->SetTexture(0, NULL);
-	device->SetTransform(D3DTS_WORLD, &identity);
-	device->SetTransform(D3DTS_VIEW, &identity);
-	device->SetTransform(D3DTS_PROJECTION, &d3d.matProjection);
-	device->SetFVF(D3DFVF_XYZ);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
 
 	device->SetRenderState(D3DRS_LIGHTING, FALSE);
 	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
@@ -3659,11 +3704,23 @@ static void ToyShadows_Draw()
 	// over means this pixel is inside a volume.
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_INCR);
-	ToyDrawVolumes();
+	HRESULT const backResult = ToyDrawVolumes(0);
 
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_DECR);
-	ToyDrawVolumes();
+	HRESULT const frontResult = ToyDrawVolumes(0);
+
+	if (ToyShadowsDebug)
+	{
+		device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+		device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		device->SetRenderState(D3DRS_FILLMODE, D3DFILL_WIREFRAME);
+		ToyDrawVolumes(0xFFFF0000);
+		device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+		device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	}
 
 	// one see-through black rectangle over the whole screen, kept to the pixels the stencil marked
 	struct ToyScreenVertex
@@ -3674,13 +3731,14 @@ static void ToyShadows_Draw()
 
 	float const w = (float)ScreenDescriptorBlock.SDB_Width;
 	float const h = (float)ScreenDescriptorBlock.SDB_Height;
+	DWORD const shade = ToyShadowsDebug ? 0xA0FF0000 : kToyDarkness;
 
 	ToyScreenVertex const quad[4] =
 	{
-		{ 0.0f, 0.0f, 0.0f, 1.0f, kToyDarkness },
-		{ w,    0.0f, 0.0f, 1.0f, kToyDarkness },
-		{ 0.0f, h,    0.0f, 1.0f, kToyDarkness },
-		{ w,    h,    0.0f, 1.0f, kToyDarkness },
+		{ 0.0f, 0.0f, 0.0f, 1.0f, shade },
+		{ w,    0.0f, 0.0f, 1.0f, shade },
+		{ 0.0f, h,    0.0f, 1.0f, shade },
+		{ w,    h,    0.0f, 1.0f, shade },
 	};
 
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
@@ -3692,16 +3750,43 @@ static void ToyShadows_Draw()
 	device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetVertexShader(NULL);
 	device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(ToyScreenVertex));
+
+	// once in a while, ask the card how many pixels the stencil let through
+	IDirect3DQuery9 *countQuery = 0;
+	if (logThisFrame && SUCCEEDED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
+	{
+		countQuery->Issue(D3DISSUE_BEGIN);
+	}
+
+	HRESULT const quadResult = device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(ToyScreenVertex));
+
+	unsigned int pixelsInShadow = 0;
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_END);
+
+		DWORD pixels = 0;
+		for (int tries = 0; tries < 1000000; tries++)
+		{
+			if (countQuery->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH) != S_FALSE)
+			{
+				break;
+			}
+		}
+
+		pixelsInShadow = pixels;
+		countQuery->Release();
+	}
 
 	savedState->Apply();
 	savedState->Release();
+
+	if (logThisFrame)
+	{
+		ToyLogLine(toyFrame, vertsThisFrame, blockResult, clearResult, backResult, frontResult, quadResult, pixelsInShadow);
+	}
 
 	toyNumVerts = 0;
 }

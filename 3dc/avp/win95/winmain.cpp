@@ -254,6 +254,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsEnabled = 0;
 		}
+		extern int ToyShadowsDebug;
+		if (strstr(command_line, "-shadowdebug"))
+		{
+			ToyShadowsDebug = 1;
+		}
 		LogString(ToyShadowsEnabled ? "toy-shadows: on" : "toy-shadows: off");
 	}
 
