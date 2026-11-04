@@ -79,7 +79,7 @@ void InitTextStrings(void)
 	if (!strncmp(TextBufferPtr, "REBCRIF1", 8))
 	{
 		// checked decompression: bounded by the file's size, NULL for a package that cannot be decoded safely
-		// (a truncated file); for a complete file the result is the same as HuffmanDecompress's
+		// (a truncated file)
 		int uncompressedSize = (textSize >= sizeof(HuffmanPackage)) ? ((HuffmanPackage*)TextBufferPtr)->UncompressedDataSize : 0;
 		textPtr = HuffmanDecompressChecked((HuffmanPackage*)(TextBufferPtr), (textSize > 0x7fffffff) ? 0x7fffffff : (int)textSize);
 		DeallocateMem(TextBufferPtr);

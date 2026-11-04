@@ -3,6 +3,7 @@
 //   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
 //   names and other text are copied using their exact measured length; level-editor code was removed
 //   a child chunk whose size cannot be real is refused
+//   a compressed level goes through the checked decoder, which knows the size of the file
 //   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
 //   rely on a whole level; object numbers are limited to what the object list can hold; so is a level with a
 //   shape that has more points than the game's list of points can hold
@@ -416,7 +417,19 @@ File_Chunk::File_Chunk(const char * file_name)
 			CloseHandle (rif_file);
 			return;
 		}
-		uncompressedData = HuffmanDecompress((HuffmanPackage*)buffer); 
+
+		// Every level the game comes with is compressed, so this runs before anything else looks at the file. A decoder that trusted what the
+		// file says could be made to write past the end of its table, or of the memory for the result. This one knows the file's size and checks.
+		uncompressedData = HuffmanDecompressChecked((HuffmanPackage*)buffer, (int)file_size);
+
+		if (!uncompressedData)
+		{
+			delete[] buffer;
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			CloseHandle (rif_file);
+			return;
+		}
+
 		file_size = ((HuffmanPackage*)buffer)->UncompressedDataSize;
 
 		delete[] buffer; // kill the buffer the compressed file was loaded into
@@ -1786,7 +1799,19 @@ RIF_File_Chunk::RIF_File_Chunk (Chunk_With_Children * parent, const char * file_
 			delete[] buffer;
 			return;
 		}
-		uncompressedData = HuffmanDecompress((HuffmanPackage*)buffer); 
+
+		// the same as in File_Chunk: nothing else has looked at this file yet, so the decoder has to check it
+		uncompressedData = HuffmanDecompressChecked((HuffmanPackage*)buffer, (int)file_size);
+
+		if (!uncompressedData)
+		{
+			delete[] buffer;
+			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			CloseHandle (rif_file);
+			Parent_File = ParentFileStore;
+			return;
+		}
+
 		file_size = ((HuffmanPackage*)buffer)->UncompressedDataSize;
 
 		delete[] buffer; // kill the buffer the compressed file was loaded into
