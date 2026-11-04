@@ -9,7 +9,7 @@ struct PS_INPUT
 float4 Lights[8]  : register(c0);    // each chosen light: x y z, and one over its range
 float4 Weights[8] : register(c8);    // x: how bright each light is. y: 0 for a light baked into the walls, 1 for one worked out live
 float4 ThisLight  : register(c16);   // the light this pass is for: x y z, and one over its range
-float4 ThisWeight : register(c17);   // its x and y, as above
+float4 ThisWeight : register(c17);   // its x and y, as above. z: how much of its share to take, 1 for an ordinary shadow
 
 
 // How much light one lamp gives this spot. The game lights the world in two ways, and each is copied here. Baked lights fade
@@ -47,6 +47,8 @@ float4 ps_main(in PS_INPUT In) : COLOR0
 
     float mine  = LightHere(ThisLight, ThisWeight, In.ViewPosition, normal);
     float share = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
+
+    share *= ThisWeight.z;
 
     return float4(share, share, share, 1.0f);
 }

@@ -3535,7 +3535,7 @@ int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
 int ToyShadowsFlareReach = 100; // -shadowflarereach=N, 50 to 400: how far a flare's light goes, in percent of the game's 10 metres
-int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
+int ToyShadowsFlareCap = 800;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. Above 400 it changes nothing
 int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
@@ -3558,6 +3558,7 @@ static const float kToyStartGap        = 8.0f;      // start just behind the pol
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
 static const float kToyMostRange       = 100000.0f; // well inside the far plane, which z-fail needs
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
+static const float kToyCloakedShadow   = 0.25f;     // how strong a cloaked Predator's shadow is, against an ordinary one
 static const float kToySoftStaysWideTo = 6000.0f;   // how far away a shadow's soft edge stays at its full width, before it narrows
 static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen light fails to reach loses this much of its brightness
 
@@ -4137,6 +4138,12 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
+		// shadows pass through a cloaked model to the wall behind it: landing on it would draw the outline of something invisible
+		if (toyCasterKind[caster] == kToyCasterCloaked)
+		{
+			continue;
+		}
+
 		ToyVec const *pts = &toyCasterPoints[toyCasterStart[caster]];
 		int const count = toyCasterCount[caster];
 
@@ -4211,7 +4218,7 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 // all its lamps goes right down to the glow.
 // A pixel is darkened once for each light: the first polygon to touch it clears its mark. Models are in front of the polygons,
 // so they keep their light for now.
-static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, float strength, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	float const *light = &lights[thisLight * kToyLightFloats];
 
@@ -4242,6 +4249,7 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	constants[16 * 4 + 3] = 1.0f / light[3];
 	constants[17 * 4 + 0] = constants[(8 + thisLight) * 4 + 0];
 	constants[17 * 4 + 1] = constants[(8 + thisLight) * 4 + 1];
+	constants[17 * 4 + 2] = strength;
 
 	device->SetPixelShaderConstantF(0, constants, 18);
 
@@ -4420,8 +4428,9 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
-// Fills toyVerts with this light's prisms.
-static void ToyBuildPrisms(const float *light, ToyFrameReport *report)
+// Fills toyVerts with this light's prisms. A cloaked model casts only a faint shadow, and a stencil only knows yes or no, so its
+// prisms go through a pass of their own: cloakedOnly picks those, and leaving it false picks all the others.
+static void ToyBuildPrisms(const float *light, ToyFrameReport *report, bool cloakedOnly)
 {
 	toyNumVerts = 0;
 	for (int caster = 0; caster < toyNumCasters; caster++)
@@ -4429,7 +4438,7 @@ static void ToyBuildPrisms(const float *light, ToyFrameReport *report)
 		int const kind = toyCasterKind[caster];
 
 		// something carrying a light sits around it, so it would block that light in every direction
-		if (kind == kToyCasterReceiveOnly)
+		if (kind == kToyCasterReceiveOnly || (kind == kToyCasterCloaked) != cloakedOnly)
 		{
 			continue;
 		}
@@ -4438,7 +4447,7 @@ static void ToyBuildPrisms(const float *light, ToyFrameReport *report)
 		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
-	if (ToyShadowsTest)
+	if (ToyShadowsTest && !cloakedOnly)
 	{
 		ToyAddTestBox(light);
 	}
@@ -4475,17 +4484,26 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 
 // Turns the stencil's marks for this flare into a picture: white where it's blocked. The flare's shader softens that as it
 // reads it, which a stencil can't do: a stencil is only ever yes or no.
-static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, bool faint, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	device->SetRenderTarget(0, toyMaskSurface);
 	device->SetViewport(viewport);
-	device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+
+	// a faint shadow goes on top of what this flare has already painted, so it adds to it, and the mask stays
+	if (!faint)
+	{
+		device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+	}
+
+	DWORD const grey = (DWORD)(kToyCloakedShadow * 255.0f);
 
 	device->SetPixelShader(NULL);
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, faint ? TRUE : FALSE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 	device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_NOTEQUAL);
 	device->SetRenderState(D3DRS_STENCILREF, 0);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
@@ -4496,7 +4514,7 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 		countQuery->Issue(D3DISSUE_BEGIN);
 	}
 
-	ToyDrawScreenQuad(device, 0xFFFFFFFF);
+	ToyDrawScreenQuad(device, faint ? D3DCOLOR_ARGB(255, grey, grey, grey) : 0xFFFFFFFF);
 
 	if (countQuery)
 	{
@@ -4737,6 +4755,7 @@ static void ToyShadows_Draw()
 	D3DVIEWPORT9 viewport;
 
 	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask;
+	bool const haveCloaked = toyPolygonsOfKind[kToyCasterCloaked] > 0;
 
 	if (darkening && haveShader && canSoften && ToyMakeTargets(device)
 		&& SUCCEEDED(device->GetRenderTarget(0, &screen)) && SUCCEEDED(device->GetViewport(&viewport)))
@@ -4767,7 +4786,7 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
-		ToyBuildPrisms(thisLight, &report);
+		ToyBuildPrisms(thisLight, &report, false);
 
 		if (ToyShadowsMode == kToyViewEdges)
 		{
@@ -4797,7 +4816,16 @@ static void ToyShadows_Draw()
 		}
 		else if (screen)
 		{
-			darkened = ToyShadeLevel(device, lights, report.lights, light, countQuery, &pixelsByLight[light]);
+			darkened = ToyShadeLevel(device, lights, report.lights, light, 1.0f, countQuery, &pixelsByLight[light]);
+
+			if (haveCloaked)
+			{
+				unsigned int notCounted = 0;
+
+				ToyBuildPrisms(thisLight, &report, true);
+				ToyMarkShadow(device, &report);
+				ToyShadeLevel(device, lights, report.lights, light, kToyCloakedShadow, 0, &notCounted);
+			}
 		}
 		else
 		{
@@ -4835,11 +4863,20 @@ static void ToyShadows_Draw()
 
 			if (thisLight[7] == 2.0f)
 			{
-				ToyBuildPrisms(thisLight, &report);
+				ToyBuildPrisms(thisLight, &report, false);
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
-					ToyPaintFlareMask(device, screen, &viewport, countQuery, &pixelsByLight[light]);
+					ToyPaintFlareMask(device, screen, &viewport, false, countQuery, &pixelsByLight[light]);
+
+					if (haveCloaked)
+					{
+						unsigned int notCounted = 0;
+
+						ToyBuildPrisms(thisLight, &report, true);
+						ToyMarkShadow(device, &report);
+						ToyPaintFlareMask(device, screen, &viewport, true, 0, &notCounted);
+					}
 				}
 				ToyAddFlareLight(device, lights, report.lights, light, screen != 0);
 				report.pixels += pixelsByLight[light];
