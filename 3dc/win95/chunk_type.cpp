@@ -1,5 +1,6 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   is_textured moved here from chunk_load.cpp, because the checks made as a level is read need it too
 //   the texture file names of a shape are copied using their exact measured length, so they always fit
 
 #include "chunk.hpp"
@@ -64,6 +65,26 @@ ObjectID Minimum(const ObjectID &o1,const  ObjectID &o2)
 #define CHUNK_UVINDEX_MASK		0xfffff000
 #define CHUNK_TEXTUREINDEX_MASK	0xfff
 #define CHUNK_NEWUVINDEX_BITS	0x0000f000
+
+// Says whether a polygon of this kind has a texture on it.
+BOOL is_textured(int type)
+{
+	if (
+	    type == I_2dTexturedPolygon
+	    || type == I_Gouraud2dTexturedPolygon
+	    || type == I_3dTexturedPolygon
+	    || type == I_Gouraud3dTexturedPolygon
+	    || type == I_ZB_2dTexturedPolygon
+	    || type == I_ZB_Gouraud2dTexturedPolygon
+	    || type == I_ZB_3dTexturedPolygon
+	    || type == I_ZB_Gouraud3dTexturedPolygon
+	)
+	{
+		return(TRUE);
+	}
+
+	return(FALSE);
+}
 
 unsigned int ChunkPoly::GetUVIndex()
 {

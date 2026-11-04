@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an object's name can now be 63 characters long (it was 49), so the longest name in the stock levels,
 //   53 characters, fits; its size now comes from chunk_object_name.hpp
+//   is_textured is declared here too, for the checks made as a level is read
 
 #ifndef _chnktype_hpp
 #define _chnktype_hpp 1
@@ -121,6 +122,8 @@ struct ChunkUV_List
 	friend BOOL operator!= (const ChunkUV_List &, const ChunkUV_List &);
 
 };
+
+BOOL is_textured(int type);
 
 class ChunkPoly
 {

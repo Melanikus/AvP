@@ -25,7 +25,7 @@
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
-// animated shapes.
+// animated shapes, and test 16 the lists of texture coordinates.
 //
 // HOW IT RUNS
 //
@@ -985,6 +985,154 @@ static void TestAnimatedShapes()
 	Parent_File = 0;
 }
 
+// Writes a chunk of texture coordinates with this many lists, each with this many corners. A list is its number of corners,
+// then two numbers for each corner.
+static char * PutUVLists(char * where, int lists, int cornersInEach)
+{
+	size_t const listBytes = sizeof(int) + 2 * sizeof(float) * (size_t)cornersInEach;
+	size_t const chunkBytes = sizeof(int) + (size_t)lists * listBytes;
+
+	char * data = PutChunk(where, "SHPUVCRD", chunkBytes);
+	memcpy(data, &lists, sizeof(lists));
+
+	for (int i = 0; i < lists; i++)
+	{
+		memcpy(data + sizeof(int) + i * listBytes, &cornersInEach, sizeof(cornersInEach));
+	}
+
+	return data + chunkBytes;
+}
+
+// Writes one polygon with a texture on it. A polygon's kind is the first number of its record, and its colour the fourth.
+static char * PutTexturedPolygon(char * where, int const * corners, unsigned int colour)
+{
+	char * end = PutPolygons(where, 1, corners);
+	int const kind = I_3dTexturedPolygon;
+
+	memcpy(end - 36, &kind, sizeof(kind));
+	memcpy(end - 36 + 12, &colour, sizeof(colour));
+
+	return end;
+}
+
+// 16. A chunk of texture coordinates says how many lists it holds, and each list how many corners, and a list has 4 places. A
+// textured polygon's colour says which list is its own, and the game writes into its own lists at that place. So all of these
+// numbers have to be real.
+static void TestTextureCoordinates()
+{
+	puts("16. texture coordinates");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const fourCorners[5] = { 0, 1, 2, 3, -1 };
+
+	// How much the chunk holds, then the two numbers at its start: how many lists, and how many corners in the first.
+	struct UVChunkRow { size_t bytes; int lists; int corners; bool accepted; char const * what; };
+	UVChunkRow const chunkRows[] =
+	{
+		{  0,          0,  0, false, "a chunk with no room for its count is refused" },
+		{  4,          0,  0, true,  "a chunk with no lists is accepted" },
+		{  8,          1,  0, true,  "an empty list is accepted" },
+		{ 40,          1,  4, true,  "a list with 4 corners is accepted" },
+		{ 48,          1,  5, false, "a list with 5 corners is refused" },
+		{  8,          1, -1, false, "a negative number of corners is refused" },
+		{  8,          1,  3, false, "a list that runs past the end of the chunk is refused" },
+		{ 16,          2,  1, false, "a list with no room for its number of corners is refused" },
+		{  4,          1,  0, false, "a count with no room for its lists is refused" },
+		{  4,         -1,  0, false, "a negative number of lists is refused" },
+		{  8, 0x7fffffff,  0, false, "a huge number of lists is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(chunkRows) / sizeof(chunkRows[0]); i++)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * data = PutChunk(wholeShape + bytes, "SHPUVCRD", chunkRows[i].bytes);
+
+		if (chunkRows[i].bytes >= sizeof(int))
+		{
+			memcpy(data, &chunkRows[i].lists, sizeof(int));
+		}
+
+		if (chunkRows[i].bytes >= 2 * sizeof(int))
+		{
+			memcpy(data + sizeof(int), &chunkRows[i].corners, sizeof(int));
+		}
+
+		// the bytes after the chunk, which a read past its end would find
+		memset(data + chunkRows[i].bytes, 0, 2 * sizeof(int));
+
+		Check(ShapeIsAccepted(data + chunkRows[i].bytes) == chunkRows[i].accepted, chunkRows[i].what);
+	}
+
+	// A sub-shape reads its lists with its own constructor.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, true, 4, triangle);
+		char * end = PutUVLists(wholeShape + bytes, 1, 5);
+
+		new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a sub-shape's list with 5 corners is refused");
+		Parent_File = 0;
+	}
+
+	// The numbers themselves have to arrive.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * end = PutUVLists(wholeShape + bytes, 2, 3);
+		float const lastNumber = 7.5f;
+		memcpy(end - sizeof(float), &lastNumber, sizeof(lastNumber));
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+
+		Check(shape->shape_data.num_uvs == 2 && shape->shape_data.uv_list[1].num_verts == 3
+			&& shape->shape_data.uv_list[1].vert[2].v == lastNumber, "the lists and their numbers are all read");
+		Parent_File = 0;
+	}
+
+	// These shapes have 2 lists. The list's place is the top half of the polygon's colour.
+	struct UVIndexRow { unsigned int colour; int const * corners; int listCorners; bool accepted; char const * what; };
+	UVIndexRow const indexRows[] =
+	{
+		{ 0x00000000, triangle,    3, true,  "a polygon using the first list is accepted" },
+		{ 0x00010000, triangle,    3, true,  "a polygon using the last list is accepted" },
+		{ 0x00020000, triangle,    3, false, "a list just past the last is refused" },
+		{ 0x7fff0000, triangle,    3, false, "a list far past the last is refused" },
+		{ 0xffff0000, triangle,    3, false, "a negative list is refused" },
+		{ 0x80000000, triangle,    3, false, "a hugely negative list is refused" },
+		{ 0x00000000, fourCorners, 3, false, "a polygon with more corners than its list is refused" },
+		{ 0x00000000, triangle,    4, true,  "a list with more corners than its polygon is accepted" },
+		{ 0x00000000, triangle,    0, true,  "an empty list is accepted, as the game shows that polygon as a line" },
+	};
+
+	for (size_t i = 0; i < sizeof(indexRows) / sizeof(indexRows[0]); i++)
+	{
+		char * end = PutShapeHeader(wholeShape, 4, 1);
+		end = PutPoints(end, 4);
+		end = PutTexturedPolygon(end, indexRows[i].corners, indexRows[i].colour);
+		end = PutUVLists(end, 2, indexRows[i].listCorners);
+
+		Check(ShapeIsAccepted(end) == indexRows[i].accepted, indexRows[i].what);
+	}
+
+	char * end = PutShapeHeader(wholeShape, 4, 1);
+	end = PutPoints(end, 4);
+	end = PutTexturedPolygon(end, triangle, 0);
+	Check(!ShapeIsAccepted(end), "a textured polygon in a shape with no lists is refused");
+
+	// A polygon with no texture uses its colour for something else, so the same number means nothing.
+	end = PutShapeHeader(wholeShape, 4, 1);
+	end = PutPoints(end, 4);
+	char * polygonEnd = PutPolygons(end, 1, triangle);
+	unsigned int const colour = 0x7fff0000;
+	memcpy(polygonEnd - 36 + 12, &colour, sizeof(colour));
+	Check(ShapeIsAccepted(polygonEnd), "a polygon with no texture can have any colour");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1005,6 +1153,7 @@ int main()
 	TestRepeatedAndMissingChunks();
 	TestMergeData();
 	TestAnimatedShapes();
+	TestTextureCoordinates();
 
 	if (checksFailed)
 	{

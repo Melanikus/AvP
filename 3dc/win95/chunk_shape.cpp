@@ -9,6 +9,7 @@
 //   removed the class that read a shape stored in a level as a raw copy of memory, because nothing could check it
 //   a polygon needs at least 3 corners; a shape can only have one list of points and one of polygons, and a shape with no
 //   points chunk can't claim any; merge data and animations are checked against the shape; a sub-shape that fails stops
+//   lists of texture coordinates are read within their chunk and their 4 places, and each textured polygon's list is checked
 
 #include <math.h>
 
@@ -189,6 +190,32 @@ static bool animation_matches_shape (Chunk_With_Children const * shape_chunk, in
 	return sequences.size() == 0 || frames_found > 0;
 }
 
+// A textured polygon keeps the place of its list of texture coordinates in the top half of its colour. The game uses that
+// place to write into lists of its own, so it has to be a real list. The game reads the colour both as a signed number and
+// as an unsigned one, so reading it as signed here means a number with its top bit set fails, which is safe for both. A list
+// with fewer corners than its polygon would be read past its end when the polygon is drawn. An empty list is allowed: the game
+// shows that polygon as a plain line. Every one of the 951593 textured polygons in the game's own levels has a real list with
+// exactly as many corners as it has. A polygon with no texture uses its colour for something else, so it isn't checked: 316 of
+// the others in those levels would fail.
+static bool texture_numbers_are_valid (ChunkShape const & shape, ChunkPoly const & polygon)
+{
+	if (!is_textured (polygon.engine_type))
+	{
+		return true;
+	}
+
+	int const list = (int) polygon.colour >> 16;
+
+	if (list < 0 || list >= shape.num_uvs)
+	{
+		return false;
+	}
+
+	int const list_corners = shape.uv_list[list].num_verts;
+
+	return list_corners == 0 || list_corners >= polygon.num_verts;
+}
+
 // Checks the numbers that say how big a shape is, all of which come from the level file.
 // - Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
 //   many there are, so a shape with too many would be written past the end of that list. The biggest shape in the game's
@@ -242,6 +269,11 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 			{
 				return false;
 			}
+		}
+
+		if (!texture_numbers_are_valid (shape, shape.poly_list[i]))
+		{
+			return false;
 		}
 	}
 
@@ -979,88 +1011,113 @@ RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"REBSHAPE
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"CONSHAPE",Console_Shape_Chunk)
 
+// How many lists of texture coordinates a chunk says it holds, which sizes the list the game makes. Each list takes at least 4
+// bytes, so a count that couldn't fit in the chunk can't be real, and the level is refused. Turned into an unsigned number, a
+// negative count becomes a huge one, so the same test refuses those too.
+static int count_uv_lists (const char * uvdata, size_t uvsize)
+{
+	size_t const count_bytes = sizeof(int);
+	size_t const smallest_list = sizeof(int);
+
+	if (uvsize < count_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	int const count = *((int *) uvdata);
+
+	if ((size_t) count > (uvsize - count_bytes) / smallest_list)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	return count;
+}
+
+// Reads the lists of texture coordinates from a level file. Each is a number of corners, then two numbers for each corner.
+// A list has 4 places, so going by the file's number alone, a list with more would be written past the end of its places. So
+// that number has to fit the places, and everything read has to be inside the chunk, or the level is refused. All 951735 lists
+// in the game's own levels have 3 or 4 corners or none, and all 30671 chunks hold exactly what they say.
+static void read_uv_lists (ChunkUV_List * lists, int count, const char * uvdata, size_t uvsize)
+{
+	size_t const most_corners = sizeof(lists[0].vert) / sizeof(lists[0].vert[0]);
+	const char * const end = uvdata + uvsize;
+
+	// a list that's never reached stays empty
+	for (int i = 0; i < count; i++)
+	{
+		lists[i].num_verts = 0;
+	}
+
+	// Step past the count. With no lists there is nothing after it to read, and the chunk may end right here.
+	if (count)
+	{
+		uvdata += sizeof(int);
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		if ((size_t) (end - uvdata) < sizeof(int))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		int const corners = *((int *) uvdata);
+		uvdata += sizeof(int);
+
+		// Turned into an unsigned number, a negative count of corners becomes a huge one, so this refuses those too.
+		if ((size_t) corners > most_corners || (size_t) (end - uvdata) < corners * sizeof(ChunkUV))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		lists[i].num_verts = corners;
+
+		for (int j = 0; j < corners; j++)
+		{
+			lists[i].vert[j] = *((ChunkUV *) uvdata);
+			uvdata += sizeof(ChunkUV);
+		}
+	}
+}
+
 // from buffer
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
+Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t uvsize)
 : Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
+uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 {
-	int i,j;
-
-	if (num_uvs)
-	{
-		parent->shape_data_store->uv_list = new ChunkUV_List[num_uvs];
-	}
-	else
-	{
-		parent->shape_data_store->uv_list = 0;
-	}
+	parent->shape_data_store->uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
 	*((ChunkUV_List**) &uv_data) = parent->shape_data_store->uv_list;
 
 	parent->shape_data_store->num_uvs = num_uvs;
 
-	uvdata += 4;
-
-	for (i = 0; i < num_uvs; i++)
-	{
-		parent->shape_data_store->uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<parent->shape_data_store->uv_list[i].num_verts; j++)
-		{
-			parent->shape_data_store->uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
+	read_uv_lists (parent->shape_data_store->uv_list, num_uvs, uvdata, uvsize);
 }
 
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
+Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t uvsize)
 : Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
+uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 {
-	int i,j;
-
-	parent->shape_data_store->uv_list = new ChunkUV_List[num_uvs];
+	parent->shape_data_store->uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
 	*((ChunkUV_List**) &uv_data) = parent->shape_data_store->uv_list;
 
 	parent->shape_data_store->num_uvs = num_uvs;
 
-	uvdata += 4;
-
-	for (i=0;i<num_uvs;i++)
-	{
-		parent->shape_data_store->uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<parent->shape_data_store->uv_list[i].num_verts; j++) 
-		{
-			parent->shape_data_store->uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
+	read_uv_lists (parent->shape_data_store->uv_list, num_uvs, uvdata, uvsize);
 }
 
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
+Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t uvsize)
 : Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
+uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 {
-	int i,j;
-
-	ChunkUV_List* uv_list= new ChunkUV_List[num_uvs];
+	ChunkUV_List * uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
 	*((ChunkUV_List**) &uv_data) = uv_list;
 
-	uvdata += 4;
-
-	for (i=0;i<num_uvs;i++)
-	{
-		uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<uv_list[i].num_verts; j++)
-		{
-			uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
+	read_uv_lists (uv_list, num_uvs, uvdata, uvsize);
 }
 
 BOOL Shape_UV_Coord_Chunk::output_chunk (HANDLE &hand)

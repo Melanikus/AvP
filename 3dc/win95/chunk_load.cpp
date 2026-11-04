@@ -4,6 +4,7 @@
 //   text is copied using its exact measured length, so it always fits
 //   a shape stored in a level as a raw copy of memory is no longer read, because nothing could check it
 //   an animated shape with no merge data no longer crashes; an alternate skin only shares an animation that fits it
+//   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
 
 #include <stdlib.h>
 #include <string>
@@ -1863,31 +1864,6 @@ void DeallocateRifLoadedShapeheader(SHAPEHEADER *shp)
 #endif  //!USE_LEVEL_MEMORY_POOL
 }
 
-///////
-// Misc
-///////
-
-// return TRUE if the poly item type corresponds to a textured polygon
-BOOL is_textured(int type)
-{
-	if (
-	    type == I_2dTexturedPolygon
-	    || type == I_Gouraud2dTexturedPolygon
-	    || type == I_3dTexturedPolygon
-	    || type == I_Gouraud3dTexturedPolygon
-	    || type == I_ZB_2dTexturedPolygon
-	    || type == I_ZB_Gouraud2dTexturedPolygon
-	    || type == I_ZB_3dTexturedPolygon
-	    || type == I_ZB_Gouraud3dTexturedPolygon
-	)
-	{
-		return(TRUE);
-	}
-
-	return(FALSE);
-}
-
-
 #if SupportModules
 
 // static Object_Chunk ** o_chunk_array;
@@ -2291,6 +2267,13 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	{
 		mgd = smdc->merge_data;
 
+		// j steps through the merged list, but that list no longer says which pairs really merged, so j goes by whether the
+		// polygon it's looking at has a fourth corner. Why it can't run off the end: call the true place in the merged list t.
+		// j starts equal to t. While they're equal, items[j] really is this step's polygon, so j moves as t does: 2 for a pair
+		// of triangles that stayed apart, 1 for a pair that merged. If a pair of four-cornered polygons stayed apart, t moves 2
+		// and j only 1, so j falls behind, and from behind, a step of 2 can only catch up, never pass. So j never gets past t,
+		// and t is always inside the list. If merging never ran, j is limited by the polygons used so far. The checks on merge
+		// data made as the level is read are what make each step here a real pair.
 		for (int i = 0, j = 0; i < smdc->num_polys; i++)
 		{
 			if (mgd[i] == -1)
