@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
+//   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -10,13 +11,63 @@ FORCE_CHUNK_INCLUDE_IMPLEMENT(strategy_chunk)
 
 RIF_IMPLEMENT_DYNCREATE("AVPSTRAT",AVP_Strategy_Chunk)
 
+// How many spare bytes follow a strategy's copy of its chunk. The strategies read a fixed set of numbers with no look at the chunk's size, and the
+// longest set of them is a good deal shorter than this.
+static size_t const StrategySpareBytes = 512;
+
+// Reads a list's count, and steps past it. A count comes from the level file and sizes a list, so it's measured against what's left of the
+// strategy before anything is made: asking for more memory than there is ends the game, and a count too big reads past the end. start is
+// where the strategy begins, size how big it is, and data where the count is. If it's wrong, the level is refused, and this gives back 0, so the
+// strategy goes on with an empty list, which is safe for everything after it.
+static int ReadListCount(const char * start, const char * & data, size_t size, size_t item_bytes)
+{
+	size_t const used = data - start;
+
+	if (used + sizeof(int) > size)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	int const count = *(int *)data;
+	data += sizeof(int);
+
+	if (!CountFitsChunk(count, item_bytes, size - used - sizeof(int)))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	return count;
+}
+
+// Two numbers, then a strategy, whose first number says what kind it is. There are about 30 kinds, and most read a fixed set of numbers with no
+// look at the chunk's size. So each reads from a copy with spare bytes after it, and whatever it reads stays in the copy. Each kind knows
+// how big it should be, so afterwards it has to be exactly the size of its chunk. All 11368 of these in the game's own levels are.
 AVP_Strategy_Chunk::AVP_Strategy_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPSTRAT")
 {
+	size_t const numbers_bytes = 8;
+
+	Strategy=0;
+	index=spare2=0;
+
+	if(datasize<numbers_bytes+sizeof(int))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	index= *(int*)data;
 	data+=4;
 	spare2= *(int*)data;
 	data+=4;
+
+	size_t const strategy_bytes=datasize-numbers_bytes;
+	char * const copy=new char[strategy_bytes+StrategySpareBytes];
+	memcpy(copy,data,strategy_bytes);
+	memset(copy+strategy_bytes,0,StrategySpareBytes);
+	data=copy;
 
 	int type=*((int*)data);
 	switch(type)
@@ -137,7 +188,14 @@ AVP_Strategy_Chunk::AVP_Strategy_Chunk(Chunk_With_Children* parent,const char* d
 			break;
 	   
 		default :
-			Strategy=new MiscStrategy(data,datasize-8);	
+			Strategy=new MiscStrategy(data,datasize-8);
+	}
+
+	delete[] copy;
+
+	if(Strategy->GetStrategySize()!=strategy_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
 }
 
@@ -603,14 +661,14 @@ void R6SimpleStrategy::fill_data_block(char* data)
 
 //////////////////////////////////////////////
 
-LiftStrategy::LiftStrategy(const char* data_start,size_t /*size*/)
+LiftStrategy::LiftStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
 
 	data_start+=AvpStrat::GetStrategySize();
-	
-	NumAssocLifts=*(int*)data_start;
-	data_start+=4;
+
+	NumAssocLifts=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumAssocLifts)
 	{
 		AssocLifts=new ObjectID[NumAssocLifts];
@@ -637,8 +695,7 @@ LiftStrategy::LiftStrategy(const char* data_start,size_t /*size*/)
 	Floor=*(int*)data_start;
 	data_start+=4;
 	
-	NumExternalLifts=*(int*)data_start;
-	data_start+=4;
+	NumExternalLifts=ReadListCount(start,data_start,size,sizeof(ExtLift));
 	if(NumExternalLifts)
 	{
 		ExternalLifts=new ExtLift[NumExternalLifts];
@@ -844,10 +901,11 @@ void BinSwitchStrategy::fill_data_block(char* data)
 LinkSwitchStrategy::LinkSwitchStrategy(const char* data_start,size_t size)
 :BinSwitchStrategy(data_start,size)
 {
+	char const * const start=data_start;
+
 	data_start+=BinSwitchStrategy::GetStrategySize();
-	
-	NumLinks=*(int*)data_start;
-	data_start+=4;
+
+	NumLinks=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumLinks)
 	{
 		LinkedSwitches=new ObjectID[NumLinks];
@@ -976,9 +1034,11 @@ void LightingStrategy::fill_data_block(char* data)
 
 
 
-MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
+MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 
 	RestState=*(int*) data_start;
@@ -990,9 +1050,8 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 	Security=*(int*) data_start;
 	data_start+=4;
 
-	NumTargets=*(int*) data_start;
-	data_start+=4;
-	
+	NumTargets=ReadListCount(start,data_start,size,sizeof(SwitchTarget));
+
 	if(NumTargets)
 	{
 		Targets=new SwitchTarget[NumTargets];
@@ -1007,8 +1066,7 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 		Targets=0;
 	}
 
-	NumLinks=*(int*)data_start;
-	data_start+=4;
+	NumLinks=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumLinks)
 	{
 		LinkedSwitches=new ObjectID[NumLinks];
@@ -1048,8 +1106,8 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 
 MultiSwitchStrategy::~MultiSwitchStrategy()
 {
-	if(Targets)delete Targets;
-	if(LinkedSwitches)delete LinkedSwitches;
+	delete[] Targets;
+	delete[] LinkedSwitches;
 }
 
 
@@ -1272,9 +1330,11 @@ void GeneratorStrategy::fill_data_block(char* data)
 
 /////////////////////////////////////////////////////////////
 
-MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t /*size*/ )
+MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 	
 	mission_description_string=*(int*)data_start;
@@ -1292,8 +1352,7 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 	mission_completion_effect=*(int*)data_start;
 	data_start+=4;
 
-	num_mission_targets=*(int*)data_start;
-	data_start+=4;
+	num_mission_targets=ReadListCount(start,data_start,size,sizeof(MissionMessage));
 
 	if(num_mission_targets)
 	{
@@ -1308,8 +1367,7 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 	else
 		mission_targets=0;
 
-	num_request_targets=*(int*)data_start;
-	data_start+=4;
+	num_request_targets=ReadListCount(start,data_start,size,sizeof(RequestTarget));
 
 	if(num_request_targets)
 	{
@@ -1472,45 +1530,66 @@ void TextMessageStrategy::fill_data_block(char* data)
 
 /////////////////////////////////////////////////////////////
 
-TrackStrategy::TrackStrategy(const char* data_start,size_t /*size*/ )
-:AvpStrat(data_start)
+// A track or a hierarchy has a list of effects, three numbers each, and each effect has a list of its own. The two lists are read the same way.
+// Each list is measured before it's made, and each effect needs room for its numbers, because a long list of effects could otherwise run on
+// past the end, even with every list inside it empty. Gives back where the next number is.
+static const char * ReadPointEffects(const char * start, const char * data, size_t size, int & count, TrackPointEffect ** & effects)
 {
-	data_start+=AvpStrat::GetStrategySize();
+	size_t const effect_bytes = 3 * sizeof(int);
 
-	num_point_effects=*(int*)data_start;
-	data_start+=4;
+	count = ReadListCount(start, data, size, effect_bytes);
+	effects = 0;
 
-	if(num_point_effects)
+	if (!count)
 	{
-		point_effects=new TrackPointEffect*[num_point_effects];
-		for(int i=0;i<num_point_effects;i++)
+		return data;
+	}
+
+	effects = new TrackPointEffect*[count];
+
+	for (int i = 0; i < count; i++)
+	{
+		if ((size_t)(data - start) + effect_bytes > size)
 		{
-			point_effects[i]=new TrackPointEffect;
-			TrackPointEffect* tpe=point_effects[i];
+			// the destructor goes through count effects, and these are all there are
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			count = i;
+			return data;
+		}
 
-			tpe->point_no=*(int*)data_start;
-			data_start+=4;
-			tpe->pad1=*(int*)data_start;
-			data_start+=4;
-			tpe->num_targets=*(int*)data_start;
-			data_start+=4;
+		effects[i] = new TrackPointEffect;
+		TrackPointEffect * effect = effects[i];
 
-			if(tpe->num_targets)
+		effect->point_no = *(int *)data;
+		data += 4;
+		effect->pad1 = *(int *)data;
+		data += 4;
+		effect->num_targets = ReadListCount(start, data, size, sizeof(TrackRequestTarget));
+		effect->targets = 0;
+
+		if (effect->num_targets)
+		{
+			effect->targets = new TrackRequestTarget[effect->num_targets];
+
+			for (int j = 0; j < effect->num_targets; j++)
 			{
-				tpe->targets=new TrackRequestTarget[tpe->num_targets];
-				for(int j=0;j<tpe->num_targets;j++)
-				{
-					tpe->targets[j]=*(TrackRequestTarget*)data_start;
-					data_start+=sizeof(TrackRequestTarget);
-				}
+				effect->targets[j] = *(TrackRequestTarget *)data;
+				data += sizeof(TrackRequestTarget);
 			}
-			else
-				tpe->targets=0;
-
 		}
 	}
-	else
-		point_effects=0;
+
+	return data;
+}
+
+TrackStrategy::TrackStrategy(const char* data_start,size_t size)
+:AvpStrat(data_start)
+{
+	char const * const start=data_start;
+
+	data_start+=AvpStrat::GetStrategySize();
+
+	data_start=ReadPointEffects(start,data_start,size,num_point_effects,point_effects);
 
 	pad1=*(int*)data_start;
 	data_start+=4;
@@ -1610,45 +1689,14 @@ size_t TrackDestructStrategy::GetStrategySize()
 }
 
 ////////////////////////////////////////////////////////////
-HierarchyStrategy::HierarchyStrategy(const char* data_start,size_t /*size*/ )
+HierarchyStrategy::HierarchyStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 
-	num_point_effects=*(int*)data_start;
-	data_start+=4;
-
-	if(num_point_effects)
-	{
-		point_effects=new TrackPointEffect*[num_point_effects];
-		for(int i=0;i<num_point_effects;i++)
-		{
-			point_effects[i]=new TrackPointEffect;
-			TrackPointEffect* tpe=point_effects[i];
-
-			tpe->point_no=*(int*)data_start;
-			data_start+=4;
-			tpe->pad1=*(int*)data_start;
-			data_start+=4;
-			tpe->num_targets=*(int*)data_start;
-			data_start+=4;
-
-			if(tpe->num_targets)
-			{
-				tpe->targets=new TrackRequestTarget[tpe->num_targets];
-				for(int j=0;j<tpe->num_targets;j++)
-				{
-					tpe->targets[j]=*(TrackRequestTarget*)data_start;
-					data_start+=sizeof(TrackRequestTarget);
-				}
-			}
-			else
-				tpe->targets=0;
-
-		}
-	}
-	else
-		point_effects=0;
+	data_start=ReadPointEffects(start,data_start,size,num_point_effects,point_effects);
 
 	pad1=*(int*)data_start;
 	data_start+=4;
@@ -1662,8 +1710,7 @@ HierarchyStrategy::~HierarchyStrategy()
 	{
 		delete point_effects[i];
 	}
-	if(point_effects) 
-		delete point_effects;
+	delete[] point_effects;
 }
 
 size_t HierarchyStrategy::GetStrategySize()

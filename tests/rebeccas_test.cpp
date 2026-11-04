@@ -56,6 +56,7 @@
 #include "environment_chunk.hpp"
 #include "avp_chunk.hpp"
 #include "hierplace.hpp"
+#include "strategy_chunk.hpp"
 #include "animation_chunk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -2342,6 +2343,175 @@ static void TestModuleBoxes()
 	}
 }
 
+// 35. A strategy chunk holds two numbers, then a strategy, whose first number says what kind it is. Each kind reads a fixed set of numbers with no
+// look at the chunk, so it reads from a padded copy, and afterwards it has to be exactly the size its class says. Each chunk here is at the
+// wall, so if anything reads the chunk itself past its end, this stops.
+static size_t const StrategyNumbersBytes = 8;
+
+static bool StrategyAccepted(char const * strategy, size_t strategyBytes)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const bytes = StrategyNumbersBytes + strategyBytes;
+	char * atTheWall = MemoryEndingAtAWall(bytes);
+	memset(atTheWall, 0, StrategyNumbersBytes);
+	memcpy(atTheWall + StrategyNumbersBytes, strategy, strategyBytes);
+
+	new AVP_Strategy_Chunk(&file, atTheWall, bytes);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// How big a strategy of this kind says it is, with every list in it empty.
+static size_t StrategySizeOfKind(int kind)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	alignas(int) static char bytes[1024];
+	memset(bytes, 0, sizeof(bytes));
+	memcpy(bytes + StrategyNumbersBytes, &kind, sizeof(kind));
+
+	AVP_Strategy_Chunk * chunk = new AVP_Strategy_Chunk(&file, bytes, sizeof(bytes));
+	size_t const size = chunk->Strategy->GetStrategySize();
+
+	Parent_File = 0;
+
+	return size;
+}
+
+static void TestStrategies()
+{
+	puts("35. strategies");
+
+	alignas(int) static char strategy[1024];
+	size_t const biggestAsked = sizeof(strategy);
+
+	// Every number a kind can be. Any kind the game doesn't know is kept whole as plain bytes, and is as big as its chunk, so it has no size to break.
+	for (int kind = 0; kind < 128; kind++)
+	{
+		size_t const size = StrategySizeOfKind(kind);
+
+		if (size + StrategyNumbersBytes >= biggestAsked)
+		{
+			continue;
+		}
+
+		memset(strategy, 0, sizeof(strategy));
+		memcpy(strategy, &kind, sizeof(kind));
+
+		Check(StrategyAccepted(strategy, size), "a strategy of its own size is accepted");
+		Check(!StrategyAccepted(strategy, size - 1), "one byte short of its size is refused");
+		Check(!StrategyAccepted(strategy, size + 4), "four bytes over its size is refused");
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char * atTheWall = MemoryEndingAtAWall(StrategyNumbersBytes + 3);
+		memset(atTheWall, 0, StrategyNumbersBytes + 3);
+
+		new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + 3);
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a chunk with no room for its kind is refused");
+		Parent_File = 0;
+	}
+
+	// Each counted list, and where its count is with every list before it empty. An item's size is what each entry in the list takes.
+	struct ListRow { int kind; size_t countAt; size_t itemBytes; char const * good; };
+	ListRow const rows[] =
+	{
+		{ StratLift,             12, 8,                                   "a lift with lifts joined to it is accepted" },
+		{ StratLift,             48, sizeof(ExtLift),                     "a lift with external lifts is accepted" },
+		{ StratMultiSwitch,      28, sizeof(SwitchTarget),                "a multi switch with targets is accepted" },
+		{ StratMultiSwitch,      32, 8,                                   "a multi switch with links is accepted" },
+		{ StratMissionObjective, 32, sizeof(MissionMessage),              "a mission objective with targets is accepted" },
+		{ StratMissionObjective, 36, sizeof(RequestTarget),               "a mission objective with requests is accepted" },
+		{ StratTrack,            12, 3 * sizeof(int),                     "a track with effects is accepted" },
+		{ StratHierarchy,        12, 3 * sizeof(int),                     "a hierarchy with effects is accepted" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		ListRow const & row = rows[i];
+		size_t const size = StrategySizeOfKind(row.kind);
+		int const two = 2;
+
+		// Items go right after the count, so everything after them moves along, and it's all zeros.
+		memset(strategy, 0, sizeof(strategy));
+		memcpy(strategy, &row.kind, sizeof(row.kind));
+		memcpy(strategy + row.countAt, &two, sizeof(two));
+		Check(StrategyAccepted(strategy, size + 2 * row.itemBytes), row.good);
+
+		int const badCounts[] = { -1, 0x7fffffff, (int)(0x100000000ULL / row.itemBytes) + 1, 3 };
+
+		for (size_t j = 0; j < sizeof(badCounts) / sizeof(badCounts[0]); j++)
+		{
+			memcpy(strategy + row.countAt, &badCounts[j], sizeof(int));
+			Check(!StrategyAccepted(strategy, size + 2 * row.itemBytes), "a count that doesn't fit its chunk is refused");
+		}
+	}
+
+	// A link switch's count is its last number.
+	{
+		size_t const size = StrategySizeOfKind(StratLinkSwitch);
+		int const kind = StratLinkSwitch;
+		int const two = 2;
+
+		memset(strategy, 0, sizeof(strategy));
+		memcpy(strategy, &kind, sizeof(kind));
+		memcpy(strategy + size - sizeof(int), &two, sizeof(two));
+		Check(StrategyAccepted(strategy, size + 2 * 8), "a link switch with links is accepted");
+		Check(!StrategyAccepted(strategy, size + 8), "a link switch with too few links for its count is refused");
+	}
+
+	// An effect's own list of targets. The third number of an effect is that list's count.
+	{
+		size_t const size = StrategySizeOfKind(StratTrack);
+		int const kind = StratTrack;
+		int const one = 1;
+		int const tooMany = 0x7fffffff;
+
+		memset(strategy, 0, sizeof(strategy));
+		memcpy(strategy, &kind, sizeof(kind));
+		memcpy(strategy + 12, &one, sizeof(one));
+		memcpy(strategy + 12 + 4 + 8, &tooMany, sizeof(tooMany));
+		Check(!StrategyAccepted(strategy, size + 12), "an effect with too many targets is refused");
+	}
+
+	// A list of effects that fits by count, until the first effect's targets use up the room. Called directly and not through the chunk, because the
+	// chunk's spare bytes would hide this. The strategy's last two numbers still get read, so the wall is those 8 bytes further on.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const kind = StratTrack;
+		int const effects = 4;
+		int const targets = 2;
+		size_t const room = 12 + 4 + 4 * 12;
+
+		memset(strategy, 0, sizeof(strategy));
+		memcpy(strategy, &kind, sizeof(kind));
+		memcpy(strategy + 12, &effects, sizeof(effects));
+		memcpy(strategy + 12 + 4 + 8, &targets, sizeof(targets));
+
+		char * atTheWall = MemoryEndingAtAWall(room + 8);
+		memset(atTheWall, 0, room + 8);
+		memcpy(atTheWall, strategy, room);
+
+		new TrackStrategy(atTheWall, room);
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "effects that run out of room are refused");
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -2373,6 +2543,7 @@ int main()
 	TestGeneratorSettings();
 	TestPlacedHierarchies();
 	TestModuleBoxes();
+	TestStrategies();
 
 	if (checksFailed)
 	{
