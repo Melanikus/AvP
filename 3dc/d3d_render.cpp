@@ -3705,6 +3705,7 @@ struct ToyLightReport
 	int prismsBuilt;
 	float nearestCaster;   // how close any corner of a polygon that cast came to the light
 	float maskRise;        // for a lamp, how much the mask's average went up. For a flare, the average of its own mask
+	unsigned int stayedMarked;   // for a lamp, marked pixels no polygon painted, added up over its passes
 };
 
 // the light being counted, on a report frame. The rest of the time it's empty, and nothing is counted
@@ -4415,6 +4416,22 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
+
+	// Painting a pixel clears its mark, so a mark still here is a pixel that was marked and never got any darker. Some are expected: a
+	// polygon past this light's reach isn't painted, because it has no light to lose, and the sky and sprites aren't on our list. The
+	// colour is off, so this only counts them. Whatever draws next marks the stencil afresh and sets everything up again first.
+	if (countQuery && toyNoteLight)
+	{
+		device->SetPixelShader(NULL);
+		device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+
+		countQuery->Issue(D3DISSUE_BEGIN);
+		ToyDrawScreenQuad(device, 0);
+		countQuery->Issue(D3DISSUE_END);
+		toyNoteLight->stayedMarked += ToyAskCard(countQuery);
+	}
 
 	return result;
 }
@@ -5569,7 +5586,7 @@ static void ToyShadows_Draw()
 		report.milliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
 		ToyLogFrame(report);
 
-		char line[400];
+		char line[480];
 
 		// the number that says what the positions are costing: each pass is its own prisms, stencil and mask
 		int passes = 0;
@@ -5611,9 +5628,9 @@ static void ToyShadows_Draw()
 				else
 				{
 					_snprintf(line, sizeof(line) - 1,
-						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes marked %u pixels (%.1f%% of the screen a pass), %d polygons in reach, %d prisms, nearest caster %.0f, mask rose %.4f, so a marked pixel lost a share of %.3f and keeps %.3f",
+						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes painted %u pixels (%.1f%% of the screen a pass), %u stayed marked, %d polygons in reach, %d prisms, nearest caster %.0f, mask rose %.4f, so a painted pixel lost a share of %.3f and keeps %.3f",
 						report.frame, i, kind, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
-						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
+						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->stayedMarked, did->polygonsInReach, did->prismsBuilt, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
 				}
 
 				line[sizeof(line) - 1] = 0;
