@@ -629,9 +629,6 @@
 		<Unit filename="..\3dc\mathline.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="..\3dc\mem3dc.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="..\3dc\networking.cpp" />
 		<Unit filename="..\3dc\networking.h" />
 		<Unit filename="..\3dc\onscreenKeyboard.cpp" />

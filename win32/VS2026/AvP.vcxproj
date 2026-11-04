@@ -384,7 +384,6 @@
     <ClCompile Include="..\..\3dc\map.cpp" />
     <ClCompile Include="..\..\3dc\mathline.cpp" />
     <ClCompile Include="..\..\3dc\maths.cpp" />
-    <ClCompile Include="..\..\3dc\mem3dcpp.cpp" />
     <ClCompile Include="..\..\3dc\MemoryStream.cpp" />
     <ClCompile Include="..\..\3dc\module.cpp" />
     <ClCompile Include="..\..\3dc\morph.cpp" />
