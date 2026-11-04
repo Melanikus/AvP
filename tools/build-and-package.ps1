@@ -91,6 +91,8 @@ if (-not (Test-Path (Join-Path $OutFolder 'AvPx.exe'))) { throw 'AvPx.exe was no
 # can't compile its shaders on a Windows that doesn't already have it.
 if (-not (Test-Path (Join-Path $OutFolder 'D3DCompiler_43.dll'))) { throw 'D3DCompiler_43.dll is not in the package' }
 
+& (Join-Path $PSScriptRoot 'check-package-imports.ps1') -Package $OutFolder
+
 "$env:GITHUB_REF_NAME $(git rev-parse HEAD)" | Out-File -Encoding ascii (Join-Path $OutFolder 'BUILD.txt')
 
 Push-Location $OutFolder
