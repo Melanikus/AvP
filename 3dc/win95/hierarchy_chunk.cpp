@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   text is copied using its exact measured length, so it always fits
+//   text is copied using its exact measured length, so it always fits; a level with a hierarchy section that
+//   has no name is refused
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -168,16 +169,26 @@ void Object_Hierarchy_Data_Chunk::post_input_processing ()
 void Object_Hierarchy_Data_Chunk::find_object_for_this_section ()
 {
 	*((Object_Chunk **)&object) = NULL;
-	
+
 	Chunk_With_Children * root = GetRootChunk();
-	
+
+	// A level file can leave a section's name blank, and the chunk then holds no name at all. This search needs the name,
+	// and so does the code that later builds the section, which uses it with no check, so skipping the search would only
+	// move the crash. The level is refused instead: load_rif sees error_code and stops with its error message. All 2006
+	// sections in the game's own files have a name.
+	if (!ob_name)
+	{
+		root->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	List<Chunk *> oblist;
 	root->lookup_child ("RBOBJECT",oblist);
-	
+
 	for (LIF<Chunk *> oli(&oblist); !oli.done(); oli.next())
 	{
 		Object_Chunk * ob = (Object_Chunk *)oli();
-		
+
 		if (!strcmp (ob->object_data.o_name, ob_name))
 		{
 			*((Object_Chunk **)&object) = ob;

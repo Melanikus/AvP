@@ -6,6 +6,7 @@ tests/rebeccas_test.cpp
 3dc/win95/chunk_object.cpp
 3dc/win95/chunk_shape.cpp
 3dc/win95/chunk_type.cpp
+3dc/win95/hierarchy_chunk.cpp
 3dc/win95/huffman.cpp
 3dc/win95/list_tem.cpp
 3dc/win95/md5.c

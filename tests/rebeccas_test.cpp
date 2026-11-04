@@ -20,9 +20,9 @@
 // Right after the name in ChunkObject comes index_num, which is filled in before the name is copied. So a name that
 // runs past its end lands on a real field, and these tests would see index_num change.
 //
-// After a level is read, the game joins each object to its shape, using numbers from the file. So the last test builds
-// real objects and shapes in a real File_Chunk, runs the real post_input_processing, and checks that a level whose
-// numbers don't join up is refused.
+// After a level is read, the game joins each object to its shape, using numbers from the file. So the last two tests
+// build real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that
+// doesn't join up is refused.
 //
 // HOW IT RUNS
 //
@@ -39,6 +39,7 @@
 #include "chunk_type.hpp"
 #include "chunk_object.hpp"
 #include "chunk_shape.hpp"
+#include "hierarchy_chunk.hpp"
 #include "mishchnk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -391,6 +392,58 @@ static void TestObjectsAndShapes()
 	Parent_File = 0;
 }
 
+// The bytes of a hierarchy section: an OBJHIERD chunk with a count of extra numbers, here 0, and then its name.
+static char sectionBytes[ChunkHeaderBytes + 4 + 8];
+
+static void BuildSection(char const * name, size_t nameBytes)
+{
+	int const chunkBytes = (int)sizeof(sectionBytes);
+
+	memset(sectionBytes, 0, sizeof(sectionBytes));
+	memcpy(sectionBytes, "OBJHIERD", 8);
+	memcpy(sectionBytes + 8, &chunkBytes, sizeof(chunkBytes));
+	memcpy(sectionBytes + ChunkHeaderBytes + 4, name, nameBytes);
+}
+
+// 8. A hierarchy section finds its object by name, so a section with a blank name has to refuse the level.
+static void TestHierarchySections()
+{
+	puts("8. hierarchy sections");
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		size_t const bytes = BuildObject(5, 7);
+		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		BuildSection("object", 7);
+		Object_Hierarchy_Chunk * hierarchy = new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes));
+		file.post_input_processing();
+
+		Check(file.error_code == 0, "a section with a name is accepted");
+		Check(hierarchy->get_data()->object == object, "and it finds the object with that name");
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		BuildShape(7);
+		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		size_t const bytes = BuildObject(5, 7);
+		new Object_Chunk(&file, objectBytes, bytes);
+		BuildSection("", 1);
+		new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes));
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a section with a blank name is refused");
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -403,6 +456,7 @@ int main()
 	TestChunkTooShort();
 	TestImpossibleChildSize();
 	TestObjectsAndShapes();
+	TestHierarchySections();
 
 	if (checksFailed)
 	{
