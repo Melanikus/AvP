@@ -26,7 +26,8 @@
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
 // animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, test 18 whether a lift has all
-// its parts, and test 19 chunks of morph frames.
+// its parts, test 19 chunks of morph frames, and test 20 chunks in the wrong
+// place.
 //
 // HOW IT RUNS
 //
@@ -51,6 +52,7 @@
 #include "module.h"
 #include "strategy_def.h"
 #include "bh_lift.h"
+#include "environment_chunk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
@@ -1521,6 +1523,109 @@ static void TestMorphFrames()
 	}
 }
 
+// 20. Some chunks trust their parent: they write into it, or treat it as a particular kind of chunk. A file can put any chunk anywhere,
+// so these are only made under the parent they trust. Anywhere else they're a chunk nothing reads, and the level still loads.
+static void TestChunksInTheWrongPlace()
+{
+	puts("20. chunks in the wrong place");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	size_t const wrongPlaceBytes = 200;
+
+	struct PlaceRow { char const * id; char const * what; };
+	PlaceRow const rows[] =
+	{
+		{ "OBJHEAD1", "an object's header inside a shape is left alone" },
+		{ "GMODHEAD", "a game mode's header inside a shape is left alone" },
+		{ "GAMEMODE", "a game mode inside a shape is left alone" },
+		{ "RIFCHILD", "a game mode's child inside a shape is left alone" },
+		{ "AVPGENER", "a generator inside a shape is left alone" },
+		{ "AIMODMAS", "a module's master chunk inside a shape is left alone" },
+		{ "AIMODSLA", "a module's slave chunk inside a shape is left alone" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		PutChunk(wholeShape + bytes, rows[i].id, wrongPlaceBytes);
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + wrongPlaceBytes);
+		Chunk * placed = shape->lookup_single_child(rows[i].id);
+
+		Check(placed && placed->r_u_miscellaneous(), rows[i].what);
+		Parent_File = 0;
+	}
+
+	// A shape's centre has to be inside a shape, and a chunk of morph frames sitting inside one isn't. With no shape to write to, the
+	// old code wrote through nothing.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * morph = PutChunk(wholeShape + bytes, "SHPMORPH", ChunkHeaderBytes + 16);
+		PutChunk(morph, "SHPCENTR", 16);
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + 2 * ChunkHeaderBytes + 16);
+		Chunk_With_Children * morphChunk = (Chunk_With_Children *)shape->lookup_single_child("SHPMORPH");
+		Chunk * centre = morphChunk->lookup_single_child("SHPCENTR");
+
+		Check(centre && centre->r_u_miscellaneous(), "a shape's centre outside a shape is left alone");
+		Parent_File = 0;
+	}
+
+	// In the right place, it still works.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const centreNumbers[3] = { 7, 8, 9 };
+		float const radius = 2.5f;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * centre = PutChunk(wholeShape + bytes, "SHPCENTR", 16);
+		memcpy(centre, centreNumbers, sizeof(centreNumbers));
+		memcpy(centre + sizeof(centreNumbers), &radius, sizeof(radius));
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + 16);
+
+		Check(shape->shape_data.centre.y == 8 && shape->shape_data.radius_about_centre == radius, "a shape's centre inside a shape is read");
+		Parent_File = 0;
+	}
+
+	// The game reads a game mode's name through its header, so a game mode needs one. A header of all zeros is an empty name and no files.
+	struct ModeRow { bool hasHeader; bool accepted; char const * what; };
+	ModeRow const modeRows[] =
+	{
+		{ true,  true,  "a game mode with a header is accepted" },
+		{ false, false, "a game mode with no header is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(modeRows) / sizeof(modeRows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const headerBytes = 64;
+		size_t const modeBytes = modeRows[i].hasHeader ? ChunkHeaderBytes + headerBytes : 0;
+
+		char * mode = PutChunk(wholeShape, "GAMEMODE", modeBytes);
+
+		if (modeRows[i].hasHeader)
+		{
+			PutChunk(mode, "GMODHEAD", headerBytes);
+		}
+
+		new Environment_Data_Chunk(&file, wholeShape, ChunkHeaderBytes + modeBytes);
+
+		Check((file.error_code == 0) == modeRows[i].accepted, modeRows[i].what);
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1545,6 +1650,7 @@ int main()
 	TestNormals();
 	TestLifts();
 	TestMorphFrames();
+	TestChunksInTheWrongPlace();
 
 	if (checksFailed)
 	{

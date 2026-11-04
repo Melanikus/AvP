@@ -11,7 +11,9 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(avp_chunk)
 
-RIF_IMPLEMENT_DYNCREATE("AVPGENER",AVP_Generator_Chunk)
+// This one looks two levels up for the level's name, so it can only be made where that's safe. All 1480 in the game's own levels are
+// in the special objects chunk.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AVPGENER",AVP_Generator_Chunk,"SPECLOBJ",Special_Objects_Chunk)
 
 void AVP_Generator_Chunk::fill_data_block (char * data_start)
 {

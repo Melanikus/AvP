@@ -5,6 +5,7 @@
 //   a child chunk whose size cannot be real is refused
 
 #include "chunk_palette.hpp"
+#include "environment_chunk.hpp"
 #include "mishchnk.hpp"
 
 #ifndef UseLocalAssert
@@ -523,7 +524,9 @@ void TLT_Config_Chunk::fill_data_block (char * data_start)
 
 // constructor from buffer
 
-RIF_IMPLEMENT_DYNCREATE("GAMEMODE",Environment_Game_Mode_Chunk)
+// These two keep a pointer to their parent as a particular kind of chunk, so they can only be made under that kind. In the game's own
+// levels all 14 game modes are in the environment data, and all 88 of these children are in a game mode.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("GAMEMODE",Environment_Game_Mode_Chunk,"REBENVDT",Environment_Data_Chunk)
 
 /*
 Children For  Environment_Game_Mode_Chunk :
@@ -543,7 +546,7 @@ Children For  Environment_Game_Mode_Chunk :
 
 
 Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* const parent,const char* data,size_t const size)
-:Chunk_With_Children(parent,"GAMEMODE") , envd_parent((Environment_Data_Chunk *)parent)
+:Chunk_With_Children(parent,"GAMEMODE") , header(0), envd_parent((Environment_Data_Chunk *)parent)
 {
 	const char * buffer_ptr = data;
 	while ((data-buffer_ptr)< (signed) size) {
@@ -555,10 +558,18 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
+
+	// The game reads a game mode's name through its header with no check. All 14 in the game's own levels have one.
+	if (!header)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 // header chunk
-RIF_IMPLEMENT_DYNCREATE("GMODHEAD",Environment_Game_Mode_Header_Chunk)
+// This constructor writes into its parent, so it can only be made under a game mode. Under anything else it's a chunk nothing reads.
+// All 14 of these in the game's own levels are inside a game mode.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("GMODHEAD",Environment_Game_Mode_Header_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
 
 Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_With_Children * const parent, const char * pdata, size_t const /*psize*/)
 : Chunk (parent, "GMODHEAD"), flags(0), rif_files()
@@ -655,7 +666,7 @@ size_t Environment_Game_Mode_Header_Chunk::size_chunk ()
 ////////////////////////////////////////
 
 // Class RIF_Child_Chunk - for RIFs in game modes containing graphics
-RIF_IMPLEMENT_DYNCREATE("RIFCHILD",RIF_Child_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("RIFCHILD",RIF_Child_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
 
 RIF_Child_Chunk::~RIF_Child_Chunk()
 {

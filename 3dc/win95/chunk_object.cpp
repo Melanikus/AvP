@@ -399,7 +399,9 @@ ObjectID Object_Chunk::CalculateID()
 /////////////////////////////////////////
 
 // Class Object_Header_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("OBJHEAD1",Object_Header_Chunk)
+// This constructor writes through its parent, so it can only be made under the object it belongs to. Under anything else it's a chunk
+// nothing reads. Every one of the 23068 of these in the game's own levels is inside an object.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("OBJHEAD1",Object_Header_Chunk,"RBOBJECT",Object_Chunk)
 
 // from buffer
 Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t hsize)

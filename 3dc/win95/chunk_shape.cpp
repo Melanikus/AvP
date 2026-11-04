@@ -1056,7 +1056,9 @@ void Shape_Polygon_Chunk::fill_data_block(char * data_start)
 /////////////////////////////////////////
 //Class Shape_Centre_Chunk :
 
-RIF_IMPLEMENT_DYNCREATE("SHPCENTR",Shape_Centre_Chunk)
+// This constructor writes into its parent's shape, so it can only be made under a shape. All 28193 of these in the game's own levels are.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPCENTR",Shape_Centre_Chunk,"REBSHAPE",Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPCENTR",Shape_Centre_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
 
 Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* data, size_t datasize)
 :Chunk (parent,"SHPCENTR")

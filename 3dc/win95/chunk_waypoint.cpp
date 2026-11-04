@@ -307,7 +307,9 @@ void Module_Waypoint_Chunk::TransferWaypointData(Module_Waypoint_Chunk* mwc_from
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AIMODMAS",AI_Module_Master_Chunk)
+// Both of these treat their parent as a module's data, and its parent as an object, so they can only be made there. All 285 and all
+// 1711 in the game's own levels are.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AIMODMAS",AI_Module_Master_Chunk,"MODULEDT",Object_Module_Data_Chunk)
 
 AI_Module_Master_Chunk::AI_Module_Master_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"AIMODMAS")
@@ -406,7 +408,7 @@ Object_Chunk* AI_Module_Master_Chunk::get_my_object_chunk()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AIMODSLA",AI_Module_Slave_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AIMODSLA",AI_Module_Slave_Chunk,"MODULEDT",Object_Module_Data_Chunk)
 
 AI_Module_Slave_Chunk::AI_Module_Slave_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"AIMODSLA")
