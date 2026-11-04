@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   adds a checked Huffman decoder for save games and text files: it refuses data that does not fit or
-//   decodes to fewer bytes than it claims
+//   decodes to fewer bytes than it claims; the room for compressed data allows for data that grows when compressed
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -82,7 +82,11 @@ extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length)
 	// Step 6: Making the encoding table
 	MakeHuffmanEncodeTable(EncodingTable,&SymbolCensus[256],Depths);
 	// Step 7: Encoding data
-	outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage)+length);
+	// Compressing can make data bigger: when all the bytes are about as common as each other, a byte can take up to
+	// MAX_DEPTH bits, which is more than the 8 it started with. So the room is worked out for that worst case: MAX_DEPTH
+	// bytes for every 8 bytes of data, MAX_DEPTH more for the few left over, and 8 for the last word the encoder writes.
+	size_t const mostBytes = (size_t)length / 8 * MAX_DEPTH + MAX_DEPTH + 8;
+	outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage) + mostBytes);
 	strncpy(outpackage->Identifier,COMPRESSED_RIF_IDENTIFIER,8);
 	outpackage->CompressedDataSize = HuffEncodeBytes((int*)(outpackage+1), sourcePtr, length, EncodingTable);
 	outpackage->UncompressedDataSize = length;
