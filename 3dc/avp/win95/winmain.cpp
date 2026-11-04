@@ -45,6 +45,7 @@
 #include "renderer.h"
 #include "mp_config.h"
 #include "logString.h"
+#include "command_line_word.h"
 #include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
@@ -261,6 +262,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	{
+		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, F7 and F8, the shoot tool, the flicker
+		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		extern int DevMode;
+		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
+		if (DevMode)
+		{
+			LogString("shadows: the developer tools are on (-dev)");
+		}
+
+		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't
+		auto const devSwitch = [&](const char *name)
+		{
+			if (!strstr(command_line, name))
+			{
+				return false;
+			}
+			if (!DevMode)
+			{
+				LogString(std::string("shadows: ") + name + " needs -dev, so it's off");
+			}
+			return DevMode != 0;
+		};
+
 		extern int ToyShadowsMode;
 		// not -noshadows: the level name switch further down takes anything starting with -n
 		if (strstr(command_line, "-shadowsoff"))
@@ -268,12 +292,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ToyShadowsMode = 0;
 		}
 		extern int ShadowFlickerOn;
-		if (strstr(command_line, "-shadowflicker"))
+		if (devSwitch("-shadowflicker"))
 		{
 			ShadowFlickerOn = 1;
 		}
 		extern int ShadowShootOn;
-		if (strstr(command_line, "-shadowshoot"))
+		if (devSwitch("-shadowshoot"))
 		{
 			ShadowShootOn = 1;
 			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
@@ -284,7 +308,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ShadowStatusOn = 0;
 		}
 		extern int ShadowsFullReport;
-		if (strstr(command_line, "-shadowreport"))
+		if (devSwitch("-shadowreport"))
 		{
 			ShadowsFullReport = 1;
 		}

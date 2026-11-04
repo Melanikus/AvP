@@ -3774,6 +3774,7 @@ static int captureCornersKept[kToyMostLights];
 static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
+int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and G, F7, F8 and the shoot tool's keys do nothing
 int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
@@ -6520,7 +6521,7 @@ static void ShadowStatus_Draw()
 
 	bool const viewRan = ToyShadows_TakeViewRan();
 
-	if (!ShadowStatusOn || !viewRan)
+	if (!DevMode || !ShadowStatusOn || !viewRan)
 	{
 		return;
 	}
@@ -6723,7 +6724,7 @@ static void ToyShadows_Draw()
 	}
 
 	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
-	if (DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	if (DevMode && DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
 	{
 		ToyShadowsMode = (ToyShadowsMode + 1) % kToyViewCount;
 
@@ -6735,7 +6736,7 @@ static void ToyShadows_Draw()
 	}
 
 	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
-	if (IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	if (DevMode && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
 		{
