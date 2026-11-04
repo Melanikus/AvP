@@ -3,6 +3,7 @@
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch
 //   the alien tail copes with a model missing its aiming animations
+//   the disc and an alien's chest are checked before use, because a save file can leave them out
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -1551,9 +1552,10 @@ static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *w
 
 		/* You should have a disc. */
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Force Appear Disc. */
-		disc_section->flags&=~section_data_notreal;
+		if (disc_section) {
+			disc_section->flags&=~section_data_notreal;
+		}
 
 	} else {
 		/* Wow, genuinely idle! */
@@ -3281,7 +3283,12 @@ void GetHierarchicalWeapon(char *riffname, char *hierarchyname, int sequence_typ
 
 	root_section = GetNamedHierarchyFromLibrary(riffname,hierarchyname);
 
-	GLOBALASSERT(root_section);
+	// the weapon table names one model the game's files don't have (the Predator's staff), and a save file can select it.
+	// The player then keeps the weapon model they have
+	if (!root_section)
+	{
+		return;
+	}
 
 	Dispel_HModel(&PlayersWeaponHModelController);
 	Create_HModel(&PlayersWeaponHModelController, root_section);
@@ -5125,8 +5132,12 @@ int MeleeWeapon_90Degree_Front_Core(DAMAGE_PROFILE *damage,int multiple,int rang
 											if (sbPtr->I_SBtype==I_BehaviourAlien) {
 												SECTION_DATA *chest;
 												chest=GetThisSectionData(sbPtr->SBdptr->HModelControlBlock->section_data,"chest");
-												GLOBALASSERT(chest);
-												CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												/* A part can be gone. The blow then lands like any other. */
+												if (chest) {
+													CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												} else {
+													HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
+												}
 											} else {
 												HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
 											}
@@ -9314,9 +9325,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9346,9 +9356,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9485,9 +9494,10 @@ void PredatorDisc_Reload(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 			weaponPtr->StateTimeOutCounter = 0;
 		} else {
 			disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-			GLOBALASSERT(disc_section);
 			/* Appear Disc. */
-			disc_section->flags&=~section_data_notreal;
+			if (disc_section) {
+				disc_section->flags&=~section_data_notreal;
+			}
 
 			time=DIV_FIXED(ONE_FIXED,(twPtr->TimeOutRateForState[WEAPONSTATE_RELOAD_PRIMARY]<<1));
 			time-=(ONE_FIXED>>4);

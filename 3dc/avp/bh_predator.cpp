@@ -6,6 +6,7 @@ Source file for predator AI
 //   a dormant predator keeps its own copy of its level data, not a pointer to it
 //   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
 //   a save file can no longer give a predator a weapon that does not exist
+//   the elevation animation and the pistol muzzle are checked before use, because either can be missing
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -970,7 +971,12 @@ void SetPredatorElevation(STRATEGYBLOCK *sbPtr) {
         GLOBALASSERT(angle1<=1024);
 
         elevation_controller=Get_Delta_Sequence(&predatorStatusPointer->HModelController,"Elevation");
-        GLOBALASSERT(elevation_controller);
+
+        // the game removes this animation in some states, and a save file can leave it out
+        if (!elevation_controller) {
+                return;
+        }
+
         {
                 int fake_timer;
 
@@ -6656,9 +6662,11 @@ static PRED_RETURN_CONDITION Execute_PNS_NewDischargePistol(STRATEGYBLOCK *sbPtr
                         null_vec.vy=0;
                         null_vec.vz=0;
 
-                        GLOBALASSERT(muzzle);
-
-                        FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                        if (muzzle)
+                        {
+                                FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        }
 
                 }
 

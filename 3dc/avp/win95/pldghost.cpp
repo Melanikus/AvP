@@ -5,6 +5,7 @@ d  ----------------------------------------------------------------------*/
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles received from other players are kept between 0 and 4095 before a sine or cosine lookup
 //   a ghost whose model has no elevation animation no longer crashes
+//   the disc and gun flash parts are checked before use; a landed disc no longer reads a part after freeing it
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -696,9 +697,10 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 					#else
 					/* Now it's not hierarchical! */
 					disc_section=GetThisSection(root_section,"disk");
-					GLOBALASSERT(disc_section);
 
-					sbPtr->shapeIndex = disc_section->ShapeNum;
+					if (disc_section) {
+						sbPtr->shapeIndex = disc_section->ShapeNum;
+					}
 					#endif
 				}
 				break;
@@ -1573,9 +1575,7 @@ void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn)
 		if(gunFlashOn)
 		{
 			/* Maintain existing gun flash */
-			LOCALASSERT(ghostData->GunflashSectionPtr);
-			
-			if (sbPtr->SBdptr)
+			if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 			{
 				ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 				MaintainNPCGunFlashEffect
@@ -1600,9 +1600,8 @@ void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn)
 		if(gunFlashOn)
 		{
 			/* new flash */
-			LOCALASSERT(ghostData->GunflashSectionPtr);
 			ghostData->GunFlashFrameStamp=GlobalFrameCounter;
-	 		if (sbPtr->SBdptr)
+	 		if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 	 		{
 			 	ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 
@@ -3039,7 +3038,7 @@ void HandlePlayerGhostWeaponSound(STRATEGYBLOCK *sbPtr, int weapon, int firingPr
 			}
 			if (firingPrimary)
 			{
-				if (sbPtr->SBdptr)
+				if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 				{
 					ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 					FireNetGhostFlameThrower
@@ -5155,14 +5154,19 @@ void Convert_DiscGhost_To_PickupGhost(STRATEGYBLOCK *sbPtr) {
 	{
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(ghostData->HModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 
-		sbPtr->shapeIndex=disc_section->sempai->ShapeNum;
-		Dispel_HModel(&ghostData->HModelController);
-		if (sbPtr->SBdptr) {
-			sbPtr->SBdptr->ObShape=disc_section->sempai->ShapeNum;
-			sbPtr->SBdptr->ObShapeData=disc_section->sempai->Shape;
-			sbPtr->SBdptr->HModelControlBlock=NULL;
+		if (disc_section) {
+			// Dispel_HModel frees disc_section, so what's needed from it is copied out first. The part it points to,
+			// in the model's own file data, stays
+			SECTION *disc=disc_section->sempai;
+
+			sbPtr->shapeIndex=disc->ShapeNum;
+			Dispel_HModel(&ghostData->HModelController);
+			if (sbPtr->SBdptr) {
+				sbPtr->SBdptr->ObShape=disc->ShapeNum;
+				sbPtr->SBdptr->ObShapeData=disc->Shape;
+				sbPtr->SBdptr->HModelControlBlock=NULL;
+			}
 		}
 	}
 

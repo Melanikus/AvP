@@ -3,6 +3,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a corpse in a save that cannot get a dynamics block is left out, instead of crashing
 //   a corpse that a save file leaves without a model is left out of the game
+//   a corpse with no plain model to trim to is left as it is
 #include "3dc.h"
 
 #include "inline.h"
@@ -652,10 +653,7 @@ void CorpseBehaveFun(STRATEGYBLOCK *sbPtr)
 		
 		/* Do we want to trim off the weapons? */
 		
-		if (corpseDataPtr->HModelController.keyframe_flags) {
-		
-			GLOBALASSERT(corpseDataPtr->TemplateRoot);
-
+		if (corpseDataPtr->HModelController.keyframe_flags && corpseDataPtr->TemplateRoot) {
 			TrimToTemplate(sbPtr,&corpseDataPtr->HModelController,corpseDataPtr->TemplateRoot, 1);
 		}
 	}

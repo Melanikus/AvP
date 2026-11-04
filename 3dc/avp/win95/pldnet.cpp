@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer
+//   the disc is checked before use, because a save file can leave that part out
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -2528,9 +2529,8 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}
@@ -2709,9 +2709,8 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}

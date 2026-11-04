@@ -1,5 +1,8 @@
 /* Maintains the equipmnt the player has, 
 rounds fired etc etc etc*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the disc is checked before use when it becomes a pickup, because a save file can leave that part out
 
 #include "3dc.h"
 #include "inline.h"
@@ -1643,7 +1646,13 @@ void Convert_Disc_To_Pickup(STRATEGYBLOCK *sbPtr) {
 	/* Transmogrify a disc behaviour to a disc ammo pickup! */
 
 	disc_section=GetThisSectionData(bbPtr->HModelController.section_data,"disk");
-	GLOBALASSERT(disc_section);
+
+	// a part of a model can be missing from a save file, and without this one there's nothing to pick up
+	if (!disc_section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+		return;
+	}
 
 	/* Sort out dynamics block */
 	dynPtr->LinVelocity.vx=0;

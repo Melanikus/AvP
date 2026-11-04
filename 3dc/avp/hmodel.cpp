@@ -9,6 +9,7 @@
 //   a delta sequence's name is copied by the length measured for it
 //   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
 //   a save file can only change a model for a whole model from the same file
+//   looking for a part in a model that is not there now gives back nothing
 
 #include "3dc.h"
 #include "io.h"
@@ -4089,6 +4090,12 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	SECTION *Get_Corresponding_Section_Recursive(SECTION *this_section, char *Name)
 	{
 		SECTION **child_list_ptr;
+
+		//a corpse loaded from a save file may have no plain model to look in
+		if (!this_section)
+		{
+			return(NULL);
+		}
 
 		if (strcmp(this_section->Section_Name, Name) == 0)
 		{

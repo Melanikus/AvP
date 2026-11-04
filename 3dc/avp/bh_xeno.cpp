@@ -8,6 +8,7 @@
 //   the arms' tilt is limited with min and max
 //   a Xenoborg placed outside every module is left out, instead of crashing
 //   a Xenoborg left without its animations by a save file is left out of the game
+//   the neck is checked before use, because a save file can leave it out
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -1825,7 +1826,12 @@ void Xeno_TurnAndTarget(STRATEGYBLOCK *sbPtr, int *ref_anglex,int *ref_angley) {
 		SECTION_DATA *head_section;
 
 		head_section=GetThisSectionData(xenoStatusPointer->HModelController.section_data,"neck");
-		GLOBALASSERT(head_section);
+
+		// a part of a model can be missing from a save file. The first part of a model can't, so aim from that
+		if (!head_section)
+		{
+			head_section=xenoStatusPointer->HModelController.section_data;
+		}
 
 		Xenoborg_GetRelativeAngles(sbPtr,&anglex,&angley,&head_section->World_Offset);
 

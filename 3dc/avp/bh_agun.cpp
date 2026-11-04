@@ -5,6 +5,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the gun's tilt is limited with min and max
 //   a sentry gun left without its animations by a save file is left out of the game
+//   the gun part is checked before use, because a save file can leave it out
 
 #include "3dc.h"
 #include "inline.h"
@@ -1266,7 +1267,12 @@ void Execute_AGun_Target(STRATEGYBLOCK *sbPtr) {
 		SECTION_DATA *gun_section;
 
 		gun_section=GetThisSectionData(agunStatusPointer->HModelController.section_data,"gun");
-		GLOBALASSERT(gun_section);
+
+		// a part of a model can be missing from a save file, and without this one there's nothing to aim
+		if (!gun_section)
+		{
+			return;
+		}
 
 		AGun_GetRelativeAngles(sbPtr,&anglex,&angley,&gun_section->World_Offset);
 

@@ -10,6 +10,7 @@
 //   a sentry sent back to a spot outside every module keeps the module it has
 //   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
 //   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
+//   the head and the elevation animation are checked before use, because either can be missing
 #include "3dc.h"
 
 #include "inline.h"
@@ -2284,7 +2285,11 @@ void SetMarineElevation(STRATEGYBLOCK *sbPtr) {
 
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -2342,7 +2347,11 @@ void CentreMarineElevation(STRATEGYBLOCK *sbPtr) {
 	}
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -9182,17 +9191,19 @@ static STATE_RETURN_CONDITION Execute_MNS_SentryMode(STRATEGYBLOCK *sbPtr) {
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}
@@ -9461,17 +9472,19 @@ static STATE_RETURN_CONDITION Execute_MNS_Wait(STRATEGYBLOCK *sbPtr)
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}

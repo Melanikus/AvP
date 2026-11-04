@@ -5,6 +5,7 @@
 //   the Queen copes with a model missing a foot or a swiping hand; her hit animation is the
 //   one set to not playing when she is made, where the attack was set twice
 //   a Queen left without her two animations by a save file is left out of the game
+//   her hand is checked before use; a game saved while she carries something no longer indexes the list with -1
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -3217,9 +3218,14 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		//find all objects that the queen can chuck
 		FindQueenObjects();
 		queenStatusPointer->CurrentQueenObject=-1;
+		//she starts with nothing in her hand, even in a game saved while she was carrying something, so she can't go on
+		//carrying it: the code for that uses the number just cleared to pick the object, and -1 isn't one
+		if(queenStatusPointer->QueenState==QBS_CarryingObject)
+		{
+			queenStatusPointer->QueenState=QBS_Reconsider;
+		}
 		//get the queens hand section
 		queenStatusPointer->QueenRightHand=GetThisSectionData(queenStatusPointer->HModelController.section_data,"rrrr fing");
-		GLOBALASSERT(queenStatusPointer->QueenRightHand);
 	}
 
 	if(!queenStatusPointer->QueenActivated)
@@ -4427,7 +4433,8 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				** 	Update object queen is carrying **
 				**----------------------------------*/
 	
-	if(queenStatusPointer->QueenState==QBS_CarryingObject)
+	//the hand is a named part of the model, and may be missing
+	if(queenStatusPointer->QueenState==QBS_CarryingObject && queenStatusPointer->QueenRightHand)
 	{
 		ProveHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr->SBdptr);
 				
