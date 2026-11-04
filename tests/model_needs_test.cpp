@@ -126,12 +126,6 @@ static void TestEveryRow()
 			partCount++;
 		}
 
-		if (partCount == 0)
-		{
-			printf("row %d (%s) names no parts\n", row, needs->hierarchy);
-			allPassed = false;
-		}
-
 		for (int gap = partCount; gap < MODEL_NEEDS_MOST_PARTS; gap++)
 		{
 			if (needs->parts[gap])

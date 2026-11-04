@@ -27,6 +27,9 @@ Capitals count in part names and model names, because the game's own lookups use
 different parts. File names are the exception: the game finds files whatever their capitals (see
 GetNamedHierarchyFromLibrary), so this list does too.
 
+A row with no parts (NULL) still means something: the model has to be in its file. The game asks for these models by
+name when it builds a character, and has no way of carrying on without one.
+
 The row for a model has to match what's in the game's files. All the rows were checked against all 63 models in the
 game's 18 model files on 2026-11-04. Anyone changing a row needs to repeat that, because a row that asks for too much
 stops the game for everybody.
@@ -67,6 +70,13 @@ const MODEL_NEEDS model_needs[] =
 
 	// The Predator's flechette pistol fires from "dum flash".
 	{ "hnpcpredator", "pred + pistol", { "dum flash" } },
+	{ "hnpcpredator", "pred with wristblade", { NULL } },
+	{ "hnpcpredator", "pred with disk", { NULL } },
+	{ "hnpcpredator", "pred with Plasma Caster", { NULL } },
+	{ "hnpcpredator", "pred with staff", { NULL } },
+	{ "hnpcpredator", "medicomp", { NULL } },
+	{ "hnpcpredator", "Speargun", { NULL } },
+	{ "hnpcpredator", "Template", { NULL } },
 
 	// A heavy blow aimed at an alien lands on its chest.
 	{ "hnpcalien", "alien", { "chest" } },
@@ -83,9 +93,33 @@ const MODEL_NEEDS model_needs[] =
 	// The sentry gun points its "gun" part at its target.
 	{ "sentry", "gun", { "gun" } },
 
-	// The Predator's disc, in flight and in the Predator's hand.
+	{ "hnpchugger", "Template", { NULL } },
+
+	// The Predator's disc, in flight and in the Predator's hand, and the marine's skeeter disc.
 	{ "disk", "Disk", { "disk" } },
 	{ "pred_HUD", "disk", { "disk" } },
+	{ "mdisk", "Mdisk", { "Mdisk" } },
+
+	// The weapons the player sees in front of them. The file "marwep.rif" calls itself MarineWeapons inside, and that's
+	// the name the game goes by.
+	{ "MarineWeapons", "Pulse Rifle", { NULL } },
+	{ "MarineWeapons", "Smart Gun", { NULL } },
+	{ "MarineWeapons", "Flamethrower", { NULL } },
+	{ "MarineWeapons", "Rocket Launcher", { NULL } },
+	{ "MarineWeapons", "Grenade Launcher", { NULL } },
+	{ "MarineWeapons", "Minigun", { NULL } },
+	{ "MarineWeapons", "Pistol", { NULL } },
+	{ "MarineWeapons", "Two pistol", { NULL } },
+	{ "MarineWeapons", "Cudgel", { NULL } },
+	{ "MarineWeapons", "SD", { NULL } },
+	{ "pred_HUD", "Template", { NULL } },
+	{ "pred_HUD", "wrist blade", { NULL } },
+	{ "pred_HUD", "wrist display", { NULL } },
+	{ "pred_HUD", "Speargun", { NULL } },
+	{ "pred_HUD", "pistol", { NULL } },
+	{ "alien_HUD", "claws", { NULL } },
+	{ "alien_HUD", "eat", { NULL } },
+	{ "alien_HUD", "tail", { NULL } },
 };
 
 const int model_needs_count = sizeof(model_needs) / sizeof(model_needs[0]);
