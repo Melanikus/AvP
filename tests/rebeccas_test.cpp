@@ -26,7 +26,8 @@
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
 // animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, test 18 whether a lift has all
-// its parts, test 19 chunks of morph frames, and test 20 chunks in the wrong place. Tests from 30 on cover the chunks whose
+// its parts, test 19 chunks of morph frames, test 20 chunks in the wrong place, and test 21 how deep chunks can
+// sit inside chunks. Tests from 30 on cover the chunks whose
 // constructors used to walk the file with no look at the chunk's size, starting with the two checks they all share.
 //
 // HOW IT RUNS
@@ -1626,6 +1627,49 @@ static void TestChunksInTheWrongPlace()
 	}
 }
 
+// 21. Chunks can hold chunks, and each level uses more of the stack, so a small file could nest deep enough to crash the game. These
+// are chunks of special objects, one inside the next, each holding nothing but the next. The game can go 64 deep.
+static void TestNesting()
+{
+	puts("21. nesting");
+
+	struct NestRow { int levels; bool accepted; char const * what; };
+	NestRow const rows[] =
+	{
+		{     15, true,  "as deep as the game's own levels go is accepted" },
+		{     64, true,  "as deep as the limit is accepted" },
+		{     65, false, "one level past the limit is refused" },
+		{ 200000, false, "a file nested deep enough to run off the stack is refused" },
+	};
+
+	alignas(int) static char nested[200000 * ChunkHeaderBytes];
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		for (int level = 0; level < rows[i].levels; level++)
+		{
+			PutChunk(nested + level * ChunkHeaderBytes, "SPECLOBJ", (rows[i].levels - level - 1) * ChunkHeaderBytes);
+		}
+
+		// PutChunk clears what a chunk holds, so these go in from the inside out
+		for (int level = rows[i].levels - 1; level >= 0; level--)
+		{
+			int const chunkBytes = (rows[i].levels - level) * (int)ChunkHeaderBytes;
+
+			memcpy(nested + level * ChunkHeaderBytes, "SPECLOBJ", 8);
+			memcpy(nested + level * ChunkHeaderBytes + 8, &chunkBytes, sizeof(chunkBytes));
+		}
+
+		new Special_Objects_Chunk(&file, nested, rows[i].levels * ChunkHeaderBytes);
+
+		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+		Parent_File = 0;
+	}
+}
+
 // 30. The two checks every chunk constructor shares. Each is proven alone here, so that a mistake in one can't hide behind a test of something
 // that uses it.
 static void TestChunkBoundChecks()
@@ -1700,6 +1744,7 @@ int main()
 	TestLifts();
 	TestMorphFrames();
 	TestChunksInTheWrongPlace();
+	TestNesting();
 	TestChunkBoundChecks();
 
 	if (checksFailed)
