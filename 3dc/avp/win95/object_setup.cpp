@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
-//   too long for its buffer is skipped, like a missing sound
+//   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -113,6 +113,13 @@ extern char* Rif_Sound_Directory;
 LOADED_SOUND const * GetSoundForMainRif(const char* wav_name)
 {
 	static char filename[200];
+
+	// A level file can leave a sound's name blank, and the chunk then holds no name at all. There is nothing to load.
+	if (!wav_name)
+	{
+		return 0;
+	}
+
 	if (Rif_Sound_Directory)
 	{
 		// filename holds 200 bytes. A path too long for it is not cut short, which could load the wrong sound:
@@ -962,7 +969,10 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 	for(;!chlif.done();chlif.next())
 	{
 		Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
-		phtt->num_sounds=max(phtt->num_sounds,isc->index+1);
+		if(isc->index_is_valid())
+		{
+			phtt->num_sounds=max(phtt->num_sounds,isc->index+1);
+		}
 	}
 
 	if(phtt->num_sounds)
@@ -977,6 +987,14 @@ void add_placed_hierarchy(Placed_Hierarchy_Chunk* phc,const char* fname,const ch
 		for(chlif.restart();!chlif.done();chlif.next())
 		{
 			Indexed_Sound_Chunk* isc=(Indexed_Sound_Chunk*)chlif();
+
+			// A number the list has no place for goes to the log, and that sound stays missing. See index_is_valid.
+			if(!isc->index_is_valid())
+			{
+				LogErrorString("level file gives a sound an impossible number: " + Util::IntToString(isc->index));
+				continue;
+			}
+
 			PLACED_HIERARCHY_SOUND* phs=&phtt->sounds[isc->index];
 
 			phs->inner_range = (unsigned)(isc->inner_range*local_scale);
