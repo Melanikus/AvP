@@ -5240,7 +5240,9 @@ static void ToyShadows_Draw()
 		{
 			ToyLogFrame(report);
 		}
-		ToyShadowsLightsByPixel = lightsOurs;
+
+		// The pass can't run this frame, so next frame's lights have to stay in the game's lighting, or nothing would draw them.
+		ToyShadowsLightsByPixel = 0;
 		ToyForgetCasters();
 		return;
 	}
