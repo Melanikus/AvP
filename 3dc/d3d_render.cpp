@@ -10,6 +10,7 @@
 //   with -keptsnap, a kept prism is finished each frame in the shader, from the same cut corners as the walls
 //   particles and coronas are written into their lists before those lists are closed, not after. Every writer now
 //   stops when its list says it has no room, and rain makes room the way the level's other shapes do
+//   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. This comes out before merge
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -28,6 +29,8 @@
 #include "surface_pictures.h"
 #include "shadow_gap.h"
 #include "static_scene.h"
+#include "shadow_shoot.h"
+#include "shadow_shoot_sums.h"
 #define UseLocalAssert FALSE
 #include "ourasert.h"
 #include <assert.h>
@@ -3802,6 +3805,7 @@ static int numWorldCorners = 0;
 static int worldCornersSinceReport = 0;    // how many of those there have been, added up, for the log
 static int casterGroup[kToyMaxCasters];     // which of keptGroups a polygon is in, or -1
 static int casterPolygon[kToyMaxCasters];   // its place in its shape
+static const void *casterShape[kToyMaxCasters];   // its shape, only for -shadowshoot, and only ever compared
 static CasterSource casterSource[kToyMaxCasters];   // only filled in on a report frame, for a polygon that's drawn
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
@@ -3830,6 +3834,7 @@ static double toyStretchTotal = 0.0;   // how far corners were thrown past their
 static int toyStretchCorners = 0;
 
 int ToyShadows_ChosenLights(float *lights, const void **owners);
+const char *ToyShadows_RoomName();
 void ToyShadows_WorldAxes(float *axes);
 void ToyShadows_ViewMatrix(float *matrix);
 int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners);
@@ -4031,6 +4036,7 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 
 	casterGroup[toyNumCasters] = facts.keptGroup;
 	casterPolygon[toyNumCasters] = facts.polygonNumber;
+	casterShape[toyNumCasters] = facts.shape;
 
 	if (facts.drawn && facts.source)
 	{
@@ -5015,6 +5021,7 @@ void ToyShadows_ReleaseTargets()
 {
 	ToyRelease(savedCardSettings);
 	ReleaseShadowPictures();
+	ShadowShoot_ReleaseCardThings();
 }
 
 // The mask is added to many times, in small amounts, so eight bits would round them away. A float picture is better, but only if
@@ -5382,6 +5389,11 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *light, float
 		*pixels += ToyAskCard(countQuery);
 	}
 
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_AfterShading(device, toyMaskSurface);
+	}
+
 	return result;
 }
 
@@ -5440,6 +5452,9 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
+// While this isn't kShootRouteNone, WorkOutPrismsInWorld tells the shoot tool about each polygon's prism, and how that prism gets to the card.
+static ShootRoute shootCrossingRoute = kShootRouteNone;
+
 // Works out a group's prisms for a light, in the world's numbers. They're left just past the end of toyVerts, at the place toyNumVerts still says, and
 // cornersMade says how many. false means they aren't all there, so they can't be used.
 static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, const float *centre, int *cornersMade)
@@ -5476,7 +5491,7 @@ static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, con
 			bool twoSided = false;
 			int const count = ToyShadows_PolygonInWorld(group.shape, polygon, group.place, &corners[0].x, kToyMostPolyPoints, plane, &twoSided);
 
-			if (count >= 3)
+			if (count >= 3 && !(ShadowShootOn && ShadowShoot_IsStopped(group.shape, polygon)))
 			{
 				ToyFlatSurface surface;
 
@@ -5488,7 +5503,14 @@ static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, con
 				surface.inWorld = true;
 				surface.keepsStartGap = twoSided;
 
+				int const vertsBeforePolygon = toyNumVerts;
+
 				ToyAddPrism(corners, count, surface, lightInWorld, centreInWorld, false);
+
+				if (shootCrossingRoute != kShootRouteNone && toyNumVerts > vertsBeforePolygon)
+				{
+					ShadowShoot_CrossInWorld(&toyVerts[vertsBeforePolygon].x, &toyVertEnds[vertsBeforePolygon], toyNumVerts - vertsBeforePolygon, count, group.shape, polygon, shootCrossingRoute, prismsAsKeptCorners);
+				}
 			}
 		}
 	}
@@ -5505,7 +5527,14 @@ static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, con
 				break;
 			}
 
+			int const vertsBeforePolygon = toyNumVerts;
+
 			ToyAddPrism(corners, count, toyCasterSurface[caster], lightInWorld, centreInWorld, false);
+
+			if (shootCrossingRoute != kShootRouteNone && toyNumVerts > vertsBeforePolygon)
+			{
+				ShadowShoot_CrossInWorld(&toyVerts[vertsBeforePolygon].x, &toyVertEnds[vertsBeforePolygon], toyNumVerts - vertsBeforePolygon, count, group.shape, casterPolygon[caster], shootCrossingRoute, prismsAsKeptCorners);
+			}
 		}
 	}
 
@@ -5544,6 +5573,24 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 	return true;
 }
 
+// A kept group's prisms are on the card, and can't be read back. So on a shot's frame they're worked out again, the same way, for the shoot tool to look at. Nothing here is drawn, and nothing is kept.
+static void ShootCrossKeptPrisms(const KeptGroup &group, const float *light, const float *centre, int cornersOnCard)
+{
+	// this isn't work the frame did, so it stays out of the frame's numbers
+	ToyLightReport *const noteLight = toyNoteLight;
+	int corners = 0;
+
+	toyNoteLight = 0;
+	shootCrossingRoute = kShootRouteKept;
+
+	bool const whole = WorkOutPrismsInWorld(group, light, centre, &corners);
+
+	shootCrossingRoute = kShootRouteNone;
+	toyNoteLight = noteLight;
+
+	ShadowShoot_NoteKeptGroup(cornersOnCard, corners, whole);
+}
+
 // Puts a group's kept prisms for this light on the list to draw, making them first if they're new and the light is staying still.
 // false means this group goes the ordinary way this time.
 static bool UseKeptPrisms(const KeptGroup &group, const float *light, const float *centre, int *corners)
@@ -5575,7 +5622,14 @@ static bool UseKeptPrisms(const KeptGroup &group, const float *light, const floa
 		toyNoteLight->keptCorners += run.corners;
 	}
 
-	return ShadowVolumes_AddRun(run);
+	bool const added = ShadowVolumes_AddRun(run);
+
+	if (added && ShadowShootFrame)
+	{
+		ShootCrossKeptPrisms(group, light, centre, run.corners);
+	}
+
+	return added;
 }
 
 // A walked group's prisms for this light, for this frame only: a light that's moving, or a store that's full or switched off. The ordinary route can't take
@@ -5584,9 +5638,22 @@ static void AddWorldPrisms(const KeptGroup &group, const float *light, const flo
 {
 	int const vertsBefore = toyNumVerts;
 	int corners = 0;
+	size_t const crossingsBefore = ShadowShootFrame ? ShadowShoot_CrossingMark() : 0;
 
-	if (!WorkOutPrismsInWorld(group, light, centre, &corners) || corners > kToyMaxVerts - numWorldCorners)
+	shootCrossingRoute = ShadowShootFrame ? kShootRouteWalked : kShootRouteNone;
+
+	bool const worked = WorkOutPrismsInWorld(group, light, centre, &corners);
+
+	shootCrossingRoute = kShootRouteNone;
+
+	if (!worked || corners > kToyMaxVerts - numWorldCorners)
 	{
+		// these aren't going to be drawn, so the shoot tool mustn't count them
+		if (ShadowShootFrame)
+		{
+			ShadowShoot_ForgetCrossings(crossingsBefore);
+		}
+
 		toyPrismsLeftOut++;
 		return;
 	}
@@ -5637,11 +5704,21 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 	ShadowVolumesCard_SetLight(light);
 	numWorldCorners = 0;
 
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_StartPass(captureLightBeingBuilt, light, centre, cloakedOnly);
+	}
+
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
 		int const kind = toyCasterKind[caster];
 
 		if ((kind == kToyCasterCloaked) != cloakedOnly || (owner && toyCasterOwner[caster] == owner))
+		{
+			continue;
+		}
+
+		if (ShadowShootOn && ShadowShoot_IsStopped(casterShape[caster], casterPolygon[caster]))
 		{
 			continue;
 		}
@@ -5663,7 +5740,8 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 
 		int const groupNumber = casterGroup[caster];
 
-		if (keeping && groupNumber >= 0 && groupNumber != groupGoingTheOrdinaryWay)
+		// A group holding a stopped polygon can't use its kept prisms, because they still have that polygon in them. They stay on the card for when it's undone.
+		if (keeping && groupNumber >= 0 && groupNumber != groupGoingTheOrdinaryWay && !(ShadowShootOn && ShadowShoot_ShapeHasStops(keptGroups[groupNumber].shape)))
 		{
 			KeptGroup const &group = keptGroups[groupNumber];
 			int corners = 0;
@@ -5682,6 +5760,11 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 		int const vertsBefore = toyNumVerts;
 		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], toyCasterSurface[caster], light, centre, kind == kToyCasterModel);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
+
+		if (ShadowShootFrame && toyNumVerts > vertsBefore)
+		{
+			ShadowShoot_CrossOnList(&toyVerts[vertsBefore].x, toyNumVerts - vertsBefore, toyCasterCount[caster], casterShape[caster], casterPolygon[caster]);
+		}
 	}
 
 	// walls drawn from the fixed buffer, which have nothing on the list above. A wall isn't a cloaked Predator, and it has no owner to step over.
@@ -5695,7 +5778,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 			continue;
 		}
 
-		if (keeping && UseKeptPrisms(group, light, centre, &corners))
+		if (keeping && !(ShadowShootOn && ShadowShoot_ShapeHasStops(group.shape)) && UseKeptPrisms(group, light, centre, &corners))
 		{
 			keptCorners += corners;
 			toyVertsOfKind[kToyCasterLevel] += corners;
@@ -5816,6 +5899,12 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 		}
 
 		device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+
+		if (ShadowShootFrame)
+		{
+			ShadowShoot_AfterMarking(device);
+		}
+
 		return;
 	}
 
@@ -5833,6 +5922,11 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 	if (FAILED(front))
 	{
 		report->front = front;
+	}
+
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_AfterMarking(device);
 	}
 }
 
@@ -5933,13 +6027,28 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 	device->SetRenderTarget(0, screen);
 	device->SetViewport(viewport);
 	device->SetScissorRect(reach);
+
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_AfterShading(device, toyMaskSurface);
+	}
 }
 
 // Adds one light to the picture: a flare, or any other live light chosen this frame. The mask takes out the part that's blocked, softly, so it
 // lights nothing it can't see. Each light does this for itself, so where one is blocked another can still light the same place.
 static void ToyAddLight(LPDIRECT3DDEVICE9 device, const float *light)
 {
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_BeforeAddingLight(device, captureLightBeingBuilt);
+	}
+
 	PixelLights_AddLight(device, light, toyMaskTexture, toyDepthTexture, (float)ToyShadowsSoft, kToySoftStaysWideTo);
+
+	if (ShadowShootFrame)
+	{
+		ShadowShoot_AfterAddingLight(device, captureLightBeingBuilt);
+	}
 }
 
 // Is this a flare being added per pixel? Only those have a ninth number of 0. The kind can't say: 2 covers every light added per
@@ -6427,6 +6536,12 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
 	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: G VIEW, F7 TAG, F8 CAPTURE");   // so that nobody has to remember them
 
+	if (ShadowShootOn)
+	{
+		_snprintf(lines[numLines++], kLineLength - 1, ShadowShoot_NumStopped() ? "F9 SHOOT, F10 STOP, F5 UNDO: %d STOPPED" : "F9 SHOOT, F10 STOP, F5 UNDO", ShadowShoot_NumStopped());
+	}
+
+
 	if (ShadowFlickerOn)
 	{
 		_snprintf(lines[numLines++], kLineLength - 1, "COUNTING FLICKER");
@@ -6489,6 +6604,87 @@ static void ShadowStatus_Draw()
 	}
 }
 
+// Shows the polygon last shot in green and each stopped polygon in red, so that anyone can see it's the one they meant. The colour stays on what's nearest, and the outline shows through
+// anything, so a polygon with something in front of it can still be found. Its corners are where it was when it was shot, so on something moving, it stays behind.
+static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
+{
+	float view[12];
+	float corners[kShootMostCorners * 3];
+	int count = 0;
+	bool stopped = false;
+
+	ToyShadows_ViewMatrix(view);
+
+	for (int number = 0; ShadowShoot_TintNumber(number, corners, &count, &stopped); number++)
+	{
+		if (count < 3 || count > kShootMostCorners)
+		{
+			continue;
+		}
+
+		D3DCOLOR const fill = stopped ? 0x70FF0000 : 0x7000FF00;
+		D3DCOLOR const outline = stopped ? 0xFFFF0000 : 0xFF00FF00;
+		ToyVec onList[kShootMostCorners];
+
+		for (int i = 0; i < count; i++)
+		{
+			Shoot_WorldToList(view, &corners[i * 3], &onList[i].x);
+		}
+
+		int verts = 0;
+
+		for (int i = 1; i + 1 < count; i++)
+		{
+			int const order[3] = { 0, i, i + 1 };
+
+			for (int corner = 0; corner < 3; corner++)
+			{
+				D3DLVERTEX &out = toyChunk[verts++];
+
+				out.x = onList[order[corner]].x;
+				out.y = onList[order[corner]].y;
+				out.z = onList[order[corner]].z;
+				out.color = fill;
+				out.specular = 0;
+				out.u = 0.0f;
+				out.v = 0.0f;
+			}
+		}
+
+		ToySetVolumeState(device);
+		device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+		device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+		device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+		device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+
+		// a little nearer than the wall it's on, or the two would fight over the same depth
+		ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.00001f);
+		device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, verts / 3, toyChunk, sizeof(D3DLVERTEX));
+		ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
+
+		for (int i = 0; i <= count; i++)
+		{
+			D3DLVERTEX &out = toyChunk[i];
+			ToyVec const &corner = onList[i % count];
+
+			out.x = corner.x;
+			out.y = corner.y;
+			out.z = corner.z;
+			out.color = outline;
+			out.specular = 0;
+			out.u = 0.0f;
+			out.v = 0.0f;
+		}
+
+		device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		device->DrawPrimitiveUP(D3DPT_LINESTRIP, count, toyChunk, sizeof(D3DLVERTEX));
+	}
+}
+
 static void ToyShadows_Draw()
 {
 	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
@@ -6529,6 +6725,35 @@ static void ToyShadows_Draw()
 		if (DebouncedKeyboardInput[KEY_F7])
 		{
 			ShadowStatusOn = !ShadowStatusOn;
+		}
+
+		// F9 shoots, F10 stops the polygon last shot from casting, and F5 undoes the newest stop. See shadow_shoot.cpp. The game leaves these three keys alone.
+		if (ShadowShootOn)
+		{
+			static char shootWords[64];
+			const char *words = 0;
+
+			if (DebouncedKeyboardInput[KEY_F9])
+			{
+				ShadowShoot_AskForShot();
+			}
+
+			if (DebouncedKeyboardInput[KEY_F10])
+			{
+				words = ShadowShoot_StopCasting();
+			}
+
+			if (DebouncedKeyboardInput[KEY_F5])
+			{
+				words = ShadowShoot_UndoStop();
+			}
+
+			if (words)
+			{
+				_snprintf(shootWords, sizeof(shootWords) - 1, "%s", words);
+				shootWords[sizeof(shootWords) - 1] = 0;
+				NewOnScreenMessage(shootWords);
+			}
 		}
 	}
 
@@ -6617,6 +6842,26 @@ static void ToyShadows_Draw()
 	// Without the pictures, each light takes a flat share, so that a pixel none of them reach ends up at the full darkness.
 	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)(litLights ? litLights : 1));
 	ToyShadows_CameraPlace(toyCameraInWorld);
+
+	if (ShadowShootOn)
+	{
+		extern int KeptSnap;
+		float view[12];
+		int crosshairX = -1, crosshairY = -1;
+
+		ToyShadows_ViewMatrix(view);
+		ShadowShoot_CrosshairPixel(&crosshairX, &crosshairY);
+
+		ShootFrameFacts const facts =
+		{
+			toyFrame, AVP_BUILD_COMMIT, ToyShadows_RoomName(), view, toyCameraInWorld,
+			d3d.matProjection._11, d3d.matProjection._22, d3d.matProjection._33, d3d.matProjection._43,
+			crosshairX, crosshairY, KeptSnap == 2, ShadowVolumesCard_CornersAreCut()
+		};
+
+		ShadowShoot_StartFrame(device, facts);
+	}
+
 	DWORD const flatShare = (DWORD)((1.0f - keepPerLight) * 255.0f) << 24;
 
 	// with the full report, ask the card how many pixels the stencil let through
@@ -7016,6 +7261,12 @@ static void ToyShadows_Draw()
 	if (ShadowFlickerOn)
 	{
 		Flicker_EndFrame(toyFrame, toyCameraInWorld, worldAxes);
+	}
+
+	if (ShadowShootOn)
+	{
+		ShadowShoot_EndFrame(device, lights, report.lights, screen != 0, toyMaskSurface, toyDepthSurface, toyDepthTexture);
+		ShootDrawTints(device);
 	}
 
 	{

@@ -1,4 +1,5 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
+//   a polygon says which shape it came from, for -shadowshoot
 // added the kinds of polygon the shadow toy keeps, and how many lights it handles.
 #ifndef _included_d3d_render_h_ /* Is this your first time? */
 #define _included_d3d_render_h_ 1
@@ -58,6 +59,7 @@ struct CasterFacts
 	int keptGroup;              // which group its prisms are kept with, from ShadowGroup_Start, or -1
 	int polygonNumber;          // its place in its shape
 	const CasterSource *source; // only read for a polygon that's drawn
+	const void *shape;          // its shape. Only -shadowshoot asks, and it's only ever compared
 };
 
 // A place on the list can have nothing in it, and a lamp that's dark for the moment keeps its place: see ToyShadows_ChooseLights. Neither has

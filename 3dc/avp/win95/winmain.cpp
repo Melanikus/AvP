@@ -6,6 +6,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the level's still polygons are built and sent to the graphics card once a level has loaded
 //   -keptsnap and -keptsnapfar
+//   -shadowshoot
 
 #include "3dc.h"
 #include "texture_relief.h"
@@ -270,6 +271,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (strstr(command_line, "-shadowflicker"))
 		{
 			ShadowFlickerOn = 1;
+		}
+		extern int ShadowShootOn;
+		if (strstr(command_line, "-shadowshoot"))
+		{
+			ShadowShootOn = 1;
+			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
 		}
 		extern int ShadowStatusOn;
 		if (strstr(command_line, "-statusoff"))

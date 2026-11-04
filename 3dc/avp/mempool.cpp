@@ -4,10 +4,14 @@
 //   the block; running out of memory stops the game in AllocMem, so nothing here has to handle it
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the level's lists on the graphics card go when the shapes do
+//   what the shoot tool has shot and stopped goes with the shapes
 #include "ourasert.h"
 #include "mem3dc.h"
 #include "mempool.h"
 #include "static_level.h"
+
+void ShadowShoot_LevelEnded();   // see shadow_shoot.cpp: a polygon's number only means something in its own level
+
 #include "logString.h"
 #include "utilities.h"
 
@@ -117,6 +121,7 @@ void ClearMemoryPool()
 {
 	// Everything that leaves a level comes through here, and this is what frees the shapes those lists were made from.
 	StaticLevel_Release();
+	ShadowShoot_LevelEnded();
 
 	for (int i = 0; i <= CurrentMemoryBlock; i++)
 	{

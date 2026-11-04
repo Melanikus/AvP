@@ -12,6 +12,7 @@
 //   the rule for a module that never moves is one function, which the static level uses too
 //   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
 //   a shape the game places by the camera is never kept
+//   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. This comes out before merge
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -54,6 +55,8 @@
 #include "renderer.h"
 #include "renderlist.h"
 #include "d3d_render.h"
+#include "los.h"
+#include "shadow_shoot.h"
 
 const RCOLOR ALIENS_LIFEFORCE_GLOW_COLOUR    = 0x20ff8080;
 const RCOLOR MARINES_LIFEFORCE_GLOW_COLOUR   = 0x208080ff;
@@ -6517,6 +6520,141 @@ int ToyShadows_PolygonInWorld(const void *shapePointer, int polygonNumber, const
 	return ToyShadows_CornersInWorld(shapePointer, polygonNumber, place, corners, mostCorners);
 }
 
+// ---- for the shoot tool, -shadowshoot: see shadow_shoot.cpp ----
+
+extern int maxshapes;
+extern fixed_t GunMuzzleSightX, GunMuzzleSightY;
+
+int ShadowShoot_ShapeNumber(const void *shape)
+{
+	for (int i = 0; shape && i < maxshapes; i++)
+	{
+		if (mainshapelist[i] == shape)
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+// An Alien has no sight, and its numbers are left over from whoever had one last.
+void ShadowShoot_CrosshairPixel(int *x, int *y)
+{
+	bool const hasSight = AvP.PlayerType != I_Alien;
+
+	*x = hasSight ? (int)(GunMuzzleSightX >> 16) : -1;
+	*y = hasSight ? (int)(GunMuzzleSightY >> 16) : -1;
+}
+
+void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
+{
+	memset(target, 0, sizeof(*target));
+	target->shapeNumber = -1;
+	target->polygon = -1;
+	target->moduleNumber = -1;
+	target->behaviour = -1;
+
+	if (!Player || !Global_VDB_Ptr)
+	{
+		return;
+	}
+
+	VECTORCH place = Global_VDB_Ptr->VDB_World;
+	VECTORCH aim = { (int)(direction[0] * 65536.0f), (int)(direction[1] * 65536.0f), (int)(direction[2] * 65536.0f) };
+
+	// The game reads these right after it asks, so nothing should need them now. They're put back anyway, so that a shot can't change the game.
+	VECTORCH const keptPoint = LOS_Point, keptNormal = LOS_ObjectNormal;
+	int const keptLambda = LOS_Lambda, keptPolygon = LOS_PolygonNumber;
+	DISPLAYBLOCK *const keptObject = LOS_ObjectHitPtr;
+	SECTION_DATA *const keptSection = LOS_HModel_Section;
+
+	FindPolygonInLineOfSight(&aim, &place, 0, Player);
+
+	DISPLAYBLOCK const *hit = LOS_ObjectHitPtr;
+	SECTION_DATA const *section = LOS_HModel_Section;
+	int const polygonNumber = LOS_PolygonNumber;
+
+	if (hit)
+	{
+		target->distance = LOS_Lambda;
+		target->point[0] = LOS_Point.vx;
+		target->point[1] = LOS_Point.vy;
+		target->point[2] = LOS_Point.vz;
+		target->arrow[0] = (float)LOS_ObjectNormal.vx / 65536.0f;
+		target->arrow[1] = (float)LOS_ObjectNormal.vy / 65536.0f;
+		target->arrow[2] = (float)LOS_ObjectNormal.vz / 65536.0f;
+	}
+
+	LOS_Point = keptPoint;
+	LOS_ObjectNormal = keptNormal;
+	LOS_Lambda = keptLambda;
+	LOS_PolygonNumber = keptPolygon;
+	LOS_ObjectHitPtr = keptObject;
+	LOS_HModel_Section = keptSection;
+
+	if (!hit)
+	{
+		return;
+	}
+
+	// A part of a model can be given a different shape from the one in its plan, and the one it has now is the one that's drawn.
+	SHAPEHEADER const *shape = !section ? GetShapeData(hit->ObShape) : section->Shape ? section->Shape : section->sempai->Shape;
+
+	if (!shape || polygonNumber < 0 || polygonNumber >= shape->numitems)
+	{
+		return;
+	}
+
+	// A module is never turned, and its shape's numbers are the world's, moved to where it is. Anything else has its own turn as well, as the line of sight code has it.
+	bool const turned = section != 0 || !hit->ObMyModule;
+	VECTORCH const standsAt = section ? section->World_Offset : hit->ObWorld;
+	MATRIXCH turn = section ? section->SecMat : hit->ObMat;
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+	VECTORCH const *points = (VECTORCH const *)*shape->points;
+	int const *vertexNumberPtr = &polygon->Poly1stPt;
+
+	while (*vertexNumberPtr != kTerminationMarker)
+	{
+		// this number comes from a game file, so it's checked before it's used to find a point
+		int const pointNumber = *vertexNumberPtr++;
+
+		if (target->numCorners == kShootMostCorners || pointNumber < 0 || pointNumber >= shape->numpoints)
+		{
+			target->numCorners = 0;
+			break;
+		}
+
+		VECTORCH corner = points[pointNumber];
+
+		if (turned)
+		{
+			RotateVector(&corner, &turn);
+		}
+
+		target->corners[target->numCorners * 3 + 0] = (float)corner.vx + (float)standsAt.vx;
+		target->corners[target->numCorners * 3 + 1] = (float)corner.vy + (float)standsAt.vy;
+		target->corners[target->numCorners * 3 + 2] = (float)corner.vz + (float)standsAt.vz;
+		target->numCorners++;
+	}
+
+	target->found = true;
+	target->shape = shape;
+	target->shapeNumber = ShadowShoot_ShapeNumber(shape);
+	target->polygon = polygonNumber;
+	target->moduleNumber = hit->ObMyModule ? hit->ObMyModule->m_index : -1;
+	target->behaviour = hit->ObStrategyBlock ? (int)hit->ObStrategyBlock->I_SBtype : -1;
+	target->flags = polygon->PolyFlags;
+	target->isPartOfAModel = section != 0;
+
+	if (!turned && shape->sh_surfacepolygons)
+	{
+		target->hasPlane = true;
+		ToyPlaneInWorld(shape->sh_surfacepolygons[polygonNumber], standsAt, target->plane);
+	}
+}
+
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 {
 	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
@@ -6602,7 +6740,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 			// PolygonWithinFrustum is the game's own test, the one it's about to make on this polygon anyway, so the report can't disagree
 			// with what really happens. That's why it's only asked on a report frame.
-			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber, &source };
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber, &source, shapePtr };
 
 			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, facts);
 			polygonsKept++;
@@ -6777,7 +6915,7 @@ static int ToyCollectUnseenModule(const MODULE *module)
 			}
 
 			// a wall has no owner, and this one isn't being drawn
-			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber, 0 };
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber, 0, shape };
 
 			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, facts);
 			polygonsAdded++;
