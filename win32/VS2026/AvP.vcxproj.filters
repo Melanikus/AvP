@@ -1322,6 +1322,9 @@
     <ClInclude Include="..\..\3dc\win95\chunk_type.hpp">
       <Filter>Header Files\chunks</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\win95\chunk_object_name.hpp">
+      <Filter>Header Files\chunks</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\menu_data.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>

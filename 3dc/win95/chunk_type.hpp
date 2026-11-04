@@ -1,13 +1,14 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an object's name can now be 63 characters long (it was 49), so the longest name in the stock levels,
-//   53 characters, fits
+//   53 characters, fits; its size now comes from chunk_object_name.hpp
 
 #ifndef _chnktype_hpp
 #define _chnktype_hpp 1
 
 #include "3dc.h"
 #include "list_tem.hpp"
+#include "chunk_object_name.hpp"
 
 struct ChunkVectorInt;
 struct ChunkVectorFloat;
@@ -209,7 +210,7 @@ struct ChunkObject
 
 	BOOL is_base_object;
 
-	char o_name[64]; // was 50; a stock level (hadleyshope.rif) has a 53-character object name
+	char o_name[OBJECT_NAME_BYTES]; // was 50; a stock level has a 53-character object name
 
 	int index_num; //this won't get changed by update_my_chunkobject
 
