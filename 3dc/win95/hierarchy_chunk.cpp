@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using its exact measured length, so it always fits; a level with a hierarchy section that
 //   has no name is refused
+//   counted lists are measured against their chunks before they're made
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -137,11 +138,11 @@ void Object_Hierarchy_Data_Chunk::fill_data_block (char *data_start)
 	}
 }
 
-Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * parent, const char * data_start, size_t /*ssize*/)
+Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * parent, const char * data_start, size_t size)
 : Chunk (parent, "OBJHIERD"), object(0), ob_name (0)
 {
-	num_extra_data=*(int*)data_start;
-	data_start+=4;
+	char const * const start = data_start;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 
 	if (num_extra_data)
 		extra_data = new int[num_extra_data];
@@ -285,9 +286,10 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 
 }
 
-Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"OBHALTSH")
 {
+	char const * const start = data;
 		
 	Shape_Set_Num=*(int*)data;
 	data+=4;
@@ -297,11 +299,19 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 	strcpy(Shape_Set_Name,data);
 	data+=(name_length+3)&~3;
 
-	int num_shapes=*(int*)data;
-	data+=4;
+	// two names, which take at least 4 bytes each
+	size_t const smallest_entry=8;
+	int num_shapes=ReadListCount(start,data,size,smallest_entry);
 
 	for(int i=0;i<num_shapes;i++)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if((size_t)(data - start) + smallest_entry > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
 		name_length=strlen(data)+1;
@@ -406,9 +416,10 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 }
 
 
-Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"HSETCOLL")
 {
+	char const * const start = data;
 		
 	Set_Collection_Num=*(int*)data;
 	data+=4;
@@ -418,8 +429,7 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 	strcpy(Set_Collection_Name,data);
 	data+=(name_length+3)&~3;
 
-	int list_length=*(int*)data;
-	data+=4;
+	int list_length=ReadListCount(start,data,size,sizeof(int));
 
 	for(int i=0;i<list_length;i++)
 	{
@@ -503,11 +513,11 @@ Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk
 
 }
 
-Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"HIDEGDIS")
 {
-	num_detail_levels=*(int*)data;
-	data+=sizeof(int);
+	char const * const start = data;
+	num_detail_levels=ReadListCount(start,data,size,sizeof(int));
 	
 	if(num_detail_levels)
 	{

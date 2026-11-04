@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it; the count of baked colours in a
 //   level file is checked against the size of its chunk
+//   counted lists are measured against their chunks before they're made
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -347,15 +348,15 @@ int Light_Scale_Chunk::ApplyRuntimeScale(int l)
 ////////////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("PLOBJLIT",Placed_Object_Light_Chunk)
 
-Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const /*size*/)
+Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const size)
 : Chunk (parent, "PLOBJLIT")
 {
+	char const * const start = data;
 	light=*(Placed_Object_Light_Data*) data;
 	data+=sizeof(Placed_Object_Light_Data);
 
-	num_extra_data=*(int*)data;
-	data+=4;
-	
+	num_extra_data=ReadListCount(start,data,size,sizeof(int));
+
 	if(num_extra_data)
 	{
 		extra_data=new int[num_extra_data];

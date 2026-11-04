@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a path's list of points is measured against its chunk before it's made
+
 #include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -18,6 +21,7 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent)
 AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPPATH2")
 {
+	char const * const start = data;
 	int name_length=strlen(data);
 	PathName=new char[name_length+1];
 	strcpy(PathName,data);
@@ -29,9 +33,8 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size
 	data+=4;
 	spare2=*(int*)data;
 	data+=4;
-	PathLength=*(int*)data;
-	data+=4;
-	
+	PathLength=ReadListCount(start,data,datasize,sizeof(ChunkPathPoint));
+
 	if(PathLength) Path=new ChunkPathPoint[PathLength];
 	else Path=0;
 	

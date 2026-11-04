@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
+//   a sequence starts with no frames, so one a broken list never reached is safe to free
 
 #ifndef _animobs_hpp
 #define _animobs_hpp 1
@@ -230,6 +231,8 @@ struct Object_Animation_Frame
 
 struct Object_Animation_Sequence
 {
+	// A file's list can stop early, and the sequences it didn't reach still get freed, so each starts with nothing to free.
+	Object_Animation_Sequence() : num_frames(0), frames(0) {}
 	~Object_Animation_Sequence() {delete[] frames;}
 
 	unsigned long num_frames;

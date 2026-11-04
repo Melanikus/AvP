@@ -58,6 +58,12 @@
 #include "hierplace.hpp"
 #include "strategy_chunk.hpp"
 #include "animation_chunk.hpp"
+#include "animation_objects.hpp"
+#include "chunk_sound.hpp"
+#include "chunk_sprites.hpp"
+#include "chunk_waypoint.hpp"
+#include "path_chunk.hpp"
+#include <new>
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
@@ -2529,6 +2535,228 @@ static void TestStrategies()
 	}
 }
 
+// 36. Counted lists. Each of these chunks holds a count from the file, and then that many items. A count too big asks for more memory than there is,
+// which ends the game, or reads on past the chunk. So each kind is tried with counts that can't be right. After the chunk come zeros and then a wall,
+// as the game's padded file has zeros after a level: a little past the end is safe, and a long way past it stops the test.
+static size_t const SpareAfterChunk = 256;
+
+typedef void (*MakesChunk)(Chunk_With_Children * parent, char const * data, size_t size);
+
+template <class Kind>
+static void MakeChunk(Chunk_With_Children * parent, char const * data, size_t size)
+{
+	new Kind(parent, data, size);
+}
+
+static bool ChunkAccepted(MakesChunk make, char const * bytes, size_t size)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+	memcpy(atTheWall, bytes, size);
+	memset(atTheWall + size, 0, SpareAfterChunk);
+
+	make(&file, atTheWall, size);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void PutNumber(char * bytes, size_t at, int number)
+{
+	memcpy(bytes + at, &number, sizeof(number));
+}
+
+// Counts that can't be right, for a chunk with room for exactly two items: past the end of what a number can be, one that wraps round to something small
+// when it's multiplied by the size of an item, one that asks for nearly 2 GB, which is more memory than there is, one more than there's room for, and one
+// that reads far past the wall.
+static void TestBadCounts(MakesChunk make, char * bytes, size_t size, size_t countAt, size_t itemBytes)
+{
+	int const badCounts[] = { -1, 0x7fffffff, (int)(0x100000000ULL / itemBytes) + 1, (int)(0x7ffff000UL / itemBytes), 3, 4000 };
+
+	for (size_t i = 0; i < sizeof(badCounts) / sizeof(badCounts[0]); i++)
+	{
+		PutNumber(bytes, countAt, badCounts[i]);
+		Check(!ChunkAccepted(make, bytes, size), "a count that doesn't fit its chunk is refused");
+	}
+}
+
+static void TestCountedLists()
+{
+	puts("36. counted lists");
+
+	alignas(int) static char bytes[4096];
+
+	// where each count is, with any name before it empty, and what each item takes at the least
+	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; };
+	CountedRow const rows[] =
+	{
+		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
+		{ MakeChunk<VModule_Array_Chunk>,                     0,  4 * sizeof(int),              "a module's list of what it can see is accepted" },
+		{ MakeChunk<Adjacent_Module_Entry_Points_Chunk>,      0,  20,                           "a module's list of neighbours is accepted" },
+		{ MakeChunk<Object_Track_Chunk2>,                     0,  sizeof(ChunkTrackSection),    "a track with sections is accepted" },
+		{ MakeChunk<Object_Alternate_Locations_Chunk>,        8,  sizeof(AltObjectLocation),    "an object's other places are accepted" },
+		{ MakeChunk<Object_Animation_Sequence_Frame_Chunk>,   40, sizeof(int),                  "an animation frame's extra numbers are accepted" },
+		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,  12, sizeof(int),                  "a sequence header's extra numbers are accepted" },
+		{ MakeChunk<Object_Animation_All_Sequence_Chunk>,     0,  4 * sizeof(int),              "a list of sequences is accepted" },
+		{ MakeChunk<Object_Hierarchy_Data_Chunk>,             0,  sizeof(int),                  "a hierarchy's extra numbers are accepted" },
+		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, 8, 8,                          "a set of alternate shapes is accepted" },
+		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,    8,  sizeof(int),                  "a collection of shape sets is accepted" },
+		{ MakeChunk<Hierarchy_Degradation_Distance_Chunk>,    0,  sizeof(int),                  "a list of detail levels is accepted" },
+		{ MakeChunk<Sprite_Bitmap_Scale_Chunk>,               0,  sizeof(float),                "a sprite's scales are accepted" },
+		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted" },
+		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted" },
+		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
+		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		CountedRow const & row = rows[i];
+		size_t const size = row.countAt + sizeof(int) + 2 * row.itemBytes;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, row.countAt, 2);
+		Check(ChunkAccepted(row.make, bytes, size), row.good);
+
+		TestBadCounts(row.make, bytes, size, row.countAt, row.itemBytes);
+
+		// The count is 0, which is always fine, so it's only the missing room that can refuse this one.
+		PutNumber(bytes, row.countAt, 0);
+		Check(!ChunkAccepted(row.make, bytes, row.countAt + sizeof(int) - 1), "a chunk with no room for its count is refused");
+	}
+
+	// A sprite's frames are held in three lists, one inside the next. Its six numbers come first, with the three counts in the middle of them. The
+	// 97612894s are the smallest count that wraps round to nearly nothing when it's multiplied by a frame's 44 bytes, so only the step that measures that
+	// count can catch them.
+	{
+		size_t const numbersBytes = 6 * sizeof(int);
+		size_t const frameBytes = sizeof(Frame);
+		int const wraps = 97612894;
+
+		struct SpriteRow { int yaw, pitch, frames; size_t framesInChunk; bool good; char const * says; };
+		SpriteRow const sprites[] =
+		{
+			{ 2,     2,     1, 4, true,  "a sprite's frames fit its chunk" },
+			{ 0,     0,     0, 0, true,  "a sprite with no frames at all is accepted" },
+			{ 2,     2,     1, 3, false, "a sprite one frame short is refused" },
+			{ -1,    1,     1, 1, false, "a sprite with a negative count of yaws is refused" },
+			{ 1,     -1,    1, 1, false, "a sprite with a negative count of pitches is refused" },
+			{ 1,     1,     -1, 1, false, "a sprite with a negative count of frames is refused" },
+			{ wraps, 1,     1, 1, false, "a count of yaws that wraps round is refused" },
+			{ 1,     wraps, 1, 1, false, "a count of pitches that wraps round is refused" },
+			{ 1,     1,     wraps, 1, false, "a count of frames that wraps round is refused" },
+			{ 1000,  1,     0, 1, false, "a thousand lists with no frames in them are refused" },
+		};
+
+		for (size_t i = 0; i < sizeof(sprites) / sizeof(sprites[0]); i++)
+		{
+			memset(bytes, 0, sizeof(bytes));
+			PutNumber(bytes, 4, sprites[i].yaw);
+			PutNumber(bytes, 8, sprites[i].pitch);
+			PutNumber(bytes, 12, sprites[i].frames);
+
+			bool const accepted = ChunkAccepted(MakeChunk<Sprite_Action_Chunk>, bytes, numbersBytes + sprites[i].framesInChunk * frameBytes);
+			Check(accepted == sprites[i].good, sprites[i].says);
+		}
+
+		memset(bytes, 0, sizeof(bytes));
+		Check(!ChunkAccepted(MakeChunk<Sprite_Action_Chunk>, bytes, numbersBytes - 1), "a sprite with no room for its numbers is refused");
+	}
+
+	// Each sequence starts with its own count of frames, and its frames follow it.
+	{
+		size_t const sequenceBytes = 4 * sizeof(int);
+		size_t const frameBytes = sizeof(Object_Animation_Frame);
+		size_t const firstFramesAt = sizeof(int);
+		MakesChunk const make = MakeChunk<Object_Animation_All_Sequence_Chunk>;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, firstFramesAt, 2);
+		Check(ChunkAccepted(make, bytes, sizeof(int) + sequenceBytes + 2 * frameBytes), "a sequence with its frames is accepted");
+
+		TestBadCounts(make, bytes, sizeof(int) + sequenceBytes + 2 * frameBytes, firstFramesAt, frameBytes);
+
+		// Four sequences fit by their count, until the first one's frame uses up the room the second needed.
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 4);
+		PutNumber(bytes, firstFramesAt, 1);
+		Check(!ChunkAccepted(make, bytes, sizeof(int) + 4 * sequenceBytes), "sequences that run out of room are refused");
+	}
+
+	// Three entries of two names fit by their count, until the first name is long enough to use up the room.
+	{
+		size_t const firstNameAt = 12;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 8, 3);
+		memset(bytes + firstNameAt, 'x', 15);
+		Check(!ChunkAccepted(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, bytes, firstNameAt + 3 * 8), "shape sets that run out of room are refused");
+	}
+
+	// A waypoint is 44 bytes, then a count of links and the links, then a count of modules and those. The chunk's own count comes before all of them.
+	{
+		size_t const waypointBytes = 3 * sizeof(ChunkVectorInt) + 4 * sizeof(int);
+		size_t const linkBytes = sizeof(WaypointLink);
+		size_t const smallestModule = 8;
+		size_t const linksAt = sizeof(int) + 44;
+		size_t const modulesAt = linksAt + sizeof(int);
+		MakesChunk const make = MakeChunk<Module_Waypoint_Chunk>;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, linksAt, 2);
+		Check(ChunkAccepted(make, bytes, sizeof(int) + waypointBytes + 2 * linkBytes), "a waypoint with links is accepted");
+		TestBadCounts(make, bytes, sizeof(int) + waypointBytes + 2 * linkBytes, linksAt, linkBytes);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, modulesAt, 2);
+		Check(ChunkAccepted(make, bytes, sizeof(int) + waypointBytes + 2 * smallestModule), "a waypoint with modules is accepted");
+		TestBadCounts(make, bytes, sizeof(int) + waypointBytes + 2 * smallestModule, modulesAt, smallestModule);
+
+		// Ten waypoints fit by their count, until the first one's links use up the room all the others needed. Each waypoint after that would read its 44
+		// bytes further on, so with this many they reach the wall unless the list stops.
+		int const manyWaypoints = 10;
+		size_t const allWaypoints = sizeof(int) + manyWaypoints * waypointBytes;
+		int const links = (int)((allWaypoints - modulesAt - sizeof(int)) / linkBytes);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, manyWaypoints);
+		PutNumber(bytes, linksAt, links);
+		Check(!ChunkAccepted(make, bytes, allWaypoints), "waypoints that run out of room are refused");
+
+		// Three modules fit by their count, until the first name is long enough to use up the room.
+		size_t const firstModuleAt = modulesAt + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, modulesAt, 3);
+		memset(bytes + firstModuleAt, 'x', 15);
+		Check(!ChunkAccepted(make, bytes, firstModuleAt + 3 * smallestModule), "modules that run out of room are refused");
+	}
+
+	// When a list stops early, the items it never reached are still freed, so each has to start with nothing to free. Each is made here on top of dirty
+	// bytes, so that "nothing" can't be luck.
+	{
+		alignas(Object_Animation_Sequence) char sequencePlace[sizeof(Object_Animation_Sequence)];
+		memset(sequencePlace, 0xee, sizeof(sequencePlace));
+		Object_Animation_Sequence const * sequence = new (sequencePlace) Object_Animation_Sequence;
+		Check(sequence->frames == 0 && sequence->num_frames == 0, "a sequence starts with no frames");
+
+		alignas(ModuleLink) char linkPlace[sizeof(ModuleLink)];
+		memset(linkPlace, 0xee, sizeof(linkPlace));
+		ModuleLink const * link = new (linkPlace) ModuleLink;
+		Check(link->module_name == 0, "a module link starts with no name");
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -2561,6 +2789,7 @@ int main()
 	TestPlacedHierarchies();
 	TestModuleBoxes();
 	TestStrategies();
+	TestCountedLists();
 
 	if (checksFailed)
 	{

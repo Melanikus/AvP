@@ -5,6 +5,7 @@
 //   removed a group of helper macros that nothing used
 //   added ChildChunkFits, which checks that a child chunk's size from the file can be real
 //   added CountFitsChunk and NameLengthInChunk, which check a count and a name from the file against the room left in a chunk
+//   added ReadListCount, which reads a list's count and measures it against its chunk
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
@@ -375,6 +376,32 @@ inline bool ChildChunkFits(char const * child, char const * start, signed int to
 inline bool CountFitsChunk(int count, size_t item_bytes, size_t bytes_left)
 {
 	return count >= 0 && (unsigned long long) count * item_bytes <= bytes_left;
+}
+
+// Reads a list's count from the file, and steps past it. A count sizes a list, so it's measured against what's left of the chunk before anything is
+// made: asking for more memory than there is ends the game, and a count too big reads past the end. start is where the reading began, size
+// how many bytes it can use, and data where the count is. If the count is wrong, the level is refused, and this gives back 0, so the chunk goes on with an
+// empty list. A real count always fits, because the items it counts are in the chunk, so no level that's whole can be refused by this.
+inline int ReadListCount(char const * start, char const * & data, size_t size, size_t item_bytes)
+{
+	size_t const used = data - start;
+
+	if (used + sizeof(int) > size)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	int const count = *(int *)data;
+	data += sizeof(int);
+
+	if (!CountFitsChunk(count, item_bytes, size - used - sizeof(int)))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	return count;
 }
 
 // How long is the name that starts here? A name in a level file ends at a zero byte, and strlen reads until it finds one, so a name with no

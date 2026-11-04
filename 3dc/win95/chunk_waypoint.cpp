@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using its exact measured length, so it always fits
 //   a module's master and slave chunks are only made inside a module's data
+//   counted lists are measured against their chunks before they're made
 
 #include "chunk_waypoint.hpp"
 
@@ -30,12 +31,15 @@ ModuleLink::~ModuleLink()
 
 RIF_IMPLEMENT_DYNCREATE("WAYPOINT",Module_Waypoint_Chunk)
 
-Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
+Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"WAYPOINT")
 {
-	NumWaypoints=*(int*)data;
-	data+=4;
-	
+	char const * const start = data;
+	// three corners, two numbers, and two counts: the least a waypoint can take
+	size_t const smallest_waypoint=3*sizeof(ChunkVectorInt)+4*sizeof(int);
+
+	NumWaypoints=ReadListCount(start,data,size,smallest_waypoint);
+
 	NumGroundWaypoints=0;
 	NumAlienWaypoints=0;
 	AlienWaypoints=0;
@@ -51,6 +55,13 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 		int first_ground_waypoint=-1;
 		for(int i=0;i<NumWaypoints;i++)
 		{
+			// a waypoint's own lists can use up the room that the count was measured against
+			if((size_t)(data - start) + smallest_waypoint > size)
+			{
+				Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				break;
+			}
+
 			ChunkWaypoint* cw=&Waypoints[i];
 			cw->index=i;
 
@@ -66,8 +77,7 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			cw->spare2=*(int*)data;
 			data+=4;	
 			
-			cw->NumWPLinks=*(int*)data;
-			data+=4;
+			cw->NumWPLinks=ReadListCount(start,data,size,sizeof(WaypointLink));
 
 			if(cw->NumWPLinks)
 				cw->WayLinks=new WaypointLink[cw->NumWPLinks];
@@ -80,8 +90,10 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 				data+=sizeof(WaypointLink);
 			}
 				
-			cw->NumModLinks=*(int*)data;
-			data+=4;
+			// a module's name takes at least 4 bytes, and its flags 4
+			size_t const smallest_link=8;
+
+			cw->NumModLinks=ReadListCount(start,data,size,smallest_link);
 
 			if(cw->NumModLinks)
 				cw->ModLinks=new ModuleLink[cw->NumModLinks];
@@ -90,6 +102,13 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 
 			for(int j=0;j<cw->NumModLinks;j++)
 			{
+				// names can be longer than the smallest, so they can use up the room that the count was measured against
+				if((size_t)(data - start) + smallest_link > size)
+				{
+					Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+					break;
+				}
+
 				ModuleLink* ml=&cw->ModLinks[j];
 				ml->module_name=new char[strlen(data)+1];
 				strcpy(ml->module_name,data);

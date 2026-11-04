@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
+//   counted lists are measured against their chunks before they're made
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -227,9 +228,10 @@ size_t Sound_Object_Extra_Name_Chunk::size_chunk()
 /////////////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("INDSOUND",Indexed_Sound_Chunk)
 
-Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char* data,const size_t)
+Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char* data,const size_t size)
 :Chunk(parent,"INDSOUND")
 {
+	char const * const start = data;
 	CHUNK_EXTRACT(index,int)
 	CHUNK_EXTRACT_STRING(wav_name)
 	CHUNK_EXTRACT(inner_range,int)
@@ -237,7 +239,21 @@ Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char*
 	CHUNK_EXTRACT(max_volume,int)
 	CHUNK_EXTRACT(pitch,int)
 	CHUNK_EXTRACT(flags,int)
-	CHUNK_EXTRACT_ARRAY(num_extra_data,extra_data,int)
+	num_extra_data=ReadListCount(start,data,size,sizeof(int));
+
+	if(num_extra_data)
+	{
+		extra_data=new int[num_extra_data];
+
+		for(int i=0;i<num_extra_data;i++)
+		{
+			CHUNK_EXTRACT(extra_data[i],int)
+		}
+	}
+	else
+	{
+		extra_data=0;
+	}
 }
 
 Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent)

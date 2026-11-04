@@ -15,32 +15,6 @@ RIF_IMPLEMENT_DYNCREATE("AVPSTRAT",AVP_Strategy_Chunk)
 // longest set of them is a good deal shorter than this.
 static size_t const StrategySpareBytes = 512;
 
-// Reads a list's count, and steps past it. A count comes from the level file and sizes a list, so it's measured against what's left of the
-// strategy before anything is made: asking for more memory than there is ends the game, and a count too big reads past the end. start is
-// where the strategy begins, size how big it is, and data where the count is. If it's wrong, the level is refused, and this gives back 0, so the
-// strategy goes on with an empty list, which is safe for everything after it.
-static int ReadListCount(const char * start, const char * & data, size_t size, size_t item_bytes)
-{
-	size_t const used = data - start;
-
-	if (used + sizeof(int) > size)
-	{
-		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-		return 0;
-	}
-
-	int const count = *(int *)data;
-	data += sizeof(int);
-
-	if (!CountFitsChunk(count, item_bytes, size - used - sizeof(int)))
-	{
-		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-		return 0;
-	}
-
-	return count;
-}
-
 // Two numbers, then a strategy, whose first number says what kind it is. There are about 30 kinds, and most read a fixed set of numbers with no
 // look at the chunk's size. So each reads from a copy with spare bytes after it, and whatever it reads stays in the copy. Each kind knows
 // how big it should be, so afterwards it has to be exactly the size of its chunk. All 11368 of these in the game's own levels are.

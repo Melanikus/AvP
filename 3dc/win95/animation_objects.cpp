@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
+//   counted lists are measured against their chunks before they're made
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -57,9 +58,10 @@ void Object_Animation_Sequence_Frame_Chunk::fill_data_block (char *data_start)
 	}
 }
 
-Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Chunk_With_Children * parent,const char *data_start, size_t)
+Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Chunk_With_Children * parent,const char *data_start, size_t size)
 : Chunk (parent, "OBASEQFR")
 {
+	char const * const start = data_start;
 	orientation.x = *((float *) data_start);
 	data_start += 4;
 	orientation.y = *((float *) data_start);
@@ -85,8 +87,7 @@ Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Ch
 	flags = *((int *) data_start);
 	data_start += 4;
 	
-	num_extra_data=*(int*) data_start;
-	data_start+=4;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 	
 	if(num_extra_data)
 		extra_data=new int[num_extra_data];
@@ -158,9 +159,10 @@ Object_Animation_Sequence_Header_Chunk::~Object_Animation_Sequence_Header_Chunk(
 		delete[] extra_data;
 }
 
-Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (Chunk_With_Children * parent,const char * data_start, size_t)
+Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (Chunk_With_Children * parent,const char * data_start, size_t size)
 : Chunk (parent, "OBASEQHD"), sequence_name (0)
 {
+	char const * const start = data_start;
 	num_frames = *((int *) data_start);
 	data_start += 4;
 
@@ -170,8 +172,7 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 	sub_sequence_number = *((int *) data_start);
 	data_start += 4;
 
-	num_extra_data=*(int*) data_start;
-	data_start+=4;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 
 	if(num_extra_data)
 		extra_data=new int[num_extra_data];
@@ -387,19 +388,28 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 	sequences=0;
 }
 
-Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_With_Children * const parent,const char * data, const size_t)
+Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_With_Children * const parent,const char * data, const size_t size)
 :Chunk(parent,"OBANALLS")
 {
-	num_sequences=*(int*)data;
-	data+=4;
+	char const * const start = data;
+	size_t const sequence_bytes=4*sizeof(int);
 
-	if(num_sequences) sequences=new Object_Animation_Sequence[num_sequences];	
+	num_sequences=ReadListCount(start,data,size,sequence_bytes);
+
+	if(num_sequences) sequences=new Object_Animation_Sequence[num_sequences];
 	else sequences=0;
 
 	for(int i=0;i<num_sequences;i++)
 	{
+		// the lists of frames can use up the room that the count of sequences was measured against
+		if((size_t)(data - start) + sequence_bytes > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		Object_Animation_Sequence* seq=&sequences[i];
-		seq->num_frames=*(int*)data;
+		int const frames_in_file=*(int*)data;
 		data+=4;
 		seq->sequence_number=*(int*)data;
 		data+=4;
@@ -407,6 +417,14 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 		data+=4;
 		seq->sequence_time=*(int*)data;
 		data+=4;
+
+		if(!CountFitsChunk(frames_in_file,sizeof(Object_Animation_Frame),size-(data-start)))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		seq->num_frames=frames_in_file;
 
 		if(seq->num_frames) seq->frames=new Object_Animation_Frame[seq->num_frames];
 		else seq->frames=0;

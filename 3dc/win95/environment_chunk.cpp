@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
+//   counted lists are measured against their chunks before they're made
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -243,13 +244,14 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 }
 
 
-Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"RANTEXID")
 {
+	char const * const start = data;
 	CHUNK_EXTRACT_STRING(name);
 	
-	int num_types,type;		
-	CHUNK_EXTRACT(num_types,int);
+	int type;
+	int const num_types=ReadListCount(start,data,size,sizeof(int));
 	for(int i=0;i<num_types;i++)
 	{
 		CHUNK_EXTRACT(type,int);

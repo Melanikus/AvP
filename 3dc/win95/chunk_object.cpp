@@ -4,6 +4,7 @@
 //   copied using their exact measured length, so they always fit; code only the level editor used was removed
 //   a child chunk whose size cannot be real is refused
 //   the copy of an object's name moved to chunk_object_name.hpp
+//   a module's lists and an object's track and alternate places are measured against their chunks before they're made
 //   an object's header is only made inside an object, because it writes through its parent
 
 #include <string>
@@ -708,13 +709,14 @@ size_t VModule_Array_Chunk::size_chunk()
 		
 }
 
-VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const char * vmdata, size_t /*vmsize*/)
+VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const char * vmdata, size_t vmsize)
 : Chunk (parent, "VMDARRAY")
 {
-	num_array_items = *((int *) vmdata);
+	char const * const start = vmdata;
+	size_t const item_bytes = 4 * sizeof(int);
 
-	vmdata += 4;
-	
+	num_array_items = ReadListCount (start, vmdata, vmsize, item_bytes);
+
 	vmod_array = new VMod_Arr_Item [num_array_items];
 
 	for (int i=0; i<num_array_items; i++)
@@ -782,13 +784,13 @@ size_t Adjacent_Module_Entry_Points_Chunk::size_chunk()
 	return(chunk_size);
 }
 
-Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_With_Children * parent, const char * data, size_t /*size*/)
+Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_With_Children * parent, const char * data, size_t size)
 : Chunk (parent, "ADJMDLEP")
 {
-	int num_array_items = *((int *) data);
+	char const * const start = data;
+	size_t const item_bytes = 2 * sizeof(int) + sizeof(ChunkVectorInt);
+	int num_array_items = ReadListCount (start, data, size, item_bytes);
 
-	data += 4;
-	
 	for (int i=0; i<num_array_items; i++)
 	{
 		Adjacent_Module am;
@@ -930,7 +932,7 @@ Object_Track_Chunk2::Object_Track_Chunk2(Object_Chunk * parent)
 
 Object_Track_Chunk2::~Object_Track_Chunk2()
 {
-	if(sections) delete sections;
+	delete[] sections;
 }
 
 void Object_Track_Chunk2::fill_data_block (char *data_start)
@@ -967,13 +969,13 @@ size_t Object_Track_Chunk2::size_chunk ()
 	return(chunk_size);
 }
 
-Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const char * data, size_t /*size*/)
+Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const char * data, size_t size)
 : Chunk (parent, "OBJTRAK2")
 {
 	int i;
+	char const * const start = data;
 
-	num_sections=*(int*)data;
-	data+=4;
+	num_sections=ReadListCount(start,data,size,sizeof(ChunkTrackSection));
 
 	if(num_sections)
 		sections=new ChunkTrackSection[num_sections];
@@ -1088,16 +1090,17 @@ size_t Object_Track_Sound_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("ALTLOCAT",Object_Alternate_Locations_Chunk)
 
-Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"ALTLOCAT")
 {
+	char const * const start = data;
+
 	group=*(int*) data;
 	data+=4;
 	spare2=*(int*) data;
 	data+=4;
-	
-	num_locations=*(int*) data;
-	data+=4;
+
+	num_locations=ReadListCount(start,data,size,sizeof(AltObjectLocation));
 
 	if(num_locations)
 		locations=new AltObjectLocation[num_locations];
