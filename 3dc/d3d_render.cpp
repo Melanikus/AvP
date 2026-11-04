@@ -3534,6 +3534,7 @@ extern void NewOnScreenMessage(char *messagePtr);
 int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
+int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
 int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 6;       // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
@@ -4425,8 +4426,12 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, IDire
 	device->SetRenderState(D3DRS_STENCILREF, 0);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+
+	// Light is added in proportion to how much room the pixel has left, so it approaches white and never reaches a hard limit.
+	// Plain adding would clip, and then a place lit by one flare would look the same as one lit by two, and the shadow of the
+	// other flare would vanish.
 	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_INVDESTCOLOR);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
 	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);

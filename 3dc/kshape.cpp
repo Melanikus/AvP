@@ -5488,6 +5488,7 @@ extern int DrawingAReflection;
 extern bool gunLayer;
 extern int GlobalFrameCounter;
 extern int ToyShadowsFlaresByPixel;
+extern int ToyShadowsFlareCap;
 
 static int toyMostLightsOnAnObject = 0;
 static int toyMostLightsInAFrame = 0;
@@ -5745,6 +5746,17 @@ int ToyShadows_PickLights(float *lights, int most)
 		if (ToyShadowsFlaresByPixel && steady[i].order < 0)
 		{
 			lights[i * 8 + 7] = 2.0f;
+
+			// A flare's brightness is its seconds left divided by 4, from 4 down to nothing over 16 seconds, with a flicker on
+			// top. Used as it stands, two flares thrown a few seconds apart differ so much that the older one's shadow is soon
+			// lost. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6 seconds, and then fades out.
+			float const cap = (float)ToyShadowsFlareCap / 100.0f;
+			float const flareBright = (float)light->LightBright / 65536.0f;
+			float const held = (flareBright < cap) ? flareBright : cap;
+
+			lights[i * 8 + 4] = held * ToyFraction(light->RedScale);
+			lights[i * 8 + 5] = held * ToyFraction(light->GreenScale);
+			lights[i * 8 + 6] = held * ToyFraction(light->BlueScale);
 		}
 
 		toyChosenLastFrame[i] = steady[i].light;
