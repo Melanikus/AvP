@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
 //   text is copied using its exact measured length, so it always fits
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a shape records how long each of its texture coordinate lists is
 
 #include <stdlib.h>
 #include <string>
@@ -2665,6 +2667,15 @@ BOOL copy_to_shapeheader(
 			uv_imnums[i] = -1;
 			shphd->sh_textures[i] = 0;
 		}
+
+		// nothing else remembers how long these lists are once the shape is built
+		shphd->sh_uvlistlengths = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->num_uvs);
+
+		if (shphd->sh_uvlistlengths)
+		{
+			memset(shphd->sh_uvlistlengths, 0, sizeof(int) * cshp_ptr->num_uvs);
+			shphd->sh_numuvlists = cshp_ptr->num_uvs;
+		}
 	}
 
 	shphd->sh_surfacetangents = (SurfaceTangent *) PoolAllocateMem(sizeof(SurfaceTangent) * shphd->numitems);
@@ -2694,6 +2705,11 @@ BOOL copy_to_shapeheader(
 				uv_imnums[item_list[i * 9 + 3] >> 16] = local_tex_index_nos[texno];
 				item_list[i * 9 + 3] += local_tex_index_nos[texno];
 				shphd->sh_textures[UVIndex] = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->uv_list[UVIndex].num_verts * 2);
+
+				if (shphd->sh_uvlistlengths)
+				{
+					shphd->sh_uvlistlengths[UVIndex] = cshp_ptr->uv_list[UVIndex].num_verts;
+				}
 
 				for (j = 0; j < cshp_ptr->uv_list[UVIndex].num_verts; j++)
 				{

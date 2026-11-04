@@ -226,6 +226,10 @@ typedef struct shapeheader
 	/*a number no other list has, or 0 if this shape has no list: see SurfaceNormals_PrepareShape*/
 	unsigned int sh_surfacelistnumber;
 
+	/*how many lists sh_textures has, and how many corners each holds. Both are zero if this shape doesn't say: see static_level.cpp*/
+	int sh_numuvlists;
+	int *sh_uvlistlengths;
+
 } SHAPEHEADER;
 
 
