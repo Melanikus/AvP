@@ -42,9 +42,6 @@
     <ClCompile Include="..\..\3dc\video\BinkPlayback.cpp">
       <Filter>Video</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\video\TheoraPlayback.cpp">
-      <Filter>Video</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\video\SmackerPlayback.cpp">
       <Filter>Video</Filter>
     </ClCompile>
@@ -67,9 +64,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\FileStream.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\Fmv_stubbed.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\FmvCutscenes.cpp">
@@ -220,9 +214,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\win95\win_func.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\win95\zsp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp">
@@ -740,9 +731,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\3dc\video\TheoraPlayback.h">
-      <Filter>Video</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h">
       <Filter>Video</Filter>
     </ClInclude>
@@ -825,9 +813,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\win95\shpanim.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\win95\zsp.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\include\3dc.h">
@@ -1037,16 +1022,10 @@
     <ClInclude Include="..\..\3dc\avp\win95\d3d_hud.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\dbdefs.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\gameplat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\gammacontrol.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\win95\heap_tem.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\hierplace.hpp">
@@ -1107,9 +1086,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\vision.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\avp\support\command.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\support\console_batch.hpp">

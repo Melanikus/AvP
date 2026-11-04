@@ -375,7 +375,6 @@
     <ClCompile Include="..\..\3dc\FileStream.cpp" />
     <ClCompile Include="..\..\3dc\FmvCutscenes.cpp" />
     <ClCompile Include="..\..\3dc\FmvPlayback.cpp" />
-    <ClCompile Include="..\..\3dc\Fmv_stubbed.cpp" />
     <ClCompile Include="..\..\3dc\Fonts.cpp" />
     <ClCompile Include="..\..\3dc\frustum.cpp" />
     <ClCompile Include="..\..\3dc\IndexBuffer.cpp" />
@@ -408,7 +407,6 @@
     <ClCompile Include="..\..\3dc\VertexDeclaration.cpp" />
     <ClCompile Include="..\..\3dc\video\BinkPlayback.cpp" />
     <ClCompile Include="..\..\3dc\video\SmackerPlayback.cpp" />
-    <ClCompile Include="..\..\3dc\video\TheoraPlayback.cpp" />
     <ClCompile Include="..\..\3dc\VorbisPlayer.cpp" />
     <ClCompile Include="..\..\3dc\win95\animation_chunk.cpp" />
     <ClCompile Include="..\..\3dc\win95\animation_objects.cpp" />
@@ -446,7 +444,6 @@
     <ClCompile Include="..\..\3dc\win95\plspecfn.cpp" />
     <ClCompile Include="..\..\3dc\win95\videomodes.cpp" />
     <ClCompile Include="..\..\3dc\win95\win_func.cpp" />
-    <ClCompile Include="..\..\3dc\win95\zsp.cpp" />
     <ClCompile Include="..\d3_func.cpp" />
     <ClCompile Include="..\di_func.cpp" />
   </ItemGroup>
@@ -533,7 +530,6 @@
     <ClInclude Include="..\..\3dc\avp\sfx.h" />
     <ClInclude Include="..\..\3dc\avp\status_panel.h" />
     <ClInclude Include="..\..\3dc\avp\strategy_def.h" />
-    <ClInclude Include="..\..\3dc\avp\support\command.hpp" />
     <ClInclude Include="..\..\3dc\avp\support\console_batch.hpp" />
     <ClInclude Include="..\..\3dc\avp\support\console_bind.hpp" />
     <ClInclude Include="..\..\3dc\avp\support\coord_strategies.hpp" />
@@ -558,7 +554,6 @@
     <ClInclude Include="..\..\3dc\avp\win95\avp_chunk.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\cheat.h" />
     <ClInclude Include="..\..\3dc\avp\win95\d3d_hud.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\dbdefs.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\env_info.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\intro.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\menus.h" />
@@ -580,7 +575,6 @@
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\text_report_gadget.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\gameplat.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gammacontrol.h" />
-    <ClInclude Include="..\..\3dc\avp\win95\heap_tem.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\hierplace.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\hud_gfx.h" />
     <ClInclude Include="..\..\3dc\avp\win95\hud_layout.h" />
@@ -610,7 +604,6 @@
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />
-    <ClInclude Include="..\..\3dc\video\TheoraPlayback.h" />
     <ClInclude Include="..\..\3dc\win95\animation_chunk.hpp" />
     <ClInclude Include="..\..\3dc\win95\animation_objects.hpp" />
     <ClInclude Include="..\..\3dc\win95\avp_string.hpp" />
@@ -652,7 +645,6 @@
     <ClInclude Include="..\..\3dc\win95\plat_shp.h" />
     <ClInclude Include="..\..\3dc\win95\showcmds.h" />
     <ClInclude Include="..\..\3dc\win95\shpanim.h" />
-    <ClInclude Include="..\..\3dc\win95\zsp.hpp" />
     <ClInclude Include="..\d3_func.h" />
     <ClInclude Include="..\resource.h" />
   </ItemGroup>
