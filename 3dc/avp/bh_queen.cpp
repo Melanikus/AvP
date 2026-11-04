@@ -6,6 +6,8 @@
 //   one set to not playing when she is made, where the attack was set twice
 //   a Queen left without her two animations by a save file is left out of the game
 //   her hand is checked before use; a game saved while she carries something no longer indexes the list with -1
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -19,6 +21,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pvisible.h"
@@ -5110,7 +5113,7 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

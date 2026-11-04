@@ -6,6 +6,9 @@
 //   byte
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   leaving the page of games found closes what the search has open on the network
+//   the address from the command line is copied with a size limit too
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -33,6 +36,7 @@
 #include "menu_data.h"
 #include "psnd.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "networking.h"
 #include "utilities.h"
 #include "tables.h"
@@ -5210,6 +5214,13 @@ static void GetHeaderInfoForSaveSlot(SAVE_SLOT_HEADER* save_slot, const char* fi
 		strncmp(block.AvP_Save_String,"AVPSAVE0",8))
 	{
 		//no good.
+		return;
+	}
+
+	// These three pick a level, a table entry and a line of text, so they have to be ones the game can write. A file that fails looks like
+	// an empty slot.
+	if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))
+	{
 		return;
 	}
 

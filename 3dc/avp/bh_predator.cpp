@@ -7,6 +7,7 @@ Source file for predator AI
 //   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
 //   a save file can no longer give a predator a weapon that does not exist
 //   the elevation animation and the pistol muzzle are checked before use, because either can be missing
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -14,6 +15,7 @@ Source file for predator AI
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -7145,7 +7147,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	predatorStatusPointer->Selected_Weapon = GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

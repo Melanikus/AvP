@@ -3,6 +3,7 @@ so player.c is looking a bit bare at the moment. */
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save with no model for the weapon leaves the player with the one they have
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 #include "3dc.h"
 #include "module.h"
@@ -14,6 +15,7 @@ so player.c is looking a bit bare at the moment. */
 #include "inventory.h"
 #include "gameplat.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "weapons.h"
@@ -2099,7 +2101,7 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	GrenadeLauncherData = block->GrenadeLauncherData;
 
 	//strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

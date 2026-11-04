@@ -6,6 +6,7 @@
 //   the gun's tilt is limited with min and max
 //   a sentry gun left without its animations by a save file is left out of the game
 //   the gun part is checked before use, because a save file can leave it out
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 #include "3dc.h"
 #include "inline.h"
@@ -15,6 +16,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "weapons.h"
 #include "compiled_shapes.h"
@@ -1644,7 +1646,7 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

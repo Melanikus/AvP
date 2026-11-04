@@ -9,6 +9,8 @@
 //   a Xenoborg placed outside every module is left out, instead of crashing
 //   a Xenoborg left without its animations by a save file is left out of the game
 //   the neck is checked before use, because a save file can leave it out
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -21,6 +23,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pvisible.h"
@@ -5185,7 +5188,7 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 	xenoStatusPointer->Target = FindSBWithName(xenoStatusPointer->Target_SBname);
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

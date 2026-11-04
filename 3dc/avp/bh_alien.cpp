@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -8,6 +11,7 @@
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "load_shape.h"
@@ -2382,7 +2386,7 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//get the alien's attack from the attack code
 	alienStatusPointer->current_attack = GetThisAttack_FromUniqueCode(block->currentAttackCode);
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

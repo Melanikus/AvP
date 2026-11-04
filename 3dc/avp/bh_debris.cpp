@@ -3,12 +3,14 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   debris in a save that cannot get a dynamics block is left out, instead of crashing
 //   debris that a save file leaves without a model is left out of the game
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "load_shape.h"
@@ -1648,7 +1650,7 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Bounce_Sound)
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -1820,7 +1822,7 @@ void LoadStrategy_Debris(/*SAVE_BLOCK_HEADER*/SAVE_BLOCK_STRATEGY_HEADER* header
 	}
 
 //strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 }

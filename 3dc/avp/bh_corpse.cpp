@@ -4,6 +4,7 @@
 //   a corpse in a save that cannot get a dynamics block is left out, instead of crashing
 //   a corpse that a save file leaves without a model is left out of the game
 //   a corpse with no plain model to trim to is left as it is
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 
 #include "inline.h"
@@ -14,6 +15,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "pfarlocs.h"
@@ -964,7 +966,7 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 					 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

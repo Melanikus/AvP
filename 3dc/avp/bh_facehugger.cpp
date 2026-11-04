@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /* Patrick 9/7/97 ----------------------------------------------------
   Source file for Facehugger AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -9,6 +12,7 @@
 #include "gamedef.h"
 #include "game_statistics.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "bh_types.h"
@@ -1240,7 +1244,7 @@ void LoadStrategy_FaceHugger(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(jumping)
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

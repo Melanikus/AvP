@@ -12,6 +12,8 @@
 //   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
 //   the head and the elevation animation are checked before use, because either can be missing
 //   a save can no longer put someone with no firing code into a firing state
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 
 #include "inline.h"
@@ -22,6 +24,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "Player.h"
@@ -18325,7 +18328,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	marineStatusPointer->My_Weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

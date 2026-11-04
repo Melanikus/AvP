@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   an object of a type the game doesn't know is left out
 
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /*------------------------Patrick 14/1/97-----------------------------
   This source file contains all the functions for the object visibility 
   management system     (which controls visibility for aliens, objects,
@@ -18,6 +19,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "bh_alien.h"
 #include "pvisible.h"
 #include "bh_predator.h"
@@ -2439,7 +2441,7 @@ void LoadStrategy_InanimateObject(SAVE_BLOCK_STRATEGY_HEADER* header)
 	
 	
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
