@@ -3540,6 +3540,8 @@ int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
+int ToyShadowsCasters = 7;    // -shadowcasters=N, 0 to 7: what may cast and take shadows. Add up 1 for the level, 2 for objects and 4 for models, so that one run can compare what each costs
+int ToyShadowsInMirror = 0;   // set by kzsort.cpp while a body part is drawn a second time, as its reflection in a mirror
 
 struct ToyVec
 {
@@ -3562,9 +3564,18 @@ static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen ligh
 static ToyVec toyCasterPoints[kToyMaxCasterPoints];
 static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
+static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static int toyNumCasters = 0;
 static int toyNumCasterPoints = 0;
 static int toyCastersLeftOut = 0;
+
+// What each kind of polygon cost this frame, for the log
+static int toyPolygonsOfKind[kToyCasterKinds];
+static int toyVertsOfKind[kToyCasterKinds];
+static void const *toyLastModel = 0;  // only ever compared, never read through, so it can't go stale in a harmful way
+static int toyThisModelPolygons = 0;
+static int toyNumModels = 0;
+static int toyLargestModel = 0;
 
 static const int kToyVertsPerDraw = 60000 * 3;
 static D3DLVERTEX toyChunk[kToyVertsPerDraw];
@@ -3578,9 +3589,10 @@ static int toyStretchCorners = 0;
 int ToyShadows_PickLights(float *lights, int most);
 
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
-void ToyShadows_AddCaster(const float *pts, int count)
+// kind is one of ToyCasterKind
+void ToyShadows_AddCaster(const float *pts, int count, int kind)
 {
-	if (count < 3 || count > kToyMostPolyPoints)
+	if (count < 3 || count > kToyMostPolyPoints || kind < 0 || kind >= kToyCasterKinds)
 	{
 		return;
 	}
@@ -3593,6 +3605,8 @@ void ToyShadows_AddCaster(const float *pts, int count)
 
 	toyCasterStart[toyNumCasters] = toyNumCasterPoints;
 	toyCasterCount[toyNumCasters] = count;
+	toyCasterKind[toyNumCasters] = kind;
+	toyPolygonsOfKind[kind]++;
 	toyNumCasters++;
 
 	for (int i = 0; i < count; i++)
@@ -3601,6 +3615,25 @@ void ToyShadows_AddCaster(const float *pts, int count)
 		toyCasterPoints[toyNumCasterPoints].y = pts[i * 3 + 1];
 		toyCasterPoints[toyNumCasterPoints].z = pts[i * 3 + 2];
 		toyNumCasterPoints++;
+	}
+}
+
+// Adds one body part to the log's count of how big each model is. All the parts of one model arrive together, so a new owner
+// means a new model. model is only used to tell one owner from the next.
+void ToyShadows_NoteModelPart(const void *model, int polygons)
+{
+	if (model != toyLastModel)
+	{
+		toyLastModel = model;
+		toyThisModelPolygons = 0;
+		toyNumModels++;
+	}
+
+	toyThisModelPolygons += polygons;
+
+	if (toyThisModelPolygons > toyLargestModel)
+	{
+		toyLargestModel = toyThisModelPolygons;
 	}
 }
 
@@ -3786,6 +3819,17 @@ static void ToyLogFrame(const ToyFrameReport &report)
 		(unsigned int)report.block, (unsigned int)report.clear, (unsigned int)report.back, (unsigned int)report.front,
 		(unsigned int)report.quad, report.pixels, report.milliseconds, report.frameMilliseconds, toyEarlyFlushes, ToyShadowsSoft, toyPassMilliseconds, toyCardMilliseconds);
 	toyEarlyFlushes = 0;
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	// What each kind cost. Verts are the real price, and they're added up over every light: a polygon outside all the lights
+	// costs none, however many polygons it belongs with. Receive only has no verts, because it builds no prisms.
+	_snprintf(line, sizeof(line) - 1,
+		"toy-shadows: frame %d, polygons: %d level, %d objects, %d models, %d receive only, %d cloaked; verts: %d level, %d objects, %d models, %d cloaked; %d models drawn, the largest %d polygons",
+		report.frame, toyPolygonsOfKind[kToyCasterLevel], toyPolygonsOfKind[kToyCasterObject], toyPolygonsOfKind[kToyCasterModel],
+		toyPolygonsOfKind[kToyCasterReceiveOnly], toyPolygonsOfKind[kToyCasterCloaked],
+		toyVertsOfKind[kToyCasterLevel], toyVertsOfKind[kToyCasterObject], toyVertsOfKind[kToyCasterModel],
+		toyVertsOfKind[kToyCasterCloaked], toyNumModels, toyLargestModel);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 }
@@ -4382,7 +4426,17 @@ static void ToyBuildPrisms(const float *light, ToyFrameReport *report)
 	toyNumVerts = 0;
 	for (int caster = 0; caster < toyNumCasters; caster++)
 	{
+		int const kind = toyCasterKind[caster];
+
+		// something carrying a light sits around it, so it would block that light in every direction
+		if (kind == kToyCasterReceiveOnly)
+		{
+			continue;
+		}
+
+		int const vertsBefore = toyNumVerts;
 		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light);
+		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
 	if (ToyShadowsTest)
 	{
@@ -4556,6 +4610,15 @@ static void ToyForgetCasters()
 	toyNumCasters = 0;
 	toyNumCasterPoints = 0;
 	toyCastersLeftOut = 0;
+	toyLastModel = 0;
+	toyThisModelPolygons = 0;
+	toyNumModels = 0;
+	toyLargestModel = 0;
+	for (int kind = 0; kind < kToyCasterKinds; kind++)
+	{
+		toyPolygonsOfKind[kind] = 0;
+		toyVertsOfKind[kind] = 0;
+	}
 	toyPrismsLeftOut = 0;
 	toyNumVerts = 0;
 	toyStretchTotal = 0.0;

@@ -154,9 +154,10 @@ void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr);
 
 VECTORCH Global_LightVector;
 
-void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr);
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddCaster(const float *pts, int count);
+void ToyShadows_AddCaster(const float *pts, int count, int kind);
+void ToyShadows_NoteModelPart(const void *model, int polygons);
 
 /*
  Global variables and arrays
@@ -2935,7 +2936,7 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		}
 	}
 
-	ToyShadows_Collect(dptr, shapeheaderptr);
+	ToyShadows_Collect(dptr, shapeheaderptr, dptr->ObMyModule ? kToyCasterLevel : kToyCasterObject);
 
 	// call polygon pipeline
 	ShapePipeline(shapeheaderptr);
@@ -3175,6 +3176,8 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		} else {
 			TranslateShapeVertices(shapeinstrptr);
 		}
+
+		ToyShadows_Collect(dptr, shapeheaderptr, kToyCasterModel);
 
 		/* call polygon pipeline */
 		ShapePipeline(shapeheaderptr);
@@ -5490,6 +5493,8 @@ extern int GlobalFrameCounter;
 extern int ToyShadowsFlaresByPixel;
 extern int ToyShadowsFlareCap;
 extern int ToyShadowsFlareReach;
+extern int ToyShadowsCasters;
+extern int ToyShadowsInMirror;
 
 static int toyMostLightsOnAnObject = 0;
 static int toyMostLightsInAFrame = 0;
@@ -5685,7 +5690,12 @@ int ToyShadows_PickLights(float *lights, int most)
 
 			if (!isFlare && ToyLightIsBrief(light))
 			{
-				ToyConsiderLight(light, brief, &numBrief, most, false);
+				// A muzzle flash or a fire on a body is made here at the centre of that body, so the body would block it in
+				// every direction. It takes no place, which leaves it shining as it always has, with no shadow of its own.
+				if (!block->HModelControlBlock)
+				{
+					ToyConsiderLight(light, brief, &numBrief, most, false);
+				}
 			}
 			else
 			{
@@ -5880,14 +5890,122 @@ void ToyShadows_NoteFrameLights()
 	}
 }
 
-// Keeps a copy of every solid polygon of this piece of the level for the end of the frame, in view space. Only the level's
-// modules cast: anything else, such as a model or a crate, has no module of its own.
-void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+// Is this a Predator with its cloak on, or another player's? These are the two tests ShapePipeline uses to draw one as a
+// shimmer. The player needs no test: their own body is never drawn, because view.cpp leaves it off the list of things on
+// screen, and the cloak test ShapePipeline has for the player only covers their weapon, which is left out anyway.
+static bool ToyBlockIsCloaked(const DISPLAYBLOCK *block)
 {
-	if (!ToyShadowsMode || !dptr->ObMyModule || gunLayer || DrawingAReflection || CurrentVisionMode != VISION_MODE_NORMAL)
+	STRATEGYBLOCK const *owner = block->ObStrategyBlock;
+
+	if (!owner || !owner->SBdataptr)
+	{
+		return false;
+	}
+
+	if (owner->I_SBtype == I_BehaviourNetGhost)
+	{
+		return ((NETGHOSTDATABLOCK const *)owner->SBdataptr)->CloakingEffectiveness != 0;
+	}
+
+	if (owner->I_SBtype == I_BehaviourPredator)
+	{
+		return ((PREDATOR_STATUS_BLOCK const *)owner->SBdataptr)->CloakingEffectiveness != 0;
+	}
+
+	return false;
+}
+
+// Is this object or body part carrying a light that could be chosen? Anything carrying a light sits around it, so it would
+// block that light in every direction, and the light would go dark everywhere. A body part's own block always says it has no
+// lights, because hmodel.cpp makes it up for one draw, so the question goes to the block of the whole body, through its owner.
+// A brief light on a body doesn't count: it can't be chosen (see ToyShadows_PickLights), and it comes and goes with each shot,
+// so a marine's shadow would flicker off as they fired.
+static bool ToyBlockCarriesLight(const DISPLAYBLOCK *block, bool isBodyPart)
+{
+	if (ToyBlockIsFlare(block))
+	{
+		return true;  // always, by type, which is how the light picker treats a flare too
+	}
+
+	DISPLAYBLOCK const *whole = block;
+
+	if (block->ObStrategyBlock && block->ObStrategyBlock->SBdptr)
+	{
+		whole = block->ObStrategyBlock->SBdptr;
+	}
+
+	for (int i = 0; i < whole->ObNumLights; i++)
+	{
+		if (!isBodyPart || !ToyLightIsBrief(whole->ObLights[i]))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// What may this polygon do? kind says where it came from: the level, an object or a model. The level is never asked about
+// lights, because a piece of the level holds the lights of its room, and walls are what cast the shadows. If something is both
+// carrying a light and cloaked, the light wins, because casting even a faint shadow would still block that light.
+static int ToyChooseKind(const DISPLAYBLOCK *block, int kind)
+{
+	if (kind == kToyCasterLevel)
+	{
+		return kind;
+	}
+
+	if (ToyBlockCarriesLight(block, kind == kToyCasterModel))
+	{
+		return kToyCasterReceiveOnly;
+	}
+
+	if (ToyBlockIsCloaked(block))
+	{
+		return kToyCasterCloaked;
+	}
+
+	return kind;
+}
+
+// Keeps a copy of every solid polygon of this shape for the end of the frame, in view space, so that it can cast a shadow and
+// have shadows fall on it. AddShape calls this for the level and for placed objects, and AddHierarchicalShape calls it for
+// each body part of a model. kind says which of those this is.
+//
+// Left out:
+// - The player's weapon, and whatever else is drawn with it, such as a facehugger on the player's face: they hang in front
+//   of the camera.
+// - Anything drawn as a reflection, because it isn't really standing there.
+// - The special vision modes, which don't show shadows.
+// - Sprites, because they turn to face the camera, so their shadow would turn too.
+// - A block with neither a piece of the level nor an owner. Those are made up for one draw, such as the alien's teeth, which
+//   are drawn while gunLayer is off. ShapePipeline reads the same two blanks as "part of the player's own view". A spear stuck
+//   in a wall and the grappling hook are made the same way, so they cast nothing either.
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
+{
+	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
 		return;
 	}
+
+	// kind is 0, 1 or 2 here, and the switch's 1, 2 and 4 are those same numbers written as single bits
+	if (!(ToyShadowsCasters & (1 << kind)))
+	{
+		return;
+	}
+
+	if (!dptr->ObMyModule && !dptr->ObStrategyBlock)
+	{
+		return;
+	}
+
+	if (shapePtr->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR))
+	{
+		return;
+	}
+
+	int const whatItMayDo = ToyChooseKind(dptr, kind);
+	int polygonsKept = 0;
 
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
 	toyCameraWorld = Global_VDB_Ptr->VDB_World;
@@ -5907,17 +6025,34 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 		float pts[maxpolypts * 3];
 		int count = 0;
 		int *vertexNumberPtr = &polyPtr->Poly1stPt;
+		bool pointsAreSafe = true;
 
 		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
 		{
-			VECTORCH const *point = &RotatedPts[*vertexNumberPtr++];
+			// this number comes from a game file, so it's checked before it's used to find a point
+			int const pointNumber = *vertexNumberPtr++;
+			if (pointNumber < 0 || pointNumber >= maxrotpts)
+			{
+				pointsAreSafe = false;
+				break;
+			}
 
+			VECTORCH const *point = &RotatedPts[pointNumber];
 			pts[count * 3 + 0] = (float)point->vx;
 			pts[count * 3 + 1] = (float)-point->vy;
 			pts[count * 3 + 2] = (float)point->vz;
 			count++;
 		}
 
-		ToyShadows_AddCaster(pts, count);
+		if (pointsAreSafe)
+		{
+			ToyShadows_AddCaster(pts, count, whatItMayDo);
+			polygonsKept++;
+		}
+	}
+
+	if (kind == kToyCasterModel)
+	{
+		ToyShadows_NoteModelPart(dptr->ObStrategyBlock, polygonsKept);
 	}
 }

@@ -1,8 +1,22 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+// added the kinds of polygon the shadow toy keeps.
 #ifndef _included_d3d_render_h_ /* Is this your first time? */
 #define _included_d3d_render_h_ 1
 
 #include "kshape.h"
 #include "d3_func.h"
+
+// The shadow toy keeps a copy of each polygon it may need at the end of the frame, and each copy has one of these kinds,
+// which says what that polygon may do. The collector in kshape.cpp chooses the kind. The shadow pass in d3d_render.cpp obeys it.
+enum ToyCasterKind
+{
+	kToyCasterLevel = 0,        // part of the level, such as a wall or a door: casts a shadow, and shadows fall on it
+	kToyCasterObject = 1,       // a placed object, such as a crate or a machine: the same
+	kToyCasterModel = 2,        // a body part of a model, such as an alien: the same
+	kToyCasterReceiveOnly = 3,  // something carrying a light: shadows fall on it, but it casts none
+	kToyCasterCloaked = 4,      // a cloaked Predator: casts only a faint shadow
+	kToyCasterKinds = 5
+};
 
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();
