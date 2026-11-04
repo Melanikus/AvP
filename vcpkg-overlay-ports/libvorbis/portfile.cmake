@@ -37,8 +37,7 @@ vcpkg_from_github(
 # - contrib/: upstream's fuzz test setup;
 # - lib/psytune.c: a command-line tool for tuning the encoder;
 # - lib/misc.c: a debug memory tracker, only for builds with DEBUG_MALLOC, which needs pthread.h.
-# lib/barkmel.c and lib/tone.c are not built either. They stay for now: Snyk recognises this
-# library by how many of its release files are here, and too few would fail the scan.
+# - lib/barkmel.c, lib/tone.c: small standalone programs, each with its own main().
 file(REMOVE_RECURSE
     "${SOURCE_PATH}/vq"
     "${SOURCE_PATH}/examples"
@@ -46,6 +45,8 @@ file(REMOVE_RECURSE
     "${SOURCE_PATH}/contrib"
     "${SOURCE_PATH}/lib/psytune.c"
     "${SOURCE_PATH}/lib/misc.c"
+    "${SOURCE_PATH}/lib/barkmel.c"
+    "${SOURCE_PATH}/lib/tone.c"
 )
 
 vcpkg_cmake_configure(
