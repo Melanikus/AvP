@@ -310,6 +310,8 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 		// the relief picture lies exactly over its texture, so it's read the same way
 		if (withRelief)
 		{
+			extern void NoteTextureUse(texID_t textureID);
+			NoteTextureUse(textureRelief.PictureFor(get_texID(it->sortKey)));
 			d3d.lpD3DDevice->SetTexture(1, Tex_GetTexture(textureRelief.PictureFor(get_texID(it->sortKey))));
 			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, addressing);
 			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, addressing);

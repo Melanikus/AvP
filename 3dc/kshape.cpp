@@ -5925,6 +5925,7 @@ static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int
 	}
 
 	placesChangedLastFrame = placesChanged;
+	FrameTiming_CountPlacesChanged(placesChanged);
 	placesChangedSinceReport += placesChanged;
 
 	return placesUsed;
@@ -5992,6 +5993,7 @@ void ToyShadows_ChooseLights()
 	extern MODULE *playerPherModule;
 	_snprintf(toyRoomName, sizeof(toyRoomName) - 1, "%s", (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none");
 	toyRoomName[sizeof(toyRoomName) - 1] = 0;
+	FrameTiming_SetRoom(toyRoomName);
 
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;

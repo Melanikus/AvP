@@ -36,46 +36,54 @@ static StaticRange Range(uint32_t texture, uint32_t firstIndex, uint32_t triangl
 	return range;
 }
 
+static const uint32_t kNoLimit = 0xFFFFFFFF;
+
 static void CheckJoining()
 {
-	Check(StaticFrame_SortAndJoin(0, 0) == 0, "no ranges at all: none come back");
+	Check(StaticFrame_SortAndJoin(0, 0, kNoLimit) == 0, "no ranges at all: none come back");
 
 	{
 		StaticRange ranges[3] = { Range(5, 60, 10), Range(5, 0, 10), Range(5, 30, 10) };
-		int const left = StaticFrame_SortAndJoin(ranges, 3);
+		int const left = StaticFrame_SortAndJoin(ranges, 3, kNoLimit);
 		Check(left == 1 && ranges[0].firstIndex == 0 && ranges[0].triangles == 30 && ranges[0].vertexCount == 90, "three neighbours, in any order, become one");
 	}
 
 	{
 		StaticRange ranges[4] = { Range(5, 0, 10), Range(5, 30, 10), Range(5, 0, 10), Range(5, 30, 10) };
-		int const left = StaticFrame_SortAndJoin(ranges, 4);
+		int const left = StaticFrame_SortAndJoin(ranges, 4, kNoLimit);
 		Check(left == 1 && ranges[0].triangles == 20, "a module noted twice is only drawn once");
 	}
 
 	{
+		StaticRange ranges[3] = { Range(5, 0, 10), Range(5, 30, 10), Range(5, 60, 10) };
+		int const left = StaticFrame_SortAndJoin(ranges, 3, 25);
+		Check(left == 2 && ranges[0].triangles == 20 && ranges[1].triangles == 10 && ranges[1].firstIndex == 60, "a join stops at the card's limit, and nothing is lost");
+	}
+
+	{
 		StaticRange ranges[2] = { Range(5, 0, 10), Range(5, 33, 10) };
-		Check(StaticFrame_SortAndJoin(ranges, 2) == 2, "a gap in the buffer keeps two ranges apart: nothing between them may be drawn");
+		Check(StaticFrame_SortAndJoin(ranges, 2, kNoLimit) == 2, "a gap in the buffer keeps two ranges apart: nothing between them may be drawn");
 	}
 
 	{
 		StaticRange ranges[2] = { Range(5, 0, 10), Range(6, 30, 10) };
-		Check(StaticFrame_SortAndJoin(ranges, 2) == 2, "two textures stay apart, even side by side");
+		Check(StaticFrame_SortAndJoin(ranges, 2, kNoLimit) == 2, "two textures stay apart, even side by side");
 	}
 
 	{
 		StaticRange ranges[2] = { Range(5, 0, 10, false), Range(5, 30, 10, true) };
-		int const left = StaticFrame_SortAndJoin(ranges, 2);
+		int const left = StaticFrame_SortAndJoin(ranges, 2, kNoLimit);
 		Check(left == 2 && ranges[0].twoSided && !ranges[1].twoSided, "a two-sided range stays apart from an ordinary one, and goes first");
 	}
 
 	{
 		StaticRange ranges[2] = { Range(5, 0, 10, false, 0), Range(5, 30, 10, false, 1000) };
-		Check(StaticFrame_SortAndJoin(ranges, 2) == 2, "a different base vertex keeps ranges apart: the same index would mean another vertex");
+		Check(StaticFrame_SortAndJoin(ranges, 2, kNoLimit) == 2, "a different base vertex keeps ranges apart: the same index would mean another vertex");
 	}
 
 	{
 		StaticRange ranges[4] = { Range(9, 90, 5), Range(2, 30, 5), Range(9, 105, 5), Range(2, 45, 5) };
-		int const left = StaticFrame_SortAndJoin(ranges, 4);
+		int const left = StaticFrame_SortAndJoin(ranges, 4, kNoLimit);
 		Check(left == 2 && ranges[0].texture == 2 && ranges[0].triangles == 10 && ranges[1].texture == 9 && ranges[1].triangles == 10, "sorted by texture, with each texture joined");
 	}
 
@@ -88,7 +96,7 @@ static void CheckJoining()
 		second.vertexCount = 20;
 
 		StaticRange ranges[2] = { first, second };
-		StaticFrame_SortAndJoin(ranges, 2);
+		StaticFrame_SortAndJoin(ranges, 2, kNoLimit);
 		Check(ranges[0].firstVertex == 100 && ranges[0].vertexCount == 410, "a joined range covers every vertex either part uses, or the card could leave some out");
 	}
 }

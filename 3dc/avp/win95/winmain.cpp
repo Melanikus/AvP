@@ -43,6 +43,7 @@
 #include "renderer.h"
 #include "mp_config.h"
 #include "logString.h"
+#include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
 
@@ -685,9 +686,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 						ThisFramesRenderingHasBegun();
 
-						DoAllShapeAnimations();
+						{
+							ProcessorStageClock clock(kProcessorGame);
 
-						UpdateGame();
+							DoAllShapeAnimations();
+
+							UpdateGame();
+						}
 
 						AvpShowViews();
 

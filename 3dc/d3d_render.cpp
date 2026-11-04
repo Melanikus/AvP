@@ -4944,7 +4944,16 @@ static bool ChooseStaticRoute()
 		}
 	}
 
-	numFrameRanges = StaticFrame_SortAndJoin(frameRanges, numFrameRanges);
+	// a card can have a limit on how many triangles one draw can hold
+	static uint32_t mostTriangles = 0;
+
+	if (!mostTriangles)
+	{
+		D3DCAPS9 caps;
+		mostTriangles = SUCCEEDED(d3d.lpD3DDevice->GetDeviceCaps(&caps)) ? caps.MaxPrimitiveCount : 65535;
+	}
+
+	numFrameRanges = StaticFrame_SortAndJoin(frameRanges, numFrameRanges, mostTriangles);
 	SurfaceStatic_SetFrame(frameRanges, numFrameRanges);
 	return true;
 }
@@ -5197,6 +5206,7 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 	}
 
 	ShadowVolumes_Keep(key, corners);
+	FrameTiming_CountKeptGroupsMade();
 	run->first = place;
 	run->corners = corners;
 
@@ -5763,6 +5773,7 @@ static void ToyForgetCasters()
 	toyNumVerts = 0;
 	toyStretchTotal = 0.0;
 	toyStretchCorners = 0;
+	FrameTiming_SetPolygonsCollected(toyNumCasters);
 	earlyFlushThisFrame = false;
 	SurfaceNormals_ForgetModulesDrawn();
 	polygonsReachKept = 0;

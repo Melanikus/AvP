@@ -8,8 +8,9 @@
 
 #include "static_level.h"
 
-// Puts ranges in drawing order and joins those that sit next to each other, so that they're drawn in one go. Gives back how many are left.
-int StaticFrame_SortAndJoin(StaticRange *ranges, int count);
+// Puts ranges in drawing order and joins those that sit next to each other, so that they're drawn in one go, as long as the join isn't more than
+// mostTriangles, the card's limit for one draw. Gives back how many are left.
+int StaticFrame_SortAndJoin(StaticRange *ranges, int count, uint32_t mostTriangles);
 
 // One route's three surface pictures, read back into memory. Each is four bytes a pixel, and a pitch is how many bytes a row takes.
 struct SurfacePicturesInMemory

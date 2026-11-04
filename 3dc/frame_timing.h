@@ -29,8 +29,28 @@ void FrameTiming_StartFrame(LPDIRECT3DDEVICE9 device);
 // On a frame being timed, says that what the card has done since the last mark belongs to this stage. On any other frame it does nothing.
 void FrameTiming_Mark(FrameStage stage);
 
-// Ends the frame, and every so often writes what the processor did to the log.
+// Ends the card's half of the frame, before the frame is shown.
 void FrameTiming_EndFrame();
+
+// Ends the frame for the processor, once the frame has been shown. A frame that took too long goes in the stall list, and every so often the averages
+// and that list go to the log.
+void FrameTiming_FrameShown();
+
+// Writes the stall list to the log now, so that the last of a level isn't lost when it ends.
+void FrameTiming_WriteStalls();
+
+// What a stall's entry says about its frame.
+void FrameTiming_SetRoom(const char *room);
+void FrameTiming_SetPolygonsCollected(int polygons);
+void FrameTiming_CountPlacesChanged(int places);
+void FrameTiming_CountKeptGroupsMade();
+
+// Says whether this is the first time this texture has been used. The first use of a texture is when the card gets its copy of it.
+bool FrameTiming_TextureIsNew(uint32_t texture);
+void FrameTiming_NoteNewTexture(const char *name, uint32_t bytes);
+
+// Notes that this effect is being used. Its first draw is when a driver may finish building it.
+void FrameTiming_NoteEffectUsed(uint32_t effect, const char *name);
 
 // Counts how many shadow prism corners a frame draws, of each kind. Only a frame being timed keeps them, to go with its times.
 void FrameTiming_CountPrismCorners(int sent, int kept);
@@ -52,6 +72,8 @@ enum ProcessorStage
 	kProcessorDrawing,      // handing the lists to the card, the shadow pass included
 	kProcessorShadowPass,   // the shadow pass alone
 	kProcessorPresent,      // waiting to show the frame: for the card to catch up, and for the screen
+	kProcessorGame,         // the game itself: animation, movement, what everything does
+	kProcessorLog,          // handing lines to the log. It should never be more than a moment: see logString.cpp
 	kNumProcessorStages
 };
 

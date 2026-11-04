@@ -35,6 +35,8 @@
 
 void ClearLog();
 void WriteToLog(const std::string &logLine);
+void LogWriteNow();            // writes everything waiting, here and now. Errors use this, so a crash can't lose them
+void LogTakeWriteTimes(int *writes, float *slowestMilliseconds, int *linesLost);   // since the last time this was asked
 void LogDxError(HRESULT hr, int LINE, const char* FILE);
 std::string DxErrorToString(HRESULT hr); // name + system message of a Direct3D / D3DX / COM result (replaces dxerr)
 void LogErrorString(const std::string &errorString, int LINE, const char* FILE);

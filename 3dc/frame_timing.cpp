@@ -16,6 +16,12 @@
 //
 // Every frame adds up its time in a few places, using the processor's own clock, which takes almost no time to read. Every few seconds the averages
 // go to the log.
+//
+// THE STALL LIST
+//
+// An average can't show a frame that stuck. So every frame is timed from end to end, and one that took too long goes in a short list in memory: what
+// each part took, and what else was going on, such as textures or effects used for the first time. The list goes to the log later, so writing it
+// can't cause what it's measuring. A frame's time runs from when the last frame was shown to when this one is, so a frame includes its own wait.
 
 #include "frame_timing.h"
 
@@ -47,6 +53,44 @@ static int framesUntilTimed = kFramesBetweenReports / 2;
 static int cornersSent = 0;
 static int cornersKept = 0;
 
+// A frame slower than this is about two frames of 60 a second, so it goes in the stall list.
+static const float kStallMilliseconds = 33.0f;
+
+static const int kMostStalls = 64;
+static const int kFirstUseTextLength = 48;
+
+struct StallEntry
+{
+	int frame;
+	float milliseconds;
+	float stage[kNumProcessorStages];
+	char room[16];
+	int placesChanged;
+	int keptGroupsMade;
+	int polygonsCollected;
+	int texturesNew;
+	uint32_t textureBytesNew;
+	char firstNewTexture[kFirstUseTextLength];
+	char effectsNew[kFirstUseTextLength];
+	bool deviceReset;
+};
+
+static StallEntry stalls[kMostStalls];
+static int stallsHeld = 0;
+static int stallsLost = 0;
+
+static StallEntry thisFrame;
+static int64_t processorThisFrame[kNumProcessorStages];
+static int framesShown = 0;
+static int64_t lastFrameShown = 0;
+
+// one bit for each texture
+static const uint32_t kTexturesKept = 65536;
+static uint8_t textureSeen[kTexturesKept / 8];
+
+static const uint32_t kEffectsKept = 256;
+static bool effectSeen[kEffectsKept];
+
 static int64_t processorTotal[kNumProcessorStages];
 static int64_t mainVerticesTotal = 0;
 static int64_t drawsTotal = 0;
@@ -75,7 +119,79 @@ ProcessorStageClock::ProcessorStageClock(ProcessorStage stageToCount)
 
 ProcessorStageClock::~ProcessorStageClock()
 {
-	processorTotal[stage] += ClockNow() - started;
+	int64_t const taken = ClockNow() - started;
+
+	processorTotal[stage] += taken;
+	processorThisFrame[stage] += taken;
+}
+
+void FrameTiming_SetRoom(const char *room)
+{
+	_snprintf(thisFrame.room, sizeof(thisFrame.room) - 1, "%s", room);
+	thisFrame.room[sizeof(thisFrame.room) - 1] = 0;
+}
+
+void FrameTiming_SetPolygonsCollected(int polygons)
+{
+	thisFrame.polygonsCollected = polygons;
+}
+
+void FrameTiming_CountPlacesChanged(int places)
+{
+	thisFrame.placesChanged += places;
+}
+
+void FrameTiming_CountKeptGroupsMade()
+{
+	thisFrame.keptGroupsMade++;
+}
+
+bool FrameTiming_TextureIsNew(uint32_t texture)
+{
+	if (texture >= kTexturesKept)
+	{
+		return false;
+	}
+
+	uint8_t const bit = (uint8_t)(1 << (texture & 7));
+
+	if (textureSeen[texture >> 3] & bit)
+	{
+		return false;
+	}
+
+	textureSeen[texture >> 3] |= bit;
+	return true;
+}
+
+void FrameTiming_NoteNewTexture(const char *name, uint32_t bytes)
+{
+	if (thisFrame.texturesNew == 0)
+	{
+		_snprintf(thisFrame.firstNewTexture, kFirstUseTextLength - 1, "%s", name);
+		thisFrame.firstNewTexture[kFirstUseTextLength - 1] = 0;
+	}
+
+	thisFrame.texturesNew++;
+	thisFrame.textureBytesNew += bytes;
+}
+
+void FrameTiming_NoteEffectUsed(uint32_t effect, const char *name)
+{
+	if (effect >= kEffectsKept || effectSeen[effect])
+	{
+		return;
+	}
+
+	effectSeen[effect] = true;
+
+	size_t const used = strlen(thisFrame.effectsNew);
+
+	if (used + 2 < (size_t)kFirstUseTextLength)
+	{
+		_snprintf(thisFrame.effectsNew + used, kFirstUseTextLength - 1 - used, "%s ", name);
+		thisFrame.effectsNew[kFirstUseTextLength - 1] = 0;
+	}
 }
 
 void FrameTiming_Release()
@@ -103,6 +219,7 @@ void FrameTiming_Release()
 
 	timingThisFrame = false;
 	waitingForAnswers = false;
+	thisFrame.deviceReset = true;
 }
 
 // These are made the first time they're needed, and again after a device reset. If the card can't do it, nothing is timed.
@@ -262,6 +379,35 @@ void FrameTiming_CountDraw()
 	drawsTotal++;
 }
 
+void FrameTiming_WriteStalls()
+{
+	for (int i = 0; i < stallsHeld; i++)
+	{
+		StallEntry const &stall = stalls[i];
+		char line[500];
+
+		_snprintf(line, sizeof(line) - 1,
+			"stall: frame %d took %.1f ms%s: shapes %.1f, locks %.1f, drawing %.1f of which shadow pass %.1f, present %.1f, game %.1f, log %.1f; room %s; %d places changed, %d kept groups made, %d polygons collected, %d textures first used (%u KB, first %s), first use of effects: %s",
+			stall.frame, stall.milliseconds, stall.deviceReset ? " with a device reset" : "", stall.stage[kProcessorShapes], stall.stage[kProcessorLocks], stall.stage[kProcessorDrawing],
+			stall.stage[kProcessorShadowPass], stall.stage[kProcessorPresent], stall.stage[kProcessorGame], stall.stage[kProcessorLog], stall.room,
+			stall.placesChanged, stall.keptGroupsMade, stall.polygonsCollected, stall.texturesNew, stall.textureBytesNew / 1024, stall.firstNewTexture, stall.effectsNew);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+
+	if (stallsLost)
+	{
+		char line[100];
+
+		_snprintf(line, sizeof(line) - 1, "stall: and %d more that the list had no room for", stallsLost);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+
+	stallsHeld = 0;
+	stallsLost = 0;
+}
+
 static void ReportProcessorTimes()
 {
 	int64_t const now = ClockNow();
@@ -277,6 +423,14 @@ static void ReportProcessorTimes()
 			ClockMilliseconds(processorTotal[kProcessorLocks]) / frames, ClockMilliseconds(processorTotal[kProcessorDrawing]) / frames,
 			ClockMilliseconds(processorTotal[kProcessorShadowPass]) / frames, ClockMilliseconds(processorTotal[kProcessorPresent]) / frames,
 			(double)mainVerticesTotal / frames, (double)drawsTotal / frames);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		int writes = 0, linesLost = 0;
+		float slowest = 0.0f;
+		LogTakeWriteTimes(&writes, &slowest, &linesLost);
+
+		_snprintf(line, sizeof(line) - 1, "log: %d writes to the disk, the slowest %.1f ms, none of it on the game's thread; %d lines lost", writes, slowest, linesLost);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
 	}
@@ -299,9 +453,48 @@ void FrameTiming_EndFrame()
 		marksRead = 0;
 		framesWaited = 0;
 	}
+}
+
+void FrameTiming_FrameShown()
+{
+	int64_t const now = ClockNow();
+
+	framesShown++;
+
+	if (lastFrameShown)
+	{
+		float const milliseconds = (float)ClockMilliseconds(now - lastFrameShown);
+
+		if (milliseconds >= kStallMilliseconds)
+		{
+			if (stallsHeld == kMostStalls)
+			{
+				stallsLost++;
+			}
+			else
+			{
+				thisFrame.frame = framesShown;
+				thisFrame.milliseconds = milliseconds;
+
+				for (int i = 0; i < kNumProcessorStages; i++)
+				{
+					thisFrame.stage[i] = (float)ClockMilliseconds(processorThisFrame[i]);
+				}
+
+				stalls[stallsHeld++] = thisFrame;
+			}
+		}
+	}
+
+	memset(&thisFrame, 0, sizeof(thisFrame));
+	memset(processorThisFrame, 0, sizeof(processorThisFrame));
 
 	if (++framesCounted >= kFramesBetweenReports)
 	{
 		ReportProcessorTimes();
+		FrameTiming_WriteStalls();
 	}
+
+	// taken after the report, so that the next frame's time starts from here
+	lastFrameShown = ClockNow();
 }

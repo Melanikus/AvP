@@ -46,10 +46,10 @@ static bool DrawnBefore(const StaticRange &a, const StaticRange &b)
 	return a.firstIndex < b.firstIndex;
 }
 
-static bool FollowsOn(const StaticRange &first, const StaticRange &next)
+static bool FollowsOn(const StaticRange &first, const StaticRange &next, uint32_t mostTriangles)
 {
 	return first.texture == next.texture && first.twoSided == next.twoSided && first.baseVertex == next.baseVertex
-		&& first.firstIndex + first.triangles * 3 == next.firstIndex;
+		&& first.firstIndex + first.triangles * 3 == next.firstIndex && next.triangles <= mostTriangles - first.triangles;
 }
 
 static bool IsInside(const StaticRange &part, const StaticRange &whole)
@@ -58,7 +58,7 @@ static bool IsInside(const StaticRange &part, const StaticRange &whole)
 		&& part.firstIndex >= whole.firstIndex && part.firstIndex + part.triangles * 3 <= whole.firstIndex + whole.triangles * 3;
 }
 
-int StaticFrame_SortAndJoin(StaticRange *ranges, int count)
+int StaticFrame_SortAndJoin(StaticRange *ranges, int count, uint32_t mostTriangles)
 {
 	if (count <= 0)
 	{
@@ -80,7 +80,7 @@ int StaticFrame_SortAndJoin(StaticRange *ranges, int count)
 			continue;
 		}
 
-		if (FollowsOn(last, next))
+		if (FollowsOn(last, next, mostTriangles))
 		{
 			uint32_t const end = std::max(last.firstVertex + last.vertexCount, next.firstVertex + next.vertexCount);
 

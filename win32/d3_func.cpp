@@ -525,6 +525,17 @@ void R_SetCurrentVideoMode()
 	R_ChangeResolution(currentWidth, currentHeight);
 }
 
+// For the stall list: the first time a texture is used is when the card gets its copy of it. RenderList.cpp binds relief pictures directly, so it calls this too.
+void NoteTextureUse(texID_t textureID)
+{
+	if (FrameTiming_TextureIsNew(textureID))
+	{
+		uint32_t width = 0, height = 0;
+		Tex_GetDimensions(textureID, width, height);
+		FrameTiming_NoteNewTexture(Tex_GetName(textureID).c_str(), width * height * 4);
+	}
+}
+
 bool R_SetTexture(uint32_t stage, texID_t textureID)
 {
 	// check that the stage value is within range
@@ -540,6 +551,8 @@ bool R_SetTexture(uint32_t stage, texID_t textureID)
 		// already set, just return
 		return true;
 	}
+
+	NoteTextureUse(textureID);
 
 	// we need to set it
 	LastError = d3d.lpD3DDevice->SetTexture(stage, Tex_GetTexture(textureID));
@@ -2719,13 +2732,18 @@ void SetTransforms()
 
 void FlipBuffers()
 {
-	ProcessorStageClock clock(kProcessorPresent);
+	{
+		ProcessorStageClock clock(kProcessorPresent);
 
-	LastError = d3d.lpD3DDevice->Present(NULL, NULL, NULL, NULL);
+		LastError = d3d.lpD3DDevice->Present(NULL, NULL, NULL, NULL);
+	}
+
 	if (FAILED(LastError))
 	{
 		LogDxError(LastError, __LINE__, __FILE__);
 	}
+
+	FrameTiming_FrameShown();
 }
 
 void ReleaseDirect3D()
