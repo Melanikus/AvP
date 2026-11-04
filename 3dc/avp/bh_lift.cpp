@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a floor number from the level file must fit the list of stations before it is written there
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -149,7 +152,11 @@ void * LiftBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 		}
 		// fill in the rest of the data
 
-		*(lcont->lift_stations + lift_stn->num_floor) = lift_stn;
+		// where this station goes comes from the level file, and the list has a size of its own, so check it fits
+		if (lift_stn->num_floor >= 0 && lift_stn->num_floor < lcont->num_stations)
+		{
+			*(lcont->lift_stations + lift_stn->num_floor) = lift_stn;
+		}
 		lcont->dest_station = -1;
 		lcont->delay_at_floor = 0;
 		lcont->delay_between_floors = 0;

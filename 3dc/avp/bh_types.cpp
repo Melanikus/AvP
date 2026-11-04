@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a lift station with a bad controller or floor number from the level file is left out of its lift
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -1178,11 +1181,27 @@ void AssignAllSBNames()
 						// find the controlling lift behave block
 						lift_bhv->control_sb = FindSBWithName(lift_bhv->control_sb_name);
 
-						GLOBALASSERT(lift_bhv->control_sb);
-
 						{
 							LIFT_STATION **lift_array;
-							LIFT_BEHAV_BLOCK *cont_bhv = (LIFT_BEHAV_BLOCK*)lift_bhv->control_sb->SBdataptr;
+							LIFT_BEHAV_BLOCK *cont_bhv = NULL;
+
+							// The controller's name and this station's floor number both come from the level file. The name
+							// may find nothing, or something that isn't a lift, and the floor number picks a place in a
+							// list that is written to below. A station that fails any of this is left out of its lift.
+							if (lift_bhv->control_sb && lift_bhv->control_sb->I_SBtype == I_BehaviourLift)
+							{
+								cont_bhv = (LIFT_BEHAV_BLOCK*)lift_bhv->control_sb->SBdataptr;
+							}
+
+							if (!cont_bhv || !cont_bhv->controller || curr_stn->num_floor < 0
+								|| curr_stn->num_floor >= cont_bhv->lift_control->num_stations)
+							{
+								if (!lift_bhv->controller)
+								{
+									lift_bhv->lift_control = NULL;
+								}
+								break;
+							}
 
 							lift_bhv->lift_control = cont_bhv->lift_control;
 							lift_array = cont_bhv->lift_control->lift_stations;
