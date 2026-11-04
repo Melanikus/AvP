@@ -124,10 +124,6 @@ extern void GADGET_Render(void)
 
 	/* CODE */
 	{
-		#if 0
-		textprint("GADGET_Render()\n");
-		#endif
-
 		// under construction...
 		GLOBALASSERT( RootGadget :: GetRoot() );
 		RootGadget :: GetRoot() -> Render
@@ -136,30 +132,6 @@ extern void GADGET_Render(void)
 			r2rect :: PhysicalScreen(), // const struct r2rect& R2Rect_Clip,
 			ONE_FIXED // int FixP_Alpha
 		);
-
-		#if 0
-		// Test all the fonts:
-		{
-			SCString* pSCString_Test = new SCString("FONT TEST STRING");
-
-			for (int i=0;i<NUM_FONTS;i++)
-			{
-				IndexedFont* pFont = IndexedFont :: GetFont( (fonts)i );
-				GLOBALASSERT(pFont);
-
-				r2pos R2Pos_TempCursor(0,i*20);
-
-				pFont -> Render_Unclipped
-				(
-					R2Pos_TempCursor, // struct r2pos& R2Pos_Cursor,
-					ONE_FIXED, // int FixP_Alpha,
-					*pSCString_Test// const SCString& SCStr
-				);
-			}
-
-			pSCString_Test -> R_Release();
-		}
-		#endif
 	}
 }
 
