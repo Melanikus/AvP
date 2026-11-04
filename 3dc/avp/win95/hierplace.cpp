@@ -3,7 +3,9 @@
 //   names saved into level data are copied, and stepped past, by the length measured from the name
 //   itself, and unused code for making new level files was removed;
 //   a placed hierarchy's name and lists are checked against the size of their chunk before they're read
+//   a placed hierarchy checks what kind of strategy it holds
 #include "hierplace.hpp"
+#include "strategy_chunk.hpp"
 #include "md5.h"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -16,6 +18,25 @@ FORCE_CHUNK_INCLUDE_IMPLEMENT(hierplace)
 RIF_IMPLEMENT_DYNCREATE("PLACHIER",Placed_Hierarchy_Chunk)
 
 CHUNK_WITH_CHILDREN_LOADER("PLACHIER",Placed_Hierarchy_Chunk)
+
+// The game reads a placed hierarchy's strategy as the hierarchy kind, whatever it says it is. Any other kind has different numbers in those places, and
+// they'd be used as a list of pointers, straight from the file. So any other kind refuses the level.
+void Placed_Hierarchy_Chunk::post_input_processing()
+{
+	Chunk * const strategy = lookup_single_child ("AVPSTRAT");
+
+	if (strategy && !strategy->r_u_miscellaneous())
+	{
+		AvpStrat const * const kept = ((AVP_Strategy_Chunk *) strategy)->Strategy;
+
+		if (kept && kept->StrategyType != StratHierarchy)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
+
+	Chunk_With_Children::post_input_processing();
+}
 /*
 Children for Placed_Hiearchy_Chunk :
 

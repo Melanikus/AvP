@@ -1,5 +1,6 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a path's list of points is measured against its chunk before it's made
+//   a path's number has to be a place of its own in the list of paths
 
 #include "path_chunk.hpp"
 
@@ -29,6 +30,14 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size
 	
 	PathID=*(int*)data;
 	data+=4;
+
+	// This is used as a place in the list of paths. A switch can only name a path up to 255, so that's the most a real one can be, and a bigger number would
+	// only ask for a bigger list. A negative one would write in front of the list.
+	if(PathID<0 || PathID>255)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	flags=*(int*)data;
 	data+=4;
 	spare2=*(int*)data;
@@ -45,6 +54,21 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size
 	}		
 }
 
+
+// Two paths with one number would share a place in the list of paths. The second one's shorter list would then be filled to the length of the first.
+void AVP_Path_Chunk::post_input_processing()
+{
+	List<Chunk *> paths;
+	parent->lookup_child("AVPPATH2",paths);
+
+	for(LIF<Chunk *> other(&paths);!other.done();other.next())
+	{
+		if(other()!=this && !other()->r_u_miscellaneous() && ((AVP_Path_Chunk *)other())->PathID==PathID)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
+}
 
 AVP_Path_Chunk::~AVP_Path_Chunk()
 {

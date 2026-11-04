@@ -7,6 +7,7 @@
 //   a module's lists and an object's track and alternate places are measured against their chunks before they're made
 //   an object's header is only made inside an object, because it writes through its parent
 //   a jump in a module's list of what it can see has to go forward
+//   a track's sound has to be its middle, start or end sound
 
 #include <string>
 #include "chunk.hpp"
@@ -1052,6 +1053,12 @@ Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* const pa
 	data+=4;
 	index=*(int*)data;
 	data+=4;
+
+	// A track has three sounds, for the middle, the start and the end of its movement, and this says which one this is.
+	if(index<0 || index>2)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 
 	wav_name=new char[strlen(data)+1];
 	strcpy(wav_name,data);

@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declaration of unused code for making new level files; added a check on the sequence numbers a
 //   level file gives
+//   a placed hierarchy checks what kind of strategy it holds
 
 #ifndef _hierplace_hpp
 #define _hierplace_hpp 1
@@ -16,6 +17,9 @@ class Placed_Hierarchy_Chunk : public Chunk_With_Children
 public :
 
 	Placed_Hierarchy_Chunk(Chunk_With_Children * const parent,const char* ,const size_t);
+
+	// Refuses the level if its strategy isn't the hierarchy kind. See the .cpp.
+	virtual void post_input_processing();
 
 
 	Placed_Hierarchy_Data_Chunk* get_data_chunk()

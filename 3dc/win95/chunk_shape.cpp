@@ -19,6 +19,7 @@
 //   a shape's centre is only made inside a shape, because it writes into the shape
 //   a chunk of texture animation must fit the polygons it names, and only a shape can have one
 //   a shape's lists of names and polygon changes are measured against their chunks before they're made
+//   a polygon can't bring the flag that says its texture list is a table of pointers
 
 #include <math.h>
 #include <vector>
@@ -1077,6 +1078,15 @@ static void read_polygon (ChunkPoly & poly, const char * record)
 	}
 
 	if (poly.num_verts < fewest_corners || corners[poly.num_verts] != -1)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	// The loader sets this flag itself on a polygon with texture animation (iflag_txanim), and the game then reads the polygon's list of texture coordinates
+	// as a table of pointers. From a file, it would turn numbers in the file into pointers. None of the 952,940 polygons in the game's own levels has it.
+	int const flag_only_the_loader_sets = 0x40000000;
+
+	if (poly.flags & flag_only_the_loader_sets)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}

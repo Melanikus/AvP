@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
 //   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
+//   a message's number has to be a place in the table of level messages
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -14,6 +15,18 @@ RIF_IMPLEMENT_DYNCREATE("AVPSTRAT",AVP_Strategy_Chunk)
 // How many spare bytes follow a strategy's copy of its chunk. The strategies read a fixed set of numbers with no look at the chunk's size, and the
 // longest set of them is a good deal shorter than this.
 static size_t const StrategySpareBytes = 512;
+
+// A message's number from the file. The game adds it to the first of the level messages, and then goes straight to that place in a table of text. So it has
+// to be one of the 450 places there are. 0 is allowed, because it can mean no message at all.
+static int const MostLevelMessages = 450;
+
+static void CheckMessageNumber(int number)
+{
+	if (number < 0 || number > MostLevelMessages)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
 
 // Two numbers, then a strategy, whose first number says what kind it is. There are about 30 kinds, and most read a fixed set of numbers with no
 // look at the chunk's size. So each reads from a copy with spare bytes after it, and whatever it reads stays in the copy. Each kind knows
@@ -1313,10 +1326,13 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 	
 	mission_description_string=*(int*)data_start;
 	data_start+=4;
-	
+
 	mission_complete_string=*(int*)data_start;
 	data_start+=4;
-	
+
+	CheckMessageNumber(mission_description_string);
+	CheckMessageNumber(mission_complete_string);
+
 	mission_number=*(int*)data_start;
 	data_start+=4;
 
@@ -1473,7 +1489,9 @@ TextMessageStrategy::TextMessageStrategy(const char* data_start,size_t /*size*/ 
 
 	message_string=*(int*)data_start;
 	data_start+=4;
-	
+
+	CheckMessageNumber(message_string);
+
 	flags=*(int*)data_start;
 	data_start+=4;
 	

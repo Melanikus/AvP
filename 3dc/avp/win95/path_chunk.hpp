@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a path checks that no other path has its number
+
 #ifndef pathchnk_hpp
 #define pathchnk_hpp 1
 
@@ -25,6 +28,9 @@ class AVP_Path_Chunk : public Chunk
 	AVP_Path_Chunk(Chunk_With_Children*,const char *,size_t);
 	AVP_Path_Chunk(Chunk_With_Children*);
 	~AVP_Path_Chunk();
+
+	// Refuses the level if another path has this one's number. See the .cpp.
+	virtual void post_input_processing();
 
 	virtual size_t size_chunk();
 	virtual void fill_data_block(char* data_start);

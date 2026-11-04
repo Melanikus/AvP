@@ -6,6 +6,7 @@
 //   a generator is only made inside the special objects chunk, because it looks two levels up
 //   a generator's weights have to fit their chunk, and are freed the same way they were made
 //   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
+//   a level's generators have to make aliens or marines
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -357,6 +358,13 @@ Global_Generator_Data_Chunk::Global_Generator_Data_Chunk(Chunk_With_Children* pa
 {
 	EnemyGenerated=*(int*)data;
 	data+=sizeof(int);
+
+	// the code that loads a level's models and the code that sets up its generators both choose by this, and anything else leaves them disagreeing
+	if(EnemyGenerated!=Generate_Aliens && EnemyGenerated!=Generate_Marines)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	MaxNPCSOnLevel=*(int*)data;
 	data+=sizeof(int);
 	NPCSPerMinute=*(int*)data;

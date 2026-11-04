@@ -3054,9 +3054,145 @@ static bool FramePlacesAccepted(int const * places, int frames)
 	return accepted;
 }
 
+// A placed hierarchy holding a strategy of this kind, with every number in it zero.
+static bool PlacedStrategyAccepted(int kind)
+{
+	size_t const strategyBytes = StrategySizeOfKind(kind);
+	char * data = PutChunk(wholeShape, "AVPSTRAT", StrategyNumbersBytes + strategyBytes);
+	memcpy(data + StrategyNumbersBytes, &kind, sizeof(kind));
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	new Placed_Hierarchy_Chunk(&file, wholeShape, ChunkHeaderBytes + StrategyNumbersBytes + strategyBytes);
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// A strategy of this kind, with one number set, and every other number zero.
+static bool StrategyNumberAccepted(int kind, size_t at, int number)
+{
+	alignas(int) static char strategy[1024];
+	size_t const size = StrategySizeOfKind(kind);
+
+	memset(strategy, 0, sizeof(strategy));
+	memcpy(strategy, &kind, sizeof(kind));
+	memcpy(strategy + at, &number, sizeof(number));
+
+	return StrategyAccepted(strategy, size);
+}
+
+static bool TrackSoundAccepted(int index)
+{
+	alignas(int) static char bytes[64];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 20, index);
+
+	return ChunkAccepted(MakeChunk<Object_Track_Sound_Chunk>, bytes, 28);
+}
+
+static bool PathNumberAccepted(int number)
+{
+	alignas(int) static char bytes[64];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 4, number);
+
+	return ChunkAccepted(MakeChunk<AVP_Path_Chunk>, bytes, 20);
+}
+
+// Two paths side by side, with these numbers.
+static bool TwoPathsAccepted(int first, int second)
+{
+	alignas(int) static char bytes[64];
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 4, first);
+	new AVP_Path_Chunk(&file, bytes, 20);
+
+	PutNumber(bytes, 4, second);
+	new AVP_Path_Chunk(&file, bytes, 20);
+
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
 static void TestNumbersUsedAsPlaces()
 {
 	puts("37. numbers used as places");
+
+	// The polygon's record comes after the header and the points in what BuildShapeData writes, and its flags are its third number.
+	{
+		int const triangle[5] = { 0, 1, 2, -1, -1 };
+		int const pointCount = 4;
+		int const onlyTheLoaderSetsThis = 0x40000000;
+		size_t const polygonAt = ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes + 12 * pointCount + ChunkHeaderBytes;
+		size_t const flagsAt = polygonAt + 2 * sizeof(int);
+
+		size_t const bytes = BuildShapeData(wholeShape, false, pointCount, triangle);
+		Check(ShapeIsAccepted(wholeShape + bytes), "a shape with plain polygons is accepted");
+
+		memcpy(wholeShape + flagsAt, &onlyTheLoaderSetsThis, sizeof(int));
+		Check(!ShapeIsAccepted(wholeShape + bytes), "a polygon that says its texture list is a table of pointers is refused");
+	}
+
+	Check(PlacedStrategyAccepted(StratHierarchy), "a placed hierarchy with a hierarchy strategy is accepted");
+	Check(!PlacedStrategyAccepted(StratDoor), "a placed hierarchy with any other kind of strategy is refused");
+
+	size_t const firstNumberAt = 12;
+
+	Check(StrategyNumberAccepted(StratMessage, firstNumberAt, 450), "the last level message is accepted");
+	Check(!StrategyNumberAccepted(StratMessage, firstNumberAt, 451), "a message past the last one is refused");
+	Check(!StrategyNumberAccepted(StratMessage, firstNumberAt, -1), "a negative message is refused");
+	Check(StrategyNumberAccepted(StratMissionObjective, firstNumberAt, 450), "a mission's description in the last place is accepted");
+	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt, 451), "a mission's description past the last place is refused");
+	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt, -1), "a mission's negative description is refused");
+	Check(StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 450), "a mission's end message in the last place is accepted");
+	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, 451), "a mission's end message past the last place is refused");
+	Check(!StrategyNumberAccepted(StratMissionObjective, firstNumberAt + 4, -1), "a mission's negative end message is refused");
+
+	{
+		alignas(int) static char generator[28];
+
+		memset(generator, 0, sizeof(generator));
+		Check(ChunkAccepted(MakeChunk<Global_Generator_Data_Chunk>, generator, sizeof(generator)), "generators that make aliens are accepted");
+
+		PutNumber(generator, 0, Generate_Marines);
+		Check(ChunkAccepted(MakeChunk<Global_Generator_Data_Chunk>, generator, sizeof(generator)), "generators that make marines are accepted");
+
+		PutNumber(generator, 0, Generate_Marines + 1);
+		Check(!ChunkAccepted(MakeChunk<Global_Generator_Data_Chunk>, generator, sizeof(generator)), "generators that make anything else are refused");
+
+		PutNumber(generator, 0, -1);
+		Check(!ChunkAccepted(MakeChunk<Global_Generator_Data_Chunk>, generator, sizeof(generator)), "generators with a negative kind are refused");
+	}
+
+	Check(TrackSoundAccepted(0), "a track's middle sound is accepted");
+	Check(TrackSoundAccepted(2), "a track's end sound is accepted");
+	Check(!TrackSoundAccepted(3), "a fourth track sound is refused");
+	Check(!TrackSoundAccepted(-1), "a track sound in a negative place is refused");
+
+	Check(PathNumberAccepted(0), "path 0 is accepted");
+	Check(PathNumberAccepted(255), "the last path a switch can name is accepted");
+	Check(!PathNumberAccepted(256), "a path no switch can name is refused");
+	Check(!PathNumberAccepted(-1), "a negative path is refused");
+	Check(!PathNumberAccepted(0x1fffffff), "a path number whose list wraps round is refused");
+	Check(TwoPathsAccepted(1, 2), "two paths with their own numbers are accepted");
+	Check(!TwoPathsAccepted(3, 3), "two paths with one number are refused");
 
 	Check(ImageIndexAccepted(0), "the first image's index is accepted");
 	Check(ImageIndexAccepted(73), "the largest image index in the game's own levels is accepted");
