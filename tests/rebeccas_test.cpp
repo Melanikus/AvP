@@ -846,23 +846,30 @@ static void TestRepeatedAndMissingChunks()
 }
 
 // 14. Merge data has one entry per polygon: -1 if it stands alone, or the place of the polygon it joins. The game uses that
-// place to reach into its lists, so it has to be real, and the two polygons of a pair have to name each other.
+// place to reach into its lists, so it has to be real, and the two polygons of a pair have to name each other. A place just
+// outside the list would be refused anyway, for not naming its partner back, by looking at whatever is there. So the "far"
+// rows use places so far off that looking there would crash, which shows that the limit itself is doing the refusing.
 static void TestMergeData()
 {
 	puts("14. merge data");
 
 	int const triangle[5] = { 0, 1, 2, -1, -1 };
 
-	struct MergeRow { int entries; int merge[3]; bool accepted; char const * what; };
+	int const farAway = 0x10000000;
+
+	struct MergeRow { int entries; int merge[4]; bool accepted; char const * what; };
 	MergeRow const rows[] =
 	{
 		{ 3, { -1, -1, -1 }, true,  "polygons that stand alone are accepted" },
 		{ 3, {  1,  0, -1 }, true,  "a pair of polygons that name each other is accepted" },
-		{ 2, { -1, -1,  0 }, false, "merge data for too few polygons is refused" },
+		{ 2, { -1, -1 },     false, "merge data for too few polygons is refused" },
+		{ 4, { -1, -1, -1, -1 }, false, "merge data for too many polygons is refused" },
 		{ 3, {  1,  2,  0 }, false, "a polygon whose partner names another is refused" },
 		{ 3, {  0, -1, -1 }, false, "a polygon that is its own partner is refused" },
 		{ 3, {  3, -1, -1 }, false, "a partner past the last polygon is refused" },
+		{ 3, { farAway, -1, -1 }, false, "a partner far past the last polygon is refused" },
 		{ 3, { -2, -1, -1 }, false, "a negative partner is refused" },
+		{ 3, { -farAway, -1, -1 }, false, "a hugely negative partner is refused" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -942,12 +949,16 @@ static void TestAnimatedShapes()
 	size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
 	Check(!ShapeIsAccepted(PutAnimation(wholeShape + bytes, 0, false, 0, 0, 0, 0)), "an animation with no frames is refused");
 
-	// A frame's number is its place in the list of frames. The game already throws away a sequence with a number too big.
+	// A frame's number is its place in the list of frames. The game already throws away a sequence with a number too big. A
+	// number just below the list would be thrown away by luck, so the second row is so far below that looking there would crash.
+	int const negativeFrames[] = { -1, -0x10000000 };
+
+	for (size_t i = 0; i < sizeof(negativeFrames) / sizeof(negativeFrames[0]); i++)
 	{
 		File_Chunk file;
 		Parent_File = &file;
 
-		char * end = PutAnimation(wholeShape + bytes, 0, true, -1, 4, 1, 0);
+		char * end = PutAnimation(wholeShape + bytes, 0, true, negativeFrames[i], 4, 1, 0);
 		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
 
 		Check(shape->count_children("ANIMSEQU") == 0, "a sequence with a negative frame number is thrown away");
