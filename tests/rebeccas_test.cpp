@@ -26,8 +26,8 @@
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
 // stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
 // animated shapes, test 16 the lists of texture coordinates, test 17 the lists of normals, test 18 whether a lift has all
-// its parts, test 19 chunks of morph frames, and test 20 chunks in the wrong
-// place.
+// its parts, test 19 chunks of morph frames, and test 20 chunks in the wrong place. Tests from 30 on cover the chunks whose
+// constructors used to walk the file with no look at the chunk's size, starting with the two checks they all share.
 //
 // HOW IT RUNS
 //
@@ -1626,6 +1626,55 @@ static void TestChunksInTheWrongPlace()
 	}
 }
 
+// 30. The two checks every chunk constructor shares. Each is proven alone here, so that a mistake in one can't hide behind a test of something
+// that uses it.
+static void TestChunkBoundChecks()
+{
+	puts("30. the checks on a count and a name");
+
+	struct CountRow { int count; size_t itemBytes; size_t bytesLeft; bool fits; char const * what; };
+	CountRow const counts[] =
+	{
+		{           0,  4,   0, true,  "no items fit in no room" },
+		{           1,  4,   0, false, "one item doesn't fit in no room" },
+		{          25,  4, 100, true,  "items that fill the room exactly fit" },
+		{          26,  4, 100, false, "one item too many doesn't fit" },
+		{          25,  4,  99, false, "room that's one byte short doesn't fit" },
+		{          -1,  4, 100, false, "a negative count doesn't fit" },
+		{          -1,  0, 100, false, "a negative count doesn't fit, even of items that take no room" },
+		{  (int)0x80000000, 4, 100, false, "the most negative count doesn't fit" },
+		{  0x40000001,  4, 100, false, "a count that wraps to 4 bytes doesn't fit" },
+		{  0x10000000, 16,   4, false, "a count that wraps to nothing doesn't fit" },
+		{  0x7fffffff, 12, 0xffffffff, false, "the largest count doesn't fit in the largest room" },
+	};
+
+	for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++)
+	{
+		Check(CountFitsChunk(counts[i].count, counts[i].itemBytes, counts[i].bytesLeft) == counts[i].fits, counts[i].what);
+	}
+
+	struct NameRow { char const * bytes; size_t bytesLeft; int length; char const * what; };
+	NameRow const names[] =
+	{
+		{ "abc\0xyz", 8,  3, "a name stops at its zero byte" },
+		{ "abc\0xyz", 4,  3, "a zero in the last byte counts" },
+		{ "abc\0xyz", 3, -1, "a zero one byte out of reach doesn't count" },
+		{ "\0abc",    4,  0, "an empty name has length 0" },
+		{ "abc",      0, -1, "no room at all means no name" },
+	};
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+	{
+		Check(NameLengthInChunk(names[i].bytes, names[i].bytesLeft) == names[i].length, names[i].what);
+	}
+
+	// Filled to the wall with no zero byte. A check that looks one byte too far crashes here, every time.
+	size_t const wallBytes = 8;
+	char * atTheWall = MemoryEndingAtAWall(wallBytes);
+	memset(atTheWall, 'x', wallBytes);
+	Check(NameLengthInChunk(atTheWall, wallBytes) == -1, "a name with no zero stops at the end of its room");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -1651,6 +1700,7 @@ int main()
 	TestLifts();
 	TestMorphFrames();
 	TestChunksInTheWrongPlace();
+	TestChunkBoundChecks();
 
 	if (checksFailed)
 	{

@@ -4,10 +4,12 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a group of helper macros that nothing used
 //   added ChildChunkFits, which checks that a child chunk's size from the file can be real
+//   added CountFitsChunk and NameLengthInChunk, which check a count and a name from the file against the room left in a chunk
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
+	#include <string.h>
 	#include "3dc.h"
 	#include "mem3dc.h" // for debug new and delete
 	#include "inline.h"
@@ -364,6 +366,24 @@ inline bool ChildChunkFits(char const * child, char const * start, signed int to
 	signed int const child_size = *(int const *)(child + 8);
 
 	return child_size >= 12 && child_size <= bytes_left;
+}
+
+// Is there room in bytes_left for count items of item_bytes each? A count comes from the file, so it can be negative, and it can be so big
+// that the sum wraps round in a 32-bit number and looks small. A negative count is refused, and this sum is done in numbers wide enough
+// not to wrap. Ask this before making a list of that size: asking for too much memory ends the game, and a chunk's own size can't be
+// too big for the file it came from.
+inline bool CountFitsChunk(int count, size_t item_bytes, size_t bytes_left)
+{
+	return count >= 0 && (unsigned long long) count * item_bytes <= bytes_left;
+}
+
+// How long is the name that starts here? A name in a level file ends at a zero byte, and strlen reads until it finds one, so a name with no
+// zero byte would run off the end of the chunk. This only looks at the bytes_left bytes it's given, and says -1 if there's no zero in them.
+inline int NameLengthInChunk(char const * name, size_t bytes_left)
+{
+	char const * const zero = (char const *) memchr(name, 0, bytes_left);
+
+	return zero ? (int)(zero - name) : -1;
 }
 
 ///////////////////////////////////////////////
