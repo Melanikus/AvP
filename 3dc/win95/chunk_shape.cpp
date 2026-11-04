@@ -15,6 +15,7 @@
 //   the two polygons of a merge pair must be triangles that share exactly one edge
 //   a chunk of morph frames must be exactly the size its count says, and hold no more frames than the game can count
 //   a textured polygon can't have the bit set that makes the game skip its texture coordinates
+//   a shape's centre is only made inside a shape, because it writes into the shape
 
 #include <math.h>
 

@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using its exact measured length, so it always fits
+//   a module's master and slave chunks are only made inside a module's data
 
 #include "chunk_waypoint.hpp"
 

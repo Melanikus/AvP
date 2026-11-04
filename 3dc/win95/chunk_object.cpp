@@ -4,6 +4,7 @@
 //   copied using their exact measured length, so they always fit; code only the level editor used was removed
 //   a child chunk whose size cannot be real is refused
 //   the copy of an object's name moved to chunk_object_name.hpp
+//   an object's header is only made inside an object, because it writes through its parent
 
 #include <string>
 #include "chunk.hpp"

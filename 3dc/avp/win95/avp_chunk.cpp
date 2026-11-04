@@ -3,6 +3,7 @@
 //   names saved into level data are copied by their measured length, an ID's name is built in text that
 //   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed;
 //   the decal list in a level file is checked against the real size of its chunk before it is read
+//   a generator is only made inside the special objects chunk, because it looks two levels up
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"

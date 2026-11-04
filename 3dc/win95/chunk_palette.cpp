@@ -3,6 +3,7 @@
 //   the TLTCONFG data in a level file is read without going past its end, text is copied using its exact
 //   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
 //   a child chunk whose size cannot be real is refused
+//   a game mode, its header and its children are only made in their right places, and a game mode must have a header
 
 #include "chunk_palette.hpp"
 #include "environment_chunk.hpp"
