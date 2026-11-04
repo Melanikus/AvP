@@ -84,21 +84,22 @@ void PixelLights_Release()
 
 // The total only needs two numbers a pixel, and it can go well over 1, so it needs a float picture. A picture of four numbers does as well,
 // at twice the memory. Gives back D3DFMT_UNKNOWN if the card has neither.
-static D3DFORMAT BestTotalFormat(LPDIRECT3DDEVICE9 device, D3DFORMAT screenFormat)
+static D3DFORMAT BestTotalFormat(LPDIRECT3DDEVICE9 device)
 {
 	static D3DFORMAT const wanted[2] = { D3DFMT_G16R16F, D3DFMT_A16B16G16R16F };
 
 	D3DFORMAT chosen = D3DFMT_UNKNOWN;
 	IDirect3D9 *direct3D = 0;
 	D3DDEVICE_CREATION_PARAMETERS created;
+	D3DDISPLAYMODE mode;
 
 	if (SUCCEEDED(device->GetDirect3D(&direct3D)))
 	{
-		if (SUCCEEDED(device->GetCreationParameters(&created)))
+		if (SUCCEEDED(device->GetCreationParameters(&created)) && SUCCEEDED(device->GetDisplayMode(0, &mode)))
 		{
 			for (int i = 1; i >= 0; i--)
 			{
-				if (direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, screenFormat, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, wanted[i]) == D3D_OK)
+				if (direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, wanted[i]) == D3D_OK)
 				{
 					chosen = wanted[i];
 				}
@@ -142,7 +143,7 @@ bool PixelLights_Ready(LPDIRECT3DDEVICE9 device)
 	HRESULT const measured = screen->GetDesc(&size);
 	screen->Release();
 
-	D3DFORMAT const format = SUCCEEDED(measured) ? BestTotalFormat(device, size.Format) : D3DFMT_UNKNOWN;
+	D3DFORMAT const format = SUCCEEDED(measured) ? BestTotalFormat(device) : D3DFMT_UNKNOWN;
 
 	if (format == D3DFMT_UNKNOWN
 		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, &totalTexture, NULL))

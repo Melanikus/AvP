@@ -49,16 +49,17 @@ void SurfacePictures_Release()
 
 // A normal needs more than 8 bits a number, or a smooth curve shows steps in its light. All three pictures must use the same number of
 // bits a pixel, or the card can't draw them together, and this format has the same 32 as the other two.
-static D3DFORMAT BestNormalFormat(LPDIRECT3DDEVICE9 device, D3DFORMAT screenFormat)
+static D3DFORMAT BestNormalFormat(LPDIRECT3DDEVICE9 device)
 {
 	D3DFORMAT chosen = D3DFMT_A8R8G8B8;
 	IDirect3D9 *direct3D = 0;
 	D3DDEVICE_CREATION_PARAMETERS created;
+	D3DDISPLAYMODE mode;
 
 	if (SUCCEEDED(device->GetDirect3D(&direct3D)))
 	{
-		if (SUCCEEDED(device->GetCreationParameters(&created))
-			&& direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, screenFormat, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_A2R10G10B10) == D3D_OK)
+		if (SUCCEEDED(device->GetCreationParameters(&created)) && SUCCEEDED(device->GetDisplayMode(0, &mode))
+			&& direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_A2R10G10B10) == D3D_OK)
 		{
 			chosen = D3DFMT_A2R10G10B10;
 		}
@@ -131,7 +132,7 @@ bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device)
 		return false;
 	}
 
-	if (FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, BestNormalFormat(device, size.Format), D3DPOOL_DEFAULT, &normalTexture, NULL))
+	if (FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, BestNormalFormat(device), D3DPOOL_DEFAULT, &normalTexture, NULL))
 		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &colourTexture, NULL))
 		|| FAILED(normalTexture->GetSurfaceLevel(0, &normalSurface))
 		|| FAILED(colourTexture->GetSurfaceLevel(0, &colourSurface)))
