@@ -126,8 +126,8 @@ const D3DFORMAT DisplayFormats32[] =
 // list of allowed depth buffer formats
 const D3DFORMAT DepthFormats[] =
 {
+	D3DFMT_D24S8,	// first: toy-shadows needs the stencil bits, and D32 has none
 	D3DFMT_D32,
-	D3DFMT_D24S8,
 	D3DFMT_D24X8,
 	D3DFMT_D24FS8,
 	D3DFMT_D16
@@ -2274,9 +2274,9 @@ bool InitialiseDirect3D()
 		D3DCREATE_SOFTWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 #else
 
-	// create D3DCREATE_PUREDEVICE
+	// toy-shadows: no D3DCREATE_PUREDEVICE, which can't be relied on to give a state block
 	LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
-		D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_PUREDEVICE, &d3dpp, &d3d.lpD3DDevice);
+		D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 
 	if (FAILED(LastError))
 	{
