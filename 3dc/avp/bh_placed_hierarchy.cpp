@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a sequence number the list does not have is ignored
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved placed hierarchy has to hold all the numbers it says it holds
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -366,6 +368,9 @@ void LoadStrategy_PlacedHierarchy(SAVE_BLOCK_STRATEGY_HEADER* header)
 	
 	ph_bhv = (PLACED_HIERARCHY_BEHAV_BLOCK*)sbPtr->SBdataptr;
 	
+	//after the header come a sequence number, a count, and that many numbers, and all of them are read one after another
+	if(!SaveBlockArrayFits((SAVE_BLOCK_HEADER*)header, (int)sizeof(*header) + 2 * (int)sizeof(int), (int*)(buffer + sizeof(int)), (int)sizeof(int), ph_bhv->num_sounds)) return;
+
 	{
 		int sequence_index;
 		sequence_index = *(int*) buffer;

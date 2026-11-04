@@ -10,6 +10,8 @@
 //   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
 //   a save file can only change a model for a whole model from the same file
 //   looking for a part in a model that is not there now gives back nothing
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   an angle worked out while blending two poses stays inside the sine table, whatever timers a save held
 
 #include "3dc.h"
 #include "io.h"
@@ -2493,6 +2495,9 @@ void MulQuat(QUAT *q1, QUAT *q2, QUAT *output)
 	QNormalise(output);
 }
 
+// Blends two poses. lerp says how far between them, and it comes from an animation's timers, which a save can set to anything, so an angle
+// worked out here can be any number. The sine table has 4096 places, and an angle goes round in steps of 4096, so wrap360 keeps each lookup
+// in the table. A real animation's angles are in range already, so this changes nothing for them. Slerp2 below does the same.
 void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 {
 	int sclp, sclq;
@@ -2514,9 +2519,9 @@ void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 		output->quatz = ((int) - input->QOrient.quatw) << 1;
 		output->quatw = ((int)input->QOrient.quatz) << 1;
 		t1 = MUL_FIXED((ONE_FIXED - lerp), 1024);
-		sclp = GetSin(t1);
+		sclp = GetSin(t1 & wrap360);
 		t2 = MUL_FIXED(lerp, 1024);
-		sclq = GetSin(t2);
+		sclq = GetSin(t2 & wrap360);
 
 		// multiply sclp and sclq by 2 to make up for short quats
 		sclp <<= 1;
@@ -2538,10 +2543,10 @@ void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 			int t1, t2;
 			int oneoversinomega = GetOneOverSin(omega);
 			t1 = MUL_FIXED((ONE_FIXED - lerp), omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclp = MUL_FIXED(t2, oneoversinomega);
 			t1 = MUL_FIXED(lerp, omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclq = MUL_FIXED(t2, oneoversinomega);
 		}
 
@@ -2580,9 +2585,9 @@ void Slerp2(SECTION_DATA *input, int lerp, QUAT *output)
 		output->quatz = -input->stored_quat.quatw;
 		output->quatw = input->stored_quat.quatz;
 		t1 = MUL_FIXED((ONE_FIXED - lerp), 1024);
-		sclp = GetSin(t1);
+		sclp = GetSin(t1 & wrap360);
 		t2 = MUL_FIXED(lerp, 1024);
-		sclq = GetSin(t2);
+		sclq = GetSin(t2 & wrap360);
 		output->quatx = (MUL_FIXED(input->stored_quat.quatx, sclp)) + (MUL_FIXED(output->quatx, sclq));
 		output->quaty = (MUL_FIXED(input->stored_quat.quaty, sclp)) + (MUL_FIXED(output->quaty, sclq));
 		output->quatz = (MUL_FIXED(input->stored_quat.quatz, sclp)) + (MUL_FIXED(output->quatz, sclq));
@@ -2599,10 +2604,10 @@ void Slerp2(SECTION_DATA *input, int lerp, QUAT *output)
 		{
 			int t1, t2;
 			t1 = MUL_FIXED((ONE_FIXED - lerp), input->omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclp = MUL_FIXED(t2, input->oneoversinomega);
 			t1 = MUL_FIXED(lerp, input->omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclq = MUL_FIXED(t2, input->oneoversinomega);
 		}
 

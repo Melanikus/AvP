@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a switch that starts out moving needs a track to move along
 
+//   a saved switch has to be on a sequence of its own texture animation
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -830,6 +831,7 @@ void BinarySwitchSetSynchData(STRATEGYBLOCK* sbPtr,int status)
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct binary_switch_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -885,7 +887,7 @@ void LoadStrategy_BinarySwitch(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(triggered_last)
 
 	//set the texture animation sequence
-	if(bs_bhv->bs_tac)
+	if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))
 	{
 		bs_bhv->bs_tac->tac_sequence = block->txanim_sequence;
 		bs_bhv->bs_tac->tac_txah_s = GetTxAnimHeaderFromShape(bs_bhv->bs_tac, (sbPtr->shapeIndex));

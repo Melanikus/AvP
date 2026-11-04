@@ -83,6 +83,36 @@ bool Save_NameFillsBlock(int blockSize, int fixedSize, const int *nameLength, co
 	return length >= 1 && length == blockSize - fixedSize && name[length - 1] == '\0';
 }
 
+// A morph's frame number holds which frame it's on in its top half, which picks an entry in the morph's list of frames, and how far on it is in
+// its bottom half. maxFrames is the end of the last frame, so a real frame is always less than that.
+int Save_MorphFrameOrOwn(int saved, int own, int maxFrames)
+{
+	return (saved >= 0 && saved < maxFrames) ? saved : own;
+}
+
+// A texture animation's list is one number the game uses as working space, then one entry for each sequence, then an empty entry to mark the
+// end (SetupAnimOnTriangle in chunk_load.cpp). The game writes through the entry it finds, so a sequence past the end would have it write
+// through whatever happens to be there. The list only ever gets as far as the empty entry, so walking along it is always safe.
+bool Save_TextureSequenceIsValid(const int *animationList, int sequence)
+{
+	if (!animationList || sequence < 0)
+	{
+		return false;
+	}
+
+	void *const *entries = (void *const *)animationList + 1;
+
+	for (int i = 0; i <= sequence; i++)
+	{
+		if (!entries[i])
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 // A dynamics block says where an object is and how it moves. Nearly all of it is only numbers, and strange numbers just give a strange
 // object. These are the parts that can do real harm:
 //

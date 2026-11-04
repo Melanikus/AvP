@@ -109,6 +109,30 @@ static void TestNames()
 	Check(!Save_NameFillsBlock(24, 20, &four, noEnd), "a name with no end mark");
 }
 
+static void TestMorphFrames()
+{
+	Check(Save_MorphFrameOrOwn(0, 7, 65536) == 0, "the first frame of a morph");
+	Check(Save_MorphFrameOrOwn(65535, 7, 65536) == 65535, "the very end of the last frame");
+	Check(Save_MorphFrameOrOwn(65536, 7, 65536) == 7, "one past the end keeps the door's own");
+	Check(Save_MorphFrameOrOwn(-1, 7, 65536) == 7, "a negative frame keeps the door's own");
+	Check(Save_MorphFrameOrOwn(2147483647, 7, 65536) == 7, "a huge frame keeps the door's own");
+}
+
+static void TestTextureSequences()
+{
+	// one entry of working space, two sequences and the empty entry at the end, then something that must never be reached
+	int a = 1, b = 2, c = 3;
+	void *list[5] = { 0, &a, &b, 0, &c };
+	int const *animation = (int const *)list;
+
+	Check(Save_TextureSequenceIsValid(animation, 0), "the first sequence");
+	Check(Save_TextureSequenceIsValid(animation, 1), "the last sequence");
+	Check(!Save_TextureSequenceIsValid(animation, 2), "one sequence past the end");
+	Check(!Save_TextureSequenceIsValid(animation, 3), "a sequence beyond the empty entry");
+	Check(!Save_TextureSequenceIsValid(animation, -1), "no negative sequence, which would be the working space");
+	Check(!Save_TextureSequenceIsValid(0, 0), "no list at all");
+}
+
 static void MakeLive(DYNAMICSBLOCK &live)
 {
 	memset(&live, 0, sizeof(live));
@@ -202,6 +226,8 @@ int main()
 	TestTableNumbers();
 	TestListPlaces();
 	TestNames();
+	TestMorphFrames();
+	TestTextureSequences();
 	TestDynamics();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");
