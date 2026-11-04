@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
 //   counted lists are measured against their chunks before they're made
+//   a sequence checks that each of its frames has a place of its own
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -195,6 +196,34 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 Object_Animation_Sequence_Header_Chunk * Object_Animation_Sequence_Chunk::get_header()
 {
 	return(Object_Animation_Sequence_Header_Chunk *) lookup_single_child("OBASEQHD");
+}
+
+// Each frame says which place it takes in its sequence, and the game puts it straight in that place, in a list just big enough to hold them all. So every
+// number has to be a place in the list, or it would write past the end, and no two can be the same, or a place would be left empty for the game to read.
+void Object_Animation_Sequence_Chunk::post_input_processing()
+{
+	List <Object_Animation_Sequence_Frame_Chunk *> frames;
+	get_frames(&frames);
+
+	int const num_frames = frames.size();
+	bool * const place_taken = new bool [num_frames] ();
+
+	for (LIF<Object_Animation_Sequence_Frame_Chunk *> frame(&frames); !frame.done(); frame.next())
+	{
+		int const place = frame()->frame_ref_no;
+
+		if (place < 0 || place >= num_frames || place_taken[place])
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		place_taken[place] = true;
+	}
+
+	delete[] place_taken;
+
+	Chunk_With_Children::post_input_processing();
 }
 
 void Object_Animation_Sequence_Chunk::get_frames(List <Object_Animation_Sequence_Frame_Chunk*> *pList)

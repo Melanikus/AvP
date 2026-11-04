@@ -3,6 +3,7 @@
 //   text is copied using its exact measured length, so it always fits
 //   a module's master and slave chunks are only made inside a module's data
 //   counted lists are measured against their chunks before they're made
+//   a waypoint's links have to lead to places in its own list
 
 #include "chunk_waypoint.hpp"
 
@@ -133,6 +134,22 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 		if(NumAlienWaypoints)
 		{
 			AlienWaypoints=&Waypoints[0];
+		}
+
+		// A link says which waypoint it leads to, counted from the start of its own list, and an alien or a marine following it goes straight to that place
+		// in the list. So it has to be a place in the list.
+		for(int i=0;i<NumWaypoints;i++)
+		{
+			ChunkWaypoint const* cw=&Waypoints[i];
+			int const list_size=(i<NumAlienWaypoints) ? NumAlienWaypoints : NumGroundWaypoints;
+
+			for(int j=0;j<cw->NumWPLinks;j++)
+			{
+				if(cw->WayLinks[j].index<0 || cw->WayLinks[j].index>=list_size)
+				{
+					Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				}
+			}
 		}
 	}
 

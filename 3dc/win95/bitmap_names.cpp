@@ -3,6 +3,7 @@
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
+//   an image's index is checked, because it's used as a place in a list
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -139,6 +140,15 @@ Chunk_With_BMPs::Chunk_With_BMPs (Chunk_With_Children * parent, const char * con
 		bdata += 4;
 		j = *((int *)bdata);
 		bdata += 4;
+
+		// This number is used as a place in a list of images, so a negative one would write in front of the list, and a huge one would ask for more memory
+		// than there is. The loader reads a polygon's number from 15 bits (copy_to_shapeheader), so 32767 is the most any polygon can use. The game's own levels go up to 73.
+		if (j < 0 || j > 32767)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			j = 0;
+		}
+
 		d1 = *((int *)bdata);
 		bdata += 4;
 		d2 = *((int *)bdata);

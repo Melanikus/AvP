@@ -6,6 +6,7 @@
 //   an animated shape with no merge data no longer crashes; an alternate skin only shares an animation that fits it
 //   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
 //   a shape stays still if a frame of its texture animation names a picture that isn't real
+//   the list of a level's image numbers is freed the way it was made
 
 #include <stdlib.h>
 #include <string>
@@ -1211,7 +1212,7 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 
 		if (h->tex_index_nos)
 		{
-			delete h->tex_index_nos;
+			delete[] h->tex_index_nos;
 		}
 
 		h->tex_index_nos = new int [h->max_index + 1];

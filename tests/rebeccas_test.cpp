@@ -2967,6 +2967,135 @@ static void TestCountedLists()
 	}
 }
 
+// 37. Numbers from a level file that the game uses as places in a list. A wrong one writes outside the list, or sends the game somewhere it never comes back from.
+static bool ImageIndexAccepted(int index)
+{
+	alignas(int) static char bytes[64];
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, 1);
+	PutNumber(bytes, sizeof(int) + sizeof(int), index);
+
+	return ChunkAccepted(MakeChunk<Global_BMP_Name_Chunk>, bytes, sizeof(int) + 24);
+}
+
+static bool BranchAccepted(int place, int branch)
+{
+	alignas(int) static char bytes[128];
+	size_t const itemBytes = 4 * sizeof(int);
+	int const items = 4;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, items);
+	PutNumber(bytes, sizeof(int) + place * itemBytes + sizeof(int), branch);
+
+	return ChunkAccepted(MakeChunk<VModule_Array_Chunk>, bytes, sizeof(int) + items * itemBytes);
+}
+
+// Three waypoints, and the first of them has one link. firstGround is which waypoint starts the ground list, or -1 if there's only one list.
+static bool LinkAccepted(int target, int firstGround, int fromWaypoint)
+{
+	alignas(int) static char bytes[512];
+	size_t const waypointBytes = 3 * sizeof(ChunkVectorInt) + 4 * sizeof(int);
+	size_t const flagsAt = 36;
+	size_t const linksAt = 44;
+	size_t const linkBytes = sizeof(WaypointLink);
+	int const waypoints = 3;
+
+	memset(bytes, 0, sizeof(bytes));
+	PutNumber(bytes, 0, waypoints);
+
+	size_t at = sizeof(int);
+
+	for (int i = 0; i < waypoints; i++)
+	{
+		if (i == firstGround)
+		{
+			PutNumber(bytes, at + flagsAt, WaypointFlag_FirstGroundWaypoint);
+		}
+
+		if (i == fromWaypoint)
+		{
+			PutNumber(bytes, at + linksAt, 1);
+			PutNumber(bytes, at + linksAt + sizeof(int), target);
+			at += linkBytes;
+		}
+
+		at += waypointBytes;
+	}
+
+	return ChunkAccepted(MakeChunk<Module_Waypoint_Chunk>, bytes, at);
+}
+
+// A sequence holding one frame for each number here. Each frame's place is its 33rd byte on.
+static bool FramePlacesAccepted(int const * places, int frames)
+{
+	size_t const frameDataBytes = 44;
+	size_t const placeAt = 32;
+	char * end = wholeShape;
+
+	for (int i = 0; i < frames; i++)
+	{
+		char * data = PutChunk(end, "OBASEQFR", frameDataBytes);
+		memcpy(data + placeAt, &places[i], sizeof(int));
+		end = data + frameDataBytes;
+	}
+
+	File_Chunk file;
+	Parent_File = &file;
+
+	new Object_Animation_Sequence_Chunk(&file, wholeShape, end - wholeShape);
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestNumbersUsedAsPlaces()
+{
+	puts("37. numbers used as places");
+
+	Check(ImageIndexAccepted(0), "the first image's index is accepted");
+	Check(ImageIndexAccepted(73), "the largest image index in the game's own levels is accepted");
+	Check(ImageIndexAccepted(32767), "the largest image index a polygon can name is accepted");
+	Check(!ImageIndexAccepted(32768), "an image index no polygon can name is refused");
+	Check(!ImageIndexAccepted(-1), "a negative image index is refused");
+	Check(!ImageIndexAccepted(0x7fffffff), "an image index that would ask for all the memory is refused");
+
+	Check(BranchAccepted(0, 2), "a jump forward in a module's list is accepted");
+	Check(BranchAccepted(1, 4), "a jump to the end of a module's list is accepted");
+	Check(!BranchAccepted(1, 5), "a jump past the end of a module's list is refused");
+	Check(!BranchAccepted(2, 2), "a jump to itself is refused");
+	Check(!BranchAccepted(2, 1), "a jump back is refused");
+	Check(!BranchAccepted(2, -1), "a negative jump is refused");
+
+	Check(LinkAccepted(2, -1, 0), "a link to the last waypoint is accepted");
+	Check(!LinkAccepted(3, -1, 0), "a link past the last waypoint is refused");
+	Check(!LinkAccepted(-1, -1, 0), "a negative link is refused");
+	Check(LinkAccepted(1, 2, 0), "a link to the last waypoint of the first list is accepted");
+	Check(!LinkAccepted(2, 2, 0), "a link past the end of its own list is refused");
+	Check(LinkAccepted(0, 2, 2), "a link in the ground list to its only waypoint is accepted");
+	Check(!LinkAccepted(1, 2, 2), "a link past the end of the ground list is refused");
+
+	int const inOrder[2] = { 0, 1 };
+	int const swapped[2] = { 1, 0 };
+	int const repeated[2] = { 1, 1 };
+	int const pastTheEnd[2] = { 0, 2 };
+	int const negative[2] = { -1, 0 };
+	int const farBelow[2] = { -100000000, 0 };   // just below zero could read a byte that happens to refuse it, and this can't
+
+	Check(FramePlacesAccepted(inOrder, 2), "frames in order are accepted");
+	Check(FramePlacesAccepted(swapped, 2), "frames out of order are accepted");
+	Check(FramePlacesAccepted(inOrder, 0), "a sequence with no frames is accepted");
+	Check(!FramePlacesAccepted(repeated, 2), "two frames in one place are refused");
+	Check(!FramePlacesAccepted(pastTheEnd, 2), "a frame past the end of its sequence is refused");
+	Check(!FramePlacesAccepted(negative, 2), "a frame in a negative place is refused");
+	Check(!FramePlacesAccepted(farBelow, 2), "a frame far below the start of its sequence is refused");
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -3000,6 +3129,7 @@ int main()
 	TestModuleBoxes();
 	TestStrategies();
 	TestCountedLists();
+	TestNumbersUsedAsPlaces();
 
 	if (checksFailed)
 	{

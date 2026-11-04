@@ -6,6 +6,7 @@
 //   the copy of an object's name moved to chunk_object_name.hpp
 //   a module's lists and an object's track and alternate places are measured against their chunks before they're made
 //   an object's header is only made inside an object, because it writes through its parent
+//   a jump in a module's list of what it can see has to go forward
 
 #include <string>
 #include "chunk.hpp"
@@ -727,7 +728,14 @@ VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const ch
 
 		vmod_array[i].branch_no = *((int *) vmdata);
 		vmdata += 4;
-		
+
+		// A closed door makes the game jump along this list to the place named here, and it walks the list until the end. A jump back would never reach the
+		// end, so the game would hang. So a jump goes forward, as far as the end of the list and no further.
+		if (vmod_array[i].branch_no != 0 && (vmod_array[i].branch_no <= i || vmod_array[i].branch_no > num_array_items))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
 		vmod_array[i].flags = *((int *) vmdata);
 		vmdata += 4;
 
