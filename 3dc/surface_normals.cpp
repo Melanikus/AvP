@@ -220,6 +220,11 @@ void SurfaceNormals_PrepareShape(SHAPEHEADER *shape)
 	}
 
 	shape->sh_surfacepolygons = list;
+
+	// Anything kept for a shape is found by this number. A shape's place in memory wouldn't do: the next level's shapes use the same memory, so
+	// something kept from the old level could pass for the new one. This only counts up, and no run of the game loads four billion shapes.
+	static unsigned int lastListNumber = 0;
+	shape->sh_surfacelistnumber = ++lastListNumber;
 }
 
 void SurfaceNormals_StartObject()

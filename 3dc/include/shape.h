@@ -223,6 +223,9 @@ typedef struct shapeheader
 	 All zero for a polygon with no texture. Models have one too, because a model's body part doesn't change shape*/
 	struct SurfaceTangent *sh_surfacetangents;
 
+	/*a number no other list has, or 0 if this shape has no list: see SurfaceNormals_PrepareShape*/
+	unsigned int sh_surfacelistnumber;
+
 } SHAPEHEADER;
 
 
