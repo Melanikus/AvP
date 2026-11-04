@@ -3,6 +3,7 @@
 //   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
 //   text is copied using its exact measured length, so it always fits
 //   a shape stored in a level as a raw copy of memory is no longer read, because nothing could check it
+//   an animated shape with no merge data no longer crashes; an alternate skin only shares an animation that fits it
 
 #include <stdlib.h>
 #include <string>
@@ -901,7 +902,14 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 				    list_pos,
 				    object
 				);
-				CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
+				// Sharing an animation points this skin at the frames' lists, which fit the main shape. A skin with other
+				// counts would run off the end of them, so it stays still instead.
+				if (mainshapelist[start_shape_no]->numpoints == mainshapelist[list_pos]->numpoints &&
+				    mainshapelist[start_shape_no]->numitems == mainshapelist[list_pos]->numitems)
+				{
+					CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
+				}
+
 				const char *shpname = sssc->get_shape_name();
 				GLOBALASSERT(shpname);
 				msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
@@ -2275,7 +2283,9 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	//create conversion between unmerged poly nos and merged poly nos
 	int *PolyConv = 0;
 	int *mgd = 0;
-	PolyConv = new int[smdc->num_polys];
+	// with no merge data, nothing was merged, so the shape still has all its polygons
+	int const polys_before_merging = smdc ? smdc->num_polys : shp->numitems;
+	PolyConv = new int[polys_before_merging];
 
 	if (smdc)
 	{
@@ -2309,7 +2319,7 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	}
 	else
 	{
-		for (int i = 0; i < smdc->num_polys; i++)
+		for (int i = 0; i < polys_before_merging; i++)
 		{
 			PolyConv[i] = i;
 		}

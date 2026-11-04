@@ -24,7 +24,8 @@
 // real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that doesn't
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
 // Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
-// stored in a level as a raw copy of memory is skipped.
+// stored in a level as a raw copy of memory is skipped. Tests 13 to 15 cover repeated and missing chunks, merge data and
+// animated shapes.
 //
 // HOW IT RUNS
 //
@@ -411,13 +412,11 @@ static void TestObjectsAndShapes()
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with no header is refused");
 	}
 
-	// How many points a shape claims, at byte 24 of its data. The game's list of points holds 10000. These made-up shapes
-	// have no points of their own, so only the count is being tested here.
+	// How many points a shape claims, at byte 24 of its data. These made-up shapes have no chunk of points, so any claim but
+	// 0 is refused. Test 13 tries the game's limit on shapes with real points.
 	struct PointCount { int points; bool accepted; char const * what; };
 	PointCount const pointCounts[] =
 	{
-		{      10000, true,  "a shape with as many points as the game can hold is accepted" },
-		{      10001, false, "one point too many is refused" },
 		{         -1, false, "a negative number of points is refused" },
 		{ 0x7FFFFFFF, false, "a huge number of points is refused" },
 	};
@@ -591,6 +590,9 @@ static void TestPolygons()
 		{ { 0, 1, 2,  3,  0 }, false, "a polygon with no end marker is refused" },
 		{ { 0, 1, 4, -1, -1 }, false, "a corner past the last point is refused" },
 		{ { 0, 1, -2, -1, -1 }, false, "a negative corner is refused" },
+		{ { -1, -1, -1, -1, -1 }, false, "a polygon with no corners is refused" },
+		{ { 0, -1, -1, -1, -1 }, false, "a polygon with 1 corner is refused" },
+		{ { 0, 1, -1, -1, -1 }, false, "a polygon with 2 corners is refused" },
 	};
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -756,6 +758,222 @@ static void TestRawMemoryShape()
 	Parent_File = 0;
 }
 
+// These write one chunk each, for shapes laid out in unusual ways, and give back where the next chunk goes.
+static char * PutPoints(char * where, int points)
+{
+	return PutChunk(where, "SHPRAWVT", 12 * (size_t)points) + 12 * (size_t)points;
+}
+
+static char * PutPolygons(char * where, int polygons, int const * corners)
+{
+	char * data = PutChunk(where, "SHPPOLYS", 36 * (size_t)polygons);
+
+	for (int i = 0; i < polygons; i++)
+	{
+		memcpy(data + 36 * i + 16, corners, 5 * sizeof(int));
+	}
+
+	return data + 36 * (size_t)polygons;
+}
+
+static char * PutShapeHeader(char * where, int points, int polygons)
+{
+	char * data = PutChunk(where, "SHPHEAD1", ShapeHeaderDataBytes);
+
+	memcpy(data + ShapePointCountAt, &points, sizeof(points));
+	memcpy(data + ShapePolygonCountAt, &polygons, sizeof(polygons));
+
+	return data + ShapeHeaderDataBytes;
+}
+
+// Loads the shape in wholeShape, which ends at "end", and says whether the level would be accepted.
+static bool ShapeIsAccepted(char const * end)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	new Shape_Chunk(&file, wholeShape, end - wholeShape);
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+	return accepted;
+}
+
+// 13. A chunk of points or polygons replaces the shape's list as it's read, while the checks look at the first one. So a
+// second chunk could leave the shape with a shorter list than the one that was checked. Each header here agrees with the
+// first chunk, not the last. And a shape with no chunk of points has no list of points, so it can't claim to have any.
+static void TestRepeatedAndMissingChunks()
+{
+	puts("13. repeated and missing chunks");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	char * end;
+
+	end = PutPoints(wholeShape, 5);
+	end = PutPoints(end, 4);
+	end = PutPolygons(end, 1, triangle);
+	end = PutShapeHeader(end, 5, 1);
+	Check(!ShapeIsAccepted(end), "a shape with two chunks of points is refused");
+
+	end = PutPoints(wholeShape, 4);
+	end = PutPolygons(end, 2, triangle);
+	end = PutPolygons(end, 1, triangle);
+	end = PutShapeHeader(end, 4, 2);
+	Check(!ShapeIsAccepted(end), "a shape with two chunks of polygons is refused");
+
+	end = PutShapeHeader(wholeShape, 4, 0);
+	Check(!ShapeIsAccepted(end), "a header that claims points with no chunk of points is refused");
+
+	end = PutShapeHeader(wholeShape, 0, 0);
+	Check(ShapeIsAccepted(end), "an empty shape that claims nothing is accepted");
+
+	// The game's list of points holds 10000.
+	struct PointCount { int points; bool accepted; char const * what; };
+	PointCount const pointCounts[] =
+	{
+		{ 10000, true,  "a shape with as many points as the game can hold is accepted" },
+		{ 10001, false, "one point too many is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(pointCounts) / sizeof(pointCounts[0]); i++)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, pointCounts[i].points, triangle);
+
+		Check(ShapeIsAccepted(wholeShape + bytes) == pointCounts[i].accepted, pointCounts[i].what);
+	}
+}
+
+// 14. Merge data has one entry per polygon: -1 if it stands alone, or the place of the polygon it joins. The game uses that
+// place to reach into its lists, so it has to be real, and the two polygons of a pair have to name each other.
+static void TestMergeData()
+{
+	puts("14. merge data");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+
+	struct MergeRow { int entries; int merge[3]; bool accepted; char const * what; };
+	MergeRow const rows[] =
+	{
+		{ 3, { -1, -1, -1 }, true,  "polygons that stand alone are accepted" },
+		{ 3, {  1,  0, -1 }, true,  "a pair of polygons that name each other is accepted" },
+		{ 2, { -1, -1,  0 }, false, "merge data for too few polygons is refused" },
+		{ 3, {  1,  2,  0 }, false, "a polygon whose partner names another is refused" },
+		{ 3, {  0, -1, -1 }, false, "a polygon that is its own partner is refused" },
+		{ 3, {  3, -1, -1 }, false, "a partner past the last polygon is refused" },
+		{ 3, { -2, -1, -1 }, false, "a negative partner is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		size_t const mergeBytes = rows[i].entries * sizeof(int);
+
+		char * end = PutShapeHeader(wholeShape, 4, 3);
+		end = PutPoints(end, 4);
+		end = PutPolygons(end, 3, triangle);
+
+		char * merge = PutChunk(end, "SHPMRGDT", mergeBytes);
+		memcpy(merge, rows[i].merge, mergeBytes);
+
+		Check(ShapeIsAccepted(merge + mergeBytes) == rows[i].accepted, rows[i].what);
+	}
+}
+
+// Writes one animation with one frame, or with none. A frame has its own points and its own polygon normals. The data of
+// a sequence and of a frame is five numbers and a name, here an empty one. The first number is its place, and the second
+// a frame's flags. Gives back where the next chunk goes.
+static char * PutAnimation(char * where, int sequence, bool hasFrame, int frameNumber, int points, int normals, int flags)
+{
+	size_t const dataBytes = 24;
+	size_t const frameBytes = (ChunkHeaderBytes + dataBytes) + (ChunkHeaderBytes + 12 * (size_t)points) + (ChunkHeaderBytes + 12 * (size_t)normals);
+	size_t const sequenceBytes = (ChunkHeaderBytes + dataBytes) + (hasFrame ? ChunkHeaderBytes + frameBytes : 0);
+
+	char * sequenceChunk = PutChunk(where, "ANIMSEQU", sequenceBytes);
+	char * sequenceData = PutChunk(sequenceChunk, "ANISEQDT", dataBytes);
+	memcpy(sequenceData, &sequence, sizeof(sequence));
+
+	if (hasFrame)
+	{
+		char * frameChunk = PutChunk(sequenceData + dataBytes, "ANIMFRAM", frameBytes);
+		char * frameData = PutChunk(frameChunk, "ANIFRADT", dataBytes);
+		memcpy(frameData, &frameNumber, sizeof(frameNumber));
+		memcpy(frameData + 4, &flags, sizeof(flags));
+
+		char * pointsEnd = PutPoints(frameData + dataBytes, points);
+		PutChunk(pointsEnd, "SHPPNORM", 12 * (size_t)normals);
+	}
+
+	return where + ChunkHeaderBytes + sequenceBytes;
+}
+
+// 15. To show a frame, the game points the shape at that frame's lists and goes on using the shape's own counts, so a frame
+// has to match its shape. These shapes have 4 points and 1 polygon.
+static void TestAnimatedShapes()
+{
+	puts("15. animated shapes");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	int const badCorner[5] = { 0, 1, 9, -1, -1 };
+	int const madeBetween = animframeflag_interpolated_frame;
+
+	struct AnimationRow { int sequence; int points; int normals; int flags; bool accepted; char const * what; };
+	AnimationRow const rows[] =
+	{
+		{    0, 4, 1, 0,           true,  "a frame that matches its shape is accepted" },
+		{ 1023, 4, 1, 0,           true,  "the biggest sequence number is accepted" },
+		{ 1024, 4, 1, 0,           false, "a sequence number too big for the list is refused" },
+		{   -1, 4, 1, 0,           false, "a negative sequence number is refused" },
+		{    0, 3, 1, 0,           false, "a frame with too few points is refused" },
+		{    0, 5, 1, 0,           false, "a frame with too many points is refused" },
+		{    0, 4, 0, 0,           false, "a frame with too few normals is refused" },
+		{    0, 4, 2, 0,           false, "a frame with too many normals is refused" },
+		{    0, 4, 1, madeBetween, false, "a frame marked as made by the game is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * end = PutAnimation(wholeShape + bytes, rows[i].sequence, true, 0, rows[i].points, rows[i].normals, rows[i].flags);
+
+		Check(ShapeIsAccepted(end) == rows[i].accepted, rows[i].what);
+	}
+
+	size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+	Check(!ShapeIsAccepted(PutAnimation(wholeShape + bytes, 0, false, 0, 0, 0, 0)), "an animation with no frames is refused");
+
+	// A frame's number is its place in the list of frames. The game already throws away a sequence with a number too big.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char * end = PutAnimation(wholeShape + bytes, 0, true, -1, 4, 1, 0);
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+
+		Check(shape->count_children("ANIMSEQU") == 0, "a sequence with a negative frame number is thrown away");
+	}
+
+	// A sub-shape that fails has to stop there. Working out an animation's normals is the step that would write through the
+	// bad corner, and that step is what makes the list of normals, so an empty list shows that it never ran.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const subBytes = BuildShapeData(wholeShape, true, 4, badCorner);
+		char * end = PutAnimation(wholeShape + subBytes, 0, true, 0, 4, 1, 0);
+
+		Shape_Sub_Shape_Chunk * subShape = new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+		file.post_input_processing();
+
+		Anim_Shape_Sequence_Chunk * animation = (Anim_Shape_Sequence_Chunk *) subShape->lookup_single_child("ANIMSEQU");
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "an animated sub-shape with a bad corner is refused");
+		Check(animation && animation->sequence_data.v_normal_list == 0, "its animation is left alone");
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -773,6 +991,9 @@ int main()
 	TestPolygons();
 	TestSubShapes();
 	TestRawMemoryShape();
+	TestRepeatedAndMissingChunks();
+	TestMergeData();
+	TestAnimatedShapes();
 
 	if (checksFailed)
 	{

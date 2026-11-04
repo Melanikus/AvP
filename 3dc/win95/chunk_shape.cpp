@@ -7,6 +7,8 @@
 //   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points;
 //   sub-shapes get the same checks, and a morphing shape must fit the morph list and match its frames
 //   removed the class that read a shape stored in a level as a raw copy of memory, because nothing could check it
+//   a polygon needs at least 3 corners; a shape can only have one list of points and one of polygons, and a shape with no
+//   points chunk can't claim any; merge data and animations are checked against the shape; a sub-shape that fails stops
 
 #include <math.h>
 
@@ -105,6 +107,88 @@ Shape_Header_Chunk * Shape_Chunk::get_header()
 	return (Shape_Header_Chunk *) this->lookup_single_child ("SHPHEAD1");
 }
 
+// Merge data pairs up triangles that the game joins into four-cornered polygons. There's one entry for each polygon: -1 if it
+// stands alone, or else the place of the polygon it joins. The game uses that place to reach into its lists, and goes through
+// every pair from its first polygon only, so an entry that doesn't lead back would leave its polygon with no place in the
+// merged list. Every one of the 12528 chunks of merge data in the game's own levels has one entry per polygon, and all of
+// their 89320 pairs lead back to each other.
+static bool merge_data_is_valid (Shape_Merge_Data_Chunk const * merge, int polygon_count)
+{
+	if (merge->num_polys != polygon_count)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		int const partner = merge->merge_data[i];
+
+		if (partner == -1)
+		{
+			continue;
+		}
+
+		if (partner < 0 || partner >= polygon_count)
+		{
+			return false;
+		}
+
+		if (partner == i || merge->merge_data[partner] != i)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// A shape's animation number picks its place in a list made to fit the biggest number, so a negative one would write before
+// that list, and a huge one would make the list's size wrap round to something small. This is far more than a shape needs.
+static int const most_animation_sequences = 1024;
+
+// In an animated shape, each frame has a full set of points and of polygon normals. To show a frame, the game points the shape
+// at that frame's lists and goes on using the shape's own counts, so every frame must have exactly as many as the shape has.
+// The game also goes straight to the first frame it can find, so there has to be one. A frame can be marked as one the game
+// worked out between two others: it no longer makes those, and throws them away as it loads, so a file that marked its frames
+// could leave none. No level that comes with the game has an animated shape, so these rules come from how the code uses the
+// numbers, not from measuring levels.
+static bool animation_matches_shape (Chunk_With_Children const * shape_chunk, int point_count, int polygon_count)
+{
+	List<Chunk *> sequences;
+	shape_chunk->lookup_child ("ANIMSEQU", sequences);
+
+	int frames_found = 0;
+
+	for (LIF<Chunk *> sequence(&sequences); !sequence.done(); sequence.next())
+	{
+		ChunkAnimSequence const & animation = ((Anim_Shape_Sequence_Chunk *) sequence())->sequence_data;
+
+		if (animation.SequenceNum < 0 || animation.SequenceNum >= most_animation_sequences)
+		{
+			return false;
+		}
+
+		for (int i = 0; i < animation.NumFrames; i++)
+		{
+			ChunkAnimFrame const * frame = animation.Frames[i];
+
+			if (frame->num_verts != point_count || frame->num_polys != polygon_count)
+			{
+				return false;
+			}
+
+			if (frame->flags & animframeflag_interpolated_frame)
+			{
+				return false;
+			}
+		}
+
+		frames_found += animation.NumFrames;
+	}
+
+	return sequences.size() == 0 || frames_found > 0;
+}
+
 // Checks the numbers that say how big a shape is, all of which come from the level file.
 // - Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
 //   many there are, so a shape with too many would be written past the end of that list. The biggest shape in the game's
@@ -114,18 +198,28 @@ Shape_Header_Chunk * Shape_Chunk::get_header()
 // - Each corner of a polygon is a place in the shape's list of points, and in the lists built from it. A corner past the
 //   end of those lists would read whatever memory comes next. Every corner of all 952940 polygons in the game's own
 //   levels is in range, and all the counts agree.
+// - A chunk of points or polygons replaces the shape's list as it's read, but these checks look at the first one. With two,
+//   they would pass a list the shape no longer has. None of the 30673 shapes in the game's own levels has two.
 static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Children const * shape_chunk)
 {
+	if (shape_chunk->count_children ("SHPRAWVT") > 1 || shape_chunk->count_children ("SHPPOLYS") > 1)
+	{
+		return false;
+	}
+
 	int const point_count = shape.num_verts;
 
-	if (point_count < 0 || point_count > maxrotpts)
+	// There's no need to test for a count below 0: the next step only passes a count that a real chunk of points agrees with,
+	// or a count of 0.
+	if (point_count > maxrotpts)
 	{
 		return false;
 	}
 
 	Shape_Vertex_Chunk * points = (Shape_Vertex_Chunk *) shape_chunk->lookup_single_child ("SHPRAWVT");
 
-	if (points && points->num_verts != point_count)
+	// With no chunk of points there's no list of points at all, so the shape can't claim to have any.
+	if (points ? points->num_verts != point_count : point_count != 0)
 	{
 		return false;
 	}
@@ -133,7 +227,7 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 	Shape_Polygon_Chunk * polygons = (Shape_Polygon_Chunk *) shape_chunk->lookup_single_child ("SHPPOLYS");
 	int const polygon_count = polygons ? polygons->num_polys : 0;
 
-	if (shape.num_polys != polygon_count || (polygon_count && !points))
+	if (shape.num_polys != polygon_count)
 	{
 		return false;
 	}
@@ -176,7 +270,14 @@ static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Childr
 		}
 	}
 
-	return true;
+	Shape_Merge_Data_Chunk * merging = (Shape_Merge_Data_Chunk *) shape_chunk->lookup_single_child ("SHPMRGDT");
+
+	if (merging && !merge_data_is_valid (merging, polygon_count))
+	{
+		return false;
+	}
+
+	return animation_matches_shape (shape_chunk, point_count, polygon_count);
 }
 
 bool Shape_Chunk::numbers_are_valid()
@@ -695,11 +796,14 @@ RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"CONSHAPE"
 // Reads one polygon from a level file. Each takes 36 bytes: four numbers, then five places for its corners, which end
 // with a -1. vert_ind holds 4 corners, so the reading stops there, whatever the file says: going by the -1 alone, a
 // polygon that left it out would be written past the end of vert_ind. A polygon with no -1 can't be real, so the level
-// is refused. Every one of the 952940 polygons in the game's own levels has 3 or 4 corners and its -1.
+// is refused. Nor can one with fewer than 3 corners: the code that draws a polygon counts down its corners and stops at
+// the last, so with none it would never stop. Every one of the 952940 polygons in the game's own levels has 3 or 4 corners
+// and its -1.
 static void read_polygon (ChunkPoly & poly, const char * record)
 {
 	int const * const corners = (int const *) (record + 16);
 	int const most_corners = sizeof(poly.vert_ind) / sizeof(poly.vert_ind[0]);
+	int const fewest_corners = 3;
 
 	poly.engine_type = *((int *) record);
 	poly.normal_index = *((int *) (record + 4));
@@ -714,7 +818,7 @@ static void read_polygon (ChunkPoly & poly, const char * record)
 		poly.num_verts++;
 	}
 
-	if (corners[poly.num_verts] != -1)
+	if (poly.num_verts < fewest_corners || corners[poly.num_verts] != -1)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
@@ -1841,11 +1945,13 @@ Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 
 // A sub-shape becomes a shape in the game like any other, so it has to pass the same checks. It can sit in several
 // different places inside a shape, and this step reaches every one of them. load_rif sees the error and stops the level.
+// A sub-shape that fails stops here, because the chunks inside it use its numbers as they stand, and one of them writes.
 void Shape_Sub_Shape_Chunk::post_input_processing()
 {
 	if (!shape_numbers_are_valid (shape_data, this))
 	{
 		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
 	}
 
 	Chunk_With_Children::post_input_processing();
@@ -2333,7 +2439,7 @@ int Anim_Shape_Sequence_Chunk::ConstructSequenceDataFromChildren()
 
 		Anim_Shape_Frame_Data_Chunk* asfdc=(Anim_Shape_Frame_Data_Chunk*)asfc->lookup_single_child("ANIFRADT");
 		if(!asfdc) return 0;
-		if(asfdc->FrameNum>=sequence_data_store->NumFrames) return 0;
+		if(asfdc->FrameNum<0 || asfdc->FrameNum>=sequence_data_store->NumFrames) return 0;
 
 		if(sequence_data_store->Frames[asfdc->FrameNum])return 0;
 		sequence_data_store->Frames[asfdc->FrameNum]=new ChunkAnimFrame;
