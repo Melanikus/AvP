@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "chunk.hpp"
@@ -61,6 +62,17 @@ HANDLE avp_CreateFile(const char *, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, 
 DWORD avp_GetFileAttributes(const char *)
 {
 	return INVALID_FILE_ATTRIBUTES;
+}
+
+// The memory code stops the game through these if the computer runs out of memory. Here that stops the test.
+void avp_MessageBox(const char * message, int)
+{
+	puts(message);
+}
+
+void avp_exit(int code)
+{
+	exit(code);
 }
 
 // Checks the compiler makes while building, before anything runs. If one of these fails, this file doesn't compile.
