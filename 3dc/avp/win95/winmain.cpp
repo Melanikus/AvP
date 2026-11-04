@@ -259,6 +259,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsDebug = 1;
 		}
+		extern int ToyShadowsMaxLights;
+		char const *lightsSwitch = strstr(command_line, "-shadowlights=");
+		if (lightsSwitch)
+		{
+			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
+			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+		}
 		LogString(ToyShadowsEnabled ? "toy-shadows: on" : "toy-shadows: off");
 	}
 

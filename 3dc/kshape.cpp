@@ -31,6 +31,7 @@
 #include "vision.h"
 #include "sfx.h"
 #include "view.h"
+#include "lighting.h"
 #include "sphere.h"
 #include "detaillevels.h"
 #include "user_profile.h"
@@ -155,7 +156,7 @@ VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr);
 void ToyShadows_NoteObjectLights();
-void ToyShadows_AddPolygon(const float *pts, int count, const float *light);
+void ToyShadows_AddCaster(const float *pts, int count);
 
 /*
  Global variables and arrays
@@ -2934,6 +2935,8 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		}
 	}
 
+	ToyShadows_Collect(dptr, shapeheaderptr);
+
 	// call polygon pipeline
 	ShapePipeline(shapeheaderptr);
 
@@ -3172,8 +3175,6 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		} else {
 			TranslateShapeVertices(shapeinstrptr);
 		}
-
-		ToyShadows_Collect(dptr, shapeheaderptr);
 
 		/* call polygon pipeline */
 		ShapePipeline(shapeheaderptr);
@@ -5482,6 +5483,7 @@ int LightIntensityAtPoint(VECTORCH *pointPtr)
 
 extern int ToyShadowsEnabled;
 extern int NumActiveLightElements;
+extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
 extern bool gunLayer;
 
@@ -5537,41 +5539,118 @@ void ToyShadows_NoteFrameLights()
 	}
 }
 
-void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+// The camera and the view of the frame the polygons came from, kept for when the lights are chosen at the end of the frame.
+static float toyViewMatrix[12];
+static VECTORCH toyCameraWorld;
+
+struct ToyFoundLight
 {
-	if (!ToyShadowsEnabled || gunLayer || DrawingAReflection)
+	LIGHTBLOCK *light;
+	int distance;
+};
+
+// Keeps the nearest lights to the camera, in order, nearest first.
+static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most)
+{
+	if (!light->LightBright || light->LightRange <= 0 || !(light->RedScale || light->GreenScale || light->BlueScale))
 	{
 		return;
 	}
 
-	// the nearest light that isn't sitting on the object itself. With none in range, one high above, so there is
-	// always something to see
-	VECTORCH lightWorld = dptr->ObWorld;
-	lightWorld.vy -= 6000;
-	int nearest = 0x7fffffff;
+	VECTORCH toLight;
+	toLight.vx = light->LightWorld.vx - toyCameraWorld.vx;
+	toLight.vy = light->LightWorld.vy - toyCameraWorld.vy;
+	toLight.vz = light->LightWorld.vz - toyCameraWorld.vz;
 
-	for (int i = 0; i < NumLightSourcesForObject; i++)
+	int const distance = Approximate3dMagnitude(&toLight);
+
+	// a light on the camera throws every shadow straight away from the eye, where it can't be seen
+	if (distance < 300)
 	{
-		LIGHTBLOCK *light = LightSourcesForObject[i];
-		VECTORCH toLight;
+		return;
+	}
 
-		toLight.vx = light->LightWorld.vx - dptr->ObWorld.vx;
-		toLight.vy = light->LightWorld.vy - dptr->ObWorld.vy;
-		toLight.vz = light->LightWorld.vz - dptr->ObWorld.vz;
+	int place = *numFound;
+	while (place > 0 && found[place - 1].distance > distance)
+	{
+		place--;
+	}
 
-		int const distance = Approximate3dMagnitude(&toLight);
+	if (place >= most)
+	{
+		return;
+	}
 
-		if (distance > 300 && distance < nearest)
+	int const last = (*numFound < most) ? (*numFound)++ : most - 1;
+	for (int i = last; i > place; i--)
+	{
+		found[i] = found[i - 1];
+	}
+
+	found[place].light = light;
+	found[place].distance = distance;
+}
+
+// Fills lights with x y z range for each light chosen, in the space the polygons were collected in. Gives back how many.
+int ToyShadows_PickLights(float *lights, int most)
+{
+	const int kMostHere = 8;
+	ToyFoundLight found[kMostHere];
+	int numFound = 0;
+
+	if (most > kMostHere)
+	{
+		most = kMostHere;
+	}
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		if (block == Player)
 		{
-			nearest = distance;
-			lightWorld = light->LightWorld;
+			continue;
+		}
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			ToyConsiderLight(block->ObLights[j], found, &numFound, most);
 		}
 	}
 
-	float const lightSource[3] = { (float)lightWorld.vx, (float)lightWorld.vy, (float)lightWorld.vz };
-	float lightView[3];
-	TranslatePoint(lightSource, lightView, ViewMatrix);
-	lightView[1] = -lightView[1];
+	for (int i = 0; i < NumActiveLightElements; i++)
+	{
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, found, &numFound, most);
+	}
+
+	for (int i = 0; i < numFound; i++)
+	{
+		LIGHTBLOCK const *light = found[i].light;
+		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+		float view[3];
+
+		TranslatePoint(source, view, toyViewMatrix);
+
+		lights[i * 4 + 0] = view[0];
+		lights[i * 4 + 1] = -view[1];
+		lights[i * 4 + 2] = view[2];
+		lights[i * 4 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+	}
+
+	return numFound;
+}
+
+// Keeps a copy of every solid polygon of this piece of the level for the end of the frame, in view space. Only the level's
+// modules cast: anything else, such as a model or a crate, has no module of its own.
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+{
+	if (!ToyShadowsEnabled || !dptr->ObMyModule || gunLayer || DrawingAReflection || CurrentVisionMode != VISION_MODE_NORMAL)
+	{
+		return;
+	}
+
+	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
+	toyCameraWorld = Global_VDB_Ptr->VDB_World;
 
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
@@ -5580,7 +5659,7 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 	{
 		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
 
-		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent))
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
 		{
 			continue;
 		}
@@ -5599,6 +5678,6 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 			count++;
 		}
 
-		ToyShadows_AddPolygon(pts, count, lightView);
+		ToyShadows_AddCaster(pts, count);
 	}
 }
