@@ -552,6 +552,41 @@ static void TestBakedColours()
 // here has 32768 frames, also at 12 bytes each.
 alignas(int) static char wholeShape[500000];
 
+// Memory that ends at a wall. A read past the end of a chunk nearly always lands in the next chunk, which proves nothing either way, so
+// a test can't see it. So here, what's being read ends exactly where readable memory does: the next page is marked so that touching
+// it stops the program. Reading even one byte past the end crashes the test, every time, and that counts as a failure. Nothing here is
+// ever run as code. Gives back where to put this many bytes so that they end at the wall.
+static char * MemoryEndingAtAWall(size_t bytes)
+{
+	static char * block = 0;
+
+	SYSTEM_INFO system;
+	GetSystemInfo(&system);
+
+	size_t const page = system.dwPageSize;
+	size_t const readable = 16 * page;
+
+	if (!block)
+	{
+		DWORD before = 0;
+		block = (char *)VirtualAlloc(NULL, readable + page, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+
+		if (!block || !VirtualProtect(block + readable, page, PAGE_NOACCESS, &before))
+		{
+			puts("Couldn't make memory that ends at a wall");
+			exit(1);
+		}
+	}
+
+	if (bytes > readable)
+	{
+		puts("Too many bytes for the memory that ends at a wall");
+		exit(1);
+	}
+
+	return block + readable - bytes;
+}
+
 // Writes a chunk's header and gives back where its data goes. The data starts as all zeros.
 static char * PutChunk(char * where, char const * name, size_t dataBytes)
 {
@@ -1426,6 +1461,28 @@ static void TestMorphFrames()
 		memcpy(frames + countAt, &rows[i].count, sizeof(int));
 
 		Check(ShapeIsAccepted(frames + rows[i].bytes) == rows[i].accepted, rows[i].what);
+	}
+
+	// With no room for its three numbers, the chunk mustn't even read them, and the checks after that can't see whether it did. So this
+	// shape ends at the wall, with that chunk last.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const tooSmall = 8;
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * morph = PutChunk(wholeShape + mainBytes, "SHPMORPH", ChunkHeaderBytes + tooSmall);
+		PutChunk(morph, "FRMMORPH", tooSmall);
+
+		size_t const allBytes = mainBytes + 2 * ChunkHeaderBytes + tooSmall;
+		char * atTheWall = MemoryEndingAtAWall(allBytes);
+		memcpy(atTheWall, wholeShape, allBytes);
+
+		new Shape_Chunk(&file, atTheWall, allBytes);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a chunk with no room for its numbers doesn't read past its end");
+		Parent_File = 0;
 	}
 
 	// The numbers themselves have to arrive. A shape number of -1 means the shape the morph belongs to, so this frame needs nothing else.
