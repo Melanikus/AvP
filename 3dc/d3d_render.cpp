@@ -3522,10 +3522,11 @@ enum ToyShadowsView
 	kToyViewFinal,      // the real thing
 	kToyViewEdges,      // each light's volumes as lines, in that light's colour
 	kToyViewPolygons,   // each light's shadowed pixels filled in that light's colour, blended so overlaps show
+	kToyViewMask,       // just what final multiplies the picture by: white is untouched, black is the full depth of shadow
 	kToyViewCount
 };
 
-static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS" };
+static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK" };
 static DWORD const kToyLightColours[8] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF };
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -3543,7 +3544,7 @@ struct ToyVec
 };
 
 static const int   kToyMostLights      = 8;
-static const int   kToyLightFloats     = 7;         // each light is x y z range red green blue
+static const int   kToyLightFloats     = 8;         // each light is x y z range red green blue kind (0 baked, 1 live)
 static const int   kToyMostPolyPoints  = 16;
 static const int   kToyMaxCasters      = 60000;
 static const int   kToyMaxCasterPoints = 240000;
@@ -4132,8 +4133,9 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 }
 
 // The stencil now marks the pixels this light can't reach. This draws the level's polygons again, exactly where the game drew
-// them, and shadow.psh takes this light's share of the light on each marked pixel out of it. So a lamp in the next room hardly
-// changes a room with its own lamp, and a spot blocked from all its lamps goes right down to the glow.
+// them, and shadow.psh adds this light's share of the light on each marked pixel to the mask. So the mask ends up holding how
+// much of each pixel's light is blocked. A spot in one lamp's shadow keeps the light of the others, and only a spot blocked from
+// all its lamps goes right down to the glow.
 // A pixel is darkened once for each light: the first polygon to touch it clears its mark. Models are in front of the polygons,
 // so they keep their light for now.
 static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, IDirect3DQuery9 *countQuery, unsigned int *pixels)
@@ -4156,15 +4158,16 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 		constants[i * 4 + 1] = other[1];
 		constants[i * 4 + 2] = other[2];
 		constants[i * 4 + 3] = 1.0f / other[3];
-		constants[(8 + i) * 4] = (other[4] + other[5] + other[6]) / 3.0f;
+		constants[(8 + i) * 4 + 0] = (other[4] + other[5] + other[6]) / 3.0f;
+		constants[(8 + i) * 4 + 1] = other[7];
 	}
 
 	constants[16 * 4 + 0] = light[0];
 	constants[16 * 4 + 1] = light[1];
 	constants[16 * 4 + 2] = light[2];
 	constants[16 * 4 + 3] = 1.0f / light[3];
-	constants[17 * 4 + 0] = constants[(8 + thisLight) * 4];
-	constants[17 * 4 + 1] = 1.0f - (float)ToyShadowsDarkness / 100.0f;
+	constants[17 * 4 + 0] = constants[(8 + thisLight) * 4 + 0];
+	constants[17 * 4 + 1] = constants[(8 + thisLight) * 4 + 1];
 
 	device->SetPixelShaderConstantF(0, constants, 18);
 
@@ -4175,8 +4178,8 @@ static HRESULT ToyShadeLevel(LPDIRECT3DDEVICE9 device, const float *lights, int 
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_ZERO);
 	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
 	// the same surface again, so a hair nearer, or rounding would leave specks of it behind the game's own
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
@@ -4288,8 +4291,8 @@ static void ToyDrawDepthForSoftening(LPDIRECT3DDEVICE9 device)
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
 }
 
-// Puts the mask on the screen through the softening shader, multiplying what's there. The mask holds what to keep.
-static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device)
+// Puts the mask on the screen through the softening shader, multiplying what's there. Or, for the mask view, instead of what's there.
+static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 {
 	D3DSURFACE_DESC size;
 	toyMaskSurface->GetDesc(&size);
@@ -4302,8 +4305,12 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device)
 	d3d.effectSystem->SetActive(d3d.shadowBlurEffect);
 	d3d.mainDecl->Set();
 
-	float const constants[4] = { pixelAcross, pixelDown, (float)ToyShadowsSoft, 3000.0f };
-	device->SetPixelShaderConstantF(0, constants, 1);
+	float const constants[8] =
+	{
+		pixelAcross, pixelDown, (float)ToyShadowsSoft, 3000.0f,
+		(float)ToyShadowsDarkness / 100.0f, 0.0f, 0.0f, 0.0f,
+	};
+	device->SetPixelShaderConstantF(0, constants, 2);
 
 	device->SetTexture(0, toyMaskTexture);
 	device->SetTexture(1, toyDepthTexture);
@@ -4321,7 +4328,7 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device)
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, !showMaskAlone);
 	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
 
@@ -4433,12 +4440,14 @@ static void ToyShadows_Draw()
 	ToyVec sampleNear = { 0.0f, 0.0f, 0.0f };
 	ToyVec sampleFar = { 0.0f, 0.0f, 0.0f };
 
-	// For soft edges the darkening below goes into the mask instead of straight onto the screen.
+	// The darkening below goes into the mask, not onto the screen. Without the mask, it falls back to a flat share.
 	bool const canSoften = d3d.shadowDepthEffect != kNullEffectID && d3d.shadowBlurEffect != kNullEffectID;
 	IDirect3DSurface9 *screen = 0;
 	D3DVIEWPORT9 viewport;
 
-	if (ToyShadowsMode == kToyViewFinal && ToyShadowsSoft > 0 && haveShader && canSoften && ToyMakeTargets(device)
+	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask;
+
+	if (darkening && haveShader && canSoften && ToyMakeTargets(device)
 		&& SUCCEEDED(device->GetRenderTarget(0, &screen)) && SUCCEEDED(device->GetViewport(&viewport)))
 	{
 		device->SetRenderTarget(0, toyDepthSurface);
@@ -4446,9 +4455,10 @@ static void ToyShadows_Draw()
 		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
 		ToyDrawDepthForSoftening(device);
 
+		// the mask starts at nothing blocked
 		device->SetRenderTarget(0, toyMaskSurface);
 		device->SetViewport(&viewport);
-		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+		device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
 	}
 	else if (screen)
 	{
@@ -4519,7 +4529,7 @@ static void ToyShadows_Draw()
 		{
 			darkened = ToyDarkenStencilledPixels(device, 0x60000000 | kToyLightColours[light], countQuery, &pixelsByLight[light]);
 		}
-		else if (haveShader)
+		else if (screen)
 		{
 			darkened = ToyShadeLevel(device, lights, report.lights, light, countQuery, &pixelsByLight[light]);
 		}
@@ -4546,10 +4556,13 @@ static void ToyShadows_Draw()
 			device->SetRenderTarget(0, screen);
 			device->SetViewport(&viewport);
 			screen->Release();
-			ToyApplySoftenedMask(device);
+			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
 		}
 
-		ToyDimWorld(device);
+		if (ToyShadowsMode == kToyViewFinal)
+		{
+			ToyDimWorld(device);
+		}
 	}
 
 	if (countQuery)

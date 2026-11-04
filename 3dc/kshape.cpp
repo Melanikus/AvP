@@ -5650,7 +5650,7 @@ static float ToyFraction(int fixedPoint)
 	return (fraction < 0.0f) ? 0.0f : (fraction > 1.0f) ? 1.0f : fraction;
 }
 
-// Fills lights with x y z range red green blue for each light chosen, 7 numbers each, in the space the polygons were collected
+// Fills lights with x y z range red green blue kind for each light chosen, 8 numbers each, in the space the polygons were collected
 // in. Gives back how many. Flares come first, near or far, so that a flare in flight always moves its shadows: the player can
 // have 4 going at once (pmove.cpp). Then steady lights, nearest the camera first. Brief lights only get the places left over.
 int ToyShadows_PickLights(float *lights, int most)
@@ -5715,20 +5715,23 @@ int ToyShadows_PickLights(float *lights, int most)
 
 		float const bright = ToyFraction(light->LightBright);
 
-		lights[i * 7 + 0] = view[0];
-		lights[i * 7 + 1] = -view[1];
-		lights[i * 7 + 2] = view[2];
-		lights[i * 7 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
-		lights[i * 7 + 4] = bright * ToyFraction(light->RedScale);
-		lights[i * 7 + 5] = bright * ToyFraction(light->GreenScale);
-		lights[i * 7 + 6] = bright * ToyFraction(light->BlueScale);
+		lights[i * 8 + 0] = view[0];
+		lights[i * 8 + 1] = -view[1];
+		lights[i * 8 + 2] = view[2];
+		lights[i * 8 + 3] = (light->LightRange < 100000) ? (float)light->LightRange : 100000.0f;
+		lights[i * 8 + 4] = bright * ToyFraction(light->RedScale);
+		lights[i * 8 + 5] = bright * ToyFraction(light->GreenScale);
+		lights[i * 8 + 6] = bright * ToyFraction(light->BlueScale);
 
-		// A flare flickers, and on the screen it's still the light that matters most, so its shadows are always strong. Only a
-		// flare has an order below 0. This is a weight in a share, not a colour: it has no effect on what any light looks like.
+		// A flare's brightness flickers around 4, so it counts as a steady 4, and its shadows hold still. Only a flare has an
+		// order below 0. This is a weight in a share, not a colour: it has no effect on what any light looks like.
 		if (steady[i].order < 0)
 		{
-			lights[i * 7 + 4] = lights[i * 7 + 5] = lights[i * 7 + 6] = 6.0f;
+			lights[i * 8 + 4] = lights[i * 8 + 5] = lights[i * 8 + 6] = 4.0f;
 		}
+
+		// 0 for a light baked into the walls, 1 for one the game works out live, like a flare
+		lights[i * 8 + 7] = (light->LightFlags & LFlag_PreLitSource) ? 0.0f : 1.0f;
 
 		toyChosenLastFrame[i] = steady[i].light;
 		toyChosen[i].distance = steady[i].distance;

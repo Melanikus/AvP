@@ -6,34 +6,34 @@ struct PS_INPUT
 };
 
 // Global variables
-float4 Lights[8]    : register(c0);    // each chosen light: x y z, and one over its range
-float4 Weights[8]   : register(c8);    // x: how much each light counts when the light on a pixel is shared out
-float4 ThisLight    : register(c16);   // the light this pass is for: x y z, and one over its range
-float4 ThisSettings : register(c17);   // x: its weight. y: what's left of a pixel no light reaches, the glow of the wall's own colour
+float4 Lights[8]  : register(c0);    // each chosen light: x y z, and one over its range
+float4 Weights[8] : register(c8);    // x: how bright each light is. y: 0 for a light baked into the walls, 1 for one worked out live
+float4 ThisLight  : register(c16);   // the light this pass is for: x y z, and one over its range
+float4 ThisWeight : register(c17);   // its x and y, as above
 
 
-// How much light one lamp gives this spot: nothing at its range, and nothing on a surface turned away from it. This is the fade
-// the level's lighting was baked with.
-float LightHere(float4 light, float weight, float3 position, float3 normal)
+// How much light one lamp gives this spot. The game lights the world in two ways, and each is copied here. Baked lights fade
+// along a cosine and depend on how squarely the surface faces them. Live ones, like a flare, fade in a straight line, and they
+// still give some light to a surface at a low angle or turned away, so a flare lying on the floor lights the floor well.
+float LightHere(float4 light, float4 weight, float3 position, float3 normal)
 {
     float3 toLight = light.xyz - position;
     float  howFar  = length(toLight);
-    float  fade    = cos(1.5707963f * saturate(howFar * light.w));
-    float  facing  = saturate(dot(normal, toLight / max(howFar, 1.0f)));
+    float  reach   = saturate(howFar * light.w);
+    float  turned  = dot(normal, toLight / max(howFar, 1.0f));
 
-    return weight * fade * facing;
+    float  baked   = cos(1.5707963f * reach) * saturate(turned);
+    float  live    = (1.0f - reach) * ((turned > 0.0f) ? (turned + 0.25f) * 0.5f : 0.125f);
+
+    return weight.x * lerp(baked, live, weight.y);
 }
 
 
 // Name: Shadow pixel shader
 // Type: Pixel shader
-// Desc: Runs on pixels one light can't reach. Works out that light's share of all the light on this spot, and takes that share
-// away. A spot with its own lamp keeps most of its light when a lamp in the next room is blocked, but a spot blocked from all its
-// lamps goes right down to the glow.
-//
-// The pixel is multiplied by glow to the power of share, once for each blocked light. Powers add when they're multiplied, and
-// the shares of all the lights add up to 1, so however many lights are blocked the result can't go below the glow, and reaches
-// it exactly when all of them are.
+// Desc: Runs on pixels one light can't reach. Works out that light's share of all the light on this spot, and writes it down.
+// The mask adds these up, one pass for each light, so it ends up holding the part of this pixel's light that is blocked. The
+// shares of all the lights add up to 1, so that can't go over 1, and a spot lit by a second light keeps exactly that light.
 
 float4 ps_main(in PS_INPUT In) : COLOR0
 {
@@ -42,12 +42,11 @@ float4 ps_main(in PS_INPUT In) : COLOR0
 
     for (int i = 0; i < 8; i++)
     {
-        all += LightHere(Lights[i], Weights[i].x, In.ViewPosition, normal);
+        all += LightHere(Lights[i], Weights[i], In.ViewPosition, normal);
     }
 
-    float mine  = LightHere(ThisLight, ThisSettings.x, In.ViewPosition, normal);
+    float mine  = LightHere(ThisLight, ThisWeight, In.ViewPosition, normal);
     float share = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
-    float keep  = pow(ThisSettings.y, share);
 
-    return float4(keep, keep, keep, 1.0f);
+    return float4(share, share, share, 1.0f);
 }
