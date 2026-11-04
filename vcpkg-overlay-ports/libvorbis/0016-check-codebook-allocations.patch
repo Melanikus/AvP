@@ -1,12 +1,12 @@
 Check the allocations that upstream's fixes do not cover.
 
 Our own patch (AvP). A crafted setup header can make these allocations fail: an
-ordered book's size and a residue's decode table are not limited by the size of
-the packet. Upstream's main limits the codebook memory in its unreleased codebook
-rewrite (e99e46ed5c), which cannot be taken on its own. Here, a failed allocation
-is reported as an error instead of writing through a null pointer. During setup
-that refuses the file. Once audio is being decoded, the decoder cannot start:
-ov_read returns an error on every call (patch 0018), and the caller has to stop.
+ordered book's size and a residue's decode table are not limited by the size of the
+packet. Upstream's main reduces the codebook memory in its unreleased codebook rewrite
+(e99e46ed5c), which cannot be taken on its own. Here, a failed allocation is reported
+as an error instead of writing through a null pointer. During setup that refuses the
+file. Once audio is being decoded, the decoder cannot start: ov_read returns an error
+on every call (patch 0018), and the caller has to stop.
 
 --- a/lib/block.c
 +++ b/lib/block.c

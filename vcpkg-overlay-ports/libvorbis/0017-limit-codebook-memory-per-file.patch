@@ -1,12 +1,14 @@
-Limit the memory one file can claim, and the links it can have.
+Limit what one file's codebooks and residue tables can claim, and its links.
 
 Our own patch (AvP). It closes what patch 0016 left open: a few bytes of a crafted
-setup header could make the decoder claim gigabytes of memory. Upstream's main limits
-the codebooks in its unreleased rewrite (e99e46ed5c), and not the residue tables.
-Each book and each residue's decode table now takes its worst-case cost from a 64 MB
-budget before anything is allocated. All the links of a chained file share that
-budget, because a seekable file keeps them all in memory. A stream that cannot seek
-keeps one link at a time, so each of its links gets the whole budget.
+setup header could make the decoder claim gigabytes of memory. Upstream's main reduces
+what the codebooks need in its unreleased rewrite (e99e46ed5c), which has no limit and
+does nothing for the residue tables. Each book and each residue's decode table now
+takes its worst-case cost from a 64 MB budget before anything is allocated. All the
+links of a chained file share that budget, because a seekable file keeps them all in
+memory. A stream that cannot seek keeps one link at a time, so each of its links gets
+the whole budget. The budget covers books and residue tables only, so a very long valid
+chain can reach it and be refused.
 
 A seekable file may have at most 256 links, because opening one recurses once per
 link. When a chained file is refused, the setups of the links already read are now
@@ -24,7 +26,7 @@ freed; before, they were lost.
    long i,j;
    static_codebook *s=_ogg_calloc(1,sizeof(*s));
    if(s==NULL)return(NULL);
-@@ -161,6 +162,29 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
+@@ -161,6 +162,32 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
  
    if(ov_ilog(s->dim)+ov_ilog(s->entries)>24)goto _eofout;
  
@@ -32,8 +34,9 @@ freed; before, they were lost.
 +     a link can have 256 of them, so a tiny file could make the decoder claim
 +     gigabytes of memory while it is being opened. So each book first takes
 +     what it will need from this file's budget, and the file is refused if
-+     the budget runs out, before anything is allocated. Valid files are
-+     nowhere near the limit (see VORBIS_BOOK_MEMORY_LIMIT).
++     the budget runs out, before anything is allocated. One link of a valid
++     file is nowhere near the limit, but a very long valid chain can reach it
++     (see VORBIS_BOOK_MEMORY_LIMIT).
 +
 +     A book needs at most, for each of its entries: 2 bytes for its length
 +     (one while reading it, one for decoding), 16 for its codeword, sorted
@@ -43,8 +46,10 @@ freed; before, they were lost.
 +     itself: its search table has at most 256 entries of 4 bytes. The check
 +     above keeps entries*dim below 2^24, so this cannot overflow a long.
 +
-+     The list of quantized values is not counted here, because it cannot be
-+     larger than the packet it is read from: there is a check for that below. */
++     The list of quantized values is not counted. It takes a long for each
++     value, so on a 32-bit build it can be 32 times the bytes it fills in the
++     packet, but it has at most entries*dim values, so it adds at most as much
++     again as the 4 bytes for each dim above. */
 +  {
 +    long cost=1024+s->entries*(26+4*s->dim);
 +    if(cost>*memory_left)goto _errout;
@@ -54,7 +59,7 @@ freed; before, they were lost.
    /* codeword ordering.... length ordered or unordered? */
    switch((int)oggpack_read(opb,1)){
    case 0:{
-@@ -202,9 +226,9 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
+@@ -202,9 +229,9 @@ static_codebook *vorbis_staticbook_unpack(oggpack_buffer *opb){
        long length=oggpack_read(opb,5)+1;
        if(length==0)goto _eofout;
        /* Unlike the unordered case above, this size is not limited by the
@@ -69,7 +74,7 @@ freed; before, they were lost.
  
 --- a/lib/codebook.h
 +++ b/lib/codebook.h
-@@ -97,7 +97,17 @@ extern long vorbis_book_codelen(codebook *book,int entry);
+@@ -97,7 +97,19 @@ extern long vorbis_book_codelen(codebook *book,int entry);
  
  
  extern int vorbis_staticbook_pack(const static_codebook *c,oggpack_buffer *b);
@@ -78,9 +83,11 @@ freed; before, they were lost.
 +   may ask for, with all the links of a chained file sharing it (see
 +   vorbis_staticbook_unpack and _vorbis_unpack_books). A stream that cannot seek
 +   is the exception: it only ever holds one link, so each link gets all of it.
-+   Real files need far less: the codebooks of the largest of 289 files measured
++   One link needs far less: the codebooks of the largest of 289 files measured
 +   need about 0.6 MB, and all 812 books built into the encoder added together
-+   need about 15 MB. */
++   need about 15 MB. A very long valid chain can reach the limit and be refused:
++   real 44.1 kHz stereo chains from the encoder stopped at 110 to 122 links at
++   low quality settings, and at the limit of 256 links at high ones. */
 +#define VORBIS_BOOK_MEMORY_LIMIT (64L*1024L*1024L)
 +
 +extern static_codebook *vorbis_staticbook_unpack(oggpack_buffer *b,
