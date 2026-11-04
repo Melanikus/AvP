@@ -1,0 +1,39 @@
+Probe only: change five files by one comment each. Not for merging.
+
+For one Snyk scan, to see whether libvorbis is still recognised at 51 of 81 files, or 0.630.
+
+--- a/lib/floor0.c
++++ b/lib/floor0.c
+@@ -1,3 +1,4 @@
++/* Probe for Snyk's recognition of this library. Not for merging. */
+ /********************************************************************
+  *                                                                  *
+  * THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.   *
+--- a/lib/lsp.c
++++ b/lib/lsp.c
+@@ -1,3 +1,4 @@
++/* Probe for Snyk's recognition of this library. Not for merging. */
+ /********************************************************************
+  *                                                                  *
+  * THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.   *
+--- a/lib/mapping0.c
++++ b/lib/mapping0.c
+@@ -1,3 +1,4 @@
++/* Probe for Snyk's recognition of this library. Not for merging. */
+ /********************************************************************
+  *                                                                  *
+  * THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.   *
+--- a/lib/mdct.c
++++ b/lib/mdct.c
+@@ -1,3 +1,4 @@
++/* Probe for Snyk's recognition of this library. Not for merging. */
+ /********************************************************************
+  *                                                                  *
+  * THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.   *
+--- a/lib/synthesis.c
++++ b/lib/synthesis.c
+@@ -1,3 +1,4 @@
++/* Probe for Snyk's recognition of this library. Not for merging. */
+ /********************************************************************
+  *                                                                  *
+  * THIS FILE IS PART OF THE OggVorbis SOFTWARE CODEC SOURCE CODE.   *
