@@ -102,7 +102,9 @@ class RenderList
 		void AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY_TYPE translucencyMode, enum FILTERING_MODE_ID filteringMode = FILTERING_BILINEAR_ON, enum TEXTURE_ADDRESS_MODE textureAddress = TEXTURE_WRAP);
 		void CreateIndices(uint16_t *indexArray, uint32_t numVerts);
 		void CreateOrthoIndices(uint16_t *indexArray);
-		void Draw();
+		// Which polygons Draw draws. Solid and see-through are two halves of the same list, drawn at different moments of a frame.
+		enum Part { kEverything, kSolid, kSeeThrough };
+		void Draw(Part part = kEverything);
 
 		// test
 		void EnableIndicesOffset();

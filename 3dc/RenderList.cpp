@@ -313,7 +313,7 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
 	}
 }
 
-void RenderList::Draw()
+void RenderList::Draw(Part part)
 {
 	uint32_t baseIndexValue = 0;
 
@@ -344,8 +344,9 @@ void RenderList::Draw()
 		else
 		{
 			uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
+			bool const solid = get_transType(it->sortKey) == TRANSLUCENCY_OFF;
 
-			if (numPrimitives)
+			if (numPrimitives && (part == kEverything || (part == kSolid) == solid))
 			{
 				// set texture
 				R_SetTexture(0, get_texID(it->sortKey));

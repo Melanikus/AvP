@@ -373,6 +373,7 @@ float cot(float in)
 static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static void ToyShadows_Draw();
+extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static int toyFrame = 0;            // counts the shadow pass's frames. Both reports use it, so what they say belongs together
 
@@ -393,6 +394,10 @@ static bool ExecuteBuffer()
 	DrawParticles();
 	DrawCoronas();
 
+	// With shadows on, a frame's last drawing goes in the order solid polygons, decals, shadows, see-through polygons. Glass has to come
+	// after the shadows, or they'd darken it as if it were part of the wall behind.
+	bool const seeThroughLast = toyFinalFlush && ToyShadowsMode != 0;
+
 	if (mainList->GetSize())
 	{
 		// set main shaders to active
@@ -404,7 +409,7 @@ static bool ExecuteBuffer()
 		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matWorldViewProj);
 
 		// draw our main list (level geometry, player weapon etc)
-		mainList->Draw();
+		mainList->Draw(seeThroughLast ? RenderList::kSolid : RenderList::kEverything);
 	}
 
 	// render any decals
@@ -429,6 +434,14 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush)
 	{
 		ToyShadows_Draw();
+	}
+
+	if (seeThroughLast && mainList->GetSize())
+	{
+		d3d.effectSystem->SetActive(d3d.mainEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+		mainList->Draw(RenderList::kSeeThrough);
 	}
 
 	// render any particles
