@@ -88,7 +88,7 @@ jobs:
           tools: ${{ steps.tools.outputs.path }}
           languages: c-cpp
           build-mode: manual
-          queries: security-and-quality,./.github/codeql/read-problems
+          queries: security-and-quality,./.github/codeql/read-problems,./.github/codeql/unreached-code
           trap-caching: false
 
       # The same command we build with by hand, once per configuration, because each one compiles code the others don't

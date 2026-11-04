@@ -1,0 +1,5 @@
+# Our query that measures code no build configuration compiles. See UnreachedCode.ql.
+name: avp/unreached-code
+version: 1.0.0
+dependencies:
+  codeql/cpp-all: "*"

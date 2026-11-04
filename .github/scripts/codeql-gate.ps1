@@ -146,6 +146,15 @@ if ($readProblems.Count -gt 0) {
     $failures.Add("$($readProblems.Count) places CodeQL could not fully read (see read-problems.tsv)")
 }
 
+# Code no build configuration compiled, which CodeQL can't read. This only measures it for now, to size the removal
+# (card DEAD-1). When DEAD-1 is done, any entry here should fail the scan.
+$unreached = @($notices | Where-Object { $_.descriptor.id -eq 'avp/diagnostics/unreached-code' })
+$unreachedLines = foreach ($block in $unreached) {
+    $place = @($block.locations)[0]
+    '{0}:{1}{2}{3}' -f (Get-ReportPath $place), $place.physicalLocation.region.startLine, "`t", $block.message.text
+}
+Write-ReportList 'unreached-code.tsv' @($unreachedLines)
+
 # Coverage: which files did CodeQL really read? Upper and lower case are treated as equal because Windows treats them so.
 $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 foreach ($notice in $notices) {
@@ -278,7 +287,8 @@ $summary = @(
     "  findings:        $($findings.Count)",
     "  read problems:   $($readProblems.Count)",
     "  look-away notes: $($suppressions.Count)",
-    "  CMake set aside: $(@($setAsideFindings).Count + @($setAsideProblems).Count)"
+    "  CMake set aside: $(@($setAsideFindings).Count + @($setAsideProblems).Count)",
+    "  unreached code:  $($unreached.Count) blocks (measured, not judged)"
 )
 Write-ReportList 'summary.txt' $summary
 $summary | Write-Output
