@@ -4,6 +4,7 @@
 //   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed;
 //   the decal list in a level file is checked against the real size of its chunk before it is read
 //   a generator is only made inside the special objects chunk, because it looks two levels up
+//   a generator's weights have to fit their chunk, and are freed the same way they were made
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -245,9 +246,29 @@ size_t AVP_Generator_Extra_Name_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("GENEXSET",AVP_Generator_Extended_Settings_Chunk)
 
-AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+// Twenty bytes of settings, then a block of weights whose first number is its own size. That size came straight from the file and went
+// into a copy, so a negative one copied about 4 GB over the heap, and a big one read far past the chunk. So the block has to fill the
+// rest of the chunk exactly, as all 384 of these in the game's own levels do, with a block of 64 bytes. A shorter block is still
+// allowed, because the list below always has room for every weight the game knows about, and the rest of them stay at 0.
+AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent,const char* data,size_t chunk_bytes)
 :Chunk(parent,"GENEXSET")
 {
+	size_t const settings_bytes = 20;
+
+	// Whatever happens next, the list is there for the destructor and for anything that reads it.
+	GenerationRate = GenRateIncrease = 0;
+	GenLimit = pad1 = pad2 = pad3 = 0;
+	spare1 = spare2 = 0;
+	weights = (AVP_Generator_Weighting*)new unsigned char[sizeof(AVP_Generator_Weighting)];
+	memset(weights,0,sizeof(AVP_Generator_Weighting));
+	weights->data_size = sizeof(AVP_Generator_Weighting);
+
+	if (chunk_bytes < settings_bytes + sizeof(int))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	CHUNK_EXTRACT(GenerationRate,int)
 	CHUNK_EXTRACT(GenRateIncrease,int)
 	CHUNK_EXTRACT(GenLimit,unsigned char)
@@ -257,19 +278,30 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 	CHUNK_EXTRACT(spare1,int)
 	CHUNK_EXTRACT(spare2,int)
 
-	size_t size=max(*(int*) data,(int)sizeof(AVP_Generator_Weighting));
+	int const weight_bytes = *(int*) data;
 
-	weights=(AVP_Generator_Weighting*)new unsigned char[size];
-	memset(weights,0,sizeof(AVP_Generator_Weighting));
-	memcpy(weights,data,*(int*) data);
+	// a negative size turns into a huge number here, so it fails too
+	if ((size_t) weight_bytes != chunk_bytes - settings_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
 
-	weights->data_size=size;
+	if ((size_t) weight_bytes > sizeof(AVP_Generator_Weighting))
+	{
+		delete[] (unsigned char*) weights;
+		weights = (AVP_Generator_Weighting*)new unsigned char[weight_bytes];
+	}
+
+	memcpy(weights,data,weight_bytes);
+
+	weights->data_size = max(weight_bytes,(int)sizeof(AVP_Generator_Weighting));
 }
 
 AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"GENEXSET")
 {
-	weights=new AVP_Generator_Weighting;
+	weights=(AVP_Generator_Weighting*)new unsigned char[sizeof(AVP_Generator_Weighting)];
 	memset(weights,0,sizeof(AVP_Generator_Weighting));
 	weights->data_size=sizeof(AVP_Generator_Weighting);
 	GenLimit=pad1=pad2=pad3=0;
@@ -279,7 +311,7 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 
 AVP_Generator_Extended_Settings_Chunk::~AVP_Generator_Extended_Settings_Chunk()
 {
-	delete weights;
+	delete[] (unsigned char*) weights;
 }
 
 void AVP_Generator_Extended_Settings_Chunk::fill_data_block (char * data)

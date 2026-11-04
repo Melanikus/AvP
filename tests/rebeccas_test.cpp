@@ -54,6 +54,7 @@
 #include "strategy_def.h"
 #include "bh_lift.h"
 #include "environment_chunk.hpp"
+#include "avp_chunk.hpp"
 #include "animation_chunk.hpp"
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -2109,6 +2110,63 @@ static void TestTextureAnimation()
 	}
 }
 
+// 32. A generator's settings: twenty bytes, then a block of weights whose first number is its own size. That size went straight into a
+// copy, so it has to fill the rest of the chunk exactly. The chunk is put at the wall, so reading a byte past its end stops the test.
+static void TestGeneratorSettings()
+{
+	puts("32. a generator's settings");
+
+	struct SettingsRow { size_t bytes; int blockSize; bool accepted; char const * what; };
+	SettingsRow const rows[] =
+	{
+		{  84,  64, true,  "the size the game's own levels have is accepted" },
+		{  24,   4, true,  "a shorter block is accepted, as the rest of the weights stay at 0" },
+		{ 100,  80, true,  "a longer block is accepted" },
+		{  23,   3, false, "a chunk with no room for the block's size is refused" },
+		{  84,  65, false, "a block one byte longer than the chunk is refused" },
+		{  84,  63, false, "a block one byte shorter than the chunk is refused" },
+		{  84,  -1, false, "a negative size is refused" },
+		{  84, 0x7fffffff, false, "a huge size is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char * atTheWall = MemoryEndingAtAWall(rows[i].bytes);
+		memset(atTheWall, 0, rows[i].bytes);
+
+		if (rows[i].bytes >= 24)
+		{
+			memcpy(atTheWall + 20, &rows[i].blockSize, sizeof(int));
+		}
+
+		AVP_Generator_Extended_Settings_Chunk * settings = new AVP_Generator_Extended_Settings_Chunk(&file, atTheWall, rows[i].bytes);
+
+		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+		Check(settings->weights != 0 && settings->weights->data_size >= (int)sizeof(AVP_Generator_Weighting), "and it can still be read");
+		Parent_File = 0;
+	}
+
+	// The weights have to arrive. The third number of the block is in place 8.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const flameMarines = 7;
+		int const blockSize = 64;
+		alignas(int) char bytes[84] = { 0 };
+		memcpy(bytes + 20, &blockSize, sizeof(int));
+		memcpy(bytes + 20 + 8, &flameMarines, sizeof(int));
+
+		AVP_Generator_Extended_Settings_Chunk * settings = new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes));
+
+		Check(settings->weights->FlameMarine_Wt == flameMarines, "a weight arrives where it should");
+		Parent_File = 0;
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -2137,6 +2195,7 @@ int main()
 	TestNesting();
 	TestChunkBoundChecks();
 	TestTextureAnimation();
+	TestGeneratorSettings();
 
 	if (checksFailed)
 	{
