@@ -3580,6 +3580,18 @@ struct ToyVec
 	float x, y, z;
 };
 
+// A polygon's flat surface. Working out which way it faces takes a square root, and there can be thousands of polygons, several lights
+// and several positions for each light. So it's worked out once a frame for each polygon, when the polygon is collected, and every light
+// and position reads the answer.
+// It comes from the polygon's corners, not from the normal stored with the shape. A prism's inside and outside are decided by the order of
+// the corners, and on 1,688 stock polygons the stored normal points the other way from that order, mostly on models.
+struct ToyFlatSurface
+{
+	float nx, ny, nz;   // an arrow straight out of the surface. It isn't shortened to a length of 1
+	float length;       // how long that arrow is. Almost nothing means the polygon has no area
+	float halfSize;     // half the longer of its first two sides, which says how big the polygon is
+};
+
 static const int   kToyMostPolyPoints  = 16;
 static const int   kToyMaxCasters      = 60000;
 static const int   kToyMaxCasterPoints = 240000;
@@ -3595,6 +3607,7 @@ static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen ligh
 static ToyVec toyCasterPoints[kToyMaxCasterPoints];
 static int toyCasterStart[kToyMaxCasters];
 static int toyCasterCount[kToyMaxCasters];
+static ToyFlatSurface toyCasterSurface[kToyMaxCasters];
 static int toyCasterKind[kToyMaxCasters];  // one of ToyCasterKind, which says what this polygon may do
 static void const *toyCasterOwner[kToyMaxCasters];  // what the polygon belongs to, or nothing for the level. Only compared, never read through
 static int toyCasterModule[kToyMaxCasters];  // for a cast-only polygon, which of toyUnseenModules it belongs to
@@ -3652,6 +3665,22 @@ bool ToyShadows_StartUnseenModule(const float *centre, float radius)
 	return true;
 }
 
+// pts holds at least three points
+static void ToyWorkOutSurface(const ToyVec *pts, ToyFlatSurface &surface)
+{
+	float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
+	float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
+
+	surface.nx = ay * bz - az * by;
+	surface.ny = az * bx - ax * bz;
+	surface.nz = ax * by - ay * bx;
+	surface.length = sqrtf(surface.nx * surface.nx + surface.ny * surface.ny + surface.nz * surface.nz);
+
+	float const sideA = ax * ax + ay * ay + az * az;
+	float const sideB = bx * bx + by * by + bz * bz;
+	surface.halfSize = sqrtf(sideA > sideB ? sideA : sideB) * 0.5f;
+}
+
 // pts holds count points, x y z, in the same space mainVertex uses (view space with y turned over)
 // kind is one of ToyCasterKind. owner is what the polygon belongs to, or nothing for the level.
 void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner)
@@ -3667,13 +3696,14 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		return;
 	}
 
+	int const firstPoint = toyNumCasterPoints;
+
 	toyCasterStart[toyNumCasters] = toyNumCasterPoints;
 	toyCasterCount[toyNumCasters] = count;
 	toyCasterKind[toyNumCasters] = kind;
 	toyCasterOwner[toyNumCasters] = owner;
 	toyCasterModule[toyNumCasters] = toyNumUnseenModules - 1;
 	toyPolygonsOfKind[kind]++;
-	toyNumCasters++;
 
 	for (int i = 0; i < count; i++)
 	{
@@ -3682,6 +3712,9 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		toyCasterPoints[toyNumCasterPoints].z = pts[i * 3 + 2];
 		toyNumCasterPoints++;
 	}
+
+	ToyWorkOutSurface(&toyCasterPoints[firstPoint], toyCasterSurface[toyNumCasters]);
+	toyNumCasters++;
 }
 
 // Adds one body part to the log's count of how big each model is. All the parts of one model arrive together, so a new owner
@@ -3739,9 +3772,9 @@ static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 	toyVerts[toyNumVerts++] = c;
 }
 
-// light holds x y z range. centre is where the light really is: the two differ while the prisms are built from one of the light's
-// positions. model says this polygon is part of a model, such as an alien
-static void ToyAddPrism(const ToyVec *pts, int count, const float *light, const float *centre, bool model)
+// surface is the polygon's flat surface. light holds x y z range. centre is where the light really is: the two differ while the prisms
+// are built from one of the light's positions. model says this polygon is part of a model, such as an alien
+static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surface, const float *light, const float *centre, bool model)
 {
 	int const needed = ((count - 2) * 2 + count * 2) * 3;
 	if (toyNumVerts + needed > kToyMaxVerts)
@@ -3750,15 +3783,11 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, const 
 		return;
 	}
 
-	float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
-	float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
-	float const nx = ay * bz - az * by;
-	float const ny = az * bx - ax * bz;
-	float const nz = ax * by - ay * bx;
+	float const nx = surface.nx, ny = surface.ny, nz = surface.nz;
+	float const normalLength = surface.length;
 
 	float const lx = light[0] - pts[0].x, ly = light[1] - pts[0].y, lz = light[2] - pts[0].z;
 	float const facing = nx * lx + ny * ly + nz * lz;
-	float const normalLength = sqrtf(nx * nx + ny * ny + nz * nz);
 	float const lightDistance = sqrtf(lx * lx + ly * ly + lz * lz);
 
 	if (normalLength < 0.001f || lightDistance < 1.0f || facing == 0.0f)
@@ -3812,11 +3841,7 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, const 
 	float startGap = kToyStartGap;
 	if (model)
 	{
-		float const sideA = ax * ax + ay * ay + az * az;
-		float const sideB = bx * bx + by * by + bz * bz;
-		float const halfSize = sqrtf(sideA > sideB ? sideA : sideB) * 0.5f;
-
-		startGap = ((float)ToyShadowsModelGap < halfSize) ? (float)ToyShadowsModelGap : halfSize;
+		startGap = ((float)ToyShadowsModelGap < surface.halfSize) ? (float)ToyShadowsModelGap : surface.halfSize;
 		if (startGap < kToyStartGap)
 		{
 			startGap = kToyStartGap;
@@ -4197,7 +4222,9 @@ static void ToyAddTestBox(const float *light, const float *centre)
 	for (int face = 0; face < 6; face++)
 	{
 		ToyVec const points[4] = { corners[kFaces[face][0]], corners[kFaces[face][1]], corners[kFaces[face][2]], corners[kFaces[face][3]] };
-		ToyAddPrism(points, 4, light, centre, false);
+		ToyFlatSurface surface;
+		ToyWorkOutSurface(points, surface);
+		ToyAddPrism(points, 4, surface, light, centre, false);
 	}
 }
 
@@ -4301,21 +4328,16 @@ static HRESULT ToyDrawLevelPolygons(LPDIRECT3DDEVICE9 device, const float *light
 		ToyVec const *pts = &toyCasterPoints[toyCasterStart[caster]];
 		int const count = toyCasterCount[caster];
 
-		float const ax = pts[1].x - pts[0].x, ay = pts[1].y - pts[0].y, az = pts[1].z - pts[0].z;
-		float const bx = pts[2].x - pts[0].x, by = pts[2].y - pts[0].y, bz = pts[2].z - pts[0].z;
-		float nx = ay * bz - az * by;
-		float ny = az * bx - ax * bz;
-		float nz = ax * by - ay * bx;
-		float const normalLength = sqrtf(nx * nx + ny * ny + nz * nz);
+		ToyFlatSurface const &surface = toyCasterSurface[caster];
 
-		if (normalLength < 0.001f)
+		if (surface.length < 0.001f)
 		{
 			continue;
 		}
 
-		nx /= normalLength;
-		ny /= normalLength;
-		nz /= normalLength;
+		float nx = surface.nx / surface.length;
+		float ny = surface.ny / surface.length;
+		float nz = surface.nz / surface.length;
 
 		if (light)
 		{
@@ -4687,7 +4709,7 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 		}
 
 		int const vertsBefore = toyNumVerts;
-		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light, centre, kind == kToyCasterModel);
+		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], toyCasterSurface[caster], light, centre, kind == kToyCasterModel);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
 	if (ToyShadowsTest && !cloakedOnly)
