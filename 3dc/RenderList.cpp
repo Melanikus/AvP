@@ -309,6 +309,10 @@ void RenderList::Draw(Part part)
 {
 	uint32_t baseIndexValue = 0;
 
+	// The sky is drawn before anything else, as glowing polygons with depth writes off, so that the level simply covers it. That makes it
+	// see-through by its kind, but it has to stay in the solid half, or it would be drawn over the level.
+	bool depthWritesOff = false;
+
 	// set vertex declaration
 	(**decl).Set();
 
@@ -327,16 +331,18 @@ void RenderList::Draw(Part part)
 					break;
 				case kCommandZWriteEnable:
 					ChangeZWriteEnable(ZWRITE_ENABLED);
+					depthWritesOff = false;
 					break;
 				case kCommandZWriteDisable:
 					ChangeZWriteEnable(ZWRITE_DISABLED);
+					depthWritesOff = true;
 					break;
 			}
 		}
 		else
 		{
 			uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
-			bool const solid = get_transType(it->sortKey) == TRANSLUCENCY_OFF;
+			bool const solid = get_transType(it->sortKey) == TRANSLUCENCY_OFF || depthWritesOff;
 
 			if (numPrimitives && (part == kEverything || (part == kSolid) == solid))
 			{
