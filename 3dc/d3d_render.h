@@ -20,7 +20,7 @@ enum ToyCasterKind
 
 // How many lights the shadow toy handles in one frame. Steady lights are lamps and flares. Brief lights are muzzle flashes, fires
 // and explosions, which get places of their own, so that one can't push out a steady light and make that light's shadows jump.
-// shadow.psh and shadowFlare.psh are sized for kToyMostLights, so they have to change along with it.
+// lightTotal.psh is sized for kToyMostLights, so it has to change along with it.
 enum
 {
 	kToyMostSteadyLights = 8,

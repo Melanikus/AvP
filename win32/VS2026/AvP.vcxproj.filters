@@ -1407,25 +1407,10 @@
     <None Include="..\..\shaders\rhw.vsh">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="..\..\shaders\shadow.psh">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="..\..\shaders\shadow.vsh">
-      <Filter>Shaders</Filter>
-    </None>
     <None Include="..\..\shaders\shadowBlur.psh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\shadowBlur.vsh">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="..\..\shaders\shadowDepth.psh">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="..\..\shaders\shadowFlare.psh">
-      <Filter>Shaders</Filter>
-    </None>
-    <None Include="..\..\shaders\shadowFlare.vsh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\lightOne.psh">

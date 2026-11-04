@@ -2601,16 +2601,13 @@ bool InitialiseDirect3D()
 	d3d.tallTextEffect = d3d.effectSystem->Add("tallText", "tallText.vsh", "tallText.psh", d3d.tallTextDecl);
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
 
-	d3d.shadowEffect = d3d.effectSystem->Add("shadow", "shadow.vsh", "shadow.psh", d3d.mainDecl);
 	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
 
 	// These draw one rectangle over the screen, and read the pictures the surface pass made.
 	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
 	d3d.lightShareEffect = d3d.effectSystem->Add("lightShare", "shadowBlur.vsh", "lightShare.psh", d3d.mainDecl);
 	d3d.lightOneEffect = d3d.effectSystem->Add("lightOne", "shadowBlur.vsh", "lightOne.psh", d3d.mainDecl);
-	d3d.shadowDepthEffect = d3d.effectSystem->Add("shadowDepth", "shadow.vsh", "shadowDepth.psh", d3d.mainDecl);
 	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
-	d3d.shadowFlareEffect = d3d.effectSystem->Add("shadowFlare", "shadowFlare.vsh", "shadowFlare.psh", d3d.mainDecl);
 
 	// we should bail out if the shaders can't be loaded
 	if ((d3d.mainEffect  == kNullShaderID)    ||
