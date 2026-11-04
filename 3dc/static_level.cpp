@@ -60,6 +60,8 @@ struct PolygonToPlace
 	int polygonNumber;
 	int corners;
 	bool turnedRound;    // the stored normal disagrees with the corners
+	float recipWidth;    // one over the texture's size. Zero for a polygon with no texture
+	float recipHeight;
 };
 
 static bool ComesBefore(const PolygonToPlace &a, const PolygonToPlace &b)
@@ -202,6 +204,8 @@ static const char *CheckPolygon(const SHAPEHEADER *shape, const POLYHEADER *poly
 	double facing[3];
 	CornerFacing((const VECTORCH *)*shape->points, &polygon->Poly1stPt, corners, facing);
 	out->turnedRound = !out->twoSided && facing[0] * stored.vx + facing[1] * stored.vy + facing[2] * stored.vz < 0.0;
+	out->recipWidth = 0.0f;
+	out->recipHeight = 0.0f;
 
 	if (!HasTexture(polygon->PolyItemType))
 	{
@@ -244,7 +248,10 @@ static const char *CheckPolygon(const SHAPEHEADER *shape, const POLYHEADER *poly
 		}
 	}
 
+	// the same sum as D3D_ZBufferedGouraudTexturedPolygon_Output, so that the answer matches to the last digit
 	out->texture = texture;
+	out->recipWidth = 1.0f / (float)width;
+	out->recipHeight = 1.0f / (float)height;
 	return 0;
 }
 
@@ -256,23 +263,7 @@ static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPl
 	const VECTORCH *points = (const VECTORCH *)*shape->points;
 	int const *corners = &polygon->Poly1stPt;
 	bool const textured = HasTexture(polygon->PolyItemType);
-	float recipWidth = 0.0f, recipHeight = 0.0f;
-	int const *coordinates = 0;
-
-	if (textured)
-	{
-		uint32_t width = 0, height = 0;
-
-		if (!setup.textureSize(placed.texture, &width, &height) || width == 0 || height == 0)
-		{
-			return "a polygon's texture doesn't exist";
-		}
-
-		// the same sum as D3D_ZBufferedGouraudTexturedPolygon_Output, so that the answer matches to the last digit
-		recipWidth = 1.0f / (float)width;
-		recipHeight = 1.0f / (float)height;
-		coordinates = shape->sh_textures[(uint32_t)polygon->PolyColour >> TxDefn];
-	}
+	int const *coordinates = textured ? shape->sh_textures[(uint32_t)polygon->PolyColour >> TxDefn] : 0;
 
 	float tangent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
@@ -295,8 +286,8 @@ static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPl
 		vertex.y = (float)point.vy + (float)input.place[1];
 		vertex.z = (float)point.vz + (float)input.place[2];
 
-		vertex.u = textured ? (float)coordinates[corner * 2 + 0] * recipWidth : 0.0f;
-		vertex.v = textured ? (float)coordinates[corner * 2 + 1] * recipHeight : 0.0f;
+		vertex.u = textured ? (float)coordinates[corner * 2 + 0] * placed.recipWidth : 0.0f;
+		vertex.v = textured ? (float)coordinates[corner * 2 + 1] * placed.recipHeight : 0.0f;
 
 		float normal[3] = { 0.0f, 0.0f, 0.0f };
 		setup.cornerNormal(shape, placed.polygonNumber, corner, normal);
