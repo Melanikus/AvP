@@ -23,6 +23,7 @@
 // After a level is read, the game joins each object to its shape, using numbers from the file. So tests 7 and 8 build
 // real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that doesn't
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
+// Test 10 does the same for the corners of a polygon.
 //
 // HOW IT RUNS
 //
@@ -539,6 +540,67 @@ static void TestBakedColours()
 	Parent_File = 0;
 }
 
+// Room for the data of a whole shape: its header, its points and its polygons, laid out as in a level file.
+alignas(int) static char wholeShape[16384];
+
+// Writes a chunk's header and gives back where its data goes. The data starts as all zeros.
+static char * PutChunk(char * where, char const * name, size_t dataBytes)
+{
+	int const chunkBytes = (int)(ChunkHeaderBytes + dataBytes);
+
+	memset(where, 0, chunkBytes);
+	memcpy(where, name, 8);
+	memcpy(where + 8, &chunkBytes, sizeof(chunkBytes));
+
+	return where + ChunkHeaderBytes;
+}
+
+// Builds the data of a shape with this many points and one polygon. A polygon has 5 places for its corners, after 16
+// bytes of other numbers. Shapes and sub-shapes have different headers. Gives back how many bytes it all takes up.
+static size_t BuildShapeData(char * where, bool subShape, int points, int const * corners)
+{
+	int const polygons = 1;
+	size_t const headerBytes = subShape ? 44 : ShapeHeaderDataBytes;
+
+	char * header = PutChunk(where, subShape ? "SUBSHPHD" : "SHPHEAD1", headerBytes);
+	memcpy(header + (subShape ? 8 : 24), &points, sizeof(points));
+	memcpy(header + (subShape ? 12 : 28), &polygons, sizeof(polygons));
+
+	char * pointData = PutChunk(header + headerBytes, "SHPRAWVT", 12 * (size_t)points);
+	char * polygon = PutChunk(pointData + 12 * (size_t)points, "SHPPOLYS", 36);
+	memcpy(polygon + 16, corners, 5 * sizeof(int));
+
+	return (polygon + 36) - where;
+}
+
+// 10. A polygon's corners. It has 4 places for them, and -1 marks the end.
+static void TestPolygons()
+{
+	puts("10. polygons");
+
+	struct PolygonRow { int corners[5]; bool accepted; char const * what; };
+	PolygonRow const rows[] =
+	{
+		{ { 0, 1, 2, -1, -1 }, true,  "a polygon with 3 corners is accepted" },
+		{ { 0, 1, 2,  3, -1 }, true,  "a polygon with 4 corners is accepted" },
+		{ { 0, 1, 2,  3,  0 }, false, "a polygon with no end marker is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, rows[i].corners);
+		new Shape_Chunk(&file, wholeShape, bytes);
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -553,6 +615,7 @@ int main()
 	TestObjectsAndShapes();
 	TestHierarchySections();
 	TestBakedColours();
+	TestPolygons();
 
 	if (checksFailed)
 	{

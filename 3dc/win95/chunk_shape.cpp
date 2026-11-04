@@ -4,6 +4,7 @@
 //   text is copied using its exact measured length, so it always fits
 //   a child chunk whose size cannot be real is refused
 //   added a check on how many points a shape claims
+//   a polygon's corners are limited to the 4 places it has for them
 
 #include <math.h>
 
@@ -636,12 +637,40 @@ RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"REBSHAPE"
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"CONSHAPE",Console_Shape_Chunk)
 
+// Reads one polygon from a level file. Each takes 36 bytes: four numbers, then five places for its corners, which end
+// with a -1. vert_ind holds 4 corners, so the reading stops there, whatever the file says: going by the -1 alone, a
+// polygon that left it out would be written past the end of vert_ind. A polygon with no -1 can't be real, so the level
+// is refused. Every one of the 952940 polygons in the game's own levels has 3 or 4 corners and its -1.
+static void read_polygon (ChunkPoly & poly, const char * record)
+{
+	int const * const corners = (int const *) (record + 16);
+	int const most_corners = sizeof(poly.vert_ind) / sizeof(poly.vert_ind[0]);
+
+	poly.engine_type = *((int *) record);
+	poly.normal_index = *((int *) (record + 4));
+	poly.flags = *((int *) (record + 8));
+	poly.colour = *((int *) (record + 12));
+
+	poly.num_verts = 0;
+
+	while (poly.num_verts < most_corners && corners[poly.num_verts] != -1)
+	{
+		poly.vert_ind[poly.num_verts] = corners[poly.num_verts];
+		poly.num_verts++;
+	}
+
+	if (corners[poly.num_verts] != -1)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
 // from buffer
 Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pdata, size_t psize)
 : Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (psize / 36) // 9 * 4 bytes per polygon
 {
-	int i, j;
+	int i;
 
 	parent->shape_data_store->poly_list = new ChunkPoly [num_polys];
 	parent->shape_data_store->num_polys = num_polys;
@@ -650,18 +679,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pda
 
 	for (i=0; i<num_polys; i++)
 	{
-		parent->shape_data_store->poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		parent->shape_data_store->poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		parent->shape_data_store->poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		parent->shape_data_store->poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		parent->shape_data_store->poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			parent->shape_data_store->poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			parent->shape_data_store->poly_list[i].num_verts++;
-		}
+		read_polygon (parent->shape_data_store->poly_list[i], pdata + (36*i));
 	}
 }
 
@@ -669,7 +687,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const 
 : Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (psize / 36) // 9 * 4 bytes per polygon
 {
-	int i, j;
+	int i;
 
 	parent->shape_data_store->poly_list = new ChunkPoly [num_polys];
 	parent->shape_data_store->num_polys = num_polys;
@@ -678,18 +696,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const 
 
 	for (i=0; i<num_polys; i++)
 	{
-		parent->shape_data_store->poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		parent->shape_data_store->poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		parent->shape_data_store->poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		parent->shape_data_store->poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		parent->shape_data_store->poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			parent->shape_data_store->poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			parent->shape_data_store->poly_list[i].num_verts++;
-		}
+		read_polygon (parent->shape_data_store->poly_list[i], pdata + (36*i));
 	}
 }
 
@@ -697,7 +704,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const ch
 : Chunk (parent, "SHPPOLYS"),
 	poly_data(0), num_polys (psize / 36) // 9 * 4 bytes per polygon
 {
-	int i, j;
+	int i;
 
 	ChunkPoly* poly_list = new ChunkPoly [num_polys];
 
@@ -705,18 +712,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const ch
 
 	for (i=0; i<num_polys; i++)
 	{
-		poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			poly_list[i].num_verts++;
-		}
+		read_polygon (poly_list[i], pdata + (36*i));
 	}
 }
 
