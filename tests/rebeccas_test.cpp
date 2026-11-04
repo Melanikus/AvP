@@ -32,6 +32,7 @@
 // non-zero result if any check failed. The repository's automatic checks run it, and a change that breaks it can't be
 // merged. It needs none of the game's files: those aren't in this repository, and it never opens a file.
 
+#include <algorithm>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -292,10 +293,11 @@ static void TestImpossibleChildSize()
 	Check(NameLength(object) == 63, "and its name was read");
 }
 
-// The bytes of a shape: an SHPHEAD1 chunk with 68 bytes of data, and the shape's number at byte 20 of that data. An object
-// names its shape at byte 56 of its own data.
+// The bytes of a shape: an SHPHEAD1 chunk with 68 bytes of data, with the shape's number at byte 20 of that data and its
+// count of polygons at byte 28. An object names its shape at byte 56 of its own data.
 static size_t const ShapeHeaderDataBytes = 68;
 static size_t const ShapeNumberAt = 20;
+static size_t const ShapePolygonCountAt = 28;
 static size_t const ObjectShapeNumberAt = 56;
 
 alignas(int) static char shapeBytes[ChunkHeaderBytes + ShapeHeaderDataBytes];
@@ -565,7 +567,7 @@ static size_t BuildShapeData(char * where, bool subShape, int points, int const 
 
 	char * header = PutChunk(where, subShape ? "SUBSHPHD" : "SHPHEAD1", headerBytes);
 	memcpy(header + (subShape ? 8 : 24), &points, sizeof(points));
-	memcpy(header + (subShape ? 12 : 28), &polygons, sizeof(polygons));
+	memcpy(header + (subShape ? 12 : ShapePolygonCountAt), &polygons, sizeof(polygons));
 
 	char * pointData = PutChunk(header + headerBytes, "SHPRAWVT", 12 * (size_t)points);
 	char * polygon = PutChunk(pointData + 12 * (size_t)points, "SHPPOLYS", 36);
@@ -599,6 +601,49 @@ static void TestPolygons()
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
+	}
+
+	// The polygons chunk sets the shape's count of polygons as it's read. A header that comes after it sets the count again
+	// from its own number, so the two can only disagree with the header last, which is how these shapes are laid out.
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+	size_t const headerChunkBytes = ChunkHeaderBytes + ShapeHeaderDataBytes;
+
+	struct CountRow { int polygons; bool accepted; char const * what; };
+	CountRow const countRows[] =
+	{
+		{ 1, true,  "a header at the end that agrees about the polygons is accepted" },
+		{ 2, false, "a header that claims more polygons than there are is refused" },
+		{ 0, false, "a header that claims fewer polygons than there are is refused" },
+	};
+
+	for (size_t i = 0; i < sizeof(countRows) / sizeof(countRows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		memcpy(wholeShape + ChunkHeaderBytes + ShapePolygonCountAt, &countRows[i].polygons, sizeof(int));
+		std::rotate(wholeShape, wholeShape + headerChunkBytes, wholeShape + bytes); // moves the header to the end
+
+		new Shape_Chunk(&file, wholeShape, bytes);
+		file.post_input_processing();
+
+		Check((file.error_code == 0) == countRows[i].accepted, countRows[i].what);
+	}
+
+	// Polygons join up points, so a shape with polygons and no points has nothing to draw them with. A chunk the game doesn't
+	// know is skipped, so giving the points chunk a made-up name is the same as it not being there.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
+		memcpy(wholeShape + headerChunkBytes, "NOPOINTS", 8);
+
+		new Shape_Chunk(&file, wholeShape, bytes);
+		file.post_input_processing();
+
+		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with polygons and no points is refused");
 	}
 
 	Parent_File = 0;
