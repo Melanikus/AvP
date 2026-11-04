@@ -420,6 +420,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ToyShadowsCasters = (asked < 0) ? 0 : (asked > 7) ? 7 : asked;
 		}
 		LogString(ToyShadowsMode ? "toy-shadows: on" : "toy-shadows: off");
+		extern int KeptSnap;
+		LogString((KeptSnap == 2) ? "shadows: a kept prism's near ends are cut each frame like the walls, and its far ends stay exact (-keptsnapfar)"
+			: (KeptSnap == 1) ? "shadows: a kept prism's corners are cut each frame like the walls (-keptsnap)" : "shadows: a kept prism's corners stay exact");
 		extern int ShadowsEvenGap;
 		LogString(ShadowsEvenGap ? "shadows: each corner works out where its shadow starts (-shadowevengap)" : "shadows: one gap for a whole polygon");
 	}

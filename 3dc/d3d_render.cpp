@@ -6308,7 +6308,7 @@ static void ShadowStatus_Draw()
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
-	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE");
+	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
 	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF %s", (textureRelief.IsReady() && ToyShadowsMode != kViewFinalNoRelief) ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);

@@ -39,6 +39,9 @@ bool ShadowVolumesCard_CornersAreCut();
 // How corners are being treated, in a few words, for the log.
 const char *ShadowVolumesCard_CornerWords();
 
+// The same for the tag on the screen, which goes after "ON" or "OFF": nothing, unless a switch asked for something.
+const char *ShadowVolumesCard_TagWords();
+
 // Writes corners to the list, starting at the place the store gave. corners holds x y z for each, and ends holds its KeptCorner end. false means it wasn't written.
 bool ShadowVolumesCard_Write(int first, const float *corners, const float *ends, int count);
 

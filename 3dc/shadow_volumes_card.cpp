@@ -100,6 +100,21 @@ const char *ShadowVolumesCard_CornerWords()
 	return (KeptSnap == 2) ? "corners cut, far ends exact" : "corners cut";
 }
 
+const char *ShadowVolumesCard_TagWords()
+{
+	if (KeptSnap == 0)
+	{
+		return "";
+	}
+
+	if (!ShadowVolumesCard_CornersAreCut())
+	{
+		return " SNAP MISSING";
+	}
+
+	return (KeptSnap == 2) ? " SNAP FAR" : " SNAP";
+}
+
 bool ShadowVolumesCard_Write(int first, const float *corners, const float *ends, int count)
 {
 	if (!cornerList || first < 0 || count <= 0 || count > kShadowVolumeMostCorners - first)
@@ -162,7 +177,10 @@ HRESULT ShadowVolumesCard_Draw(LPDIRECT3DDEVICE9 device, D3DCOLOR colour, const 
 	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TFACTOR);
 	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
 
-	for (int number = 0; number < ShadowVolumes_NumRuns(); number++)
+	// With kept prisms off there's no list on the card, and all there is to draw is the corners handed in.
+	int const numRuns = cornerList ? ShadowVolumes_NumRuns() : 0;
+
+	for (int number = 0; number < numRuns; number++)
 	{
 		ShadowVolumeRun const &run = ShadowVolumes_Run(number);
 
