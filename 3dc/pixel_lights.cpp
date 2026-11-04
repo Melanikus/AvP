@@ -30,7 +30,6 @@
 
 extern VECTORCH *Global_ShapePoints;
 extern VECTORCH *Global_ShapeVNormals;
-extern DISPLAYBLOCK *Global_ODB_Ptr;
 
 // Where each number is in a light on the list. See kToyLightFloats.
 enum
@@ -378,7 +377,6 @@ void PixelLights_LightSeeThroughCorner(RENDERVERTEX *corner, int vertexNumber)
 
 	VECTORCH const *point = Global_ShapePoints + vertexNumber;
 	VECTORCH const *normal = Global_ShapeVNormals ? Global_ShapeVNormals + vertexNumber : 0;
-	bool const usesFacing = normal && !(Global_ODB_Ptr->ObFlags3 & ObFlag3_NoLightDot);
 	int red = 0, green = 0, blue = 0;
 	int glowRed = 0, glowGreen = 0, glowBlue = 0;
 
@@ -400,7 +398,7 @@ void PixelLights_LightSeeThroughCorner(RENDERVERTEX *corner, int vertexNumber)
 
 		int amount = MUL_FIXED(light->LightRange - distance, light->BrightnessOverRange);
 
-		if (distance > 0 && usesFacing)
+		if (distance > 0 && normal)
 		{
 			int const facing = MUL_FIXED(normal->vx, toLight.vx) + MUL_FIXED(normal->vy, toLight.vy) + MUL_FIXED(normal->vz, toLight.vz);
 
