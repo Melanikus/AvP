@@ -1165,6 +1165,7 @@ static void TestTextureCoordinates()
 		{ 0x00000000, triangle,    3, true,  "a polygon using the first list is accepted" },
 		{ 0x00010000, triangle,    3, true,  "a polygon using the last list is accepted" },
 		{ 0x00020000, triangle,    3, false, "a list just past the last is refused" },
+		{ 0x00008000, triangle,    3, false, "a textured polygon with the bit that skips its coordinates is refused" },
 		{ 0x7fff0000, triangle,    3, false, "a list far past the last is refused" },
 		{ 0xffff0000, triangle,    3, false, "a negative list is refused" },
 		{ 0x80000000, triangle,    3, false, "a hugely negative list is refused" },

@@ -14,6 +14,7 @@
 //   own normal must be one of those in its list
 //   the two polygons of a merge pair must be triangles that share exactly one edge
 //   a chunk of morph frames must be exactly the size its count says
+//   a textured polygon can't have the bit set that makes the game skip its texture coordinates
 
 #include <math.h>
 
@@ -275,6 +276,13 @@ static bool texture_numbers_are_valid (ChunkShape const & shape, ChunkPoly const
 	if (!is_textured (polygon.engine_type))
 	{
 		return true;
+	}
+
+	// This bit makes the game skip the step that copies a polygon's texture coordinates, and the polygon stays textured, so it would
+	// be drawn from a list that was never filled in. None of the 951593 textured polygons in the game's own levels has it.
+	if (polygon.colour & 0x8000)
+	{
+		return false;
 	}
 
 	int const list = (int) polygon.colour >> 16;
