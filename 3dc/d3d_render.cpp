@@ -4937,8 +4937,13 @@ template <class T> static void ToyRelease(T *&thing)
 }
 
 // Called just before the device resets, which Direct3D won't do while these exist. They're made again when next needed.
+// A copy of all the card's settings, to put back after the shadow pass. It's only made once, because making one every frame means asking for memory and
+// copying everything into it. It holds on to whatever was set when it last took its copy, so it has to go before the device can be reset.
+static IDirect3DStateBlock9 *savedCardSettings = 0;
+
 void ToyShadows_ReleaseTargets()
 {
+	ToyRelease(savedCardSettings);
 	ToyRelease(toyMaskSurface);
 	ToyRelease(toyDepthSurface);
 	ToyRelease(toyMaskTexture);
@@ -5700,11 +5705,15 @@ static void ReportKeptPrisms()
 // Clears the stencil and marks the pixels the light behind the prisms in toyVerts can't reach.
 static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 {
+	FrameTiming_Mark(kStageShading);
+
 	HRESULT const cleared = device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
 	if (FAILED(cleared))
 	{
 		report->clear = cleared;
 	}
+
+	FrameTiming_Mark(kStageClearing);
 
 	ToySetVolumeState(device);
 
@@ -6476,10 +6485,9 @@ static void ToyShadows_Draw()
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
 	// The game caches its render states, so everything is put back exactly as it was, whatever happens here.
-	IDirect3DStateBlock9 *savedState = 0;
 	{
 		ProcessorStageClock stateClock(kProcessorStateBlock);
-		report.block = device->CreateStateBlock(D3DSBT_ALL, &savedState);
+		report.block = savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings);
 	}
 	if (FAILED(report.block))
 	{
@@ -6891,8 +6899,7 @@ static void ToyShadows_Draw()
 
 	{
 		ProcessorStageClock stateClock(kProcessorStateBlock);
-		savedState->Apply();
-		savedState->Release();
+		savedCardSettings->Apply();
 	}
 
 	if (logThisFrame)

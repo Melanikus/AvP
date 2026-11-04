@@ -323,6 +323,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			KeptSnap = 1;
 		}
+
+		// Walls drawn from the fixed buffer have no corners on the list, so their prisms always go through the card's own sums. Exact corners against
+		// the scene's cut ones are what made kept prisms flicker, so these always use the cut ones.
+		if (StaticSceneOn && !KeptSnap)
+		{
+			KeptSnap = 1;
+		}
 		extern int ToyShadowsDarkness;
 		char const *darkSwitch = strstr(command_line, "-shadowdark=");
 		if (darkSwitch)

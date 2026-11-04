@@ -33,8 +33,8 @@
 
 static const int kFramesBetweenReports = 300;
 
-// A frame's fixed parts, plus three for each pass of up to 40 prisms. Past this, the last mark takes everything that's left.
-static const int kMostMarks = 150;
+// A frame's fixed parts, plus five for each pass of up to about 60. Past this, the last mark takes everything that's left.
+static const int kMostMarks = 300;
 
 // How long to go on asking before giving up on an answer. It would only come to this if the device had a problem.
 static const int kMostFramesToWait = 60;
@@ -274,9 +274,9 @@ static void ReportCardTimes(UINT64 ticksPerSecond)
 
 	char line[400];
 	_snprintf(line, sizeof(line) - 1,
-		"card: %.1f ms: scene %.1f, surface pictures %.1f, light total %.1f, prisms sent %.1f for %d corners, prisms kept %.1f for %d corners, shading %.1f, softening %.1f, dimming %.1f, adding lights %.1f, after %.1f",
+		"card: %.1f ms: scene %.1f, surface pictures %.1f, light total %.1f, prisms sent %.1f for %d corners, prisms kept %.1f for %d corners, clearing the stencil %.1f, shading %.1f, softening %.1f, dimming %.1f, adding lights %.1f, after %.1f",
 		allOfIt, stageTotal[kStageScene], stageTotal[kStageSurfacePictures], stageTotal[kStageLightTotal], stageTotal[kStagePrismsSent], cornersSent,
-		stageTotal[kStagePrismsKept], cornersKept, stageTotal[kStageShading], stageTotal[kStageSoftening], stageTotal[kStageDimming],
+		stageTotal[kStagePrismsKept], cornersKept, stageTotal[kStageClearing], stageTotal[kStageShading], stageTotal[kStageSoftening], stageTotal[kStageDimming],
 		stageTotal[kStageAddingLights], stageTotal[kStageAfter]);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);

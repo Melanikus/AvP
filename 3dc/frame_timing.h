@@ -15,7 +15,8 @@ enum FrameStage
 	kStageLightTotal,
 	kStagePrismsSent,       // shadow prisms sent to the card this frame
 	kStagePrismsKept,       // shadow prisms already on the card
-	kStageShading,          // clearing the stencil, and putting each light's share into the mask
+	kStageClearing,         // clearing the stencil, before each pass
+	kStageShading,          // putting each light's share into the mask
 	kStageSoftening,        // blurring the mask and applying it
 	kStageDimming,
 	kStageAddingLights,
