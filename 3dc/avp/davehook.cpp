@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   temporary text objects are let go automatically when the code using them ends, instead of by hand;
-//   the message font is made by a small function that hands it back (it works the same as before)
+//   the message font is made by a small function that hands it back (it works the same as before);
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 /*******************************************************************
  *
  *    DESCRIPTION: 	davehook.cpp
@@ -395,20 +396,10 @@ int Testing :: IITest(int i)
 // Diagnostic hook for reference counting system:
 void Testing :: DumpRefCounts(void)
 {
-	#if TrackReferenceCounted
-	{
-		RefHolder<SCString> pSCString_Feedback(new SCString("DUMPING REFCOUNT INFO"));
-		pSCString_Feedback -> SendToScreen();
-
-		LogFile tempLog("REFDUMP.TXT");
-		RefCountObject :: DumpAll(tempLog);
-	}
-	#else
 	{
 		RefHolder<SCString> pSCString_Feedback(new SCString("REFCOUNT INFO DISABLED AT COMPILE-TIME"));
 		pSCString_Feedback -> SendToScreen();
 	}
-	#endif
 }
 
 /*

@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   temporary text objects are let go automatically when the code using them ends, instead of by hand
+//   temporary text objects are let go automatically when the code using them ends, instead of by hand;
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 /*******************************************************************
  *
  *    DESCRIPTION: 	string.cpp
@@ -19,9 +20,6 @@
 #include "strutil.h"	
 #include "index_font.hpp"
 
-	#if TrackReferenceCounted
-	#include "dump_context.hpp"
-	#endif
 
 	#define UseLocalAssert TRUE
 	#include "ourasert.h"
@@ -52,12 +50,6 @@
 /* Exported function definitions ***********************************/
 // class SCString
 // public:
-#if TrackReferenceCounted
-void SCString :: DumpIDForReferenceDump(R_DumpContext& theContext) const
-{
-	theContext . dprintf("SCString \"%s\" refs remainining=%i\n",pProjCh_Val,CheckRef());
-}
-#endif
 
 ProjChar* SCString :: pProjCh(void) const
 {

@@ -3,6 +3,9 @@
 	scstring.hpp
 
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   deleted the reference-tracking debug code, which was switched off and never compiled
 
 #ifndef _scstring
 #define _scstring 1
@@ -135,9 +138,6 @@
 			// the input, and the whitespace is used to separate individual
 			// strings
 
-		#if TrackReferenceCounted
-		void DumpIDForReferenceDump(R_DumpContext& theContext) const;
-		#endif
 
 	private:
 		~SCString();
