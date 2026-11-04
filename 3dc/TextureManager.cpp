@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a texture's size can be asked for with a number that isn't trusted
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -431,6 +434,20 @@ void Tex_GetDimensions(texID_t textureID, uint32_t &width, uint32_t &height)
 {
 	width  = textureList[textureID].width;
 	height = textureList[textureID].height;
+}
+
+// Tex_GetDimensions trusts the number it's given. This one is for a number that came from a level file: false means there's no such texture.
+bool Tex_GetRealSize(texID_t textureID, uint32_t *width, uint32_t *height)
+{
+	if (textureID >= textureList.size() || !textureList[textureID].isValid)
+	{
+		return false;
+	}
+
+	*width  = textureList[textureID].width;
+	*height = textureList[textureID].height;
+
+	return true;
 }
 
 void Tex_ListTextures()

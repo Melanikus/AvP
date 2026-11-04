@@ -9,6 +9,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the shadow code is told which polygons show both sides, and on a report frame which ones the game draws
 //   the shadow code is told which shapes are staying still, so their prisms can be kept
+//   the rule for a module that never moves is one function, which the static level uses too
 #include "3dc.h"
 #include "surface_normals.h"
 #include "logString.h"
@@ -6552,7 +6553,8 @@ static const int kToyMostOutOfView = 20000;
 // can, as doors and lifts do, and its shape here wouldn't match where it really is. A morphing shape's points change too. So those
 // still cast only while drawn. An infinite module is the level's outer box and has no shape of its own, a dormant one is switched
 // off, and one marked not visible wouldn't be drawn when in view either.
-static bool ToyModuleCanCastUnseen(const MODULE *module)
+// Is this a module that stays exactly as it is for the whole level? Nothing controls it, nothing morphs it, and it's a real part of the level.
+bool ModuleNeverMoves(const MODULE *module)
 {
 	if (!module || !module->m_mapptr)
 	{
@@ -6564,12 +6566,12 @@ static bool ToyModuleCanCastUnseen(const MODULE *module)
 		return false;
 	}
 
-	if (module->m_mapptr->MapFlags & ObFlag_NotVis)
-	{
-		return false;
-	}
+	return !(module->m_mapptr->MapFlags & ObFlag_NotVis);
+}
 
-	return !ToyModuleWasCollected(module);
+static bool ToyModuleCanCastUnseen(const MODULE *module)
+{
+	return ModuleNeverMoves(module) && !ToyModuleWasCollected(module);
 }
 
 // Whether any of the chosen lights can reach this module's ball, which it's had since the level loaded. A ball is rougher than the module's box,

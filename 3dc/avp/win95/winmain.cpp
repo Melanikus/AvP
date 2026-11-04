@@ -3,9 +3,12 @@
 //   LevelName has room for any custom level name and the "-n" name from the command line is limited to
 //   it; the Debug build's console output is closed properly on every way the game exits; the "-ip" address
 //   from the command line is limited to its buffer
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the level's still polygons are built and sent to the graphics card once a level has loaded
 
 #include "3dc.h"
 #include "texture_relief.h"
+#include "static_level.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -611,6 +614,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		/*********** Process the data ************/
 		AssignAllSBNames();
 		StartGame();
+
+		// after StartGame, because that's when every module that's controlled by something has been told so
+		StaticLevel_BuildThisLevel();
 
 		/* JH 28/5/97 */
 		/* remove resident loaded 'fast' files */

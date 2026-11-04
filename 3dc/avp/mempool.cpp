@@ -2,9 +2,12 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level that asks for more memory than a pool block holds gets it separately, instead of writing past
 //   the block; running out of memory stops the game in AllocMem, so nothing here has to handle it
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the level's lists on the graphics card go when the shapes do
 #include "ourasert.h"
 #include "mem3dc.h"
 #include "mempool.h"
+#include "static_level.h"
 #include "logString.h"
 #include "utilities.h"
 
@@ -112,6 +115,9 @@ void* PoolAllocateMem(size_t amount)
 
 void ClearMemoryPool()
 {
+	// Everything that leaves a level comes through here, and this is what frees the shapes those lists were made from.
+	StaticLevel_Release();
+
 	for (int i = 0; i <= CurrentMemoryBlock; i++)
 	{
 		DeallocateMem(MemoryBlocks[i]);

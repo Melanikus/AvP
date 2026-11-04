@@ -144,6 +144,12 @@
     <ClCompile Include="..\..\3dc\shadow_reach.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\static_level.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\static_level_card.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\frame_timing.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

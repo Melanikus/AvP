@@ -89,6 +89,7 @@ std::string& Tex_GetName	(texID_t textureID);
 const r_Texture& Tex_GetTexture	(texID_t textureID);
 void Tex_GetNamesVector		(std::vector<std::string> &namesArray);
 void Tex_GetDimensions		(texID_t textureID, uint32_t &width, uint32_t &height);
+bool Tex_GetRealSize		(texID_t textureID, uint32_t *width, uint32_t *height);
 
 bool Tex_Lock	(texID_t textureID, uint8_t **data, uint32_t *pitch, enum TextureLock lockType = TextureLock_Normal);
 bool Tex_Unlock	(texID_t textureID);
