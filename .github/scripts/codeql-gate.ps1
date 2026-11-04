@@ -17,8 +17,8 @@ param(
     #   own-all     = every C/C++ file in git, compiled or not;
     #   libs        = the libraries as really compiled: each one must have at least one source file in the report;
     #   all-sources = every C/C++ file of the libraries, compiled or not;
-    #   other       = workflows and scripts: there is no list to compare with, but it must have read something.
-    [Parameter(Mandatory)] [ValidateSet('own', 'own-all', 'libs', 'all-sources', 'other')] [string] $Kind,
+    #   actions     = this repository's workflows: there is no list to compare with, but it must have read something.
+    [Parameter(Mandatory)] [ValidateSet('own', 'own-all', 'libs', 'all-sources', 'actions')] [string] $Kind,
 
     # The folder CodeQL wrote its report (.sarif) into.
     [Parameter(Mandatory)] [string] $SarifFolder,
@@ -51,7 +51,8 @@ $readProblemNotice = '/diagnostics/(failed-extractor-invocations|extraction-warn
 
 # Languages CodeQL can read that no job in codeql.yml scans. A file like this would be code nobody reads, so it fails
 # the gate. Whoever adds one should add a CodeQL job for its language and take it off this list.
-$unscannedTypes = '.cs', '.cshtml', '.razor', '.go', '.java', '.kt', '.kts', '.py', '.rb', '.erb', '.rs', '.swift'
+$unscannedTypes = '.cs', '.cshtml', '.razor', '.go', '.java', '.kt', '.kts', '.py', '.rb', '.erb', '.rs', '.swift',
+    '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts', '.vue', '.html', '.htm', '.xhtml'
 
 # Helper entries in vcpkg's build folder that hold no library code. D3DX is Microsoft's binary package: it has no source
 # to scan, and it is the one exception the project accepts.
@@ -232,8 +233,8 @@ if (-not (Test-Path -LiteralPath $actionSettings)) {
 # so it can stop on something harmless, and then a person looks. The file list includes the types that C/C++ code pulls
 # in with #include, such as .inl, because a comment in one of those works the same way.
 $suppressionComment = '\b(lgtm|codeql)\s*\[[^\]]*\]|(//|/\*|#|;)\s*lgtm\b'
-$textTypes = if ($Kind -eq 'other') {
-    '.js', '.ts', '.html', '.htm', '.yml', '.yaml'
+$textTypes = if ($Kind -eq 'actions') {
+    '.yml', '.yaml'
 } else {
     $sourceTypes + $headerTypes + '.inc', '.inl', '.ipp', '.tcc'
 }
