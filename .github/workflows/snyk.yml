@@ -62,10 +62,19 @@ jobs:
           fi
           echo "No scanner suppressions found."
 
+      # Exit 1 is findings, which fail at once. Exit 2 or more is an error, retried; it fails if it never clears.
       - name: Snyk Code (SAST)
+        shell: bash
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk code test --sarif-file-output=snyk-code.sarif
+        run: |
+          for attempt in 1 2 3; do
+            if snyk code test --sarif-file-output=snyk-code.sarif; then rc=0; else rc=$?; fi
+            if [ "$rc" -lt 2 ]; then break; fi
+            echo "Snyk Code error (exit $rc) on attempt $attempt"
+            sleep 30
+          done
+          exit "$rc"
 
       # Snyk reports how many files it read in the SARIF. A file it could not parse is silently skipped and the scan
       # still passes, so we compare its count with what git tracks. A missing report fails here too.
@@ -129,7 +138,15 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set -o pipefail
-          snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif | tee sca.log
+          # Snyk exits 0 for clean, 1 for findings, 2 or more for an error such as a service failure. Only an error is
+          # retried, and it still fails if it never clears: a scan that didn't finish is not a clean scan.
+          for attempt in 1 2 3; do
+            if snyk test --unmanaged --print-dep-paths --sarif-file-output=snyk-open-source.sarif | tee sca.log; then rc=0; else rc=$?; fi
+            if [ "$rc" -lt 2 ]; then break; fi
+            echo "Snyk Open Source error (exit $rc) on attempt $attempt"
+            sleep 30
+          done
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           if ! grep -q 'Testing ' sca.log; then
             echo "::error::Snyk Open Source did not run a scan"
             exit 1
@@ -260,7 +277,13 @@ jobs:
                 failed=1
               fi
               if ! code_scan "$d" "results/$lib.code.sarif"; then failed=1; fi
-              if ! (cd "$d" && snyk test --unmanaged --print-dep-paths) | tee sca.log; then failed=1; fi
+              for attempt in 1 2 3; do
+                if (cd "$d" && snyk test --unmanaged --print-dep-paths) | tee sca.log; then rc=0; else rc=$?; fi
+                if [ "$rc" -lt 2 ]; then break; fi
+                echo "Snyk Open Source error (exit $rc) on attempt $attempt"
+                sleep 30
+              done
+              if [ "$rc" -ne 0 ]; then failed=1; fi
               tested=$(grep -oE 'Tested [0-9]+ dependenc' sca.log | grep -oE '[0-9]+' || echo 0)
               if [ "$tested" -lt 1 ]; then
                 echo "::error::Snyk Open Source did not recognise $lib"
