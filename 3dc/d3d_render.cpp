@@ -3534,6 +3534,7 @@ extern void NewOnScreenMessage(char *messagePtr);
 int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
+int ToyShadowsFlareReach = 100; // -shadowflarereach=N, 50 to 400: how far a flare's light goes, in percent of the game's 10 metres
 int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
 int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
@@ -4420,7 +4421,7 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 
 // Turns the stencil's marks for this flare into a picture: white where it's blocked. The flare's shader softens that as it
 // reads it, which a stencil can't do: a stencil is only ever yes or no.
-static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport)
+static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen, const D3DVIEWPORT9 *viewport, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	device->SetRenderTarget(0, toyMaskSurface);
 	device->SetViewport(viewport);
@@ -4435,7 +4436,19 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 	device->SetRenderState(D3DRS_STENCILREF, 0);
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_BEGIN);
+	}
+
 	ToyDrawScreenQuad(device, 0xFFFFFFFF);
+
+	if (countQuery)
+	{
+		countQuery->Issue(D3DISSUE_END);
+		*pixels += ToyAskCard(countQuery);
+	}
 
 	device->SetRenderTarget(0, screen);
 	device->SetViewport(viewport);
@@ -4444,8 +4457,10 @@ static void ToyPaintFlareMask(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *scree
 // Adds one flare's light to the picture. With a mask, the shader takes the blocked part out, softly. Without one, the stencil
 // does it, with a hard edge. Either way it lights nothing it can't see. Each flare does this for itself, so where one is
 // blocked another can still light the same place.
-static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, bool haveMask, IDirect3DQuery9 *countQuery, unsigned int *pixels)
+static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, int thisLight, bool haveMask)
 {
+	float const *light = &lights[thisLight * kToyLightFloats];
+
 	d3d.effectSystem->SetActive(d3d.shadowFlareEffect);
 	d3d.effectSystem->SetVertexShaderConstant(d3d.shadowFlareEffect, 0, CONST_MATRIX, &d3d.matProjection);
 
@@ -4455,14 +4470,36 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, bool 
 		toyMaskSurface->GetDesc(&size);
 	}
 
-	float const constants[12] =
+	// A light's three colours hold its colour times its brightness, so the brightest of them is its brightness.
+	float const bright = max(light[4], max(light[5], light[6]));
+	float const perBright = (bright > 0.0f) ? 1.0f / bright : 0.0f;
+
+	// see shadowFlare.psh for what each of these is. Places with no flare stay at 0, so they add nothing.
+	float constants[11 * 4] =
 	{
 		light[0], light[1], light[2], 1.0f / light[3],
-		light[4], light[5], light[6], 0.0f,
+		light[4] * perBright, light[5] * perBright, light[6] * perBright, bright,
 		haveMask ? 1.0f / (float)size.Width : 0.0f, haveMask ? 1.0f / (float)size.Height : 0.0f,
 		haveMask ? (float)ToyShadowsSoft : -1.0f, kToySoftStaysWideTo,
 	};
-	device->SetPixelShaderConstantF(0, constants, 3);
+
+	int flares = 0;
+	for (int i = 0; i < numLights && flares < 4; i++)
+	{
+		float const *other = &lights[i * kToyLightFloats];
+
+		if (other[7] == 2.0f)
+		{
+			constants[(3 + flares) * 4 + 0] = other[0];
+			constants[(3 + flares) * 4 + 1] = other[1];
+			constants[(3 + flares) * 4 + 2] = other[2];
+			constants[(3 + flares) * 4 + 3] = 1.0f / other[3];
+			constants[(7 + flares) * 4 + 0] = max(other[4], max(other[5], other[6]));
+			flares++;
+		}
+	}
+
+	device->SetPixelShaderConstantF(0, constants, 11);
 
 	if (haveMask)
 	{
@@ -4488,11 +4525,9 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, bool 
 	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
 
-	// Light is added in proportion to how much room the pixel has left, so it approaches white and never reaches a hard limit.
-	// Plain adding would clip, and then a place lit by one flare would look the same as one lit by two, and the shadow of the
-	// other flare would vanish.
+	// The shader keeps all the flares together within the pixel's own texture, so plain adding is what's wanted here.
 	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_INVDESTCOLOR);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
 
 	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
@@ -4503,18 +4538,7 @@ static void ToyAddFlareLight(LPDIRECT3DDEVICE9 device, const float *light, bool 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
 
-	if (countQuery)
-	{
-		countQuery->Issue(D3DISSUE_BEGIN);
-	}
-
 	mainList->DrawOpaqueAgain();
-
-	if (countQuery)
-	{
-		countQuery->Issue(D3DISSUE_END);
-		*pixels += ToyAskCard(countQuery);
-	}
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
@@ -4752,9 +4776,9 @@ static void ToyShadows_Draw()
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
-					ToyPaintFlareMask(device, screen, &viewport);
+					ToyPaintFlareMask(device, screen, &viewport, countQuery, &pixelsByLight[light]);
 				}
-				ToyAddFlareLight(device, thisLight, screen != 0, countQuery, &pixelsByLight[light]);
+				ToyAddFlareLight(device, lights, report.lights, light, screen != 0);
 				report.pixels += pixelsByLight[light];
 			}
 		}

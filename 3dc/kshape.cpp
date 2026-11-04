@@ -5489,6 +5489,7 @@ extern bool gunLayer;
 extern int GlobalFrameCounter;
 extern int ToyShadowsFlaresByPixel;
 extern int ToyShadowsFlareCap;
+extern int ToyShadowsFlareReach;
 
 static int toyMostLightsOnAnObject = 0;
 static int toyMostLightsInAFrame = 0;
@@ -5752,6 +5753,8 @@ int ToyShadows_PickLights(float *lights, int most)
 			// lost. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6 seconds, and then fades out.
 			float const cap = (float)ToyShadowsFlareCap / 100.0f;
 			float const flareBright = (float)light->LightBright / 65536.0f;
+
+			lights[i * 8 + 3] *= (float)ToyShadowsFlareReach / 100.0f;
 			float const held = (flareBright < cap) ? flareBright : cap;
 
 			lights[i * 8 + 4] = held * ToyFraction(light->RedScale);
