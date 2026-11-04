@@ -228,6 +228,144 @@ static void TestDynamics()
 	Check(true, "an object with no dynamics block is left alone");
 }
 
+// A good value has to count nothing, and a bad one has to count against the check that refused it and no other. If only the total were looked at, a later check could hide a missing one.
+static void CheckRefusedBy(const char *check, int count, const char *what)
+{
+	char words[200] = { 0 };
+
+	Save_DescribeRefusals(words, sizeof(words));
+
+	char wanted[120] = { 0 };
+
+	snprintf(wanted, sizeof(wanted), "save: %d values refused, by %s %d", count, check, count);
+	Check(Save_RefusalsBy(check) == count && strcmp(words, wanted) == 0, what);
+	Save_StartCountingRefusals();
+}
+
+static void CheckNothingRefused(const char *what)
+{
+	char words[200] = { 0 };
+
+	Save_DescribeRefusals(words, sizeof(words));
+	Check(strcmp(words, "save: no values refused") == 0, what);
+	Save_StartCountingRefusals();
+}
+
+static void TestCountingRefusals()
+{
+	Save_StartCountingRefusals();
+
+	// everything a real save holds
+	Save_WeaponSlotIsValid(0);
+	Save_WeaponStateIsValid(0);
+	Save_VisionModeIsValid(0);
+	Save_AmmoIsValid(0);
+	Save_PlaceInListOrNone(0, 3);
+	Save_PlaceInListOrNone(-1, 3);
+	Save_MorphFrameOrOwn(5, 1, 10);
+	Save_NumberIsInRange(5, 1, 10);
+
+	int const length = 4;
+	char const goodName[4] = { 'a', 'b', 'c', 0 };
+
+	Save_NameFillsBlock(14, 10, &length, goodName);
+
+	void *const sequences[3] = { 0, (void *)goodName, 0 };
+
+	Save_TextureSequenceIsValid((const int *)sequences, 0);
+
+	DYNAMICSBLOCK live, saved;
+	MakeLive(live);
+	memset(&saved, 0, sizeof(saved));
+	saved.Mass = 30;
+	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
+	saved.ToppleForce = TOPPLE_FORCE_FULL;
+	Save_RestoreDynamics(&live, &saved);
+	CheckNothingRefused("everything a real save holds counts nothing, and -1 for none is one of those");
+
+	// each bad value, named
+	Save_WeaponSlotIsValid(-1);
+	CheckRefusedBy("a weapon slot", 1, "a bad weapon slot is counted against that check");
+	Save_WeaponStateIsValid(MAX_NO_OF_WEAPON_STATES);
+	CheckRefusedBy("a weapon's state", 1, "a bad weapon state");
+	Save_VisionModeIsValid(NUMBER_OF_VISION_MODES);
+	CheckRefusedBy("a vision mode", 1, "a bad vision mode");
+	Save_AmmoIsValid(MAX_NO_OF_AMMO_TEMPLATES);
+	CheckRefusedBy("a kind of ammunition", 1, "a bad kind of ammunition");
+	Save_PlaceInListOrNone(3, 3);
+	CheckRefusedBy("a place in a list", 1, "a place past the end of its list");
+	Save_PlaceInListOrNone(-2, 3);
+	CheckRefusedBy("a place in a list", 1, "a place below -1");
+	Save_MorphFrameOrOwn(10, 1, 10);
+	CheckRefusedBy("a morph's frame", 1, "a bad morph frame");
+	Save_NumberIsInRange(11, 1, 10);
+	CheckRefusedBy("a number out of its range", 1, "a number out of its range");
+	Save_NameFillsBlock(9, 10, &length, goodName);
+	CheckRefusedBy("a name in its block", 1, "a block too small for its name");
+	Save_NameFillsBlock(15, 10, &length, goodName);
+	CheckRefusedBy("a name in its block", 1, "a name that doesn't fill its block");
+	Save_TextureSequenceIsValid(0, 0);
+	CheckRefusedBy("a texture animation's sequence", 1, "a texture animation with no list");
+	Save_TextureSequenceIsValid((const int *)sequences, 1);
+	CheckRefusedBy("a texture animation's sequence", 1, "a sequence past the end of its list");
+
+	MakeLive(live);
+	memset(&saved, 0, sizeof(saved));
+	saved.Mass = 0;
+	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
+	saved.ToppleForce = TOPPLE_FORCE_FULL;
+	Save_RestoreDynamics(&live, &saved);
+	CheckRefusedBy("a mass", 1, "a mass of nothing");
+
+	MakeLive(live);
+	saved.Mass = 30;
+	saved.DynamicsType = (enum DYN_TYPE)9999;
+	Save_RestoreDynamics(&live, &saved);
+	CheckRefusedBy("a kind of dynamics", 1, "a kind of dynamics that isn't one");
+
+	MakeLive(live);
+	saved.DynamicsType = DYN_TYPE_NRBB_COLLISIONS;
+	saved.ToppleForce = (enum TOPPLE_FORCE)9999;
+	Save_RestoreDynamics(&live, &saved);
+	CheckRefusedBy("a topple force", 1, "a topple force that isn't one");
+
+	MakeLive(live);
+	saved.ToppleForce = TOPPLE_FORCE_FULL;
+	saved.CollisionReportPtr = (struct collisionreport *)&live;
+	Save_RestoreDynamics(&live, &saved);
+	CheckRefusedBy("an address in a dynamics block", 1, "an address where a real save holds nothing");
+
+	// several kinds in one line, and a line too small for them
+	Save_WeaponSlotIsValid(-1);
+	Save_WeaponSlotIsValid(-1);
+	Save_VisionModeIsValid(-1);
+
+	char words[200] = { 0 };
+
+	Save_DescribeRefusals(words, sizeof(words));
+	Check(strcmp(words, "save: 3 values refused, by a weapon slot 2, a vision mode 1") == 0, "the line adds up, and says how many each check refused");
+
+	char tooSmall[20];
+
+	memset(tooSmall, 'x', sizeof(tooSmall));
+	Save_DescribeRefusals(tooSmall, 12);
+	Check(tooSmall[11] == 0 && tooSmall[12] == 'x', "a line that doesn't fit is cut short, and writes nothing past its room");
+	Save_StartCountingRefusals();
+
+	// more kinds than there are places: the count stays right, and nothing goes past the end
+	static char names[20][8];
+
+	for (int i = 0; i < 20; i++)
+	{
+		snprintf(names[i], sizeof(names[i]), "kind%d", i);
+		Save_NoteRefused(names[i]);
+	}
+
+	Save_DescribeRefusals(words, sizeof(words));
+	Check(strncmp(words, "save: 20 values refused, by kind0 1", 35) == 0 && strstr(words, ", others 4") != 0, "more kinds than places still adds up");
+	Save_StartCountingRefusals();
+}
+
 int main()
 {
 	TestSlotNumbers();
@@ -238,6 +376,7 @@ int main()
 	TestTextureSequences();
 	TestRanges();
 	TestDynamics();
+	TestCountingRefusals();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");
 	return checksFailed ? 1 : 0;

@@ -5,6 +5,7 @@ so player.c is looking a bit bare at the moment. */
 //   a save with no model for the weapon leaves the player with the one they have
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a save can't choose which weapon is in a slot, or pick a slot, weapon state, vision mode or grenade that doesn't exist
+//   a value a save has refused is counted for the log
 
 #include "3dc.h"
 #include "module.h"
@@ -2018,7 +2019,18 @@ void SaveStrategy_Player(STRATEGYBLOCK* sbPtr)
 // game looks a slot's weapon up in TemplateWeapon without asking, and that table holds the functions that fire it.
 static bool SavedSlotHoldsAWeapon(const PLAYER_STATUS *playerStatusPtr, int slot)
 {
-	return Save_WeaponSlotIsValid(slot) && playerStatusPtr->WeaponSlot[slot].WeaponIDNumber != NULL_WEAPON;
+	if(!Save_WeaponSlotIsValid(slot))
+	{
+		return false;
+	}
+
+	if(playerStatusPtr->WeaponSlot[slot].WeaponIDNumber == NULL_WEAPON)
+	{
+		Save_NoteRefused("a weapon slot with no weapon in it");
+		return false;
+	}
+
+	return true;
 }
 
 void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)

@@ -15,6 +15,85 @@
 #include "vision.h"
 #include "save_checks.h"
 
+#include <stdio.h>
+#include <string.h>
+
+// Each check has a place here the first time it refuses something. There are fewer checks than places, so the last place only stops a mistake from going past the end.
+enum { kMostKindsOfRefusal = 16 };
+static const char *refusingChecks[kMostKindsOfRefusal];
+static int refusalCounts[kMostKindsOfRefusal];
+static int numChecksRefusing = 0;
+static int refusalsWithNoPlace = 0;
+
+void Save_StartCountingRefusals()
+{
+	numChecksRefusing = 0;
+	refusalsWithNoPlace = 0;
+}
+
+void Save_NoteRefused(const char *check)
+{
+	for (int i = 0; i < numChecksRefusing; i++)
+	{
+		if (strcmp(refusingChecks[i], check) == 0)
+		{
+			refusalCounts[i]++;
+			return;
+		}
+	}
+
+	if (numChecksRefusing == kMostKindsOfRefusal)
+	{
+		refusalsWithNoPlace++;
+		return;
+	}
+
+	refusingChecks[numChecksRefusing] = check;
+	refusalCounts[numChecksRefusing] = 1;
+	numChecksRefusing++;
+}
+
+int Save_RefusalsBy(const char *check)
+{
+	for (int i = 0; i < numChecksRefusing; i++)
+	{
+		if (strcmp(refusingChecks[i], check) == 0)
+		{
+			return refusalCounts[i];
+		}
+	}
+
+	return 0;
+}
+
+void Save_DescribeRefusals(char *words, int size)
+{
+	int total = refusalsWithNoPlace;
+
+	for (int i = 0; i < numChecksRefusing; i++)
+	{
+		total += refusalCounts[i];
+	}
+
+	if (total == 0)
+	{
+		snprintf(words, (size_t)size, "save: no values refused");
+		return;
+	}
+
+	int used = snprintf(words, (size_t)size, "save: %d values refused, by", total);
+
+	for (int i = 0; i < numChecksRefusing && used >= 0 && used < size; i++)
+	{
+		used += snprintf(words + used, (size_t)(size - used), "%s %s %d", (i == 0) ? "" : ",", refusingChecks[i], refusalCounts[i]);
+	}
+
+	if (refusalsWithNoPlace > 0 && used >= 0 && used < size)
+	{
+		snprintf(words + used, (size_t)(size - used), ", others %d", refusalsWithNoPlace);
+	}
+}
+
 // The slot's numbers are read when the menu lists the saves, long before the file is loaded. They pick the level's name from a table, a line
 // of text, and the row of every damage table in the game.
 bool Save_SlotNumbersAreValid(int species, int episode, int difficulty)
@@ -46,48 +125,98 @@ bool Save_SlotNumbersAreValid(int species, int episode, int difficulty)
 // runs at, the colour of every particle in each vision mode, and the name of each kind of ammunition.
 bool Save_WeaponSlotIsValid(int slot)
 {
-	return slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS;
+	bool const valid = slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS;
+
+	if (!valid)
+	{
+		Save_NoteRefused("a weapon slot");
+	}
+
+	return valid;
 }
 
 bool Save_WeaponStateIsValid(int state)
 {
-	return state >= 0 && state < MAX_NO_OF_WEAPON_STATES;
+	bool const valid = state >= 0 && state < MAX_NO_OF_WEAPON_STATES;
+
+	if (!valid)
+	{
+		Save_NoteRefused("a weapon's state");
+	}
+
+	return valid;
 }
 
 bool Save_VisionModeIsValid(int mode)
 {
-	return mode >= 0 && mode < NUMBER_OF_VISION_MODES;
+	bool const valid = mode >= 0 && mode < NUMBER_OF_VISION_MODES;
+
+	if (!valid)
+	{
+		Save_NoteRefused("a vision mode");
+	}
+
+	return valid;
 }
 
 bool Save_AmmoIsValid(int ammo)
 {
-	return ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES;
+	bool const valid = ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES;
+
+	if (!valid)
+	{
+		Save_NoteRefused("a kind of ammunition");
+	}
+
+	return valid;
 }
 
 // Many saved numbers say which entry of a list something is using, with -1 for none. A number outside the list means none as well, because
 // there's nothing better to do with it, and an object that has lost track of something carries on as usual.
 int Save_PlaceInListOrNone(int place, int count)
 {
-	return (place >= 0 && place < count) ? place : -1;
+	bool const inTheList = place >= 0 && place < count;
+
+	// -1 is a real answer, and it means none
+	if (!inTheList && place != -1)
+	{
+		Save_NoteRefused("a place in a list");
+	}
+
+	return inTheList ? place : -1;
 }
 
 bool Save_NameFillsBlock(int blockSize, int fixedSize, const int *nameLength, const char *name)
 {
 	if (blockSize < fixedSize)
 	{
+		Save_NoteRefused("a name in its block");
 		return false;
 	}
 
 	int const length = *nameLength;
+	bool const fits = length >= 1 && length == blockSize - fixedSize && name[length - 1] == '\0';
 
-	return length >= 1 && length == blockSize - fixedSize && name[length - 1] == '\0';
+	if (!fits)
+	{
+		Save_NoteRefused("a name in its block");
+	}
+
+	return fits;
 }
 
 // A morph's frame number holds which frame it's on in its top half, which picks an entry in the morph's list of frames, and how far on it is in
 // its bottom half. maxFrames is the end of the last frame, so a real frame is always less than that.
 int Save_MorphFrameOrOwn(int saved, int own, int maxFrames)
 {
-	return (saved >= 0 && saved < maxFrames) ? saved : own;
+	bool const valid = saved >= 0 && saved < maxFrames;
+
+	if (!valid)
+	{
+		Save_NoteRefused("a morph's frame");
+	}
+
+	return valid ? saved : own;
 }
 
 // A texture animation's list is one number the game uses as working space, then one entry for each sequence, then an empty entry to mark the
@@ -97,6 +226,7 @@ bool Save_TextureSequenceIsValid(const int *animationList, int sequence)
 {
 	if (!animationList || sequence < 0)
 	{
+		Save_NoteRefused("a texture animation's sequence");
 		return false;
 	}
 
@@ -106,6 +236,7 @@ bool Save_TextureSequenceIsValid(const int *animationList, int sequence)
 	{
 		if (!entries[i])
 		{
+			Save_NoteRefused("a texture animation's sequence");
 			return false;
 		}
 	}
@@ -115,7 +246,14 @@ bool Save_TextureSequenceIsValid(const int *animationList, int sequence)
 
 bool Save_NumberIsInRange(int number, int lowest, int highest)
 {
-	return number >= lowest && number <= highest;
+	bool const inRange = number >= lowest && number <= highest;
+
+	if (!inRange)
+	{
+		Save_NoteRefused("a number out of its range");
+	}
+
+	return inRange;
 }
 
 // A dynamics block says where an object is and how it moves. Nearly all of it is only numbers, and strange numbers just give a strange
@@ -144,20 +282,28 @@ void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
 
 	*live = *saved;
 
+	if (live->CollisionReportPtr)
+	{
+		Save_NoteRefused("an address in a dynamics block");
+	}
+
 	live->CollisionReportPtr = 0;
 
 	if (live->Mass <= 0)
 	{
+		Save_NoteRefused("a mass");
 		live->Mass = ownMass;
 	}
 
 	if ((int)live->DynamicsType < DYN_TYPE_NO_COLLISIONS || (int)live->DynamicsType > DYN_TYPE_CUBOID_COLLISIONS)
 	{
+		Save_NoteRefused("a kind of dynamics");
 		live->DynamicsType = ownType;
 	}
 
 	if ((int)live->ToppleForce < TOPPLE_FORCE_NONE || (int)live->ToppleForce > TOPPLE_FORCE_FULL)
 	{
+		Save_NoteRefused("a topple force");
 		live->ToppleForce = ownTopple;
 	}
 

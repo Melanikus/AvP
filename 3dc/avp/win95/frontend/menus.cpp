@@ -9,6 +9,7 @@
 //   the address from the command line is copied with a size limit too
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
+//   the log says when a save slot is listed as empty because its numbers are wrong
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -5221,6 +5222,7 @@ static void GetHeaderInfoForSaveSlot(SAVE_SLOT_HEADER* save_slot, const char* fi
 	// an empty slot.
 	if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))
 	{
+		LogString("save: a save slot's numbers aren't ones the game could have written, so it's listed as empty");
 		return;
 	}
 

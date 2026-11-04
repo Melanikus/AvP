@@ -5,6 +5,7 @@
 //   saved, instead of overwriting another slot, and that does not cost the player a save
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save can't list the player as dead and take their strategy block away
+//   each load says in the log how many values it refused, and by which check
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -34,6 +35,7 @@
 #include "game_statistics.h"
 #include "user_profile.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "huffman.hpp"
 #include "fmvCutscenes.h"
 #define UseLocalAssert TRUE
@@ -581,6 +583,8 @@ void LoadSavedGame()
 	//we can now clear the load request
 	LoadGameRequest = SAVELOAD_REQUEST_NONE;
 
+	Save_StartCountingRefusals();
+
 	//load the file
 	file = avp_CreateFile(filename,GENERIC_READ, 0, 0, OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 
@@ -799,6 +803,14 @@ void LoadSavedGame()
 		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_ERRORLOADING));
 	}
 
+	//on a save the player really made, this has to say none: see save_checks.h
+	{
+		char refusals[600] = { 0 };
+
+		Save_DescribeRefusals(refusals, sizeof(refusals));
+		LogString(refusals);
+	}
+
 	EndLoadGame();
 
 	RemoveDestroyedStrategyBlocks();
@@ -895,6 +907,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	//the fixed part (which holds the count) must be inside the block before the count is read
 	if(header->size < fixedSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + " is smaller than its header");
 		return FALSE;
 	}
@@ -902,6 +915,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	count = *countPtr;
 	if(count < 0 || count > capacity || count > (header->size - fixedSize) / elemSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + ": invalid count " + Util::IntToString(count));
 		return FALSE;
 	}
@@ -1339,6 +1353,10 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 	if(sbPtr && sbPtr != Player->ObStrategyBlock)
 	{
 		DestroyAnyStrategyBlock(sbPtr);
+	}
+	else if(sbPtr)
+	{
+		Save_NoteRefused("the player's block being taken away");
 	}
 }
 

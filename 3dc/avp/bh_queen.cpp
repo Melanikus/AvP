@@ -10,6 +10,7 @@
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   the object a saved Queen is holding has to be one of the objects in the level
 //   a saved Queen's biases are divided by, so they have to be 1 or more
+//   a value a save has refused is counted for the log
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -5083,9 +5084,17 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	{
 		COPYELEMENT_LOAD(QueenObjectBias)
 	}
+	else
+	{
+		Save_NoteRefused("the Queen's bias");
+	}
 	if(block->QueenPlayerBias >= 1)
 	{
 		COPYELEMENT_LOAD(QueenPlayerBias)
+	}
+	else
+	{
+		Save_NoteRefused("the Queen's bias");
 	}
 	COPYELEMENT_LOAD(QueenTauntTimer)
 	COPYELEMENT_LOAD(QueenFireTimer)

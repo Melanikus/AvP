@@ -33,4 +33,13 @@ bool Save_NumberIsInRange(int number, int lowest, int highest);
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
 void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
 
+// WHAT WAS REFUSED: a game the player really saved has to load exactly as it did, so on a real save, every check has to pass. These count the ones that don't, for one line in the log at the end of each load, and
+// that line is how a test with real saves shows that a check is too strict. check is a fixed piece of text naming it. A block the wrong size isn't counted: that's the game's own test, as old as the game.
+void Save_StartCountingRefusals();
+void Save_NoteRefused(const char *check);
+int Save_RefusalsBy(const char *check);
+
+// The line for the log, cut short if it doesn't fit.
+void Save_DescribeRefusals(char *words, int size);
+
 #endif
