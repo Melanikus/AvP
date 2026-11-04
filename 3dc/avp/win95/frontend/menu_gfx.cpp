@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the small font's letter widths are looked up with an unsigned byte, so it no longer matters how the compiler
-//   treats a plain char
+//   treats a plain char; the wrapped text function stops counting a word's width at a limit, so a huge word in a
+//   file cannot make the sum overflow
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
@@ -586,6 +587,13 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 	return sx;
 }
 
+// The most pixels RenderSmallFontString_Wrapped counts for one word or one run of spaces. The text can come from a
+// file, and nothing limits how long a word in a file is: without a limit, a long enough word would add up to more
+// than an int can hold and wrap round to a wrong width. A million pixels is far wider than any screen, so a word that
+// reaches the limit could not fit whatever its true width is, and no text that can be shown changes. Two such widths
+// added together, and the line count worked out from them, also stay far below the largest number an int can hold.
+static const int MAX_COUNTED_TEXT_WIDTH = 1000000;
+
 extern void RenderSmallFontString_Wrapped(char *textPtr, RECT* area, int alpha, int* output_x, int* output_y)
 {
 	// text on menus in bottom black space
@@ -605,11 +613,15 @@ Determine area used by text , so we can draw it centrally
 		while (*textPtr2 && *textPtr2==' ') 
 		{
 			widthFromSpaces += AAFontWidths[(unsigned char)*textPtr2++];
+			if (widthFromSpaces > MAX_COUNTED_TEXT_WIDTH)
+				widthFromSpaces = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') 
 		{
 			widthFromChars += AAFontWidths[(unsigned char)*textPtr2++];
+			if (widthFromChars > MAX_COUNTED_TEXT_WIDTH)
+				widthFromChars = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		wordWidth=widthFromSpaces+widthFromChars;
@@ -676,10 +688,14 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2==' ') {
 			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
+				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') {
 			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
+			if (wordWidth > MAX_COUNTED_TEXT_WIDTH)
+				wordWidth = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		if (wordWidth > area->right-sx) 
@@ -710,6 +726,8 @@ Determine area used by text , so we can draw it centrally
 		while (*textPtr && *textPtr==' ') 
 		{
 			sx += AAFontWidths[(unsigned char)*textPtr++];
+			if (sx > MAX_COUNTED_TEXT_WIDTH)
+				sx = MAX_COUNTED_TEXT_WIDTH;
 		}
 		
 		if (sx > area->right) 
