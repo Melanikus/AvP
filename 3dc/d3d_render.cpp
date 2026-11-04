@@ -6366,7 +6366,7 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 10, kLineLength = 48 };
+	enum { kMostLines = 12, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
@@ -6382,6 +6382,7 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
+	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: G VIEW, F7 TAG, F8 CAPTURE");   // so that nobody has to remember them
 
 	if (ShadowFlickerOn)
 	{
