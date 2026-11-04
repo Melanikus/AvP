@@ -6,6 +6,7 @@
 //   added a check on how many points a shape claims
 //   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points;
 //   sub-shapes get the same checks, and a morphing shape must fit the morph list and match its frames
+//   removed the class that read a shape stored in a level as a raw copy of memory, because nothing could check it
 
 #include <math.h>
 
@@ -46,7 +47,6 @@ Children for Shape_Chunk :
 "PNOTINBB"		Poly_Not_In_Bounding_Box_Chunk
 "ANSHCEN2"		Anim_Shape_Centre_Chunk
 "ASALTTEX"		Anim_Shape_Alternate_Texturing_Chunk
-"SHPPRPRO"		Shape_Preprocessed_Data_Chunk	
 */
 
 Shape_Chunk::Shape_Chunk(Chunk_With_Children * parent, const char *data, size_t size)
@@ -290,13 +290,6 @@ void Shape_Chunk::destroy_auxiliary_chunks()
 	}
 
 	lookup_child("ASALTTEX",chlst);
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
-	lookup_child("SHPPRPRO",chlst);
 	while (chlst.size())
 	{
 		delete chlst.first_entry();
@@ -1815,7 +1808,6 @@ Children for Shape_Sub_Shape_Chunk :
 "PNOTINBB"		Poly_Not_In_Bounding_Box_Chunk
 "ANSHCEN2"		Anim_Shape_Centre_Chunk
 "ASALTTEX"		Anim_Shape_Alternate_Texturing_Chunk
-"SHPPRPRO"		Shape_Preprocessed_Data_Chunk	
 
 
 "SHPFNAME"		Shape_Name_Chunk
@@ -2764,101 +2756,3 @@ void Console_Type_Chunk::fill_data_block(char* data_start)
 
 	*(int*)data_start=(int)console;
 }
-
-
-/////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SHPPRPRO",Shape_Preprocessed_Data_Chunk)
-
-Shape_Preprocessed_Data_Chunk::Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent, const char * data, size_t )
-:Chunk(parent,"SHPPRPRO")
-{
-	block_size=*(int*)data;
-	data+=4;
-	first_pointer=*(int*)data;
-	data+=4;
-
-	if (block_size)
-	{
-		memory_block = new unsigned int[block_size];
-		memcpy(memory_block, data,block_size*4);
-		data += block_size*4;
-	}
-	else
-	{
-		memory_block = 0;
-	}
-	
-	num_extra_data = *(int*)data;
-	data += 4;
-	
-	if (num_extra_data)
-	{
-		extra_data = new int[num_extra_data];
-		memcpy(extra_data, data,num_extra_data*4);
-	}
-	else
-	{
-		extra_data = 0;
-	}
-}
-
-Shape_Preprocessed_Data_Chunk::Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent,int _block_size,int _first_pointer,unsigned int* _memory_block)
-:Chunk(parent,"SHPPRPRO")
-{
-	num_extra_data = 0;
-	extra_data = 0;
-	block_size = _block_size;
-	first_pointer = _first_pointer;
-	
-	if (block_size)
-	{
-		memory_block = new unsigned int[block_size];
-		memcpy(memory_block, _memory_block, block_size*4);
-	}
-	else
-	{
-		memory_block = 0;
-	}
-}
-
-void Shape_Preprocessed_Data_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-	data_start += 8;
-	*((int *) data_start) = chunk_size;
-	data_start += 4;
-
-	*(int*)data_start=block_size;
-	data_start+=4;
-	*(int*)data_start=first_pointer;
-	data_start+=4;
-
-	memcpy(data_start,memory_block,4*block_size);
-	data_start+=4*block_size;
-
-	*(int*)data_start=num_extra_data;
-	data_start+=4;
-	memcpy(data_start,extra_data,4*num_extra_data);
-}
-
-// bjd - FIXME
-void* Shape_Preprocessed_Data_Chunk::GetMemoryBlock()
-{
-	void* retval = memory_block;
-
-	unsigned int* current = (unsigned int*)&first_pointer;
-	unsigned int* next;
-
-	while((*current>>16) != 0xffff)
-	{
-		next = &memory_block[(*current)>>16];
-		*current = (unsigned int)&memory_block[(*current)&0xffff];
-		current = next;
-	}
-	*current = (unsigned int)&memory_block[(*current)&0xffff];
-
-	memory_block = 0;
-	block_size = 0;
-	return retval;
-}
-

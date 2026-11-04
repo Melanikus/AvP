@@ -77,6 +77,7 @@ We give titles rather than commit IDs because an ID can change before a branch m
 | An unfinished loop in `Bink_Open`, in the Bink video decoder | `git show e4394fc:dependencies/libbinkdec/src/BinkDecoder.cpp`, lines 108-117 | Inside `#if 0`, and not valid C++ | Nothing | Delete BinkDecoder.cpp's unfinished disabled block |
 | Debug code that kept a record of every reference-counted object, switched on by `TrackReferenceCounted` | `git show e4394fc:3dc/avp/support/refobj.cpp`. Also `3dc/avp/support/refobj.hpp`, `3dc/avp/support/scstring.cpp`, `3dc/avp/support/scstring.hpp` and `3dc/avp/davehook.cpp` | Always off, and it could not have been switched on without further work, as it wasn't valid C++ | Not for a port. The idea could help when hunting memory leaks | Delete the reference-tracking debug code, which was never compiled |
 | Older versions of some AI tests, kept beside the live ones | `git show e4394fc:3dc/avp/bh_marine.cpp` (7 places), `3dc/avp/bh_weapon.cpp`, `3dc/avp/bh_xeno.cpp`, `3dc/avp/bh_near.cpp` | Switched off. They also stopped code scanners reading the files | Not for a port. They show how the behaviour was tuned | Let code scanners parse bh_marine.cpp (delete never-compiled if-heads); Let code scanners read bh_weapon, bh_xeno, bh_near (delete dead #if 0s) |
+| Shapes stored in a level as a raw copy of memory: the `SHPPRPRO` chunk, `Shape_Preprocessed_Data_Chunk` and `copy_preprocessed_to_shapeheader` | `git show e4394fc:3dc/win95/chunk_shape.cpp`, from line 3097, and `git show e4394fc:3dc/win95/chunk_load.cpp`, lines 2743-2780. Also `3dc/win95/chunk_shape.hpp` and `3dc/win95/chunk_load.hpp` | A level set the shape's counts and addresses itself, so none of the checks on shapes applied, and a crafted level could choose where the game wrote. None of the 86 levels that ship with the game holds one, and nothing in the game made one | Nothing. It kept addresses in 32 bits, so it couldn't work in a 64-bit build either. Do not bring it back: see below | Stop reading shapes stored as raw copies of memory |
 
 Some code changed shape without anything being removed, so a compiler sees the same thing. If you compare an old copy, these
 will look different: `3dc/frustum.cpp` (the clipping macros), `3dc/win95/hash_tem.hpp` (the `HashTable` classes),
@@ -133,6 +134,7 @@ that too.
 | What it was | Where it was | Why not |
 |---|---|---|
 | Prebuilt ENet libraries: `enet/enet.lib`, `enet/enet64.lib`, `enet/lib/enet.dll`, `enet/lib/enet.exp`, `enet/lib/enet.lib` | Commit `e4394fc` | They can't be matched to any source code, are unsigned, and carry no version. This project keeps no precompiled code from open-source libraries. Build ENet from source |
+| Reading a shape from a raw copy of memory in a level (`SHPPRPRO`) | Commit `e4394fc`, `3dc/win95/chunk_shape.cpp` from line 3097 | A level is a file from outside the game, and this let one choose the addresses the game writes to. Any faster way of loading shapes has to pass the same checks as every other shape |
 
 ## Planned
 

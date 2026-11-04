@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
 //   text is copied using its exact measured length, so it always fits
+//   a shape stored in a level as a raw copy of memory is no longer read, because nothing could check it
 
 #include <stdlib.h>
 #include <string>
@@ -836,36 +837,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 	int start_shape_no = list_pos;
 	String rif_name;
 	setup_tex_conv_array(local_max_index, local_tex_index_nos, h, tmpshp);
-	Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)tmpshp->lookup_single_child("SHPPRPRO");
-
-	if (spdc)
-	{
-		copy_preprocessed_to_shapeheader(
-		    h,
-		    spdc,
-		    mainshapelist[list_pos],
-		    tmpshp,
-		    flags,
-		    local_max_index,
-		    local_tex_index_nos,
-		    list_pos,
-		    object
-		);
-	}
-	else
-	{
-		copy_to_shapeheader(
-		    h,
-		    tmpshp->shape_data,
-		    mainshapelist[list_pos],
-		    tmpshp,
-		    flags,
-		    local_max_index,
-		    local_tex_index_nos,
-		    list_pos,
-		    object
-		);
-	}
+	copy_to_shapeheader(
+	    h,
+	    tmpshp->shape_data,
+	    mainshapelist[list_pos],
+	    tmpshp,
+	    flags,
+	    local_max_index,
+	    local_tex_index_nos,
+	    list_pos,
+	    object
+	);
 
 	Shape_External_File_Chunk *seflc = 0;
 	Chunk *pChunk = tmpshp->lookup_single_child("SHPEXTFL");
@@ -1074,36 +1056,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 							if (afi()->shape1a->list_pos_number == -1)
 							{
 								list_pos = GetMSLPos();
-								Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)afi()->shape1a->lookup_single_child("SHPPRPRO");
-
-								if (spdc)
-								{
-									copy_preprocessed_to_shapeheader(
-									    h,
-									    spdc,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
-								else
-								{
-									copy_to_shapeheader(
-									    h,
-									    afi()->shape1a->shape_data,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
+								copy_to_shapeheader(
+								    h,
+								    afi()->shape1a->shape_data,
+								    mainshapelist[list_pos],
+								    afi()->shape1a,
+								    flags,
+								    local_max_index,
+								    local_tex_index_nos,
+								    list_pos,
+								    object
+								);
 
 								post_process_shape(mainshapelist[list_pos]);
 								afi()->shape1a->list_pos_number = list_pos;
@@ -1137,36 +1100,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 							if (afi()->shape2a->list_pos_number == -1)
 							{
 								list_pos = GetMSLPos();
-								Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)afi()->shape2a->lookup_single_child("SHPPRPRO");
-
-								if (spdc)
-								{
-									copy_preprocessed_to_shapeheader(
-									    h,
-									    spdc,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
-								else
-								{
-									copy_to_shapeheader(
-									    h,
-									    afi()->shape2a->shape_data,
-									    mainshapelist[list_pos],
-									    afi()->shape2a,
-									    0,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
+								copy_to_shapeheader(
+								    h,
+								    afi()->shape2a->shape_data,
+								    mainshapelist[list_pos],
+								    afi()->shape2a,
+								    0,
+								    local_max_index,
+								    local_tex_index_nos,
+								    list_pos,
+								    object
+								);
 
 								post_process_shape(mainshapelist[list_pos]);
 								afi()->shape2a->list_pos_number = list_pos;
@@ -2742,44 +2686,6 @@ BOOL copy_to_shapeheader(
 		}
 
 		SetupAnimatingShape((Shape_Chunk *)shape, shphd, smdc);
-	}
-
-	return TRUE;
-}
-
-BOOL copy_preprocessed_to_shapeheader(
-    RIFFHANDLE h,
-    Shape_Preprocessed_Data_Chunk *spdc,
-    SHAPEHEADER  *&shphd,
-    Chunk_With_Children *shape,
-    int /*flags*/,
-    int local_max_index,
-    int *local_tex_index_nos,
-    int /*listpos*/,
-    const ChunkObject *object
-)
-{
-	shphd = (SHAPEHEADER *)spdc->GetMemoryBlock();
-
-	for (int i = 0; i < shphd->numitems; i++)
-	{
-		if (is_textured(shphd->items[i][0]))
-		{
-			int texno = shphd->items[i][3] & 0x7fff;
-
-			if (texno <= local_max_index &&
-			    local_tex_index_nos[texno] != -1)
-			{
-				shphd->items[i][3] &= 0xffff0000;
-				shphd->items[i][3] += local_tex_index_nos[texno];
-			}
-			else
-			{
-				shphd->items[i][0] = I_Polyline;
-				shphd->items[i][2] |= iflag_nolight;
-				shphd->items[i][3] = 0xffffffff;
-			}
-		}
 	}
 
 	return TRUE;

@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them; added a
 //   check on the shape numbers a level file gives, and on the numbers that give a shape's size
+//   removed the class that read a shape stored in a level as a raw copy of memory
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -1022,40 +1023,4 @@ private:
 
 };
 
-///////////////////////////////////////////////
-class Shape_Preprocessed_Data_Chunk : public Chunk
-{
-public:
-
-	Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent,int _blocksize,int _first_pointer,unsigned int* _memory_block);
-	Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent, const char * data, size_t ssize);
-	~Shape_Preprocessed_Data_Chunk ()
-	{
-		delete[] extra_data;
-		delete[] memory_block;
-	}
-
-	virtual size_t size_chunk ()
-	{
-		return (chunk_size = 12 + 12+block_size*4+num_extra_data*4);
-	}
-
-	virtual void fill_data_block (char *);
-
-
-	int num_extra_data;
-	int* extra_data;
-
-	void* GetMemoryBlock();
-
-private:
-
-	int block_size;
-	int first_pointer;
-	unsigned int* memory_block;
-
-	friend class Shape_Chunk;
-	friend class Shape_Sub_Shape_Chunk;
-
-};
 #endif

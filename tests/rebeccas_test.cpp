@@ -23,7 +23,8 @@
 // After a level is read, the game joins each object to its shape, using numbers from the file. So tests 7 and 8 build
 // real objects and shapes in a real File_Chunk, run the real post_input_processing, and check that a level that doesn't
 // join up is refused. Test 9 does the same for an object's baked colours: how many there are also comes from the file.
-// Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing.
+// Test 10 does the same for the corners of a polygon, and test 11 for sub-shapes and morphing. Test 12 shows that a shape
+// stored in a level as a raw copy of memory is skipped.
 //
 // HOW IT RUNS
 //
@@ -716,6 +717,45 @@ static void TestSubShapes()
 	Parent_File = 0;
 }
 
+// 12. A level could once hold a shape as a raw copy of the game's memory, its counts and addresses included, and the game
+// used that copy as it stood. Nothing checked it, so a level could choose where the game wrote. The game no longer reads such
+// a chunk. It's kept as a chunk of a kind the game doesn't know, and the shape comes from its ordinary, checked chunks.
+static void TestRawMemoryShape()
+{
+	puts("12. shapes stored as raw memory");
+
+	int const triangle[5] = { 0, 1, 2, -1, -1 };
+
+	// the first number in the chunk was the size of the copy, taken on trust
+	struct RawRow { int size; char const * skipped; char const * loaded; };
+	RawRow const rows[] =
+	{
+		{ 0,          "an empty raw copy is skipped, not read", "the rest of that shape still loads" },
+		{ 0x7fffffff, "a raw copy claiming a huge size is skipped, not read", "the rest of that shape still loads" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		size_t const rawBytes = 12;
+		char * rawCopy = PutChunk(wholeShape + mainBytes, "SHPPRPRO", rawBytes);
+		memcpy(rawCopy, &rows[i].size, sizeof(rows[i].size));
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + rawBytes);
+		file.post_input_processing();
+
+		Chunk * rawChunk = shape->lookup_single_child("SHPPRPRO");
+
+		Check(rawChunk && rawChunk->r_u_miscellaneous(), rows[i].skipped);
+		Check(file.error_code == 0, rows[i].loaded);
+	}
+
+	Parent_File = 0;
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -732,6 +772,7 @@ int main()
 	TestBakedColours();
 	TestPolygons();
 	TestSubShapes();
+	TestRawMemoryShape();
 
 	if (checksFailed)
 	{
