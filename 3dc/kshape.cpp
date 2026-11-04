@@ -5990,10 +5990,14 @@ void ToyShadows_NoteFrameLights(int frame)
 		}
 	}
 
-	char line[256];
+	// which room the player is in, so a log can be read against the level, and whether a mirror is being drawn this frame
+	extern MODULE *playerPherModule;
+	char const *room = (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none";
+
+	char line[300];
 	_snprintf(line, sizeof(line) - 1,
-		"toy-lights: frame %d%s: %d active = %d level + %d objects + %d flares + %d brief + %d elements + %d on the player; camera inside the range of %d, %d can reach the view, %d share a spot",
-		frame, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot);
+		"toy-lights: frame %d%s: %d active = %d level + %d objects + %d flares + %d brief + %d elements + %d on the player; camera inside the range of %d, %d can reach the view, %d share a spot; room %s, mirror %d",
+		frame, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot, room, MirroringActive ? 1 : 0);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 
