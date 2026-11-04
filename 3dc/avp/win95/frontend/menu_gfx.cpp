@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the small font's letter widths are looked up with an unsigned byte, so it no longer matters how the compiler
+//   treats a plain char
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
@@ -91,6 +95,11 @@ texID_t AVPMENUGFX_SPLASH_SCREEN5;
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern AVPMENU_ELEMENT AvPMenu_SinglePlayer[];
 
+// The width in pixels of each letter of the small font. There are 256 entries, one for every value a byte can have,
+// so a letter is always turned into an "unsigned char" (a number from 0 to 255) before it is looked up here. This game
+// is built with the /J compiler option, which makes a plain char unsigned too, but the code must not depend on that:
+// without it a letter above 127, such as an accented letter or a stray byte in a damaged file, would be a negative
+// number, and the lookup would read memory from before the start of the table.
 char AAFontWidths[256];
 
 AVPIndexedFont IntroFont_Light;
@@ -326,7 +335,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned int) *ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length;
@@ -339,7 +348,7 @@ extern int RenderSmallMenuText(char *textPtr, int x, int y, int alpha, enum AVPM
 
 			while (*ptr)
 			{
-				length += AAFontWidths[(unsigned int) *ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length/2;
@@ -371,7 +380,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += AAFontWidths[*ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length;
@@ -384,7 +393,7 @@ extern int RenderSmallMenuText_Coloured(char *textPtr, int x, int y, int alpha, 
 
 			while(*ptr)
 			{
-				length += AAFontWidths[*ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length/2;
@@ -417,7 +426,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += AAFontWidths[*ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length;
@@ -430,7 +439,7 @@ extern int Hardware_RenderSmallMenuText(char *textPtr, int x, int y, int alpha, 
 
 			while (*ptr)
 			{
-				length += AAFontWidths[*ptr++];
+				length += AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length/2;
@@ -468,7 +477,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=AAFontWidths[*ptr++];
+				length+=AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length;
@@ -481,7 +490,7 @@ extern int Hardware_RenderSmallMenuText_Coloured(char *textPtr, int x, int y, in
 
 			while (*ptr)
 			{
-				length+=AAFontWidths[*ptr++];
+				length+=AAFontWidths[(unsigned char)*ptr++];
 			}
 
 			x -= length/2;
@@ -550,7 +559,7 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 
 	DrawSmallMenuCharacter(x, y, topLeftU, topLeftV, alphaR, alphaG, alphaB, alphaR);
 
-	return AAFontWidths[(unsigned int) c];
+	return AAFontWidths[(unsigned char)c];
 }
 
 /*static*/extern int RenderSmallFontString(char *textPtr, int sx, int sy, int alpha, int red, int green, int blue)
@@ -570,7 +579,7 @@ extern int RenderSmallChar(char c, int x, int y, int alpha, int red, int green, 
 
 			DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, alphaR, alphaG, alphaB, alphaR);
 
-			sx += AAFontWidths[(unsigned int) c];
+			sx += AAFontWidths[(unsigned char)c];
 		}
 	}
 
@@ -595,12 +604,12 @@ Determine area used by text , so we can draw it centrally
 		
 		while (*textPtr2 && *textPtr2==' ') 
 		{
-			widthFromSpaces += AAFontWidths[(unsigned int) *textPtr2++];
+			widthFromSpaces += AAFontWidths[(unsigned char)*textPtr2++];
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') 
 		{
-			widthFromChars += AAFontWidths[(unsigned int) *textPtr2++];
+			widthFromChars += AAFontWidths[(unsigned char)*textPtr2++];
 		}
 		
 		wordWidth=widthFromSpaces+widthFromChars;
@@ -666,11 +675,11 @@ Determine area used by text , so we can draw it centrally
 		wordWidth = 0;
 		
 		while (*textPtr2 && *textPtr2==' ') {
-			wordWidth += AAFontWidths[(unsigned int) *textPtr2++];
+			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
 		}
 		
 		while (*textPtr2 && *textPtr2!=' ') {
-			wordWidth += AAFontWidths[(unsigned int) *textPtr2++];
+			wordWidth += AAFontWidths[(unsigned char)*textPtr2++];
 		}
 		
 		if (wordWidth > area->right-sx) 
@@ -700,7 +709,7 @@ Determine area used by text , so we can draw it centrally
 
 		while (*textPtr && *textPtr==' ') 
 		{
-			sx += AAFontWidths[(unsigned int) *textPtr++];
+			sx += AAFontWidths[(unsigned char)*textPtr++];
 		}
 		
 		if (sx > area->right) 
@@ -718,7 +727,7 @@ Determine area used by text , so we can draw it centrally
 		while (*textPtr && *textPtr != ' ') 
 		{
 			char c = *textPtr++;
-			int letterWidth = AAFontWidths[(unsigned int) c];
+			int letterWidth = AAFontWidths[(unsigned char)c];
 			
 			if (sx + letterWidth > area->right) 
 			{
@@ -736,7 +745,7 @@ Determine area used by text , so we can draw it centrally
 
 				DrawSmallMenuCharacter(sx, sy, topLeftU, topLeftV, ONE_FIXED, ONE_FIXED, ONE_FIXED, alpha);
 
-				sx += AAFontWidths[(unsigned int) c];
+				sx += AAFontWidths[(unsigned char)c];
 			}
 		}
 	}
