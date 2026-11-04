@@ -12,6 +12,7 @@
 //   the rule for a module that never moves is one function, which the static level uses too
 #include "3dc.h"
 #include "surface_normals.h"
+#include "static_scene.h"
 #include "logString.h"
 #include <math.h>
 #include <vector>
@@ -165,6 +166,8 @@ void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr);
 VECTORCH Global_LightVector;
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
+void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr);
+extern int DrawingAReflection;
 void ToyShadows_NoteObjectLights();
 void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const CasterFacts &facts);
 int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *place);
@@ -2880,6 +2883,14 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 	/* Texture Animation Control */
 	if (dptr->ObTxAnimCtrlBlks) {
 		ControlTextureAnimation(dptr);
+	}
+
+	// A wall this frame draws from the fixed buffer needs none of what follows: see static_scene.cpp. A reflection is never one, because the mirror keeps its
+	// whole frame on the old route, but the test costs nothing, and a reflection drawn from there would land in the wrong place.
+	if (dptr->ObMyModule && !DrawingAReflection && StaticScene_TookModule(dptr->ObMyModule->m_index)) {
+		SurfaceNormals_NoteModuleDrawn(dptr->ObMyModule->m_index);
+		ToyShadows_CollectStaticModule(dptr, shapeheaderptr);
+		return;
 	}
 
 	/* Global Variables */
@@ -6438,6 +6449,11 @@ int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const
 	}
 
 	return count;
+}
+
+// A wall on the fixed buffer's route has no corners on the list, so this is where its shadows will be collected from.
+void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+{
 }
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)

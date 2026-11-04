@@ -15,6 +15,7 @@
 #include "ourasert.h"
 #include "user_profile.h"
 #include "vdb.h"
+#include "static_scene.h"
 
 extern int *ItemPointers[maxpolyptrs];
 extern int ItemCount;
@@ -400,6 +401,17 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 #endif
 	}
 	DrawingAReflection=0;
+
+	// A module slipped inside another is drawn with the objects, so it's never offered, and it stays on the old route.
+	StaticScene_StartChoosing();
+
+	for (int offered = 0; offered < numVisMods; offered++)
+	{
+		StaticScene_OfferModule(SortedModules[offered].DispPtr);
+	}
+
+	StaticScene_FinishChoosing();
+
 	{
 		int numMods = numVisMods;
 		{

@@ -8,6 +8,7 @@
 // If anything goes wrong, nothing is left behind, and every polygon goes the old way.
 
 #include "static_level.h"
+#include "static_scene.h"
 #include "3dc.h"
 #include "module.h"
 #include "d3_func.h"
@@ -173,8 +174,9 @@ void StaticLevel_BuildThisLevel()
 	// Off means off: with neither switch, nothing is built, and the level loads as it always has.
 	extern int StaticSurfaceOn;
 	extern int StaticSurfaceCompare;
+	extern int StaticSceneOn;
 
-	if (!StaticSurfaceOn && !StaticSurfaceCompare)
+	if (!StaticSurfaceOn && !StaticSurfaceCompare && !StaticSceneOn)
 	{
 		return;
 	}
@@ -248,6 +250,7 @@ void StaticLevel_BuildThisLevel()
 	std::vector<uint32_t>().swap(theLevel.colours);
 
 	ready = true;
+	StaticScene_StartLevel();
 }
 
 void StaticLevel_Release()

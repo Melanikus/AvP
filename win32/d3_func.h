@@ -224,6 +224,10 @@ typedef struct D3DInfo
 	class VertexDeclaration	*surfaceStaticDecl;     // the level's fixed buffer: see surface_static.cpp
 	effectID_t				surfaceStaticEffect;
 	effectID_t				surfaceStaticReliefEffect;
+	class VertexDeclaration	*surfaceSceneDecl;      // the same buffer with its baked colours: see static_scene.cpp
+	effectID_t				surfaceSceneEffect;
+	effectID_t				surfaceSceneCompareEffect;
+	effectID_t				surfaceSceneReplayEffect;
 	class VertexDeclaration	*volumeDecl;      // shadow prisms kept between frames: see shadow_volumes.cpp
 	effectID_t				volumeEffect;
 	effectID_t				lightTotalEffect;

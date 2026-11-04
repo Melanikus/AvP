@@ -2532,6 +2532,14 @@ bool InitialiseDirect3D()
 	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
 	d3d.surfaceStaticDecl->Create();
 
+	d3d.surfaceSceneDecl = new VertexDeclaration;
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+	d3d.surfaceSceneDecl->Add(1, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+	d3d.surfaceSceneDecl->Create();
+
 	d3d.surfaceReliefDecl = 0;
 
 	if (textureRelief.IsOn())
@@ -2664,6 +2672,9 @@ bool InitialiseDirect3D()
 	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
 	d3d.surfaceReliefEffect = kNullEffectID;
 	d3d.surfaceStaticEffect = d3d.effectSystem->Add("surfaceStatic", "surfaceStatic.vsh", "surface.psh", d3d.surfaceStaticDecl);
+	d3d.surfaceSceneEffect = d3d.effectSystem->Add("surfaceScene", "surfaceScene.vsh", "surfaceScene.psh", d3d.surfaceSceneDecl);
+	d3d.surfaceSceneCompareEffect = d3d.effectSystem->Add("surfaceSceneCompare", "surfaceScene.vsh", "surfaceSceneCompare.psh", d3d.surfaceSceneDecl);
+	d3d.surfaceSceneReplayEffect = d3d.effectSystem->Add("surfaceSceneReplay", "surfaceSceneReplay.vsh", "surfaceSceneCompare.psh", d3d.surfaceDecl);
 	d3d.surfaceStaticReliefEffect = kNullEffectID;
 
 	if (d3d.surfaceReliefDecl)
@@ -2762,6 +2773,7 @@ void ReleaseDirect3D()
 	delete d3d.surfaceDecl;
 	delete d3d.surfaceReliefDecl;
 	delete d3d.surfaceStaticDecl;
+	delete d3d.surfaceSceneDecl;
 
 	delete d3d.volumeDecl;
 	delete d3d.orthoDecl;

@@ -135,6 +135,9 @@
     <ClCompile Include="..\..\3dc\surface_static.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\static_scene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\texture_relief.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1471,6 +1474,18 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\surfaceStatic.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceScene.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceScene.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceSceneCompare.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceSceneReplay.vsh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\tallText.psh">

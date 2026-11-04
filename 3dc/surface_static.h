@@ -11,6 +11,12 @@
 // Says which runs of the fixed buffer this frame draws. The list has to stay as it is until the pictures have been drawn.
 void SurfaceStatic_SetFrame(const StaticRange *ranges, int count);
 
+// Gives surfaceStatic.vsh and surfaceScene.vsh the numbers they read.
+void SurfaceStatic_SetShaderNumbers(LPDIRECT3DDEVICE9 device);
+
+// The runs SetFrame was given.
+const StaticRange *SurfaceStatic_FrameRanges(int *count);
+
 // Whether this route can draw at all. If not, the old route draws everything.
 bool SurfaceStatic_Ready();
 

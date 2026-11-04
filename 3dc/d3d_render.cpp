@@ -22,6 +22,7 @@
 #include "FmvCutscenes.h"
 #include "surface_normals.h"
 #include "surface_pictures.h"
+#include "static_scene.h"
 #define UseLocalAssert FALSE
 #include "ourasert.h"
 #include <assert.h>
@@ -420,6 +421,9 @@ static bool ExecuteBuffer()
 	// after the shadows, or they'd darken it as if it were part of the wall behind.
 	bool const seeThroughLast = toyFinalFlush && ToyShadowsMode != 0;
 
+	// The walls from the fixed buffer go once, after the solid polygons, whichever drawing of the frame gets there first. See static_scene.cpp.
+	bool const wallsAreDue = StaticScene_WallsAreDue();
+
 	if (mainList->GetSize())
 	{
 		// set main shaders to active
@@ -431,7 +435,20 @@ static bool ExecuteBuffer()
 		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &matWorldViewProj);
 
 		// draw our main list (level geometry, player weapon etc)
-		mainList->Draw(seeThroughLast ? RenderList::kSolid : RenderList::kEverything);
+		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
+	}
+
+	if (wallsAreDue)
+	{
+		StaticScene_DrawWalls(d3d.lpD3DDevice);
+
+		if (!seeThroughLast && mainList->GetSize())
+		{
+			d3d.effectSystem->SetActive(d3d.mainEffect);
+			d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+			mainList->Draw(RenderList::kSeeThrough);
+		}
 	}
 
 	// render any decals
@@ -4913,6 +4930,14 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 // off by default until the comparison has been seen to come out clean in the game.
 int StaticSurfaceOn = 0;
 int StaticSurfaceCompare = 0;
+extern int StaticSceneOn;
+
+// Can the walls come from the fixed buffer on this frame, as far as the shadows go? Only in the real picture, with lights added per pixel, because the other
+// views draw things the buffer doesn't hold. A frame that's being compared needs the old route, to have something to compare with.
+bool StaticScene_ViewAllows()
+{
+	return ToyShadowsLightsByPixel && (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kViewFinalNoRelief) && !(StaticSurfaceCompare && ShadowReportIsDue());
+}
 
 static const int kMostFrameRanges = 16384;
 static StaticRange frameRanges[kMostFrameRanges];
@@ -4925,7 +4950,7 @@ static bool ChooseStaticRoute()
 	numFrameRanges = 0;
 
 	// these three move corners or flip the view in ways the buffer doesn't know about
-	if ((!StaticSurfaceOn && !StaticSurfaceCompare) || !StaticLevel_Ready() || !SurfaceStatic_Ready()
+	if ((!StaticSurfaceOn && !StaticSurfaceCompare && !StaticScene_TookAny()) || !StaticLevel_Ready() || !SurfaceStatic_Ready()
 		|| MIRROR_CHEATMODE || TRIPTASTIC_CHEATMODE || UNDERWATER_CHEATMODE)
 	{
 		return false;
@@ -5082,6 +5107,64 @@ static void CompareSurfaceRoutes(LPDIRECT3DDEVICE9 device, const float *worldAxe
 		"static compare: frame %d, %d pixels, %d ranges: %d holes in the new route, %d only in the new route, %d colours changed, %d normals changed, %d distances changed, largest change %.2f",
 		frame, differences.pixelsCompared, numFrameRanges, differences.holesInNew, differences.extraInNew, differences.colourChanged,
 		differences.normalChanged, differences.distanceChanged, differences.largestDistanceChange);
+	LogString(line);
+}
+
+// Draws just the walls that are in the fixed buffer, both ways, each with a depth buffer of its own, and compares them. It has to run on a frame that went the
+// old way, so that the game's own polygons are there to compare with, so it says that its frame is no good for timing.
+static void CompareSceneRoutes(LPDIRECT3DDEVICE9 device, int frame)
+{
+	D3DSURFACE_DESC size;
+	IDirect3DSurface9 *gameDepth = 0;
+	IDirect3DSurface9 *ownDepth = 0;
+	char line[300] = { 0 };
+
+	if (FAILED(toyDepthSurface->GetDesc(&size)) || FAILED(device->GetDepthStencilSurface(&gameDepth))
+		|| FAILED(device->CreateDepthStencilSurface(size.Width, size.Height, D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, TRUE, &ownDepth, NULL)))
+	{
+		if (gameDepth)
+		{
+			gameDepth->Release();
+		}
+
+		LogString("static scene compare: couldn't make a depth buffer, so nothing was compared");
+		return;
+	}
+
+	RoutePictures oldRoute, newRoute;
+
+	device->SetDepthStencilSurface(ownDepth);
+	ToySetVolumeState(device);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+
+	bool const oldDrawn = SurfacePictures_DrawWalls(device, toyDepthSurface, false) && oldRoute.Read(device, toyDepthSurface);
+	bool const newDrawn = SurfacePictures_DrawWalls(device, toyDepthSurface, true) && newRoute.Read(device, toyDepthSurface);
+
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetDepthStencilSurface(gameDepth);
+	gameDepth->Release();
+	ownDepth->Release();
+
+	device->SetRenderTarget(0, toyDepthSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+	if (!oldDrawn || !newDrawn)
+	{
+		_snprintf(line, sizeof(line) - 1, "static scene compare: frame %d: couldn't read the pictures back, so nothing was compared", frame);
+		LogString(line);
+		return;
+	}
+
+	PictureDifferences differences;
+	StaticFrame_Compare(oldRoute.InMemory(), newRoute.InMemory(), oldRoute.colour.description.Width, oldRoute.colour.description.Height,
+		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &differences);
+
+	_snprintf(line, sizeof(line) - 1,
+		"static scene compare: frame %d (drawn the old way, so its timings don't count), %d pixels: %d holes in the new route, %d only in the new route, %d colours changed, %d distances changed, the largest by %.2f",
+		frame, differences.pixelsCompared, differences.holesInNew, differences.extraInNew, differences.colourChanged, differences.distanceChanged, differences.largestDistanceChange);
 	LogString(line);
 }
 
@@ -5965,6 +6048,11 @@ static void ToyShadows_Draw()
 			else
 			{
 				CompareSurfaceRoutes(device, worldAxes, toyFrame);
+
+				if (StaticSceneOn)
+				{
+					CompareSceneRoutes(device, toyFrame);
+				}
 			}
 		}
 

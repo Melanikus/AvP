@@ -301,12 +301,7 @@ void SurfaceNormals_StartObject()
 	// that the two can't disagree: a polygon marked and not drawn from the buffer would vanish from the pictures. A reflection writes nothing.
 	if (moduleBeingDrawn >= 0 && !DrawingAReflection && !ToyShadowsInMirror)
 	{
-		if (numModulesDrawn < kMostModulesNoted)
-		{
-			modulesDrawn[numModulesDrawn] = moduleBeingDrawn;
-		}
-
-		numModulesDrawn++;
+		SurfaceNormals_NoteModuleDrawn(moduleBeingDrawn);
 	}
 
 	if (objectIsTurned)
@@ -365,6 +360,16 @@ static void PointNormal(int point, float *normal)
 	normal[0] = turned.x;
 	normal[1] = turned.y;
 	normal[2] = turned.z;
+}
+
+void SurfaceNormals_NoteModuleDrawn(int moduleNumber)
+{
+	if (numModulesDrawn < kMostModulesNoted)
+	{
+		modulesDrawn[numModulesDrawn] = moduleNumber;
+	}
+
+	numModulesDrawn++;
 }
 
 const int *SurfaceNormals_ModulesDrawn(int *count)

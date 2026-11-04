@@ -49,6 +49,7 @@ enum { kMostModulesInAFrame = 4096 };
 
 // The modules drawn so far this frame, and how many. count can be more than the list holds, which means some weren't noted.
 const int *SurfaceNormals_ModulesDrawn(int *count);
+void SurfaceNormals_NoteModuleDrawn(int moduleNumber);
 void SurfaceNormals_ForgetModulesDrawn();
 
 // Hands the list to the graphics card, or takes it back, for a pass that reads it.

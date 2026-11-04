@@ -26,6 +26,10 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 void SurfacePictures_ShowNormals(LPDIRECT3DDEVICE9 device);
 
 // The pictures themselves, for a shader to read. Which way each pixel faces, and its texture's colour.
+// Draws only the level's walls that are in the fixed buffer into the three pictures, in their final colours, for comparing the two ways of drawing them. A depth
+// buffer of its own has to be set, with depth writes on. fromBuffer picks the way. See CompareSceneRoutes in d3d_render.cpp.
+bool SurfacePictures_DrawWalls(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, bool fromBuffer);
+
 IDirect3DTexture9 *SurfacePictures_Normal();
 IDirect3DTexture9 *SurfacePictures_Colour();
 

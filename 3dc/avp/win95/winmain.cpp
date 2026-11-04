@@ -275,6 +275,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			StaticSurfaceOn = 1;
 		}
+		extern int StaticSceneOn;
+		if (strstr(command_line, "-staticscene"))
+		{
+			StaticSceneOn = 1;
+		}
 		extern int StaticSurfaceCompare;
 		if (strstr(command_line, "-staticcompare"))
 		{

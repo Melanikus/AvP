@@ -15,6 +15,7 @@
 #include "surface_pictures.h"
 #include "surface_normals.h"
 #include "surface_static.h"
+#include "static_scene.h"
 #include "texture_relief.h"
 #include "d3_func.h"
 #include "RenderList.h"
@@ -220,6 +221,51 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	device->SetRenderTarget(2, NULL);
 
 	return true;
+}
+
+bool SurfacePictures_DrawWalls(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, bool fromBuffer)
+{
+	if (!SurfacePictures_Ready(device))
+	{
+		return false;
+	}
+
+	device->SetRenderTarget(0, normalSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+	device->SetRenderTarget(0, colourSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+	device->SetRenderTarget(0, depthPicture);
+	device->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFFFFFFFF, 1.0f, 0);
+
+	device->SetRenderTarget(1, normalSurface);
+	device->SetRenderTarget(2, colourSurface);
+
+	bool worked = true;
+
+	if (fromBuffer)
+	{
+		int count = 0;
+		StaticRange const *ranges = SurfaceStatic_FrameRanges(&count);
+
+		worked = StaticScene_DrawForComparing(device, ranges, count);
+	}
+	else
+	{
+		d3d.effectSystem->SetActive(d3d.surfaceSceneReplayEffect);
+
+		D3DXMATRIX projectionDown;
+		D3DXMatrixTranspose(&projectionDown, &d3d.matProjection);
+		device->SetVertexShaderConstantF(0, (const float *)&projectionDown, 4);
+
+		SurfaceNormals_UseList();
+		mainList->DrawOpaqueAgain(d3d.surfaceDecl);
+		SurfaceNormals_StopUsingList();
+	}
+
+	device->SetRenderTarget(1, NULL);
+	device->SetRenderTarget(2, NULL);
+
+	return worked;
 }
 
 void SurfacePictures_ShowNormals(LPDIRECT3DDEVICE9 device)

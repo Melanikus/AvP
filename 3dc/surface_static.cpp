@@ -37,14 +37,20 @@ void SurfaceStatic_SetFrame(const StaticRange *ranges, int count)
 	frameRangeCount = (ranges && count > 0) ? count : 0;
 }
 
+const StaticRange *SurfaceStatic_FrameRanges(int *count)
+{
+	*count = frameRangeCount;
+	return frameRanges;
+}
+
 bool SurfaceStatic_Ready()
 {
 	return d3d.surfaceStaticDecl && d3d.surfaceStaticEffect != kNullEffectID && StaticLevel_Ready();
 }
 
-// The numbers surfaceStatic.vsh reads. They go straight into its registers: its first three hold the game's view, a line for each of x, y and z, and the
+// The numbers surfaceStatic.vsh and surfaceScene.vsh read. They go straight into its registers: its first three hold the game's view, a line for each of x, y and z, and the
 // next four hold the projection, read down its columns because that's how the shader multiplies.
-static void SetShaderNumbers(LPDIRECT3DDEVICE9 device)
+void SurfaceStatic_SetShaderNumbers(LPDIRECT3DDEVICE9 device)
 {
 	float view[12];
 	ToyShadows_ViewMatrix(view);
@@ -78,7 +84,7 @@ bool SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 	bool const relief = withRelief && d3d.surfaceStaticReliefEffect != kNullEffectID;
 
 	d3d.effectSystem->SetActive(relief ? d3d.surfaceStaticReliefEffect : d3d.surfaceStaticEffect);
-	SetShaderNumbers(device);
+	SurfaceStatic_SetShaderNumbers(device);
 
 	bool worked = d3d.surfaceStaticDecl->Set();
 	worked = SUCCEEDED(device->SetStreamSource(0, StaticLevel_VertexBuffer(), 0, sizeof(StaticVertex))) && worked;
