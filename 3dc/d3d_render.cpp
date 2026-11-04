@@ -3560,10 +3560,11 @@ enum ToyShadowsView
 	kToyViewEdges,      // each light's volumes as lines, in that light's colour
 	kToyViewPolygons,   // each light's shadowed pixels filled in that light's colour, blended so overlaps show
 	kToyViewMask,       // just what final multiplies the picture by: white is untouched, black is the full depth of shadow
+	kViewNormals,       // which way each pixel faces, from the surface pictures
 	kToyViewCount
 };
 
-static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK" };
+static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "MASK", "NORMALS" };
 static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
 
 extern void NewOnScreenMessage(char *messagePtr);
@@ -5111,7 +5112,7 @@ static void ToyShadows_Draw()
 
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
-	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask)
+	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals)
 		&& toyNumCasters > 0 && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % 300) == 0;
@@ -5213,7 +5214,7 @@ static void ToyShadows_Draw()
 	IDirect3DSurface9 *screen = 0;
 	D3DVIEWPORT9 viewport;
 
-	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask;
+	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
 	bool const haveCloaked = toyPolygonsOfKind[kToyCasterCloaked] > 0;
 
 	if (darkening && ToyPicturesCanRun(device)
@@ -5479,6 +5480,11 @@ static void ToyShadows_Draw()
 
 		if (screen)
 		{
+			if (ToyShadowsMode == kViewNormals)
+			{
+				SurfacePictures_ShowNormals(device);
+			}
+
 			if (noting)
 			{
 				ToyReadPicture(device, screen, 255.0f, &screenAtEnd);

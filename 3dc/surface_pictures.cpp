@@ -188,6 +188,57 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	return true;
 }
 
+void SurfacePictures_ShowNormals(LPDIRECT3DDEVICE9 device)
+{
+	D3DSURFACE_DESC size;
+
+	if (!normalSurface || FAILED(normalSurface->GetDesc(&size)))
+	{
+		return;
+	}
+
+	struct ScreenCorner
+	{
+		float x, y, z, rhw;
+		float u, v;
+	};
+
+	// Half a pixel back, so that each pixel of the screen reads the middle of the same pixel of the picture.
+	float const left = -0.5f, top = -0.5f;
+	float const right = (float)size.Width - 0.5f, bottom = (float)size.Height - 0.5f;
+
+	ScreenCorner const corners[4] =
+	{
+		{ left,  top,    0.0f, 1.0f, 0.0f, 0.0f },
+		{ right, top,    0.0f, 1.0f, 1.0f, 0.0f },
+		{ left,  bottom, 0.0f, 1.0f, 0.0f, 1.0f },
+		{ right, bottom, 0.0f, 1.0f, 1.0f, 1.0f },
+	};
+
+	device->SetVertexShader(NULL);
+	device->SetPixelShader(NULL);
+	device->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+
+	device->SetTexture(0, normalTexture);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ScreenCorner));
+
+	device->SetTexture(0, NULL);
+}
+
 IDirect3DTexture9 *SurfacePictures_Normal()
 {
 	return normalTexture;

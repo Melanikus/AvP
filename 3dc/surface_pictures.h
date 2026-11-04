@@ -21,6 +21,10 @@ void SurfacePictures_Release();
 // The caller has set the depth test and the rest of the device up. Says false if nothing was drawn.
 bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes);
 
+// Puts the picture of which way each pixel faces on the screen, for checking by eye. Each direction shows as a colour: red for right, green for
+// up and blue for away from the camera, with grey for a normal of zero, and black where there's no surface.
+void SurfacePictures_ShowNormals(LPDIRECT3DDEVICE9 device);
+
 // The pictures themselves, for a shader to read. Which way each pixel faces, and its texture's colour.
 IDirect3DTexture9 *SurfacePictures_Normal();
 IDirect3DTexture9 *SurfacePictures_Colour();
