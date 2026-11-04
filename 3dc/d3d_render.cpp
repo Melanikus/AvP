@@ -4503,7 +4503,9 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 }
 
 // Draws the surface pictures, which also write down how far away each pixel is. They're the same surfaces the game has just drawn, so they go
-// a hair nearer, or rounding would leave specks of them behind the game's own. Says false if nothing was drawn.
+// a hair nearer, or rounding would leave specks of them behind the game's own. The hair is a fixed size, and doesn't grow with a surface's
+// slant: depth isn't written here, so of two polygons that both pass, the last drawn wins, and a wider margin would let the wrong one win
+// along the line where something meets a floor. Says false if nothing was drawn.
 static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes)
 {
 	ToySetVolumeState(device);
@@ -4512,12 +4514,10 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes)
 	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, -0.000001f);
-	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, -1.0f);
 
 	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
-	ToySetFloatState(device, D3DRS_SLOPESCALEDEPTHBIAS, 0.0f);
 
 	return drawn;
 }

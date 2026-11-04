@@ -301,6 +301,11 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration)
 		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, addressing);
 		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, addressing);
 
+		DWORD const filter = (get_filterType(it->sortKey) == FILTERING_BILINEAR_ON) ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+
+		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_MINFILTER, filter);
+		d3d.lpD3DDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, filter);
+
 		R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
 	}
 }
