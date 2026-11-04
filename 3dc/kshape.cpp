@@ -5759,8 +5759,9 @@ int ToyShadows_PickLights(float *lights, int most)
 			lights[i * 8 + 7] = 2.0f;
 
 			// A flare's brightness is its seconds left divided by 4, from 4 down to nothing over 16 seconds, with a flicker on
-			// top. That's what the game lights with, so it's used as it stands. A cap would hold it steady, but dims it, and
-			// because its colour is a pink that only reaches white by being so bright, a cap also turns it pink.
+			// top. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6 seconds, and then fades out.
+			// The cap is also what gives a flare its look: its colour is a pink, and the game only makes it white by being
+			// so bright that all three colours clip. The user chose this dim red look, so don't raise it to match the game.
 			float const cap = (float)ToyShadowsFlareCap / 100.0f;
 			float const flareBright = (float)light->LightBright / 65536.0f;
 

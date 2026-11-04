@@ -3535,7 +3535,7 @@ int ToyShadowsMode = kToyViewFinal;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
 int ToyShadowsFlareReach = 100; // -shadowflarereach=N, 50 to 400: how far a flare's light goes, in percent of the game's 10 metres
-int ToyShadowsFlareCap = 800;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. Above 400 it changes nothing
+int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_PickLights
 int ToyShadowsFlaresByPixel = 0;   // set each frame: flares are left out of the game's lighting, and added per pixel here
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
@@ -3558,6 +3558,7 @@ static const float kToyStartGap        = 8.0f;      // start just behind the pol
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
 static const float kToyMostRange       = 100000.0f; // well inside the far plane, which z-fail needs
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
+static const float kToyFlareTouching   = 40.0f;     // a flare this close to a polygon's flat surface is lying on it
 static const float kToyCloakedShadow   = 0.25f;     // how strong a cloaked Predator's shadow is, against an ordinary one
 static const float kToySoftStaysWideTo = 6000.0f;   // how far away a shadow's soft edge stays at its full width, before it narrows
 static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen light fails to reach loses this much of its brightness
@@ -3674,6 +3675,14 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	// the polygon's flat surface is out of the light's reach
 	float const planeDistance = fabsf(facing) / normalLength;
 	if (planeDistance >= light[3])
+	{
+		return;
+	}
+
+	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
+	// it from the whole room. So a polygon that close doesn't cast for that flare. A light's eighth number is its kind, and 2
+	// is a flare.
+	if (light[7] == 2.0f && planeDistance < kToyFlareTouching)
 	{
 		return;
 	}
