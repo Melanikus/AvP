@@ -24,6 +24,7 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open
+//   makes its own set of file functions for libvorbis, the same ones as the header's OV_CALLBACKS_DEFAULT
 
 #include <stdio.h>
 #include "VorbisPlayer.h"
@@ -61,6 +62,26 @@ std::vector<std::string> TrackList;
 
 static VorbisPlayback *inGameMusic = NULL;
 
+// Moves around in the music file. off is 64 bits wide, so files over 2 GB would still work. Same as libvorbis's own
+// version for Windows.
+static int SeekVorbisFile(FILE *file, ogg_int64_t off, int whence)
+{
+	if (file == NULL) {
+		return -1;
+	}
+	return _fseeki64(file, off, whence);
+}
+
+// The four things libvorbis needs to do with a music file: read, move, close, and say where it is. These are the same
+// functions as libvorbis's OV_CALLBACKS_DEFAULT, so the file is read in exactly the same way. libvorbis gives each of
+// them a "void *" file, so they are cast to the form it expects.
+static ov_callbacks vorbisFileFunctions = {
+	(size_t (*)(void *, size_t, size_t, void *)) fread,
+	(int (*)(void *, ogg_int64_t, int))          SeekVorbisFile,
+	(int (*)(void *))                            fclose,
+	(long (*)(void *))                           ftell
+};
+
 bool VorbisPlayback::Open(const std::string &fileName)
 {
 	_vorbisFile = fopen(fileName.c_str(), "rb");
@@ -69,7 +90,7 @@ bool VorbisPlayback::Open(const std::string &fileName)
 		return false;
 	}
 
-	if (ov_open_callbacks(_vorbisFile, &_oggFile, NULL, 0, OV_CALLBACKS_DEFAULT) < 0) {
+	if (ov_open_callbacks(_vorbisFile, &_oggFile, NULL, 0, vorbisFileFunctions) < 0) {
 		Con_PrintError("File " + fileName + "is not a valid OGG Vorbis file");
 		// a failed open leaves the file to us: libvorbis clears its datasource before ov_clear
 		fclose(_vorbisFile);

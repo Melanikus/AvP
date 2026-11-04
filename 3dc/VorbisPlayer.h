@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   leaves out the header's ready-made file functions, since VorbisPlayer.cpp makes the one set it uses
+
 #ifndef _VorbisPlayer_h_
 #define _VorbisPlayer_h_
 
@@ -31,6 +34,9 @@
 	#define _fseeki64 fseek // ensure libvorbis uses fseek and not _fseeki64 for xbox
 #endif
 
+// This header offers ready-made sets of file functions, and every source file that includes it gets its own copy of all
+// of them, used or not. We use one, so we make it ourselves in VorbisPlayer.cpp and ask the header to leave the rest out.
+#define OV_EXCLUDE_STATIC_CALLBACKS
 #include <vorbis/vorbisfile.h>
 #include "audioStreaming.h"
 #include <string>
