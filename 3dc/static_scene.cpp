@@ -179,8 +179,14 @@ void StaticScene_FinishChoosing()
 		toldAboutNotLit = true;
 	}
 
-	D3DCAPS9 caps;
-	uint32_t const mostTriangles = SUCCEEDED(d3d.lpD3DDevice->GetDeviceCaps(&caps)) ? caps.MaxPrimitiveCount : 65535;
+	// the most a card will draw in one go, which never changes, so it is only asked once
+	static uint32_t mostTriangles = 0;
+
+	if (!mostTriangles)
+	{
+		D3DCAPS9 caps;
+		mostTriangles = SUCCEEDED(d3d.lpD3DDevice->GetDeviceCaps(&caps)) ? caps.MaxPrimitiveCount : 65535;
+	}
 
 	numRanges = StaticFrame_SortAndJoin(ranges, numRanges, mostTriangles);
 	wallsAreDue = numRanges > 0;
