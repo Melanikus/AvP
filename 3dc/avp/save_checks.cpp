@@ -171,6 +171,20 @@ bool Save_AmmoIsValid(int ammo)
 	return valid;
 }
 
+// When a weapon being put away has finished, the game uses the slot to swap to as a place in the list of slots, without asking, and writes through what it finds there. The game only ever starts
+// putting a weapon away after choosing the next slot, so a real save can't have the selected weapon doing that with no swap going on. And the number that means "no swap" is past the end of the list.
+bool Save_SwapFitsWeaponState(int state, int swapSlot)
+{
+	bool const fits = !(state == WEAPONSTATE_UNREADYING && swapSlot == WEAPON_FINISHED_SWAPPING);
+
+	if (!fits)
+	{
+		Save_NoteRefused("a weapon being put away with no slot to go to");
+	}
+
+	return fits;
+}
+
 // Many saved numbers say which entry of a list something is using, with -1 for none. A number outside the list means none as well, because
 // there's nothing better to do with it, and an object that has lost track of something carries on as usual.
 int Save_PlaceInListOrNone(int place, int count)

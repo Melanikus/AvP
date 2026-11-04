@@ -4,6 +4,8 @@
 //   this file never declares, and a never-compiled #else branch
 //   the alien tail copes with a model missing its aiming animations
 //   the disc and an alien's chest are checked before use, because a save file can leave them out
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a weapon being put away with no slot to go to stays in the hands, and nothing is written past the list of slots
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -958,6 +960,16 @@ void UpdateWeaponStateMachine(void)
 		        
 				case WEAPONSTATE_UNREADYING:
 		        {
+					// The game always chooses the next slot before it starts putting a weapon away, so this needs one. The number that means "no swap" isn't a place in the list of slots,
+					// and the sums below write through what they find there. The swapping states above ask this same question.
+					if (playerStatusPtr->SwapToWeaponSlot == WEAPON_FINISHED_SWAPPING)
+					{
+						weaponPtr->CurrentState = WEAPONSTATE_IDLE;
+						weaponPtr->StateTimeOutCounter = 0;
+						playerStatusPtr->Encumberance = twPtr->Encum_Idle;
+						break;
+					}
+
 					if (SimilarPredWeapons(weaponPtr,&playerStatusPtr->WeaponSlot[playerStatusPtr->SwapToWeaponSlot])) {
            		       	
            		       	PLAYER_WEAPON_DATA *newWeaponPtr;

@@ -14,6 +14,9 @@ bool Save_WeaponStateIsValid(int state);
 bool Save_VisionModeIsValid(int mode);
 bool Save_AmmoIsValid(int ammo);
 
+// A weapon being put away says which slot comes next. Can its state go with that number? Each is fine alone, but "no swap going on" isn't a slot.
+bool Save_SwapFitsWeaponState(int state, int swapSlot);
+
 // A saved place in a list of count entries, where -1 means none. Any other number that isn't in the list comes back as -1 too.
 int Save_PlaceInListOrNone(int place, int count);
 

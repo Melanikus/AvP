@@ -77,6 +77,13 @@ static void TestTableNumbers()
 	Check(!Save_AmmoIsValid(AMMO_NONE), "no ammunition at all isn't a choice");
 }
 
+static void TestWeaponSwaps()
+{
+	Check(Save_SwapFitsWeaponState(WEAPONSTATE_UNREADYING, WEAPON_SLOT_1), "a weapon being put away, with a slot to go to");
+	Check(Save_SwapFitsWeaponState(WEAPONSTATE_IDLE, WEAPON_FINISHED_SWAPPING), "a weapon in the hands, with no swap going on");
+	Check(!Save_SwapFitsWeaponState(WEAPONSTATE_UNREADYING, WEAPON_FINISHED_SWAPPING), "a weapon being put away with no swap going on is refused");
+}
+
 static void TestListPlaces()
 {
 	Check(Save_PlaceInListOrNone(0, 3) == 0, "the first place in a list");
@@ -260,6 +267,8 @@ static void TestCountingRefusals()
 	Save_WeaponStateIsValid(0);
 	Save_VisionModeIsValid(0);
 	Save_AmmoIsValid(0);
+	Save_SwapFitsWeaponState(WEAPONSTATE_UNREADYING, WEAPON_SLOT_1);
+	Save_SwapFitsWeaponState(WEAPONSTATE_IDLE, WEAPON_FINISHED_SWAPPING);
 	Save_PlaceInListOrNone(0, 3);
 	Save_PlaceInListOrNone(-1, 3);
 	Save_MorphFrameOrOwn(5, 1, 10);
@@ -292,6 +301,8 @@ static void TestCountingRefusals()
 	CheckRefusedBy("a vision mode", 1, "a bad vision mode");
 	Save_AmmoIsValid(MAX_NO_OF_AMMO_TEMPLATES);
 	CheckRefusedBy("a kind of ammunition", 1, "a bad kind of ammunition");
+	Save_SwapFitsWeaponState(WEAPONSTATE_UNREADYING, WEAPON_FINISHED_SWAPPING);
+	CheckRefusedBy("a weapon being put away with no slot to go to", 1, "a weapon being put away with no swap going on");
 	Save_PlaceInListOrNone(3, 3);
 	CheckRefusedBy("a place in a list", 1, "a place past the end of its list");
 	Save_PlaceInListOrNone(-2, 3);
@@ -370,6 +381,7 @@ int main()
 {
 	TestSlotNumbers();
 	TestTableNumbers();
+	TestWeaponSwaps();
 	TestListPlaces();
 	TestNames();
 	TestMorphFrames();

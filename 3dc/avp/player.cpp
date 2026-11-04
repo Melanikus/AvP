@@ -6,6 +6,7 @@ so player.c is looking a bit bare at the moment. */
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a save can't choose which weapon is in a slot, or pick a slot, weapon state, vision mode or grenade that doesn't exist
 //   a value a save has refused is counted for the log
+//   a save can't have the selected weapon being put away with no slot to go to
 
 #include "3dc.h"
 #include "module.h"
@@ -2122,6 +2123,17 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 		playerStatusPtr->WeaponSlot[i].PositionOffset = block->WeaponSlot[i].PositionOffset;
 		playerStatusPtr->WeaponSlot[i].DirectionOffset = block->WeaponSlot[i].DirectionOffset;
 		playerStatusPtr->WeaponSlot[i].Possessed = block->WeaponSlot[i].Possessed;
+	}
+
+	//each of these numbers can be fine alone and still be wrong together. A weapon that isn't really being put away just stays in the player's hands.
+	{
+		PLAYER_WEAPON_DATA *selectedWeapon = &playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot];
+
+		if(!Save_SwapFitsWeaponState(selectedWeapon->CurrentState,playerStatusPtr->SwapToWeaponSlot))
+		{
+			selectedWeapon->CurrentState = WEAPONSTATE_IDLE;
+			selectedWeapon->StateTimeOutCounter = 0;
+		}
 	}
 
 	//some stuff for the weapon displayblock
