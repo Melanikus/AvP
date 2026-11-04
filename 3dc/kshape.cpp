@@ -5722,6 +5722,7 @@ static float ToyFraction(int fixedPoint)
 static float toyChosenLights[kToyMostLights * kToyLightFloats];
 static void const *toyChosenOwners[kToyMostLights];
 static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
+static char toyRoomName[32] = "none";
 static int toyNumLightsByPixel = 0;
 
 // Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
@@ -5736,6 +5737,12 @@ void ToyShadows_ChooseLights()
 {
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
 	toyCameraWorld = Global_VDB_Ptr->VDB_World;
+
+	// The log prints this on every report, menus too. A room's name lives in the level's memory, which is given back when the level
+	// ends, so the log keeps a copy of its own. This function only runs while a level is showing, when the name is still good.
+	extern MODULE *playerPherModule;
+	_snprintf(toyRoomName, sizeof(toyRoomName) - 1, "%s", (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none");
+	toyRoomName[sizeof(toyRoomName) - 1] = 0;
 
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;
@@ -5992,8 +5999,7 @@ void ToyShadows_NoteFrameLights(int frame)
 	}
 
 	// which room the player is in, so a log can be read against the level, and whether a mirror is being drawn this frame
-	extern MODULE *playerPherModule;
-	char const *room = (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none";
+	char const *room = toyRoomName;
 
 	char line[300];
 	_snprintf(line, sizeof(line) - 1,
