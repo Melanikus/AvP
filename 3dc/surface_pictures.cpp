@@ -172,7 +172,7 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	// always did, so turning relief off leaves nothing of it behind.
 	bool const withRelief = reliefWanted && textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
-	bool const fromBuffer = useStatic && SurfaceStatic_Ready();
+	bool fromBuffer = useStatic && SurfaceStatic_Ready();
 
 	// The world's three directions, for surface.psh to turn each normal to face the way the camera does. This is the only place that happens.
 	// They go straight into the shader's registers. A vertex shader's numbers go through a list whose order the compiler picks, so a second
@@ -185,9 +185,10 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	};
 	device->SetPixelShaderConstantF(0, axes, 3);
 
+	// If this fails part way, whatever it did draw is drawn again below, on the same pixels, so nothing goes missing.
 	if (fromBuffer)
 	{
-		SurfaceStatic_Draw(device, withRelief);
+		fromBuffer = SurfaceStatic_Draw(device, withRelief);
 	}
 
 	d3d.effectSystem->SetActive(effect);

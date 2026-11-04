@@ -6,7 +6,7 @@
 //
 // WHAT'S STILL DRAWN THE OLD WAY: everything not in the buffer, such as objects, models and doors. SurfaceNormals_WritePolygon marks each polygon of a
 // module as being in the buffer or not, so that the old drawing can leave out just the ones drawn here. That's decided while the pictures are drawn, so
-// either route works on any frame, and if this one can't draw, the old one still has everything.
+// either route works on any frame, and if this one can't draw, even part way through, the old one still has everything.
 //
 // IT HAS TO MATCH THE GAME: the pictures are read by lights working on what the game drew, so a pixel here must be the same surface as the pixel on screen.
 // surfaceStatic.vsh explains how the corners are made to land in the same places.
@@ -24,6 +24,7 @@
 #include "texture_relief.h"
 #include "d3_func.h"
 #include "VertexDeclaration.h"
+#include "logString.h"
 
 void ToyShadows_ViewMatrix(float *matrix);
 
@@ -62,11 +63,16 @@ static void SetHowTexturesAreRead(LPDIRECT3DDEVICE9 device, DWORD sampler)
 	device->SetSamplerState(sampler, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 }
 
-void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
+bool SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 {
-	if (!SurfaceStatic_Ready() || !frameRangeCount)
+	if (!SurfaceStatic_Ready())
 	{
-		return;
+		return false;
+	}
+
+	if (!frameRangeCount)
+	{
+		return true;
 	}
 
 	bool const relief = withRelief && d3d.surfaceStaticReliefEffect != kNullEffectID;
@@ -74,9 +80,9 @@ void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 	d3d.effectSystem->SetActive(relief ? d3d.surfaceStaticReliefEffect : d3d.surfaceStaticEffect);
 	SetShaderNumbers(device);
 
-	d3d.surfaceStaticDecl->Set();
-	device->SetStreamSource(0, StaticLevel_VertexBuffer(), 0, sizeof(StaticVertex));
-	device->SetIndices(StaticLevel_IndexBuffer());
+	bool worked = d3d.surfaceStaticDecl->Set();
+	worked = SUCCEEDED(device->SetStreamSource(0, StaticLevel_VertexBuffer(), 0, sizeof(StaticVertex))) && worked;
+	worked = SUCCEEDED(device->SetIndices(StaticLevel_IndexBuffer())) && worked;
 
 	SetHowTexturesAreRead(device, 0);
 
@@ -91,7 +97,7 @@ void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 	bool textureIsSet = false;
 	uint32_t texture = 0;
 
-	for (int i = 0; i < frameRangeCount; i++)
+	for (int i = 0; worked && i < frameRangeCount; i++)
 	{
 		StaticRange const &range = frameRanges[i];
 
@@ -114,7 +120,7 @@ void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 			twoSided = range.twoSided;
 		}
 
-		device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, range.baseVertex, range.firstVertex, range.vertexCount, range.firstIndex, range.triangles);
+		worked = SUCCEEDED(device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, range.baseVertex, range.firstVertex, range.vertexCount, range.firstIndex, range.triangles));
 	}
 
 	// the old drawing that follows counts on nothing being dropped: the game has already dropped the backs of its polygons
@@ -124,4 +130,15 @@ void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief)
 	{
 		device->SetTexture(1, NULL);
 	}
+
+	// once is enough: this frame and any like it just go the old way
+	static bool told = false;
+
+	if (!worked && !told)
+	{
+		LogString("surface pictures: the card refused the level's fixed buffer, so those frames draw it the old way");
+		told = true;
+	}
+
+	return worked;
 }

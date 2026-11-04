@@ -14,7 +14,8 @@ void SurfaceStatic_SetFrame(const StaticRange *ranges, int count);
 // Whether this route can draw at all. If not, the old route draws everything.
 bool SurfaceStatic_Ready();
 
-// Draws the frame's runs into the pictures that are set. withRelief picks the shaders, and it's the same answer the rest of the pass is using.
-void SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief);
+// Draws the frame's runs into the pictures that are set. withRelief picks the shaders, and it's the same answer the rest of the pass is using. Gives back false
+// if the card refused any of it. Those polygons have to go the old way then, or they'd be missing from the pictures.
+bool SurfaceStatic_Draw(LPDIRECT3DDEVICE9 device, bool withRelief);
 
 #endif
