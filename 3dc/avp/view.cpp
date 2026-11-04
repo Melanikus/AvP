@@ -165,9 +165,10 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		dptr2 = *aptr++;
 
-		// While shadows are on, a flare's light is added per pixel instead, only where it can really reach. This is for the weapon
-		// too, which gets no flare light at all, because the game's flare is a bright white and not the dim red the user chose.
-		if (ToyShadowsLightsByPixel && ToyBlockIsFlare(dptr2))
+		// While shadows are on, the weapon gets no flare light at all: the shadow pass doesn't draw it, and the game's flare is a
+		// bright white, not the dim red the user chose. Everything else goes on below. A chosen flare leaves there, like any light
+		// added per pixel, and one that wasn't chosen stays, held to that dim red by ToyShadows_ChooseLights.
+		if (ToyShadowsLightsByPixel && gunLayer && ToyBlockIsFlare(dptr2))
 		{
 			continue;
 		}

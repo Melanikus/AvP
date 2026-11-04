@@ -5726,6 +5726,42 @@ static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
 static char toyRoomName[32] = "none";
 static int toyNumLightsByPixel = 0;
 
+bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light);
+
+// A flare that wasn't chosen stays in the game's lighting, so it still lights the room, though it casts no shadow. At the game's own
+// brightness it would turn white, because a new flare is so bright that all three colours clip. So it's held to the same cap as a
+// chosen flare, and stays the dim red the user chose. This only changes the number the lighting reads this frame: UpdateObjectLights
+// works that out afresh every frame from the flare's real brightness, so the flare itself isn't touched, and a save is no different.
+static void ToyHoldBackUnchosenFlares()
+{
+	if (!ToyShadowsLightsByPixel)
+	{
+		return;
+	}
+
+	int const cap = (int)(((long long)ONE_FIXED * ToyShadowsFlareCap) / 100);
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		if (!ToyBlockIsFlare(block))
+		{
+			continue;
+		}
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK *light = block->ObLights[j];
+
+			if (light->LightBright > cap && light->LightRange > 0 && !ToyShadows_LightIsByPixel(light))
+			{
+				light->BrightnessOverRange = DIV_FIXED(MUL_FIXED(cap, LightScale), light->LightRange);
+			}
+		}
+	}
+}
+
 // Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
 // before: a live light can only leave the game's lighting for a frame it hasn't been used in yet, and a muzzle flash only has that
 // one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
@@ -5733,7 +5769,8 @@ static int toyNumLightsByPixel = 0;
 //
 // Up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
 // flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 4 brief lights of their own. A live
-// light past those limits simply stays in the game's lighting, so nothing vanishes.
+// light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
+// ToyHoldBackUnchosenFlares.
 void ToyShadows_ChooseLights()
 {
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
@@ -5750,6 +5787,7 @@ void ToyShadows_ChooseLights()
 
 	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
+		ToyHoldBackUnchosenFlares();
 		return;
 	}
 
@@ -5869,6 +5907,8 @@ void ToyShadows_ChooseLights()
 		toyChosen[i].bright = light->LightBright;
 		toyChosen[i].flags = light->LightFlags;
 	}
+
+	ToyHoldBackUnchosenFlares();
 }
 
 // Gives the shadow pass this frame's list, and how many are on it. lights and owners have room for kToyMostLights each.
