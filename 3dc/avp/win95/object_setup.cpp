@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
-//   an impossible sequence number is skipped too, and an object with no usable sequence is left out
+//   an impossible sequence number is skipped too, and an object with no usable sequence is left out, as is a
+//   placed sound with no file name
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -3746,6 +3747,16 @@ void setup_sounds (Environment_Data_Chunk *envd)
 		for (LIF<Chunk *> cli(&cl); !cli.done(); cli.next())
 		{
 			Sound_Object_Chunk *snd = (Sound_Object_Chunk *) cli();
+
+			// A level file can leave a placed sound's file name blank, and the chunk then holds no name at all. Everything
+			// below, and the sound object the game makes later, measures and copies that name, so a sound with no name
+			// goes to the log and is left out of the level. None of the game's own 2062 placed sounds has a blank name.
+			if (!snd->wav_name)
+			{
+				LogErrorString("level file has a placed sound with no file name");
+				continue;
+			}
+
 			SOUND_TOOLS_TEMPLATE *stt = (SOUND_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(SOUND_TOOLS_TEMPLATE));
 			
 			stt->position.vx = (int)(snd->position.x * local_scale);
