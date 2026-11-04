@@ -8,7 +8,8 @@
 //   the same for a polygon's flat surface worked out each frame
 //   walls drawn from the fixed buffer cast shadows from their shapes, with nothing on the caster list
 //   with -keptsnap, a kept prism is finished each frame in the shader, from the same cut corners as the walls
-//   particles and coronas are written into their lists before those lists are closed, not after
+//   particles and coronas are written into their lists before those lists are closed, not after. Every writer now
+//   stops when its list says it has no room, and rain makes room the way the level's other shapes do
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -253,48 +254,6 @@ inline float HPos2DC(int32_t pos)
 	else {
 		return (float(pos / (float)ScreenDescriptorBlock.SDB_Height)* 2) - 1;
 	}
-}
-
-// AvP uses numVerts to represent the actual number of polygon vertices we're passing to the backend.
-// we then use the OUTPUT_TRIANGLE function to generate the indices required to represent those
-// polygons. This function calculates the number of indices required based on the number of vertices.
-// AvP code defined these, so hence the magic numbers.
-
-uint32_t GetNumIndices(uint32_t numVerts)
-{
-	uint32_t numIndices = 0;
-
-	switch (numVerts)
-	{
-		case 3:
-			numIndices = 3;
-			break;
-		case 4:
-			numIndices = 6;
-			break;
-		case 5:
-			numIndices = 9;
-			break;
-		case 6:
-			numIndices = 12;
-			break;
-		case 7:
-			numIndices = 15;
-			break;
-		case 8:
-			numIndices = 18;
-			break;
-		case 0:
-			numIndices = 0;
-			break;
-		case 256:
-			numIndices = 1350;
-			break;
-		default:
-			// need to check this is ok!!
-			numIndices = numVerts;
-	}
-	return numIndices;
 }
 
 bool staticDecalsTest = false;
@@ -694,7 +653,9 @@ void DrawProgressBar(const RECT &srcRect, const RECT &destRect, texID_t textureI
 	float RecipW = 1.0f / thisTexture.realWidth;
 	float RecipH = 1.0f / thisTexture.realHeight;
 
-	orthoList->AddItem(4, textureID, TRANSLUCENCY_OFF, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, textureID, TRANSLUCENCY_OFF, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	RCOLOR colour = RCOLOR_XRGB(255, 255, 255);
 
@@ -836,7 +797,9 @@ void DrawTallFontCharacter(uint32_t topX, uint32_t topY, texID_t textureID, uint
 	}
 	else
 	{
-		orthoList->AddItem(4, textureID, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+		if (!orthoList->AddItem(4, textureID, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+			return;
+		}
 
 		// bottom left
 		orthoVertex[orthoVBOffset].x = x1;
@@ -936,7 +899,9 @@ void DrawFadeQuad(uint32_t topX, uint32_t topY, uint32_t alpha)
 
 	RCOLOR colour = RCOLOR_ARGB(alpha,0,0,0);
 
-	orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -985,7 +950,9 @@ void DrawFontQuad(uint32_t x, uint32_t y, uint32_t charWidth, uint32_t charHeigh
 	float x2 = WPos2DC(x + charWidth);
 	float y2 = HPos2DC(y + charHeight);
 
-	orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_OFF, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_OFF, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = x1;
@@ -1036,7 +1003,9 @@ void DrawQuad(uint32_t x, uint32_t y, uint32_t width, uint32_t height, texID_t t
 
 	Texture tempTexture = Tex_GetTextureDetails(textureID);
 
-	orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, textureID, translucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = x1;
@@ -1166,7 +1135,9 @@ void DrawSmallMenuCharacter(uint32_t topX, uint32_t topY, uint32_t texU, uint32_
 	float x2 = WPos2DC(topX + font_width);
 	float y2 = HPos2DC(topY + font_height);
 
-	orthoList->AddItem(4, AAFontImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, AAFontImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = x1;
@@ -1395,7 +1366,9 @@ void DrawCoronas()
 		uint32_t sizeX = (ScreenDescriptorBlock.SDB_Width / 100) * 10;
 		uint32_t sizeY = sizeX;//(ScreenDescriptorBlock.SDB_Height / 100) * 11;
 
-		orthoList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+		if (!orthoList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+			continue; // no room for this one, and the end of this function still has to run
+		}
 
 		// bottom left
 		orthoVertex[orthoVBOffset].x = WPos2DC(transformedPoint.x - sizeX);
@@ -1502,9 +1475,13 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 	float RecipH = 1.0f / /*(float)*/ texHeight;
 
 	if (gunLayer) {
-		weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
+		if (!weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode)) {
+			return;
+		}
 	} else {
-		mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode);
+		if (!mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode)) {
+			return;
+		}
 	}
 
 	WriteSurfaceNormals(inputPolyPtr, shapePolygon);
@@ -1548,7 +1525,9 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	// Take header information
 	int32_t flags = inputPolyPtr->PolyFlags;
 
-	mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, RenderPolygon.TranslucencyMode);
+	if (!mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, RenderPolygon.TranslucencyMode)) {
+		return;
+	}
 
 	// With no texture, this reads the white one, so the surface pictures hold it as white. It's still a real surface, and the lights left out
 	// of the game's lighting for its shape are added from those pictures.
@@ -1588,7 +1567,9 @@ void D3D_PredatorThermalVisionPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVER
 		LockExecuteBuffer();
 	}
 
-	mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, TRANSLUCENCY_OFF);
+	if (!mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, TRANSLUCENCY_OFF)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -1628,9 +1609,13 @@ void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 
 //	mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL);
 	if (gunLayer) {
-		weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL);
+		if (!weaponList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL)) {
+			return;
+		}
 	} else {
-		mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL);
+		if (!mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, TRANSLUCENCY_NORMAL)) {
+			return;
+		}
 	}
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
@@ -1666,7 +1651,9 @@ void D3D_Rectangle(int x0, int y0, int x1, int y1, int r, int g, int b, int a)
 	float new_x2 = WPos2DC(x1);
 	float new_y2 = HPos2DC(y1);
 
-	orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = new_x1;
@@ -1715,7 +1702,9 @@ void D3D_HUDQuad_Output(texID_t textureID, struct VertexTag *quadVerticesPtr, ui
 	float RecipW = 1.0f / texWidth;
 	float RecipH = 1.0f / texHeight;
 
-	orthoList->AddItem(4, textureID, TRANSLUCENCY_GLOWING, filteringType, TEXTURE_CLAMP);
+	if (!orthoList->AddItem(4, textureID, TRANSLUCENCY_GLOWING, filteringType, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = WPos2DC(quadVerticesPtr[3].X);
@@ -1783,7 +1772,17 @@ void D3D_DrawParticle_Rain(PARTICLE *particlePtr, VECTORCH *prevPositionPtr)
 		TranslatePointIntoViewspace(&vertices[1]);
 		TranslatePointIntoViewspace(&vertices[2]);
 
-		mainList->AddItem(3, NO_TEXTURE, TRANSLUCENCY_NORMAL);
+		// A raindrop is three corners and a level can have 999 drops, so rain can reach the end of the main list like
+		// anything else in the level. When it does, what's waiting is drawn and the list starts again.
+		if (!mainList->Check(3)) {
+			UnlockExecuteBufferAndPrepareForUse();
+			ExecuteBuffer();
+			LockExecuteBuffer();
+		}
+
+		if (!mainList->AddItem(3, NO_TEXTURE, TRANSLUCENCY_NORMAL)) {
+			return;
+		}
 
 		VECTORCH *verticesPtr = vertices;
 
@@ -1893,7 +1892,9 @@ void D3D_Decal_Output(DECAL *decalPtr, RENDERVERTEX *renderVerticesPtr)
 				);
 	}
 
-	decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!decalList->AddItem(RenderPolygon.NumberOfVertices, textureID, decalDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -1965,7 +1966,9 @@ static void D3D_Particle_Output(PARTICLE *particlePtr, PARTICLEVERTEX *renderVer
 	float RecipW = 1.0f / (float) texWidth;
 	float RecipH = 1.0f / (float) texHeight;
 
-	particleList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+	if (!particleList->AddItem(4, SpecialFXImageNumber, (enum TRANSLUCENCY_TYPE)particleDescPtr->TranslucencyType, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+		return;
+	}
 
 	RCOLOR colour;
 
@@ -2491,7 +2494,9 @@ void DrawNoiseOverlay(int t)
 	uint32_t c = 255;
 	uint32_t size = 256;//*CameraZoomScale;
 
-	orthoList->AddItem(4, StaticImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, StaticImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -2542,7 +2547,9 @@ void DrawScanlinesOverlay(float level)
 
 	float size = 128.0f*(1.0f-level*0.8f);//*CameraZoomScale;
 
-	orthoList->AddItem(4, PredatorNumbersImageNumber, TRANSLUCENCY_NORMAL, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, PredatorNumbersImageNumber, TRANSLUCENCY_NORMAL, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -2607,7 +2614,9 @@ void D3D_SkyPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVertice
 	float RecipW = (1.0f / (float) texWidth)  / 65536.0f;
 	float RecipH = (1.0f / (float) texHeight) / 65536.0f;
 
-	mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!mainList->AddItem(RenderPolygon.NumberOfVertices, textureID, RenderPolygon.TranslucencyMode, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -2640,7 +2649,9 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 		LockExecuteBuffer();
 	}
 
-	mainList->AddItem(kNumMeshVerts, currentWaterTexture, TRANSLUCENCY_NORMAL);
+	if (!mainList->AddItem(kNumMeshVerts, currentWaterTexture, TRANSLUCENCY_NORMAL)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < kNumMeshVerts; i++)
 	{
@@ -2927,7 +2938,9 @@ extern void D3D_DrawColourBar(int yTop, int yBottom, int rScale, int gScale, int
 
 	for (uint32_t i = 0; i < 255;)
 	{
-		orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_OFF, FILTERING_BILINEAR_ON, TEXTURE_CLAMP);
+		if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_OFF, FILTERING_BILINEAR_ON, TEXTURE_CLAMP)) {
+			return;
+		}
 
 		unsigned int colour = 0;
 		unsigned int c = 0;
@@ -2994,7 +3007,9 @@ extern void D3D_FadeDownScreen(int brightness, int colour)
 		t = 0;
 	}
 
-	orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_NORMAL, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_NORMAL, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -3043,7 +3058,9 @@ extern void D3D_PlayerOnFireOverlay(void)
 	float u = (FastRandom()&255)/256.0f;
 	float v = (FastRandom()&255)/256.0f;
 
-	orthoList->AddItem(4, BurningImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, BurningImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -3093,7 +3110,9 @@ extern void D3D_ScreenInversionOverlay()
 	theta[0] = (CloakingPhase/8)&4095;
 	theta[1] = (800-CloakingPhase/8)&4095;
 
-	orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_DARKENINGCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_DARKENINGCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < 2; i++)
 	{
@@ -3142,7 +3161,9 @@ extern void D3D_ScreenInversionOverlay()
 		// only do this when finishing first loop, otherwise we reserve space for 4 verts we never add
 		if (i == 0)
 		{
-			orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_COLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+			if (!orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_COLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+				return;
+			}
 		}
 	}
 }
@@ -3151,7 +3172,9 @@ extern void D3D_PredatorScreenInversionOverlay()
 {
 	uint32_t colour = 0xffffffff;
 
-	orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_DARKENINGCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, NO_TEXTURE, TRANSLUCENCY_DARKENINGCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	// bottom left
 	orthoVertex[orthoVBOffset].x = -1.0f;
@@ -3220,7 +3243,9 @@ extern void D3D_PlayerDamagedOverlay(int intensity)
 
 	colour = 0xffffff - baseColour + (intensity<<24);
 
-	orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_INVCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+	if (!orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_INVCOLOUR, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+		return;
+	}
 
 	for (uint32_t i = 0; i < 2; i++)
 	{
@@ -3271,7 +3296,9 @@ extern void D3D_PlayerDamagedOverlay(int intensity)
 		// only do this when finishing first loop, otherwise we reserve space for 4 verts we never add
 		if (i == 0)
 		{
-			orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP);
+			if (!orthoList->AddItem(4, SpecialFXImageNumber, TRANSLUCENCY_GLOWING, FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {
+				return;
+			}
 		}
 	}
 }

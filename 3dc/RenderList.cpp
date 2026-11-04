@@ -22,17 +22,64 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a list no longer takes a shape its buffers have no room for, or a shape while its buffers are closed. It leaves
+//   the shape out and says so once in the log. Adding a command can no longer run off the end of the list. The log
+//   also says when a list passes each quarter of its room. GetNumIndices moved here from d3d_render.cpp, because
+//   this file is the one that writes the index numbers it counts
+
 #include "RenderList.h"
 #include "TextureManager.h"
 #include "texture_relief.h"
 #include "renderer.h"
 #include <algorithm>
+#include <string>
 #include <assert.h>
 #include "console.h"
 #include <assert.h>
 #include "logString.h"
 
-extern uint32_t GetNumIndices(uint32_t numVerts);
+// AvP uses numVerts to represent the actual number of polygon vertices we're passing to the backend.
+// we then use the OUTPUT_TRIANGLE function to generate the indices required to represent those
+// polygons. This function calculates the number of indices required based on the number of vertices.
+// AvP code defined these, so hence the magic numbers.
+
+uint32_t GetNumIndices(uint32_t numVerts)
+{
+	uint32_t numIndices = 0;
+
+	switch (numVerts)
+	{
+		case 3:
+			numIndices = 3;
+			break;
+		case 4:
+			numIndices = 6;
+			break;
+		case 5:
+			numIndices = 9;
+			break;
+		case 6:
+			numIndices = 12;
+			break;
+		case 7:
+			numIndices = 15;
+			break;
+		case 8:
+			numIndices = 18;
+			break;
+		case 0:
+			numIndices = 0;
+			break;
+		case 256:
+			numIndices = 1350;
+			break;
+		default:
+			// CreateIndices writes no index numbers for any other size, so this is more than enough room for it
+			numIndices = numVerts;
+	}
+	return numIndices;
+}
 
 // bit getters
 #define get_unused(src)			((src & 4278190080) >> 24)
@@ -70,6 +117,10 @@ RenderList::RenderList(const std::string &listName, size_t size, VertexBuffer **
 	layer = kLayerWorld;
 
 	useIndicesOffset = false;
+
+	leftOutBecauseFull = 0;
+	leftOutBecauseClosed = 0;
+	quartersReported = 0;
 
 	// treat the vector as an array so resize it to desired size
 	Items.reserve(size);
@@ -184,8 +235,23 @@ void RenderList::AddIndices(uint16_t *indexArray, uint32_t a, uint32_t b, uint32
 	(**ib).SetSize(iCount + 3);
 }
 
+// The list of shapes grows when it needs to. This is what keeps the next entry inside it.
+void RenderList::MakeRoomForOneMoreItem()
+{
+	if (GetSize() + 1 >= Items.size())
+	{
+		// list is full. let's just resize it
+		LogString("Resizing list " + listName);
+		Items.resize(Items.size() * 2);
+	}
+}
+
 void RenderList::AddCommand(int commandType)
 {
+	// Commands use none of the buffers, so they only need room in the list itself. Two in a row at the very end of the
+	// list used to write one entry past it.
+	MakeRoomForOneMoreItem();
+
 	Items[listIndex].sortKey = 0;
 	set_command     (Items[listIndex].sortKey, 1);
 	set_commandType (Items[listIndex].sortKey, commandType);
@@ -198,32 +264,51 @@ void RenderList::SetLayer(int layer)
 //	Items[listIndex].layerID = layer;
 }
 
+// Is there room in the buffers for one more shape with this many corners?
 bool RenderList::Check(uint32_t numVerts)
 {
 	uint32_t numIndices = GetNumIndices(numVerts);
 
-	// check that we have room in the VB and IB
-	if ((**vb).GetSize() + numVerts > (**vb).GetCapacity()) {
+	// Check that we have room in the VB and IB. Taking what's used away from the room can't wrap round to a small number
+	// the way adding a huge count to it could. What's used never exceeds the room, as this is the only way in.
+	if (numVerts > (**vb).GetCapacity() - (**vb).GetSize()) {
 		return false;
 	}
-	if ((**ib).GetSize() + numIndices > (**ib).GetCapacity()) {
+	if (numIndices > (**ib).GetCapacity() - (**ib).GetSize()) {
 		return false;
 	}
 
 	return true;
 }
 
-void RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY_TYPE translucencyMode, enum FILTERING_MODE_ID filteringMode, enum TEXTURE_ADDRESS_MODE textureAddress)
+bool RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY_TYPE translucencyMode, enum FILTERING_MODE_ID filteringMode, enum TEXTURE_ADDRESS_MODE textureAddress)
 {
 	assert(numVerts != 0);
 
-	// check that we have room in the render list array
-	if (GetSize()+1 >= Items.capacity())
+	// The caller is about to write this shape's corners into the buffers, so both have to be open: a closed buffer's
+	// memory belongs to the graphics card's driver again. A buffer also stays closed if opening it failed.
+	if (!(**vb)._isLocked || !(**ib)._isLocked)
 	{
-		// list is full. let's just resize it
-		LogString("Resizing list " + listName);
-		Items.resize(Items.capacity() * 2);
+		if (leftOutBecauseClosed == 0) {
+			LogString("Render list " + listName + " was asked for a shape while it was closed, so the shape is left out. Any more like it won't be logged.");
+		}
+		leftOutBecauseClosed++;
+		return false;
 	}
+
+	// Both also need room for the whole shape. Leaving it out costs one shape for one frame. Writing past the end of a
+	// buffer could damage anything at all.
+	if (!Check(numVerts))
+	{
+		if (leftOutBecauseFull == 0) {
+			LogString("Render list " + listName + " is full, so a shape is left out. Any more like it won't be logged.");
+		}
+		leftOutBecauseFull++;
+		return false;
+	}
+
+	// check that we have room in the render list array
+	MakeRoomForOneMoreItem();
 
 	uint32_t numIndices = GetNumIndices(numVerts);
 
@@ -257,6 +342,8 @@ void RenderList::AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY
 	// update the vertex buffer object with how many items it's holding
 	uint32_t currentSize = (**vb).GetSize();
 	(**vb).SetSize(currentSize + numVerts);
+
+	return true;
 }
 
 void RenderList::Sort()
@@ -267,8 +354,38 @@ void RenderList::Sort()
 	std::sort(Items.begin(), Items.begin() + listIndex);
 }
 
+// Writes a line to the log each time this list gets through another quarter of its room, at most four lines per list.
+// It's there to answer one question from a real run: how close does a busy frame come to filling each list?
+void RenderList::ReportHowFullItGot()
+{
+	uint32_t const vertexRoom = (**vb).GetCapacity();
+	uint32_t const indexRoom  = (**ib).GetCapacity();
+
+	if (!vertexRoom || !indexRoom) {
+		return;
+	}
+
+	uint32_t const verts   = (**vb).GetSize();
+	uint32_t const indices = (**ib).GetSize();
+
+	// Multiplied as 64-bit numbers, so a very large count can't wrap round to a small one. Whichever buffer is fuller
+	// is the one that counts.
+	uint32_t const vertexQuarters = static_cast<uint32_t>((static_cast<uint64_t>(verts)   * 4) / vertexRoom);
+	uint32_t const indexQuarters  = static_cast<uint32_t>((static_cast<uint64_t>(indices) * 4) / indexRoom);
+	uint32_t const quarters = (vertexQuarters > indexQuarters) ? vertexQuarters : indexQuarters;
+
+	if (quarters > quartersReported)
+	{
+		quartersReported = quarters;
+		LogString("Render list " + listName + " reached " + std::to_string(verts) + " of " + std::to_string(vertexRoom) + " corners and " + std::to_string(indices) + " of " + std::to_string(indexRoom) + " index numbers");
+	}
+}
+
 void RenderList::Reset()
 {
+	// the frame's numbers are about to go, so this is the moment to look at them
+	ReportHowFullItGot();
+
 	// reset our index back to the first item
 	listIndex = 0;
 
