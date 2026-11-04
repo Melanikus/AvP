@@ -4143,7 +4143,7 @@ static void ToyForgetCasters()
 static void ToyShadows_Draw()
 {
 	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
-	if (DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !Con_IsOpen())
+	if (DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
 	{
 		ToyShadowsMode = (ToyShadowsMode + 1) % kToyViewCount;
 
