@@ -126,10 +126,12 @@ jobs:
       - name: Fail if precompiled code is in the repository
         shell: bash
         run: |
-          found=$(git ls-files | grep -iE '\.(dll|lib|exp|exe|obj|o|a|so|dylib|pdb|ilk|ocx|sys)$' || true)
+          found=$(git ls-files | grep -iE '\.(dll|lib|exp|exe|obj|o|a|so|dylib|pdb|ilk|ocx|sys|zip|7z|rar|cab|gz|tgz|bz2|xz|zst|tar|msi|jar)$' || true)
           while IFS= read -r -d '' file; do
             [ -f "$file" ] || continue
             signature=$(head -c 8 -- "$file" | od -An -tx1 | tr -d ' \n')
+            # A plain tar file has no mark at its start. Its mark, "ustar", is 257 bytes in.
+            tar_mark=$(head -c 262 -- "$file" | tail -c +258 | od -An -tx1 | tr -d ' \n')
             case "$signature" in
               4d5a*)                                   ;; # Windows program or DLL
               7f454c46*)                               ;; # Linux program
@@ -138,13 +140,22 @@ jobs:
               213c617263683e*)                         ;; # static library
               0061736d*)                               ;; # WebAssembly
               4c01*|6486*|64aa*)                       ;; # Windows object file
-              *) continue ;;
+              504b0304*|504b0506*|504b0708*)           ;; # zip, and files built on it such as jar
+              377abcaf271c*)                           ;; # 7z
+              526172211a07*)                           ;; # rar
+              4d534346*)                               ;; # cab
+              1f8b*)                                   ;; # gzip
+              d0cf11e0a1b11ae1*)                       ;; # msi
+              425a683[1-9]31415926*)                   ;; # bzip2
+              fd377a585a00*)                           ;; # xz
+              28b52ffd*)                               ;; # zstd
+              *) [ "$tar_mark" = 7573746172 ] || continue ;;
             esac
             found="$found"$'\n'"$file"
           done < <(git ls-files -z)
           if [ -n "$found" ]; then
             echo "$found"
-            echo "::error::Precompiled code is in the repository"
+            echo "::error::Precompiled code, or an archive that could hold it, is in the repository"
             exit 1
           fi
           echo "No precompiled code found."
