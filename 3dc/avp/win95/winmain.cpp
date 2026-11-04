@@ -259,6 +259,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsDebug = 1;
 		}
+		extern int ToyShadowsTest;
+		if (strstr(command_line, "-shadowtest"))
+		{
+			ToyShadowsTest = 1;
+		}
 		extern int ToyShadowsMaxLights;
 		char const *lightsSwitch = strstr(command_line, "-shadowlights=");
 		if (lightsSwitch)

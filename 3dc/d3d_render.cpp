@@ -3510,6 +3510,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 int ToyShadowsEnabled = 1;
 int ToyShadowsDebug = 0;      // -shadowdebug: shows the first light's volumes as red wires and the shadowed pixels in red
 int ToyShadowsMaxLights = 1;  // -shadowlights=N, 1 to 8
+int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 
 struct ToyVec
 {
@@ -3524,6 +3525,7 @@ static const int   kToyMaxVerts        = 1200000;
 static const float kToyStartGap        = 8.0f;      // start just behind the polygon, or surfaces shadow themselves in speckles
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
 static const float kToyMostRange       = 100000.0f; // well inside the far plane, which z-fail needs
+static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
 static const float kToyFullDarkness    = 0.44f;     // a pixel every chosen light fails to reach loses this much of its brightness
 
 static ToyVec toyCasterPoints[kToyMaxCasterPoints];
@@ -3536,6 +3538,8 @@ static int toyCastersLeftOut = 0;
 static ToyVec toyVerts[kToyMaxVerts];
 static int toyNumVerts = 0;
 static int toyPrismsLeftOut = 0;
+static double toyStretchTotal = 0.0;   // how far corners were thrown past their polygon, for the log
+static int toyStretchCorners = 0;
 
 int ToyShadows_PickLights(float *lights, int most);
 
@@ -3600,10 +3604,16 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 	}
 
 	// the polygon's flat surface is out of the light's reach
-	if (fabsf(facing) / normalLength >= light[3])
+	float const planeDistance = fabsf(facing) / normalLength;
+	if (planeDistance >= light[3])
 	{
 		return;
 	}
+
+	// The far end is the polygon scaled up from the light, so it stays parallel to the polygon, one light range away from the
+	// light. Moving each corner out to the range instead fails on a big wall: its corners can all lie beyond the range while
+	// its middle is right by the light, and the prism comes out paper thin.
+	float const scale = light[3] / planeDistance;
 
 	// Rooms are shells seen from inside, so light from the next room hits the back of a wall. Polygons cast from both sides.
 	// A polygon facing the other way is read backwards, so that every prism is built the same way round.
@@ -3637,8 +3647,18 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light)
 		dy /= length;
 		dz /= length;
 
-		// the prism ends at the edge of the light's reach, or just past the polygon for a corner that lies beyond it
-		float const reach = (length + gap + 1.0f > light[3]) ? length + gap + 1.0f : light[3];
+		float reach = length * scale;
+		if (reach > kToyMostReach)
+		{
+			reach = kToyMostReach;
+		}
+		if (reach < length + gap + 1.0f)
+		{
+			reach = length + gap + 1.0f;   // the far end must stay behind the near end, or the prism turns inside out
+		}
+
+		toyStretchTotal += reach - length;
+		toyStretchCorners++;
 
 		nearPts[i].x = point.x + dx * gap;
 		nearPts[i].y = point.y + dy * gap;
@@ -3751,6 +3771,28 @@ static void ToySetVolumeState(LPDIRECT3DDEVICE9 device)
 	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
 }
 
+static int toyQueriesUnanswered = 0;
+
+// The card answers when it gets there, so this waits, but not for ever. A count that never came is noted, not taken for a 0.
+static unsigned int ToyAskCard(IDirect3DQuery9 *countQuery)
+{
+	DWORD counted = 0;
+	HRESULT answer = S_FALSE;
+
+	for (int tries = 0; tries < 1000000 && answer == S_FALSE; tries++)
+	{
+		answer = countQuery->GetData(&counted, sizeof(counted), D3DGETDATA_FLUSH);
+	}
+
+	if (answer != S_OK)
+	{
+		toyQueriesUnanswered++;
+		return 0;
+	}
+
+	return counted;
+}
+
 static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, IDirect3DQuery9 *countQuery, unsigned int *pixels)
 {
 	struct ToyScreenVertex
@@ -3791,21 +3833,91 @@ static HRESULT ToyDarkenStencilledPixels(LPDIRECT3DDEVICE9 device, DWORD shade, 
 	if (countQuery)
 	{
 		countQuery->Issue(D3DISSUE_END);
-
-		// the card answers when it gets there, so wait, but not for ever
-		DWORD counted = 0;
-		for (int tries = 0; tries < 1000000; tries++)
-		{
-			if (countQuery->GetData(&counted, sizeof(counted), D3DGETDATA_FLUSH) != S_FALSE)
-			{
-				break;
-			}
-		}
-
-		*pixels += counted;
+		*pixels += ToyAskCard(countQuery);
 	}
 
 	return result;
+}
+
+// Draws the volumes without touching the stencil or the picture, and counts the fragments that pass this depth test.
+static unsigned int ToyCountFragments(LPDIRECT3DDEVICE9 device, IDirect3DQuery9 *countQuery, DWORD cull, DWORD depthTest)
+{
+	device->SetRenderState(D3DRS_CULLMODE, cull);
+	device->SetRenderState(D3DRS_ZFUNC, depthTest);
+
+	countQuery->Issue(D3DISSUE_BEGIN);
+	ToyDrawVolumes(0);
+	countQuery->Issue(D3DISSUE_END);
+
+	return ToyAskCard(countQuery);
+}
+
+struct ToyMeasurements
+{
+	unsigned int backBehind, frontBehind;     // fragments behind what the scene drew: these are what z-fail counts
+	unsigned int backInFront, frontInFront;   // fragments in front of it
+	unsigned int stencilControl;              // pixels marked with no depth test at all: 0 here means the stencil path is broken
+	unsigned int zPass;                       // the same shadow, counted from the camera's side instead
+};
+
+// Leaves the picture alone: the depth buffer isn't written, colour writes are off, and the two stencil counts are read with a
+// fully see-through quad. The real pass clears the stencil again afterwards.
+static void ToyMeasure(LPDIRECT3DDEVICE9 device, IDirect3DQuery9 *countQuery, ToyMeasurements *measured)
+{
+	DWORD const seeThrough = 0;
+
+	ToySetVolumeState(device);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	measured->backBehind   = ToyCountFragments(device, countQuery, D3DCULL_CW,  D3DCMP_GREATER);
+	measured->frontBehind  = ToyCountFragments(device, countQuery, D3DCULL_CCW, D3DCMP_GREATER);
+	measured->backInFront  = ToyCountFragments(device, countQuery, D3DCULL_CW,  D3DCMP_LESSEQUAL);
+	measured->frontInFront = ToyCountFragments(device, countQuery, D3DCULL_CCW, D3DCMP_LESSEQUAL);
+
+	// every fragment of the volumes marks the stencil, whatever the depth buffer holds
+	device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+	ToySetVolumeState(device);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+	device->SetRenderState(D3DRS_STENCILREF, 1);
+	ToyDrawVolumes(0);
+	ToyDarkenStencilledPixels(device, seeThrough, countQuery, &measured->stencilControl);
+
+	// z-pass: front faces in front of the scene add one, back faces in front of it take one away
+	device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+	ToySetVolumeState(device);
+	device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INCR);
+	ToyDrawVolumes(0);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+	device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_DECR);
+	ToyDrawVolumes(0);
+	ToyDarkenStencilledPixels(device, seeThrough, countQuery, &measured->zPass);
+}
+
+// A closed box round the light. Every direction out of the light hits it, so everything in range is in its shadow, whatever
+// the room looks like.
+static void ToyAddTestBox(const float *light)
+{
+	float const size = 100.0f;
+	ToyVec corners[8];
+
+	for (int i = 0; i < 8; i++)
+	{
+		corners[i].x = light[0] + ((i & 1) ? size : -size);
+		corners[i].y = light[1] + ((i & 2) ? size : -size);
+		corners[i].z = light[2] + ((i & 4) ? size : -size);
+	}
+
+	static const int kFaces[6][4] = { { 0, 1, 3, 2 }, { 4, 5, 7, 6 }, { 0, 1, 5, 4 }, { 2, 3, 7, 6 }, { 0, 2, 6, 4 }, { 1, 3, 7, 5 } };
+
+	for (int face = 0; face < 6; face++)
+	{
+		ToyVec const points[4] = { corners[kFaces[face][0]], corners[kFaces[face][1]], corners[kFaces[face][2]], corners[kFaces[face][3]] };
+		ToyAddPrism(points, 4, light);
+	}
 }
 
 static void ToyForgetCasters()
@@ -3815,6 +3927,8 @@ static void ToyForgetCasters()
 	toyCastersLeftOut = 0;
 	toyPrismsLeftOut = 0;
 	toyNumVerts = 0;
+	toyStretchTotal = 0.0;
+	toyStretchCorners = 0;
 }
 
 static void ToyShadows_Draw()
@@ -3867,6 +3981,12 @@ static void ToyShadows_Draw()
 		countQuery = 0;
 	}
 
+	ToyMeasurements measured = { 0, 0, 0, 0, 0, 0 };
+	unsigned int pixelsByLight[kToyMostLights] = { 0 };
+	bool const counting = countQuery != 0;
+	ToyVec sampleNear = { 0.0f, 0.0f, 0.0f };
+	ToyVec sampleFar = { 0.0f, 0.0f, 0.0f };
+
 	for (int light = 0; light < report.lights; light++)
 	{
 		toyNumVerts = 0;
@@ -3874,7 +3994,23 @@ static void ToyShadows_Draw()
 		{
 			ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], &lights[light * 4]);
 		}
+		if (ToyShadowsTest)
+		{
+			ToyAddTestBox(&lights[light * 4]);
+		}
 		report.verts += toyNumVerts;
+
+		if (countQuery && light == 0)
+		{
+			// the first thing each prism writes is a near corner, then the far corner that goes with it
+			if (toyNumVerts >= 6)
+			{
+				sampleNear = toyVerts[0];
+				sampleFar = toyVerts[3];
+			}
+
+			ToyMeasure(device, countQuery, &measured);
+		}
 
 		HRESULT const cleared = device->Clear(0, NULL, D3DCLEAR_STENCIL, 0, 1.0f, 0);
 		if (FAILED(cleared))
@@ -3912,11 +4048,12 @@ static void ToyShadows_Draw()
 			device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
 		}
 
-		HRESULT const darkened = ToyDarkenStencilledPixels(device, shade, countQuery, &report.pixels);
+		HRESULT const darkened = ToyDarkenStencilledPixels(device, shade, countQuery, &pixelsByLight[light]);
 		if (FAILED(darkened))
 		{
 			report.quad = darkened;
 		}
+		report.pixels += pixelsByLight[light];
 	}
 
 	if (countQuery)
@@ -3935,6 +4072,36 @@ static void ToyShadows_Draw()
 		QueryPerformanceFrequency(&ticksPerSecond);
 		report.milliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
 		ToyLogFrame(report);
+
+		char line[240];
+		if (counting)
+		{
+			float const distance = sqrtf(lights[0] * lights[0] + lights[1] * lights[1] + lights[2] * lights[2]);
+
+			_snprintf(line, sizeof(line) - 1,
+				"toy-shadows: first light, distance %.0f, range %.0f: behind the scene back %u front %u, in front of it back %u front %u, stencil control %u, z-pass %u, unanswered %d",
+				distance, lights[3], measured.backBehind, measured.frontBehind, measured.backInFront, measured.frontInFront,
+				measured.stencilControl, measured.zPass, toyQueriesUnanswered);
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
+
+			_snprintf(line, sizeof(line) - 1,
+				"toy-shadows: first light at %.0f %.0f %.0f, a prism from %.0f %.0f %.0f to %.0f %.0f %.0f, corners thrown %.0f on average",
+				lights[0], lights[1], lights[2], sampleNear.x, sampleNear.y, sampleNear.z, sampleFar.x, sampleFar.y, sampleFar.z,
+				toyStretchCorners ? toyStretchTotal / toyStretchCorners : 0.0);
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
+
+			_snprintf(line, sizeof(line) - 1, "toy-shadows: pixels in shadow by light: %u %u %u %u %u %u %u %u",
+				pixelsByLight[0], pixelsByLight[1], pixelsByLight[2], pixelsByLight[3],
+				pixelsByLight[4], pixelsByLight[5], pixelsByLight[6], pixelsByLight[7]);
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
+		}
+		else
+		{
+			LogString("toy-shadows: the card gave no occlusion query, so every pixel count on this frame means nothing");
+		}
 	}
 
 	ToyForgetCasters();
