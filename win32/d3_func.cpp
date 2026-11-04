@@ -33,6 +33,7 @@
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
 #include "frame_timing.h"
+#include "shadow_debug.h"
 #include "surface_pictures.h"
 #include "texture_relief.h"
 #include "shader_model.h"
@@ -195,6 +196,7 @@ uint32_t R_GetScreenWidth()
 bool ReleaseVolatileResources()
 {
 	FrameTiming_Release();
+	ShadowCapture_GiveUp();
 	extern void ToyShadows_ReleaseTargets();
 	ToyShadows_ReleaseTargets();
 

@@ -49,6 +49,15 @@
 #include "pixel_lights.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
+#include "shadow_debug.h"
+#include "texture_relief.h"
+
+// The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
+#if __has_include("build_commit.h")
+#include "build_commit.h"
+#else
+#define AVP_BUILD_COMMIT "not known"
+#endif
 #include "static_frame.h"
 #include "surface_static.h"
 #include "shadow_volumes.h"
@@ -391,6 +400,7 @@ static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
+static void ShadowStatus_Draw();
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
 static const int kFramesBetweenReports = 300;   // how often the shadow pass writes its report to the log
@@ -2667,6 +2677,8 @@ void ThisFramesRenderingHasFinished()
 
 	Con_Draw();
 
+	ShadowStatus_Draw();
+
 	ToyShadows_NoteFrameLights(toyFrame + 1);  // the pass below is that frame
 
 	UnlockExecuteBufferAndPrepareForUse();
@@ -2674,8 +2686,14 @@ void ThisFramesRenderingHasFinished()
 	ExecuteBuffer();
 	toyFinalFlush = false;
 	FrameTiming_Mark(kStageAfter);
-	R_EndScene();
+
+	{
+		ProcessorStageClock clock(kProcessorEndScene);
+		R_EndScene();
+	}
+
 	FrameTiming_EndFrame();
+	ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 
 	Tex_CheckMemoryUsage();
 
@@ -3691,6 +3709,15 @@ static int toyCasterCount[kToyMaxCasters];
 static ToyFlatSurface toyCasterSurface[kToyMaxCasters];
 static float toyCameraInWorld[3];   // where the camera is, in the world's numbers
 static const float kCameraOnTheList[3] = { 0.0f, 0.0f, 0.0f };   // and in the light list's numbers it's always here
+// For a capture: which light's prisms are being built now, or -1, and what each light has cost this frame, added up over its passes.
+static int captureLightBeingBuilt = -1;
+static int captureCornersSent[kToyMostLights];
+static int captureCornersKept[kToyMostLights];
+static int keptGroupsMadeThisFrame = 0;
+
+int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
+int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
+
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
 static bool prismsForPictures = false;   // true if this frame draws the surface pictures, and false if it takes the flat shadows
 static bool casterDrawnOneSided[kToyMaxCasters];  // only on a report frame: true for a polygon the game draws and hides the back of. See CheckNoPolygonSeenFromBehind
@@ -5383,6 +5410,7 @@ static bool MakeKeptPrisms(const KeptGroup &group, const ShadowVolumeKey &key, c
 
 	ShadowVolumes_Keep(key, corners);
 	FrameTiming_CountKeptGroupsMade();
+	keptGroupsMadeThisFrame++;
 	run->first = place;
 	run->corners = corners;
 
@@ -5545,6 +5573,12 @@ static void ToyBuildPrisms(const float *light, const float *centre, const void *
 		ToyAddTestBox(light, centre);
 	}
 	report->verts += toyNumVerts + keptCorners + numWorldCorners;
+
+	if (captureLightBeingBuilt >= 0)
+	{
+		captureCornersSent[captureLightBeingBuilt] += toyNumVerts + numWorldCorners;
+		captureCornersKept[captureLightBeingBuilt] += keptCorners;
+	}
 	keptCornersThisPass = keptCorners;
 }
 
@@ -5993,8 +6027,127 @@ static void ToyReadPicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture,
 	copy->Release();
 }
 
+// Reads a picture back, and hands every fourth pixel each way to the flicker number. It makes the game wait for the card, so it's only with -shadowflicker.
+static void ReadPictureSamples(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *picture, FlickerPicture which)
+{
+	static std::vector<float> samples;
+
+	D3DSURFACE_DESC size;
+	IDirect3DSurface9 *copy = 0;
+	D3DLOCKED_RECT locked;
+
+	if (FAILED(picture->GetDesc(&size))
+		|| FAILED(device->CreateOffscreenPlainSurface(size.Width, size.Height, size.Format, D3DPOOL_SYSTEMMEM, &copy, NULL)))
+	{
+		return;
+	}
+
+	if (SUCCEEDED(device->GetRenderTargetData(picture, copy)) && SUCCEEDED(copy->LockRect(&locked, NULL, D3DLOCK_READONLY)))
+	{
+		samples.clear();
+
+		for (UINT y = 0; y < size.Height; y += 4)
+		{
+			unsigned char const *row = (unsigned char const *)locked.pBits + y * locked.Pitch;
+
+			for (UINT x = 0; x < size.Width; x += 4)
+			{
+				if (size.Format == D3DFMT_R16F)
+				{
+					samples.push_back(ToyHalfFloat(*(unsigned short const *)(row + x * 2)));
+				}
+				else if (size.Format == D3DFMT_A16B16G16R16F)
+				{
+					samples.push_back(ToyHalfFloat(*(unsigned short const *)(row + x * 8)));
+				}
+				else
+				{
+					// blue, green, red and a spare. A mask in this format keeps its number in red, from 0 to 1, and the screen is an average, from 0 to 255
+					unsigned char const *pixel = row + x * 4;
+					samples.push_back((picture == toyMaskSurface) ? (float)pixel[2] / 255.0f : ((float)pixel[0] + (float)pixel[1] + (float)pixel[2]) / 3.0f);
+				}
+			}
+		}
+
+		copy->UnlockRect();
+		Flicker_AddPicture(which, samples);
+	}
+
+	copy->Release();
+}
+
+// A small number for what carries a light, for a capture's numbers. The real thing is a place in memory, and that's no use to anyone reading them. 0 means nothing does.
+static int OwnerNumber(const void *owner)
+{
+	static void const *seen[64];
+
+	if (!owner)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < 64; i++)
+	{
+		if (seen[i] == owner)
+		{
+			return i + 1;
+		}
+
+		if (!seen[i])
+		{
+			seen[i] = owner;
+			return i + 1;
+		}
+	}
+
+	return 65;
+}
+
+// One frame's lines for a capture's numbers.txt.
+static void NoteCaptureNumbers(int frame, const float *lights, const void *const *owners, int numLights, const unsigned int *pixels)
+{
+	float view[12];
+	ToyShadows_ViewMatrix(view);
+
+	char line[500];
+	std::string numbers;
+
+	_snprintf(line, sizeof(line) - 1,
+		"frame %d, view %s: camera at %.1f %.1f %.1f; right %.4f %.4f %.4f, up %.4f %.4f %.4f, forward %.4f %.4f %.4f; %d polygons on the list, %d walls from the fixed buffer, %d kept groups made, %d prisms beyond range left out\n",
+		frame, kToyViewNames[ToyShadowsMode], toyCameraInWorld[0], toyCameraInWorld[1], toyCameraInWorld[2],
+		view[0], view[1], view[2], view[4], view[5], view[6], view[8], view[9], view[10],
+		toyNumCasters, numWalkedGroups, keptGroupsMadeThisFrame, prismsOutOfRange);
+	line[sizeof(line) - 1] = 0;
+	numbers += line;
+
+	for (int i = 0; i < numLights && i < kToyMostLights; i++)
+	{
+		float const *light = &lights[i * kToyLightFloats];
+
+		if (LightOnListIsDark(light))
+		{
+			continue;
+		}
+
+		_snprintf(line, sizeof(line) - 1,
+			"  light %d: kind %.0f, at %.1f %.1f %.1f, range %.0f, strength %.3f, owner %d, %d positions, corners sent %d, corners kept %d, pixels marked %u\n",
+			i, light[7], light[kToyLightWorld + 0], light[kToyLightWorld + 1], light[kToyLightWorld + 2], light[3], (light[4] + light[5] + light[6]) / 3.0f,
+			OwnerNumber(owners[i]), ToyPositionsForLight(light), captureCornersSent[i], captureCornersKept[i], pixels[i]);
+		line[sizeof(line) - 1] = 0;
+		numbers += line;
+	}
+
+	ShadowCapture_AddNumbers(numbers);
+}
+
 static void ToyForgetCasters()
 {
+	FrameTiming_SetPolygonsCollected(toyNumCasters);
+	captureLightBeingBuilt = -1;
+	keptGroupsMadeThisFrame = 0;
+	memset(captureCornersSent, 0, sizeof(captureCornersSent));
+	memset(captureCornersKept, 0, sizeof(captureCornersKept));
+
 	ToyShadows_NextCollectingFrame();
 	toyNumUnseenModules = 0;
 	toyNumCasters = 0;
@@ -6015,7 +6168,6 @@ static void ToyForgetCasters()
 	toyNumVerts = 0;
 	toyStretchTotal = 0.0;
 	toyStretchCorners = 0;
-	FrameTiming_SetPolygonsCollected(toyNumCasters);
 	earlyFlushThisFrame = false;
 	SurfaceNormals_ForgetModulesDrawn();
 	polygonsReachKept = 0;
@@ -6033,6 +6185,136 @@ static bool ToyDepthBufferHasStencil()
 	D3DFORMAT const format = d3d.d3dpp.AutoDepthStencilFormat;
 
 	return format == D3DFMT_D24S8 || format == D3DFMT_D24FS8;
+}
+
+// One line of the tag, with its right edge at rightX. The same sums as D3D_RenderHUDString_Centred, which is the game's own text, at another size.
+static void DrawStatusLine(const char *text, int rightX, int y, int scale)
+{
+	int x = rightX;
+
+	for (char const *p = text; *p; p++)
+	{
+		x -= MUL_FIXED(scale, AAFontWidths[(unsigned char)*p]);
+	}
+
+	VertexTag quadVertices[4];
+
+	quadVertices[0].Y = y - MUL_FIXED(scale, 1);
+	quadVertices[1].Y = y - MUL_FIXED(scale, 1);
+	quadVertices[2].Y = y + MUL_FIXED(scale, HUD_FONT_HEIGHT + 1);
+	quadVertices[3].Y = y + MUL_FIXED(scale, HUD_FONT_HEIGHT + 1);
+
+	for (char const *p = text; *p; p++)
+	{
+		unsigned char const c = (unsigned char)*p;
+		int const topLeftU = 1 + ((c - 32) & 15) * 16;
+		int const topLeftV = 1 + ((c - 32) >> 4) * 16;
+
+		quadVertices[0].U = topLeftU - 1;
+		quadVertices[0].V = topLeftV;
+		quadVertices[1].U = topLeftU + HUD_FONT_WIDTH + 1;
+		quadVertices[1].V = topLeftV;
+		quadVertices[2].U = topLeftU + HUD_FONT_WIDTH + 1;
+		quadVertices[2].V = topLeftV + HUD_FONT_HEIGHT + 1;
+		quadVertices[3].U = topLeftU - 1;
+		quadVertices[3].V = topLeftV + HUD_FONT_HEIGHT + 1;
+
+		quadVertices[0].X = x - MUL_FIXED(scale, 1);
+		quadVertices[3].X = x - MUL_FIXED(scale, 1);
+		quadVertices[1].X = x + MUL_FIXED(scale, HUD_FONT_WIDTH + 1);
+		quadVertices[2].X = x + MUL_FIXED(scale, HUD_FONT_WIDTH + 1);
+
+		D3D_HUDQuad_Output(AAFontImageNumber, quadVertices, 0xFFFFFFFF, FILTERING_BILINEAR_ON);
+
+		x += MUL_FIXED(scale, AAFontWidths[c]);
+	}
+}
+
+// The tag on the top right of the screen, which says how this build is running, so that a moment in a video can be matched to the log. It's only
+// a few more polygons on the list the display already uses, so it can't hold anything up. It's only there while a level is being shown.
+static void ShadowStatus_Draw()
+{
+	const char *ToyShadows_RoomName();
+	bool ToyShadows_TakeViewRan();
+
+	bool const viewRan = ToyShadows_TakeViewRan();
+
+	if (!ShadowStatusOn || !viewRan)
+	{
+		return;
+	}
+
+	enum { kMostLines = 9, kLineLength = 48 };
+	char lines[kMostLines][kLineLength];
+	int numLines = 0;
+
+	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s", KeptPrismsOff ? "OFF" : "ON");
+	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF %s", (textureRelief.IsReady() && ToyShadowsMode != kViewFinalNoRelief) ? "ON" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);
+	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
+	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
+	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
+
+	if (ShadowFlickerOn)
+	{
+		_snprintf(lines[numLines++], kLineLength - 1, "COUNTING FLICKER");
+	}
+
+	if (ShadowCapture_IsOn())
+	{
+		_snprintf(lines[numLines++], kLineLength - 1, "CAPTURING");
+	}
+
+	int characters = 0;
+
+	for (int i = 0; i < numLines; i++)
+	{
+		lines[i][kLineLength - 1] = 0;
+
+		// a room's name comes from the level file, and only these have a place in the font
+		for (char *p = lines[i]; *p; p++, characters++)
+		{
+			if ((unsigned char)*p < 32 || (unsigned char)*p > 126)
+			{
+				*p = '?';
+			}
+		}
+	}
+
+	// half the HUD's own size is still easy to read in a video, and hides less
+	int const scale = (HUDScaleFactor / 2 > ONE_FIXED) ? HUDScaleFactor / 2 : ONE_FIXED;
+	int const lineHeight = MUL_FIXED(scale, HUD_FONT_HEIGHT + 3);
+	int const margin = MUL_FIXED(scale, 6);
+	int const rightX = ScreenDescriptorBlock.SDB_Width - margin;
+
+	int widest = 0;
+
+	for (int i = 0; i < numLines; i++)
+	{
+		int width = 0;
+
+		for (char const *p = lines[i]; *p; p++)
+		{
+			width += MUL_FIXED(scale, AAFontWidths[(unsigned char)*p]);
+		}
+
+		widest = (width > widest) ? width : widest;
+	}
+
+	// room for the backing and every letter, or none of it
+	if (!orthoList->Check(4 + characters * 4) || widest + margin * 2 > (int)ScreenDescriptorBlock.SDB_Width)
+	{
+		return;
+	}
+
+	// a dark backing, so that the white letters can be read over anything
+	DrawQuad(rightX - widest - margin, margin / 2, widest + margin * 2 - margin / 2, lineHeight * numLines + margin, NO_TEXTURE, RCOLOR_ARGB(150, 0, 0, 0), TRANSLUCENCY_NORMAL);
+
+	for (int i = 0; i < numLines; i++)
+	{
+		DrawStatusLine(lines[i], rightX, margin + i * lineHeight, scale);
+	}
 }
 
 static void ToyShadows_Draw()
@@ -6064,12 +6346,28 @@ static void ToyShadows_Draw()
 		LogString(message);
 	}
 
+	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
+	if (IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	{
+		if (DebouncedKeyboardInput[KEY_F8])
+		{
+			ShadowCapture_Start(toyFrame + 1);
+		}
+
+		if (DebouncedKeyboardInput[KEY_F7])
+		{
+			ShadowStatusOn = !ShadowStatusOn;
+		}
+	}
+
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
 	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief)
 		&& (toyNumCasters > 0 || numWalkedGroups > 0) && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
+
+	FrameTiming_SetFrameNumber(toyFrame);
 
 	ToyFrameReport report = { toyFrame, toyNumCasters, 0, 0, S_OK, S_OK, S_OK, S_OK, S_OK, 0, 0.0f, 0.0f };
 
@@ -6153,7 +6451,9 @@ static void ToyShadows_Draw()
 	// with the full report, ask the card how many pixels the stencil let through
 	bool const fullReport = logThisFrame && ShadowsFullReport != 0;
 	IDirect3DQuery9 *countQuery = 0;
-	if (fullReport && FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
+	bool const capturingFrame = ShadowCapture_IsOn();
+
+	if ((fullReport || capturingFrame) && FAILED(device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &countQuery)))
 	{
 		countQuery = 0;
 	}
@@ -6258,6 +6558,8 @@ static void ToyShadows_Draw()
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
 
+		captureLightBeingBuilt = light;
+
 		// lights added per pixel come after the world has been darkened
 		if (thisLight[7] == 2.0f || LightOnListIsDark(thisLight))
 		{
@@ -6314,7 +6616,7 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
-		if (countQuery && !measuredThisFrame && ToyShadowsMode == kToyViewPolygons)
+		if (fullReport && countQuery && !measuredThisFrame && ToyShadowsMode == kToyViewPolygons)
 		{
 			measuredLight = thisLight;
 
@@ -6397,6 +6699,17 @@ static void ToyShadows_Draw()
 			}
 
 			FrameTiming_Mark(kStageShading);
+
+			if (capturingFrame)
+			{
+				ShadowCapture_TakeMask(device, toyMaskSurface);
+			}
+
+			if (ShadowFlickerOn)
+			{
+				ReadPictureSamples(device, toyMaskSurface, kFlickerMask);
+			}
+
 			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
 			FrameTiming_Mark(kStageSoftening);
 
@@ -6415,6 +6728,8 @@ static void ToyShadows_Draw()
 		for (int light = 0; light < report.lights; light++)
 		{
 			float const *thisLight = &lights[light * kToyLightFloats];
+
+			captureLightBeingBuilt = light;
 
 			// Without the pictures there's no adding a light. That's only ever one frame: the first after they're lost, before the lights go back to the game.
 			RECT reach;
@@ -6489,6 +6804,11 @@ static void ToyShadows_Draw()
 				ToyReadPicture(device, screen, 255.0f, &screenAtEnd);
 			}
 
+			if (ShadowFlickerOn)
+			{
+				ReadPictureSamples(device, screen, kFlickerScreen);
+			}
+
 			screen->Release();
 		}
 	}
@@ -6496,6 +6816,16 @@ static void ToyShadows_Draw()
 	if (countQuery)
 	{
 		countQuery->Release();
+	}
+
+	if (capturingFrame)
+	{
+		NoteCaptureNumbers(toyFrame, lights, lightOwners, report.lights, pixelsByLight);
+	}
+
+	if (ShadowFlickerOn)
+	{
+		Flicker_EndFrame(toyFrame, toyCameraInWorld, worldAxes);
 	}
 
 	{

@@ -16,6 +16,7 @@
 #include "surface_normals.h"
 #include "surface_pictures.h"
 #include "frame_timing.h"
+#include "shadow_debug.h"
 #include "TextureManager.h"
 
 #include <stdio.h>
@@ -256,6 +257,7 @@ void StaticLevel_BuildThisLevel()
 void StaticLevel_Release()
 {
 	FrameTiming_WriteStalls();   // the same moment a level ends, and this is the one place all of them pass
+	Flicker_WriteReport();
 
 	ready = false;
 

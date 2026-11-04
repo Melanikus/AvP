@@ -265,6 +265,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsMode = 0;
 		}
+		extern int ShadowFlickerOn;
+		if (strstr(command_line, "-shadowflicker"))
+		{
+			ShadowFlickerOn = 1;
+		}
+		extern int ShadowStatusOn;
+		if (strstr(command_line, "-statusoff"))
+		{
+			ShadowStatusOn = 0;
+		}
 		extern int ShadowsFullReport;
 		if (strstr(command_line, "-shadowreport"))
 		{
@@ -658,9 +668,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 		while (AvP.MainLoopRunning && bRunning) 
 		{
-			CheckForWindowsMessages();
+			{
+				ProcessorStageClock clock(kProcessorMessages);
 
-			CursorHome();
+				CheckForWindowsMessages();
+
+				CursorHome();
+			}
 
 			#if debug
 			if (memoryInitialisationFailure)
@@ -704,15 +718,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 							UpdateGame();
 						}
 
-						AvpShowViews();
+						{
+							ProcessorStageClock clock(kProcessorViews);
 
-						// Do screen shot here so that text and hud graphics aren't shown
-						MaintainHUD();
+							AvpShowViews();
+						}
 
-						FlushTextprintBuffer();
+						{
+							ProcessorStageClock clock(kProcessorHud);
 
-						// check music status
-						Music_Check();
+							// Do screen shot here so that text and hud graphics aren't shown
+							MaintainHUD();
+
+							FlushTextprintBuffer();
+
+							// check music status
+							Music_Check();
+						}
 
 						// check to see if we're pausing the game;
 						// if so kill off any sound effects
@@ -729,7 +751,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 					}
 
 					// draw ingame menu
-					menusActive = AvP_InGameMenus();
+					{
+						ProcessorStageClock clock(kProcessorMenus);
+
+						menusActive = AvP_InGameMenus();
+					}
+
 					if (AvP.RestartLevel) menusActive = FALSE;
 
 					if (AvP.LevelCompleted)

@@ -42,6 +42,7 @@ void FrameTiming_WriteStalls();
 // What a stall's entry says about its frame.
 void FrameTiming_SetRoom(const char *room);
 void FrameTiming_SetPolygonsCollected(int polygons);
+void FrameTiming_SetFrameNumber(int frame);   // the number the shadow pass's reports and the tag on the screen use for this frame
 void FrameTiming_CountPlacesChanged(int places);
 void FrameTiming_CountKeptGroupsMade();
 
@@ -75,6 +76,11 @@ enum ProcessorStage
 	kProcessorStateBlock,   // saving and putting back all the card's settings around the shadow pass, which is part of that pass
 	kProcessorBeginScene,   // starting a frame. A driver that's holding a frame back to match the screen can wait here and not in present
 	kProcessorGame,         // the game itself: animation, movement, what everything does
+	kProcessorMessages,     // what Windows has to say, and anything else at the top of the loop
+	kProcessorViews,        // working out what's on screen. Shapes are part of this
+	kProcessorHud,          // the display, and looking after the music
+	kProcessorMenus,        // the menus, which are asked every frame
+	kProcessorEndScene,     // finishing a frame
 	kProcessorLog,          // handing lines to the log. It should never be more than a moment: see logString.cpp
 	kNumProcessorStages
 };

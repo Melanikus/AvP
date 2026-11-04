@@ -156,6 +156,12 @@
     <ClCompile Include="..\..\3dc\frame_timing.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\flicker_meter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\static_frame.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

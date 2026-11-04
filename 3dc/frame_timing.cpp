@@ -94,6 +94,9 @@ static bool effectSeen[kEffectsKept];
 static int64_t processorTotal[kNumProcessorStages];
 static int64_t mainVerticesTotal = 0;
 static int64_t drawsTotal = 0;
+static int texturesFirstUsedTotal = 0;
+static int64_t textureBytesFirstUsedTotal = 0;
+static int effectsFirstUsedTotal = 0;
 static int framesCounted = 0;
 static int64_t lastReportClock = 0;
 
@@ -136,6 +139,11 @@ void FrameTiming_SetPolygonsCollected(int polygons)
 	thisFrame.polygonsCollected = polygons;
 }
 
+void FrameTiming_SetFrameNumber(int frame)
+{
+	thisFrame.frame = frame;
+}
+
 void FrameTiming_CountPlacesChanged(int places)
 {
 	thisFrame.placesChanged += places;
@@ -174,6 +182,8 @@ void FrameTiming_NoteNewTexture(const char *name, uint32_t bytes)
 
 	thisFrame.texturesNew++;
 	thisFrame.textureBytesNew += bytes;
+	texturesFirstUsedTotal++;
+	textureBytesFirstUsedTotal += bytes;
 }
 
 void FrameTiming_NoteEffectUsed(uint32_t effect, const char *name)
@@ -184,6 +194,7 @@ void FrameTiming_NoteEffectUsed(uint32_t effect, const char *name)
 	}
 
 	effectSeen[effect] = true;
+	effectsFirstUsedTotal++;
 
 	size_t const used = strlen(thisFrame.effectsNew);
 
@@ -379,17 +390,34 @@ void FrameTiming_CountDraw()
 	drawsTotal++;
 }
 
+// What the clocks that don't overlap add up to. Anything left of a frame is in none of them.
+static double ClockedPartsOf(double const *stage)
+{
+	return stage[kProcessorMessages] + stage[kProcessorGame] + stage[kProcessorViews] + stage[kProcessorHud] + stage[kProcessorMenus] + stage[kProcessorLocks]
+		+ stage[kProcessorDrawing] + stage[kProcessorBeginScene] + stage[kProcessorEndScene] + stage[kProcessorPresent];
+}
+
 void FrameTiming_WriteStalls()
 {
 	for (int i = 0; i < stallsHeld; i++)
 	{
 		StallEntry const &stall = stalls[i];
-		char line[500];
+		char line[800];
+
+		double stages[kNumProcessorStages];
+
+		for (int stage = 0; stage < kNumProcessorStages; stage++)
+		{
+			stages[stage] = stall.stage[stage];
+		}
+
+		double const left = stall.milliseconds - ClockedPartsOf(stages);
 
 		_snprintf(line, sizeof(line) - 1,
-			"stall: frame %d took %.1f ms%s: shapes %.1f, locks %.1f, drawing %.1f of which shadow pass %.1f, present %.1f, starting the scene %.1f, game %.1f, log %.1f; room %s; %d places changed, %d kept groups made, %d polygons collected, %d textures first used (%u KB, first %s), first use of effects: %s",
-			stall.frame, stall.milliseconds, stall.deviceReset ? " with a device reset" : "", stall.stage[kProcessorShapes], stall.stage[kProcessorLocks], stall.stage[kProcessorDrawing],
-			stall.stage[kProcessorShadowPass], stall.stage[kProcessorPresent], stall.stage[kProcessorBeginScene], stall.stage[kProcessorGame], stall.stage[kProcessorLog], stall.room,
+			"stall: frame %d took %.1f ms%s: messages %.1f, game %.1f, views %.1f of which shapes %.1f, display %.1f, menus %.1f, locks %.1f, drawing %.1f of which shadow pass %.1f, finishing %.1f, present %.1f, starting the scene %.1f, log %.1f, in no clock %.1f; room %s; %d places changed, %d kept groups made, %d polygons collected, %d textures first used (%u KB, first %s), first use of effects: %s",
+			stall.frame, stall.milliseconds, stall.deviceReset ? " with a device reset" : "", stall.stage[kProcessorMessages], stall.stage[kProcessorGame], stall.stage[kProcessorViews], stall.stage[kProcessorShapes],
+			stall.stage[kProcessorHud], stall.stage[kProcessorMenus], stall.stage[kProcessorLocks], stall.stage[kProcessorDrawing], stall.stage[kProcessorShadowPass], stall.stage[kProcessorEndScene],
+			stall.stage[kProcessorPresent], stall.stage[kProcessorBeginScene], stall.stage[kProcessorLog], (left > 0.0) ? left : 0.0, stall.room,
 			stall.placesChanged, stall.keptGroupsMade, stall.polygonsCollected, stall.texturesNew, stall.textureBytesNew / 1024, stall.firstNewTexture, stall.effectsNew);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
@@ -415,15 +443,22 @@ static void ReportProcessorTimes()
 	if (lastReportClock)
 	{
 		double const frames = (double)framesCounted;
-		char line[420];
+		double stages[kNumProcessorStages];
+
+		for (int stage = 0; stage < kNumProcessorStages; stage++)
+		{
+			stages[stage] = ClockMilliseconds(processorTotal[stage]) / frames;
+		}
+
+		double const whole = ClockMilliseconds(now - lastReportClock) / frames;
+		double const left = whole - ClockedPartsOf(stages);
+		char line[800];
 
 		_snprintf(line, sizeof(line) - 1,
-			"processor: ms a frame over %d frames: whole frame %.1f, shapes %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f and saving the card's settings %.2f, waiting to present %.1f, starting the scene %.1f, game %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that",
-			framesCounted, ClockMilliseconds(now - lastReportClock) / frames, ClockMilliseconds(processorTotal[kProcessorShapes]) / frames,
-			ClockMilliseconds(processorTotal[kProcessorLocks]) / frames, ClockMilliseconds(processorTotal[kProcessorDrawing]) / frames,
-			ClockMilliseconds(processorTotal[kProcessorShadowPass]) / frames, ClockMilliseconds(processorTotal[kProcessorStateBlock]) / frames, ClockMilliseconds(processorTotal[kProcessorPresent]) / frames,
-			ClockMilliseconds(processorTotal[kProcessorBeginScene]) / frames, ClockMilliseconds(processorTotal[kProcessorGame]) / frames,
-			(double)mainVerticesTotal / frames, (double)drawsTotal / frames);
+			"processor: ms a frame over %d frames: whole frame %.1f, messages %.1f, game %.1f, views %.1f of which shapes %.1f, display %.1f, menus %.1f, locks %.2f, drawing %.1f of which shadow pass %.1f and saving the card's settings %.2f, finishing %.1f, present %.1f, starting the scene %.1f, in no clock %.1f; %.0f vertices a frame, and %.0f indexed draws of the lists, counting the scene and the surface pictures, with no shadow draws in that; %d textures first used (%d KB), %d effects first used",
+			framesCounted, whole, stages[kProcessorMessages], stages[kProcessorGame], stages[kProcessorViews], stages[kProcessorShapes], stages[kProcessorHud], stages[kProcessorMenus], stages[kProcessorLocks],
+			stages[kProcessorDrawing], stages[kProcessorShadowPass], stages[kProcessorStateBlock], stages[kProcessorEndScene], stages[kProcessorPresent], stages[kProcessorBeginScene], (left > 0.0) ? left : 0.0,
+			(double)mainVerticesTotal / frames, (double)drawsTotal / frames, texturesFirstUsedTotal, (int)(textureBytesFirstUsedTotal / 1024), effectsFirstUsedTotal);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
 
@@ -440,6 +475,9 @@ static void ReportProcessorTimes()
 	memset(processorTotal, 0, sizeof(processorTotal));
 	mainVerticesTotal = 0;
 	drawsTotal = 0;
+	texturesFirstUsedTotal = 0;
+	textureBytesFirstUsedTotal = 0;
+	effectsFirstUsedTotal = 0;
 	framesCounted = 0;
 }
 
@@ -474,7 +512,12 @@ void FrameTiming_FrameShown()
 			}
 			else
 			{
-				thisFrame.frame = framesShown;
+				// a frame with no shadow pass to number it, such as a film
+				if (!thisFrame.frame)
+				{
+					thisFrame.frame = framesShown;
+				}
+
 				thisFrame.milliseconds = milliseconds;
 
 				for (int i = 0; i < kNumProcessorStages; i++)

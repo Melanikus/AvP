@@ -5805,6 +5805,20 @@ static float toyChosenLights[kToyMostLights * kToyLightFloats];
 static void const *toyChosenOwners[kToyMostLights];
 static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
 static char toyRoomName[32] = "none";
+static bool levelViewRan = false;
+
+const char *ToyShadows_RoomName()
+{
+	return toyRoomName;
+}
+
+// Has a level been shown since this was last asked? Menus and loading screens don't count.
+bool ToyShadows_TakeViewRan()
+{
+	bool const ran = levelViewRan;
+	levelViewRan = false;
+	return ran;
+}
 static int toyNumLightsByPixel = 0;
 
 // While shadows are on, a flare can still reach the game's lighting: one that wasn't chosen, which lights the room but casts no shadow, and
@@ -6007,6 +6021,7 @@ void ToyShadows_ChooseLights()
 	_snprintf(toyRoomName, sizeof(toyRoomName) - 1, "%s", (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none");
 	toyRoomName[sizeof(toyRoomName) - 1] = 0;
 	FrameTiming_SetRoom(toyRoomName);
+	levelViewRan = true;
 
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;
