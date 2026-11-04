@@ -230,6 +230,9 @@ typedef struct shapeheader
 	int sh_numuvlists;
 	int *sh_uvlistlengths;
 
+	/*how many entries sh_extraitemdata holds, or 0 if this shape doesn't say: see static_level.cpp*/
+	int sh_numextraitems;
+
 } SHAPEHEADER;
 
 

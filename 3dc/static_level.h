@@ -63,6 +63,7 @@ struct StaticLevelData
 {
 	std::vector<StaticVertex> vertices;
 	std::vector<uint32_t> indices;      // each counted from its range's baseVertex
+	std::vector<uint32_t> colours;      // one D3DCOLOR for each vertex, raw, before gamma. Alpha is 255, or 0 for a polygon that takes no live light
 	std::vector<StaticRange> ranges;    // in module order, so one module's sit together
 
 	const char *refused;     // nothing if it was built
@@ -79,6 +80,9 @@ struct StaticLevelData
 	// Is this polygon in the list? If not, it has to go the old way.
 	bool PolygonIsIn(int moduleNumber, int polygonNumber) const;
 
+	// Is everything of this module that the game draws in the list? If not, the module has to go the old way, all of it.
+	bool ModuleIsWhole(int moduleNumber) const;
+
 	void Clear();
 
 	// the workings of those two: for each module number, where its ranges and its polygons' bits are
@@ -88,6 +92,7 @@ struct StaticLevelData
 		int numRanges;
 		int firstBit;
 		int numPolygons;
+		bool whole;
 	};
 	std::vector<ModuleEntry> moduleEntries;
 	std::vector<uint32_t> polygonBits;
@@ -97,6 +102,10 @@ struct StaticLevelData
 // three angles are its MapEuler. The game makes every module's matrix the identity (module.cpp), so no level can turn one today, and this keeps it so.
 // ObFlag_ArbRot comes straight from the file, and makes the game place a shape by the camera.
 bool StaticLevel_ModuleSitsStill(int flags, int angleX, int angleY, int angleZ);
+
+// Does this shape hold a baked colour for every point? Its colours come from a different chunk from its points, so it needn't, and a module whose shape
+// doesn't has to stay on the old route. A shape with no baked colours is fine: it starts from black.
+bool StaticLevel_ShapeHasItsColours(const shapeheader *shape);
 
 // Builds the list. false means it refused, and the level stays on the old route.
 bool StaticLevel_Work(const StaticLevelSetup &setup, StaticLevelData *data);
@@ -116,10 +125,14 @@ bool StaticLevel_Ready();
 // See StaticLevelData. Safe to ask whether or not there's a list.
 const StaticRange *StaticLevel_RangesOf(int moduleNumber, int *count);
 bool StaticLevel_PolygonIsIn(int moduleNumber, int polygonNumber);
+bool StaticLevel_ModuleIsWhole(int moduleNumber);
 
 // The buffers, for the code that draws them. It sets the stream, the indices and the declaration itself.
 IDirect3DVertexBuffer9 *StaticLevel_VertexBuffer();
 IDirect3DIndexBuffer9 *StaticLevel_IndexBuffer();
+
+// The baked colours: one D3DCOLOR for each vertex, in the same order, as a stream of their own so the vertices never change. See StaticLevelData::colours.
+IDirect3DVertexBuffer9 *StaticLevel_ColourBuffer();
 
 // true means 32-bit indices. Otherwise they're 16-bit, and baseVertex does the rest. Always pass baseVertex.
 bool StaticLevel_IndicesAre32Bit();

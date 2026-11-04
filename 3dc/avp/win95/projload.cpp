@@ -9,6 +9,7 @@
 //   number is left out; when two sounds have the same number, the earlier one is given back
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   each of a level's own shapes gets its list of polygon facts once it's finished.
+//   a shape records how many baked colours it holds
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -1424,6 +1425,8 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 				return FALSE;
 			}
 
+			mainshapelist[osnp->sh_num]->sh_numextraitems = svic->num_vertices;
+
 			for (int vn = 0; vn < svic->num_vertices; vn++) 
 			{
 				//convert coloured light to a brightness value
@@ -1991,6 +1994,8 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 								memoryInitialisationFailure = 1;
 								return FALSE;
 							}
+
+							mainshapelist[list_pos]->sh_numextraitems = svic->num_vertices;
 
 							for (int vn = 0; vn < svic->num_vertices; vn++) 
 							{

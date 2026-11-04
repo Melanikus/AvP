@@ -110,6 +110,11 @@ static inline bool HasTexture(int type)
 	return type != I_ZB_GouraudPolygon;
 }
 
+bool StaticLevel_ShapeHasItsColours(const shapeheader *shape)
+{
+	return !(shape->shapeflags & ShapeFlag_PreLit) || (shape->sh_extraitemdata && shape->sh_numextraitems >= shape->numpoints);
+}
+
 // Checks what a shape holds, before any of it is read.
 static const char *CheckShape(const SHAPEHEADER *shape)
 {
@@ -131,6 +136,11 @@ static const char *CheckShape(const SHAPEHEADER *shape)
 	if (shape->sh_numuvlists < 0 || shape->sh_numuvlists > kMostUVLists || (shape->sh_numuvlists > 0 && (!shape->sh_textures || !shape->sh_uvlistlengths)))
 	{
 		return "a shape's texture coordinate lists don't add up";
+	}
+
+	if (!StaticLevel_ShapeHasItsColours(shape))
+	{
+		return "a shape's baked colours are too short";
 	}
 
 	return 0;
@@ -236,8 +246,40 @@ static const char *CheckPolygon(const SHAPEHEADER *shape, const POLYHEADER *poly
 	return 0;
 }
 
+// The colour a corner has before any live light and before gamma, worked out as the game works it out in VertexIntensity_Standard_Opt,
+// GouraudTexturedPolygon_Construct and GouraudPolygon_Construct. Baked colours are packed as blue, green, red from the bottom. A shape with none starts
+// from black. Alpha tells the shader whether live lights add to this: 0 means the polygon takes no light.
+static uint32_t BakedColour(const SHAPEHEADER *shape, const POLYHEADER *polygon, int point)
+{
+	uint32_t red = 0, green = 0, blue = 0;
+
+	if (shape->shapeflags & ShapeFlag_PreLit)
+	{
+		uint32_t const packed = (uint32_t)shape->sh_extraitemdata[point].EID_VertexI;
+
+		blue = packed & 255;
+		green = (packed >> 8) & 255;
+		red = (packed >> 16) & 255;
+	}
+
+	// a polygon with no texture is drawn in a yellow as bright as the average, and it takes no notice of iflag_nolight
+	if (!HasTexture(polygon->PolyItemType))
+	{
+		uint32_t const average = (red + green + blue) / 3;
+
+		return 0xFF000000u | (average << 16) | (average << 8);
+	}
+
+	if (polygon->PolyFlags & iflag_nolight)
+	{
+		return 0x00FFFFFFu;
+	}
+
+	return 0xFF000000u | (red << 16) | (green << 8) | blue;
+}
+
 // Writes one polygon's corners, as the game would. Gives back why it's refused, or nothing.
-static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPlace &placed, const StaticLevelSetup &setup, std::vector<StaticVertex> *vertices)
+static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPlace &placed, const StaticLevelSetup &setup, std::vector<StaticVertex> *vertices, std::vector<uint32_t> *colours)
 {
 	const SHAPEHEADER *shape = input.shape;
 	const POLYHEADER *polygon = (const POLYHEADER *)shape->items[placed.polygonNumber];
@@ -293,6 +335,7 @@ static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPl
 		}
 
 		vertices->push_back(vertex);
+		colours->push_back(BakedColour(shape, polygon, corners[corner]));
 	}
 
 	return 0;
@@ -405,6 +448,7 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 		}
 
 		entry.numPolygons = module.shape->numitems;
+		entry.whole = true;
 		entry.firstBit = (int)(totalPolygons - (uint64_t)module.shape->numitems);
 
 		FindAnimatedLists(module.shape, &animatedLists);
@@ -421,7 +465,21 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 			if (!GameDrawsType(polygon->PolyItemType) || (polygon->PolyFlags & (iflag_notvis | iflag_transparent | iflag_txanim | iflag_light_corona)))
 			{
 				data->polygonsLeftOut++;
+
+				// what the game never draws doesn't matter, but anything else left out means the module can't leave the old route
+				if (GameDrawsType(polygon->PolyItemType) && !(polygon->PolyFlags & iflag_notvis))
+				{
+					entry.whole = false;
+				}
+
 				continue;
+			}
+
+			// The game draws a polygon with no texture without its gamma table, and the scene's shader puts everything through it. So this polygon is fine
+			// for the surface pictures, which take no notice of colour, but its module has to stay on the old route for the scene.
+			if (!HasTexture(polygon->PolyItemType))
+			{
+				entry.whole = false;
 			}
 
 			PolygonToPlace placed;
@@ -450,6 +508,7 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 	std::sort(polygons.begin(), polygons.end(), ComesBefore);
 
 	data->vertices.reserve((size_t)totalCorners);
+	data->colours.reserve((size_t)totalCorners);
 	data->indices.reserve((size_t)totalTriangles * 3);
 	data->polygonBits.assign((size_t)(totalPolygons / 32 + 1), 0);
 
@@ -500,7 +559,7 @@ static bool Work(const StaticLevelSetup &setup, StaticLevelData *data)
 			rangeInputs.push_back(placed.input);
 		}
 
-		const char *problem = WriteCorners(setup.modules[placed.input], placed, setup, &data->vertices);
+		const char *problem = WriteCorners(setup.modules[placed.input], placed, setup, &data->vertices, &data->colours);
 
 		if (problem)
 		{
@@ -604,6 +663,7 @@ void StaticLevelData::Clear()
 {
 	std::vector<StaticVertex>().swap(vertices);
 	std::vector<uint32_t>().swap(indices);
+	std::vector<uint32_t>().swap(colours);
 	std::vector<StaticRange>().swap(ranges);
 	std::vector<ModuleEntry>().swap(moduleEntries);
 	std::vector<uint32_t>().swap(polygonBits);
@@ -629,6 +689,11 @@ const StaticRange *StaticLevelData::RangesOf(int moduleNumber, int *count) const
 
 	*count = entry.numRanges;
 	return &ranges[(size_t)entry.firstRange];
+}
+
+bool StaticLevelData::ModuleIsWhole(int moduleNumber) const
+{
+	return moduleNumber >= 0 && (size_t)moduleNumber < moduleEntries.size() && moduleEntries[(size_t)moduleNumber].whole;
 }
 
 bool StaticLevelData::PolygonIsIn(int moduleNumber, int polygonNumber) const

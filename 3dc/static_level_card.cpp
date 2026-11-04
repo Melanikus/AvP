@@ -26,6 +26,7 @@ extern SCENE Global_Scene;
 static StaticLevelData theLevel;
 static IDirect3DVertexBuffer9 *vertexBuffer = 0;
 static IDirect3DIndexBuffer9 *indexBuffer = 0;
+static IDirect3DVertexBuffer9 *colourBuffer = 0;
 static bool indicesAre32Bit = false;
 static bool ready = false;
 
@@ -67,6 +68,12 @@ static void ListModules(std::vector<StaticLevelInput> *modules)
 
 		MODULEMAPBLOCK const *map = module->m_mapptr;
 
+		// Nothing sets a module's own colours today, and they'd be a list with no length. A shape can also hold fewer colours than points: one stock module does.
+		if (module->m_extraitemdata || !StaticLevel_ShapeHasItsColours(shape))
+		{
+			continue;
+		}
+
 		if (!StaticLevel_ModuleSitsStill(map->MapFlags, map->MapEuler.EulerX, map->MapEuler.EulerY, map->MapEuler.EulerZ))
 		{
 			continue;
@@ -97,6 +104,28 @@ static bool SendVertices()
 
 	memcpy(memory, &theLevel.vertices[0], bytes);
 	vertexBuffer->Unlock();
+
+	return true;
+}
+
+static bool SendColours()
+{
+	UINT const bytes = (UINT)(theLevel.colours.size() * sizeof(D3DCOLOR));
+	void *memory = 0;
+
+	if (FAILED(d3d.lpD3DDevice->CreateVertexBuffer(bytes, D3DUSAGE_WRITEONLY, 0, D3DPOOL_MANAGED, &colourBuffer, NULL)))
+	{
+		colourBuffer = 0;
+		return false;
+	}
+
+	if (FAILED(colourBuffer->Lock(0, bytes, &memory, 0)) || !memory)
+	{
+		return false;
+	}
+
+	memcpy(memory, &theLevel.colours[0], bytes);
+	colourBuffer->Unlock();
 
 	return true;
 }
@@ -201,7 +230,7 @@ void StaticLevel_BuildThisLevel()
 		return;
 	}
 
-	if (!SendVertices() || !SendIndices())
+	if (!SendVertices() || !SendIndices() || !SendColours())
 	{
 		LogString("static level: the card wouldn't take the lists, so the level stays on the old route");
 		StaticLevel_Release();
@@ -216,6 +245,7 @@ void StaticLevel_BuildThisLevel()
 	// the card has them now, and each frame only needs the ranges
 	std::vector<StaticVertex>().swap(theLevel.vertices);
 	std::vector<uint32_t>().swap(theLevel.indices);
+	std::vector<uint32_t>().swap(theLevel.colours);
 
 	ready = true;
 }
@@ -238,6 +268,12 @@ void StaticLevel_Release()
 		indexBuffer = 0;
 	}
 
+	if (colourBuffer)
+	{
+		colourBuffer->Release();
+		colourBuffer = 0;
+	}
+
 	theLevel.Clear();
 }
 
@@ -257,6 +293,11 @@ const StaticRange *StaticLevel_RangesOf(int moduleNumber, int *count)
 	return theLevel.RangesOf(moduleNumber, count);
 }
 
+bool StaticLevel_ModuleIsWhole(int moduleNumber)
+{
+	return ready && theLevel.ModuleIsWhole(moduleNumber);
+}
+
 bool StaticLevel_PolygonIsIn(int moduleNumber, int polygonNumber)
 {
 	return ready && theLevel.PolygonIsIn(moduleNumber, polygonNumber);
@@ -265,6 +306,11 @@ bool StaticLevel_PolygonIsIn(int moduleNumber, int polygonNumber)
 IDirect3DVertexBuffer9 *StaticLevel_VertexBuffer()
 {
 	return ready ? vertexBuffer : 0;
+}
+
+IDirect3DVertexBuffer9 *StaticLevel_ColourBuffer()
+{
+	return ready ? colourBuffer : 0;
 }
 
 IDirect3DIndexBuffer9 *StaticLevel_IndexBuffer()

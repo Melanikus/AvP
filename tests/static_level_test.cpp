@@ -87,6 +87,7 @@ struct MadeUpShape
 	std::vector<int *> listPointers;
 	std::vector<int> listLengths;
 	std::vector<SurfaceTangent> tangents;
+	std::vector<EXTRAITEMDATA> colours;
 
 	MadeUpShape()
 	{
@@ -185,6 +186,26 @@ struct MadeUpShape
 		header.sh_uvlistlengths = listLengths.empty() ? 0 : &listLengths[0];
 		header.sh_numuvlists = (int)lists.size();
 		header.sh_surfacetangents = tangents.empty() ? 0 : &tangents[0];
+
+		if (!colours.empty())
+		{
+			header.shapeflags |= ShapeFlag_PreLit;
+			header.sh_extraitemdata = &colours[0];
+			header.sh_numextraitems = (int)colours.size();
+		}
+	}
+
+	// a different baked colour for each point: red, green and blue that can't be mistaken for each other
+	void BakeColours()
+	{
+		colours.clear();
+
+		for (size_t i = 0; i < points.size(); i++)
+		{
+			EXTRAITEMDATA colour;
+			colour.EID_VertexI = (int)(0x7F000000u | ((uint32_t)(0x10 + i) << 16) | ((uint32_t)(0x40 + i) << 8) | (uint32_t)(0x70 + i));
+			colours.push_back(colour);
+		}
 	}
 };
 
@@ -368,6 +389,104 @@ static void CheckNoTexture()
 	StaticRange const *ranges = data.RangesOf(3, &count);
 	Check(count == 1 && ranges[0].texture == kNoTexture, "it uses the game's no-texture picture");
 	Check(data.vertices[2].u == 0.0f && data.vertices[2].v == 0.0f, "and its coordinates are zero, as the game's are");
+}
+
+static void CheckBakedColours()
+{
+	MadeUpShape shape;
+	shape.BakeColours();
+	shape.AddQuad(kTextureA);
+
+	StaticLevelData data;
+	data.Clear();
+	Check(BuildOne(shape, &data), "a shape with baked colours is built");
+	Check(data.colours.size() == data.vertices.size(), "with one colour for each corner");
+	Check(data.colours[0] == 0xFF104070u && data.colours[3] == 0xFF134373u, "each the colour of its own point, with red, green and blue the right way round, and alpha saying it takes live light");
+
+	MadeUpShape plain;
+	plain.AddQuad(kTextureA);
+	BuildOne(plain, &data);
+	Check(data.colours.size() == 4 && data.colours[1] == 0xFF000000u, "a shape with no baked colours starts from black");
+
+	MadeUpShape glowing;
+	glowing.BakeColours();
+	glowing.AddQuad(kTextureA, iflag_nolight);
+	BuildOne(glowing, &data);
+	Check(data.colours[2] == 0x00FFFFFFu, "a polygon that takes no light is white, with alpha saying so");
+
+	MadeUpShape turned;
+	turned.BakeColours();
+	turned.AddQuad(kTextureA);
+	turned.polygons[0].corners[0] = 3;
+	turned.polygons[0].corners[3] = 0;
+	BuildOne(turned, &data);
+	Check(data.colours[0] == 0xFF134373u, "the colour follows the corner's point, not its place in the polygon");
+
+	MadeUpShape noTexture;
+	noTexture.BakeColours();
+	noTexture.AddPolygon(I_ZB_GouraudPolygon, 0, 0, 4);
+	BuildOne(noTexture, &data);
+
+	uint32_t const average = (0x10 + 0x40 + 0x70) / 3;
+	Check(data.colours[0] == (0xFF000000u | (average << 16) | (average << 8)), "a polygon with no texture is the game's yellow");
+	Check(!data.ModuleIsWhole(3) && data.PolygonIsIn(3, 0), "it's in the list for the pictures, but its module stays on the old route, because the game gives it no gamma");
+
+	MadeUpShape noTextureNoLight;
+	noTextureNoLight.BakeColours();
+	noTextureNoLight.AddPolygon(I_ZB_GouraudPolygon, 0, 0, 4, iflag_nolight);
+	BuildOne(noTextureNoLight, &data);
+	Check(data.colours[0] == (0xFF000000u | (average << 16) | (average << 8)), "and it takes no notice of the no-light flag, as the game doesn't");
+
+	MadeUpShape full;
+	full.BakeColours();
+	full.AddQuad(kTextureA);
+	full.Finish();
+	Check(StaticLevel_ShapeHasItsColours((const shapeheader *)&full.header), "a shape with a colour for every point has its colours");
+
+	full.header.sh_numextraitems = full.header.numpoints - 1;
+	Check(!StaticLevel_ShapeHasItsColours((const shapeheader *)&full.header), "one short doesn't");
+
+	full.header.sh_numextraitems = full.header.numpoints;
+	full.header.sh_extraitemdata = 0;
+	Check(!StaticLevel_ShapeHasItsColours((const shapeheader *)&full.header), "a baked shape with no list doesn't");
+
+	MadeUpShape unbaked;
+	unbaked.AddQuad(kTextureA);
+	unbaked.Finish();
+	Check(StaticLevel_ShapeHasItsColours((const shapeheader *)&unbaked.header), "a shape that isn't baked needs none");
+}
+
+static void CheckWholeModules()
+{
+	MadeUpShape all;
+	all.AddQuad(kTextureA);
+	all.AddQuad(kTextureB);
+
+	StaticLevelData data;
+	data.Clear();
+	BuildOne(all, &data);
+	Check(data.ModuleIsWhole(3), "a module with everything in the list is whole");
+	Check(!data.ModuleIsWhole(4), "a module not in the list isn't");
+	Check(!data.ModuleIsWhole(-1), "an object asking with -1 isn't");
+	Check(!data.ModuleIsWhole(20), "a number past the end isn't");
+
+	MadeUpShape hidden;
+	hidden.AddQuad(kTextureA);
+	hidden.AddQuad(kTextureA, iflag_notvis);
+	hidden.AddPolygon(I_Polyline, kTextureA, 0, 4);
+	BuildOne(hidden, &data);
+	Check(data.ModuleIsWhole(3), "what the game never draws doesn't stop a module being whole");
+
+	int const flags[3] = { iflag_transparent, iflag_txanim, iflag_light_corona };
+
+	for (int i = 0; i < 3; i++)
+	{
+		MadeUpShape part;
+		part.AddQuad(kTextureA);
+		part.AddQuad(kTextureA, flags[i]);
+		BuildOne(part, &data);
+		Check(!data.ModuleIsWhole(3), "a module with something drawn that isn't in the list isn't whole");
+	}
 }
 
 static void CheckOrderAndRanges()
@@ -697,6 +816,22 @@ static void CheckHostileShapes()
 {
 	{
 		MadeUpShape s;
+		s.BakeColours();
+		s.AddQuad(kTextureA);
+		s.Finish();
+		s.header.sh_extraitemdata = 0;
+		CheckRefused(s, "a shape's baked colours are too short", "a shape that says it's baked, with no colours", true);
+	}
+	{
+		MadeUpShape s;
+		s.BakeColours();
+		s.AddQuad(kTextureA);
+		s.Finish();
+		s.header.sh_numextraitems = s.header.numpoints - 1;
+		CheckRefused(s, "a shape's baked colours are too short", "one baked colour fewer than the shape has points", true);
+	}
+	{
+		MadeUpShape s;
 		s.AddQuad(kTextureA);
 		s.Finish();
 		s.header.numitems = -1;
@@ -970,6 +1105,8 @@ int main()
 	CheckTwoSided();
 	CheckWhatsLeftOut();
 	CheckNoTexture();
+	CheckBakedColours();
+	CheckWholeModules();
 	CheckOrderAndRanges();
 	CheckSmallerIndices();
 	CheckTrianglesInOneDraw();
