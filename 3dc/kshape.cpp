@@ -5739,10 +5739,11 @@ static int toyNumLightsByPixel = 0;
 // any flare on glass or in a mirror. At the game's own brightness it would turn white, because a new flare is so bright that all three colours
 // clip. So every flare is held to the cap, and stays the dim red the user chose. This only changes the number the lighting reads this frame:
 // UpdateObjectLights works that out afresh every frame from the flare's real brightness, so the flare itself isn't touched, and a save is
-// no different.
+// no different. A card that can't add lights per pixel is held to the cap as well, so it gets the dim red too. Shadows off and the vision
+// modes keep the game's own flares, except for the one frame after switching, while ToyShadowsLightsByPixel is still set.
 static void ToyHoldFlaresToTheirCap()
 {
-	if (!ToyShadowsLightsByPixel)
+	if (!ToyShadowsLightsByPixel && (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL))
 	{
 		return;
 	}

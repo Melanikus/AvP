@@ -69,13 +69,18 @@ static D3DFORMAT BestNormalFormat(LPDIRECT3DDEVICE9 device, D3DFORMAT screenForm
 	return chosen;
 }
 
-// Can this device do it at all? If not, says why in the log.
-static bool CardCanDoThis(LPDIRECT3DDEVICE9 device, const D3DSURFACE_DESC &screen)
+bool SurfacePictures_CardCanDrawThem(LPDIRECT3DDEVICE9 device)
 {
 	D3DCAPS9 caps;
 
-	if (FAILED(device->GetDeviceCaps(&caps))
-		|| caps.PixelShaderVersion < D3DPS_VERSION(3, 0) || caps.VertexShaderVersion < D3DVS_VERSION(3, 0) || caps.NumSimultaneousRTs < 3)
+	return SUCCEEDED(device->GetDeviceCaps(&caps))
+		&& caps.PixelShaderVersion >= D3DPS_VERSION(3, 0) && caps.VertexShaderVersion >= D3DVS_VERSION(3, 0) && caps.NumSimultaneousRTs >= 3;
+}
+
+// Can this device do it at all? If not, says why in the log.
+static bool CardCanDoThis(LPDIRECT3DDEVICE9 device, const D3DSURFACE_DESC &screen)
+{
+	if (!SurfacePictures_CardCanDrawThem(device))
 	{
 		LogString("surface pictures: this card can't draw three pictures at once with shader model 3, so they stay off");
 		return false;

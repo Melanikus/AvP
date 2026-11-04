@@ -29,6 +29,7 @@
 
 #include "d3_func.h"
 #include "surface_normals.h"
+#include "surface_pictures.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
 #include "logString.h"
@@ -722,7 +723,12 @@ bool CreateVolatileResources()
 	// main
 	d3d.mainVB = new VertexBuffer;
 	d3d.mainVB->Create(kMaxVertices*5, sizeof(D3DLVERTEX), USAGE_DYNAMIC);
-	SurfaceNormals_Create(kMaxVertices*5);
+
+	// This list is filled and emptied every frame, and only the surface pictures read it, so a card that can't draw them skips it.
+	if (SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
+	{
+		SurfaceNormals_Create(kMaxVertices*5);
+	}
 
 	d3d.mainIB = new IndexBuffer;
 	d3d.mainIB->Create((kMaxIndices*5) * 3, USAGE_DYNAMIC);
@@ -1310,6 +1316,11 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	if (FAILED(LastError))
 	{
 		LogErrorString("CreateVertexShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+
+		// A card with no shader model 3 ends up here, once for each shader that needs it, so these two are given back.
+		pCode->Release();
+		vertexShader.constantTable->Release();
+		vertexShader.constantTable = 0;
 		return false;
 	}
 
@@ -1402,6 +1413,11 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	if (FAILED(LastError))
 	{
 		LogErrorString("CreatePixelShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+
+		// the same as for a vertex shader, above
+		pCode->Release();
+		pixelShader.constantTable->Release();
+		pixelShader.constantTable = 0;
 		return false;
 	}
 

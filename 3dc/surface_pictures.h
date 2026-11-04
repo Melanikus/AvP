@@ -6,6 +6,10 @@
 
 #include <d3d9.h>
 
+// Whether this card has what the pictures need at all: shader model 3, and three pictures drawn at once. Without that, nothing that
+// feeds the pictures needs to run.
+bool SurfacePictures_CardCanDrawThem(LPDIRECT3DDEVICE9 device);
+
 // Whether the pictures exist, making them the first time it's asked. False on a card that can't do this, and then no light may rely on them.
 bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device);
 
