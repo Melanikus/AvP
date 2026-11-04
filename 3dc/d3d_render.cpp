@@ -23,6 +23,7 @@
 #include "FmvCutscenes.h"
 #include "surface_normals.h"
 #include "surface_pictures.h"
+#include "shadow_gap.h"
 #include "static_scene.h"
 #define UseLocalAssert FALSE
 #include "ourasert.h"
@@ -3644,6 +3645,7 @@ int ToyShadowsLightsByPixel = 0;   // set each frame, for the next one: chosen l
 int ToyShadowsWorld = 70;     // -shadowworld=N, 10 to 100: how bright the whole world is, in percent, so that lit places stand out
 int ToyShadowsSoft = 12;      // -shadowsoft=N, 0 to 32: how wide the soft edge of a shadow is, in pixels, up close. 0 is hard
 int ToyShadowsModelGap = 60;  // -shadowmodelgap=N, 8 to 200: the furthest behind a model's polygon its shadow starts
+int ShadowsEvenGap = 0;       // -shadowevengap: a shadow starts the same distance behind every part of its polygon. See shadow_gap.h
 int KeptPrismsOff = 0;        // -keptprismsoff: every prism is worked out every frame, as if nothing could be kept
 int ToyShadowsTest = 0;       // -shadowtest: a small box round each light, so everything in its range must go dark
 int ToyShadowsPositions = 4;   // -shadowpositions=N, 1, 4 or 8: how many places a light is treated as shining from. 1 is a point of light, with no penumbra
@@ -3694,8 +3696,8 @@ static const int   kToyMaxVerts        = 1200000;
 static const float kToyStartGap        = 8.0f;      // start just behind the polygon, or surfaces shadow themselves in speckles
 static const float kToyWidestGap       = 200.0f;    // the most that gap can stretch to, at a very low angle
 // How far past a polygon its shadow starts when the polygon's front is turned from the light. It can be this small because nothing on that
-// polygon is lit by that light, so there's nothing there to shadow. It can't be less: the game rounds a corner to whole numbers, which can
-// move it by up to 0.87, and the start still has to be past the surface after that.
+// polygon is lit by that light, so there's nothing there to shadow. It can't be less: the game cuts a corner down to whole numbers, which can
+// move it by up to 1.73, and the start still has to be past the surface after that.
 static const float kUnlitStartGap      = 2.0f;
 static const float kToyMostReach       = 400000.0f; // how far a corner can be thrown, also well inside the far plane
 static const float kToyFlareTouching   = 40.0f;     // a flare this close to a polygon's flat surface is lying on it
@@ -4437,8 +4439,20 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 		dy /= length;
 		dz /= length;
 
-		// a light almost touching the polygon: the start stays on the light's far side of the corner
-		float const start = (takeSurfaceIn && length < kToyStartGap * 2.0f) ? length * -0.5f : gap;
+		float start = gap;
+
+		if (takeSurfaceIn)
+		{
+			// a light almost touching the polygon: the start stays on the light's far side of the corner
+			if (length < kToyStartGap * 2.0f)
+			{
+				start = length * -0.5f;
+			}
+		}
+		else if (ShadowsEvenGap)
+		{
+			start = ShadowGap_ForCorner(startGap, length, planeDistance, kShadowGapWidest);
+		}
 
 		float reach = length * scale;
 		if (reach > kToyMostReach)

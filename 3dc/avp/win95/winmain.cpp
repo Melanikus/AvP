@@ -280,6 +280,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ShadowsFullReport = 1;
 		}
+		extern int ShadowsEvenGap;
+		if (strstr(command_line, "-shadowevengap"))
+		{
+			ShadowsEvenGap = 1;
+		}
 		extern int StaticSurfaceOn;
 		if (strstr(command_line, "-staticsurface"))
 		{
@@ -403,6 +408,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ToyShadowsCasters = (asked < 0) ? 0 : (asked > 7) ? 7 : asked;
 		}
 		LogString(ToyShadowsMode ? "toy-shadows: on" : "toy-shadows: off");
+		extern int ShadowsEvenGap;
+		LogString(ShadowsEvenGap ? "shadows: each corner works out where its shadow starts (-shadowevengap)" : "shadows: one gap for a whole polygon");
 	}
 
 	if (strstr(command_line, "-intro"))	{
