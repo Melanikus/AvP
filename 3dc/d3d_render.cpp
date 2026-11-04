@@ -3716,6 +3716,7 @@ static int walkedGroups[kMostKeptGroups];   // which of keptGroups are walked
 static int numWalkedGroups = 0;
 static ToyVec worldPrisms[kToyMaxVerts];   // this frame's prisms for a walked group that isn't kept, in the world's numbers, for one light
 static int numWorldCorners = 0;
+static int worldCornersSinceReport = 0;    // how many of those there have been, added up, for the log
 static int casterGroup[kToyMaxCasters];     // which of keptGroups a polygon is in, or -1
 static int casterPolygon[kToyMaxCasters];   // its place in its shape
 static CasterSource casterSource[kToyMaxCasters];   // only filled in on a report frame, for a polygon that's drawn
@@ -5295,8 +5296,8 @@ static void ToyApplySoftenedMask(LPDIRECT3DDEVICE9 device, bool showMaskAlone)
 	device->SetTexture(1, NULL);
 }
 
-// Works out a group's prisms for a light, in the world's numbers. They're left just past the end of toyVerts, at the place toyNumVerts still says, and corners
-// says how many. false means they aren't all there, so they can't be used.
+// Works out a group's prisms for a light, in the world's numbers. They're left just past the end of toyVerts, at the place toyNumVerts still says, and
+// cornersMade says how many. false means they aren't all there, so they can't be used.
 static bool WorkOutPrismsInWorld(const KeptGroup &group, const float *light, const float *centre, int *cornersMade)
 {
 	// The light's first three numbers are its place in the light list's numbers, which change whenever the camera does. So this gives the sums in
@@ -5437,6 +5438,8 @@ static void AddWorldPrisms(const KeptGroup &group, const float *light, const flo
 
 	memcpy(&worldPrisms[numWorldCorners], &toyVerts[vertsBefore], (size_t)corners * sizeof(ToyVec));
 	numWorldCorners += corners;
+	worldCornersSinceReport += corners;
+	toyVertsOfKind[kToyCasterLevel] += corners;
 }
 
 // Could anything in this group block this light? The same test as PolygonIsOutOfRange, with the group's ball in place of a polygon, from the light's true place.
@@ -5572,6 +5575,18 @@ static void StartKeptPrisms(const float *lights, int numLights)
 
 static void ReportKeptPrisms()
 {
+	// These walls are on no caster list, so no other line would show they were there.
+	if (numWalkedGroups > 0)
+	{
+		char walls[200] = { 0 };
+
+		_snprintf(walls, sizeof(walls) - 1, "shadows: frame %d: walls from the fixed buffer: %d this frame, and %d corners worked out for one frame only since the last report",
+			toyFrame, numWalkedGroups, worldCornersSinceReport);
+		LogString(walls);
+	}
+
+	worldCornersSinceReport = 0;
+
 	// without this, a run with the switch on would log all zeros, which reads like a store that's broken
 	if (KeptPrismsOff)
 	{
