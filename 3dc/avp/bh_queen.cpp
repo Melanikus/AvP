@@ -8,6 +8,7 @@
 //   her hand is checked before use; a game saved while she carries something no longer indexes the list with -1
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   the object a saved Queen is holding has to be one of the objects in the level
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -5073,7 +5074,8 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(TempTarget)//going for an intermediate point
 	COPYELEMENT_LOAD(TempTargetTimer)//time before queen gives up going for intermediate point
 
-	COPYELEMENT_LOAD(CurrentQueenObject)
+	//this picks an entry in QueenObjectList, and the Queen writes to whatever is there, so it has to be one of them
+	queenStatusPointer->CurrentQueenObject = Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects);
 	COPYELEMENT_LOAD(QueenStateTimer)
 	COPYELEMENT_LOAD(QueenObjectBias)
 	COPYELEMENT_LOAD(QueenPlayerBias)

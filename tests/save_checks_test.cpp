@@ -77,6 +77,38 @@ static void TestTableNumbers()
 	Check(!Save_AmmoIsValid(AMMO_NONE), "no ammunition at all isn't a choice");
 }
 
+static void TestListPlaces()
+{
+	Check(Save_PlaceInListOrNone(0, 3) == 0, "the first place in a list");
+	Check(Save_PlaceInListOrNone(2, 3) == 2, "the last place in a list");
+	Check(Save_PlaceInListOrNone(-1, 3) == -1, "none stays none");
+	Check(Save_PlaceInListOrNone(3, 3) == -1, "one place past the end is none");
+	Check(Save_PlaceInListOrNone(-2, 3) == -1, "a negative place is none");
+	Check(Save_PlaceInListOrNone(0, 0) == -1, "an empty list has no first place");
+	Check(Save_PlaceInListOrNone(0, -1) == -1, "a list that was never filled has no first place");
+}
+
+static void TestNames()
+{
+	char const name[] = "sound.wav";
+	int const length = (int)sizeof(name);
+	int const huge = 2147483647, negative = -1, zero = 0;
+	char const noEnd[4] = { 'a', 'b', 'c', 'd' };
+	int const four = 4;
+
+	Check(Save_NameFillsBlock(20 + length, 20, &length, name), "a name that fills the block, end mark and all");
+	Check(!Save_NameFillsBlock(19, 20, &length, name), "a block too small to hold the length isn't read");
+	Check(!Save_NameFillsBlock(8, 20, 0, name), "a bare header isn't read at all");
+	Check(!Save_NameFillsBlock(20 + length + 1, 20, &length, name), "a block with room left over");
+	Check(!Save_NameFillsBlock(20 + length - 1, 20, &length, name), "a name longer than the block");
+	// the byte before an empty name is an end mark, so a check that looked there would be fooled
+	char const before[2] = { 0, 'a' };
+	Check(!Save_NameFillsBlock(20, 20, &zero, &before[1]), "a name with nothing in it, not even its end mark");
+	Check(!Save_NameFillsBlock(20, 20, &negative, name), "a negative length");
+	Check(!Save_NameFillsBlock(20, 20, &huge, name), "a huge length");
+	Check(!Save_NameFillsBlock(24, 20, &four, noEnd), "a name with no end mark");
+}
+
 static void MakeLive(DYNAMICSBLOCK &live)
 {
 	memset(&live, 0, sizeof(live));
@@ -168,6 +200,8 @@ int main()
 {
 	TestSlotNumbers();
 	TestTableNumbers();
+	TestListPlaces();
+	TestNames();
 	TestDynamics();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");

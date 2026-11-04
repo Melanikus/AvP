@@ -1,6 +1,11 @@
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP sound management source
   ----------------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   finds the data after a save block with DataAfterBlock, which says what it means
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved sound has to hold everything it says it holds, and its name has to end inside the block
 
 #define DB_LEVEL 1
 
@@ -702,6 +707,7 @@ static int FindLowerPriorityActiveSound(ACTIVESOUNDPRIORITY testPriority, unsign
 static SOUNDINDEX GetSoundIndexFromNameAndIndex(const char* name,SOUNDINDEX index);
 
 #include "savegame.h"
+#include "save_checks.h"
 
 typedef struct sound_save_block
 {
@@ -744,8 +750,8 @@ void Load_SoundState(int* soundHandle)
 		Sound_Stop(*soundHandle);
 	}
 
-	//check the size
-	if(block->header.size != sizeof(*block) + block->fileNameLength) return;
+	//check the size. A handle with no sound playing is saved as a bare header, so this is the usual way out
+	if(!Save_NameFillsBlock(block->header.size, sizeof(*block), &block->fileNameLength, name)) return;
 
 	soundIndex = GetSoundIndexFromNameAndIndex(name,block->soundIndex);
 	if(soundIndex==SID_NOSOUND) return;
@@ -837,7 +843,7 @@ void Load_SoundState_NoRef(SAVE_BLOCK_HEADER* header)
 	SOUNDINDEX soundIndex;
 
 	//check the size
-	if(block->header.size != sizeof(*block) + block->fileNameLength) return;
+	if(!Save_NameFillsBlock(block->header.size, sizeof(*block), &block->fileNameLength, name)) return;
 
 	//only load if the sound doesn't require an external reference
 	if(block->externalRef) return;

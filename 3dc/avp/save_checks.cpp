@@ -64,6 +64,25 @@ bool Save_AmmoIsValid(int ammo)
 	return ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES;
 }
 
+// Many saved numbers say which entry of a list something is using, with -1 for none. A number outside the list means none as well, because
+// there's nothing better to do with it, and an object that has lost track of something carries on as usual.
+int Save_PlaceInListOrNone(int place, int count)
+{
+	return (place >= 0 && place < count) ? place : -1;
+}
+
+bool Save_NameFillsBlock(int blockSize, int fixedSize, const int *nameLength, const char *name)
+{
+	if (blockSize < fixedSize)
+	{
+		return false;
+	}
+
+	int const length = *nameLength;
+
+	return length >= 1 && length == blockSize - fixedSize && name[length - 1] == '\0';
+}
+
 // A dynamics block says where an object is and how it moves. Nearly all of it is only numbers, and strange numbers just give a strange
 // object. These are the parts that can do real harm:
 //

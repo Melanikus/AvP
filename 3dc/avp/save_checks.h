@@ -14,6 +14,13 @@ bool Save_WeaponStateIsValid(int state);
 bool Save_VisionModeIsValid(int mode);
 bool Save_AmmoIsValid(int ammo);
 
+// A saved place in a list of count entries, where -1 means none. Any other number that isn't in the list comes back as -1 too.
+int Save_PlaceInListOrNone(int place, int count);
+
+// Is this block a fixed part of fixedSize bytes and then a name, which fills the rest of the block and has its end mark? The length is only read
+// if the block is big enough to hold it.
+bool Save_NameFillsBlock(int blockSize, int fixedSize, const int *nameLength, const char *name);
+
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
 void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
 
