@@ -31,6 +31,11 @@ void SurfaceNormals_Unlock();
 // Says a new shape is about to be drawn. The polygons that follow belong to it.
 void SurfaceNormals_StartObject();
 
+// The normal a corner of a polygon uses, in the shape's own directions: the same answer SurfaceNormals_WritePolygon gives for an object lined up with the world.
+// For anything built ahead of time from a shape, so it asks nothing of the frame being drawn. corner counts from 0. Gives back zero if there's no such
+// corner, and also if that's what the shape really holds there.
+void SurfaceNormals_CornerNormal(const struct shapeheader *shape, int polygonNumber, int corner, float *normal);
+
 // Writes a polygon's normals. polygonNumber is its place in the shape, and firstVertex is the place its first corner has in the game's list
 // of vertices. The polygon has to be a real one of the shape being drawn, because its corner numbers are looked up in that shape.
 void SurfaceNormals_WritePolygon(const struct polyheader *polygon, int polygonNumber, uint32_t firstVertex, uint32_t corners);

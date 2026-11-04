@@ -395,6 +395,57 @@ static void ChooseNormal(const SurfacePolygon *facts, uint32_t corner, int point
 	PointNormal(point, normal);
 }
 
+void SurfaceNormals_CornerNormal(const SHAPEHEADER *shape, int polygonNumber, int corner, float *normal)
+{
+	normal[0] = 0.0f;
+	normal[1] = 0.0f;
+	normal[2] = 0.0f;
+
+	if (!shape || !shape->items || polygonNumber < 0 || polygonNumber >= shape->numitems || corner < 0 || corner >= maxpolypts)
+	{
+		return;
+	}
+
+	const POLYHEADER *polygon = (const POLYHEADER *)shape->items[polygonNumber];
+	const int *cornerNumbers = &polygon->Poly1stPt;
+
+	for (int i = 0; i <= corner; i++)
+	{
+		if (cornerNumbers[i] == kTerminationMarker)
+		{
+			return;
+		}
+	}
+
+	// the same two choices, in the same order, as ChooseNormal
+	if (shape->sh_surfacepolygons && corner < kCornersInList)
+	{
+		const SurfacePolygon &facts = shape->sh_surfacepolygons[polygonNumber];
+
+		if (facts.flatCorners & (1u << corner))
+		{
+			normal[0] = -facts.nx;
+			normal[1] = -facts.ny;
+			normal[2] = -facts.nz;
+			return;
+		}
+	}
+
+	int const point = cornerNumbers[corner];
+
+	if (!shape->sh_vnormals || !*shape->sh_vnormals || point < 0 || point >= shape->numpoints || point >= maxrotpts)
+	{
+		return;
+	}
+
+	VECTORCH const &stored = ((const VECTORCH *)*shape->sh_vnormals)[point];
+	float const one = (float)ONE_FIXED;
+
+	normal[0] = (float)stored.vx / one;
+	normal[1] = (float)stored.vy / one;
+	normal[2] = (float)stored.vz / one;
+}
+
 void SurfaceNormals_WritePolygon(const POLYHEADER *polygon, int polygonNumber, uint32_t firstVertex, uint32_t corners)
 {
 	// With no list open there's nowhere to write. A reflection stays out of the pictures on purpose.
