@@ -248,6 +248,11 @@ void PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int nu
 		float const *light = &lights[i * kToyLightFloats];
 		bool const perPixel = light[kLightKind] == kKindAddedPerPixel;
 
+		if (LightOnListIsDark(light))
+		{
+			continue;
+		}
+
 		constants[(kFirstLight + i) * 4 + 0] = light[0];
 		constants[(kFirstLight + i) * 4 + 1] = light[1];
 		constants[(kFirstLight + i) * 4 + 2] = light[2];

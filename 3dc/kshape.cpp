@@ -5576,8 +5576,16 @@ struct ToyFoundLight
 	int distance;       // from the camera
 };
 
-static LIGHTBLOCK *toyChosenLastFrame[kToyMostLights];
-static int toyNumChosenLastFrame = 0;
+// A light keeps one place on the list for as long as it's chosen, and a new light takes a free place. So everything that goes by place stays
+// with its light: its colour in the debug views, and its line in the log. If the list were simply remade in order, every light below one that
+// came or went would move up or down a place, and change colour, while nothing about it had changed. This says who's in each place, with
+// nothing in a free place. These are only compared, never read through, for the reason kToyStayQuarters gives.
+static LIGHTBLOCK *lightInPlace[kToyMostLights];
+static bool placeHasPositions[kToyMostLights];   // whether the lamp in this place is one of those drawn from several positions
+static int placesChangedLastFrame = 0;
+static int placesChangedSinceReport = 0;
+
+extern int ToyShadowsNearLights;
 
 // What the log says about the lights chosen most recently. These are copies, so the log never reads a light that may have gone.
 struct ToyChosenNote
@@ -5651,6 +5659,25 @@ static bool ToyLightIsLit(const LIGHTBLOCK *light)
 	return light->LightBright && light->LightRange > 0 && (light->RedScale || light->GreenScale || light->BlueScale);
 }
 
+// A lamp with everything a lamp needs, except that its brightness is 0 just now.
+static bool LightIsDarkForNow(const LIGHTBLOCK *light)
+{
+	return !light->LightBright && light->LightRange > 0 && (light->RedScale || light->GreenScale || light->BlueScale);
+}
+
+static bool LightHasAPlace(const LIGHTBLOCK *light)
+{
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (lightInPlace[place] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 {
 	VECTORCH toLight;
@@ -5664,9 +5691,16 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 // Keeps the best lights seen so far, in order. A light marked first goes ahead of every other, nearest of those first, and
 // none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
 // light element, which is on no block.
+//
+// A lamp that flickers goes dark for a moment and comes back. If that lost it its place, the next light in line would come in for that moment,
+// and move from the game's lighting to ours and straight back. So a dark lamp that has a place keeps it, and competes for it just as if it were
+// lit. A lamp that's been shot out is dark for good, and is treated the same way: it only gives up its place once enough other lights are
+// clearly nearer, or the camera leaves it behind.
 static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most)
 {
-	if (!ToyLightIsLit(light))
+	bool const hasAPlace = LightHasAPlace(light);
+
+	if (!ToyLightIsLit(light) && !(hasAPlace && LightIsDarkForNow(light)))
 	{
 		return;
 	}
@@ -5688,13 +5722,9 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 			return;
 		}
 
-		for (int i = 0; i < toyNumChosenLastFrame; i++)
+		if (hasAPlace)
 		{
-			if (toyChosenLastFrame[i] == light)
-			{
-				order = (int)(((long long)distance * kToyStayQuarters) / 4);
-				break;
-			}
+			order = (int)(((long long)distance * kToyStayQuarters) / 4);
 		}
 	}
 
@@ -5769,6 +5799,112 @@ static void ToyHoldFlaresToTheirCap()
 				light->BrightnessOverRange = DIV_FIXED(MUL_FIXED(cap, LightScale), light->LightRange);
 			}
 		}
+	}
+}
+
+// Gives each chosen light its place on the list: the one it already has, or else a free one. placeOf and hadPositions get one answer for each
+// chosen light: which place it's in, and whether it was already one of the lamps with several positions. Gives back how many places the list
+// needs, which is the last one in use and every place before it, so a free place in the middle is on the list. It's filled in as a dark light.
+static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int *placeOf, bool *hadPositions)
+{
+	LIGHTBLOCK *newPlaces[kToyMostLights] = { 0 };
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		placeOf[i] = -1;
+		hadPositions[i] = false;
+
+		for (int place = 0; place < kToyMostLights; place++)
+		{
+			if (lightInPlace[place] == chosen[i].light)
+			{
+				placeOf[i] = place;
+				hadPositions[i] = placeHasPositions[place];
+				newPlaces[place] = chosen[i].light;
+				break;
+			}
+		}
+	}
+
+	// This can't run off the end: there are as many places as lights can be chosen, and each light has one.
+	int firstFree = 0;
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		if (placeOf[i] < 0)
+		{
+			while (newPlaces[firstFree])
+			{
+				firstFree++;
+			}
+
+			placeOf[i] = firstFree;
+			newPlaces[firstFree] = chosen[i].light;
+		}
+	}
+
+	int placesUsed = 0;
+	int placesChanged = 0;
+
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (newPlaces[place])
+		{
+			placesUsed = place + 1;
+		}
+
+		if (newPlaces[place] != lightInPlace[place])
+		{
+			placesChanged++;
+		}
+
+		lightInPlace[place] = newPlaces[place];
+		placeHasPositions[place] = false;
+	}
+
+	placesChangedLastFrame = placesChanged;
+	placesChangedSinceReport += placesChanged;
+
+	return placesUsed;
+}
+
+// Picks the lamps drawn from several positions: the nearest few, leaving out lights added per pixel. Those are gone too soon for the shape of a
+// shadow's edge to be seen, apart from flares, which always have positions. A lamp that has them keeps them until another is clearly nearer, the
+// same way a light keeps its place. Otherwise, two lamps about as near as each other would swap as the camera moved, and both their shadows
+// would jump. Each position is another stencil pass, so this can't be every lamp.
+static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, const int *placeOf, const bool *hadPositions)
+{
+	bool picked[kToyMostLights] = { false };
+
+	for (int round = 0; round < ToyShadowsNearLights; round++)
+	{
+		int nearest = -1;
+		int nearestDistance = 0;
+
+		for (int i = 0; i < numChosen; i++)
+		{
+			if (picked[i] || toyChosenLights[placeOf[i] * kToyLightFloats + 7] == 2.0f)
+			{
+				continue;
+			}
+
+			int const distance = hadPositions[i] ? (int)(((long long)chosen[i].distance * kToyStayQuarters) / 4) : chosen[i].distance;
+
+			if (nearest < 0 || distance < nearestDistance)
+			{
+				nearest = i;
+				nearestDistance = distance;
+			}
+		}
+
+		if (nearest < 0)
+		{
+			return;
+		}
+
+		picked[nearest] = true;
+		placeHasPositions[placeOf[nearest]] = true;
+		toyChosenLights[placeOf[nearest] * kToyLightFloats + kLightManyPositions] = 1.0f;
 	}
 }
 
@@ -5849,13 +5985,28 @@ void ToyShadows_ChooseLights()
 		chosen[numChosen++] = brief[i];
 	}
 
-	toyNumChosenLastFrame = numChosen;
-	toyNumChosen = numChosen;
+	int placeOf[kToyMostLights];
+	bool hadPositions[kToyMostLights];
+
+	toyNumChosen = GiveLightsTheirPlaces(chosen, numChosen, placeOf, hadPositions);
+
+	// To start with, every place reads as a dark light with nothing in it. Its range is 1 only so that nothing can divide by 0.
+	for (int place = 0; place < toyNumChosen; place++)
+	{
+		float *out = &toyChosenLights[place * kToyLightFloats];
+
+		memset(out, 0, kToyLightFloats * sizeof(float));
+		out[3] = 1.0f;
+		out[8] = 1.0f;
+		toyChosenOwners[place] = 0;
+		memset(&toyChosen[place], 0, sizeof(toyChosen[place]));
+	}
 
 	for (int i = 0; i < numChosen; i++)
 	{
 		LIGHTBLOCK const *light = chosen[i].light;
-		float *out = &toyChosenLights[i * kToyLightFloats];
+		int const place = placeOf[i];
+		float *out = &toyChosenLights[place * kToyLightFloats];
 		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
 		float view[3];
 
@@ -5916,14 +6067,14 @@ void ToyShadows_ChooseLights()
 			}
 		}
 
-		toyChosenOwners[i] = chosen[i].owner;
-		toyChosenLastFrame[i] = chosen[i].light;
-		toyChosen[i].distance = chosen[i].distance;
-		toyChosen[i].range = light->LightRange;
-		toyChosen[i].bright = light->LightBright;
-		toyChosen[i].flags = light->LightFlags;
+		toyChosenOwners[place] = chosen[i].owner;
+		toyChosen[place].distance = chosen[i].distance;
+		toyChosen[place].range = light->LightRange;
+		toyChosen[place].bright = light->LightBright;
+		toyChosen[place].flags = light->LightFlags;
 	}
 
+	PickLampsForPositions(chosen, numChosen, placeOf, hadPositions);
 	ToyHoldFlaresToTheirCap();
 }
 
@@ -6070,8 +6221,19 @@ void ToyShadows_NoteFrameLights(int frame)
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 
+	// A lit lamp that keeps its place never counts here. A light coming onto the list or leaving it does, once.
+	_snprintf(line, sizeof(line) - 1, "shadow lights: %d places on the list changed owner on the last frame, %d since the last report", placesChangedLastFrame, placesChangedSinceReport);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+	placesChangedSinceReport = 0;
+
 	for (int i = 0; i < toyNumChosen; i++)
 	{
+		if (!lightInPlace[i])
+		{
+			continue;
+		}
+
 		_snprintf(line, sizeof(line) - 1, "toy-lights:   chosen %d: %d away, range %d, brightness %d, flags %08x", i,
 			toyChosen[i].distance, toyChosen[i].range, toyChosen[i].bright, toyChosen[i].flags);
 		line[sizeof(line) - 1] = 0;
@@ -6305,6 +6467,12 @@ static bool ToyBallTouchesALight(const float *ball, const float *lights, int num
 	for (int i = 0; i < numLights; i++)
 	{
 		float const *light = &lights[i * kToyLightFloats];
+
+		if (LightOnListIsDark(light))
+		{
+			continue;
+		}
+
 		float const dx = ball[0] - light[0];
 		float const dy = ball[1] - light[1];
 		float const dz = ball[2] - light[2];

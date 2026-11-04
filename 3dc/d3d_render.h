@@ -27,16 +27,25 @@ enum
 	kToyMostBriefLights = 4,
 	kToyMostLights = kToyMostSteadyLights + kToyMostBriefLights,
 
-	// each light is 12 numbers: x y z, range, red green blue, its kind (0 baked into the walls, 1 live, in the game's lighting,
+	// each light is 13 numbers: x y z, range, red green blue, its kind (0 baked into the walls, 1 live, in the game's lighting,
 	// 2 live, added per pixel), then 1 if it's lit the way the game lights it, or 0 for the look chosen for flares, then its place in
-	// the world. The first x y z is the same place in the numbers the shaders use.
-	kToyLightFloats = 12,
+	// the world, then 1 if it's one of the lamps drawn from several positions. The first x y z is the same place in the numbers the
+	// shaders use.
+	kToyLightFloats = 13,
 	kToyLightWorld = 9,
+	kLightManyPositions = 12,
 
 	// The furthest a light counts as reaching, in the game's units. A shadow has to end well inside the far plane, or the
 	// stencil can't count it. A level can ask for more: 1,024,900 is in the stock levels.
 	kToyMostRange = 100000
 };
+
+// A place on the list can have nothing in it, and a lamp that's dark for the moment keeps its place: see ToyShadows_ChooseLights. Neither has
+// any colour, so nothing it did could be seen, and everything that goes through the list steps over it.
+inline bool LightOnListIsDark(const float *light)
+{
+	return light[4] <= 0.0f && light[5] <= 0.0f && light[6] <= 0.0f;
+}
 
 extern void D3D_DrawBackdrop();
 extern void PostLandscapeRendering();

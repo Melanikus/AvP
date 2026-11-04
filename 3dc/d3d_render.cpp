@@ -4373,6 +4373,11 @@ static void ToyDrawLightMarkers(LPDIRECT3DDEVICE9 device, const float *lights, i
 		float const *position = &lights[light * kToyLightFloats];
 		ToyVec corners[8];
 
+		if (LightOnListIsDark(position))
+		{
+			continue;
+		}
+
 		for (int i = 0; i < 8; i++)
 		{
 			corners[i].x = position[0] + ((i & 1) ? size : -size);
@@ -4844,37 +4849,16 @@ static bool ToyLightIsFlare(const float *light)
 	return light[8] == 0.0f;
 }
 
-// How many positions this light is drawn from: every flare, and the nearest few of the lamps. Flares come first in the list, and
-// the others go nearest first. Any other light added per pixel stays a point: a muzzle flash or an explosion is gone too soon for
-// the shape of its shadow's edge to be seen, and each position is another stencil pass. A light with no size is a point too, so
+// How many positions this light is drawn from: every flare, and the lamps PickLampsForPositions picked. A light with no size is a point, so
 // one position is all it can have.
-static int ToyPositionsForLight(const float *lights, int thisLight)
+static int ToyPositionsForLight(const float *light)
 {
-	float const *light = &lights[thisLight * kToyLightFloats];
 	bool const flare = ToyLightIsFlare(light);
 	int const size = flare ? ToyShadowsFlareSize : ToyShadowsLampSize;
 
-	if (size <= 0 || ToyShadowsPositions < 4 || (!flare && light[7] == 2.0f))
+	if (size <= 0 || ToyShadowsPositions < 4 || (!flare && light[kLightManyPositions] == 0.0f))
 	{
 		return 1;
-	}
-
-	if (!flare)
-	{
-		int nearer = 0;
-
-		for (int i = 0; i < thisLight; i++)
-		{
-			if (lights[i * kToyLightFloats + 7] != 2.0f)
-			{
-				nearer++;
-			}
-		}
-
-		if (nearer >= ToyShadowsNearLights)
-		{
-			return 1;
-		}
 	}
 
 	return (ToyShadowsPositions < 8) ? 4 : 8;
@@ -5172,8 +5156,18 @@ static void ToyShadows_Draw()
 		return;
 	}
 
+	int litLights = 0;
+
+	for (int light = 0; light < report.lights; light++)
+	{
+		if (!LightOnListIsDark(&lights[light * kToyLightFloats]))
+		{
+			litLights++;
+		}
+	}
+
 	// Without the pictures, each light takes a flat share, so that a pixel none of them reach ends up at the full darkness.
-	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)report.lights);
+	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)(litLights ? litLights : 1));
 	float worldAxes[9];
 	ToyShadows_WorldAxes(worldAxes);
 	ToyShadows_CameraPlace(toyCameraInWorld);
@@ -5206,6 +5200,7 @@ static void ToyShadows_Draw()
 	unsigned int pixelsByLight[kToyMostLights] = { 0 };
 	bool const counting = countQuery != 0;
 	bool measuredThisFrame = false;
+	float const *measuredLight = lights;
 	ToyVec sampleNear = { 0.0f, 0.0f, 0.0f };
 	ToyVec sampleFar = { 0.0f, 0.0f, 0.0f };
 
@@ -5271,7 +5266,7 @@ static void ToyShadows_Draw()
 		float const *thisLight = &lights[light * kToyLightFloats];
 
 		// lights added per pixel come after the world has been darkened
-		if (thisLight[7] == 2.0f)
+		if (thisLight[7] == 2.0f || LightOnListIsDark(thisLight))
 		{
 			continue;
 		}
@@ -5306,7 +5301,7 @@ static void ToyShadows_Draw()
 		}
 
 		// a light drawn from several positions, which only the mask can add up
-		int const positions = screen ? ToyPositionsForLight(lights, light) : 1;
+		int const positions = screen ? ToyPositionsForLight(thisLight) : 1;
 		if (positions > 1)
 		{
 			HRESULT const darkened = ToyShadeFromEveryPosition(device, thisLight, lightOwners[light], positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
@@ -5326,8 +5321,10 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
-		if (countQuery && light == 0 && ToyShadowsMode == kToyViewPolygons)
+		if (countQuery && !measuredThisFrame && ToyShadowsMode == kToyViewPolygons)
 		{
+			measuredLight = thisLight;
+
 			// the first thing each prism writes is a near corner, then the far corner that goes with it
 			if (toyNumVerts >= 6)
 			{
@@ -5420,7 +5417,7 @@ static void ToyShadows_Draw()
 
 			// Without the pictures there's no adding a light. That's only ever one frame: the first after they're lost, before the lights go back to the game.
 			RECT reach;
-			if (screen && thisLight[7] == 2.0f && ToyLightRectangle(device, thisLight, &reach))
+			if (screen && thisLight[7] == 2.0f && !LightOnListIsDark(thisLight) && ToyLightRectangle(device, thisLight, &reach))
 			{
 				device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 				device->SetScissorRect(&reach);
@@ -5431,7 +5428,7 @@ static void ToyShadows_Draw()
 					toyNoteLight = &lightReports[light];
 				}
 
-				int const positions = ToyPositionsForLight(lights, light);
+				int const positions = ToyPositionsForLight(thisLight);
 				if (positions > 1)
 				{
 					ToyPaintFlareFromEveryPosition(device, screen, &viewport, &reach, thisLight, lightOwners[light], positions, worldAxes, haveCloaked, &report, countQuery, &pixelsByLight[light]);
@@ -5542,10 +5539,13 @@ static void ToyShadows_Draw()
 		int passes = 0;
 		for (int i = 0; i < report.lights; i++)
 		{
-			passes += darkening ? ToyPositionsForLight(lights, i) : 1;
+			if (!LightOnListIsDark(&lights[i * kToyLightFloats]))
+			{
+				passes += darkening ? ToyPositionsForLight(&lights[i * kToyLightFloats]) : 1;
+			}
 		}
-		_snprintf(line, sizeof(line) - 1, "toy-shadows: %d passes for %d lights; %d positions, on flares and the nearest %d others; lamp size %d, flare size %d",
-			passes, report.lights, ToyShadowsPositions, ToyShadowsNearLights, ToyShadowsLampSize, ToyShadowsFlareSize);
+		_snprintf(line, sizeof(line) - 1, "toy-shadows: %d passes for %d lit lights; %d positions, on flares and the nearest %d others; lamp size %d, flare size %d",
+			passes, litLights, ToyShadowsPositions, ToyShadowsNearLights, ToyShadowsLampSize, ToyShadowsFlareSize);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
 
@@ -5560,8 +5560,14 @@ static void ToyShadows_Draw()
 			for (int i = 0; i < report.lights; i++)
 			{
 				float const *thisLight = &lights[i * kToyLightFloats];
+
+				if (LightOnListIsDark(thisLight))
+				{
+					continue;
+				}
+
 				ToyLightReport const *did = &lightReports[i];
-				int const passesHere = ToyPositionsForLight(lights, i);
+				int const passesHere = ToyPositionsForLight(thisLight);
 				float const kind = thisLight[7];
 				float const distance = sqrtf(thisLight[0] * thisLight[0] + thisLight[1] * thisLight[1] + thisLight[2] * thisLight[2]);
 				float const weight = (thisLight[4] + thisLight[5] + thisLight[6]) / 3.0f;
@@ -5600,18 +5606,18 @@ static void ToyShadows_Draw()
 
 		if (measuredThisFrame)
 		{
-			float const distance = sqrtf(lights[0] * lights[0] + lights[1] * lights[1] + lights[2] * lights[2]);
+			float const distance = sqrtf(measuredLight[0] * measuredLight[0] + measuredLight[1] * measuredLight[1] + measuredLight[2] * measuredLight[2]);
 
 			_snprintf(line, sizeof(line) - 1,
 				"toy-shadows: first light, distance %.0f, range %.0f: behind the scene back %u front %u, in front of it back %u front %u, stencil control %u, z-pass %u, unanswered %d",
-				distance, lights[3], measured.backBehind, measured.frontBehind, measured.backInFront, measured.frontInFront,
+				distance, measuredLight[3], measured.backBehind, measured.frontBehind, measured.backInFront, measured.frontInFront,
 				measured.stencilControl, measured.zPass, toyQueriesUnanswered);
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
 
 			_snprintf(line, sizeof(line) - 1,
 				"toy-shadows: first light at %.0f %.0f %.0f, a prism from %.0f %.0f %.0f to %.0f %.0f %.0f, corners thrown %.0f on average",
-				lights[0], lights[1], lights[2], sampleNear.x, sampleNear.y, sampleNear.z, sampleFar.x, sampleFar.y, sampleFar.z,
+				measuredLight[0], measuredLight[1], measuredLight[2], sampleNear.x, sampleNear.y, sampleNear.z, sampleFar.x, sampleFar.y, sampleFar.z,
 				toyStretchCorners ? toyStretchTotal / toyStretchCorners : 0.0);
 			line[sizeof(line) - 1] = 0;
 			LogString(line);
