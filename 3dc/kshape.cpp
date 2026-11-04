@@ -5486,6 +5486,7 @@ extern int NumActiveLightElements;
 extern LIGHTELEMENT LightElementStorage[];
 extern int DrawingAReflection;
 extern bool gunLayer;
+extern int GlobalFrameCounter;
 
 static int toyMostLightsOnAnObject = 0;
 static int toyMostLightsInAFrame = 0;
@@ -5503,74 +5504,122 @@ void ToyShadows_NoteObjectLights()
 	}
 }
 
-void ToyShadows_NoteFrameLights()
-{
-	if (!ToyShadowsMode)
-	{
-		return;
-	}
-
-	// the same lights LightSourcesInRangeOfObject would consider, before it looks at range
-	int lights = NumActiveLightElements;
-
-	for (int i = 0; i < NumActiveBlocks; i++)
-	{
-		DISPLAYBLOCK *block = ActiveBlockList[i];
-
-		for (int j = 0; j < block->ObNumLights; j++)
-		{
-			LIGHTBLOCK *light = block->ObLights[j];
-
-			if (light->LightBright && (light->RedScale || light->GreenScale || light->BlueScale))
-			{
-				lights++;
-			}
-		}
-	}
-
-	if (lights > toyMostLightsInAFrame)
-	{
-		toyMostLightsInAFrame = lights;
-
-		char line[80];
-		_snprintf(line, sizeof(line) - 1, "toy-shadows: most lights in one frame so far: %d", toyMostLightsInAFrame);
-		line[sizeof(line) - 1] = 0;
-		LogString(line);
-	}
-}
-
 // The camera and the view of the frame the polygons came from, kept for when the lights are chosen at the end of the frame.
 static float toyViewMatrix[12];
 static VECTORCH toyCameraWorld;
 
+// A chosen light stays chosen until another is clearly nearer: a light picked last frame counts as this many quarters of
+// its real distance. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
+// from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
+// been thrown away does no harm.
+static const int kToyStayQuarters = 3;
+static const int kToyMostChosen = 8;
+
 struct ToyFoundLight
 {
 	LIGHTBLOCK *light;
-	int order;    // lowest first
+	int order;      // lowest first
+	int distance;   // from the camera
 };
 
-// Keeps the lights nearest the camera, in order. A light marked first goes ahead of every other, nearest of those first.
-static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most, bool first)
+static LIGHTBLOCK *toyChosenLastFrame[kToyMostChosen];
+static int toyNumChosenLastFrame = 0;
+
+// What the log says about the lights chosen most recently. These are copies, because the log comes a frame later, when a
+// brief light has gone.
+struct ToyChosenNote
 {
-	if (!light->LightBright || light->LightRange <= 0 || !(light->RedScale || light->GreenScale || light->BlueScale))
+	int distance, range, bright, flags;
+};
+
+static ToyChosenNote toyChosen[kToyMostChosen];
+static int toyNumChosen = 0;
+
+// A light that only lasts a moment: a muzzle flash, remade with a new brightness every frame, or a light element such as
+// sparks or an explosion. Letting one take a place, even for a frame, would make all the steady shadows jump.
+static bool ToyLightIsBrief(const LIGHTBLOCK *light)
+{
+	return (light->LightFlags & LFlag_Deallocate) != 0;
+}
+
+static bool ToyBlockIsFlare(const DISPLAYBLOCK *block)
+{
+	return block->ObStrategyBlock && block->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade;
+}
+
+// Could any of this light's range be on screen? The test is a deliberately wide view, about 127 degrees across in both
+// directions, so that it never drops a light the camera can really see, whatever the field of view or the zoom. A wrong
+// "no" would show as shadows popping off, and a wrong "yes" only costs a pass. A light behind the camera can still pass,
+// because what counts is its whole range and not where it sits.
+static bool ToyLightCanReachTheView(const LIGHTBLOCK *light)
+{
+	const float kWideSlope = 2.0f;
+	const float kPlaneScale = 2.236f;  // the square root of 1 + kWideSlope squared: turns the sums below into distances
+
+	float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+	float view[3];
+	TranslatePoint(source, view, toyViewMatrix);
+
+	float const range = (float)light->LightRange;
+
+	if (view[2] + range < 0.0f)
 	{
-		return;
+		return false;  // all of it lies behind the camera
 	}
 
+	float const reach = range * kPlaneScale;
+
+	return (fabs(view[0]) - view[2] * kWideSlope <= reach) && (fabs(view[1]) - view[2] * kWideSlope <= reach);
+}
+
+static bool ToyLightIsLit(const LIGHTBLOCK *light)
+{
+	return light->LightBright && light->LightRange > 0 && (light->RedScale || light->GreenScale || light->BlueScale);
+}
+
+static int ToyDistanceToCamera(const LIGHTBLOCK *light)
+{
 	VECTORCH toLight;
 	toLight.vx = light->LightWorld.vx - toyCameraWorld.vx;
 	toLight.vy = light->LightWorld.vy - toyCameraWorld.vy;
 	toLight.vz = light->LightWorld.vz - toyCameraWorld.vz;
 
-	int const distance = Approximate3dMagnitude(&toLight);
+	return Approximate3dMagnitude(&toLight);
+}
 
-	// a light on the camera throws every shadow straight away from the eye, where it can't be seen
-	if (distance < 300 && !first)
+// Keeps the best lights seen so far, in order. A light marked first goes ahead of every other, nearest of those first, and
+// none of the tests below apply to it: a flare is always chosen, near or far.
+static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFound, int most, bool first)
+{
+	if (!ToyLightIsLit(light))
 	{
 		return;
 	}
 
-	int const order = first ? distance - 0x40000000 : distance;
+	int const distance = ToyDistanceToCamera(light);
+	int order = distance;
+
+	if (first)
+	{
+		order = distance - 0x40000000;
+	}
+	else
+	{
+		// a light on the camera throws every shadow straight away from the eye, where it can't be seen
+		if (distance < 300 || !ToyLightCanReachTheView(light))
+		{
+			return;
+		}
+
+		for (int i = 0; i < toyNumChosenLastFrame; i++)
+		{
+			if (toyChosenLastFrame[i] == light)
+			{
+				order = (int)(((long long)distance * kToyStayQuarters) / 4);
+				break;
+			}
+		}
+	}
 
 	int place = *numFound;
 	while (place > 0 && found[place - 1].order > order)
@@ -5591,6 +5640,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, ToyFoundLight *found, int *numFo
 
 	found[place].light = light;
 	found[place].order = order;
+	found[place].distance = distance;
 }
 
 // A fixed point number as a fraction, kept between 0 and 1.
@@ -5601,17 +5651,18 @@ static float ToyFraction(int fixedPoint)
 }
 
 // Fills lights with x y z range red green blue for each light chosen, 7 numbers each, in the space the polygons were collected
-// in. Gives back how many. Flares come first, near or far, so that a flare in flight always moves its shadows. The player can
-// have 4 going at once (pmove.cpp).
+// in. Gives back how many. Flares come first, near or far, so that a flare in flight always moves its shadows: the player can
+// have 4 going at once (pmove.cpp). Then steady lights, nearest the camera first. Brief lights only get the places left over.
 int ToyShadows_PickLights(float *lights, int most)
 {
-	const int kMostHere = 8;
-	ToyFoundLight found[kMostHere];
-	int numFound = 0;
+	ToyFoundLight steady[kToyMostChosen];
+	ToyFoundLight brief[kToyMostChosen];
+	int numSteady = 0;
+	int numBrief = 0;
 
-	if (most > kMostHere)
+	if (most > kToyMostChosen)
 	{
-		most = kMostHere;
+		most = kToyMostChosen;
 	}
 
 	for (int i = 0; i < NumActiveBlocks; i++)
@@ -5623,22 +5674,40 @@ int ToyShadows_PickLights(float *lights, int most)
 			continue;
 		}
 
-		bool const isFlare = block->ObStrategyBlock && block->ObStrategyBlock->I_SBtype == I_BehaviourFlareGrenade;
+		bool const isFlare = ToyBlockIsFlare(block);
 
 		for (int j = 0; j < block->ObNumLights; j++)
 		{
-			ToyConsiderLight(block->ObLights[j], found, &numFound, most, isFlare);
+			LIGHTBLOCK *light = block->ObLights[j];
+
+			if (!isFlare && ToyLightIsBrief(light))
+			{
+				ToyConsiderLight(light, brief, &numBrief, most, false);
+			}
+			else
+			{
+				ToyConsiderLight(light, steady, &numSteady, most, isFlare);
+			}
 		}
 	}
 
 	for (int i = 0; i < NumActiveLightElements; i++)
 	{
-		ToyConsiderLight(&LightElementStorage[i].LightBlock, found, &numFound, most, false);
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, brief, &numBrief, most, false);
 	}
+
+	int numFound = numSteady;
+	for (int i = 0; i < numBrief && numFound < most; i++)
+	{
+		steady[numFound++] = brief[i];
+	}
+
+	toyNumChosenLastFrame = numFound;
+	toyNumChosen = numFound;
 
 	for (int i = 0; i < numFound; i++)
 	{
-		LIGHTBLOCK const *light = found[i].light;
+		LIGHTBLOCK const *light = steady[i].light;
 		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
 		float view[3];
 
@@ -5653,9 +5722,123 @@ int ToyShadows_PickLights(float *lights, int most)
 		lights[i * 7 + 4] = bright * ToyFraction(light->RedScale);
 		lights[i * 7 + 5] = bright * ToyFraction(light->GreenScale);
 		lights[i * 7 + 6] = bright * ToyFraction(light->BlueScale);
+
+		toyChosenLastFrame[i] = steady[i].light;
+		toyChosen[i].distance = steady[i].distance;
+		toyChosen[i].range = light->LightRange;
+		toyChosen[i].bright = light->LightBright;
+		toyChosen[i].flags = light->LightFlags;
 	}
 
 	return numFound;
+}
+
+// Breaks "active" down by kind, so the count means something. Writes a line each time the total passes its record, and every
+// 300 frames. "Active" is the test LightSourcesInRangeOfObject starts from: lit, and on something the game is keeping active.
+void ToyShadows_NoteFrameLights()
+{
+	if (!ToyShadowsMode)
+	{
+		return;
+	}
+
+	const int kMostSpots = 256;
+	VECTORCH spots[kMostSpots];
+	int numSpots = 0;
+	int level = 0, objects = 0, flares = 0, brief = 0, onPlayer = 0, cameraInside = 0, canReach = 0;
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK const *light = block->ObLights[j];
+
+			if (!ToyLightIsLit(light))
+			{
+				continue;
+			}
+
+			if (block == Player)
+			{
+				onPlayer++;
+			}
+			else if (ToyBlockIsFlare(block))
+			{
+				flares++;
+			}
+			else if (ToyLightIsBrief(light))
+			{
+				brief++;
+			}
+			else if (block->ObMyModule)
+			{
+				level++;
+			}
+			else
+			{
+				objects++;
+			}
+
+			if (ToyDistanceToCamera(light) < light->LightRange)
+			{
+				cameraInside++;
+			}
+
+			if (ToyLightCanReachTheView(light))
+			{
+				canReach++;
+			}
+
+			if (numSpots < kMostSpots)
+			{
+				spots[numSpots++] = light->LightWorld;
+			}
+		}
+	}
+
+	int const total = level + objects + flares + brief + onPlayer + NumActiveLightElements;
+	bool const isRecord = total > toyMostLightsInAFrame;
+
+	if (isRecord)
+	{
+		toyMostLightsInAFrame = total;
+	}
+
+	if (!isRecord && (GlobalFrameCounter % 300) != 0)
+	{
+		return;
+	}
+
+	// two lights in exactly the same place would be one light counted twice
+	int sameSpot = 0;
+	for (int i = 1; i < numSpots; i++)
+	{
+		for (int j = 0; j < i; j++)
+		{
+			if (spots[i].vx == spots[j].vx && spots[i].vy == spots[j].vy && spots[i].vz == spots[j].vz)
+			{
+				sameSpot++;
+				break;
+			}
+		}
+	}
+
+	char line[256];
+	_snprintf(line, sizeof(line) - 1,
+		"toy-lights: frame %d%s: %d active = %d level + %d objects + %d flares + %d brief + %d elements + %d on the player; camera inside the range of %d, %d can reach the view, %d share a spot",
+		GlobalFrameCounter, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	for (int i = 0; i < toyNumChosen; i++)
+	{
+		_snprintf(line, sizeof(line) - 1, "toy-lights:   chosen %d: %d away, range %d, brightness %d, flags %08x", i,
+			toyChosen[i].distance, toyChosen[i].range, toyChosen[i].bright, toyChosen[i].flags);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
 }
 
 // Keeps a copy of every solid polygon of this piece of the level for the end of the frame, in view space. Only the level's
