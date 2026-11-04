@@ -3717,9 +3717,6 @@ static const float kToyPositions[8][3] =
 	{ -0.577f, -0.577f, -0.577f }, { -0.577f,  0.577f,  0.577f }, {  0.577f, -0.577f,  0.577f }, {  0.577f,  0.577f, -0.577f },
 };
 
-// While a light's prisms are built from one of its positions, this is where the light really is. Otherwise it's empty.
-static float const *toyLightCentre = 0;
-
 // What one light did on a report frame, so that the log shows what reached the screen and not only what the stencil marked. Marked
 // isn't the same as darkened: a prism runs on past the light's range, and a pixel out there is marked and loses nothing.
 struct ToyLightReport
@@ -3742,8 +3739,9 @@ static inline void ToyTri(const ToyVec &a, const ToyVec &b, const ToyVec &c)
 	toyVerts[toyNumVerts++] = c;
 }
 
-// light holds x y z range. model says this polygon is part of a model, such as an alien
-static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool model)
+// light holds x y z range. centre is where the light really is: the two differ while the prisms are built from one of the light's
+// positions. model says this polygon is part of a model, such as an alien
+static void ToyAddPrism(const ToyVec *pts, int count, const float *light, const float *centre, bool model)
 {
 	int const needed = ((count - 2) * 2 + count * 2) * 3;
 	if (toyNumVerts + needed > kToyMaxVerts)
@@ -3771,7 +3769,6 @@ static void ToyAddPrism(const ToyVec *pts, int count, const float *light, bool m
 	// A position can land behind a surface the light is really in front of: a flare lying on the floor, or a lamp just under a
 	// ceiling. That surface would then block the position from the whole room, and part of the light would go, in the shape of
 	// the floor. So a polygon whose flat surface lies between the light and the position doesn't cast for that position.
-	float const *centre = toyLightCentre ? toyLightCentre : light;
 	float const centreFacing = nx * (centre[0] - pts[0].x) + ny * (centre[1] - pts[0].y) + nz * (centre[2] - pts[0].z);
 
 	if ((centreFacing < 0.0f) != (facing < 0.0f))
@@ -4183,7 +4180,7 @@ static void ToyMeasure(LPDIRECT3DDEVICE9 device, IDirect3DQuery9 *countQuery, To
 
 // A closed box round the light. Every direction out of the light hits it, so everything in range is in its shadow, whatever
 // the room looks like.
-static void ToyAddTestBox(const float *light)
+static void ToyAddTestBox(const float *light, const float *centre)
 {
 	float const size = 100.0f;
 	ToyVec corners[8];
@@ -4200,7 +4197,7 @@ static void ToyAddTestBox(const float *light)
 	for (int face = 0; face < 6; face++)
 	{
 		ToyVec const points[4] = { corners[kFaces[face][0]], corners[kFaces[face][1]], corners[kFaces[face][2]], corners[kFaces[face][3]] };
-		ToyAddPrism(points, 4, light, false);
+		ToyAddPrism(points, 4, light, centre, false);
 	}
 }
 
@@ -4658,7 +4655,8 @@ static bool ToyBallInReach(const ToyBall &ball, const float *light)
 // prisms go through a pass of their own: cloakedOnly picks those, and leaving it false picks all the others.
 // owner is what carries this light, or nothing. Anything carrying a light sits around it, so it would block that light in every
 // direction, and the light would go dark everywhere. So it casts no shadow from its own light, and still casts from all the others.
-static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport *report, bool cloakedOnly)
+// centre is where the light really is, and light is where these prisms are cast from, which can be one of its positions.
+static void ToyBuildPrisms(const float *light, const float *centre, const void *owner, ToyFrameReport *report, bool cloakedOnly)
 {
 	toyNumVerts = 0;
 	int moduleAsked = -1;
@@ -4689,12 +4687,12 @@ static void ToyBuildPrisms(const float *light, const void *owner, ToyFrameReport
 		}
 
 		int const vertsBefore = toyNumVerts;
-		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light, kind == kToyCasterModel);
+		ToyAddPrism(&toyCasterPoints[toyCasterStart[caster]], toyCasterCount[caster], light, centre, kind == kToyCasterModel);
 		toyVertsOfKind[kind] += toyNumVerts - vertsBefore;
 	}
 	if (ToyShadowsTest && !cloakedOnly)
 	{
-		ToyAddTestBox(light);
+		ToyAddTestBox(light, centre);
 	}
 	report->verts += toyNumVerts;
 }
@@ -5023,14 +5021,12 @@ static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *
 	float const part = 1.0f / (float)positions;
 	HRESULT result = S_OK;
 
-	toyLightCentre = light;
-
 	for (int position = 0; position < positions; position++)
 	{
 		float moved[kToyLightFloats];
 		ToyLightAtPosition(light, position, axes, moved);
 
-		ToyBuildPrisms(moved, owner, report, false);
+		ToyBuildPrisms(moved, light, owner, report, false);
 		ToyMarkShadow(device, report);
 
 		HRESULT const darkened = ToyShadeLevel(device, lights, numLights, thisLight, part, countQuery, pixels);
@@ -5040,14 +5036,12 @@ static HRESULT ToyShadeFromEveryPosition(LPDIRECT3DDEVICE9 device, const float *
 		}
 	}
 
-	toyLightCentre = 0;
-
 	// a cloaked Predator's shadow is faint, from something that can barely be seen, so one position is plenty
 	if (haveCloaked)
 	{
 		unsigned int notCounted = 0;
 
-		ToyBuildPrisms(light, owner, report, true);
+		ToyBuildPrisms(light, light, owner, report, true);
 		ToyMarkShadow(device, report);
 		ToyShadeLevel(device, lights, numLights, thisLight, kToyCloakedShadow, 0, &notCounted);
 	}
@@ -5061,26 +5055,22 @@ static void ToyPaintFlareFromEveryPosition(LPDIRECT3DDEVICE9 device, IDirect3DSu
 {
 	float const part = 1.0f / (float)positions;
 
-	toyLightCentre = light;
-
 	for (int position = 0; position < positions; position++)
 	{
 		float moved[kToyLightFloats];
 		ToyLightAtPosition(light, position, axes, moved);
 
-		ToyBuildPrisms(moved, owner, report, false);
+		ToyBuildPrisms(moved, light, owner, report, false);
 		ToyMarkShadow(device, report);
 		ToyPaintFlareMask(device, screen, viewport, reach, position != 0, part, countQuery, pixels);
 	}
-
-	toyLightCentre = 0;
 
 	// a cloaked Predator's shadow is faint, from something that can barely be seen, so one position is plenty
 	if (haveCloaked)
 	{
 		unsigned int notCounted = 0;
 
-		ToyBuildPrisms(light, owner, report, true);
+		ToyBuildPrisms(light, light, owner, report, true);
 		ToyMarkShadow(device, report);
 		ToyPaintFlareMask(device, screen, viewport, reach, true, kToyCloakedShadow, 0, &notCounted);
 	}
@@ -5404,7 +5394,7 @@ static void ToyShadows_Draw()
 			continue;
 		}
 
-		ToyBuildPrisms(thisLight, lightOwners[light], &report, false);
+		ToyBuildPrisms(thisLight, thisLight, lightOwners[light], &report, false);
 
 		if (ToyShadowsMode == kToyViewEdges)
 		{
@@ -5440,7 +5430,7 @@ static void ToyShadows_Draw()
 			{
 				unsigned int notCounted = 0;
 
-				ToyBuildPrisms(thisLight, lightOwners[light], &report, true);
+				ToyBuildPrisms(thisLight, thisLight, lightOwners[light], &report, true);
 				ToyMarkShadow(device, &report);
 				ToyShadeLevel(device, lights, report.lights, light, kToyCloakedShadow, 0, &notCounted);
 			}
@@ -5534,7 +5524,7 @@ static void ToyShadows_Draw()
 					continue;
 				}
 
-				ToyBuildPrisms(thisLight, lightOwners[light], &report, false);
+				ToyBuildPrisms(thisLight, thisLight, lightOwners[light], &report, false);
 				ToyMarkShadow(device, &report);
 				if (screen)
 				{
@@ -5544,7 +5534,7 @@ static void ToyShadows_Draw()
 					{
 						unsigned int notCounted = 0;
 
-						ToyBuildPrisms(thisLight, lightOwners[light], &report, true);
+						ToyBuildPrisms(thisLight, thisLight, lightOwners[light], &report, true);
 						ToyMarkShadow(device, &report);
 						ToyPaintFlareMask(device, screen, &viewport, &reach, true, kToyCloakedShadow, 0, &notCounted);
 					}
