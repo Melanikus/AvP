@@ -7,6 +7,9 @@
  *    HISTORY:  Created 13/11/97 
  *
  *******************************************************************/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a function with nothing to do no longer holds two empty blocks; the compiled code is the same
 
 /* Includes ********************************************************/
 #include "3dc.h"
@@ -166,13 +169,7 @@ extern void GADGET_ScreenModeChange_Setup(void)
 	/* expects to be called immediately before anything happens to the screen
 	mode */
 
-	/* PRECONDITION */
-	{
-	}
-
-	/* CODE */
-	{
-	}
+	// nothing to do before the screen mode changes
 }
 
 
