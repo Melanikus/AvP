@@ -111,6 +111,20 @@ static HuffmanPackage * MakePackage(int * packageSize)
 	return package;
 }
 
+// A package that unpacks to far more than the spare bytes kept after a package's data. It's all one byte value, so it packs down to a size that fits the wall.
+static HuffmanPackage * MakeBigPackage(int * packageSize)
+{
+	int const bytes = 4 * 1024 * 1024;
+	unsigned char * data = (unsigned char *)calloc(bytes, 1);
+
+	HuffmanPackage * package = HuffmanCompression(data, bytes);
+	*packageSize = (int)sizeof(HuffmanPackage) + package->CompressedDataSize;
+
+	free(data);
+
+	return package;
+}
+
 // A package from a file can say anything, and the decoder is the first thing to look at it. The package goes at the wall, so reading a byte
 // past its end stops this test. Gives back true if the decoder said no.
 static bool Refused(HuffmanPackage const * original, void (*damage)(HuffmanPackage *), int bytesKept)
@@ -168,6 +182,18 @@ static void TestDamagedPackages()
 
 	Check(!Refused(package, 0, packageSize), "a whole package is decoded");
 	Check(Refused(package, SizeNegative, packageSize), "a negative size is refused");
+
+	// A small package with a negative size fits in the block the decoder makes, and then doesn't decode to that size, so a later check would refuse it too.
+	// This one holds far more than the block, so only the test for a negative size stands between it and writing past the end.
+	{
+		int bigPackageSize = 0;
+		HuffmanPackage * bigPackage = MakeBigPackage(&bigPackageSize);
+
+		Check(!Refused(bigPackage, 0, bigPackageSize), "a whole big package is decoded");
+		Check(Refused(bigPackage, SizeNegative, bigPackageSize), "a negative size on a big package is refused");
+
+		free(bigPackage);
+	}
 	Check(Refused(package, SizeHuge, packageSize), "a huge size is refused");
 	Check(Refused(package, SizeTooBigForData, packageSize), "a size the data can't hold is refused");
 	Check(Refused(package, LengthNegative, packageSize), "a negative code length is refused");
