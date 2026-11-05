@@ -15,6 +15,7 @@
 //   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. This comes out before merge
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
+//   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -181,6 +182,8 @@ int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *pla
 void ShadowGroup_StartWalked(const void *shape, unsigned int listNumber, const int *place, int numPolygons, const float *ballInWorld, const ShadowReachBall &ballOnTheList);
 bool ShadowReportIsDue();
 void ToyShadows_NoteModelPart(const void *model, int polygons);
+void ToyShadows_NoteWorldDrawn();
+bool ToyShadows_VolumesInThisView();
 
 /*
  Global variables and arrays
@@ -6496,7 +6499,14 @@ void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
 
 	if (ToyShadowsCasters & (1 << kToyCasterLevel))
 	{
-		ShadowGroup_StartWalked(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx, shapePtr->numitems, module->m_ball, ToyModuleBallOnTheList(module));
+		if (ToyShadows_VolumesInThisView())
+		{
+			ShadowGroup_StartWalked(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx, shapePtr->numitems, module->m_ball, ToyModuleBallOnTheList(module));
+		}
+		else
+		{
+			ToyShadows_NoteWorldDrawn();
+		}
 	}
 }
 
@@ -6685,6 +6695,13 @@ void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 
 	if (shapePtr->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR))
 	{
+		return;
+	}
+
+	// With the shadow volumes off nothing casts, so the list isn't wanted. This comes after the tests above, so that a frame counts as the same kind of frame either way.
+	if (!ToyShadows_VolumesInThisView())
+	{
+		ToyShadows_NoteWorldDrawn();
 		return;
 	}
 

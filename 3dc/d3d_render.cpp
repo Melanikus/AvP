@@ -15,6 +15,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting
+//   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -3721,6 +3722,8 @@ extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
 int LightingNow = kLightingRelief;
+// Whether anything casts a shadow. With this at 0, no polygons are collected for casting and no prisms are built or drawn, kept ones included. The mask stays at nothing
+// blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 1;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8: how many steady lights
 int ToyShadowsMaxBrief = 4;   // -shadowbrief=N, 0 to 4: how many brief lights on top of those, such as muzzle flashes and explosions
@@ -6470,6 +6473,26 @@ static void NoteCaptureNumbers(int frame, const float *lights, const void *const
 	ShadowCapture_AddNumbers(numbers);
 }
 
+// Only the real picture obeys the switch. The other views are there to show what the shadow code is doing, so they go on showing it.
+bool ToyShadows_VolumesInThisView()
+{
+	return ShadowVolumesOn || ToyShadowsMode != kToyViewFinal;
+}
+
+// With the shadow volumes off nothing goes on the caster list, but the frame's lights still need to know that the world was drawn. On a frame with none of it, they
+// stay in the game's own lighting, the same as they do with the volumes on.
+static bool worldDrawnWithoutCasters = false;
+
+void ToyShadows_NoteWorldDrawn()
+{
+	worldDrawnWithoutCasters = true;
+}
+
+static bool ToyWorldWasDrawn()
+{
+	return toyNumCasters > 0 || numWalkedGroups > 0 || worldDrawnWithoutCasters;
+}
+
 static void ToyForgetCasters()
 {
 	FrameTiming_SetPolygonsCollected(toyNumCasters);
@@ -6484,6 +6507,7 @@ static void ToyForgetCasters()
 	toyNumCasterPoints = 0;
 	numKeptGroups = 0;
 	numWalkedGroups = 0;
+	worldDrawnWithoutCasters = false;
 	toyCastersLeftOut = 0;
 	toyLastModel = 0;
 	toyThisModelPolygons = 0;
@@ -6596,7 +6620,11 @@ static void ShadowStatus_Draw()
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
-	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
+	if (ToyShadows_VolumesInThisView())
+	{
+		_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
+	}
+
 	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_Word(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
@@ -6979,10 +7007,14 @@ static void ToyShadows_Draw()
 		}
 	}
 
+	// The G key above can change the view after the polygons were collected. That's safe both ways: going to a view with volumes, this frame's prisms come out empty, and
+	// going to one without, the polygons on the list are just forgotten at the end.
+	bool const volumesThisFrame = ToyShadows_VolumesInThisView();
+
 	// Chosen live lights are ours while the view adds them per pixel. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
 	bool const lightsOurs = ViewAddsLightsPerPixel()
-		&& (toyNumCasters > 0 || numWalkedGroups > 0) && ToyPicturesCanRun(d3d.lpD3DDevice);
+		&& ToyWorldWasDrawn() && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
 
@@ -7009,13 +7041,13 @@ static void ToyShadows_Draw()
 	// chosen before this frame's lighting ran: see ToyShadows_ChooseLights
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
-	report.lights = (toyNumCasters || numWalkedGroups) ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+	report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
 
 	if (!report.lights)
 	{
 		if (ShadowShootOn)
 		{
-			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, (toyNumCasters || numWalkedGroups) ? "this frame has no lights chosen" : "nothing on this frame casts a shadow"));
+			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, ToyWorldWasDrawn() ? "this frame has no lights chosen" : "nothing on this frame casts a shadow"));
 		}
 
 		if (logThisFrame)
@@ -7029,12 +7061,17 @@ static void ToyShadows_Draw()
 
 	float worldAxes[9];
 	ToyShadows_WorldAxes(worldAxes);
+
+	// This stays on with the volumes off. It only tells the store which lights this frame has, so that when they're turned on again, the store knows what really stood still.
 	StartKeptPrisms(lights, report.lights);
 
 	// These go after everything that was drawn, so if the lists fill up, it's these that miss out. By now everything drawn is known, which is
 	// what the view needs.
-	MakeShadowReachView();
-	polygonsReachKept = ToyShadows_CollectOutOfView(lights, report.lights, worldAxes, &polygonsReachLeftOut);
+	if (volumesThisFrame)
+	{
+		MakeShadowReachView();
+		polygonsReachKept = ToyShadows_CollectOutOfView(lights, report.lights, worldAxes, &polygonsReachLeftOut);
+	}
 
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
@@ -7074,6 +7111,12 @@ static void ToyShadows_Draw()
 	// Without the pictures, each light takes a flat share, so that a pixel none of them reach ends up at the full darkness.
 	float const keepPerLight = powf(1.0f - kToyFullDarkness, 1.0f / (float)(litLights ? litLights : 1));
 	ToyShadows_CameraPlace(toyCameraInWorld);
+
+	// A ray through the prisms has nothing to find with no prisms, so the press is dropped, and the log says why.
+	if (ShadowShootOn && !volumesThisFrame)
+	{
+		ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, "the shadow volumes are off"));
+	}
 
 	if (ShadowShootOn)
 	{
@@ -7186,8 +7229,13 @@ static void ToyShadows_Draw()
 	// Every prism this frame is built after this line. The edges view draws no pictures, but it's there to show what a frame with them would use.
 	prismsForPictures = screen != 0 || ((ToyShadowsMode == kToyViewEdges || ToyShadowsMode == kViewRedVolumes) && ToyPicturesCanRun(device));
 
+	if (logThisFrame && !volumesThisFrame)
+	{
+		LogString("shadows: the shadow volumes are off, so nothing was collected for casting, no prism was built or drawn, and no light on this frame is blocked by anything");
+	}
+
 	// these only read what's already on the processor's side, so they don't wait for anything
-	if (logThisFrame && screen != 0)
+	if (logThisFrame && volumesThisFrame && screen != 0)
 	{
 		ToyCheckStoredPlanes(worldAxes);
 		CheckNoPolygonSeenFromBehind();
@@ -7202,7 +7250,10 @@ static void ToyShadows_Draw()
 
 	memset(lightReports, 0, sizeof(lightReports));
 
-	for (int light = 0; light < report.lights; light++)
+	// With the volumes off no light marks anything, so this is the loop they leave out. The mask stays as it was cleared above: nothing blocked.
+	int const lightsThatMark = volumesThisFrame ? report.lights : 0;
+
+	for (int light = 0; light < lightsThatMark; light++)
 	{
 		float const *thisLight = &lights[light * kToyLightFloats];
 
@@ -7377,7 +7428,13 @@ static void ToyShadows_Draw()
 				ReadPictureSamples(device, toyMaskSurface, kFlickerMask);
 			}
 
-			ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
+			// With the volumes off the mask holds nothing, so shadowBlur.psh would give 1 for every pixel, and the screen multiplied by 1 is the screen. Leaving it out changes
+			// nothing but the time it takes.
+			if (volumesThisFrame)
+			{
+				ToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);
+			}
+
 			FrameTiming_Mark(kStageSoftening);
 
 			if (noting)
@@ -7409,6 +7466,14 @@ static void ToyShadows_Draw()
 				{
 					lightReports[light].drawn = true;
 					toyNoteLight = &lightReports[light];
+				}
+
+				// With the volumes off nothing has touched the mask since it was cleared, so nothing blocks this light anywhere.
+				if (!volumesThisFrame)
+				{
+					ToyAddLight(device, thisLight);
+					device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+					continue;
 				}
 
 				int const positions = ToyPositionsForLight(thisLight);
@@ -7493,6 +7558,11 @@ static void ToyShadows_Draw()
 		{
 			ShadowCapture_AddNumbers("-shadowshoot is on, so these pictures can have its green and red tints on them\n");
 		}
+
+		if (!volumesThisFrame)
+		{
+			ShadowCapture_AddNumbers("the shadow volumes are off, so no light on this frame is blocked by anything\n");
+		}
 	}
 
 	if (ShadowFlickerOn)
@@ -7524,7 +7594,7 @@ static void ToyShadows_Draw()
 		int passes = 0;
 		for (int i = 0; i < report.lights; i++)
 		{
-			if (!LightOnListIsDark(&lights[i * kToyLightFloats]))
+			if (volumesThisFrame && !LightOnListIsDark(&lights[i * kToyLightFloats]))
 			{
 				passes += darkening ? ToyPositionsForLight(&lights[i * kToyLightFloats]) : 1;
 			}
@@ -7552,11 +7622,11 @@ static void ToyShadows_Draw()
 				}
 
 				ToyLightReport const *did = &lightReports[i];
-				int const passesHere = ToyPositionsForLight(thisLight);
+				int const passesHere = volumesThisFrame ? ToyPositionsForLight(thisLight) : 0;
 				float const kind = thisLight[7];
 				float const distance = sqrtf(thisLight[0] * thisLight[0] + thisLight[1] * thisLight[1] + thisLight[2] * thisLight[2]);
 				float const weight = (thisLight[4] + thisLight[5] + thisLight[6]) / 3.0f;
-				float const perPass = (float)pixelsByLight[i] / (float)passesHere;
+				float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;
 				float const share = (kind != 2.0f && pixelsByLight[i]) ? did->maskRise * screenPixels * (float)passesHere / (float)pixelsByLight[i] : 0.0f;
 
 				if (kind == 2.0f)
@@ -7570,7 +7640,7 @@ static void ToyShadows_Draw()
 				{
 					_snprintf(line, sizeof(line) - 1,
 						"toy-shadows: frame %d, light %d, kind %.0f: %.0f away at %.0f %.0f %.0f, range %.0f, weight %.2f, %s, %d passes painted %u pixels (%.1f%% of the screen a pass), %u stayed marked, %d polygons in reach, %d prisms, %d kept corners, nearest caster %.0f, mask rose %.4f, so a painted pixel lost a share of %.3f and keeps %.3f",
-						report.frame, i, kind, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : "off screen",
+						report.frame, i, kind, distance, thisLight[0], thisLight[1], thisLight[2], thisLight[3], weight, did->drawn ? "drawn" : volumesThisFrame ? "off screen" : "not needed",
 						passesHere, pixelsByLight[i], 100.0f * perPass / screenPixels, did->stayedMarked, did->polygonsInReach, did->prismsBuilt, did->keptCorners, did->nearestCaster, did->maskRise, share, 1.0f - darkest * share);
 				}
 
