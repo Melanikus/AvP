@@ -17,6 +17,7 @@
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting
 //   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
 //   the developer keys only work in a level being played, so a letter typed into a menu can't press them
+//   a frame that couldn't start forgets what it collected for shadows, so it can't reach a later frame, or a later level
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -416,6 +417,7 @@ static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
+static void ToyForgetCasters();
 static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
 extern int ToyShadowsMode;
@@ -2730,6 +2732,10 @@ void ThisFramesRenderingHasFinished()
 		// Nothing can be drawn, but these two lists of what was collected this frame still have to be emptied, or they'd grow for as long as this lasts.
 		DrawParticles();
 		DrawCoronas();
+
+		// The same for the shadow pass, which would otherwise never run to forget them. The next frame that opens would cast shadows from this one's polygons too, and
+		// what it keeps points at shapes, which are gone if the level ends while frames can't start.
+		ToyForgetCasters();
 	}
 	else
 	{

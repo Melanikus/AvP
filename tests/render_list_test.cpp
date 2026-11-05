@@ -1368,6 +1368,7 @@ struct SourceFindings
 	bool flushChecksTheFrame;
 	bool frameEndChecksTheFrame;
 	bool frameEndAlwaysFinishes;
+	bool frameEndForgetsCasters;
 	bool frameStartRemembers;
 	int writersRead;
 	int mainWritersRead;
@@ -1385,6 +1386,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 	found.flushChecksTheFrame = false;
 	found.frameEndChecksTheFrame = false;
 	found.frameEndAlwaysFinishes = false;
+	found.frameEndForgetsCasters = false;
 	found.frameStartRemembers = false;
 	found.writersRead = 0;
 	found.mainWritersRead = 0;
@@ -1531,6 +1533,7 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			size_t const guard = body.find("if (!frameIsOpen)");
 			found.frameEndChecksTheFrame = guard != std::string::npos && guard < body.find("UnlockExecuteBufferAndPrepareForUse()");
 			found.frameEndAlwaysFinishes = body.find("LightBlockDeallocation()") != std::string::npos && body.find("return") == std::string::npos;
+			found.frameEndForgetsCasters = guard != std::string::npos && body.find("ToyForgetCasters();", guard) < body.find("frameIsOpen = false");
 		}
 
 		if (function.name == "ThisFramesRenderingHasBegun")
@@ -1581,6 +1584,7 @@ static void CheckTheRealWriters()
 	Check(found.flushChecksTheFrame, "a flush checks the frame is open");
 	Check(found.frameEndChecksTheFrame, "the end of a frame checks it too");
 	Check(found.frameEndAlwaysFinishes, "and a frame that couldn't be drawn still gets to the end of that function, where the lights that are due to go are let go of");
+	Check(found.frameEndForgetsCasters, "and it forgets what it collected for shadows, because the shadow pass, which would have, didn't run");
 	Check(found.frameStartRemembers, "and the start of a frame only says it's open if it did start");
 
 	// That these checks can catch anything has to be shown as well. Each of these breaks one writer in a copy of the file.
