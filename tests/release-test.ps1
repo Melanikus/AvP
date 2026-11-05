@@ -260,6 +260,48 @@ Remove-Item -LiteralPath (Join-Path $package 'License.txt')
 $result = Run-Script 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit)
 Check ($result.Text.Contains('REFUSED: License.txt is not in the package')) "check-release-package.ps1 starts without being told either. It said: $($result.Text)"
 
+# --- As GitHub really runs a step. It starts PowerShell with a file holding the step's words, then one more line of its own, which exits with whatever the last
+# program left behind. So a script that only ends, with a refused program before it, reads as a failure, and the other way round. Running them with -File, as
+# everything above does, hides that. This one has a program fail first, so only a script that says what it means can pass.
+$stepFile = Join-Path $temporary 'avp-release-step.ps1'
+
+function Run-AsAStep([string]$name, [string[]]$arguments)
+{
+    $words = @($arguments | ForEach-Object { if ($_.StartsWith('-')) { $_ } else { "'$_'" } }) -join ' '
+
+    @(
+        '$ErrorActionPreference = ''stop''',
+        'cmd /c exit 3',
+        "& '$(Join-Path $repository "tools/$name")' $words",
+        'if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }'
+    ) | Set-Content -Encoding Ascii -LiteralPath $stepFile
+
+    $ErrorActionPreference = 'Continue'
+    & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '$stepFile'" *> $null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    return $code
+}
+
+Make-GoodRepository
+Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub')) -eq 0) 'as a step, check-release.ps1 passes when it should'
+Write-Blockers "## What's in the way`n`n- Something.`n"
+Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub')) -eq 1) 'and it fails when it should'
+
+Make-GoodPackage
+Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 0) 'as a step, check-release-package.ps1 passes when it should'
+Remove-Item -LiteralPath (Join-Path $package 'D3DCompiler_43.dll')
+Write-Sums
+Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
+
+Remove-Item -Force -LiteralPath $stepFile
+
+foreach ($name in 'tools/check-release.ps1', 'tools/check-release-package.ps1', 'tests/release-test.ps1')
+{
+    $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
+    Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
+}
+
 # --- The workflow, read as text
 $workflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/release.yml')) -replace "`r", ''
 
@@ -331,3 +373,6 @@ if ($script:failures -gt 0)
 {
     exit 1
 }
+
+# Said outright: the last script this ran was meant to be refused, and GitHub ends a step by exiting with what the last program left behind.
+exit 0

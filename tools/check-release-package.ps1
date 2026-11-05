@@ -111,3 +111,6 @@ if ($listed.Count -gt 0)
 }
 
 Write-Host 'The package has everything it should, and it matches this commit.'
+
+# Said outright, because GitHub ends a step by exiting with whatever the last program to run left behind, whatever this script thought.
+exit 0

@@ -191,3 +191,6 @@ if ($tags -ccontains "refs/tags/v$Version")
 }
 
 Write-Host "$commit may be released as v$Version."
+
+# Said outright, because GitHub ends a step by exiting with whatever the last program to run left behind, whatever this script thought.
+exit 0
