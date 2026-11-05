@@ -1,0 +1,378 @@
+<#
+Tests the release checks, with no network and nothing built. The Unit tests check runs this.
+
+Two parts:
+- tools/check-release.ps1 and tools/check-release-package.ps1 are run for real, on made-up folders with something wrong in each. Each one
+  has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
+- .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
+
+What this can't prove: that GitHub will do what the workflow asks. The first real run is what proves that.
+#>
+$ErrorActionPreference = 'Stop'
+
+$repository = Split-Path -Parent $PSScriptRoot
+$powershell = (Get-Process -Id $PID).Path
+$temporary = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+$work = Join-Path $temporary 'avp-release-test'
+$script:failures = 0
+$script:passes = 0
+
+function Check([bool]$passed, [string]$what)
+{
+    if ($passed)
+    {
+        $script:passes++
+    }
+    else
+    {
+        $script:failures++
+        Write-Host "FAILED: $what"
+    }
+}
+
+function Run-Script([string]$name, [string[]]$arguments)
+{
+    # Each script ends with exit, so it gets a process of its own. Older PowerShell turns anything a program writes to its error stream into a
+    # stopping error while this is set to Stop, and what the script says is what's being tested.
+    $file = Join-Path $repository "tools/$name"
+    $ErrorActionPreference = 'Continue'
+    $output = & $powershell -NoProfile -ExecutionPolicy Bypass -File $file @arguments 2>&1 | ForEach-Object { "$_" }
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    return [pscustomobject]@{ Code = $code; Text = ($output -join "`n") }
+}
+
+function Expect-Refused([string]$name, [string[]]$arguments, [string]$reason, [string]$what)
+{
+    $result = Run-Script $name $arguments
+    $refusal = @($result.Text -split "`n" | Where-Object { $_.StartsWith('REFUSED: ') })
+    Check ($result.Code -ne 0 -and $refusal.Count -eq 1 -and $refusal[0].Contains($reason)) "$what. It said: $($result.Text)"
+}
+
+function Clear-Work
+{
+    if (Test-Path -LiteralPath $work) { Remove-Item -Recurse -Force -LiteralPath $work }
+    New-Item -ItemType Directory -Force $work | Out-Null
+}
+
+function Write-File([string]$path, [string]$text)
+{
+    New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
+    [System.IO.File]::WriteAllText($path, $text)
+}
+
+# --- A made-up repository with everything right. Each test breaks one thing in it.
+$checkScript = Get-Content -Raw (Join-Path $repository 'tools/check-release.ps1')
+$shadowsPart = [regex]::Match($checkScript, '(?s)\$shadowsAndShaders = @\((.*?)\n\)').Groups[1].Value
+$shadowFiles = @([regex]::Matches($shadowsPart, "'([^']+)'") | ForEach-Object { $_.Groups[1].Value })
+
+Check ($shadowFiles.Count -ge 10) 'the list of what Shadows & Shaders is made of can be read'
+Check ($shadowFiles -contains '3dc/texture_relief.cpp' -and $shadowFiles -contains 'shaders/reliefMain.psh' -and $shadowFiles -contains '3dc/view_settings.cpp' -and $shadowFiles -contains '3dc/shadow_volumes.cpp') 'and it has the shadows, the relief mapping and the menu'
+
+# If one of these is ever renamed or moved, this says so now, and not on the day of a release.
+$realProject = Get-Content -Raw (Join-Path $repository 'win32/VS2026/AvP.vcxproj')
+
+foreach ($file in $shadowFiles)
+{
+    Check (Test-Path -LiteralPath (Join-Path $repository $file)) "$file really is in this repository"
+
+    if ($file.EndsWith('.cpp'))
+    {
+        Check ($realProject.Contains(($file -replace '/', '\'))) "and the game's project really builds $file"
+    }
+}
+
+function Make-GoodRepository
+{
+    Clear-Work
+    Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') "# Title`n`nWords.`n`n## What's in the way`n`nNothing.`n"
+    $project = '<Project>'
+
+    foreach ($file in $shadowFiles)
+    {
+        Write-File (Join-Path $work $file) 'code'
+        $project += "<ClCompile Include=`"..\..\$($file -replace '/', '\')`" />"
+    }
+
+    Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') "$project</Project>"
+}
+
+$good = '1.0.0'
+
+function Check-Release([string]$version) { return Run-Script 'check-release.ps1' @('-Version', $version, '-Repository', $work, '-WithoutGitHub') }
+
+Make-GoodRepository
+$result = Check-Release $good
+Check ($result.Code -eq 0) "everything right passes. It said: $($result.Text)"
+
+# --- The version comes from a person typing in a box.
+$tooManyDigits = '1234567.0.0'
+$otherAlphabet = -join [char[]](0x0661, 0x002E, 0x0662, 0x002E, 0x0663)
+
+# An empty word can't go through a command line, so that one is asked from inside PowerShell, which is also how release.yml asks.
+$emptyVersion = & $powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$(Join-Path $repository 'tools/check-release.ps1')' -Version '' -Repository '$work' -WithoutGitHub; exit `$LASTEXITCODE" 2>&1 | ForEach-Object { "$_" }
+Check ($LASTEXITCODE -ne 0 -and ($emptyVersion -join ' ').Contains('REFUSED: the version has to be three plain numbers')) "an empty version is refused. It said: $emptyVersion"
+
+foreach ($bad in '1', '1.2', '1.2.3.4', 'v1.0.0', '1.0.0-rc1', ' 1.0.0', '1.0.0 ', "1.0.0`n", '1.0.0;x', '1..0', 'a.b.c', '../1.0.0', $tooManyDigits, $otherAlphabet)
+{
+    Expect-Refused 'check-release.ps1' @('-Version', $bad, '-Repository', $work, '-WithoutGitHub') 'the version has to be three plain numbers' "the version [$bad] is refused"
+}
+
+foreach ($fine in '1.0.0', '0.0.1', '10.20.30')
+{
+    Check ((Check-Release $fine).Code -eq 0) "the version $fine is taken"
+}
+
+# --- The list of what's in the way
+function Write-Blockers([string]$text) { Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') $text }
+
+$blockersRefused = @(
+    @{ Text = "## What's in the way`n`n- Something.`n"; Reason = 'still lists something'; What = 'one blocker stops it' },
+    @{ Text = "## What's in the way`n`nNothing.`n`n- Something.`n"; Reason = 'still lists something'; What = 'Nothing and a blocker together stops it' },
+    @{ Text = "## What's in the way`n`nSomething in plain words.`n"; Reason = 'still lists something'; What = 'a blocker with no dash in front stops it' },
+    @{ Text = "## What's in the way`n`n<!-- hidden -->`n"; Reason = 'still lists something'; What = 'a hidden line stops it, because anything at all counts' },
+    @{ Text = "## What's in the way`n`nnothing.`n"; Reason = 'still lists something'; What = 'nothing in small letters stops it: it has to be the one exact word' },
+    @{ Text = "## What's in the way`n"; Reason = 'has nothing under its heading'; What = 'an empty list stops it, because a file cut short looks the same' },
+    @{ Text = "Nothing.`n"; Reason = "has no heading"; What = 'a file with no heading stops it' }
+)
+
+foreach ($case in $blockersRefused)
+{
+    Make-GoodRepository
+    Write-Blockers $case.Text
+    Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') $case.Reason $case.What
+}
+
+Make-GoodRepository
+Remove-Item -LiteralPath (Join-Path $work 'RELEASE-BLOCKERS.md')
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'RELEASE-BLOCKERS.md is missing' 'taking the file away stops it'
+
+$realBlockers = Get-Content (Join-Path $repository 'RELEASE-BLOCKERS.md')
+Check ($realBlockers -contains "## What's in the way") "the real file has the heading the script looks for"
+
+# --- Shadows & Shaders
+foreach ($file in $shadowFiles)
+{
+    Make-GoodRepository
+    Remove-Item -LiteralPath (Join-Path $work $file)
+    Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') "Shadows & Shaders isn't in this commit: $file is missing" "without $file it's refused"
+}
+
+Make-GoodRepository
+Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') '<Project></Project>'
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') "the game's project doesn't build it" 'code the project does not build is refused'
+
+# --- The checks that ask GitHub. There's no network here, so all that can be tried is that it refuses to go on without being on avpx_main.
+Make-GoodRepository
+$savedRef = $env:GITHUB_REF
+$env:GITHUB_REF = 'refs/heads/some-other-branch'
+$result = Run-Script 'check-release.ps1' @('-Version', $good, '-Repository', $work)
+$env:GITHUB_REF = $savedRef
+Check ($result.Code -ne 0 -and $result.Text.Contains('REFUSED: a release can only be started from avpx_main')) "another branch is refused. It said: $($result.Text)"
+
+# --- The package
+$commit = 'abcdef0123456789abcdef0123456789abcdef01'
+$package = Join-Path $work 'package'
+$packageRepository = Join-Path $work 'repo'
+
+function Write-Sums
+{
+    $folder = (Resolve-Path -LiteralPath $package).Path
+    $sums = @(Get-ChildItem -LiteralPath $package -Recurse -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
+        '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower(), ($_.FullName.Substring($folder.Length + 1) -replace '\\', '/')
+    })
+    [System.IO.File]::WriteAllLines((Join-Path $package 'SHA256SUMS.txt'), $sums)
+}
+
+function Make-GoodPackage
+{
+    Clear-Work
+    foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
+    Write-File (Join-Path $package 'BUILD.txt') "avpx_main $commit"
+    Write-File (Join-Path $package 'shaders/reliefMain.psh') 'shader one'
+    Write-File (Join-Path $package 'shaders/volume.vsh') 'shader two'
+    Write-File (Join-Path $packageRepository 'shaders/reliefMain.psh') 'shader one'
+    Write-File (Join-Path $packageRepository 'shaders/volume.vsh') 'shader two'
+    Write-Sums
+}
+
+function Package-Arguments { return @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository) }
+
+Make-GoodPackage
+$result = Run-Script 'check-release-package.ps1' (Package-Arguments)
+Check ($result.Code -eq 0) "a good package passes. It said: $($result.Text)"
+
+foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
+{
+    Make-GoodPackage
+    Remove-Item -LiteralPath (Join-Path $package $name)
+    Write-Sums
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$name is not in the package" "a package without $name is refused"
+}
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'SHA256SUMS.txt')
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'SHA256SUMS.txt is not in the package' 'a package with no list of hashes is refused'
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'shaders/reliefMain.psh')
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'the shader reliefMain.psh is not in the package' 'a missing shader is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'shaders/reliefMain.psh') 'some other shader'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "the shader reliefMain.psh in the package isn't the one in this commit" 'a different shader is refused'
+
+Make-GoodPackage
+Remove-Item -Recurse -LiteralPath (Join-Path $packageRepository 'shaders')
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit has no shaders' 'no shaders to compare with is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'BUILD.txt') 'avpx_main 1111111111111111111111111111111111111111'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "BUILD.txt doesn't say this package came from" 'a package from another commit is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'other.exe') 'a program'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'other.exe is in the package' 'a second program is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'extra.txt') 'not on the list'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'extra.txt is in the package, but not on its list of hashes' 'a file not on the list is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'License.txt') 'changed after the list was made'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "License.txt doesn't match its hash" 'a file that does not match the list is refused'
+
+Make-GoodPackage
+Add-Content -LiteralPath (Join-Path $package 'SHA256SUMS.txt') -Value ('0' * 64 + '  gone.txt')
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "names a file that isn't in the package: gone.txt" 'a line for a file that is not there is refused'
+
+# --- Not told where the repository is, as release.yml doesn't tell them. Everything above says where, so this is the only thing that tries it. What it answers
+# depends on what RELEASE-BLOCKERS.md says today, but it has to be one of the script's own answers, and not a failure to start.
+$result = Run-Script 'check-release.ps1' @('-Version', $good, '-WithoutGitHub')
+Check ($result.Text.Contains('RELEASE-BLOCKERS.md still lists') -or $result.Text.Contains('Everything that can be checked')) "check-release.ps1 finds the repository by itself. It said: $($result.Text)"
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'License.txt')
+$result = Run-Script 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit)
+Check ($result.Text.Contains('REFUSED: License.txt is not in the package')) "check-release-package.ps1 starts without being told either. It said: $($result.Text)"
+
+# --- As GitHub really runs a step. It starts PowerShell with a file holding the step's words, then one more line of its own, which exits with whatever the last
+# program left behind. So a script that only ends, with a refused program before it, reads as a failure, and the other way round. Running them with -File, as
+# everything above does, hides that. This one has a program fail first, so only a script that says what it means can pass.
+$stepFile = Join-Path $temporary 'avp-release-step.ps1'
+
+function Run-AsAStep([string]$name, [string[]]$arguments)
+{
+    $words = @($arguments | ForEach-Object { if ($_.StartsWith('-')) { $_ } else { "'$_'" } }) -join ' '
+
+    @(
+        '$ErrorActionPreference = ''stop''',
+        'cmd /c exit 3',
+        "& '$(Join-Path $repository "tools/$name")' $words",
+        'if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }'
+    ) | Set-Content -Encoding Ascii -LiteralPath $stepFile
+
+    $ErrorActionPreference = 'Continue'
+    & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '$stepFile'" *> $null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    return $code
+}
+
+Make-GoodRepository
+Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub')) -eq 0) 'as a step, check-release.ps1 passes when it should'
+Write-Blockers "## What's in the way`n`n- Something.`n"
+Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub')) -eq 1) 'and it fails when it should'
+
+Make-GoodPackage
+Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 0) 'as a step, check-release-package.ps1 passes when it should'
+Remove-Item -LiteralPath (Join-Path $package 'D3DCompiler_43.dll')
+Write-Sums
+Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
+
+Remove-Item -Force -LiteralPath $stepFile
+
+foreach ($name in 'tools/check-release.ps1', 'tools/check-release-package.ps1', 'tests/release-test.ps1')
+{
+    $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
+    Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
+}
+
+# --- The workflow, read as text
+$workflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/release.yml')) -replace "`r", ''
+
+function Check-Order([string]$text, [string]$first, [string]$second, [string]$what)
+{
+    $a = $text.IndexOf($first, [System.StringComparison]::Ordinal)
+    $b = $text.IndexOf($second, [System.StringComparison]::Ordinal)
+    Check ($a -ge 0 -and $b -ge 0 -and $a -lt $b) $what
+}
+
+$withoutComments = (($workflow -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+$jobs = [regex]::Split($withoutComments, '(?m)^  (?=(?:check|build|publish):\n)')
+
+Check ($jobs.Count -eq 4) 'the workflow has the three jobs, and no others'
+$top = $jobs[0]; $checkJob = $jobs[1]; $buildJob = $jobs[2]; $publishJob = $jobs[3]
+
+Check ($top -match '(?m)^on:\n  workflow_dispatch:\n') 'it starts by hand'
+Check ($top -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):') 'and in no other way, because a tag could point at a commit with the checks taken out'
+Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything'
+
+Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
+Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
+Check ($buildJob -match '(?m)^    needs: check$') 'the build needs the checks to have passed'
+Check ($publishJob -match '(?m)^    needs: build$') 'and the draft needs the build, so it comes after the checks too'
+Check-Order $buildJob 'tools/build-and-package.ps1' 'tools/check-release-package.ps1' 'the package is checked after it is made'
+Check-Order $buildJob 'tools/check-release-package.ps1' 'actions/upload-artifact' 'and before it goes anywhere'
+Check ($publishJob -match '(?m)^    environment: release\s') 'the draft waits for the owner'
+
+Check-Order $publishJob 'Refuse if anything has changed' 'attest-build-provenance' 'what has changed since the checks is looked at first'
+Check-Order $publishJob 'attest-build-provenance' 'gh release create' 'and how it was built is recorded before the draft is made'
+Check ($publishJob.Contains('--jq .sha') -and $publishJob.Contains('$tip -cne $env:GITHUB_SHA')) 'it is still the tip when the owner approves'
+Check ($publishJob.Contains('--draft') -and $publishJob.Contains('--target $env:GITHUB_SHA')) 'it makes a draft, on the commit that was checked'
+Check (-not ($withoutComments -match '--draft=false|gh release edit|git push|git tag|/git/refs')) 'nothing here publishes it, or makes a tag'
+Check ($publishJob.Contains('-not $made.isDraft')) 'and it checks that what it made is a draft'
+Check (-not $publishJob.Contains('actions/checkout') -and -not $publishJob.Contains('./tools/')) 'the job that can write has no copy of the code'
+
+Check ($publishJob -match '(?m)^      contents: write\s') 'the last job can write'
+Check (-not $checkJob.Contains('write') -and -not $buildJob.Contains(': write')) 'and the other two can not'
+
+foreach ($other in Get-ChildItem (Join-Path $repository '.github/workflows') -Filter '*.yml' | Where-Object { $_.Name -ne 'release.yml' })
+{
+    Check (-not (Get-Content -Raw $other.FullName).Contains('contents: write')) "$($other.Name) can't write to the repository"
+}
+
+foreach ($match in [regex]::Matches($withoutComments, '(?m)^\s*(?:- )?uses:\s*(\S+)'))
+{
+    Check ($match.Groups[1].Value -cmatch '^[a-z-]+/[a-z-]+@[0-9a-f]{40}$') "$($match.Groups[1].Value) is pinned to a full commit hash"
+}
+
+Check ($withoutComments.Split("`n").Where({ $_ -match 'actions/checkout@' }).Count -eq 2) 'two jobs check out the code'
+Check ([regex]::Matches($withoutComments, 'persist-credentials: false').Count -eq 2) 'and neither leaves its token behind for the build to find'
+
+$inputUses = @([regex]::Matches($withoutComments, '.*\$\{\{\s*inputs\.[^\n]*') | ForEach-Object { $_.Value.Trim() })
+Check ($inputUses.Count -ge 1 -and @($inputUses | Where-Object { $_ -cne 'VERSION: ${{ inputs.version }}' }).Count -eq 0) 'what a person typed only ever reaches a command as a setting, so it can never be run as part of one'
+Check (-not $withoutComments.Contains('secrets.')) 'it uses no secret but the job''s own token'
+
+# --- The list of required checks is the same as the test build's
+$buildWorkflow = Get-Content -Raw (Join-Path $repository '.github/workflows/build.yml')
+$listInBuild = [regex]::Match($buildWorkflow, '\$required = (.*)').Groups[1].Value.Trim()
+$listInCheck = [regex]::Match($checkScript, '\$requiredChecks = (.*)').Groups[1].Value.Trim()
+Check ($listInBuild.Length -gt 0 -and $listInBuild -ceq $listInCheck) 'a release asks for the same checks as a test build'
+
+Clear-Work
+Remove-Item -Recurse -Force -LiteralPath $work
+
+Write-Host "$script:passes passed, $script:failures failed"
+
+if ($script:failures -gt 0)
+{
+    exit 1
+}
+
+# Said outright: the last script this ran was meant to be refused, and GitHub ends a step by exiting with what the last program left behind.
+exit 0

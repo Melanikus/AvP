@@ -296,6 +296,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			return DevMode != 0;
 		};
 
+		// the same for one that's followed by a number: it gives back where the switch is, or nothing if it wasn't asked for or there's no -dev
+		auto const devNumber = [&](const char *name) -> const char *
+		{
+			return devSwitch(name) ? strstr(command_line, name) : 0;
+		};
+
 		extern int ToyShadowsMode;
 		// not -noshadows: the level name switch further down takes anything starting with -n
 		if (strstr(command_line, "-shadowsoff"))
@@ -326,44 +332,44 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ShadowsFullReport = 1;
 		}
 		extern int ShadowsEvenGap;
-		if (strstr(command_line, "-shadowevengap"))
+		if (devSwitch("-shadowevengap"))
 		{
 			ShadowsEvenGap = 1;
 		}
 		extern int StaticSurfaceOn;
-		if (strstr(command_line, "-staticsurface"))
+		if (devSwitch("-staticsurface"))
 		{
 			StaticSurfaceOn = 1;
 		}
 		extern int StaticSceneOn;
-		if (strstr(command_line, "-staticscene"))
+		if (devSwitch("-staticscene"))
 		{
 			StaticSceneOn = 1;
 		}
 		extern int StaticSceneNoLiveLights;
-		if (strstr(command_line, "-staticnolivelights"))
+		if (devSwitch("-staticnolivelights"))
 		{
 			StaticSceneNoLiveLights = 1;
 		}
 		extern int StaticSurfaceCompare;
-		if (strstr(command_line, "-staticcompare"))
+		if (devSwitch("-staticcompare"))
 		{
 			StaticSurfaceCompare = 1;
 		}
 		extern int KeptPrismsOff;
 		// not -nokeptprisms, for the same reason as -shadowsoff
 		// they're off unless this says otherwise, and -keptprismsoff is still accepted, so that an old launch option does no harm
-		if (strstr(command_line, "-keptprismson"))
+		if (devSwitch("-keptprismson"))
 		{
 			KeptPrismsOff = 0;
 		}
 		extern int ShadowsDepthGap;
-		if (strstr(command_line, "-shadowdepthgap"))
+		if (devSwitch("-shadowdepthgap"))
 		{
 			ShadowsDepthGap = 1;
 			LogString("shadows: a shadow's start stands further behind its polygon as depth gets coarser (-shadowdepthgap), on prisms made each frame only: not kept prisms, and not the walls -staticscene walks");
 		}
-		char const *biasSwitch = strstr(command_line, "-shadowbiassteps=");
+		char const *biasSwitch = devNumber("-shadowbiassteps=");
 		if (biasSwitch)
 		{
 			extern float ShadowSurfaceBias;
@@ -389,11 +395,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		}
 		extern int KeptSnap;
 		// the longer word first, because the shorter one is inside it
-		if (strstr(command_line, "-keptsnapfar"))
+		if (devSwitch("-keptsnapfar"))
 		{
 			KeptSnap = 2;
 		}
-		else if (strstr(command_line, "-keptsnap"))
+		else if (devSwitch("-keptsnap"))
 		{
 			KeptSnap = 1;
 		}
@@ -405,96 +411,96 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			KeptSnap = 1;
 		}
 		extern int ToyShadowsDarkness;
-		char const *darkSwitch = strstr(command_line, "-shadowdark=");
+		char const *darkSwitch = devNumber("-shadowdark=");
 		if (darkSwitch)
 		{
 			int const asked = atoi(darkSwitch + strlen("-shadowdark="));
 			ToyShadowsDarkness = (asked < 0) ? 0 : (asked > 99) ? 99 : asked;
 		}
 		extern int ToyShadowsSoft;
-		char const *softSwitch = strstr(command_line, "-shadowsoft=");
+		char const *softSwitch = devNumber("-shadowsoft=");
 		if (softSwitch)
 		{
 			int const asked = atoi(softSwitch + strlen("-shadowsoft="));
 			ToyShadowsSoft = (asked < 0) ? 0 : (asked > 32) ? 32 : asked;
 		}
 		extern int ToyShadowsPositions;
-		char const *positionsSwitch = strstr(command_line, "-shadowpositions=");
+		char const *positionsSwitch = devNumber("-shadowpositions=");
 		if (positionsSwitch)
 		{
 			int const asked = atoi(positionsSwitch + strlen("-shadowpositions="));
 			ToyShadowsPositions = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
 		}
 		extern int ToyShadowsNearLights;
-		char const *nearSwitch = strstr(command_line, "-shadownearlights=");
+		char const *nearSwitch = devNumber("-shadownearlights=");
 		if (nearSwitch)
 		{
 			int const asked = atoi(nearSwitch + strlen("-shadownearlights="));
 			ToyShadowsNearLights = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;
 		}
 		extern int ToyShadowsLampSize;
-		char const *lampSwitch = strstr(command_line, "-shadowlampsize=");
+		char const *lampSwitch = devNumber("-shadowlampsize=");
 		if (lampSwitch)
 		{
 			int const asked = atoi(lampSwitch + strlen("-shadowlampsize="));
 			ToyShadowsLampSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
 		}
 		extern int ToyShadowsFlareSize;
-		char const *flareSizeSwitch = strstr(command_line, "-shadowflaresize=");
+		char const *flareSizeSwitch = devNumber("-shadowflaresize=");
 		if (flareSizeSwitch)
 		{
 			int const asked = atoi(flareSizeSwitch + strlen("-shadowflaresize="));
 			ToyShadowsFlareSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
 		}
 		extern int ToyShadowsModelGap;
-		char const *modelGapSwitch = strstr(command_line, "-shadowmodelgap=");
+		char const *modelGapSwitch = devNumber("-shadowmodelgap=");
 		if (modelGapSwitch)
 		{
 			int const asked = atoi(modelGapSwitch + strlen("-shadowmodelgap="));
 			ToyShadowsModelGap = (asked < 8) ? 8 : (asked > 200) ? 200 : asked;
 		}
 		extern int ToyShadowsFlareReach;
-		char const *reachSwitch = strstr(command_line, "-shadowflarereach=");
+		char const *reachSwitch = devNumber("-shadowflarereach=");
 		if (reachSwitch)
 		{
 			int const asked = atoi(reachSwitch + strlen("-shadowflarereach="));
 			ToyShadowsFlareReach = (asked < 50) ? 50 : (asked > 400) ? 400 : asked;
 		}
 		extern int ToyShadowsFlareCap;
-		char const *flareSwitch = strstr(command_line, "-shadowflare=");
+		char const *flareSwitch = devNumber("-shadowflare=");
 		if (flareSwitch)
 		{
 			int const asked = atoi(flareSwitch + strlen("-shadowflare="));
 			ToyShadowsFlareCap = (asked < 10) ? 10 : (asked > 800) ? 800 : asked;
 		}
 		extern int ToyShadowsWorld;
-		char const *worldSwitch = strstr(command_line, "-shadowworld=");
+		char const *worldSwitch = devNumber("-shadowworld=");
 		if (worldSwitch)
 		{
 			int const asked = atoi(worldSwitch + strlen("-shadowworld="));
 			ToyShadowsWorld = (asked < 10) ? 10 : (asked > 100) ? 100 : asked;
 		}
 		extern int ToyShadowsTest;
-		if (strstr(command_line, "-shadowtest"))
+		if (devSwitch("-shadowtest"))
 		{
 			ToyShadowsTest = 1;
 		}
 		extern int ToyShadowsMaxLights;
-		char const *lightsSwitch = strstr(command_line, "-shadowlights=");
+		char const *lightsSwitch = devNumber("-shadowlights=");
 		if (lightsSwitch)
 		{
 			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
 			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
 		}
 		extern int ToyShadowsMaxBrief;
-		char const *briefSwitch = strstr(command_line, "-shadowbrief=");
+		char const *briefSwitch = devNumber("-shadowbrief=");
 		if (briefSwitch)
 		{
 			int const asked = atoi(briefSwitch + strlen("-shadowbrief="));
 			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;
 		}
 		extern int ToyShadowsCasters;
-		char const *castersSwitch = strstr(command_line, "-shadowcasters=");
+		char const *castersSwitch = devNumber("-shadowcasters=");
 		if (castersSwitch)
 		{
 			int const asked = atoi(castersSwitch + strlen("-shadowcasters="));
