@@ -5194,7 +5194,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, LightingNow == kLightingRelief);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -6655,6 +6655,7 @@ static void ShadowStatus_Draw()
 	}
 
 	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF DEPTH %.3f%s%s", ReliefDepthNow, ReliefHeightFlipped ? ", HEIGHT FLIPPED" : "", ReliefTiltFlipped ? ", TILT FLIPPED" : "");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
 	{
@@ -6936,6 +6937,57 @@ void LightingCommand(char *words)
 	if (!SwitchWords_LightingAsk(words, &lightingAsked))
 	{
 		SaySwitch("LIGHTING TAKES 1 GOURAUD, 2 PERPIXEL, 3 NORMALS OR 4 RELIEF, OR NOTHING FOR THE NEXT");
+	}
+}
+
+bool ReliefHeightFlipped = false;
+bool ReliefTiltFlipped = false;
+float ReliefDepthNow = kReliefDepthAtStart;
+
+// In a network game a flip would show a player nothing they shouldn't see, but these are developers' tools, and the same rule keeps them all simple. See view_switches.h.
+static bool ReliefToolsCanAct(char const *name)
+{
+	if (DevMode && AvP.Network == I_No_Network)
+	{
+		return true;
+	}
+
+	Con_PrintError(std::string(name) + " NEEDS -DEV, AND ISN'T THERE IN A NETWORK GAME");
+	return false;
+}
+
+void ReliefFlipCommand()
+{
+	if (ReliefToolsCanAct("RELIEFFLIP"))
+	{
+		ReliefHeightFlipped = !ReliefHeightFlipped;
+		SaySwitch(ReliefHeightFlipped ? "RELIEF: BLACK IS THE POLYGON, WHITE IS DEEP" : "RELIEF: WHITE IS THE POLYGON, BLACK IS DEEP");
+	}
+}
+
+void TiltFlipCommand()
+{
+	if (ReliefToolsCanAct("TILTFLIP"))
+	{
+		ReliefTiltFlipped = !ReliefTiltFlipped;
+		SaySwitch(ReliefTiltFlipped ? "NORMAL MAPS: TILT FLIPPED, BUMPS ARE DENTS" : "NORMAL MAPS: TILT AS IT IS IN THE FILE");
+	}
+}
+
+void ReliefDepthCommand(char *words)
+{
+	if (ReliefToolsCanAct("RELIEFDEPTH"))
+	{
+		// With no number, it just says what the depth is now.
+		if (words && *words)
+		{
+			ReliefDepthNow = ReliefDepth_Clamped((float)atof(words));
+		}
+
+		static char message[40];
+		_snprintf(message, sizeof(message) - 1, "RELIEF DEPTH %.3f", ReliefDepthNow);
+		message[sizeof(message) - 1] = 0;
+		SaySwitch(message);
 	}
 }
 

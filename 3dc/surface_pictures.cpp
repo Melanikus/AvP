@@ -17,6 +17,7 @@
 #include "surface_static.h"
 #include "static_scene.h"
 #include "texture_relief.h"
+#include "view_switches.h"
 #include "d3_func.h"
 #include "RenderList.h"
 #include "logString.h"
@@ -159,9 +160,22 @@ bool SurfacePictures_ReliefCanRun()
 	return textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
 }
 
+void SurfacePictures_SetReliefConstants(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool march)
+{
+	float const constants[4 * 4] =
+	{
+		worldAxes[0], worldAxes[1], worldAxes[2], 0.0f,
+		worldAxes[3], worldAxes[4], worldAxes[5], 0.0f,
+		worldAxes[6], worldAxes[7], worldAxes[8], 0.0f,
+		march ? ReliefDepthNow : 0.0f, ReliefHeightFlipped ? -1.0f : 1.0f, ReliefTiltFlipped ? -1.0f : 1.0f, 0.0f,
+	};
+
+	device->SetPixelShaderConstantF(0, constants, 4);
+}
+
 // useStatic asks for the level's walls to be drawn from the fixed buffer, and only what isn't in it to be drawn the old way. It can be asked for on any frame,
 // and if that route can't draw, the old way draws everything: see surface_static.cpp.
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic)
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic, bool marchWanted)
 {
 	if (!SurfacePictures_Ready(device))
 	{
@@ -185,23 +199,30 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 
 	// A hand-made map has smaller copies, and this blends between them, which is what stops a detailed map shimmering in the distance. Every other relief picture has just the one.
 	// The shadow pass puts the card's settings back when it ends.
+	bool const march = withRelief && marchWanted;
+
 	if (withRelief)
 	{
 		device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
 	}
-	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
-	bool fromBuffer = useStatic && SurfaceStatic_Ready();
 
-	// The world's three directions, for surface.psh to turn each normal to face the way the camera does. This is the only place that happens.
+	// The walk reads its depth map many times, so it's smoothed however the picture itself is read, or the walk would land on steps.
+	if (march)
+	{
+		device->SetSamplerState(2, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		device->SetSamplerState(2, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		device->SetSamplerState(2, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+	}
+
+	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
+
+	// The fixed buffer's own drawing doesn't set up the depth maps, so the walk goes the old way for now.
+	bool fromBuffer = useStatic && !march && SurfaceStatic_Ready();
+
+	// The world's three directions, for the shader to turn each normal to face the way the camera does, and what the walk needs. This is the only place that happens.
 	// They go straight into the shader's registers. A vertex shader's numbers go through a list whose order the compiler picks, so a second
 	// one there could land on top of WorldViewProj.
-	float const axes[3 * 4] =
-	{
-		worldAxes[0], worldAxes[1], worldAxes[2], 0.0f,
-		worldAxes[3], worldAxes[4], worldAxes[5], 0.0f,
-		worldAxes[6], worldAxes[7], worldAxes[8], 0.0f,
-	};
-	device->SetPixelShaderConstantF(0, axes, 3);
+	SurfacePictures_SetReliefConstants(device, worldAxes, march);
 
 	// If this fails part way, whatever it did draw is drawn again below, on the same pixels, so nothing goes missing.
 	if (fromBuffer)
@@ -224,7 +245,7 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	if (withRelief)
 	{
 		SurfaceNormals_UseTangents();
-		mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true);
+		mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true, march);
 		SurfaceNormals_StopUsingTangents();
 	}
 	else

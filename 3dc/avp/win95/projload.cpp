@@ -36,6 +36,7 @@
 #include <math.h>
 #include "chunk_waypoint.hpp"
 #include "texture_relief.h"
+#include "view_switches.h"
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
 #include "sequences.h"
@@ -2743,8 +2744,16 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 */
 	ingameTextureList.push_back(textureID);
 
-	// a picture of the shape its painting shows, for the lights to use
-	textureRelief.Build(textureID);
+	// A picture of the shape its painting shows, for the lights to use. A level loaded with a lighting that draws no maps reads no map, so a stranger's file stays unread, and the first run of the
+	// game is the old game. Switching to a lighting with maps mid-level draws flat until the next level. -dev reads them anyway, because a developer comparing lightings on one spot wants
+	// them all there on the first press. It's a choice made on the command line, and a player without it is unaffected.
+	extern int DevMode;
+	extern int LightingNow;
+
+	if (DevMode || Lighting_UsesMaps(LightingNow))
+	{
+		textureRelief.Build(textureID);
+	}
 
 	return textureID;
 }

@@ -240,6 +240,11 @@ texID_t TextureRelief::PictureFor(texID_t) const
 	return 0;
 }
 
+texID_t TextureRelief::HeightFor(texID_t) const
+{
+	return 0;
+}
+
 r_Texture const &Tex_GetTexture(texID_t)
 {
 	static r_Texture none = 0;

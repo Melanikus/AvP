@@ -24,8 +24,13 @@ void SurfacePictures_Release();
 
 // Draws the frame's solid polygons into the pictures. depthPicture is where each pixel's distance goes, and it has already been cleared.
 // worldAxes holds the world's three directions in the light list's space, three numbers each.
+// marchWanted asks for the walk through the depth maps, which is the Relief map lighting: see reliefMarch.fxh. It needs reliefWanted, and it leaves the fixed buffer out.
 // The caller has set the depth test and the rest of the device up. Says false if nothing was drawn.
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic = false);
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic = false, bool marchWanted = false);
+
+// Tells the pixel shaders in the card's registers c0 to c3 what reliefMarch.fxh expects there: the world's directions, the depth, and which way the height and the tilt run. With march false the
+// depth is 0, so no pixel moves and no depth map is read.
+void SurfacePictures_SetReliefConstants(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool march);
 
 // Puts the picture of which way each pixel faces on the screen, for checking by eye. Each direction shows as a colour: red for right, green for
 // up and blue for away from the camera, with grey for a normal of zero, and black where there's no surface.

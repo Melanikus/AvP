@@ -64,6 +64,9 @@ class TextureRelief
 		// The relief picture to use with a texture. One that has none gets a flat picture, which changes nothing, so anything can be asked for.
 		texID_t PictureFor(texID_t picture) const;
 
+		// The depth map to use with a texture, for reliefMarch.fxh. One that has none gets the same flat picture, whose alpha of 0 means there's no depth, so no pixel of it moves.
+		texID_t HeightFor(texID_t picture) const;
+
 		// Writes what's held to the log. Called when a level has finished loading.
 		void LogWhatIsHeld();
 

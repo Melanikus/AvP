@@ -36,6 +36,33 @@ extern int ShadowVolumesOn;  // 1 draws shadows, 0 doesn't
 void ShadowsCommand(char *words);
 void LightingCommand(char *words);
 
+// For developers, to judge a depth map or a normal map on the spot: which way round is it, and how deep should it be? They do nothing without -dev, or in a network game, and the tag shows them.
+//   RELIEFFLIP          swaps which of black and white is the polygon's level, in the depth map
+//   TILTFLIP            swaps bumps and dents, in the normal map
+//   RELIEFDEPTH 0.08    how deep the depth map's deepest part is, as a fraction of a picture's width
+void ReliefFlipCommand();
+void TiltFlipCommand();
+void ReliefDepthCommand(char *words);
+
+extern bool ReliefHeightFlipped;
+extern bool ReliefTiltFlipped;
+extern float ReliefDepthNow;
+
+float const kReliefDepthAtStart = 0.06f;
+float const kReliefDepthMost = 0.2f;     // Past about this the walk's 16 steps are too far apart to land on anything thin.
+
+// A depth somebody typed. Anything that isn't a number between the ends comes back as the nearest end, and a thing that isn't a number at all as no depth. So this is what makes
+// the shader's depth safe to use, whatever is typed.
+inline float ReliefDepth_Clamped(float asked)
+{
+	if (!(asked > 0.0f))
+	{
+		return 0.0f;
+	}
+
+	return asked < kReliefDepthMost ? asked : kReliefDepthMost;
+}
+
 // What a command can leave noted for the end of the frame. Anything else is the setting asked for: 0 or 1 for SHADOWS, or a LightingChoice.
 enum
 {

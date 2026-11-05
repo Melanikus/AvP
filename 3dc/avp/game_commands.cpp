@@ -335,6 +335,11 @@ void CreateGameSpecificConsoleCommands(void)
 		ShadowsCommand
 	);
 
+	// Only do anything with -dev, and they say so without it. See view_switches.h.
+	ConsoleCommand::Make("RELIEFFLIP", "SWAPS WHICH OF BLACK AND WHITE IS THE POLYGON'S LEVEL IN A DEPTH MAP, LIVE", ReliefFlipCommand);
+	ConsoleCommand::Make("TILTFLIP", "SWAPS BUMPS AND DENTS IN A NORMAL MAP, LIVE", TiltFlipCommand);
+	ConsoleCommand::Make("RELIEFDEPTH", "HOW DEEP A DEPTH MAP GOES, AS A FRACTION OF A PICTURE'S WIDTH, FROM 0 TO 0.2", ReliefDepthCommand);
+
 	#ifndef AVP_DEBUG_VERSION 
 	bool IsACheat = true;
 	#else

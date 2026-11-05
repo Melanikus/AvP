@@ -365,10 +365,11 @@ bool TextureRelief::MakeFlatPicture()
 		return false;
 	}
 
+	// Flat: a normal straight out of the picture. Its alpha is what says "no depth here" when it stands in for a depth map: see reliefMarch.fxh.
 	pixel[0] = 255;
 	pixel[1] = 128;
 	pixel[2] = 128;
-	pixel[3] = 128;
+	pixel[3] = 0;
 
 	Tex_Unlock(flat);
 
@@ -702,6 +703,11 @@ void TextureRelief::Build(texID_t picture)
 	}
 
 	reliefOf[picture].levelCounted = levelNumber;
+}
+
+texID_t TextureRelief::HeightFor(texID_t) const
+{
+	return flatPicture;
 }
 
 texID_t TextureRelief::PictureFor(texID_t picture) const

@@ -413,7 +413,7 @@ void RenderList::Reset()
 // Draws this list's solid polygons a second time, for a pass that adds light to them. The caller has set the shaders and
 // the blending. This goes straight to the device, because the caller puts the device back afterwards, and the game's own
 // record of its settings has to stay true.
-void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief)
+void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief, bool withHeight)
 {
 	declaration->Set();
 	(**vb).Set();
@@ -452,12 +452,27 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 			d3d.lpD3DDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, filter);
 		}
 
+		// The depth map lies over it the same way. It's on the card only for the Relief map lighting.
+		if (withHeight)
+		{
+			extern void NoteTextureUse(texID_t textureID);
+			NoteTextureUse(textureRelief.HeightFor(get_texID(it->sortKey)));
+			d3d.lpD3DDevice->SetTexture(2, Tex_GetTexture(textureRelief.HeightFor(get_texID(it->sortKey))));
+			d3d.lpD3DDevice->SetSamplerState(2, D3DSAMP_ADDRESSU, addressing);
+			d3d.lpD3DDevice->SetSamplerState(2, D3DSAMP_ADDRESSV, addressing);
+		}
+
 		R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
 	}
 
 	if (withRelief)
 	{
 		d3d.lpD3DDevice->SetTexture(1, NULL);
+	}
+
+	if (withHeight)
+	{
+		d3d.lpD3DDevice->SetTexture(2, NULL);
 	}
 }
 
