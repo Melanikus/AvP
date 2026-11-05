@@ -1,6 +1,7 @@
 {
 	"copy": [
 		"3dc",
+		"win32",
 		"tests"
 	],
 	"rows": [
@@ -189,8 +190,8 @@
 			"changes": [
 				{
 					"file": "3dc/texture_relief.cpp",
-					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n}",
-					"to": "\thandMadeTries = 0;\n\tstoppedTryingWasLogged = false;\n}"
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\thandMadeTries = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}"
 				}
 			]
 		},
@@ -199,8 +200,8 @@
 			"changes": [
 				{
 					"file": "3dc/texture_relief.cpp",
-					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n}",
-					"to": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n}"
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tmapsNotThere = 0;\n}"
 				}
 			]
 		},
@@ -441,6 +442,76 @@
 					"file": "3dc/texture_relief.cpp",
 					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tNoteDepthFile(pictureName);\n\t}\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing map goes through an open, which writes an error",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!FF_FileIsThere(mapName))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing .dds goes through an open, which writes an error",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": " && FF_FileIsThere(depthName))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing map is not counted",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tmapsNotThere++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "QUIET: a map that is there is counted as well",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tFileStream file;\n\tfile.Open(mapName, FileStream::FileRead);\n",
+					"to": "\tmapsNotThere++;\n\tFileStream file;\n\tfile.Open(mapName, FileStream::FileRead);\n"
+				}
+			]
+		},
+		{
+			"name": "QUIET: the next level keeps the count",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tstoppedTryingWasLogged = false;\n\t\tmapsNotThere = 0;\n",
+					"to": "\t\tstoppedTryingWasLogged = false;\n"
+				}
+			]
+		},
+		{
+			"name": "QUIET: giving everything back keeps the count",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\tstoppedTryingWasLogged = false;\n}"
+				}
+			]
+		},
+		{
+			"name": "QUIET: the log line leaves the count out",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\" depth maps, and \"\n\t\t\t+ std::to_string(mapsNotThere) + \" map files it looked for aren't there\");",
+					"to": "\" depth maps\");"
 				}
 			]
 		}

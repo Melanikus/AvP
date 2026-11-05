@@ -23,6 +23,7 @@
 #include "texture_relief.h"
 #include "relief_map_file.h"
 #include "FastFile.h"
+#include "FileStream.h"
 #include "utilities.h"
 
 static int checksFailed = 0;
@@ -720,7 +721,7 @@ static void CheckTheGameSide()
 		relief.LogWhatIsHeld();
 
 		Check(logLines.size() == 2 && logLines[0] == "texture relief: 1 pictures held, 256 bytes", "the log says what's held");
-		Check(logLines.size() == 2 && logLines[1] == "texture relief: this level has 0 hand-made, 1 worked out and 0 flat. Hand-made maps hold 0 bytes. It has 0 depth maps", "and what this level has of each kind");
+		Check(logLines.size() == 2 && logLines[1] == "texture relief: this level has 0 hand-made, 1 worked out and 0 flat. Hand-made maps hold 0 bytes. It has 0 depth maps, and 2 map files it looked for aren't there", "and what this level has of each kind");
 
 		relief.TurnOff();
 		logLines.clear();
@@ -745,7 +746,19 @@ static void CheckTheGameSide()
 
 // ---- Hand-made maps, as real files, through the game's real file reader
 
-FastFileHandle *FF_Find(const std::string &) { return 0; }
+// FF_Find is what writes the error for a file that isn't there, and it's only reached by opening one. So how often it's asked is how many errors the game would write.
+static int errorsAFileWouldWrite = 0;
+
+FastFileHandle *FF_Find(const std::string &)
+{
+	errorsAFileWouldWrite++;
+	return 0;
+}
+
+bool FF_FileIsThere(const std::string &fileName)
+{
+	return DoesFileExist(fileName);
+}
 
 const std::string &FF_GetFastFileName(int32_t)
 {
@@ -1010,6 +1023,46 @@ static void CheckWhatTryingMapsCosts()
 		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
 
 		Check(relief.HandMadeTriesThisLevel() == 0 && relief.HandMadeBytesTriedThisLevel() == 0, "a texture with no map costs nothing");
+	}
+
+	// Most textures have no maps, so that's only a count. It isn't an error, and nothing writes one.
+	{
+		StartAgain();
+		RemoveMapFile(mapFile);
+		errorsAFileWouldWrite = 0;
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		Check(relief.MapsNotThereThisLevel() == 2, "a texture with no maps counts each file once, however often it's asked for");
+		Check(errorsAFileWouldWrite == 0, "and no file is opened that would write an error");
+		Check(logLines.empty(), "and the log says nothing about it yet");
+
+		relief.LogWhatIsHeld();
+		Check(LogCount("It has 0 depth maps, and 2 map files it looked for aren't there") == 1, "the level's log line says how many");
+		Check(relief.MapsNotThereThisLevel() == 0, "and the next level starts at none");
+
+		relief.Build(AddTexture(MapFolder() + "/nothing.rim", 8, 8, 32, TextureUsage_Normal));
+		Check(relief.MapsNotThereThisLevel() == 2, "and counts its own");
+
+		relief.ReleaseAll();
+		Check(relief.MapsNotThereThisLevel() == 0, "giving everything back starts the count again");
+	}
+
+	// One that's there is opened as ever, and isn't counted
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(8, 200, 90, 180));
+		errorsAFileWouldWrite = 0;
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+
+		Check(relief.MapsNotThereThisLevel() == 1 && errorsAFileWouldWrite == 0, "a map that's there isn't counted, only the depth map that isn't");
+		RemoveMapFile(mapFile);
 	}
 
 	// Many maps, all wrong at the end: the bytes run out. Each is written under its own name, and the last few wouldn't be refused for what the first ones were.

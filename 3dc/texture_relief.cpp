@@ -29,6 +29,7 @@
 #include "texture_relief.h"
 #include "relief_map_file.h"
 #include "FileStream.h"
+#include "FastFile.h"
 #include "d3_func.h"
 #include "logString.h"
 
@@ -287,7 +288,7 @@ bool TextureRelief::Calculate(uint8_t const *picture, uint32_t picturePitch, uin
 
 TextureRelief::TextureRelief(size_t mostBytes, size_t mostHandMadeBytes, size_t mostTries)
 : mostBytesHeld(mostBytes), mostHandMadeBytesHeld(mostHandMadeBytes), limitWasLogged(false), on(true), autoGenerate(false), flatPictureMade(false), flatPicture(0),
-  picturesHeld(0), bytesHeld(0), handMadeBytesHeld(0), mostHandMadeTries(mostTries), handMadeTries(0), handMadeBytesTried(0), stoppedTryingWasLogged(false), levelNumber(1)
+  picturesHeld(0), bytesHeld(0), handMadeBytesHeld(0), mostHandMadeTries(mostTries), handMadeTries(0), handMadeBytesTried(0), stoppedTryingWasLogged(false), mapsNotThere(0), levelNumber(1)
 {
 }
 
@@ -309,6 +310,11 @@ size_t TextureRelief::HandMadeTriesThisLevel() const
 uint64_t TextureRelief::HandMadeBytesTriedThisLevel() const
 {
 	return handMadeBytesTried;
+}
+
+size_t TextureRelief::MapsNotThereThisLevel() const
+{
+	return mapsNotThere;
 }
 
 size_t TextureRelief::HandMadeBytesHeld() const
@@ -454,7 +460,8 @@ void TextureRelief::NoteDepthFile(std::string const &pictureName)
 {
 	std::string depthName;
 
-	if (ReliefMap_FileName(pictureName, "_Depth.dds", &depthName))
+	// FF_FileIsThere first, because opening a file that isn't there writes an error, and most textures have no such file
+	if (ReliefMap_FileName(pictureName, "_Depth.dds", &depthName) && FF_FileIsThere(depthName))
 	{
 		FileStream file;
 		file.Open(depthName, FileStream::FileRead);
@@ -523,6 +530,14 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture, MapKind kind)
 
 	if (!ReliefMap_FileName(pictureName, (kind == kDepthMap) ? "_Depth.rim" : "_Normal.rim", &mapName))
 	{
+		return MISSING_TEXTURE;
+	}
+
+	// Asked first, because opening a file that isn't there writes an error, and most textures have no maps. Nothing is charged for this: it costs next to nothing, and a level's list of pictures
+	// is as long as it is either way.
+	if (!FF_FileIsThere(mapName))
+	{
+		mapsNotThere++;
 		return MISSING_TEXTURE;
 	}
 
@@ -800,13 +815,15 @@ void TextureRelief::LogWhatIsHeld()
 		}
 
 		LogString("texture relief: this level has " + std::to_string(handMade) + " hand-made, " + std::to_string(workedOut) + " worked out and " + std::to_string(flat)
-			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes. It has " + std::to_string(depth) + " depth maps");
+			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes. It has " + std::to_string(depth) + " depth maps, and "
+			+ std::to_string(mapsNotThere) + " map files it looked for aren't there");
 		levelNumber++;
 
 		// The next level has its own allowance
 		handMadeTries = 0;
 		handMadeBytesTried = 0;
 		stoppedTryingWasLogged = false;
+		mapsNotThere = 0;
 	}
 	else
 	{
@@ -836,4 +853,5 @@ void TextureRelief::ReleaseAll()
 	handMadeTries = 0;
 	handMadeBytesTried = 0;
 	stoppedTryingWasLogged = false;
+	mapsNotThere = 0;
 }

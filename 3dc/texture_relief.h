@@ -81,6 +81,7 @@ class TextureRelief
 		size_t HandMadeBytesHeld() const;
 		size_t HandMadeTriesThisLevel() const;
 		uint64_t HandMadeBytesTriedThisLevel() const;
+		size_t MapsNotThereThisLevel() const;
 
 		// Whether a picture of this size may be worked on. Every size comes from a file, so this comes before anything is allocated or added up.
 		static bool SizeIsFine(uint32_t width, uint32_t height);
@@ -126,6 +127,7 @@ class TextureRelief
 		size_t handMadeTries;               // map files opened on this level, used or not
 		uint64_t handMadeBytesTried;        // bytes of them read and unpacked on this level, used or not
 		bool stoppedTryingWasLogged;        // on this level
+		size_t mapsNotThere;                // map files looked for on this level that aren't there. Most textures have none, so this isn't an error, and it's only a count
 		size_t levelNumber;                 // goes up each time LogWhatIsHeld says what a level had
 };
 
