@@ -205,7 +205,11 @@ void SetFrustumType(enum FrustumType frustumType)
    can add some. A flat polygon with no dent gets one more for each cut when the first corner is tested properly,
    which is where nine comes from. A twisted one can get more. So can any polygon while USE_FRUSTUM_CULL is off,
    because each cut then assumes its first corner is on the visible side. So a full list leaves the rest of the corners
-   out. All that goes wrong is that the polygon has the wrong shape for that frame. Up to maxpolypts nothing changes. */
+   out, and the log says so once. Up to maxpolypts nothing changes.
+
+   What happens to a polygon that's stopped depends on the code that draws it, which has to cope with nine corners. The render list's fan does (RenderList.cpp, the
+   branch for six corners or more), and without it a nine-cornered polygon draws from indices left over from the one before. So this limit has to land with that fan.
+   With both, all that goes wrong is that the polygon has the wrong shape for that frame. */
 static_assert(sizeof(VerticesBuffer) / sizeof(VerticesBuffer[0]) == maxpolypts, "Clip_Polygon stops at maxpolypts, so both of its lists have to hold that many");
 static_assert(sizeof(RenderPolygon.Vertices) / sizeof(RenderPolygon.Vertices[0]) == maxpolypts, "Clip_Polygon stops at maxpolypts, so both of its lists have to hold that many");
 
