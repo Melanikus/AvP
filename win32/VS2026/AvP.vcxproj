@@ -413,6 +413,7 @@
     <ClCompile Include="..\..\3dc\frame_timing.cpp" />
     <ClCompile Include="..\..\3dc\flicker_meter.cpp" />
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
+    <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />

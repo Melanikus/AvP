@@ -19,6 +19,7 @@
 //   the developer keys only work in a level being played, so a letter typed into a menu can't press them
 //   a frame that couldn't start forgets what it collected for shadows, so it can't reach a later frame, or a later level
 //   LIGHTING has four choices: Gouraud, per pixel, normals, and relief, which draws as normals for now
+//   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -288,7 +289,18 @@ static bool LockExecuteBuffer()
 
 	// lock main vertex and index buffers
 	d3d.mainVB->Lock((void**)&mainVertex);
-	SurfaceNormals_Lock();
+
+	// Only the shadow pass reads the normals. With its view off, none are written, and this leaves the game's frame the way it always was. The view only changes at the very end of a
+	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by G collected no polygons, so its pass has nothing to do.
+	{
+		extern int ToyShadowsMode;
+
+		if (ToyShadowsMode)
+		{
+			SurfaceNormals_Lock();
+		}
+	}
+
 	d3d.mainIB->Lock(&mainIndex);
 
 	// lock ortho vertex and index buffers
@@ -3737,10 +3749,10 @@ static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x00
 extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
-int LightingNow = kLightingNormals;
+int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from the settings file, before the first frame
 // Whether anything casts a shadow. With this at 0, no polygons are collected for casting and no prisms are built or drawn, kept ones included. The mask stays at nothing
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
-int ShadowVolumesOn = 1;
+int ShadowVolumesOn = 0;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8: how many steady lights
 int ToyShadowsMaxBrief = 4;   // -shadowbrief=N, 0 to 4: how many brief lights on top of those, such as muzzle flashes and explosions
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
@@ -6846,7 +6858,13 @@ static void SaySwitch(const char *words)
 	static char message[100];
 	_snprintf(message, sizeof(message) - 1, "%s", words);
 	message[sizeof(message) - 1] = 0;
-	NewOnScreenMessage(message);
+
+	// The main menus can change these too, and there's no HUD there to show a message: nothing has been set up for one until a level starts.
+	if (AvP.MainLoopRunning)
+	{
+		NewOnScreenMessage(message);
+	}
+
 	LogString(message);
 }
 
@@ -6874,6 +6892,29 @@ void LightingCommand(char *words)
 	{
 		SaySwitch("LIGHTING TAKES 1 GOURAUD, 2 PERPIXEL, 3 NORMALS OR 4 RELIEF, OR NOTHING FOR THE NEXT");
 	}
+}
+
+// The menu asks the same way the commands do. See view_settings.cpp.
+void ViewSwitches_AskLighting(int choice)
+{
+	lightingAsked = choice;
+}
+
+void ViewSwitches_AskShadows(int on)
+{
+	shadowsAsked = on;
+}
+
+bool ViewSwitches_SomethingAsked()
+{
+	return shadowsAsked != kAskedNothing || lightingAsked != kAskedNothing;
+}
+
+// Asking makes the pictures if they aren't there yet, so only a change of mind asks, and a player who stays on Gouraud never does.
+void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere)
+{
+	*perPixelThere = PerPixelLightsCanRun();
+	*mapsThere = SurfacePictures_ReliefCouldRun();
 }
 
 // Where LIGHTING and SHADOWS change. It runs after this frame's shadows, so everything the next frame reads, from its lights onwards, agrees.
@@ -6928,7 +6969,7 @@ static void ViewSwitches_ApplyAsked()
 		static bool saidNoStencil = false, saidNoPerPixel = false, saidNoMaps = false, saidReliefIsNormals = false;
 
 		bool const perPixelThere = PerPixelLightsCanRun();
-		bool const mapsThere = SurfacePictures_ReliefCanRun();
+		bool const mapsThere = SurfacePictures_ReliefCouldRun();
 
 		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);
 

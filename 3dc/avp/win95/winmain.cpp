@@ -9,9 +9,11 @@
 //   -shadowshoot
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
+//   how the world is drawn comes from the settings file, and those two switches change it for this run only
 
 #include "3dc.h"
 #include "texture_relief.h"
+#include "view_settings.h"
 #include "view_switches.h"
 #include "static_level.h"
 #include "module.h"
@@ -195,6 +197,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// load AliensVsPredator.cfg
 	Config_Load();
+	ViewSettings_Load();
 
 	Music_Init(); //load list of music tracks assigned to levels , from a text file
 	LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
@@ -262,7 +265,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	if (strstr(command_line, "-reliefoff"))
 	{
 		textureRelief.TurnOff();
-		LightingNow = kLightingPerPixel;
+
+		if (Lighting_UsesMaps(LightingNow))
+		{
+			LightingNow = kLightingPerPixel;
+		}
 	}
 
 	{

@@ -149,6 +149,11 @@ bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device)
 	return true;
 }
 
+bool SurfacePictures_ReliefCouldRun()
+{
+	return textureRelief.IsOn() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();
+}
+
 bool SurfacePictures_ReliefCanRun()
 {
 	return textureRelief.IsReady() && d3d.surfaceReliefEffect != kNullEffectID && SurfaceNormals_TangentsReady();

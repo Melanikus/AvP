@@ -8,7 +8,7 @@
 // change. Only one thing is noted for each, so a key that's bound twice still changes things once a press. A batch file can easily leave a key bound twice.
 //
 // EVERYTHING OFF: with Gouraud and no shadows, the view itself goes to OFF, which is exactly how the game has always drawn. Turning either back on returns to the
-// view it left, as long as nothing else has moved it.
+// view it left, as long as nothing else has moved it. A new player starts here: see view_settings.cpp, which keeps what they choose.
 //
 // G, FOR DEVELOPERS: G picks what the shadow pass shows. LIGHTING and SHADOWS decide what its FINAL view draws, and the other views are for looking inside the pass, so
 // they show what they're named for. With everything off, FINAL and OFF would be the same thing, so G goes straight past FINAL.
@@ -22,9 +22,9 @@
 
 enum LightingChoice
 {
-	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where -shadowsoff starts
+	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where a new player starts, and -shadowsoff
 	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where -reliefoff starts
-	kLightingNormals,   // lights are added per pixel, and each pixel's map tilts which way it faces. The game starts here
+	kLightingNormals,   // lights are added per pixel, and each pixel's map tilts which way it faces
 	kLightingRelief,    // the same, and each pixel's map should also make the surface stand out from its polygon. That part isn't written yet: see Lighting_WordsOnScreen
 	kLightingChoices
 };
@@ -244,6 +244,51 @@ inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixe
 inline char const *Lighting_Word(int choice)
 {
 	return (choice == kLightingRelief) ? "RELIEF" : (choice == kLightingNormals) ? "NORMALS" : (choice == kLightingPerPixel) ? "PERPIXEL" : "GOURAUD";
+}
+
+// What a saved setting calls a choice. Only the exact words count: no numbers, and nothing at all isn't a choice, because this comes from a file anyone can edit. Gives back false,
+// and leaves choice alone, for anything else.
+inline bool Lighting_FromSavedWord(char const *words, int *choice)
+{
+	if (!words)
+	{
+		return false;
+	}
+
+	char const *start;
+	size_t length;
+	SwitchWords_Trim(words, &start, &length);
+
+	for (int candidate = 0; candidate < kLightingChoices; candidate++)
+	{
+		if (SwitchWords_Are(start, length, Lighting_Word(candidate)))
+		{
+			*choice = candidate;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Where the menu's line goes, when the player has moved it from last to pressed. The line goes round and round, one step at a time, so it can only have gone one way. A choice that
+// can't be drawn is passed over in that same direction, so the player can always get to everything that is there. Gouraud always is, so this always finds one.
+inline int Lighting_MenuStep(int last, int pressed, bool mapsThere, bool perPixelThere)
+{
+	int const step = ((last + 1) % kLightingChoices == pressed) ? 1 : kLightingChoices - 1;
+	int choice = ((pressed % kLightingChoices) + kLightingChoices) % kLightingChoices;
+
+	for (int tried = 0; tried < kLightingChoices; tried++)
+	{
+		if (Lighting_IsThere(choice, mapsThere, perPixelThere))
+		{
+			return choice;
+		}
+
+		choice = (choice + step) % kLightingChoices;
+	}
+
+	return kLightingGouraud;
 }
 
 // What the screen calls it. Relief is meant to make a surface stand out from its polygon, using the depth in its map, and nothing does that yet. So it draws what NORMALS draws, and it says so

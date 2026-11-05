@@ -13,6 +13,9 @@ bool SurfacePictures_CardCanDrawThem(LPDIRECT3DDEVICE9 device);
 // Whether the pictures exist, making them the first time it's asked. False on a card that can't do this, and then no light may rely on them.
 bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device);
 
+// Whether what draws the relief pictures is there, so choosing them makes sense, even in the menus before any level has loaded them.
+bool SurfacePictures_ReliefCouldRun();
+
 // Whether the relief pictures and what draws them are all there, so that asking for relief really would draw it.
 bool SurfacePictures_ReliefCanRun();
 

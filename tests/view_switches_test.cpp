@@ -195,6 +195,57 @@ static void TheCycle()
 	}
 }
 
+static int SavedWordGives(char const *words)
+{
+	int choice = kWasNotedBefore;
+
+	return Lighting_FromSavedWord(words, &choice) ? choice : ((choice == kWasNotedBefore) ? kNotUnderstood : -999);
+}
+
+// What a settings file can say, which anyone can edit
+static void TheSavedWord()
+{
+	for (int choice = 0; choice < kLightingChoices; choice++)
+	{
+		Check(SavedWordGives(Lighting_Word(choice)) == choice, std::string("a saved ") + Lighting_Word(choice) + " comes back as itself");
+	}
+
+	Check(SavedWordGives("gouraud") == kLightingGouraud, "in small letters");
+	Check(SavedWordGives(" NORMALS\r") == kLightingNormals, "with spaces, and what's left at the end of a line");
+
+	char const *const refused[] = { "", "   ", "0", "1", "2", "3", "4", "-1", "RELIE", "RELIEFS", "RELIEF 1", "PER PIXEL", "NORMAL", "true", "\xFF", "RELIEF\xFF" };
+
+	for (char const *words : refused)
+	{
+		Check(SavedWordGives(words) == kNotUnderstood, std::string("a saved '") + words + "' is refused, and leaves the choice alone");
+	}
+
+	Check(SavedWordGives(0) == kNotUnderstood, "and so is nothing at all");
+	Check(SavedWordGives(std::string(100000, 'R').c_str()) == kNotUnderstood, "and a very long line");
+}
+
+// The menu's line goes round one step at a time
+static void TheMenuStep()
+{
+	for (int choice = 0; choice < kLightingChoices; choice++)
+	{
+		int const next = (choice + 1) % kLightingChoices;
+		int const before = (choice + kLightingChoices - 1) % kLightingChoices;
+
+		Check(Lighting_MenuStep(choice, next, true, true) == next, std::string("with everything there, the line goes forward from ") + Lighting_Word(choice));
+		Check(Lighting_MenuStep(choice, before, true, true) == before, std::string("and back from ") + Lighting_Word(choice));
+		Check(Lighting_MenuStep(choice, next, true, false) == kLightingGouraud, std::string("on a card that can't draw per pixel, forward from ") + Lighting_Word(choice) + " is Gouraud");
+		Check(Lighting_MenuStep(choice, before, true, false) == kLightingGouraud, std::string("and so is back from ") + Lighting_Word(choice));
+	}
+
+	Check(Lighting_MenuStep(kLightingPerPixel, kLightingNormals, false, true) == kLightingGouraud, "with no maps, forward from per pixel goes past both that need them, to Gouraud");
+	Check(Lighting_MenuStep(kLightingGouraud, kLightingRelief, false, true) == kLightingPerPixel, "and back from Gouraud goes past both, to per pixel");
+	Check(Lighting_MenuStep(kLightingGouraud, kLightingPerPixel, false, true) == kLightingPerPixel, "and per pixel is still there");
+	Check(Lighting_MenuStep(kLightingPerPixel, kLightingGouraud, false, true) == kLightingGouraud, "and so is Gouraud");
+	Check(Lighting_MenuStep(kLightingGouraud, 99, true, true) >= 0 && Lighting_MenuStep(kLightingGouraud, 99, true, true) < kLightingChoices, "a number no menu could send still gives a choice");
+	Check(Lighting_MenuStep(kLightingGouraud, -7, true, true) >= 0 && Lighting_MenuStep(kLightingGouraud, -7, true, true) < kLightingChoices, "and so does one below zero");
+}
+
 // The same numbers as the game's views, enough for these rows
 enum { kOff, kFinal, kEdges, kPolygons, kViewCount };
 
@@ -380,8 +431,8 @@ static void TheRealGame()
 	Check(Has(shadowsCommand, "SwitchWords_ShadowsAsk(words, &shadowsAsked)") && !Has(shadowsCommand, "ShadowVolumesOn"), "SHADOWS only notes what it's asked for");
 	Check(Has(lightingCommand, "SwitchWords_LightingAsk(words, &lightingAsked)") && !Has(lightingCommand, "LightingNow ="), "LIGHTING only notes what it's asked for");
 
-	Check(Has(render, "int LightingNow = kLightingNormals;"), "the game starts in normals, which is what it has always started in, under its old name of relief");
-	Check(Has(render, "int ShadowVolumesOn = 1;"), "with shadows on");
+	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
+	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
 	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic)"), "the surface pass only asks for the maps when the choice reads them");
 	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
 
@@ -419,8 +470,71 @@ static void TheRealGame()
 	std::string const reliefOff = Between(launch, "\"-reliefoff\"", "}");
 	std::string const shadowsOff = Between(launch, "\"-shadowsoff\"", "}");
 
-	Check(Has(reliefOff, "LightingNow = kLightingPerPixel;"), "-reliefoff starts in per pixel");
+	Check(Has(reliefOff, "if (Lighting_UsesMaps(LightingNow))\r\n\t\t{\r\n\t\t\tLightingNow = kLightingPerPixel;"), "-reliefoff only moves a choice that reads maps, to per pixel");
+
+	std::string::size_type const settingsRead = launch.find("Config_Load();\r\n\tViewSettings_Load();");
+
+	Check(settingsRead != std::string::npos && settingsRead < launch.find("\"-reliefoff\"") && settingsRead < launch.find("\"-shadowsoff\""), "the settings are read straight after the file, ahead of the switches that change them for one run");
+
+	// a new player's game: nothing written for what's off
+	Check(Has(render, "if (ToyShadowsMode)\r\n\t\t{\r\n\t\t\tSurfaceNormals_Lock();"), "with the view off, the normals aren't opened, so none are written");
+	Check(CountOf(render, "SurfaceNormals_Lock();") == 1, "and that's the only place they're opened");
+
+	std::string const saying = Between(render, "static void SaySwitch(const char *words)", "// A reason is worth hearing once");
+
+	Check(Has(saying, "if (AvP.MainLoopRunning)\r\n\t{\r\n\t\tNewOnScreenMessage(message);"), "no message goes to a HUD that isn't there, in the main menus");
+
+	std::string const settings = ReadSourceFile("3dc/view_settings.cpp");
+	std::string const loading = Between(settings, "void ViewSettings_Load()", "void ViewSettings_MenuFrame()");
+
+	Check(Has(loading, "Lighting_FromSavedWord(rendering.c_str(), &choice)"), "the saved choice goes through the strict reader");
+	Check(Has(loading, "Config_GetString(kHeading, kRendering, Lighting_Word(kLightingGouraud))"), "with nothing saved it's Gouraud");
+	Check(Has(loading, "Config_GetBool(kHeading, kShadows, false)"), "shadows off");
+	Check(Has(loading, "Config_GetBool(kHeading, kAutoGenerate, false)"), "and no maps worked out");
+	Check(Has(loading, "textureRelief.SetAutoGenerate(autoGenerate);"), "which the picture code is told");
+	Check(Has(loading, "ToyShadowsMode = 0;"), "and everything off is the OFF view from the first frame");
+	std::string::size_type const menuFrameStarts = settings.find("void ViewSettings_MenuFrame()");
+	std::string const menuFrame = (menuFrameStarts == std::string::npos) ? "" : settings.substr(menuFrameStarts);
+
+	Check(Has(menuFrame, "ViewSwitches_AskLighting(lastRendering);") && !Has(menuFrame, "LightingNow ="), "after loading, only the one safe moment changes the lighting: the menu asks");
+	Check(Has(menuFrame, "ViewSwitches_AskShadows(lastShadows);") && !Has(menuFrame, "ShadowVolumesOn ="), "and the same for shadows");
+	Check(Has(settings, "Config_Save();"), "the menu saves");
+
+	// the text
+	std::string const language = ReadSourceFile("3dc/avp/language.cpp");
+	std::string const names = ReadSourceFile("3dc/avp/langenum.h");
+
+	Check(Has(language, "for (int i = 1; i < TEXTSTRING_RENDERING_TITLE; i++)"), "only what's in a stock language file is read from it, so a stock file doesn't count as short");
+	Check(Has(language, "TextStringPtr[i] = OurTextStrings[i - TEXTSTRING_RENDERING_TITLE];"), "and the rest comes from the code");
+	Check(CountOf(language, "static_assert(sizeof(OurTextStrings)") == 1, "and the compiler checks there's one for each");
+
+	std::string::size_type const gouraudName = names.find("TEXTSTRING_RENDERING_GOURAUD,");
+	std::string::size_type const perPixelName = names.find("TEXTSTRING_RENDERING_PERPIXEL,");
+	std::string::size_type const normalsName = names.find("TEXTSTRING_RENDERING_NORMALS,");
+	std::string::size_type const reliefName = names.find("TEXTSTRING_RENDERING_RELIEF,");
+
+	Check(gouraudName != std::string::npos && gouraudName < perPixelName && perPixelName < normalsName && normalsName < reliefName, "the menu's names are in the order of the choices");
+	Check(kLightingGouraud == 0 && kLightingPerPixel == 1 && kLightingNormals == 2 && kLightingRelief == 3, "and those are numbered from 0, as the menu's line is");
+
+	// the menus: each table is read by position, and a new page has to be in both
+	std::string const menuData = ReadSourceFile("3dc/avp/win95/frontend/menu_data.cpp");
+	std::string const menuNames = ReadSourceFile("3dc/avp/win95/frontend/menus.h");
+	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
+
+	Check(menuNames.find("AVPMENU_INGAMEVIDEOMODE,") < menuNames.find("AVPMENU_RENDERING,") && menuNames.find("AVPMENU_RENDERING,") < menuNames.find("AVPMENU_INGAMERENDERING"), "the two new pages come last among the page names");
+	Check(menuData.find("// AVPMENU_INGAMEVIDEOMODE") < menuData.find("// AVPMENU_RENDERING") && menuData.find("// AVPMENU_RENDERING") < menuData.find("// AVPMENU_INGAMERENDERING"), "and in the same order in the table");
+	Check(Has(menuData, "{AVPMENU_INGAMERENDERING},\t{0},\t{0},\tTEXTSTRING_RENDERING_TITLE_HELP}"), "a level's menus lead to the in-level page");
+	Check(Has(menuData, "{AVPMENU_RENDERING},\t{0},\t{0},\tTEXTSTRING_RENDERING_TITLE_HELP}"), "and the main menus to the other");
+	Check(Has(menuData, "{3},\t{&MenuRendering},\t\t{TEXTSTRING_RENDERING_GOURAUD}"), "the rendering line has four choices, starting at the first name");
+	Check(CountOf(menus, "ViewSettings_MenuFrame();") == 2, "both kinds of menu notice a change");
+
+	std::string const project = ReadSourceFile("win32/VS2026/AvP.vcxproj");
+
+	Check(Has(project, "3dc\\view_settings.cpp"), "and the game builds the file that does it");
 	Check(Has(shadowsOff, "ToyShadowsMode = 0;") && Has(shadowsOff, "ShadowVolumesOn = 0;") && Has(shadowsOff, "LightingNow = kLightingGouraud;"), "-shadowsoff starts with everything off");
+
+	// A new page is only as good as the line that gets people to it, and the file has to be in the filters too, or Visual Studio won't show it.
+	Check(Has(ReadSourceFile("win32/VS2026/AvP.vcxproj.filters"), "3dc\\view_settings.cpp"), "and the project's list of files shows it");
 }
 
 // SHADOWS 0: nothing is collected for casting, no prism is built or drawn, and the lights carry on. These rows only show that the lines are there, because the renderer
@@ -482,6 +596,8 @@ int main()
 	WordsForLighting();
 	ShadowsAnswers();
 	TheCycle();
+	TheSavedWord();
+	TheMenuStep();
 	TheView();
 	TheEightStates();
 	TheRealGame();
