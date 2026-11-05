@@ -47,7 +47,7 @@ float BlockedHere(float2 place, float here)
 
 // Name: One light pixel shader
 // Type: Pixel shader
-// Desc: The light of one light on one pixel, added to the picture. While shadows are on, chosen live lights are left out of the game's
+// Desc: The light of one light on one pixel, added to the picture. While lights are added per pixel, chosen live lights are left out of the game's
 // lighting, and this is the only light they give. The mask says where the light is blocked, so it lights nothing it can't see, and the
 // edge of its shadow is soft.
 //

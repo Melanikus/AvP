@@ -353,6 +353,14 @@ static void TheRealGame()
 	Check(Has(render, "int ShadowVolumesOn = 1;"), "with shadows on");
 	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, LightingNow == kLightingRelief, useStatic)"), "the surface pass asks for relief only when that's the choice");
 	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
+
+	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
+
+	Check(Has(addsPerPixel, "ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud"), "in FINAL, Gouraud keeps the live lights in the game's own lighting");
+	Check(Has(addsPerPixel, "ToyShadowsMode == kToyViewMask") && Has(addsPerPixel, "ToyShadowsMode == kViewNormals"), "and the views for looking inside the pass take no notice of it");
+	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()"), "the pass asks that before it takes any lights");
+	Check(Has(applying, "if (!ViewAddsLightsPerPixel())\r\n\t{\r\n\t\tToyShadowsLightsByPixel = 0;"), "and a change hands them back in time for the very next frame");
+
 	Check(Has(applying, "ToyShadowsMode = View_AfterSwitches(ToyShadowsMode, kToyViewOff, switchesWereAllOff, allOff, &viewToComeBackTo);"), "everything off goes to the OFF view");
 	Check(Has(applying, "if (!hasStencil)\r\n\t{\r\n\t\tShadowVolumesOn = 0;\r\n\t\tLightingNow = kLightingGouraud;"), "with no stencil bits, both are held off every frame");
 

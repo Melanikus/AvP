@@ -3,6 +3,8 @@
 //   angles from a save file are kept between 0 and 4095 before a sine or cosine lookup, and an object's light
 //   list has room for every light;
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   says when the weapon goes without a flare's light, now that LIGHTING can keep lights in the game's own sum
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -243,7 +245,7 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	{
 		dptr2 = *aptr++;
 
-		// While shadows are on, the weapon gets no flare light at all: the shadow pass doesn't draw it, and the game's flare is a
+		// While lights are added per pixel, the weapon gets no flare light at all: the shadow pass doesn't draw it, and the game's flare is a
 		// bright white, not the dim red the user chose. Everything else goes on below. A chosen flare leaves there, like any light
 		// added per pixel, and one that wasn't chosen stays, held to that dim red by ToyShadows_ChooseLights.
 		if (ToyShadowsLightsByPixel && gunLayer && ToyBlockIsFlare(dptr2))

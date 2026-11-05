@@ -14,6 +14,7 @@
 //   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. This comes out before merge
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
+//   with Gouraud lighting, chosen live lights stay in the game's own lighting
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -6772,6 +6773,13 @@ static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
 	}
 }
 
+// Are chosen live lights added per pixel in the view being shown? In FINAL, LIGHTING decides. MASK and NORMALS are for looking inside the pass, so they take no notice
+// of it. Every other view leaves all the lights to the game.
+static bool ViewAddsLightsPerPixel()
+{
+	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
+}
+
 // What the commands and keys have asked for, until the end of this frame's shadows. See view_switches.h.
 static int shadowsAsked = kAskedNothing;
 static int lightingAsked = kAskedNothing;
@@ -6898,7 +6906,8 @@ static void ViewSwitches_ApplyAsked()
 	switchesWereAllOff = allOff;
 
 	// The next frame's lights are chosen before its polygons are known, from this. Going to Gouraud, they have to stay in the game's own lighting from that very frame.
-	if (LightingNow == kLightingGouraud)
+	// Coming back, this leaves it alone: the next frame still lights them the game's way and shades them through the mask, and the frame after that adds them per pixel.
+	if (!ViewAddsLightsPerPixel())
 	{
 		ToyShadowsLightsByPixel = 0;
 	}
@@ -6970,9 +6979,9 @@ static void ToyShadows_Draw()
 		}
 	}
 
-	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
+	// Chosen live lights are ours while the view adds them per pixel. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
-	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals)
+	bool const lightsOurs = ViewAddsLightsPerPixel()
 		&& (toyNumCasters > 0 || numWalkedGroups > 0) && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
