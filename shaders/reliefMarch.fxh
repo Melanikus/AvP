@@ -12,7 +12,8 @@
 // NOTHING HERE COMES FROM A FILE'S SAY-SO. The number of steps is fixed below, and the depth is clamped before it gets here, so a map can't make this take longer or reach further.
 //
 // THE PICTURE'S SIZE IN THE WORLD. The depth is a fraction of one picture's width. So a picture spread over a bigger wall gets deeper grooves, in the same proportion, and it keeps its look.
-// A picture stretched more one way than the other shifts by slightly the wrong amount along one of them.
+// In the stock levels one picture covers from 3 to 14 metres of wall, and often nearly twice as far one way as the other. A picture that's stretched counts as its average width, and the walk
+// goes by how the picture really lies on the wall, so a groove is the same depth from whichever side you look at it.
 
 sampler2D ReliefHeight : register(s2);    // the depth map, or the flat picture, whose alpha of 0 means "there's no depth here"
 float4 WorldAxes[3]    : register(c0);    // the world's x, y and z directions, as the camera sees them
@@ -22,6 +23,7 @@ static const int   kReliefEvenSteps   = 16;       // the first search
 static const int   kReliefHalvings    = 6;        // the second search
 static const float kReliefLeastSlant  = 0.2f;     // seen this close to edge-on or closer, the line is treated as if it were at this slant, or a step could leap across most of a picture
 static const float kReliefMostDeeper  = 400.0f;   // the most a pixel's place can move in the world, in the game's units, which are millimetres. A polygon with a nonsense texture stops here
+static const float kReliefMostShift   = 1.0f;     // the furthest the walk can go along the picture, which is one whole picture. On any sane polygon the depth and the slant already stop it sooner
 
 // What the walk found.
 struct ReliefHit
@@ -92,22 +94,22 @@ ReliefHit ReliefMarch(float2 place, float3 viewPosition, float3 normal, float4 t
     hit.dx           = ddx(place);
     hit.dy           = ddy(place);
 
-    // How much of the world one whole picture covers here, from how much of each moves across a pixel of the screen.
+    // Asked here, because these can't be asked for inside an "if": how far one pixel of the screen moves in the world.
     float3 worldAcross   = ddx(viewPosition);
     float3 worldDown     = ddy(viewPosition);
-    float  worldMoved    = dot(worldAcross, worldAcross) + dot(worldDown, worldDown);
-    float  pictureMoved  = dot(hit.dx, hit.dx) + dot(hit.dy, hit.dy);
     float  viewSize      = dot(viewPosition, viewPosition);
 
     float3 straightOut, alongU, alongV;
     bool   hasDirections = PictureDirections(normal, tangent, straightOut, alongU, alongV);
 
-    if (ReliefSettings.x <= 0.0f || !hasDirections || pictureMoved <= 0.0f || viewSize <= 0.0f)
+    if (ReliefSettings.x <= 0.0f || !hasDirections || viewSize <= 0.0f)
     {
         return hit;
     }
 
     float3 view   = viewPosition / sqrt(viewSize);    // the line of sight, going away from the eye
+    float3 uSeen  = ReliefToCamera(alongU);
+    float3 vSeen  = ReliefToCamera(alongV);
     float  inward = -dot(view, ReliefToCamera(straightOut));
 
     // Looking at the back of a polygon, or exactly along it
@@ -116,10 +118,40 @@ ReliefHit ReliefMarch(float2 place, float3 viewPosition, float3 normal, float4 t
         return hit;
     }
 
-    float  slant = max(inward, kReliefLeastSlant);
+    // HOW THE PICTURE LIES ON THE WALL. One pixel across the screen and one pixel down the screen each move some way along the wall, and some way along the picture. Two such moves are
+    // enough to work out how far the picture moves for one unit of wall in each of the wall's two directions, however the picture is stretched or turned. It's two equations in two unknowns, and
+    // wallArea is the number they both get divided by. It's zero only if those two pixels moved along one line, which a polygon seen from its front can't do, so that's left alone too.
+    float2 wallAcross = float2(dot(worldAcross, uSeen), dot(worldAcross, vSeen));
+    float2 wallDown   = float2(dot(worldDown, uSeen), dot(worldDown, vSeen));
+    float  wallArea   = wallAcross.x * wallDown.y - wallAcross.y * wallDown.x;
+
+    if (abs(wallArea) <= 0.000001f)
+    {
+        return hit;
+    }
+
+    float2 picturePerU = (hit.dx * wallDown.y - hit.dy * wallAcross.y) / wallArea;
+    float2 picturePerV = (hit.dy * wallAcross.x - hit.dx * wallDown.x) / wallArea;
+
+    // The same two moves say how much of the picture one unit of wall takes up. Its upside down is how much wall one whole picture covers, as an area, and the square root of that is its average width.
+    float pictureArea = abs(picturePerU.x * picturePerV.y - picturePerU.y * picturePerV.x);
+
+    if (pictureArea <= 0.0f)
+    {
+        return hit;
+    }
+
+    float worldDepth = ReliefSettings.x / sqrt(pictureArea);    // how deep the very deepest is, in the world
+    float slant      = max(inward, kReliefLeastSlant);
 
     // How far along the picture the line of sight goes on its way down to the very deepest
-    float2 wholeWay = float2(dot(view, ReliefToCamera(alongU)), dot(view, ReliefToCamera(alongV))) * ReliefSettings.x / slant;
+    float2 wholeWay = (picturePerU * dot(view, uSeen) + picturePerV * dot(view, vSeen)) * worldDepth / slant;
+    float  wayLength = length(wholeWay);
+
+    if (wayLength > kReliefMostShift)
+    {
+        wholeWay = wholeWay * kReliefMostShift / wayLength;
+    }
 
     float above = 0.0f;    // the last place on the line still above the surface: 0 is at the polygon, and 1 is at the very deepest
     float below = 0.0f;    // the first found to be under it
@@ -161,8 +193,7 @@ ReliefHit ReliefMarch(float2 place, float3 viewPosition, float3 normal, float4 t
     hit.place = place + wholeWay * below;
 
     // The same spot in the world. Going down that far takes this much distance along the line of sight.
-    float pictureInWorld = sqrt(worldMoved / pictureMoved);
-    float deeper         = min(below * ReliefSettings.x * pictureInWorld / slant, kReliefMostDeeper);
+    float deeper = min(below * worldDepth / slant, kReliefMostDeeper);
 
     hit.viewPosition = viewPosition + view * deeper;
 
