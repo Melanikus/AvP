@@ -21,6 +21,7 @@
 //   LIGHTING has four choices: Gouraud, per pixel, normals, and relief, which draws as normals for now
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
+//   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -408,6 +409,8 @@ static bool UnlockExecuteBufferAndPrepareForUse()
 static bool frameIsOpen = false;
 
 static bool ExecuteBuffer();
+static bool MainDrawUsesHeights();
+static void DrawSolidsWithHeights();
 
 // Draws everything waiting in the lists and starts them again, for when a list is full in the middle of a frame. If the frame couldn't start, there's nothing to draw.
 static void FlushLists()
@@ -458,8 +461,17 @@ static bool ExecuteBuffer()
 	// The walls from the fixed buffer go once, after the solid polygons, whichever drawing of the frame gets there first. See static_scene.cpp.
 	bool const wallsAreDue = StaticScene_WallsAreDue();
 
+	// Relief map's way of drawing the solid polygons. Nothing below changes without it.
+	bool const solidsUseHeights = MainDrawUsesHeights();
+
 	if (mainList->GetSize())
 	{
+		if (solidsUseHeights)
+		{
+			DrawSolidsWithHeights();
+		}
+		else
+		{
 		// set main shaders to active
 		d3d.effectSystem->SetActive(d3d.mainEffect);
 
@@ -470,6 +482,7 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);
+		}
 	}
 
 	if (wallsAreDue)
@@ -483,6 +496,16 @@ static bool ExecuteBuffer()
 
 			mainList->Draw(RenderList::kSeeThrough);
 		}
+	}
+
+	// That way only drew the solid half. A frame's last drawing does the see-through half after the shadows, further down, and any earlier drawing has to do it here, or glass would
+	// go missing from a frame with too many polygons for one list.
+	if (solidsUseHeights && !seeThroughLast && !wallsAreDue && mainList->GetSize())
+	{
+		d3d.effectSystem->SetActive(d3d.mainEffect);
+		d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+
+		mainList->Draw(RenderList::kSeeThrough);
 	}
 
 	// render any decals
@@ -5194,7 +5217,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, LightingNow == kLightingRelief);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights());
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -5212,7 +5235,7 @@ extern int StaticSceneOn;
 // views draw things the buffer doesn't hold. A frame that's being compared needs the old route, to have something to compare with.
 bool StaticScene_ViewAllows()
 {
-	return ToyShadowsLightsByPixel && ToyShadowsMode == kToyViewFinal && !(StaticSurfaceCompare && ShadowReportIsDue());
+	return ToyShadowsLightsByPixel && ToyShadowsMode == kToyViewFinal && !(StaticSurfaceCompare && ShadowReportIsDue()) && LightingNow != kLightingRelief;
 }
 
 static const int kMostFrameRanges = 16384;
@@ -5227,7 +5250,7 @@ static bool ChooseStaticRoute()
 
 	// these three move corners or flip the view in ways the buffer doesn't know about
 	if ((!StaticSurfaceOn && !StaticSurfaceCompare && !StaticScene_TookAny()) || !StaticLevel_Ready() || !SurfaceStatic_Ready()
-		|| MIRROR_CHEATMODE || TRIPTASTIC_CHEATMODE || UNDERWATER_CHEATMODE)
+		|| MIRROR_CHEATMODE || TRIPTASTIC_CHEATMODE || UNDERWATER_CHEATMODE || LightingNow == kLightingRelief)
 	{
 		return false;
 	}
@@ -6654,7 +6677,7 @@ static void ShadowStatus_Draw()
 		_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
 	}
 
-	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn(), mainDrawUsedHeights), ShadowVolumesOn ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF DEPTH %.3f%s%s", ReliefDepthNow, ReliefHeightFlipped ? ", HEIGHT FLIPPED" : "", ReliefTiltFlipped ? ", TILT FLIPPED" : "");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
@@ -6991,6 +7014,53 @@ void ReliefDepthCommand(char *words)
 	}
 }
 
+extern int DrawFullBright;
+
+// Did the last main draw go through the heights? The tag says so, because Relief map being chosen doesn't mean it could be drawn.
+static bool mainDrawUsedHeights = false;
+
+// Does the main draw go through the heights? Only in the real picture with Relief map chosen, and not when something moves corners or flips the view in a way the lists of normals and
+// tangents don't know about. Then it draws the way it always has. The fixed buffer has already said no in this mode: see StaticScene_ViewAllows and ChooseStaticRoute.
+static bool MainDrawUsesHeights()
+{
+	mainDrawUsedHeights = LightingNow == kLightingRelief && ToyShadowsMode == kToyViewFinal && d3d.reliefMainEffect != kNullEffectID && SurfacePictures_ReliefCanRun()
+		&& CurrentVisionMode == VISION_MODE_NORMAL && !MirroringActive && !DrawFullBright && !WireFrameMode
+		&& !MIRROR_CHEATMODE && !TRIPTASTIC_CHEATMODE && !UNDERWATER_CHEATMODE && !DISCOINFERNO_CHEATMODE && !MOTIONBLUR_CHEATMODE;
+
+	return mainDrawUsedHeights;
+}
+
+// The solid polygons, by the shader that marches through their height pictures. The normals and tangents are attached for this one draw, and taken off again straight after, so every other
+// draw sees the game's list of corners as it always has.
+static void DrawSolidsWithHeights()
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+
+	d3d.effectSystem->SetActive(d3d.reliefMainEffect);
+
+	// These go straight into the shaders' registers, for the same reason as the surface pictures: see SurfacePictures_Draw. A matrix is read down its columns there.
+	D3DXMATRIX projectionDown;
+	D3DXMatrixTranspose(&projectionDown, &d3d.matProjection);
+	device->SetVertexShaderConstantF(0, (const float *)&projectionDown, 4);
+
+	float worldAxes[9];
+	ToyShadows_WorldAxes(worldAxes);
+	SurfacePictures_SetReliefConstants(device, worldAxes, true);
+
+	ChangeFilteringMode(2, FILTERING_BILINEAR_ON);
+	device->SetSamplerState(2, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+
+	SurfaceNormals_UseList();
+	SurfaceNormals_UseTangents();
+
+	mainList->Draw(RenderList::kSolid, d3d.surfaceReliefDecl);
+
+	SurfaceNormals_StopUsingTangents();
+	SurfaceNormals_StopUsingList();
+
+	device->SetSamplerState(2, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
+}
+
 // The menu asks the same way the commands do. See view_settings.cpp.
 void ViewSwitches_AskLighting(int choice)
 {
@@ -7095,7 +7165,8 @@ static void ViewSwitches_ApplyAsked()
 		int const drawn = Lighting_Drawn(LightingNow, mapsThere, perPixelThere);
 
 		static char message[40];
-		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_WordsOnScreen(drawn));
+		bool const reliefShaderIsThere = d3d.reliefMainEffect != kNullEffectID;
+		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_WordsOnScreen(drawn, reliefShaderIsThere));
 		message[sizeof(message) - 1] = 0;
 		SaySwitch(message);
 
@@ -7111,9 +7182,9 @@ static void ViewSwitches_ApplyAsked()
 		{
 			SayReasonOnce(&saidNoMaps, textureRelief.IsOn() ? "THIS CARD CANNOT DRAW MAPS, SO NORMALS AND RELIEF ARE SKIPPED" : "THERE ARE NO MAPS, BECAUSE OF -RELIEFOFF, SO NORMALS AND RELIEF ARE SKIPPED");
 		}
-		else if (drawn == kLightingRelief)
+		else if (drawn == kLightingRelief && !reliefShaderIsThere)
 		{
-			SayReasonOnce(&saidReliefIsNormals, "RELIEF HAS NO DEPTH YET, SO IT DRAWS THE SAME AS NORMALS");
+			SayReasonOnce(&saidReliefIsNormals, "THE RELIEF MAP SHADER COULD NOT BE MADE, SO IT DRAWS THE SAME AS NORMALS");
 		}
 
 		lightingAsked = kAskedNothing;

@@ -476,7 +476,7 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 	}
 }
 
-void RenderList::Draw(Part part)
+void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)
 {
 	uint32_t baseIndexValue = 0;
 
@@ -490,7 +490,17 @@ void RenderList::Draw(Part part)
 	bool depthWritesOff = false;
 
 	// set vertex declaration
-	(**decl).Set();
+	if (declarationWithHeights)
+	{
+		declarationWithHeights->Set();
+
+		// The shadow pass and the surface pass both use stage 2 without telling R_SetTexture, so what it remembers about that stage may not be so.
+		R_ForgetTexture(2);
+	}
+	else
+	{
+		(**decl).Set();
+	}
 
 	// set vb and ibs to active
 	(**vb).Set();
@@ -528,8 +538,21 @@ void RenderList::Draw(Part part)
 				ChangeFilteringMode(0, (enum FILTERING_MODE_ID)			get_filterType(it->sortKey));
 				ChangeTextureAddressMode(0, (enum TEXTURE_ADDRESS_MODE) get_texAddressType(it->sortKey));
 
+				// the height picture lies exactly over its texture, so it wraps where the texture wraps
+				if (declarationWithHeights)
+				{
+					R_SetTexture(2, textureRelief.HeightFor(get_texID(it->sortKey)));
+					ChangeTextureAddressMode(2, (enum TEXTURE_ADDRESS_MODE) get_texAddressType(it->sortKey));
+				}
+
 				R_DrawIndexedPrimitive(baseIndexValue, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
 			}
 		}
+	}
+
+	if (declarationWithHeights)
+	{
+		d3d.lpD3DDevice->SetTexture(2, NULL);
+		R_ForgetTexture(2);
 	}
 }

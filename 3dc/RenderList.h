@@ -123,7 +123,9 @@ class RenderList
 		void CreateOrthoIndices(uint16_t *indexArray);
 		// Which polygons Draw draws. Solid and see-through are two halves of the same list, drawn at different moments of a frame.
 		enum Part { kEverything, kSolid, kSeeThrough };
-		void Draw(Part part = kEverything);
+		// With declarationWithHeights, it's the main draw for Relief map: the corners also get what that declaration brings them, and each polygon's height picture is on stage 2. See
+		// DrawSolidsWithHeights in d3d_render.cpp. Without it, this is the game's own draw, unchanged.
+		void Draw(Part part = kEverything, class VertexDeclaration *declarationWithHeights = 0);
 
 		uint32_t GetLeftOutBecauseFull()   const { return leftOutBecauseFull; }
 		uint32_t GetLeftOutBecauseClosed() const { return leftOutBecauseClosed; }

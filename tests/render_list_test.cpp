@@ -245,6 +245,10 @@ texID_t TextureRelief::HeightFor(texID_t) const
 	return 0;
 }
 
+void R_ForgetTexture(uint32_t)
+{
+}
+
 r_Texture const &Tex_GetTexture(texID_t)
 {
 	static r_Texture none = 0;

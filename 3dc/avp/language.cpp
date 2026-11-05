@@ -37,7 +37,7 @@ static char OurTextStrings[][200] =
 	"Rendering options",
 	"How the world is lit, and whether things cast shadows.",
 	"Rendering",
-	"How the world is lit. Relief map draws the same as Per-pixel + normals for now. A choice this card can't draw is skipped.",
+	"How the world is lit. A choice this card can't draw is skipped.",
 	"Gouraud",
 	"Per-pixel (flat)",
 	"Per-pixel + normals",

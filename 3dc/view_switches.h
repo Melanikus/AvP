@@ -25,7 +25,7 @@ enum LightingChoice
 	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where a new player starts, and -shadowsoff
 	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where -reliefoff starts
 	kLightingNormals,   // lights are added per pixel, and each pixel's map tilts which way it faces
-	kLightingRelief,    // the same, and each pixel's map should also make the surface stand out from its polygon. That part isn't written yet: see Lighting_WordsOnScreen
+	kLightingRelief,    // the same, and a ray marched through each pixel's height makes the surface stand out from its polygon. See Lighting_WordsOnScreen for when it can't
 	kLightingChoices
 };
 
@@ -318,11 +318,11 @@ inline int Lighting_MenuStep(int last, int pressed, bool mapsThere, bool perPixe
 	return kLightingGouraud;
 }
 
-// What the screen calls it. Relief is meant to make a surface stand out from its polygon, using the depth in its map, and nothing does that yet. So it draws what NORMALS draws, and it says so
-// instead of claiming to be something it isn't. When that's written, this goes back to being the word.
-inline char const *Lighting_WordsOnScreen(int choice)
+// What the screen calls it. Relief can be chosen and still not be marching: its shader may not have been made, or something on this frame stops it, such as a mirror or a vision mode. Then it
+// draws what NORMALS draws, and it says so instead of claiming to be something it isn't.
+inline char const *Lighting_WordsOnScreen(int choice, bool marching)
 {
-	return (choice == kLightingRelief) ? "RELIEF, DRAWN AS NORMALS" : Lighting_Word(choice);
+	return (choice == kLightingRelief && !marching) ? "RELIEF, DRAWN AS NORMALS" : Lighting_Word(choice);
 }
 
 // What the view becomes after the switches have changed. It only moves when everything goes off, or stops being off. If G has moved it away from OFF in between, it stays

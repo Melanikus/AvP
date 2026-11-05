@@ -60,6 +60,7 @@ bool R_EndScene();
 // texture functions
 bool R_SetTexture            (uint32_t stage, texID_t textureID);
 void R_UnsetTexture          (texID_t textureID);
+void R_ForgetTexture         (uint32_t stage);
 bool R_LockTexture           (Texture &texture, uint8_t **data, uint32_t *pitch, enum TextureLock lockType);
 bool R_UnlockTexture         (Texture &texture);
 bool R_CreateTextureWithCopies (uint32_t side, uint32_t levels, Texture &texture);

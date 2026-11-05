@@ -61,7 +61,7 @@ from source.
 
 ## Turning on the new look
 A new install looks the way the game always has: the new lighting and shadows are off until you choose them. They're under **Rendering options** in the audio and video options, in the main menus and while playing:
-- **Rendering:** Gouraud, Per-pixel (flat), Per-pixel + normals, or Relief map. Relief map draws the same as Per-pixel + normals for now.
+- **Rendering:** Gouraud, Per-pixel (flat), Per-pixel + normals, or Relief map.
 - **Shadows:** yes or no.
 - **Auto-generate maps:** works out maps for textures that have none. Turning it on takes effect from the next level.
 

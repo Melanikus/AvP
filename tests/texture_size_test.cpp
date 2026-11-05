@@ -150,7 +150,7 @@ int main()
 	Check(CountOf(device, "D3DXCheckTextureRequirements(") == 1, "and nothing else in that file asks the helper, so nothing else takes its answer unchecked");
 
 	// Each of these has its size in the code, not from a file, and R_CreateTexture is the only one with a size from outside. A new one has to be looked at, so this counts them.
-	Check(CountOf(device, "lpD3DDevice->CreateTexture(") == 4, "and it's still one of 4 places that make a texture: the menu font's at 512 x 512, two of 1 x 1, and this");
+	Check(CountOf(device, "lpD3DDevice->CreateTexture(") == 5, "and it's still one of 5 places that make a texture: the menu font's at 512 x 512, two of 1 x 1, a square hand-made map, which checks for itself what it got, and this");
 
 	std::string const manager = ReadSourceFile("3dc/TextureManager.cpp");
 	std::string const fromRim = FunctionBody(manager, "texID_t Tex_CreateFromRIM(");

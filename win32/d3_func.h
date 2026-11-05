@@ -221,6 +221,7 @@ typedef struct D3DInfo
 	effectID_t				surfaceEffect;
 	class VertexDeclaration	*surfaceReliefDecl;     // these two stay empty with relief pictures off
 	effectID_t				surfaceReliefEffect;
+	effectID_t				reliefMainEffect;       // the main draw for Relief map. Stays empty if it couldn't be made, and then nothing uses it
 	class VertexDeclaration	*surfaceStaticDecl;     // the level's fixed buffer: see surface_static.cpp
 	effectID_t				surfaceStaticEffect;
 	effectID_t				surfaceStaticReliefEffect;

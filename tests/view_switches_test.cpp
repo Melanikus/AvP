@@ -185,11 +185,12 @@ static void TheCycle()
 		"each is called what the command calls it");
 
 	// Relief mustn't claim what it doesn't do. These lengths are the room the game leaves: 39 characters of a message, and 47 of a line of the tag.
-	Check(std::string(Lighting_WordsOnScreen(kLightingRelief)).find("AS NORMALS") != std::string::npos, "relief says it's drawn as normals");
+	Check(std::string(Lighting_WordsOnScreen(kLightingRelief, false)).find("AS NORMALS") != std::string::npos, "relief that isn't marching says it's drawn as normals");
+	Check(std::string(Lighting_WordsOnScreen(kLightingRelief, true)) == "RELIEF", "and when it's marching, it's just relief");
 
 	for (int choice = 0; choice < kLightingChoices; choice++)
 	{
-		size_t const words = strlen(Lighting_WordsOnScreen(choice));
+		size_t const words = strlen(Lighting_WordsOnScreen(choice, false));
 
 		Check(strlen("LIGHTING: ") + words <= 39, std::string(Lighting_Word(choice)) + " fits in its message");
 		Check(strlen("LIGHTING , SHADOWS OFF") + words <= 47, "and in its line of the tag");
@@ -600,9 +601,39 @@ static void TheVolumesSwitch()
 	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);"), "LIGHTING changes the choice");
 	Check(Has(applying, "\t\tshadowsAsked = kAskedNothing;"), "what SHADOWS asked for is done once, not again every frame");
 	Check(Has(applying, "\t\tlightingAsked = kAskedNothing;"), "and the same for LIGHTING");
-	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_WordsOnScreen(LightingReallyDrawn()), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both, and relief says what it really draws");
-	Check(Has(applying, "\"LIGHTING: %s\", Lighting_WordsOnScreen(drawn)"), "and so does the message when it changes");
+	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_WordsOnScreen(LightingReallyDrawn(), mainDrawUsedHeights), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both, and relief says what it really draws");
+	Check(Has(applying, "\"LIGHTING: %s\", Lighting_WordsOnScreen(drawn, reliefShaderIsThere)"), "and so does the message when it changes");
+
+	// The main draw: the old route has to stay as it was, so this all hangs on one question.
+	std::string const usesHeights = Between(render, "static bool MainDrawUsesHeights()\n{", "// The solid polygons, by the shader");
+	std::string const drawsHeights = Between(render, "static void DrawSolidsWithHeights()\n{", "// The menu asks the same way");
+	std::string const buffer = Between(render, "static bool ExecuteBuffer()\n{", "// render any particles");
+
+	Check(Has(usesHeights, "LightingNow == kLightingRelief && ToyShadowsMode == kToyViewFinal && d3d.reliefMainEffect != kNullEffectID && SurfacePictures_ReliefCanRun()"), "the heights are only for Relief, in the real picture, with its shader and maps there");
+	Check(Has(usesHeights, "!MirroringActive") && Has(usesHeights, "!MIRROR_CHEATMODE") && Has(usesHeights, "CurrentVisionMode == VISION_MODE_NORMAL"), "and not when something moves corners or flips the view");
+	Check(Has(buffer, "if (solidsUseHeights)\n\t\t{\n\t\t\tDrawSolidsWithHeights();\n\t\t}\n\t\telse"), "the main draw takes that way only when asked, and the game's own way otherwise");
+	Check(Has(buffer, "mainList->Draw((seeThroughLast || wallsAreDue) ? RenderList::kSolid : RenderList::kEverything);"), "and the game's own way is as it was");
+	Check(Has(buffer, "if (solidsUseHeights && !seeThroughLast && !wallsAreDue && mainList->GetSize())"), "and an early drawing still draws its glass");
+	Check(Has(drawsHeights, "SurfaceNormals_UseList();\n\tSurfaceNormals_UseTangents();\n\n\tmainList->Draw(RenderList::kSolid, d3d.surfaceReliefDecl);\n\n\tSurfaceNormals_StopUsingTangents();\n\tSurfaceNormals_StopUsingList();"), "the two lists are attached for that one draw, and taken off straight after");
+	Check(Has(render, "ShadowReportIsDue()) && LightingNow != kLightingRelief;") && Has(render, "UNDERWATER_CHEATMODE || LightingNow == kLightingRelief)"), "and the fixed buffer stays out of this mode");
+
+	std::string const lists = ReadSourceFile("3dc/RenderList.cpp");
+	std::string const drawn = Between(lists, "void RenderList::Draw(Part part, VertexDeclaration *declarationWithHeights)", "// ");
+
+	Check(Has(lists, "if (declarationWithHeights)\n\t{\n\t\tdeclarationWithHeights->Set();"), "with heights the list uses the other declaration");
+	Check(Has(lists, "else\n\t{\n\t\t(**decl).Set();"), "without them, its own");
+	Check(Has(lists, "R_SetTexture(2, textureRelief.HeightFor(get_texID(it->sortKey)));"), "each polygon gets its own height picture");
+	Check(CountOf(lists, "R_ForgetTexture(2);") == 2, "and what's remembered about that stage is forgotten before and after");
 	Check(Has(applying, "SayReasonOnce(&saidReliefIsNormals,"), "and the log says why, once");
+
+	std::string const reliefMain = ReadSourceFile("shaders/reliefMain.psh");
+	std::string const reliefMainVertex = ReadSourceFile("shaders/reliefMain.vsh");
+
+	Check(Has(reliefMain, "return tex2Dgrad(Tex0, hit.place, hit.dx, hit.dy) * In.Diffuse + In.Specular;"), "Relief's main draw lights a pixel as pixel.psh does, so it shows under baked light");
+	Check(Has(reliefMainVertex, "(In.Normal.w < 0.5f) ? float4(0.0f, 0.0f, 0.0f, 0.0f) : In.Tangent"), "and a polygon nobody wrote down stays where it is");
+
+	// the old shaders aren't touched
+	Check(!Has(ReadSourceFile("shaders/pixel.psh"), "Normal") && !Has(ReadSourceFile("shaders/vertex.vsh"), "Tangent"), "the game's own main shaders know nothing of any of this");
 
 	std::string const inThisView = Between(render, "bool ToyShadows_VolumesInThisView()", "}");
 

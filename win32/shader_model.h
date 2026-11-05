@@ -12,7 +12,7 @@
 // once. Those are told apart by the start of the file's name.
 inline bool ShaderNeedsModel3(const std::string &fileName)
 {
-	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0;
+	return fileName.compare(0, 6, "shadow") == 0 || fileName.compare(0, 7, "surface") == 0 || fileName.compare(0, 5, "light") == 0 || fileName.compare(0, 6, "relief") == 0;
 }
 
 #endif
