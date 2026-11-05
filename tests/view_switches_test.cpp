@@ -392,6 +392,57 @@ static void TheRealGame()
 	Check(Has(shadowsOff, "ToyShadowsMode = 0;") && Has(shadowsOff, "ShadowVolumesOn = 0;") && Has(shadowsOff, "LightingNow = kLightingGouraud;"), "-shadowsoff starts with everything off");
 }
 
+// SHADOWS 0: nothing is collected for casting, no prism is built or drawn, and the lights carry on. These rows only show that the lines are there, because the renderer
+// doesn't link into a test. What they do on a card needs a run. The world's dim has no row on purpose: whether it stays with the volumes off is still a question for the user.
+static void TheVolumesSwitch()
+{
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
+	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\r\n{", "static void ToyShadows_Draw()");
+
+	// the commands reach the switches, once each
+	Check(Has(applying, "if (hasStencil)\r\n\t\t{\r\n\t\t\tShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);"), "SHADOWS changes the switch, where there are stencil bits");
+	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, reliefThere, perPixelThere);"), "LIGHTING changes the choice");
+	Check(Has(applying, "\t\tshadowsAsked = kAskedNothing;"), "what SHADOWS asked for is done once, not again every frame");
+	Check(Has(applying, "\t\tlightingAsked = kAskedNothing;"), "and the same for LIGHTING");
+	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_Word(LightingReallyDrawn()), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both");
+
+	std::string const inThisView = Between(render, "bool ToyShadows_VolumesInThisView()", "}");
+
+	Check(Has(inThisView, "return ShadowVolumesOn || ToyShadowsMode != kToyViewFinal;"), "only FINAL obeys the switch, and the other views go on showing the shadow code");
+
+	// collecting
+	std::string const collecting = Between(shapes, "void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)\r\n{", "int const whatItMayDo");
+	std::string::size_type const lastTest = collecting.find("ShapeFlag_Sprite");
+	std::string::size_type const gate = collecting.find("ToyShadows_VolumesInThisView");
+
+	Check(Has(collecting, "if (!ToyShadows_VolumesInThisView())\r\n\t{\r\n\t\tToyShadows_NoteWorldDrawn();\r\n\t\treturn;"), "with the volumes off, nothing is collected, and the world is noted as drawn");
+	Check(lastTest != std::string::npos && gate != std::string::npos && lastTest < gate, "after the other tests, so a frame counts as the same kind of frame either way");
+
+	std::string const walls = Between(shapes, "void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)\r\n{", "int ToyShadows_PolygonInWorld");
+
+	Check(Has(walls, "if (ToyShadows_VolumesInThisView())\r\n\t\t{\r\n\t\t\tShadowGroup_StartWalked("), "a wall from the fixed buffer only makes its group with the volumes on");
+	Check(Has(walls, "else\r\n\t\t{\r\n\t\t\tToyShadows_NoteWorldDrawn();"), "and otherwise notes that the world was drawn");
+
+	// the lights still know the world was drawn
+	std::string const forgetting = Between(render, "static void ToyForgetCasters()", "earlyFlushThisFrame = false;");
+
+	Check(Has(forgetting, "worldDrawnWithoutCasters = false;"), "that note only lasts the frame");
+	Check(Has(render, "return toyNumCasters > 0 || numWalkedGroups > 0 || worldDrawnWithoutCasters;"), "and it counts as the world being drawn");
+	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()\r\n\t\t&& ToyWorldWasDrawn() && ToyPicturesCanRun(d3d.lpD3DDevice);"), "so lights stay added per pixel with nothing on the caster list");
+	Check(Has(render, "report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;"), "and the pass still goes through them");
+
+	// the pass
+	Check(Has(render, "bool const volumesThisFrame = ToyShadows_VolumesInThisView();"), "the pass asks the same question");
+	Check(Has(render, "StartKeptPrisms(lights, report.lights);\r\n\r\n\t// These go after"), "the store still hears which lights there are, so it knows what stood still when the volumes come back");
+	Check(Has(render, "if (volumesThisFrame)\r\n\t{\r\n\t\tMakeShadowReachView();"), "walls out of view are only looked for with the volumes on");
+	Check(Has(render, "int const lightsThatMark = volumesThisFrame ? report.lights : 0;"), "with them off, no light marks anything");
+	Check(Has(render, "for (int light = 0; light < lightsThatMark; light++)"), "and that's the loop that builds prisms and marks the stencil");
+	Check(Has(render, "if (volumesThisFrame)\r\n\t\t\t{\r\n\t\t\t\tToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);"), "an empty mask isn't drawn");
+	Check(Has(render, "if (!volumesThisFrame)\r\n\t\t\t\t{\r\n\t\t\t\t\tToyAddLight(device, thisLight);"), "a light added per pixel goes straight on, with no prisms or mask of its own");
+	Check(Has(render, "float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;"), "the report doesn't divide by no passes");
+}
+
 int main()
 {
 	WordsForShadows();
@@ -401,6 +452,7 @@ int main()
 	TheView();
 	TheSixStates();
 	TheRealGame();
+	TheVolumesSwitch();
 
 	if (checksFailed)
 	{
