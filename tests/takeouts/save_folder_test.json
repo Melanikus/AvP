@@ -275,12 +275,42 @@
 			]
 		},
 		{
-			"name": "SOURCE: the log asks before it can write",
+			"name": "SOURCE: the log says it and then wipes it",
 			"changes": [
 				{
 					"file": "3dc/logString.cpp",
-					"from": "\t\tlogWriter = new LogWriter;\n\t\tfilterBeforeOurs",
-					"to": "\t\tif (char const *const early = GetSaveFolderProblem())\n\t\t{\n\t\t\tLogErrorString(early);\n\t\t}\n\n\t\tlogWriter = new LogWriter;\n\t\tfilterBeforeOurs"
+					"from": "\t\twriter->Empty();\n\t}\n\n\t// Making the log asked for the save folder, and if that went wrong, there was no log yet to say so in. It's said here and not when the log is made, because this empties whatever came before it,\n\t// and it's the first thing the game does (WinMain in winmain.cpp).\n\tif (char const *const problem = GetSaveFolderProblem())\n\t{\n\t\tLogErrorString(problem);\n\t}",
+					"to": "\t\tif (char const *const problem = GetSaveFolderProblem())\n\t\t{\n\t\t\tLogErrorString(problem);\n\t\t}\n\n\t\twriter->Empty();\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says it while it's being made",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "\t\tatexit(WriteLogAtExit);\n",
+					"to": "\t\tatexit(WriteLogAtExit);\n\n\t\tif (char const *const early = GetSaveFolderProblem())\n\t\t{\n\t\t\tLogErrorString(early);\n\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log still checks for a path that is never null",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "filePath = GetSaveFolderPath();",
+					"to": "char const *folder = GetSaveFolderPath();\n\t\tfilePath = folder ? folder : \"\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game doesn't empty the log first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\tClearLog();\n",
+					"to": "\n"
 				}
 			]
 		},

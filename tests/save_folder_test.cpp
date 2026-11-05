@@ -178,10 +178,18 @@ static void TestTheGamesCode()
 
 static void TestWhatTheyAreTold()
 {
-	std::string const making = Between(ReadSourceFile("3dc/logString.cpp"), "static LogWriter *TheLogWriter()", "void ClearLog()");
+	std::string const log = ReadSourceFile("3dc/logString.cpp");
+	std::string const clearing = Between(log, "void ClearLog()\n{\n\tif (LogWriter *writer = TheLogWriter())", "void WriteToLog");
 
-	Check(ComesBefore(making, "logWriter = new LogWriter;", "GetSaveFolderProblem()"), "the log says what went wrong with the save folder, once there's a log to say it in");
-	Check(ComesBefore(making, "GetSaveFolderProblem()", "LogErrorString(problem);"), "as an error");
+	Check(ComesBefore(clearing, "writer->Empty();", "GetSaveFolderProblem()"), "the log says what went wrong with the save folder after it's been emptied, because that wipes anything before it");
+	Check(ComesBefore(clearing, "GetSaveFolderProblem()", "LogErrorString(problem);"), "as an error");
+	Check(!Has(Between(log, "static LogWriter *TheLogWriter()", "void ClearLog()"), "GetSaveFolderProblem"), "and not when the log is made, where it would be wiped");
+	Check(!clearing.empty(), "the function that empties the log is where it's expected to be");
+	Check(Has(log, "filePath = GetSaveFolderPath();"), "the log uses the save folder as it comes, because it's never null");
+
+	std::string const startingOn = Between(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "SetWindowTitle();", "LogString(");
+
+	Check(Has(startingOn, "ClearLog();"), "the game empties the log first thing, so that's when it's said");
 
 	std::string const asking = Between(ReadSourceFile("3dc/utilities.cpp"), "char const *GetSaveFolderProblem()", "char *GetSaveFolderPath()");
 

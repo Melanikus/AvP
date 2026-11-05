@@ -183,8 +183,7 @@ public:
 		QueryPerformanceFrequency(&ticksPerSecond);
 
 		// no folder means the current one: the log is only worth so much, and it mustn't be why the game won't start
-		char const *folder = GetSaveFolderPath();
-		filePath = folder ? folder : "";
+		filePath = GetSaveFolderPath();
 		filePath += logFilename;
 
 		wake = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -381,7 +380,7 @@ static void WriteLogAtExit()
 }
 
 // It's never given back: it has to outlive everything that might still write to the log as the game ends. It can give back nothing, while it's being
-// made, so that a line written from inside that doesn't come straight back here. Such a line would be lost, so finding the save folder keeps what went wrong, and it's said here instead.
+// made, so that a line written from inside that doesn't come straight back here. Such a line would be lost, so finding the save folder keeps what went wrong, and ClearLog says it.
 static LogWriter *TheLogWriter()
 {
 	static bool beingMade = false;
@@ -392,12 +391,6 @@ static LogWriter *TheLogWriter()
 		logWriter = new LogWriter;
 		filterBeforeOurs = SetUnhandledExceptionFilter(WriteLogBeforeCrash);
 		atexit(WriteLogAtExit);
-
-		// Making the log asked for the save folder. If that went wrong, there was no log yet to say so in, and now there is.
-		if (char const *const problem = GetSaveFolderProblem())
-		{
-			LogErrorString(problem);
-		}
 	}
 
 	return logWriter;
@@ -408,6 +401,13 @@ void ClearLog()
 	if (LogWriter *writer = TheLogWriter())
 	{
 		writer->Empty();
+	}
+
+	// Making the log asked for the save folder, and if that went wrong, there was no log yet to say so in. It's said here and not when the log is made, because this empties whatever came before it,
+	// and it's the first thing the game does (WinMain in winmain.cpp).
+	if (char const *const problem = GetSaveFolderProblem())
+	{
+		LogErrorString(problem);
 	}
 }
 
