@@ -361,6 +361,13 @@ static void TheRealGame()
 	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()"), "the pass asks that before it takes any lights");
 	Check(Has(applying, "if (!ViewAddsLightsPerPixel())\r\n\t{\r\n\t\tToyShadowsLightsByPixel = 0;"), "and a change hands them back in time for the very next frame");
 
+	// These three only show the lines are there. Whether they look right on a card needs a run.
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
+
+	Check(Has(render, "if (light[7] != 0.0f && fabsf(centreFacing) < kToyFlareTouching)"), "the floor under a resting flare doesn't block it, whichever way it's lit");
+	Check(Has(shapes, "toyChosenLights[placeOf[i] * kToyLightFloats + 7] != 0.0f"), "only lamps are picked to be drawn from several positions");
+	Check(Has(shapes, "(chosen[i].order < 0 && light->LightBright > flareCap) ? flareCap : light->LightBright"), "a flare in the game's lighting counts only what its cap lets it add");
+
 	Check(Has(applying, "ToyShadowsMode = View_AfterSwitches(ToyShadowsMode, kToyViewOff, switchesWereAllOff, allOff, &viewToComeBackTo);"), "everything off goes to the OFF view");
 	Check(Has(applying, "if (!hasStencil)\r\n\t{\r\n\t\tShadowVolumesOn = 0;\r\n\t\tLightingNow = kLightingGouraud;"), "with no stencil bits, both are held off every frame");
 

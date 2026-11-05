@@ -5415,9 +5415,9 @@ static void CompareSceneRoutes(LPDIRECT3DDEVICE9 device, int frame)
 	LogString(line);
 }
 
-// There are two ways to show a shadow. If this card can do everything below, the surface pictures are drawn, every light reads them, and
-// chosen live lights leave the game's lighting to be added per pixel. If it can't, the game keeps all its lights, and each light darkens
-// the pixels it can't reach by a flat share. Nothing is left in between, so this one test decides both.
+// There are two ways to show a shadow. If this card can do everything below, the surface pictures are drawn and every light reads them. Chosen live lights then
+// leave the game's lighting to be added per pixel, unless LIGHTING is on Gouraud, which keeps them there and only shades them through the mask. If the card
+// can't, the game keeps all its lights, and each light darkens the pixels it can't reach by a flat share. This one test decides which way a card can go.
 static bool ToyPicturesCanRun(LPDIRECT3DDEVICE9 device)
 {
 	return d3d.shadowBlurEffect != kNullEffectID && PixelLights_Ready(device) && ToyMakeTargets(device);
@@ -6801,8 +6801,8 @@ static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
 	}
 }
 
-// Are chosen live lights added per pixel in the view being shown? In FINAL, LIGHTING decides. MASK and NORMALS are for looking inside the pass, so they take no notice
-// of it. Every other view leaves all the lights to the game.
+// Are chosen live lights added per pixel in the view being shown? In FINAL, LIGHTING decides. MASK and NORMALS are for looking inside the pass, so for the lights they
+// take no notice of it, though their surfaces do lose their relief when it isn't on relief. Every other view leaves all the lights to the game.
 static bool ViewAddsLightsPerPixel()
 {
 	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
