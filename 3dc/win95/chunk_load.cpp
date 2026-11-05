@@ -616,7 +616,7 @@ RIFFHANDLE load_rif_non_env(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		// fname can come from a level's RIFCHILD chunk: no fixed-size buffer
+		// no fixed-size buffer: a name's length shouldn't be able to matter here
 		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
