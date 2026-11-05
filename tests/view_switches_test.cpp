@@ -626,7 +626,7 @@ static void TheVolumesSwitch()
 
 	// The main draw: the old route has to stay as it was, so this all hangs on one question.
 	std::string const usesHeights = Between(render, "static bool MainDrawUsesHeights()\n{", "// The solid polygons, by the shader");
-	std::string const drawsHeights = Between(render, "static void DrawSolidsWithHeights()\n{", "// The menu asks the same way");
+	std::string const drawsHeights = Between(render, "static void DrawSolidsWithHeights()\n{", "// Asking makes the pictures if they aren't there yet");
 	std::string const buffer = Between(render, "static bool ExecuteBuffer()\n{", "// render any particles");
 
 	Check(Has(usesHeights, "LightingNow == kLightingRelief && ToyShadowsMode == kToyViewFinal && d3d.reliefMainEffect != kNullEffectID && SurfacePictures_ReliefCanRun()"), "the heights are only for Relief, in the real picture, with its shader and maps there");
