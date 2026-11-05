@@ -33,7 +33,8 @@ If you decide against it, delete the draft. Nothing else was made, so the versio
 ## What it can't prove
 
 The checks run on GitHub's machines, and their own machine may have a copy of a file a player's doesn't. Nothing here starts the game
-itself on a clean Windows. Do that by hand before you press Publish, if you can.
+itself on a clean Windows, so a person has to. `RELEASE-BLOCKERS.md` lists that until someone has done it the first time. Do it again for
+each release, with the zip from the draft, before you press Publish.
 
 ## How someone checks a copy they downloaded
 
