@@ -33,6 +33,8 @@
 //   waiting for the graphics card to come back asks it again each time round, so it can't wait forever, and the wait ends if
 //   the player closes the game. A buffer that couldn't be made can't be locked
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the settings file can't say where shaders come from
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
@@ -84,7 +86,9 @@ int	NumAvailableVideoModes;
 D3DINFO d3d;
 bool usingStencil = false;
 
-std::string shaderPath;
+// Always this folder beside the game. It used to come from the settings file, and a file someone shared could point it at another computer, so that the game fetched
+// shaders from there and ran them. tests/settings_file_test.cpp keeps it out.
+static const std::string shaderPath = "shaders/";
 std::string videoModeDescription;
 
 bool CreateVolatileResources();
@@ -2206,7 +2210,6 @@ bool InitialiseDirect3D()
 //	uint32_t colourDepth = Config_GetInt("[VideoMode]", "ColourDepth", 32);
 	bool useTripleBuffering = Config_GetBool("[VideoMode]", "UseTripleBuffering", false);
 	bool useVSync = Config_GetBool("[VideoMode]", "UseVSync", true);
-	shaderPath = Config_GetString("[VideoMode]", "ShaderPath", "shaders/");
 
 	// set some defaults
 	uint32_t defaultDevice = D3DADAPTER_DEFAULT;
