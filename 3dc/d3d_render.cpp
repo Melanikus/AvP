@@ -18,6 +18,7 @@
 //   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
 //   the developer keys only work in a level being played, so a letter typed into a menu can't press them
 //   a frame that couldn't start forgets what it collected for shadows, so it can't reach a later frame, or a later level
+//   LIGHTING has four choices: Gouraud, per pixel, normals, and relief, which draws as normals for now
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -3736,7 +3737,7 @@ static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x00
 extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
-int LightingNow = kLightingRelief;
+int LightingNow = kLightingNormals;
 // Whether anything casts a shadow. With this at 0, no polygons are collected for casting and no prisms are built or drawn, kept ones included. The mask stays at nothing
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 1;
@@ -5180,7 +5181,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, LightingNow == kLightingRelief, useStatic);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -6640,7 +6641,7 @@ static void ShadowStatus_Draw()
 		_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
 	}
 
-	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_Word(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
 	{
@@ -6817,7 +6818,7 @@ static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
 }
 
 // Are chosen live lights added per pixel in the view being shown? In FINAL, LIGHTING decides. MASK and NORMALS are for looking inside the pass, so for the lights they
-// take no notice of it, though their surfaces do lose their relief when it isn't on relief. Every other view leaves all the lights to the game.
+// take no notice of it, though their surfaces only have their maps when it asks for them. Every other view leaves all the lights to the game.
 static bool ViewAddsLightsPerPixel()
 {
 	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
@@ -6871,7 +6872,7 @@ void LightingCommand(char *words)
 {
 	if (!SwitchWords_LightingAsk(words, &lightingAsked))
 	{
-		SaySwitch("LIGHTING TAKES 1 RELIEF, 2 PERPIXEL OR 3 GOURAUD, OR NOTHING FOR THE NEXT");
+		SaySwitch("LIGHTING TAKES 1 GOURAUD, 2 PERPIXEL, 3 NORMALS OR 4 RELIEF, OR NOTHING FOR THE NEXT");
 	}
 }
 
@@ -6924,15 +6925,17 @@ static void ViewSwitches_ApplyAsked()
 
 	if (lightingAsked != kAskedNothing)
 	{
-		static bool saidNoStencil = false, saidNoPerPixel = false, saidNoRelief = false;
+		static bool saidNoStencil = false, saidNoPerPixel = false, saidNoMaps = false, saidReliefIsNormals = false;
 
 		bool const perPixelThere = PerPixelLightsCanRun();
-		bool const reliefThere = SurfacePictures_ReliefCanRun();
+		bool const mapsThere = SurfacePictures_ReliefCanRun();
 
-		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, reliefThere, perPixelThere);
+		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);
+
+		int const drawn = Lighting_Drawn(LightingNow, mapsThere, perPixelThere);
 
 		static char message[40];
-		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_Word(Lighting_Drawn(LightingNow, reliefThere, perPixelThere)));
+		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_WordsOnScreen(drawn));
 		message[sizeof(message) - 1] = 0;
 		SaySwitch(message);
 
@@ -6944,9 +6947,13 @@ static void ViewSwitches_ApplyAsked()
 		{
 			SayReasonOnce(&saidNoPerPixel, "THIS CARD CANNOT DRAW LIGHTS PER PIXEL, SO ONLY GOURAUD IS THERE");
 		}
-		else if (!reliefThere)
+		else if (!mapsThere)
 		{
-			SayReasonOnce(&saidNoRelief, textureRelief.IsOn() ? "THIS CARD CANNOT DRAW RELIEF, SO IT IS SKIPPED" : "RELIEF WAS NOT BUILT, BECAUSE OF -RELIEFOFF, SO IT IS SKIPPED");
+			SayReasonOnce(&saidNoMaps, textureRelief.IsOn() ? "THIS CARD CANNOT DRAW MAPS, SO NORMALS AND RELIEF ARE SKIPPED" : "THERE ARE NO MAPS, BECAUSE OF -RELIEFOFF, SO NORMALS AND RELIEF ARE SKIPPED");
+		}
+		else if (drawn == kLightingRelief)
+		{
+			SayReasonOnce(&saidReliefIsNormals, "RELIEF HAS NO DEPTH YET, SO IT DRAWS THE SAME AS NORMALS");
 		}
 
 		lightingAsked = kAskedNothing;

@@ -79,17 +79,19 @@ static void WordsForLighting()
 {
 	Check(LightingAskFor("") == kAskedNext, "LIGHTING alone goes to the next one");
 	Check(LightingAskFor("  ") == kAskedNext, "and so does LIGHTING with only spaces after it");
-	Check(LightingAskFor("1") == kLightingRelief, "1 is relief");
+	Check(LightingAskFor("1") == kLightingGouraud, "1 is Gouraud");
 	Check(LightingAskFor("2") == kLightingPerPixel, "2 is per pixel");
-	Check(LightingAskFor("3") == kLightingGouraud, "3 is Gouraud");
-	Check(LightingAskFor("RELIEF") == kLightingRelief, "the name RELIEF");
-	Check(LightingAskFor("PERPIXEL") == kLightingPerPixel, "the name PERPIXEL");
+	Check(LightingAskFor("3") == kLightingNormals, "3 is normals");
+	Check(LightingAskFor("4") == kLightingRelief, "4 is relief");
 	Check(LightingAskFor("GOURAUD") == kLightingGouraud, "the name GOURAUD");
+	Check(LightingAskFor("PERPIXEL") == kLightingPerPixel, "the name PERPIXEL");
+	Check(LightingAskFor("NORMALS") == kLightingNormals, "the name NORMALS");
+	Check(LightingAskFor("RELIEF") == kLightingRelief, "the name RELIEF");
 	Check(LightingAskFor("gouraud") == kLightingGouraud, "a name in small letters");
 	Check(LightingAskFor("PerPixel\r") == kLightingPerPixel, "a name in mixed letters, at the end of a line from a file");
 	Check(LightingAskFor("  relief  ") == kLightingRelief, "a name with spaces around it");
 
-	char const *const refused[] = { "0", "4", "-1", "11", "1 2", "RELIE", "RELIEFS", "RELIEF 1", "PER PIXEL", "GOURAUD2", "ON", "OFF", "\xFF", "RELIEF\xFF" };
+	char const *const refused[] = { "0", "5", "-1", "11", "1 2", "RELIE", "RELIEFS", "RELIEF 1", "PER PIXEL", "NORMAL", "NORMALS2", "GOURAUD2", "ON", "OFF", "\xFF", "RELIEF\xFF" };
 
 	for (char const *words : refused)
 	{
@@ -126,10 +128,11 @@ static void ShadowsAnswers()
 
 static void TheCycle()
 {
-	// everything there
-	Check(Lighting_AfterAsking(kLightingRelief, kAskedNext, true, true) == kLightingPerPixel, "relief goes to per pixel");
-	Check(Lighting_AfterAsking(kLightingPerPixel, kAskedNext, true, true) == kLightingGouraud, "per pixel goes to Gouraud");
-	Check(Lighting_AfterAsking(kLightingGouraud, kAskedNext, true, true) == kLightingRelief, "Gouraud goes back to relief");
+	// everything there, in the order the player sees them
+	Check(Lighting_AfterAsking(kLightingGouraud, kAskedNext, true, true) == kLightingPerPixel, "Gouraud goes to per pixel");
+	Check(Lighting_AfterAsking(kLightingPerPixel, kAskedNext, true, true) == kLightingNormals, "per pixel goes to normals");
+	Check(Lighting_AfterAsking(kLightingNormals, kAskedNext, true, true) == kLightingRelief, "normals goes to relief");
+	Check(Lighting_AfterAsking(kLightingRelief, kAskedNext, true, true) == kLightingGouraud, "relief goes back to Gouraud");
 
 	for (int choice = 0; choice < kLightingChoices; choice++)
 	{
@@ -139,24 +142,31 @@ static void TheCycle()
 		Check(Lighting_Drawn(choice, true, true) == choice, std::string(Lighting_Word(choice)) + " is drawn when it's there");
 	}
 
-	// relief wasn't built: -reliefoff, or a shader that couldn't be made
-	Check(Lighting_AfterAsking(kLightingPerPixel, kAskedNext, false, true) == kLightingGouraud, "with no relief, per pixel goes to Gouraud");
-	Check(Lighting_AfterAsking(kLightingGouraud, kAskedNext, false, true) == kLightingPerPixel, "and Gouraud goes past relief, to per pixel");
-	Check(Lighting_AfterAsking(kLightingRelief, kAskedNext, false, true) == kLightingGouraud, "still asking for relief, a press moves on from what's really on the screen, which is per pixel");
-	Check(Lighting_AfterAsking(kLightingGouraud, kLightingRelief, false, true) == kLightingGouraud, "asking for relief by name when it isn't there changes nothing");
+	Check(!Lighting_UsesMaps(kLightingGouraud) && !Lighting_UsesMaps(kLightingPerPixel), "Gouraud and per pixel don't read the maps");
+	Check(Lighting_UsesMaps(kLightingNormals) && Lighting_UsesMaps(kLightingRelief), "normals and relief do");
+
+	// no maps: -reliefoff, or a shader that couldn't be made
+	Check(Lighting_AfterAsking(kLightingPerPixel, kAskedNext, false, true) == kLightingGouraud, "with no maps, per pixel goes past both that need them, to Gouraud");
+	Check(Lighting_AfterAsking(kLightingGouraud, kAskedNext, false, true) == kLightingPerPixel, "and Gouraud goes to per pixel");
+	Check(Lighting_AfterAsking(kLightingNormals, kAskedNext, false, true) == kLightingGouraud, "still asking for normals, a press moves on from what's really on the screen, which is per pixel");
+	Check(Lighting_AfterAsking(kLightingRelief, kAskedNext, false, true) == kLightingGouraud, "and the same from relief");
+	Check(Lighting_AfterAsking(kLightingGouraud, kLightingNormals, false, true) == kLightingGouraud, "asking for normals by name when it isn't there changes nothing");
+	Check(Lighting_AfterAsking(kLightingGouraud, kLightingRelief, false, true) == kLightingGouraud, "and nor does relief");
 	Check(Lighting_AfterAsking(kLightingGouraud, kLightingPerPixel, false, true) == kLightingPerPixel, "per pixel can still be asked for");
-	Check(Lighting_Drawn(kLightingRelief, false, true) == kLightingPerPixel, "relief asked for and not there draws per pixel, as it always has");
+	Check(Lighting_Drawn(kLightingNormals, false, true) == kLightingPerPixel, "normals asked for and not there draws per pixel");
+	Check(Lighting_Drawn(kLightingRelief, false, true) == kLightingPerPixel, "and so does relief");
 
 	// the card can't draw per pixel at all, or not for this moment
 	for (int choice = 0; choice < kLightingChoices; choice++)
 	{
 		Check(Lighting_Drawn(choice, true, false) == kLightingGouraud, std::string(Lighting_Word(choice)) + " asked for draws Gouraud on a card that can't draw per pixel");
 		Check(Lighting_AfterAsking(choice, kAskedNext, true, false) == choice, std::string("a press on that card leaves ") + Lighting_Word(choice) + " asked for, for when it comes back");
-		Check(Lighting_AfterAsking(choice, kAskedNext, false, false) == choice, std::string("with no relief either, it still leaves ") + Lighting_Word(choice));
+		Check(Lighting_AfterAsking(choice, kAskedNext, false, false) == choice, std::string("with no maps either, it still leaves ") + Lighting_Word(choice));
 	}
 
 	Check(Lighting_AfterAsking(kLightingRelief, kLightingPerPixel, true, false) == kLightingRelief, "per pixel by name on that card changes nothing");
-	Check(Lighting_AfterAsking(kLightingGouraud, kLightingRelief, true, false) == kLightingGouraud, "and nor does relief by name");
+	Check(Lighting_AfterAsking(kLightingGouraud, kLightingNormals, true, false) == kLightingGouraud, "and nor does normals by name");
+	Check(Lighting_AfterAsking(kLightingGouraud, kLightingRelief, true, false) == kLightingGouraud, "or relief");
 	Check(Lighting_AfterAsking(kLightingRelief, kLightingGouraud, true, false) == kLightingGouraud, "but Gouraud can always be asked for");
 
 	// a press taken while the card has gone for a moment, then it's back
@@ -167,10 +177,22 @@ static void TheCycle()
 	int asked = kAskedNothing;
 	SwitchWords_LightingAsk("", &asked);
 	SwitchWords_LightingAsk("", &asked);
-	Check(Lighting_AfterAsking(kLightingRelief, asked, true, true) == kLightingPerPixel, "a key bound twice moves on one, not two");
+	Check(Lighting_AfterAsking(kLightingPerPixel, asked, true, true) == kLightingNormals, "a key bound twice moves on one, not two");
 
-	Check(std::string(Lighting_Word(kLightingRelief)) == "RELIEF" && std::string(Lighting_Word(kLightingPerPixel)) == "PERPIXEL" && std::string(Lighting_Word(kLightingGouraud)) == "GOURAUD",
+	Check(std::string(Lighting_Word(kLightingRelief)) == "RELIEF" && std::string(Lighting_Word(kLightingNormals)) == "NORMALS"
+		&& std::string(Lighting_Word(kLightingPerPixel)) == "PERPIXEL" && std::string(Lighting_Word(kLightingGouraud)) == "GOURAUD",
 		"each is called what the command calls it");
+
+	// Relief mustn't claim what it doesn't do. These lengths are the room the game leaves: 39 characters of a message, and 47 of a line of the tag.
+	Check(std::string(Lighting_WordsOnScreen(kLightingRelief)).find("AS NORMALS") != std::string::npos, "relief says it's drawn as normals");
+
+	for (int choice = 0; choice < kLightingChoices; choice++)
+	{
+		size_t const words = strlen(Lighting_WordsOnScreen(choice));
+
+		Check(strlen("LIGHTING: ") + words <= 39, std::string(Lighting_Word(choice)) + " fits in its message");
+		Check(strlen("LIGHTING , SHADOWS OFF") + words <= 47, "and in its line of the tag");
+	}
 }
 
 // The same numbers as the game's views, enough for these rows
@@ -220,8 +242,8 @@ static void TheView()
 	Check(View_AfterG(kPolygons, kViewCount, kFinal, true) == kOff, "and it still comes round to OFF");
 }
 
-// Every one of the six, on a card that has everything
-static void TheSixStates()
+// Every one of the eight, on a card that has everything
+static void TheEightStates()
 {
 	int seen = 0;
 
@@ -229,7 +251,7 @@ static void TheSixStates()
 	{
 		for (int choice = 0; choice < kLightingChoices; choice++)
 		{
-			int const lighting = Lighting_AfterAsking(kLightingRelief, choice, true, true);
+			int const lighting = Lighting_AfterAsking(kLightingNormals, choice, true, true);
 			int const volumes = Shadows_AfterAsking(1, shadows);
 
 			if (lighting == choice && volumes == shadows)
@@ -239,7 +261,7 @@ static void TheSixStates()
 		}
 	}
 
-	Check(seen == 6, "all six can be reached");
+	Check(seen == 8, "all eight can be reached");
 
 	// SHADOWS changing doesn't touch LIGHTING, and the other way round: they're separate numbers, with nothing shared.
 	Check(Lighting_AfterAsking(kLightingPerPixel, kAskedNothing, true, true) == kLightingPerPixel && Shadows_AfterAsking(0, kAskedNothing) == 0, "what isn't asked about stays");
@@ -358,9 +380,9 @@ static void TheRealGame()
 	Check(Has(shadowsCommand, "SwitchWords_ShadowsAsk(words, &shadowsAsked)") && !Has(shadowsCommand, "ShadowVolumesOn"), "SHADOWS only notes what it's asked for");
 	Check(Has(lightingCommand, "SwitchWords_LightingAsk(words, &lightingAsked)") && !Has(lightingCommand, "LightingNow ="), "LIGHTING only notes what it's asked for");
 
-	Check(Has(render, "int LightingNow = kLightingRelief;"), "the game starts in relief");
+	Check(Has(render, "int LightingNow = kLightingNormals;"), "the game starts in normals, which is what it has always started in, under its old name of relief");
 	Check(Has(render, "int ShadowVolumesOn = 1;"), "with shadows on");
-	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, LightingNow == kLightingRelief, useStatic)"), "the surface pass asks for relief only when that's the choice");
+	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic)"), "the surface pass only asks for the maps when the choice reads them");
 	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
@@ -411,10 +433,12 @@ static void TheVolumesSwitch()
 
 	// the commands reach the switches, once each
 	Check(Has(applying, "if (hasStencil)\r\n\t\t{\r\n\t\t\tShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);"), "SHADOWS changes the switch, where there are stencil bits");
-	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, reliefThere, perPixelThere);"), "LIGHTING changes the choice");
+	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);"), "LIGHTING changes the choice");
 	Check(Has(applying, "\t\tshadowsAsked = kAskedNothing;"), "what SHADOWS asked for is done once, not again every frame");
 	Check(Has(applying, "\t\tlightingAsked = kAskedNothing;"), "and the same for LIGHTING");
-	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_Word(LightingReallyDrawn()), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both");
+	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_WordsOnScreen(LightingReallyDrawn()), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both, and relief says what it really draws");
+	Check(Has(applying, "\"LIGHTING: %s\", Lighting_WordsOnScreen(drawn)"), "and so does the message when it changes");
+	Check(Has(applying, "SayReasonOnce(&saidReliefIsNormals,"), "and the log says why, once");
 
 	std::string const inThisView = Between(render, "bool ToyShadows_VolumesInThisView()", "}");
 
@@ -459,7 +483,7 @@ int main()
 	ShadowsAnswers();
 	TheCycle();
 	TheView();
-	TheSixStates();
+	TheEightStates();
 	TheRealGame();
 	TheVolumesSwitch();
 

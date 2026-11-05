@@ -324,7 +324,7 @@ void CreateGameSpecificConsoleCommands(void)
 	ConsoleCommand::Make
 	(
 		"LIGHTING",
-		"HOW THE WORLD IS LIT: 1 RELIEF, 2 PERPIXEL, 3 GOURAUD. ON ITS OWN, THE NEXT ONE",
+		"HOW THE WORLD IS LIT: 1 GOURAUD, 2 PERPIXEL, 3 NORMALS, 4 RELIEF. ON ITS OWN, THE NEXT ONE",
 		LightingCommand
 	);
 

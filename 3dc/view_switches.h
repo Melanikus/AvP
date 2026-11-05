@@ -1,6 +1,6 @@
 // The two things a player can change while playing: how the world is lit, and whether shadows are drawn. Written 2026-11-05 by Melanikus for the AvP port.
 //
-// LIGHTING has three choices, and SHADOWS is on or off. Either can be set whatever the other says, so there are six ways the world can look.
+// LIGHTING has four choices, and SHADOWS is on or off. Either can be set whatever the other says, so there are eight ways the world can look.
 // Both are console commands, so they can go on any key: BIND L LIGHTING. With -dev they also have keys of their own, L and H.
 //
 // WHEN THEY CHANGE: the drawing code reads these many times a frame, and a command can arrive at any moment. So a command only notes what it was asked for, and the
@@ -22,9 +22,10 @@
 
 enum LightingChoice
 {
-	kLightingRelief,    // lights are added per pixel, on surfaces given depth by their relief pictures. The game starts here
-	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where -reliefoff starts
 	kLightingGouraud,   // the game's own lighting, worked out at each polygon's corners and blended across it. Where -shadowsoff starts
+	kLightingPerPixel,  // lights are added per pixel, on flat surfaces. Where -reliefoff starts
+	kLightingNormals,   // lights are added per pixel, and each pixel's map tilts which way it faces. The game starts here
+	kLightingRelief,    // the same, and each pixel's map should also make the surface stand out from its polygon. That part isn't written yet: see Lighting_WordsOnScreen
 	kLightingChoices
 };
 
@@ -126,7 +127,7 @@ inline bool SwitchWords_ShadowsAsk(char const *words, int *asked)
 	return true;
 }
 
-// LIGHTING: nothing goes to the next choice. The numbers are their places in the cycle, and the names work too.
+// LIGHTING: nothing goes to the next choice. The numbers are their places in the cycle, counting from 1, and the names work too.
 inline bool SwitchWords_LightingAsk(char const *words, int *asked)
 {
 	if (!words)
@@ -142,17 +143,21 @@ inline bool SwitchWords_LightingAsk(char const *words, int *asked)
 	{
 		*asked = kAskedNext;
 	}
-	else if (SwitchWords_Are(start, length, "1") || SwitchWords_Are(start, length, "RELIEF"))
+	else if (SwitchWords_Are(start, length, "1") || SwitchWords_Are(start, length, "GOURAUD"))
 	{
-		*asked = kLightingRelief;
+		*asked = kLightingGouraud;
 	}
 	else if (SwitchWords_Are(start, length, "2") || SwitchWords_Are(start, length, "PERPIXEL"))
 	{
 		*asked = kLightingPerPixel;
 	}
-	else if (SwitchWords_Are(start, length, "3") || SwitchWords_Are(start, length, "GOURAUD"))
+	else if (SwitchWords_Are(start, length, "3") || SwitchWords_Are(start, length, "NORMALS"))
 	{
-		*asked = kLightingGouraud;
+		*asked = kLightingNormals;
+	}
+	else if (SwitchWords_Are(start, length, "4") || SwitchWords_Are(start, length, "RELIEF"))
+	{
+		*asked = kLightingRelief;
 	}
 	else
 	{
@@ -177,18 +182,24 @@ inline int Shadows_AfterAsking(int now, int asked)
 	return asked ? 1 : 0;
 }
 
-// Whether this choice can be drawn right now. The game's own lighting always can.
-inline bool Lighting_IsThere(int choice, bool reliefThere, bool perPixelThere)
+// Whether this choice reads the maps
+inline bool Lighting_UsesMaps(int choice)
+{
+	return choice == kLightingNormals || choice == kLightingRelief;
+}
+
+// Whether this choice can be drawn right now. The game's own lighting always can. mapsThere says whether the pictures that hold the maps, and what draws them, are all there.
+inline bool Lighting_IsThere(int choice, bool mapsThere, bool perPixelThere)
 {
 	return choice == kLightingGouraud
 		|| (choice == kLightingPerPixel && perPixelThere)
-		|| (choice == kLightingRelief && perPixelThere && reliefThere);
+		|| (Lighting_UsesMaps(choice) && perPixelThere && mapsThere);
 }
 
 // What really gets drawn when this is what was asked for
-inline int Lighting_Drawn(int asked, bool reliefThere, bool perPixelThere)
+inline int Lighting_Drawn(int asked, bool mapsThere, bool perPixelThere)
 {
-	if (Lighting_IsThere(asked, reliefThere, perPixelThere))
+	if (Lighting_IsThere(asked, mapsThere, perPixelThere))
 	{
 		return asked;
 	}
@@ -200,7 +211,7 @@ inline int Lighting_Drawn(int asked, bool reliefThere, bool perPixelThere)
 //
 // When a card can't draw per pixel, a press can't change anything anyway, so it also leaves what was asked for alone. That can be true for just a moment around a device
 // reset, and this way the lighting a player chose comes back afterwards.
-inline int Lighting_AfterAsking(int now, int asked, bool reliefThere, bool perPixelThere)
+inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixelThere)
 {
 	if (asked == kAskedNothing)
 	{
@@ -209,7 +220,7 @@ inline int Lighting_AfterAsking(int now, int asked, bool reliefThere, bool perPi
 
 	if (asked != kAskedNext)
 	{
-		return Lighting_IsThere(asked, reliefThere, perPixelThere) ? asked : now;
+		return Lighting_IsThere(asked, mapsThere, perPixelThere) ? asked : now;
 	}
 
 	if (!perPixelThere)
@@ -218,20 +229,28 @@ inline int Lighting_AfterAsking(int now, int asked, bool reliefThere, bool perPi
 	}
 
 	// From what's on the screen, so that a press never lands on what's already there. Gouraud is always there, so this always finds one.
-	int choice = Lighting_Drawn(now, reliefThere, perPixelThere);
+	int choice = Lighting_Drawn(now, mapsThere, perPixelThere);
 
 	do
 	{
 		choice = (choice + 1) % kLightingChoices;
 	}
-	while (!Lighting_IsThere(choice, reliefThere, perPixelThere));
+	while (!Lighting_IsThere(choice, mapsThere, perPixelThere));
 
 	return choice;
 }
 
+// What the command calls each choice
 inline char const *Lighting_Word(int choice)
 {
-	return (choice == kLightingRelief) ? "RELIEF" : (choice == kLightingPerPixel) ? "PERPIXEL" : "GOURAUD";
+	return (choice == kLightingRelief) ? "RELIEF" : (choice == kLightingNormals) ? "NORMALS" : (choice == kLightingPerPixel) ? "PERPIXEL" : "GOURAUD";
+}
+
+// What the screen calls it. Relief is meant to make a surface stand out from its polygon, using the depth in its map, and nothing does that yet. So it draws what NORMALS draws, and it says so
+// instead of claiming to be something it isn't. When that's written, this goes back to being the word.
+inline char const *Lighting_WordsOnScreen(int choice)
+{
+	return (choice == kLightingRelief) ? "RELIEF, DRAWN AS NORMALS" : Lighting_Word(choice);
 }
 
 // What the view becomes after the switches have changed. It only moves when everything goes off, or stops being off. If G has moved it away from OFF in between, it stays
