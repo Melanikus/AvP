@@ -25,7 +25,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   colours are looked up in a way that can't go past the end of the colour table
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   says the most planes a picture can have
+//   says the most planes a picture can have, and the largest a picture can be
 
 #pragma once
 
@@ -66,6 +66,10 @@ const int kMaskLasso = 3;
 const uint32_t kMaxColours = 65536;
 const int kMostPlanes = 16;     // a colour number is held in 16 bits, one from each plane
 
+// The size of a picture comes from its file, and memory and time are spent on the strength of it. The largest of the game's own are 640 x 480 by area and 7392 tall, in a font.
+const uint32_t kLargestRimSide = 8192;
+const uint64_t kMostRimPixels = 2048 * 2048;
+
 struct ColourRegister
 {
 	uint8_t red;
@@ -96,6 +100,8 @@ class RimLoader
 
 	private:
 		uint32_t GetUnpackedBytes();
+		bool BodyCanHoldThePicture();
+		uint8_t NextBodyByte();
 		uint32_t GetBody();
 		uint32_t GetScanLine();
 		uint32_t GetUncompressedBytes();
@@ -118,6 +124,8 @@ class RimLoader
 		uint32_t rowBytes;
 
 		std::vector<uint8_t> destRow;
+		uint64_t bodyLeft;      // how much of the picture's data is still to be read
+		bool ranOut;            // whether it ran out before the picture was finished
 		uint32_t destRowIndex;
 
 		// change this when code works

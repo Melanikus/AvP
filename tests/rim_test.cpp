@@ -40,12 +40,18 @@ static void Check(bool passed, std::string const &what)
 
 // ---- What FileStream asks of the rest of the game. These pictures are ordinary files, never in a fastfile.
 
-FastFileHandle *FF_Find(const std::string &) { return 0; }
+// One file can be made to look as if it's inside a fastfile, to show it stops at its own end.
+static std::string memberName, containerName;
+static FastFileHandle memberHandle;
+
+FastFileHandle *FF_Find(const std::string &name)
+{
+	return (!memberName.empty() && name == memberName) ? &memberHandle : 0;
+}
 
 const std::string &FF_GetFastFileName(int32_t)
 {
-	static std::string const none;
-	return none;
+	return containerName;
 }
 
 namespace Util
@@ -200,11 +206,12 @@ static size_t const kWatched = 4096;
 struct Result
 {
 	bool opened;
+	bool finished;      // whether it read all its picture
 	uint32_t width, height;
 	std::vector<uint8_t> pixels;
 	bool nothingPastTheEnd;
 
-	Result() : opened(false), width(0), height(0), nothingPastTheEnd(true) {}
+	Result() : opened(false), finished(false), width(0), height(0), nothingPastTheEnd(true) {}
 
 	// blue, green, red and alpha of a pixel, in the order they're written
 	bool PixelIs(uint32_t x, uint32_t y, int b, int g, int r, int a) const
@@ -219,36 +226,52 @@ struct Result
 	}
 };
 
-static Result Read(Bytes const &bytes)
+// Decode writes where it's told, trusting that there's room for the size it gives. This gives it exactly that, with a pattern after it, as the game does: the game's check that the card
+// made what was asked for is in R_CreateTexture. Any picture that opens is small enough to read in full, because of the loader's own limit.
+static Result ReadFrom(std::string const &path)
 {
 	Result result;
-	WriteFile(bytes);
-
 	RimLoader picture;
-	result.opened = picture.Open(TestFilePath());
+	result.opened = picture.Open(path);
 
 	if (result.opened)
 	{
 		picture.GetDimensions(result.width, result.height);
 		size_t const size = (size_t)result.width * result.height * 4;
 
-		// a full-sized picture would take a long time and tell us nothing more
-		if (size <= (1u << 24))
+		std::vector<uint8_t> memory(size + kWatched, kPattern);
+		result.finished = picture.Decode(&memory[0], result.width * 4);
+
+		for (size_t i = size; i < memory.size(); i++)
 		{
-			std::vector<uint8_t> memory(size + kWatched, kPattern);
-			picture.Decode(&memory[0], result.width * 4);
-
-			for (size_t i = size; i < memory.size(); i++)
-			{
-				result.nothingPastTheEnd = result.nothingPastTheEnd && (memory[i] == kPattern);
-			}
-
-			memory.resize(size);
-			result.pixels.swap(memory);
+			result.nothingPastTheEnd = result.nothingPastTheEnd && (memory[i] == kPattern);
 		}
+
+		memory.resize(size);
+		result.pixels.swap(memory);
 	}
 
 	return result;
+}
+
+static Result Read(Bytes const &bytes)
+{
+	WriteFile(bytes);
+	return ReadFrom(TestFilePath());
+}
+
+static int CountOf(std::string const &text, std::string const &words)
+{
+	int count = 0;
+	std::string::size_type place = 0;
+
+	while ((place = text.find(words, place)) != std::string::npos)
+	{
+		count++;
+		place += words.size();
+	}
+
+	return count;
 }
 
 static std::string ReadSourceFile(char const *name)
@@ -371,6 +394,79 @@ static void CheckRefusals()
 
 	Check(!Read(Bytes()).opened, "an empty file is refused");
 
+	// A few bytes asking for a huge picture: this used to take 256 MB, and minutes of reading from nothing
+	{
+		Picture p(8192, 8192, 16, 1);
+		p.colours = CountingColours(1);
+		Check(p.File().size() < 100 && !Read(p.File()).opened, "a tiny file saying it's 8192 x 8192 is refused");
+
+		Picture tooWide(8193, 1, 1, 0);
+		tooWide.colours = CountingColours(1);
+		tooWide.body.assign(1025, 0);
+		Check(!Read(tooWide.File()).opened, "a picture wider than the limit is refused, with all its data there");
+
+		Picture tooTall(1, 8193, 1, 0);
+		tooTall.colours = CountingColours(1);
+		tooTall.body.assign(8193, 0);
+		Check(!Read(tooTall.File()).opened, "and one taller");
+
+		Picture tooMany(2049, 2048, 1, 0);
+		tooMany.colours = CountingColours(1);
+		tooMany.body.assign((size_t)257 * 2048, 0);
+		Check(!Read(tooMany.File()).opened, "and one with too many pixels in all");
+
+		Picture most(2048, 2048, 1, 0);
+		most.colours = CountingColours(2);
+		most.body.assign((size_t)256 * 2048, 0x80);
+		Result const r = Read(most.File());
+		Check(r.opened && r.finished && r.ShowsColour(0, 2047, 1) && r.ShowsColour(1, 2047, 0) && r.nothingPastTheEnd, "the most pixels there can be is read to the end");
+
+		Picture tall(1, 7392, 1, 0);
+		tall.colours = CountingColours(2);
+		tall.body.assign(7392, 0x80);
+		Check(Read(tall.File()).opened, "as tall as the game's own font opens");
+	}
+
+	// The picture's data has to be able to hold what its size says
+	{
+		Picture plain(8, 8, 8, 0);
+		plain.colours = CountingColours(1);
+		plain.body.assign(63, 0);
+		Check(!Read(plain.File()).opened, "a plain picture one byte short is refused");
+		plain.body.assign(64, 0);
+		Check(Read(plain.File()).opened, "and with exactly enough it opens");
+
+		Picture packed(8, 8, 8, 1);
+		packed.colours = CountingColours(1);
+		Check(!Read(packed.File()).opened, "a packed picture with nothing in it is refused");
+		packed.body.assign(1, 0);
+		Check(Read(packed.File()).opened, "a 64th of its size can't be ruled out until it's unpacked");
+
+		Picture big(64, 64, 8, 1);
+		big.colours = CountingColours(1);
+		big.body.assign(63, 0);
+		Check(!Read(big.File()).opened, "less than the best packing could make it from is refused");
+		big.body.assign(64, 0);
+		Check(Read(big.File()).opened, "and exactly that opens");
+
+		Bytes file = plain.File();
+		file.pop_back();
+		Check(!Read(file).opened, "a body that says it's longer than the file is refused");
+
+		Bytes tableFile;
+		Add(tableFile, "CMAP");
+		Add32(tableFile, 300);
+		Check(!Read(tableFile).opened, "and so is a colour table longer than the file");
+
+		// really there, all of it, with more colours than a number can name
+		Picture manyColours(1, 1, 16, 0);
+		manyColours.colours.assign(3 * 65537, 0);
+		manyColours.body.assign(16, 0);
+		Check(!Read(manyColours.File()).opened, "a colour table with more colours than can be used is refused");
+		manyColours.colours.assign(3 * 65536, 0);
+		Check(Read(manyColours.File()).opened, "and with exactly as many as can be used it opens");
+	}
+
 	{
 		Bytes junk;
 		Add(junk, "JUNK");
@@ -423,12 +519,34 @@ static void CheckBadPixels()
 	}
 
 	{
-		// Only no-ops, all the way to the end of the file. They have to end, and zeros past the end do that.
+		// Only no-ops, all the way to the end. They have to end, and the end of the picture's data does that.
 		Picture p(8, 2, 1, 1);
 		p.colours = CountingColours(2);
 		p.body.assign(5000, 0x80);
 		Result const r = Read(p.File());
-		Check(r.opened && r.nothingPastTheEnd, "a picture of nothing but no-ops ends, and writes nothing past the end");
+		Check(r.opened && !r.finished && r.nothingPastTheEnd, "a picture of nothing but no-ops ends, says so, and writes nothing past the end");
+	}
+
+	{
+		// Data follows the picture's own, so a loader reading past the end of its data would find something to read, and carry on
+		Picture p(8, 2, 1, 1);
+		p.colours = CountingColours(2);
+		p.body.assign(1, 0);
+		Bytes file = p.File();
+		file.insert(file.end(), 100, 0xFF);
+		Result const r = Read(file);
+		Check(r.opened && !r.finished, "what comes after a picture's data isn't read as part of it");
+	}
+
+	{
+		// The last thing in the picture's data says "repeat the next byte", and there isn't a next byte, only what follows the data
+		Picture p(8, 1, 1, 1);
+		p.colours = CountingColours(2);
+		p.body.assign(1, (uint8_t)(int8_t)-1);
+		Bytes file = p.File();
+		file.insert(file.end(), 10, 0xFF);
+		Result const r = Read(file);
+		Check(r.opened && !r.finished, "a repeated run with nothing to repeat stops there");
 	}
 
 	{
@@ -474,35 +592,43 @@ static void CheckBadPixels()
 	}
 
 	{
-		// the file stops part way through the picture, both ways of packing
-		for (uint32_t compression = 0; compression < 2; compression++)
+		// Packed, the file stops part way through the picture. Each row of each plane takes 2 bytes here, and there's only enough for the first row and part of the next.
+		Picture p(32, 32, 8, 1);
+		p.colours = CountingColours(4);
+
+		for (int i = 0; i < 8 * 4 + 4; i++)
 		{
-			Picture p(32, 32, 8, compression);
-			p.colours = CountingColours(4);
-			p.body.assign(10, 0);
-			Result const r = Read(p.File());
-			Check(r.opened && r.nothingPastTheEnd, std::string(compression ? "packed" : "plain") + ", cut short: it reads what's there, and ends");
+			p.body.push_back(0);
+			p.body.push_back(0xFF);
 		}
+
+		p.body.resize(32 * 8 * 4 / 64 > p.body.size() ? 32 * 8 * 4 / 64 : p.body.size());
+		Result const r = Read(p.File());
+		Check(r.opened && !r.finished, "packed and cut short: it opens, and says it couldn't finish");
+		Check(r.nothingPastTheEnd, "and writes nothing past the end");
+		Check(r.pixels.size() > 32 * 4 && r.pixels[32 * 4] == kPattern, "and a row it couldn't finish isn't written at all");
 	}
 
 	{
 		Picture p(0, 0, 8, 0);
 		Result const r = Read(p.File());
-		Check(r.opened && r.width == 0 && r.height == 0, "a picture with no size has nothing to write");
+		Check(r.opened && r.width == 0 && r.height == 0 && r.nothingPastTheEnd, "a picture with no size has nothing to write, and writes nothing");
 	}
 
 	{
-		// as wide as it can say
-		Picture p(65535, 1, 1, 0);
+		// as wide as it can be
+		Picture p(8192, 1, 1, 0);
 		p.colours = CountingColours(2);
+		p.body.assign(1024, 0);
 		Result const r = Read(p.File());
-		Check(r.opened && r.width == 65535 && r.nothingPastTheEnd, "65535 wide: nothing is written past the end of its row");
+		Check(r.opened && r.finished && r.width == 8192 && r.nothingPastTheEnd, "8192 wide: nothing is written past the end of its row");
 	}
 
 	{
 		// a second colour table replaces the first
 		Picture p(1, 1, 1, 0);
 		p.colours = CountingColours(2);
+		p.body.assign(1, 0x80);
 		Bytes file = p.File();
 		Bytes extra;
 		Add(extra, "CMAP");
@@ -511,7 +637,6 @@ static void CheckBadPixels()
 		extra.insert(extra.end(), second, second + 6);
 		size_t const body = std::string((char const *)&file[0], file.size()).find("BODY");
 		file.insert(file.begin() + body, extra.begin(), extra.end());
-		file.push_back(0x80);
 		Result const r = Read(file);
 		Check(r.opened && r.PixelIs(0, 0, 70, 60, 50, 255), "with two colour tables, the last one counts");
 	}
@@ -543,7 +668,7 @@ static void CheckDamagedPictures()
 	}
 
 	Bytes const good = p.File();
-	int opened = 0, refused = 0, wrote = 0;
+	int opened = 0, refused = 0, wrote = 0, finished = 0;
 
 	for (int round = 0; round < 500; round++)
 	{
@@ -564,11 +689,149 @@ static void CheckDamagedPictures()
 		opened += r.opened ? 1 : 0;
 		refused += r.opened ? 0 : 1;
 		wrote += r.nothingPastTheEnd ? 0 : 1;
+		finished += r.finished ? 1 : 0;
 	}
 
-	printf("  500 damaged copies: %d opened, %d refused\n", opened, refused);
+	printf("  500 damaged copies: %d opened, %d of those finished, %d refused\n", opened, finished, refused);
 	Check(opened > 50 && refused > 50, "the damage reaches both ways out");
 	Check(wrote == 0, "and none of them writes past the end of its picture, and all of them end");
+}
+
+// A file inside a fastfile, which is what nearly every picture in the game is. Its neighbours are right after it, so reading on would find them.
+static void CheckInsideAFastFile()
+{
+	printf("A picture inside a fastfile:\n");
+
+	Picture good(8, 1, 1, 0);
+	good.colours = CountingColours(2);
+	good.body.assign(1, 0x80);
+	Bytes const goodFile = good.File();
+
+	containerName = TestFilePath() + ".ffl";
+	memberName = "member.rim";
+
+	Bytes const before(100, 0x77);
+	Bytes const after(1000, 0xFF);
+	Bytes container = before;
+	container.insert(container.end(), goodFile.begin(), goodFile.end());
+	container.insert(container.end(), after.begin(), after.end());
+
+	FILE *file = fopen(containerName.c_str(), "wb");
+
+	if (file)
+	{
+		fwrite(&container[0], 1, container.size(), file);
+		fclose(file);
+	}
+
+	memberHandle.fastFileIndex = 0;
+	memberHandle.fileOffset = (uint32_t)before.size();
+	memberHandle.fileSize = (uint32_t)goodFile.size();
+
+	{
+		Result const r = ReadFrom(memberName);
+		Check(r.opened && r.finished && r.ShowsColour(0, 0, 1) && r.ShowsColour(1, 0, 0), "it's read from where it is");
+	}
+
+	// The same bytes, with the file said to end one byte sooner: its body now reaches past its end, into its neighbour
+	{
+		memberHandle.fileSize = (uint32_t)goodFile.size() - 1;
+		Check(!ReadFrom(memberName).opened, "a body past the end of its own file is refused, with a neighbour there to read");
+	}
+
+	// The file said to end inside its colour table. All the rest of a good picture is right after it, so read on and it would open.
+	{
+		size_t const table = std::string((char const *)&goodFile[0], goodFile.size()).find("CMAP");
+		memberHandle.fileSize = (uint32_t)table + 8 + 3;
+		Check(!ReadFrom(memberName).opened, "and so is a file that ends inside its colour table, because no body can follow it");
+	}
+
+	memberName.clear();
+	remove(containerName.c_str());
+}
+
+// What the game reads a letter's width with, on a real picture in memory, against the sums it used before
+static int OldLetterWidth(uint8_t const *pixels, uint32_t textureWidth, int c, int letterWidth, int letterHeight, int widest)
+{
+	int const x1 = 1 + ((c - 32) & 15) * 16;
+	int const y1 = 1 + ((c - 32) >> 4) * 16;
+	int width = widest;
+
+	for (int x = x1 + letterWidth; x > x1; x--)
+	{
+		bool blank = true;
+
+		for (int y = y1; y < y1 + letterHeight; y++)
+		{
+			if (pixels[(x + y * textureWidth) * 4] >= 0x80)
+			{
+				blank = false;
+				break;
+			}
+		}
+
+		if (blank)
+		{
+			width--;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	return width;
+}
+
+static void CheckLetterWidths()
+{
+	printf("How wide a letter is:\n");
+
+	uint32_t const size = 256;
+	std::vector<uint8_t> picture((size_t)size * size * 4, 0);
+
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 2, "a blank letter is what's left of its width");
+
+	// letter 65 is at 1 + 1 * 16, 1 + 2 * 16
+	int const left = FontChecks_LetterX(65), top = FontChecks_LetterY(65);
+	picture[((size_t)top * size + left + 3) * 4] = 0x80;
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 5, "a bright pixel in its third column sets its width");
+	picture[((size_t)top * size + left + 3) * 4] = 0x7F;
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 2, "one that isn't bright enough doesn't");
+	picture[((size_t)top * size + left + 3) * 4] = 0;
+	picture[((size_t)top * size + left + 3) * 4 + 1] = 0xFF;
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 2, "only blue is looked at");
+	picture[((size_t)top * size + left + 3) * 4 + 1] = 0;
+	picture[((size_t)(top + 14) * size + left + 15) * 4] = 0xFF;
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 17, "something in its last column and last row is its whole width");
+	picture[((size_t)(top + 14) * size + left + 15) * 4] = 0;
+	picture[((size_t)(top + 15) * size + left + 15) * 4] = 0xFF;
+	picture[((size_t)top * size + left + 16) * 4] = 0xFF;
+	picture[((size_t)top * size + left) * 4] = 0xFF;
+	Check(FontChecks_LetterWidth(&picture[0], size * 4, 65, 15, 15, 17) == 2, "what's just outside the letter doesn't count");
+
+	// Rows longer than the width: the letter is found through the pitch
+	{
+		uint32_t const pitch = size * 4 + 64;
+		std::vector<uint8_t> padded((size_t)pitch * size, 0);
+		padded[(size_t)top * pitch + (size_t)(left + 3) * 4] = 0xFF;
+		Check(FontChecks_LetterWidth(&padded[0], pitch, 65, 15, 15, 17) == 5, "rows longer than the picture's width are found by their real length");
+	}
+
+	// the same answers as before, for every letter of a picture of noise, as every picture the game has had
+	for (size_t i = 0; i < picture.size(); i++)
+	{
+		picture[i] = (RandomBits() % 40 == 0) ? 0xFF : 0;
+	}
+
+	bool same = true;
+
+	for (int c = 33; c < 255; c++)
+	{
+		same = same && FontChecks_LetterWidth(&picture[0], size * 4, c, 15, 15, 17) == OldLetterWidth(&picture[0], size, c, 15, 15, 17);
+	}
+
+	Check(same, "every letter comes out as it did, with rows as long as the picture is wide");
 }
 
 static void CheckFontSum()
@@ -576,11 +839,12 @@ static void CheckFontSum()
 	printf("A font picture big enough for where its letters are read from:\n");
 
 	Check(FontChecks_LettersFit(256, 256, 255, 15, 15), "the game's own, 256 x 256");
-	Check(FontChecks_LettersFit(128, 44, 64, 5, 8), "the demo's, 128 x 44, which is smaller than the fixed layout but only goes as far as its 64 letters");
+	Check(FontChecks_LettersFit(128, 44, 64, 15, 15), "the demo's, 128 x 44, which is smaller than the fixed layout but only goes as far as its 64 letters");
 	Check(!FontChecks_LettersFit(1, 1, 255, 15, 15), "1 x 1, which is what a missing or crafted one could be");
 	Check(!FontChecks_LettersFit(0, 0, 255, 15, 15), "no size at all");
 	Check(!FontChecks_LettersFit(256, 16, 255, 15, 15), "wide enough, but not tall enough");
-	Check(!FontChecks_LettersFit(8, 8, 64, 5, 8), "too small for even the demo's");
+	Check(!FontChecks_LettersFit(8, 8, 64, 15, 15), "too small for even the demo's");
+	Check(!FontChecks_LettersFit(128, 128, 255, 15, 15), "128 x 128 is too small for the full game's");
 
 	// The last letter read is number 254, in place 14 of its row of the grid and on the grid's row 13. Its last pixel is at x 240, y 223, so 256 wide needs 224 rows.
 	Check(FontChecks_LetterX(254) + 15 == 240 && FontChecks_LetterY(254) + 15 - 1 == 223, "the last letter ends where the grid says");
@@ -600,6 +864,13 @@ static void CheckFontSum()
 	Check(!FontChecks_LettersFit(16384, 1, 255, 15, 15), "16384 x 1 is refused, because width alone doesn't make up for height");
 
 	std::string const loader = ReadSourceFile("3dc/RimLoader.cpp");
+	std::string const textures = ReadSourceFile("3dc/TextureManager.cpp");
+
+	// What's left of a picture isn't read once its data has run out. Those reads would only give zeros, so a picture alone can't show this, only the time it takes.
+	Check(loader.find("y < header.height && !ranOut") != std::string::npos, "no more rows are read once the data has run out");
+
+	// The game's side of a picture that can't be finished
+	Check(textures.find("if (!decoded)") != std::string::npos && textures.find("R_ReleaseTexture(newTexture);") > textures.find("if (!decoded)") && textures.find("R_ReleaseTexture(newTexture);") != std::string::npos, "the game doesn't keep a picture that couldn't be finished");
 
 	// What's past the end of a table is whatever memory holds, which can happen to be zero, so a picture alone can't always show this.
 	Check(loader.find("if (index < numColours)") != std::string::npos, "a colour is only looked up if it's in the table");
@@ -610,9 +881,9 @@ static void CheckFontSum()
 	size_t const lock = (function == std::string::npos) ? function : menu.find("Tex_Lock(AAFontImageNumber", function);
 	Check(function != std::string::npos && check != std::string::npos && lock != std::string::npos && check < lock, "the game checks that before it reads any letters");
 
-	size_t const letterPlace = (function == std::string::npos) ? function : menu.find("int x1 = FontChecks_LetterX(c);", function);
-	Check(letterPlace != std::string::npos, "and reads them from where the check says they are");
-	Check(menu.find("uint8_t *s = &srcPtr[y*pitch + x*4];") != std::string::npos, "with each row found from the length the card gives it, which is never shorter than the check's");
+	Check(menu.find("if (pitch < textureWidth * 4)") != std::string::npos, "a picture whose rows are shorter than its width isn't read");
+	Check(menu.find("FontChecks_LetterWidth(originalSrcPtr, pitch, c, HUD_FONT_WIDTH, HUD_FONT_HEIGHT, MAX_SMALL_LETTER_WIDTH)") != std::string::npos, "each letter is read with the rows the card gives it");
+	Check(CountOf(menu, "GiveEveryLetterOneWidth();") == 3, "a font that's missing, too small or laid out wrong gets letters that take up room");
 }
 
 int main()
@@ -621,6 +892,8 @@ int main()
 	CheckRefusals();
 	CheckBadPixels();
 	CheckDamagedPictures();
+	CheckInsideAFastFile();
+	CheckLetterWidths();
 	CheckFontSum();
 
 	remove(TestFilePath().c_str());

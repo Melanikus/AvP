@@ -27,7 +27,8 @@
 //   to use is refused, and a file with no header reads as an empty picture
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a picture with more planes than a colour number has bits is refused, so is one packed in a way this can't read,
-//   and a no-op in a packed row no longer counts as the bytes of the run before it
+//   and a no-op in a packed row no longer counts as the bytes of the run before it;
+//   a picture too large is refused, so is one that can't hold what its size says, and reading stops where its data does
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -46,6 +47,8 @@ RimLoader::RimLoader()
 	destRowStart = 0;
 	rowBytes = 0;
 	destRowIndex = 0;
+	bodyLeft = 0;
+	ranOut = false;
 
 	// change this when code works
 	dest = 0;
@@ -75,7 +78,8 @@ bool RimLoader::Decode(uint8_t *dest, uint32_t destPitch)
 
 	GetBody();
 
-	return true;
+	// a packed picture can say it's larger than what it holds, and that only shows when it's unpacked
+	return !ranOut;
 }
 
 void RimLoader::OddChunkSizeCheck()
@@ -108,6 +112,11 @@ bool RimLoader::HandleBMHD()
 	header.pageHeight = file.GetUint16BE();
 
 	rowBytes = (header.width+7) / 8;
+
+	if ((uint32_t)header.width > kLargestRimSide || (uint32_t)header.height > kLargestRimSide || (uint64_t)header.width * header.height > kMostRimPixels)
+	{
+		return false;
+	}
 
 	// Both of these come from the file. A colour number is made of one bit from each plane, and it only has room for 16. The game's own pictures have 11 at most.
 	if (header.nPlanes > kMostPlanes)
@@ -212,6 +221,12 @@ bool RimLoader::Open(const std::string &fileName)
 				break;
 			case BODY:
 				chunkSize = file.GetUint32BE();
+
+				if (!BodyCanHoldThePicture())
+				{
+					return false;
+				}
+
 				gotBody = true;
 				break;
 			default:
@@ -223,6 +238,41 @@ bool RimLoader::Open(const std::string &fileName)
 	return true;
 }
 
+// Whether the picture's data can be as long as its size says, before anything is allocated for it. A few bytes could otherwise ask for a very large picture, and every row of it would then
+// be read from nothing, one byte at a time. A plain picture needs all of it. A packed one can make 128 bytes from 2 at best. The data also has to be in this file: read past the end of a
+// file inside a fastfile, and it would be the next file.
+bool RimLoader::BodyCanHoldThePicture()
+{
+	uint64_t const needed = (uint64_t)rowBytes * header.nPlanes * header.height;
+
+	if (chunkSize > file.BytesLeft())
+	{
+		return false;
+	}
+
+	if (header.compression == kCompressionNone ? chunkSize < needed : (uint64_t)chunkSize * 64 < needed)
+	{
+		return false;
+	}
+
+	bodyLeft = chunkSize;
+	ranOut = false;
+	return true;
+}
+
+// The next byte of the picture's data, or 0 and a note that there's none left. Nothing reads past this.
+uint8_t RimLoader::NextBodyByte()
+{
+	if (bodyLeft == 0)
+	{
+		ranOut = true;
+		return 0;
+	}
+
+	bodyLeft--;
+	return file.GetByte();
+}
+
 // do the byterun1 decompression here
 uint32_t RimLoader::GetUnpackedBytes()
 {
@@ -232,11 +282,11 @@ uint32_t RimLoader::GetUnpackedBytes()
 	while (bytesDone < rowBytes)
 	{
 		// get the value we'll work with
-		int8_t val = file.GetByte();
+		int8_t val = NextBodyByte();
 
 		if (val == -128)
 		{
-			// A no-op adds nothing to the row, so it counts as nothing. A file of nothing but no-ops can't keep this going for ever, because past the end of a file every byte reads as 0, which isn't one.
+			// a no-op adds nothing to the row, so it counts as nothing
 			length = 0;
 		}
 		else if (val >= 0)
@@ -248,7 +298,7 @@ uint32_t RimLoader::GetUnpackedBytes()
 			// get next n bytes literally
 			for (uint32_t i = 0; i < length; i++)
 			{
-				destRow[destRowIndex++] = file.GetByte();
+				destRow[destRowIndex++] = NextBodyByte();
 			}
 		}
 		else if (val > -128)
@@ -259,7 +309,7 @@ uint32_t RimLoader::GetUnpackedBytes()
 			length = (std::min)(length, rowBytes-bytesDone);
 
 			// get next byte and memset it to dest times length
-			memset(&destRow[destRowIndex], file.GetByte(), length);
+			memset(&destRow[destRowIndex], NextBodyByte(), length);
 			destRowIndex += length;
 		}
 
@@ -276,7 +326,7 @@ uint32_t RimLoader::GetBody()
 	// destination row buffer
 	destRow.resize(rowBytes * header.nPlanes);
 
-	for (uint16_t y = 0; y < header.height; y++)
+	for (uint16_t y = 0; y < header.height && !ranOut; y++)
 	{
 		// reset
 		destRowIndex = 0;
@@ -310,6 +360,12 @@ uint32_t RimLoader::GetScanLine()
 	for (uint8_t p = 0; p < header.nPlanes; p++)
 	{
 		bytesDone += GetRow();
+	}
+
+	// a row that ran out isn't written: what came before it is all the picture has
+	if (ranOut)
+	{
+		return bytesDone;
 	}
 
 /*
@@ -379,7 +435,7 @@ uint32_t RimLoader::GetUncompressedBytes()
 {
 	for (uint32_t i = 0; i < rowBytes; i++)
 	{
-		destRow[destRowIndex++] = file.GetByte();
+		destRow[destRowIndex++] = NextBodyByte();
 	}
 
 	return rowBytes;

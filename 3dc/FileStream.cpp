@@ -253,6 +253,15 @@ bool FileStream::WriteString(const char *theString)
 	return WriteBytes(reinterpret_cast<const uint8_t*>(theString), strlen(theString));
 }
 
+// How much of this file is left to read. A file inside a fastfile ends where it ends, not where the fastfile does.
+uint64_t FileStream::BytesLeft()
+{
+	int64_t const place = GetCurrentPos();
+	int64_t const end = (fromFastFile ? (int64_t)fileOffset : 0) + (int64_t)GetFileSize();
+
+	return (place < 0 || place > end) ? 0 : (uint64_t)(end - place);
+}
+
 uint32_t FileStream::GetFileSize()
 {
 	if (fromFastFile) {

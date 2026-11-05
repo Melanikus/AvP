@@ -55,7 +55,7 @@ struct Texture
 	uint16_t		width;
 	uint16_t		height;
 
-	// texture width and height, possible resized up to power-of-two dimension by graphics api (eg 1024x512)
+	// what the graphics card really made, which can be larger than was asked for (eg 1024x512), or smaller, if the card has a limit
 	uint16_t		realWidth;
 	uint16_t		realHeight;
 

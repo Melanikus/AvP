@@ -27,8 +27,12 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   releasing the textures is safe if the game stops before Direct3D has started
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a picture whose texture can't be locked lets go of the texture
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a picture that ends before it should isn't kept
 
 #include <sstream>
 #include "renderer.h"
@@ -289,9 +293,17 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 		return MISSING_TEXTURE;
 	}
 
-	newRim.Decode(dest, pitch);
+	bool const decoded = newRim.Decode(dest, pitch);
 
 	R_UnlockTexture(newTexture);
+
+	// A file can say it's larger than what it holds, and that only shows when it's unpacked.
+	if (!decoded)
+	{
+		Con_PrintError("The picture " + fileName + " ends before it should, so it isn't used");
+		R_ReleaseTexture(newTexture);
+		return MISSING_TEXTURE;
+	}
 
 	// get the next available ID
 	textureID = Tex_GetFreeID();
