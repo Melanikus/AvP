@@ -26,6 +26,8 @@
 //   the debug text that prints a matrix is written with a size limit, so it always fits;
 //   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone);
 //   the menu font's letters are limited to what its texture can hold
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies, for a hand-made relief map, which asks the card first and looks at what it made
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   makes the list and the shader for shadow prisms kept between frames
 //   waiting for the graphics card to come back asks it again each time round, so it can't wait forever, and the wait ends if
@@ -1746,6 +1748,76 @@ void DeRedTexture(Texture &texture)
 	}
 
 	R_UnlockTexture(texture);
+}
+
+// A square picture with all its smaller copies, at four bytes a pixel, for a hand-made relief map. The size comes from a stranger's file, so this asks the card first, and then looks at what
+// it really made. A map that comes out any other size is given back: unlike a picture of the game's own, nothing here can make do with a different size.
+bool R_CreateTextureWithCopies(uint32_t side, uint32_t levels, Texture &texture)
+{
+	texture.texture = NULL;
+
+	D3DCAPS9 caps;
+
+	if (FAILED(d3d.lpD3DDevice->GetDeviceCaps(&caps)) || side > caps.MaxTextureWidth || side > caps.MaxTextureHeight || !(caps.TextureCaps & D3DPTEXTURECAPS_MIPMAP))
+	{
+		return false;
+	}
+
+	LPDIRECT3DTEXTURE9 made = NULL;
+
+	LastError = d3d.lpD3DDevice->CreateTexture(side, side, levels, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &made, NULL);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, __FILE__);
+		return false;
+	}
+
+	D3DSURFACE_DESC description;
+
+	if (made->GetLevelCount() != levels || FAILED(made->GetLevelDesc(0, &description)) || description.Width != side || description.Height != side)
+	{
+		made->Release();
+		return false;
+	}
+
+	texture.bitsPerPixel = 32;
+	texture.width  = side;
+	texture.height = side;
+	texture.realWidth  = side;
+	texture.realHeight = side;
+	texture.usage   = TextureUsage_Normal;
+	texture.texture = made;
+	texture.isValid = true;
+
+	return true;
+}
+
+bool R_LockTextureCopy(Texture &texture, uint32_t level, uint8_t **data, uint32_t *pitch)
+{
+	D3DLOCKED_RECT lock;
+
+	LastError = texture.texture->LockRect(level, &lock, NULL, 0);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, __FILE__);
+		return false;
+	}
+
+	*data = static_cast<uint8_t*>(lock.pBits);
+	*pitch = lock.Pitch;
+	return true;
+}
+
+bool R_UnlockTextureCopy(Texture &texture, uint32_t level)
+{
+	LastError = texture.texture->UnlockRect(level);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, __FILE__);
+		return false;
+	}
+
+	return true;
 }
 
 bool R_CreateTextureFromFile(const std::string &fileName, Texture &texture)

@@ -348,9 +348,10 @@ static void CheckRefusals()
 		Check(Read(p.File()).opened, "16 planes opens, because a colour number has 16 bits");
 	}
 
-	uint32_t const tooMany[3] = { 17, 33, 255 };
+	// 24 is what a hand-made map can have, which only its own reader takes, in relief_map_file.h. A picture of the game's own can never get there through this.
+	uint32_t const tooMany[4] = { 17, 24, 33, 255 };
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 4; i++)
 	{
 		Picture p(1, 1, tooMany[i], 0);
 		p.colours = CountingColours(1);

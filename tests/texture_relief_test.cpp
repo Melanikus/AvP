@@ -11,18 +11,25 @@
 //
 // tests/build.ps1 compiles this with the real texture_relief.cpp, and the program gives back a non-zero result if any check failed.
 
+#include <direct.h>
+#include <fstream>
+#include <sstream>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vector>
 #include <windows.h>
 
 #include "texture_relief.h"
+#include "relief_map_file.h"
+#include "FastFile.h"
+#include "utilities.h"
 
 static int checksFailed = 0;
 
-static void Check(bool good, const char *what)
+static void Check(bool good, std::string const &what)
 {
-	printf("  %s  %s\n", good ? "ok" : "FAILED", what);
+	printf("  %s  %s\n", good ? "ok" : "FAILED", what.c_str());
 
 	if (!good)
 	{
@@ -130,6 +137,85 @@ void Tex_Release(texID_t textureID)
 	textureList.at(textureID).alive = false;
 }
 
+// A hand-made map: the stand-in keeps each copy as a picture of its own, and a card that won't make a texture this big is a count like the others.
+struct StandInCopies
+{
+	texID_t id;
+	std::vector<std::vector<uint8_t> > levels;
+};
+
+static std::vector<StandInCopies> copiesList;
+static uint32_t largestSideCardMakes = 16384;
+
+static StandInCopies *CopiesOf(texID_t id)
+{
+	for (size_t i = 0; i < copiesList.size(); i++)
+	{
+		if (copiesList[i].id == id)
+		{
+			return &copiesList[i];
+		}
+	}
+
+	return 0;
+}
+
+texID_t Tex_CreateWithCopies(const std::string &textureName, uint32_t side, uint32_t levels)
+{
+	if (createsToFail > 0)
+	{
+		createsToFail--;
+		return MISSING_TEXTURE;
+	}
+
+	if (createsLeft-- <= 0 || side > largestSideCardMakes)
+	{
+		return MISSING_TEXTURE;
+	}
+
+	madeCount++;
+
+	StandInCopies copies;
+	copies.id = AddTexture(textureName, 1, 1, 32, TextureUsage_Normal);
+
+	for (uint32_t level = 0; level < levels; level++)
+	{
+		uint32_t const levelSide = ReliefMap_LevelSide(side, level);
+		copies.levels.push_back(std::vector<uint8_t>((size_t)levelSide * levelSide * 4 * 2, 0xEE));    // twice the room, with a pitch to match, to show rows are found from the pitch
+	}
+
+	copiesList.push_back(copies);
+	return copies.id;
+}
+
+bool Tex_LockCopy(texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch)
+{
+	if (locksLeft-- <= 0)
+	{
+		return false;
+	}
+
+	lockCount++;
+	StandInCopies *copies = CopiesOf(textureID);
+	*data = &copies->levels.at(level)[0];
+
+	uint32_t levelSide = 1;
+
+	while ((size_t)levelSide * levelSide * 4 * 2 < copies->levels.at(level).size())
+	{
+		levelSide *= 2;
+	}
+
+	*pitch = levelSide * 4 * 2;
+	return true;
+}
+
+bool Tex_UnlockCopy(texID_t, uint32_t)
+{
+	unlockCount++;
+	return true;
+}
+
 static void StartAgain()
 {
 	textureList.clear();
@@ -143,6 +229,8 @@ static void StartAgain()
 	unlockCount = 0;
 	cardShrinksPictures = false;
 	logLines.clear();
+	copiesList.clear();
+	largestSideCardMakes = 16384;
 }
 
 static int TexturesAlive()
@@ -480,6 +568,7 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 		texID_t const picture = Added::Picture(pixels);
 
 		relief.TurnOff();
@@ -494,6 +583,7 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 		MISSING_TEXTURE = 0;
 		NO_TEXTURE = 1;
 		texID_t const picture = Added::Picture(pixels);
@@ -553,6 +643,7 @@ static void CheckTheGameSide()
 
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 
 		texID_t const picture = AddTexture("graphics/wall.rim", row.width, 8, row.bits, row.usage);
 		createsToFail = row.createsToFail;
@@ -573,6 +664,7 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 		texID_t const first = Added::Picture(pixels);
 		texID_t const second = Added::Picture(pixels);
 
@@ -592,6 +684,7 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief(size * size * 4 * 2);
+		relief.SetAutoGenerate(true);
 		texID_t const pictures[3] = { Added::Picture(pixels), Added::Picture(pixels), Added::Picture(pixels) };
 
 		relief.Build(pictures[0]);
@@ -621,11 +714,13 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 
 		relief.Build(Added::Picture(pixels));
 		relief.LogWhatIsHeld();
 
-		Check(logLines.size() == 1 && logLines[0] == "texture relief: 1 pictures held, 256 bytes", "the log says what's held");
+		Check(logLines.size() == 2 && logLines[0] == "texture relief: 1 pictures held, 256 bytes", "the log says what's held");
+		Check(logLines.size() == 2 && logLines[1] == "texture relief: this level has 0 hand-made, 1 worked out and 0 flat. Hand-made maps hold 0 bytes", "and what this level has of each kind");
 
 		relief.TurnOff();
 		logLines.clear();
@@ -638,6 +733,7 @@ static void CheckTheGameSide()
 	{
 		StartAgain();
 		TextureRelief relief;
+		relief.SetAutoGenerate(true);
 
 		relief.Build(65536);
 		relief.Build(0);
@@ -647,11 +743,444 @@ static void CheckTheGameSide()
 	}
 }
 
+// ---- Hand-made maps, as real files, through the game's real file reader
+
+FastFileHandle *FF_Find(const std::string &) { return 0; }
+
+const std::string &FF_GetFastFileName(int32_t)
+{
+	static std::string const none;
+	return none;
+}
+
+namespace Util
+{
+	void FtoBslash(std::string &text)
+	{
+		for (size_t i = 0; i < text.size(); i++)
+		{
+			text[i] = (text[i] == '/') ? '\\' : text[i];
+		}
+	}
+}
+
+static std::string MapFolder()
+{
+	static std::string folder;
+
+	if (folder.empty())
+	{
+		char *name = _tempnam(NULL, "reliefmap");
+		folder = name ? name : "reliefmaptest";
+		free(name);
+		_mkdir(folder.c_str());
+
+		for (size_t i = 0; i < folder.size(); i++)
+		{
+			folder[i] = (folder[i] == '\\') ? '/' : folder[i];
+		}
+	}
+
+	return folder;
+}
+
+typedef std::vector<uint8_t> Bytes;
+
+static void Add32(Bytes &to, uint32_t value)
+{
+	for (int shift = 24; shift >= 0; shift -= 8)
+	{
+		to.push_back((uint8_t)(value >> shift));
+	}
+}
+
+static void AddWords(Bytes &to, char const *words)
+{
+	to.insert(to.end(), words, words + strlen(words));
+}
+
+// A deep .rim with every pixel the same, and planes of its own if asked
+static Bytes DeepMap(uint32_t side, uint8_t x, uint8_t y, uint8_t z, uint32_t planes = 24)
+{
+	Bytes file;
+	uint32_t const rowBytes = (side + 7) / 8;
+
+	AddWords(file, "FORM");
+	Add32(file, 0);
+	AddWords(file, "ILBMBMHD");
+	Add32(file, 20);
+	file.push_back((uint8_t)(side >> 8));
+	file.push_back((uint8_t)side);
+	file.push_back((uint8_t)(side >> 8));
+	file.push_back((uint8_t)side);
+	Add32(file, 0);
+	file.push_back((uint8_t)planes);
+	file.push_back(0);
+	file.push_back(0);
+	file.push_back(0);
+	Add32(file, 0);
+	Add32(file, 0);
+	AddWords(file, "BODY");
+	Add32(file, rowBytes * planes * side);
+
+	uint8_t const values[3] = { x, y, z };
+
+	for (uint32_t row = 0; row < side; row++)
+	{
+		for (uint32_t plane = 0; plane < planes; plane++)
+		{
+			file.insert(file.end(), rowBytes, ((values[(plane / 8) % 3] >> (plane % 8)) & 1) ? 0xFF : 0x00);
+		}
+	}
+
+	return file;
+}
+
+static void WriteMapFile(std::string const &name, Bytes const &bytes)
+{
+	std::string const path = MapFolder() + "/" + name;
+	FILE *file = fopen(path.c_str(), "wb");
+
+	if (file)
+	{
+		if (!bytes.empty())
+		{
+			fwrite(&bytes[0], 1, bytes.size(), file);
+		}
+
+		fclose(file);
+	}
+}
+
+static void RemoveMapFile(std::string const &name)
+{
+	remove((MapFolder() + "/" + name).c_str());
+}
+
+static bool LogHas(std::string const &words)
+{
+	for (size_t i = 0; i < logLines.size(); i++)
+	{
+		if (logLines[i].find(words) != std::string::npos)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int LogCount(std::string const &words)
+{
+	int count = 0;
+
+	for (size_t i = 0; i < logLines.size(); i++)
+	{
+		count += (logLines[i].find(words) != std::string::npos) ? 1 : 0;
+	}
+
+	return count;
+}
+
+static std::string ReadSourceFile(char const *name)
+{
+	// /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	return all.str();
+}
+
+static void CheckHandMadeMaps()
+{
+	printf("Hand-made maps:\n");
+
+	std::string const wall = MapFolder() + "/wall.rim";
+	std::string const mapFile = "wall_Normal.rim";
+	std::string const mapPath = MapFolder() + "/" + mapFile;
+
+	RemoveMapFile(mapFile);
+
+	// Nothing there, and working one out not asked for: this is what most textures are now
+	{
+		StartAgain();
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		Check(!relief.AutoGenerates(), "working maps out is off to start with");
+
+		relief.Build(picture);
+
+		Check(madeCount == 1 && relief.PicturesHeld() == 0 && relief.PictureFor(picture) != picture, "with no file and it not asked for, there's only the flat picture");
+		Check(lockCount == 1, "and the texture itself isn't read");
+
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 0 hand-made, 0 worked out and 1 flat"), "the log counts it as flat");
+	}
+
+	// A map, larger than its picture
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(16, 200, 90, 180));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		texID_t const map = relief.PictureFor(picture);
+		StandInCopies const *copies = CopiesOf(map);
+
+		Check(copies != 0, "a map beside its picture is used, and it can be larger than the picture");
+		Check(madeCount == 2, "once, however many times it's asked for, with one flat picture");
+		Check(relief.PicturesHeld() == 1 && relief.BytesHeld() == 0 && relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(16), "it's counted as a hand-made map, at what it really holds");
+		Check(textureList[map].details.name == mapPath, "it's named after its file");
+
+		if (copies)
+		{
+			Check(copies->levels.size() == 5, "it has its smaller copies, all the way down");
+
+			std::vector<uint8_t> const &top = copies->levels[0];
+			Check(top[0] == 180 && top[1] == 90 && top[2] == 200 && top[3] == 200, "each pixel is blue z, green y, red x, and alpha x");
+
+			uint32_t const pitch = 16 * 4 * 2;
+			Check(top[pitch] == 180 && top[pitch + 2] == 200 && top[16 * 4] == 0xEE, "rows are found from the card's pitch, and nothing is written past a row");
+
+			std::vector<uint8_t> const &last = copies->levels[4];
+			Check(last[2] > 128 && last[1] < 128 && last[0] > 128 && last[3] == last[2], "the last copy, 1 x 1, still leans the same way");
+			Check(last[4] == 0xEE, "and it's only one pixel");
+		}
+
+		Check(lockCount == unlockCount, "everything locked is unlocked");
+		Check(LogCount("texture relief: using " + mapPath + ", 16 x 16, with 5 copies and " + std::to_string(ReliefMap_PlainBytes(16)) + " bytes, for a picture of 8 x 8") == 1, "the log says which file and what size, once");
+
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 1 hand-made, 0 worked out and 0 flat. Hand-made maps hold " + std::to_string(ReliefMap_PlainBytes(16)) + " bytes"), "and counts it as hand-made");
+
+		// The next level has the same picture
+		logLines.clear();
+		relief.Build(picture);
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 1 hand-made, 0 worked out and 0 flat"), "the next level counts it afresh");
+		Check(!LogHas("using"), "without reading the file again");
+
+		// Hand-made stays whatever the switch says
+		relief.SetAutoGenerate(true);
+		Check(relief.PictureFor(picture) == map, "with working maps out on, a hand-made one stays");
+		relief.SetAutoGenerate(false);
+		Check(relief.PictureFor(picture) == map, "and with it off");
+
+		relief.ReleaseAll();
+		Check(relief.HandMadeBytesHeld() == 0 && !textureList[map].alive, "giving everything back gives it back too");
+
+		RemoveMapFile(mapFile);
+	}
+
+	// The switch
+	{
+		StartAgain();
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		memset(&textureList[picture].pixels[0], 90, textureList[picture].pixels.size());
+
+		relief.Build(picture);
+		texID_t const flat = relief.PictureFor(picture);
+
+		relief.SetAutoGenerate(true);
+		Check(relief.PictureFor(picture) == flat, "turned on, nothing changes until a level asks");
+
+		relief.Build(picture);
+		texID_t const workedOut = relief.PictureFor(picture);
+		Check(workedOut != flat && relief.PicturesHeld() == 1, "and when one does, the texture gets one worked out");
+
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 0 hand-made, 1 worked out and 0 flat"), "which the log counts as that");
+
+		relief.SetAutoGenerate(false);
+		Check(relief.PictureFor(picture) == flat, "turned off, it's flat again at once");
+
+		relief.SetAutoGenerate(true);
+		Check(relief.PictureFor(picture) == workedOut, "and turned on again, the one already made comes back");
+	}
+
+	// Every reason a map isn't used. Each says why, once, and the texture goes on as if the file weren't there.
+	struct RefusedRow { char const *what; Bytes file; ReliefMapProblem problem; };
+
+	Bytes cutShort = DeepMap(8, 200, 90, 180);
+	cutShort.pop_back();
+
+	Bytes notSquare = DeepMap(8, 200, 90, 180);
+	notSquare[std::string((char const *)&notSquare[0], notSquare.size()).find("BMHD") + 11] = 16;
+
+	RefusedRow const refused[] =
+	{
+		{ "an empty file", Bytes(), kMapNoHeading },
+		{ "a file of something else", Bytes(100, 'x'), kMapPartsWrong },
+		{ "a map that's cut short", cutShort, kMapCutShort },
+		{ "a map that isn't square", notSquare, kMapNotSquare },
+		{ "a map that isn't a power of two", DeepMap(7, 200, 90, 180), kMapSideNotAPowerOfTwo },
+		{ "a map of too few planes to be deep and too many for a table", DeepMap(8, 200, 90, 180, 23), kMapPlanesWrong },
+		{ "a map of planes with no table", DeepMap(8, 200, 90, 180, 8), kMapColourTableWrong },
+		{ "a map as large as a side can say", DeepMap(4096, 200, 90, 180, 1), kMapSideTooLarge },
+	};
+
+	for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); i++)
+	{
+		StartAgain();
+		WriteMapFile(mapFile, refused[i].file);
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		std::string const reason = std::string("texture relief: ") + mapPath + " isn't used, because " + ReliefMap_ProblemWords(refused[i].problem);
+
+		Check(LogCount(reason) == 1 && logLines.size() == 1, std::string(refused[i].what) + " says why, once");
+		Check(madeCount == 1 && relief.PicturesHeld() == 0 && copiesList.empty(), std::string(refused[i].what) + " makes nothing, and leaves the flat picture");
+		Check(relief.IsReady(), "  and everything else still works");
+	}
+
+	// With working maps out on, a refused map gives way to that
+	{
+		StartAgain();
+		WriteMapFile(mapFile, Bytes(100, 'x'));
+
+		TextureRelief relief;
+		relief.SetAutoGenerate(true);
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.LogWhatIsHeld();
+		Check(LogHas("isn't used") && LogHas("this level has 0 hand-made, 1 worked out and 0 flat"), "a refused map gives way to one worked out, if that's asked for");
+	}
+
+	// The limit, with room for exactly one
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(8, 200, 90, 180));
+		WriteMapFile("second_Normal.rim", DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief(64 * 1024 * 1024, (size_t)ReliefMap_PlainBytes(8));
+		texID_t const first = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		texID_t const second = AddTexture(MapFolder() + "/second.rim", 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(first);
+		int const madeBefore = madeCount;
+		relief.Build(second);
+
+		Check(relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(8) && CopiesOf(relief.PictureFor(first)) != 0, "a map that exactly fills the limit is kept");
+		Check(madeCount == madeBefore && !CopiesOf(relief.PictureFor(second)), "the next one goes without, and nothing is made for it");
+		Check(LogHas("second_Normal.rim isn't used, because hand-made maps have reached their limit of " + std::to_string(ReliefMap_PlainBytes(8)) + " bytes"), "and the log says so");
+
+		RemoveMapFile("second_Normal.rim");
+	}
+
+	// The card says no
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(16, 200, 90, 180));
+		largestSideCardMakes = 8;
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		Check(LogHas("isn't used, because the graphics card can't make a texture 16 on a side") && relief.HandMadeBytesHeld() == 0 && relief.PicturesHeld() == 0, "a map larger than the card can make goes without, and says why");
+	}
+
+	// It can't be written
+	for (int locksThatWork = 1; locksThatWork <= 2; locksThatWork++)
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(AddTexture(MapFolder() + "/none.rim", 8, 8, 32, TextureUsage_Normal));   // makes the flat picture first, which takes a lock of its own
+		locksLeft = locksThatWork - 1;
+
+		int const before = TexturesAlive();
+		relief.Build(picture);
+
+		Check(LogHas("isn't used, because the graphics card wouldn't let it be written") && relief.HandMadeBytesHeld() == 0 && TexturesAlive() == before, "a copy that can't be written gives the whole map back");
+		Check(lockCount == unlockCount, "and leaves nothing locked");
+	}
+
+	// What can't have a map
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Dynamic));
+		Check(relief.PicturesHeld() == 0 && copiesList.empty(), "a film gets no map, even with a file there");
+
+		TextureRelief off;
+		off.TurnOff();
+		off.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+		Check(off.PicturesHeld() == 0 && copiesList.empty(), "with relief turned off at the start, the file isn't looked at");
+
+		WriteMapFile("nameless_Normal.rim", DeepMap(8, 200, 90, 180));
+		TextureRelief unnamed;
+		unnamed.Build(AddTexture(MapFolder() + "/nameless", 8, 8, 32, TextureUsage_Normal));
+		Check(unnamed.PicturesHeld() == 0 && copiesList.empty(), "a picture not named .rim has no map");
+		RemoveMapFile("nameless_Normal.rim");
+
+		RemoveMapFile(mapFile);
+	}
+
+	// A depth map is noticed, not read: what's in it doesn't matter, and it doesn't stop anything
+	{
+		StartAgain();
+		WriteMapFile("wall_Depth.rim", Bytes(100, 'x'));
+		WriteMapFile("wall_Depth.dds", Bytes(100, 'x'));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		Check(LogCount("wall_Depth.rim, which isn't used, because nothing draws from depth yet") == 1, "a depth map is noticed, once, whatever it holds");
+		Check(LogCount("wall_Depth.dds, which isn't used, because nothing draws from depth yet") == 1, "with either ending");
+		Check(madeCount == 1 && relief.PicturesHeld() == 0, "and it isn't read, and alone it leaves the flat picture");
+
+		RemoveMapFile("wall_Depth.rim");
+		RemoveMapFile("wall_Depth.dds");
+	}
+
+	// The parts that only the real game has, and so only reading can check
+	std::string const pictures = ReadSourceFile("3dc/surface_pictures.cpp");
+	std::string const card = ReadSourceFile("win32/d3_func.cpp");
+
+	Check(pictures.find("device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);") != std::string::npos, "the surface pass blends between a map's smaller copies");
+	Check(card.find("side > caps.MaxTextureWidth || side > caps.MaxTextureHeight") != std::string::npos, "the card is asked before a map is made");
+	Check(card.find("made->GetLevelCount() != levels") != std::string::npos && card.find("description.Width != side || description.Height != side") != std::string::npos, "and what it made is looked at afterwards");
+
+	_rmdir(MapFolder().c_str());
+}
+
 int main()
 {
+	// so that if a row stops the program, what it says before that still gets out
+	setvbuf(stdout, 0, _IONBF, 0);
+
 	CheckTheCalculation();
 	CheckHostileInput();
 	CheckTheGameSide();
+	CheckHandMadeMaps();
 
 	printf("%d failed\n", checksFailed);
 	return checksFailed ? 1 : 0;

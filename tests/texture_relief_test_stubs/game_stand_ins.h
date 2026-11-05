@@ -34,6 +34,9 @@ texID_t Tex_Create(const std::string &textureName, uint32_t width, uint32_t heig
 const Texture &Tex_GetTextureDetails(texID_t textureID);
 bool Tex_Lock(texID_t textureID, uint8_t **data, uint32_t *pitch, enum TextureLock lockType = TextureLock_Normal);
 bool Tex_Unlock(texID_t textureID);
+texID_t Tex_CreateWithCopies(const std::string &textureName, uint32_t side, uint32_t levels);
+bool Tex_LockCopy(texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch);
+bool Tex_UnlockCopy(texID_t textureID, uint32_t level);
 void Tex_Release(texID_t textureID);
 
 #endif

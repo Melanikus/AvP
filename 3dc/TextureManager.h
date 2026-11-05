@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies
+
 #ifndef _TextureManager_h_
 #define _TextureManager_h_
 
@@ -76,6 +79,9 @@ struct Texture
 texID_t Tex_Create         (const std::string &textureName, uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usageType);
 texID_t Tex_AddTexture     (const std::string &textureName, r_Texture texture, uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usage);
 texID_t Tex_CreateFromRIM  (const std::string &fileName);
+texID_t Tex_CreateWithCopies (const std::string &textureName, uint32_t side, uint32_t levels);
+bool Tex_LockCopy   (texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch);
+bool Tex_UnlockCopy (texID_t textureID, uint32_t level);
 texID_t Tex_CreateFromFile (const std::string &filePath);
 texID_t Tex_CheckExists    (const std::string &textureName);
 

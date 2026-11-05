@@ -9,8 +9,8 @@
 //   2. Depth. In a painted surface, the dark is usually deep and the light is usually raised. Where brightness changes sharply there's usually a crack
 //      or a seam, so those places are pressed in a little further. The 5x5 Sobel mask below is what finds them.
 //   3. Normals. The same mask, run over the depth, says which way the surface slopes at each pixel, and that gives the arrow for that pixel.
-// It's a guess, and a painted shadow will come out as a dent. That's fine: this is a stand-in for pictures made by hand. texture_relief.h says how
-// those will arrive.
+// It's a guess, and a painted shadow will come out as a dent. That's fine: this is a stand-in for pictures made by hand, which it only does if it's asked to. texture_relief.h says how
+// those arrive.
 //
 // THE EDGES OF A PICTURE: the mask reads two pixels each way, so at an edge it carries on from the opposite side. Pictures repeat: in the stock levels
 // 81,080 of 913,052 polygons run past the edge of their picture, so stopping there would draw a seam across them.
@@ -21,11 +21,14 @@
 // ANIMATED TEXTURES need nothing special. Each frame is a picture with a texture number of its own, so it has a relief picture of its own too.
 
 #include <math.h>
+#include <memory>
 #include <new>
 #include <stdlib.h>
 #include <string>
 
 #include "texture_relief.h"
+#include "relief_map_file.h"
+#include "FileStream.h"
 #include "d3_func.h"
 #include "logString.h"
 
@@ -282,9 +285,25 @@ bool TextureRelief::Calculate(uint8_t const *picture, uint32_t picturePitch, uin
 	return true;
 }
 
-TextureRelief::TextureRelief(size_t mostBytes)
-: mostBytesHeld(mostBytes), limitWasLogged(false), on(true), flatPictureMade(false), flatPicture(0), picturesHeld(0), bytesHeld(0)
+TextureRelief::TextureRelief(size_t mostBytes, size_t mostHandMadeBytes)
+: mostBytesHeld(mostBytes), mostHandMadeBytesHeld(mostHandMadeBytes), limitWasLogged(false), on(true), autoGenerate(false), flatPictureMade(false), flatPicture(0),
+  picturesHeld(0), bytesHeld(0), handMadeBytesHeld(0), levelNumber(1)
 {
+}
+
+void TextureRelief::SetAutoGenerate(bool wanted)
+{
+	autoGenerate = wanted;
+}
+
+bool TextureRelief::AutoGenerates() const
+{
+	return autoGenerate;
+}
+
+size_t TextureRelief::HandMadeBytesHeld() const
+{
+	return handMadeBytesHeld;
 }
 
 void TextureRelief::TurnOff()
@@ -419,9 +438,194 @@ texID_t TextureRelief::CalculatedPictureFor(texID_t picture)
 }
 
 // THE ONE PLACE a texture gets its relief picture. Later: "use somerimname_Normal.rim if it exists, otherwise calculate" goes here. See texture_relief.h.
-texID_t TextureRelief::ReliefPictureFor(texID_t picture)
+// Says once for each if a depth map is there, because someone made it for a reason, and it would be easy to think it was doing something
+void TextureRelief::NoteDepthFile(std::string const &pictureName)
 {
-	return CalculatedPictureFor(picture);
+	static char const *const endings[2] = { "_Depth.rim", "_Depth.dds" };
+
+	for (int i = 0; i < 2; i++)
+	{
+		std::string depthName;
+
+		if (ReliefMap_FileName(pictureName, endings[i], &depthName))
+		{
+			FileStream file;
+			file.Open(depthName, FileStream::FileRead);
+
+			if (file.IsGood())
+			{
+				LogString("texture relief: found " + depthName + ", which isn't used, because nothing draws from depth yet");
+			}
+		}
+	}
+}
+
+// The texture's hand-made map, or MISSING_TEXTURE if it hasn't one that can be used. The file is checked all the way through before the card is asked for anything.
+texID_t TextureRelief::HandMadePictureFor(texID_t picture)
+{
+	// Copied out, because making a texture can move the list these numbers are in.
+	Texture const &details = Tex_GetTextureDetails(picture);
+	std::string const pictureName = details.name;
+	uint32_t const pictureWidth = details.realWidth;
+	uint32_t const pictureHeight = details.realHeight;
+
+	// A film is changed while it plays, so a map of it would mean nothing.
+	if (details.usage != TextureUsage_Normal)
+	{
+		return MISSING_TEXTURE;
+	}
+
+	NoteDepthFile(pictureName);
+
+	std::string mapName;
+
+	if (!ReliefMap_FileName(pictureName, "_Normal.rim", &mapName))
+	{
+		return MISSING_TEXTURE;
+	}
+
+	FileStream file;
+	file.Open(mapName, FileStream::FileRead);
+
+	if (!file.IsGood())
+	{
+		return MISSING_TEXTURE;
+	}
+
+	std::string const notUsed = "texture relief: " + mapName + " isn't used, because ";
+	uint64_t const fileBytes = file.GetFileSize();
+
+	if (fileBytes > kReliefMapMostFileBytes)
+	{
+		LogString(notUsed + ReliefMap_ProblemWords(kMapFileTooLong));
+		return MISSING_TEXTURE;
+	}
+
+	std::unique_ptr<uint8_t[]> const bytes(new(std::nothrow) uint8_t[(size_t)fileBytes + 1]);
+
+	if (!bytes)
+	{
+		LogString(notUsed + "there isn't the memory to read it");
+		return MISSING_TEXTURE;
+	}
+
+	if (fileBytes > 0 && file.ReadBytes(bytes.get(), (size_t)fileBytes) != fileBytes)
+	{
+		LogString(notUsed + "it couldn't be read");
+		return MISSING_TEXTURE;
+	}
+
+	ReliefMapRim rim;
+	ReliefMapProblem problem = ReliefMap_FindRimParts(bytes.get(), fileBytes, &rim);
+
+	if (problem != kMapFine)
+	{
+		LogString(notUsed + ReliefMap_ProblemWords(problem));
+		return MISSING_TEXTURE;
+	}
+
+	uint64_t const allBytes = ReliefMap_PlainBytes(rim.side);
+
+	// bytes held can't be more than the most allowed, so this can't go below zero
+	if (allBytes > mostHandMadeBytesHeld - handMadeBytesHeld)
+	{
+		LogString(notUsed + "hand-made maps have reached their limit of " + std::to_string(mostHandMadeBytesHeld) + " bytes");
+		return MISSING_TEXTURE;
+	}
+
+	std::unique_ptr<uint8_t[]> const pixels(new(std::nothrow) uint8_t[(size_t)allBytes]);
+
+	if (!pixels)
+	{
+		LogString(notUsed + "there isn't the memory to read it");
+		return MISSING_TEXTURE;
+	}
+
+	problem = ReliefMap_DecodeRim(rim, pixels.get());
+
+	if (problem != kMapFine)
+	{
+		LogString(notUsed + ReliefMap_ProblemWords(problem));
+		return MISSING_TEXTURE;
+	}
+
+	// Each smaller copy goes straight after the one it's made from
+	uint32_t const levels = ReliefMap_Levels(rim.side);
+	uint8_t *copy = pixels.get();
+
+	for (uint32_t level = 0; level + 1 < levels; level++)
+	{
+		uint32_t const levelSide = ReliefMap_LevelSide(rim.side, level);
+		uint8_t *const next = copy + (size_t)levelSide * levelSide * 4;
+
+		ReliefMap_MakeSmallerCopy(copy, levelSide, next);
+		copy = next;
+	}
+
+	texID_t const map = Tex_CreateWithCopies(mapName, rim.side, levels);
+
+	if (map == MISSING_TEXTURE)
+	{
+		LogString(notUsed + "the graphics card can't make a texture " + std::to_string(rim.side) + " on a side with smaller copies");
+		return MISSING_TEXTURE;
+	}
+
+	copy = pixels.get();
+
+	for (uint32_t level = 0; level < levels; level++)
+	{
+		uint32_t const levelSide = ReliefMap_LevelSide(rim.side, level);
+		uint8_t *to = 0;
+		uint32_t pitch = 0;
+
+		if (!Tex_LockCopy(map, level, &to, &pitch))
+		{
+			Tex_Release(map);
+			LogString(notUsed + "the graphics card wouldn't let it be written");
+			return MISSING_TEXTURE;
+		}
+
+		for (uint32_t y = 0; y < levelSide; y++)
+		{
+			memcpy(to + (size_t)y * pitch, copy + (size_t)y * levelSide * 4, (size_t)levelSide * 4);
+		}
+
+		Tex_UnlockCopy(map, level);
+		copy += (size_t)levelSide * levelSide * 4;
+	}
+
+	handMadeBytesHeld += (size_t)allBytes;
+
+	LogString("texture relief: using " + mapName + ", " + std::to_string(rim.side) + " x " + std::to_string(rim.side) + ", with " + std::to_string(levels) + " copies and " + std::to_string(allBytes)
+		+ " bytes, for a picture of " + std::to_string(pictureWidth) + " x " + std::to_string(pictureHeight));
+
+	return map;
+}
+
+// The one place a texture gets its relief picture. See texture_relief.h for the order.
+void TextureRelief::ReliefPictureFor(texID_t picture, Entry &entry)
+{
+	texID_t relief = MISSING_TEXTURE;
+	bool workedOut = false;
+
+	if (!entry.lookedForFile)
+	{
+		entry.lookedForFile = true;
+		relief = HandMadePictureFor(picture);
+	}
+
+	if (relief == MISSING_TEXTURE && autoGenerate)
+	{
+		relief = CalculatedPictureFor(picture);
+		workedOut = true;
+	}
+
+	if (relief != MISSING_TEXTURE)
+	{
+		entry.relief = relief;
+		entry.workedOut = workedOut;
+		picturesHeld++;
+	}
 }
 
 void TextureRelief::Build(texID_t picture)
@@ -431,38 +635,31 @@ void TextureRelief::Build(texID_t picture)
 		return;
 	}
 
-	// a picture used by two shapes loads once, and gets here twice
-	if (picture < reliefOf.size() && reliefOf[picture] != NO_TEXTURE)
-	{
-		return;
-	}
-
 	if (!MakeFlatPicture())
-	{
-		return;
-	}
-
-	texID_t const relief = ReliefPictureFor(picture);
-
-	if (relief == MISSING_TEXTURE)
 	{
 		return;
 	}
 
 	if (picture >= reliefOf.size())
 	{
-		reliefOf.resize(picture + 1, NO_TEXTURE);
+		Entry const none = { NO_TEXTURE, false, false, 0 };
+		reliefOf.resize(picture + 1, none);
 	}
 
-	reliefOf[picture] = relief;
-	picturesHeld++;
+	// a picture used by two shapes loads once, and gets here twice
+	if (reliefOf[picture].relief == NO_TEXTURE)
+	{
+		ReliefPictureFor(picture, reliefOf[picture]);
+	}
+
+	reliefOf[picture].levelCounted = levelNumber;
 }
 
 texID_t TextureRelief::PictureFor(texID_t picture) const
 {
-	if (picture < reliefOf.size() && reliefOf[picture] != NO_TEXTURE)
+	if (picture < reliefOf.size() && reliefOf[picture].relief != NO_TEXTURE && (autoGenerate || !reliefOf[picture].workedOut))
 	{
-		return reliefOf[picture];
+		return reliefOf[picture].relief;
 	}
 
 	return flatPicture;
@@ -473,6 +670,34 @@ void TextureRelief::LogWhatIsHeld()
 	if (on)
 	{
 		LogString("texture relief: " + std::to_string(picturesHeld) + " pictures held, " + std::to_string(bytesHeld) + " bytes");
+
+		// What this level asked for, as each would be drawn right now
+		size_t handMade = 0, workedOut = 0, flat = 0;
+
+		for (size_t i = 0; i < reliefOf.size(); i++)
+		{
+			Entry const &entry = reliefOf[i];
+
+			if (entry.levelCounted == levelNumber)
+			{
+				if (entry.relief == NO_TEXTURE || (entry.workedOut && !autoGenerate))
+				{
+					flat++;
+				}
+				else if (entry.workedOut)
+				{
+					workedOut++;
+				}
+				else
+				{
+					handMade++;
+				}
+			}
+		}
+
+		LogString("texture relief: this level has " + std::to_string(handMade) + " hand-made, " + std::to_string(workedOut) + " worked out and " + std::to_string(flat)
+			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes");
+		levelNumber++;
 	}
 	else
 	{
@@ -484,7 +709,7 @@ void TextureRelief::ReleaseAll()
 {
 	for (size_t i = 0; i < reliefOf.size(); i++)
 	{
-		Tex_Release(reliefOf[i]);
+		Tex_Release(reliefOf[i].relief);
 	}
 
 	if (flatPictureMade)
@@ -497,4 +722,5 @@ void TextureRelief::ReleaseAll()
 	limitWasLogged = false;
 	picturesHeld = 0;
 	bytesHeld = 0;
+	handMadeBytesHeld = 0;
 }

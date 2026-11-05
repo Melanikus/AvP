@@ -177,6 +177,13 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	// THE CHOICE: with relief pictures, or exactly as it was without them. Without them this draws with surface.vsh and surface.psh, from the same lists it
 	// always did, so turning relief off leaves nothing of it behind.
 	bool const withRelief = reliefWanted && SurfacePictures_ReliefCanRun();
+
+	// A hand-made map has smaller copies, and this blends between them, which is what stops a detailed map shimmering in the distance. Every other relief picture has just the one.
+	// The shadow pass puts the card's settings back when it ends.
+	if (withRelief)
+	{
+		device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+	}
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
 	bool fromBuffer = useStatic && SurfaceStatic_Ready();
 

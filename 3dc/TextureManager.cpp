@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies, for a hand-made relief map
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a texture's size can be asked for with a number that isn't trusted
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -190,6 +192,48 @@ texID_t Tex_CreateTallFontTexture(const std::string &textureName, AVPTEXTURE &Av
 	}
 
 	return textureID;
+}
+
+// A square picture with all its smaller copies. See R_CreateTextureWithCopies.
+texID_t Tex_CreateWithCopies(const std::string &textureName, uint32_t side, uint32_t levels)
+{
+	Texture newTexture;
+	newTexture.name = textureName;
+
+	if (!R_CreateTextureWithCopies(side, levels, newTexture))
+	{
+		return MISSING_TEXTURE;
+	}
+
+	texID_t textureID = Tex_GetFreeID();
+
+	if (textureID < textureList.size()) // we're reusing a slot in this case
+	{
+		textureList[textureID] = newTexture;
+	}
+	else
+	{
+		textureList.push_back(newTexture);
+	}
+
+	Tex_CheckMemoryUsage();
+
+	return textureID;
+}
+
+bool Tex_LockCopy(texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch)
+{
+	if (!textureList[textureID].isValid || !textureList[textureID].texture)
+	{
+		return false;
+	}
+
+	return R_LockTextureCopy(textureList[textureID], level, data, pitch);
+}
+
+bool Tex_UnlockCopy(texID_t textureID, uint32_t level)
+{
+	return R_UnlockTextureCopy(textureList[textureID], level);
 }
 
 texID_t Tex_CreateFromRIM(const std::string &fileName)

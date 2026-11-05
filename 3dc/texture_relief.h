@@ -1,16 +1,22 @@
 // Gives a level's flat pictures a feeling of depth. Written 2026-11-04 by Melanikus for the AvP port.
 // See texture_relief.cpp for how it works.
 //
-// THE RELIEF PICTURE: anyone making one by hand has to match this. It's the same size as its texture and holds four numbers for each pixel, 0 to 255.
+// THE RELIEF PICTURE: anyone making one by hand has to match this. It holds three numbers for each pixel, 0 to 255.
 //   red    how far the surface leans towards the right of the picture
 //   green  how far it leans towards the bottom of the picture (the way tools call "DirectX", or "Y-")
 //   blue   how much it faces straight out of the picture
-//   alpha  how high the surface is: 255 is the highest point, 0 the deepest
 // Red, green and blue are each 128 + 127 * a number from -1 to 1, and those three make an arrow 1 long. So a flat pixel is exactly 128, 128, 255.
 //
-// LATER: players will be able to bring their own. If somerimname_Normal.rim exists it will be used in place of working one out, and it goes in
-// TextureRelief::ReliefPictureFor, the one place a texture gets its relief picture. A file like that comes from strangers, so it has to pass the same
-// size checks as everything here: SizeIsFine, before anything is allocated or added up.
+// WHERE ONE COMES FROM, in this order. TextureRelief::ReliefPictureFor is the one place that decides.
+//   1. A hand-made map: a file beside the texture, with _Normal on the end of its name, so graphics/Envrnmts/Derelict/Hive01_Normal.rim goes with graphics/Envrnmts/Derelict/Hive01.rim.
+//      It's a file from a stranger: relief_map_file.h says what it has to be, and that's checked before anything is allocated. If it fails, the log says why, and the texture
+//      carries on as if the file weren't there. It can be larger than its texture, because it's read by position on the picture, not by pixel.
+//   2. One worked out from the texture, if SetAutoGenerate has been asked for.
+//   3. Otherwise a flat picture, which changes nothing.
+//
+// THERE'S NO HEIGHT: a .rim has no alpha of its own, so a map can't say how high a surface is, and nothing draws from a height today. surfaceRelief.psh only reads the three numbers
+// above. A picture this code works out does keep a height in its alpha, which nothing reads. A file called name_Depth.rim is reserved for this: the game notices one, logs that it isn't
+// used, and doesn't read it.
 
 #ifndef TEXTURE_RELIEF_H
 #define TEXTURE_RELIEF_H
@@ -29,11 +35,17 @@ class TextureRelief
 		// The stock levels and characters can load 50.8 MB of pictures, so a stock game shouldn't meet this limit. Every picture the game has comes to 72.9 MB,
 		// so if that count ever proves short, the last few textures of a very long session would lose their relief.
 		// The limit's other job is to hold back a hostile level: it fits 16 of the largest pictures allowed, about 0.6 seconds of work.
-		explicit TextureRelief(size_t mostBytes = 64 * 1024 * 1024);
+		// mostHandMadeBytes is the same for hand-made maps, which are larger, and can be many. A map past it goes without, and the log says so.
+		explicit TextureRelief(size_t mostBytes = 64 * 1024 * 1024, size_t mostHandMadeBytes = 256 * 1024 * 1024);
 
 		// With -reliefoff on the command line. Nothing is built after this, and the game draws exactly as if none of this existed.
 		void TurnOff();
 		bool IsOn() const;
+
+		// Whether a texture with no hand-made map gets one worked out. The Video menu's "Auto-generate maps", and off to start with. Turned off, it takes effect at once. Turned on, it takes
+		// effect for each texture when a level next asks for it. A hand-made map stays either way.
+		void SetAutoGenerate(bool wanted);
+		bool AutoGenerates() const;
 
 		// While a level loads, for each of its textures. A texture that can't have a relief picture simply goes without.
 		void Build(texID_t picture);
@@ -54,6 +66,7 @@ class TextureRelief
 
 		size_t PicturesHeld() const;
 		size_t BytesHeld() const;
+		size_t HandMadeBytesHeld() const;
 
 		// Whether a picture of this size may be worked on. Every size comes from a file, so this comes before anything is allocated or added up.
 		static bool SizeIsFine(uint32_t width, uint32_t height);
@@ -63,18 +76,33 @@ class TextureRelief
 		static bool Calculate(uint8_t const *picture, uint32_t picturePitch, uint32_t width, uint32_t height, uint8_t *relief, uint32_t reliefPitch);
 
 	private:
-		texID_t ReliefPictureFor(texID_t picture);
+		// What's known about one texture
+		struct Entry
+		{
+			texID_t relief;              // NO_TEXTURE means none
+			bool workedOut;              // it came from this code, not from a file
+			bool lookedForFile;          // a hand-made map is only looked for once, so that the disk isn't asked again and the log says things once
+			size_t levelCounted;         // the last level that counted this texture
+		};
+
+		void ReliefPictureFor(texID_t picture, Entry &entry);
+		texID_t HandMadePictureFor(texID_t picture);
 		texID_t CalculatedPictureFor(texID_t picture);
+		void NoteDepthFile(std::string const &pictureName);
 		bool MakeFlatPicture();
 
 		size_t mostBytesHeld;
+		size_t mostHandMadeBytesHeld;
 		bool limitWasLogged;
 		bool on;
+		bool autoGenerate;
 		bool flatPictureMade;
 		texID_t flatPicture;
-		std::vector<texID_t> reliefOf;      // by texture number. NO_TEXTURE means none
+		std::vector<Entry> reliefOf;        // by texture number
 		size_t picturesHeld;
 		size_t bytesHeld;
+		size_t handMadeBytesHeld;
+		size_t levelNumber;                 // goes up each time LogWhatIsHeld says what a level had
 };
 
 extern TextureRelief textureRelief;
