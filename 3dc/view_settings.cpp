@@ -1,8 +1,9 @@
 // The rendering page of the menus, and the settings it keeps. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // WHAT THE PLAYER GETS: three lines in the menus: how the world is lit, whether things cast shadows, and whether maps are worked out for textures with none. A new player gets the
-// game as it has always looked, with all the new drawing off, and it's only when they choose otherwise that any of it is built. What they choose is kept in AliensVsPredator.cfg,
-// not in their profile, because it belongs to this computer and this graphics card, not to who's playing.
+// game as it has always looked. All the new drawing is off, so none of it runs in a frame, and the pictures and prisms it needs aren't made. Loading a level still does a little for it,
+// working out each shape's normals, so that it can be turned on during a level. What they choose is kept in AliensVsPredator.cfg, not in their profile, because it belongs to this
+// computer and this graphics card, not to who's playing.
 //
 // THE FILE CAN SAY ANYTHING: it's a text file anyone can edit, so only the exact words count. Anything else is treated as if it wasn't there, the log says so, and what it said is
 // never repeated there.
@@ -23,6 +24,9 @@ void ViewSwitches_AskShadows(int on);
 bool ViewSwitches_SomethingAsked();
 void ViewSwitches_SetAtStart(int lighting, int volumes);
 void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere);
+int ViewSwitches_DrawnForTheMenu();
+bool ViewSwitches_ShadowsCanBeOn();
+void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead);   // menu_data.cpp
 
 static const char kHeading[] = "[Video]";
 static const char kRendering[] = "Rendering";
@@ -77,28 +81,46 @@ void ViewSettings_MenuFrame()
 
 			ViewSwitches_WhatsThere(&mapsThere, &perPixelThere);
 
-			lastRendering = MenuRendering = Lighting_MenuStep(lastRendering, MenuRendering, mapsThere, perPixelThere);
-			ViewSwitches_AskLighting(lastRendering);
-			Config_SetString(kHeading, kRendering, Lighting_Word(lastRendering));
-			changed = true;
+			int const choice = Lighting_MenuStep(lastRendering, MenuRendering, mapsThere, perPixelThere);
+
+			// Nothing else may be there to move to, and then there's nothing to ask for, and nothing to save.
+			if (choice != lastRendering)
+			{
+				ViewSwitches_AskLighting(choice);
+				Config_SetString(kHeading, kRendering, Lighting_Word(choice));
+				changed = true;
+			}
+
+			lastRendering = MenuRendering = choice;
 		}
 		else
 		{
-			lastRendering = MenuRendering = LightingNow;
+			lastRendering = MenuRendering = ViewSwitches_DrawnForTheMenu();
 		}
 
 		if (MenuShadows != lastShadows)
 		{
+			// A card that can't draw them refuses, so the line goes back, and what was refused isn't saved as if it had been chosen.
+			if (MenuShadows && !ViewSwitches_ShadowsCanBeOn())
+			{
+				MenuShadows = 0;
+			}
+			else
+			{
+				ViewSwitches_AskShadows(MenuShadows);
+				Config_SetBool(kHeading, kShadows, MenuShadows != 0);
+				changed = true;
+			}
+
 			lastShadows = MenuShadows;
-			ViewSwitches_AskShadows(lastShadows);
-			Config_SetBool(kHeading, kShadows, lastShadows != 0);
-			changed = true;
 		}
 		else
 		{
 			lastShadows = MenuShadows = ShadowVolumesOn;
 		}
 	}
+
+	RenderingPage_SayWhatLinesDo(ViewSwitches_ShadowsCanBeOn(), Lighting_UsesMaps(MenuRendering));
 
 	// Turning it off takes effect at once, and on from the next level, because maps are only worked out while a level loads. TextureRelief knows that, and the page says so.
 	if (MenuAutoGenerate != lastAutoGenerate)

@@ -231,6 +231,13 @@ static AVPMENU_ELEMENT AvPMenu_Rendering[] =
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
+// Each of the page's lines says when it does nothing, so what a line says can change while the page is showing. See view_settings.cpp.
+void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead)
+{
+	AvPMenu_Rendering[1].HelpString = shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT;
+	AvPMenu_Rendering[2].HelpString = mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING;
+}
+
 static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] = 
 {
 	{AVPMENU_ELEMENT_GOTOMENU,      {TEXTSTRING_VIDEOOPTIONS_TITLE},  {AVPMENU_INGAMEVIDEOMODE}}, // bjd - for ingame resolution changing

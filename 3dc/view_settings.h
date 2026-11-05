@@ -11,7 +11,8 @@ extern int MenuAutoGenerate;   // 0 or 1
 // Once the settings file has been read, and before anything looks at how to draw: starts the game the way the player last chose, or the way the game has always looked.
 void ViewSettings_Load();
 
-// Every frame a menu is showing: passes on what the player changed, saves it, and otherwise shows what's really on, because a key or a console command can change it too.
+// Every frame a menu is showing: passes on what the player changed, saves it, and otherwise shows what's really being drawn, because a key or a console command can change it too,
+// and a saved choice may be one this card can't draw.
 void ViewSettings_MenuFrame();
 
 #endif

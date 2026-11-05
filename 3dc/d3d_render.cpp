@@ -6962,6 +6962,28 @@ void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere)
 	*mapsThere = SurfacePictures_ReliefCouldRun();
 }
 
+// What the menu shows: what's really being drawn. In the main menus no level has loaded any maps yet, so what counts is whether they could be drawn. Gouraud never asks, so a
+// player who stays there never has the pictures made for them.
+int ViewSwitches_DrawnForTheMenu()
+{
+	if (LightingNow == kLightingGouraud)
+	{
+		return kLightingGouraud;
+	}
+
+	bool mapsThere = false;
+	bool perPixelThere = false;
+
+	ViewSwitches_WhatsThere(&mapsThere, &perPixelThere);
+
+	return Lighting_Drawn(LightingNow, mapsThere, perPixelThere);
+}
+
+bool ViewSwitches_ShadowsCanBeOn()
+{
+	return ToyDepthBufferHasStencil();
+}
+
 // Where LIGHTING and SHADOWS change. It runs after this frame's shadows, so everything the next frame reads, from its lights onwards, agrees.
 static void ViewSwitches_ApplyAsked()
 {

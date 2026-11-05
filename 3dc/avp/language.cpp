@@ -32,20 +32,22 @@ static char *TextBufferPtr;
 
 // Text that isn't in anyone's language.txt. That file belongs to the player's copy of the game, and it's packed, so it isn't ours to change, and these are in English whatever the language.
 // They come after everything the file holds, in the order of the enum in langenum.h.
-static char OurTextStrings[][120] =
+static char OurTextStrings[][200] =
 {
 	"Rendering options",
 	"How the world is lit, and whether things cast shadows.",
 	"Rendering",
-	"How the world is lit. Relief draws as per-pixel + normals for now. A choice this card can't draw is skipped.",
-	"Gouraud (Classic)",
-	"Per-pixel",
+	"How the world is lit. Relief map draws the same as Per-pixel + normals for now. A choice this card can't draw is skipped.",
+	"Gouraud",
+	"Per-pixel (flat)",
 	"Per-pixel + normals",
-	"Relief",
+	"Relief map",
 	"Shadows",
 	"Whether lights cast shadows.",
+	"This does nothing here: this card can't draw shadows.",
 	"Auto-generate maps",
 	"Works out maps for textures that have none. Turning it on takes effect from the next level.",
+	"This does nothing with Gouraud or Per-pixel (flat): only Per-pixel + normals and Relief map read maps.",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

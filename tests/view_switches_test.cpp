@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -332,7 +333,11 @@ static std::string ReadSourceFile(char const *name)
 	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
 	std::stringstream all;
 	all << file.rdbuf();
-	return all.str();
+
+	// A file has one kind of line ending or the other depending on how it was cloned, and these rows shouldn't care.
+	std::string text = all.str();
+	text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+	return text;
 }
 
 // The text from one marker up to the next one after it. Empty if either isn't there, so a row looking inside it fails instead of passing on nothing.
@@ -405,11 +410,11 @@ static void TheRealGame()
 	Check(!NamesKey(controls, "KEY_H"), "no default control uses H, for any species");
 
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
-	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\r\n{", "static void ToyShadows_Draw()");
+	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
 	std::string const keys = Between(applying, "if (DevKeysCanAct())", "bool const hasStencil");
 
 	Check(CountOf(render, "ViewSwitches_ApplyAsked();") == 2, "the switches change from one place, named once ahead and called once");
-	Check(Has(render, "ToyShadows_Draw();\r\n\t\tViewSwitches_ApplyAsked();"), "and that's straight after the frame's shadows");
+	Check(Has(render, "ToyShadows_Draw();\n\t\tViewSwitches_ApplyAsked();"), "and that's straight after the frame's shadows");
 
 	std::string const canAct = Between(render, "static bool DevKeysCanAct()", "}");
 
@@ -418,7 +423,7 @@ static void TheRealGame()
 
 	std::string const keepingOut = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()", "static void ToyShadows_Draw()");
 
-	Check(Has(keepingOut, "if (AvP.Network == I_No_Network)\r\n\t{\r\n\t\treturn;"), "a game that isn't a network game keeps its tools");
+	Check(Has(keepingOut, "if (AvP.Network == I_No_Network)\n\t{\n\t\treturn;"), "a game that isn't a network game keeps its tools");
 	Check(Has(keepingOut, "ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal"), "in one that is, only OFF and FINAL are allowed");
 	Check(Has(keepingOut, "ToyShadowsMode = kToyViewFinal;"), "anything else goes back to FINAL");
 	Check(Has(keepingOut, "ShadowShootOn = 0;") && Has(keepingOut, "ShadowFlickerOn = 0;") && Has(keepingOut, "ShadowsFullReport = 0;"), "and the tools that say the same in words go off");
@@ -433,7 +438,7 @@ static void TheRealGame()
 	Check(Has(canAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
 	Check(Has(keys, "if (DevKeysCanAct())"), "L and H ask that");
 	Check(Has(render, "if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])"), "and so does G");
-	Check(Has(render, "Not while typing, like G.\r\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
+	Check(Has(render, "Not while typing, like G.\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
 	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 1, "and nothing else in the drawing code reads those keys");
 	Check(Has(keys, "DebouncedKeyboardInput[KEY_L]") && Has(keys, "lightingAsked = kAskedNext"), "L is the next lighting, once a press");
 	Check(Has(keys, "DebouncedKeyboardInput[KEY_H]") && Has(keys, "shadowsAsked = kAskedNext"), "H switches the shadows, once a press");
@@ -455,7 +460,7 @@ static void TheRealGame()
 	Check(Has(addsPerPixel, "ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud"), "in FINAL, Gouraud keeps the live lights in the game's own lighting");
 	Check(Has(addsPerPixel, "ToyShadowsMode == kToyViewMask") && Has(addsPerPixel, "ToyShadowsMode == kViewNormals"), "and the views for looking inside the pass take no notice of it");
 	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()"), "the pass asks that before it takes any lights");
-	Check(Has(applying, "if (!ViewAddsLightsPerPixel())\r\n\t{\r\n\t\tToyShadowsLightsByPixel = 0;"), "and a change hands them back in time for the very next frame");
+	Check(Has(applying, "if (!ViewAddsLightsPerPixel())\n\t{\n\t\tToyShadowsLightsByPixel = 0;"), "and a change hands them back in time for the very next frame");
 
 	// These three only show the lines are there. Whether they look right on a card needs a run.
 	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
@@ -465,7 +470,7 @@ static void TheRealGame()
 	Check(Has(shapes, "(chosen[i].order < 0 && light->LightBright > flareCap) ? flareCap : light->LightBright"), "a flare in the game's lighting counts only what its cap lets it add");
 
 	Check(Has(applying, "ToyShadowsMode = View_AfterSwitches(ToyShadowsMode, kToyViewOff, switchesWereAllOff, allOff, &viewToComeBackTo);"), "everything off goes to the OFF view");
-	Check(Has(applying, "if (!hasStencil)\r\n\t{\r\n\t\tShadowVolumesOn = 0;\r\n\t\tLightingNow = kLightingGouraud;"), "with no stencil bits, both are held off every frame");
+	Check(Has(applying, "if (!hasStencil)\n\t{\n\t\tShadowVolumesOn = 0;\n\t\tLightingNow = kLightingGouraud;"), "with no stencil bits, both are held off every frame");
 
 	// The tag is a fixed list of lines on the stack, and more lines than it has room for would write past its end.
 	std::string const tag = Between(render, "enum { kMostLines = ", "int characters = 0;");
@@ -484,19 +489,19 @@ static void TheRealGame()
 	std::string const reliefOff = Between(launch, "\"-reliefoff\"", "}");
 	std::string const shadowsOff = Between(launch, "\"-shadowsoff\"", "}");
 
-	Check(Has(reliefOff, "if (Lighting_UsesMaps(LightingNow))\r\n\t\t{\r\n\t\t\tLightingNow = kLightingPerPixel;"), "-reliefoff only moves a choice that reads maps, to per pixel");
+	Check(Has(reliefOff, "if (Lighting_UsesMaps(LightingNow))\n\t\t{\n\t\t\tLightingNow = kLightingPerPixel;"), "-reliefoff only moves a choice that reads maps, to per pixel");
 
-	std::string::size_type const settingsRead = launch.find("Config_Load();\r\n\tViewSettings_Load();");
+	std::string::size_type const settingsRead = launch.find("Config_Load();\n\tViewSettings_Load();");
 
 	Check(settingsRead != std::string::npos && settingsRead < launch.find("\"-reliefoff\"") && settingsRead < launch.find("\"-shadowsoff\""), "the settings are read straight after the file, ahead of the switches that change them for one run");
 
 	// a new player's game: nothing written for what's off
-	Check(Has(render, "if (ToyShadowsMode)\r\n\t\t{\r\n\t\t\tSurfaceNormals_Lock();"), "with the view off, the normals aren't opened, so none are written");
+	Check(Has(render, "if (ToyShadowsMode)\n\t\t{\n\t\t\tSurfaceNormals_Lock();"), "with the view off, the normals aren't opened, so none are written");
 	Check(CountOf(render, "SurfaceNormals_Lock();") == 1, "and that's the only place they're opened");
 
 	std::string const saying = Between(render, "static void SaySwitch(const char *words)", "// A reason is worth hearing once");
 
-	Check(Has(saying, "if (AvP.MainLoopRunning)\r\n\t{\r\n\t\tNewOnScreenMessage(message);"), "no message goes to a HUD that isn't there, in the main menus");
+	Check(Has(saying, "if (AvP.MainLoopRunning)\n\t{\n\t\tNewOnScreenMessage(message);"), "no message goes to a HUD that isn't there, in the main menus");
 
 	std::string const settings = ReadSourceFile("3dc/view_settings.cpp");
 	std::string const loading = Between(settings, "void ViewSettings_Load()", "void ViewSettings_MenuFrame()");
@@ -550,6 +555,32 @@ static void TheRealGame()
 	std::string const project = ReadSourceFile("win32/VS2026/AvP.vcxproj");
 
 	Check(Has(project, "3dc\\view_settings.cpp"), "and the game builds the file that does it");
+
+	// the page tells the truth
+	Check(Has(menuFrame, "lastRendering = MenuRendering = ViewSwitches_DrawnForTheMenu();"), "the page shows what's really being drawn");
+	Check(Has(menuFrame, "if (choice != lastRendering)\n\t\t\t{\n\t\t\t\tViewSwitches_AskLighting(choice);"), "nothing is asked for or saved when there's nowhere to move to");
+	Check(Has(menuFrame, "if (MenuShadows && !ViewSwitches_ShadowsCanBeOn())\n\t\t\t{\n\t\t\t\tMenuShadows = 0;"), "a refused Shadows goes back");
+
+	std::string::size_type const refused = menuFrame.find("MenuShadows = 0;");
+	std::string::size_type const savedShadows = menuFrame.find("Config_SetBool(kHeading, kShadows");
+
+	Check(refused != std::string::npos && savedShadows != std::string::npos && Has(menuFrame.substr(refused, savedShadows - refused), "else"), "and isn't saved");
+	Check(Has(menuFrame, "RenderingPage_SayWhatLinesDo(ViewSwitches_ShadowsCanBeOn(), Lighting_UsesMaps(MenuRendering));"), "and a line says when it does nothing");
+	Check(Has(menuData, "shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT"), "for shadows");
+	Check(Has(menuData, "mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING"), "and for maps");
+
+	// the user's names, in the language table's order
+	char const *const labels[] = { "\"Gouraud\"", "\"Per-pixel (flat)\"", "\"Per-pixel + normals\"", "\"Relief map\"" };
+	std::string::size_type last = 0;
+
+	for (char const *label : labels)
+	{
+		std::string::size_type const at = language.find(label);
+		Check(at != std::string::npos && at > last, std::string("the page says ") + label);
+		last = at;
+	}
+
+	Check(!Has(language, "Classic"), "and Classic has gone from the words");
 	Check(Has(shadowsOff, "ToyShadowsMode = 0;") && Has(shadowsOff, "ShadowVolumesOn = 0;") && Has(shadowsOff, "LightingNow = kLightingGouraud;"), "-shadowsoff starts with everything off");
 
 	// A new page is only as good as the line that gets people to it, and the file has to be in the filters too, or Visual Studio won't show it.
@@ -562,10 +593,10 @@ static void TheVolumesSwitch()
 {
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
 	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
-	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\r\n{", "static void ToyShadows_Draw()");
+	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
 
 	// the commands reach the switches, once each
-	Check(Has(applying, "if (hasStencil)\r\n\t\t{\r\n\t\t\tShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);"), "SHADOWS changes the switch, where there are stencil bits");
+	Check(Has(applying, "if (hasStencil)\n\t\t{\n\t\t\tShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);"), "SHADOWS changes the switch, where there are stencil bits");
 	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);"), "LIGHTING changes the choice");
 	Check(Has(applying, "\t\tshadowsAsked = kAskedNothing;"), "what SHADOWS asked for is done once, not again every frame");
 	Check(Has(applying, "\t\tlightingAsked = kAskedNothing;"), "and the same for LIGHTING");
@@ -578,34 +609,34 @@ static void TheVolumesSwitch()
 	Check(Has(inThisView, "return ShadowVolumesOn || ToyShadowsMode != kToyViewFinal;"), "only FINAL obeys the switch, and the other views go on showing the shadow code");
 
 	// collecting
-	std::string const collecting = Between(shapes, "void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)\r\n{", "int const whatItMayDo");
+	std::string const collecting = Between(shapes, "void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)\n{", "int const whatItMayDo");
 	std::string::size_type const lastTest = collecting.find("ShapeFlag_Sprite");
 	std::string::size_type const gate = collecting.find("ToyShadows_VolumesInThisView");
 
-	Check(Has(collecting, "if (!ToyShadows_VolumesInThisView())\r\n\t{\r\n\t\tToyShadows_NoteWorldDrawn();\r\n\t\treturn;"), "with the volumes off, nothing is collected, and the world is noted as drawn");
+	Check(Has(collecting, "if (!ToyShadows_VolumesInThisView())\n\t{\n\t\tToyShadows_NoteWorldDrawn();\n\t\treturn;"), "with the volumes off, nothing is collected, and the world is noted as drawn");
 	Check(lastTest != std::string::npos && gate != std::string::npos && lastTest < gate, "after the other tests, so a frame counts as the same kind of frame either way");
 
-	std::string const walls = Between(shapes, "void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)\r\n{", "int ToyShadows_PolygonInWorld");
+	std::string const walls = Between(shapes, "void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)\n{", "int ToyShadows_PolygonInWorld");
 
-	Check(Has(walls, "if (ToyShadows_VolumesInThisView())\r\n\t\t{\r\n\t\t\tShadowGroup_StartWalked("), "a wall from the fixed buffer only makes its group with the volumes on");
-	Check(Has(walls, "else\r\n\t\t{\r\n\t\t\tToyShadows_NoteWorldDrawn();"), "and otherwise notes that the world was drawn");
+	Check(Has(walls, "if (ToyShadows_VolumesInThisView())\n\t\t{\n\t\t\tShadowGroup_StartWalked("), "a wall from the fixed buffer only makes its group with the volumes on");
+	Check(Has(walls, "else\n\t\t{\n\t\t\tToyShadows_NoteWorldDrawn();"), "and otherwise notes that the world was drawn");
 
 	// the lights still know the world was drawn
 	std::string const forgetting = Between(render, "static void ToyForgetCasters()", "earlyFlushThisFrame = false;");
 
 	Check(Has(forgetting, "worldDrawnWithoutCasters = false;"), "that note only lasts the frame");
 	Check(Has(render, "return toyNumCasters > 0 || numWalkedGroups > 0 || worldDrawnWithoutCasters;"), "and it counts as the world being drawn");
-	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()\r\n\t\t&& ToyWorldWasDrawn() && ToyPicturesCanRun(d3d.lpD3DDevice);"), "so lights stay added per pixel with nothing on the caster list");
+	Check(Has(render, "bool const lightsOurs = ViewAddsLightsPerPixel()\n\t\t&& ToyWorldWasDrawn() && ToyPicturesCanRun(d3d.lpD3DDevice);"), "so lights stay added per pixel with nothing on the caster list");
 	Check(Has(render, "report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;"), "and the pass still goes through them");
 
 	// the pass
 	Check(Has(render, "bool const volumesThisFrame = ToyShadows_VolumesInThisView();"), "the pass asks the same question");
-	Check(Has(render, "StartKeptPrisms(lights, report.lights);\r\n\r\n\t// These go after"), "the store still hears which lights there are, so it knows what stood still when the volumes come back");
-	Check(Has(render, "if (volumesThisFrame)\r\n\t{\r\n\t\tMakeShadowReachView();"), "walls out of view are only looked for with the volumes on");
+	Check(Has(render, "StartKeptPrisms(lights, report.lights);\n\n\t// These go after"), "the store still hears which lights there are, so it knows what stood still when the volumes come back");
+	Check(Has(render, "if (volumesThisFrame)\n\t{\n\t\tMakeShadowReachView();"), "walls out of view are only looked for with the volumes on");
 	Check(Has(render, "int const lightsThatMark = volumesThisFrame ? report.lights : 0;"), "with them off, no light marks anything");
 	Check(Has(render, "for (int light = 0; light < lightsThatMark; light++)"), "and that's the loop that builds prisms and marks the stencil");
-	Check(Has(render, "if (volumesThisFrame)\r\n\t\t\t{\r\n\t\t\t\tToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);"), "an empty mask isn't drawn");
-	Check(Has(render, "if (!volumesThisFrame)\r\n\t\t\t\t{\r\n\t\t\t\t\tToyAddLight(device, thisLight);"), "a light added per pixel goes straight on, with no prisms or mask of its own");
+	Check(Has(render, "if (volumesThisFrame)\n\t\t\t{\n\t\t\t\tToyApplySoftenedMask(device, ToyShadowsMode == kToyViewMask);"), "an empty mask isn't drawn");
+	Check(Has(render, "if (!volumesThisFrame)\n\t\t\t\t{\n\t\t\t\t\tToyAddLight(device, thisLight);"), "a light added per pixel goes straight on, with no prisms or mask of its own");
 	Check(Has(render, "float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;"), "the report doesn't divide by no passes");
 }
 
