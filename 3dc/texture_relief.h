@@ -14,9 +14,10 @@
 //   2. One worked out from the texture, if SetAutoGenerate has been asked for.
 //   3. Otherwise a flat picture, which changes nothing.
 //
-// THERE'S NO HEIGHT: a .rim has no alpha of its own, so a map can't say how high a surface is, and nothing draws from a height today. surfaceRelief.psh only reads the three numbers
-// above. A picture this code works out does keep a height in its alpha, which nothing reads. A file called name_Depth.rim is reserved for this: the game notices one, logs that it isn't
-// used, and doesn't read it.
+// THE DEPTH MAP is a second picture, read the same way from name_Depth.rim, with the same rules and from the same allowance. A texture can have either, both or neither, because each is read
+// on its own. White is the level of the polygon, and black is as deep as the surface goes. reliefMarch.fxh walks through it. A texture with no depth map gets the flat picture instead, and
+// its alpha of 0 says there's no depth, so nothing moves. A film gets neither, because it's changed while it plays. name_Depth.dds is noticed and logged, and isn't read yet. A picture this
+// code works out keeps a height in its alpha, which nothing reads.
 
 #ifndef TEXTURE_RELIEF_H
 #define TEXTURE_RELIEF_H
@@ -96,11 +97,16 @@ class TextureRelief
 			bool workedOut;              // it came from this code, not from a file
 			bool lookedForFile;          // a hand-made map is only looked for once, so that the disk isn't asked again and the log says things once
 			size_t levelCounted;         // the last level that counted this texture
+			texID_t height;              // its depth map. NO_TEXTURE means none
+			bool lookedForDepth;         // on its own, because a texture can have its map on one level and its depth map on a later one
 		};
 
 		void ReliefPictureFor(texID_t picture, Entry &entry);
+		enum MapKind { kNormalMap, kDepthMap };
+
 		bool MayTryAnotherMap();
-		texID_t HandMadePictureFor(texID_t picture);
+		void DepthPictureFor(texID_t picture, Entry &entry);
+		texID_t HandMadePictureFor(texID_t picture, MapKind kind);
 		texID_t CalculatedPictureFor(texID_t picture);
 		void NoteDepthFile(std::string const &pictureName);
 		bool MakeFlatPicture();

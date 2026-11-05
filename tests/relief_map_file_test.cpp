@@ -757,6 +757,74 @@ static void CheckSmallerCopies()
 	Check(ReliefMap_Number(5.0f) == 255 && ReliefMap_Number(-5.0f) == 0, "and they stay in a byte");
 }
 
+static void CheckHeights()
+{
+	printf("The height of a depth map:\n");
+
+	// R, G and B are bytes 2, 1 and 0 of a pixel, and alpha is byte 3
+	struct HeightRow { uint8_t b, g, r; uint8_t height; char const *what; };
+	HeightRow const rows[] =
+	{
+		{ 200, 200, 200, 200, "a grey pixel keeps its height" },
+		{ 0,   0,   0,   0,   "black stays black" },
+		{ 255, 255, 255, 255, "white stays white, with nothing lost to rounding" },
+		{ 10,  20,  30,  20,  "other colours are averaged" },
+		{ 30,  20,  10,  20,  "with all three counting the same" },
+		{ 0,   0,   1,   0,   "a third rounds down" },
+		{ 0,   1,   1,   1,   "two thirds round up" },
+		{ 254, 255, 255, 255, "nearly white rounds to white" },
+		{ 255, 0,   0,   85,  "blue alone counts for a third" },
+		{ 0,   255, 0,   85,  "and green" },
+		{ 0,   0,   255, 85,  "and red" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		uint8_t pixel[5] = { rows[i].b, rows[i].g, rows[i].r, 7, 0xEE };
+		ReliefMap_MakeHeightPixel(pixel);
+		Check(pixel[0] == rows[i].height && pixel[1] == rows[i].height && pixel[2] == rows[i].height, rows[i].what);
+		Check(pixel[3] == 255 && pixel[4] == 0xEE, "  with an alpha of 255, whatever it had, and nothing touched past the pixel");
+	}
+
+	printf("Smaller copies of a depth map:\n");
+
+	// 4 x 4, each corner of the top row different, to tell each pixel of the copy from the others. Green is different from blue, to show the copy is made from one number that's the height.
+	uint8_t from[4 * 4 * 4];
+	uint8_t to[2 * 2 * 4 + 4];
+	uint8_t const heights[16] = { 10, 20, 100, 104,   30, 40, 200, 204,   0, 0, 255, 255,   0, 1, 255, 254 };
+
+	for (int i = 0; i < 16; i++)
+	{
+		from[i * 4] = heights[i];
+		from[i * 4 + 1] = heights[i];
+		from[i * 4 + 2] = heights[i];
+		from[i * 4 + 3] = 255;
+	}
+
+	memset(to, 0xEE, sizeof(to));
+	ReliefMap_MakeSmallerHeightCopy(from, 4, to);
+
+	Check(to[0] == 25, "each is the plain average of the four above it: 10, 20, 30 and 40 make 25");
+	Check(to[4] == 152, "the next along has the next four: 100, 104, 200 and 204 make 152");
+	Check(to[8] == 0, "the next row down has the next four: 0, 0, 0 and 1 rounds to 0");
+	Check(to[12] == 255, "255, 255, 255 and 254 rounds to 255");
+	Check(to[1] == 25 && to[2] == 25, "and all three colours hold it");
+	Check(to[3] == 255 && to[7] == 255 && to[11] == 255 && to[15] == 255, "with an alpha of 255");
+	Check(to[16] == 0xEE, "and nothing is written past the copy");
+
+	// A half rounds up, by the sum: 0, 0, 1 and 1 is 2 over 4, a half
+	uint8_t const half[2 * 2 * 4] = { 0, 0, 0, 255,  1, 1, 1, 255,  1, 1, 1, 255,  0, 0, 0, 255 };
+	uint8_t halfTo[4] = { 0xEE, 0xEE, 0xEE, 0xEE };
+	ReliefMap_MakeSmallerHeightCopy(half, 2, halfTo);
+	Check(halfTo[0] == 1, "exactly a half rounds up");
+
+	// Not made into an arrow 1 long, which is what the other kind of copy would do
+	uint8_t const grey[2 * 2 * 4] = { 60, 60, 60, 255,  60, 60, 60, 255,  60, 60, 60, 255,  60, 60, 60, 255 };
+	uint8_t greyTo[4] = { 0xEE, 0xEE, 0xEE, 0xEE };
+	ReliefMap_MakeSmallerHeightCopy(grey, 2, greyTo);
+	Check(greyTo[0] == 60 && greyTo[1] == 60 && greyTo[2] == 60, "a height stays the height it was");
+}
+
 static void CheckFileNames()
 {
 	printf("Where a picture's map is:\n");
@@ -780,6 +848,7 @@ int main()
 	CheckRimFiles();
 	CheckDamagedFiles();
 	CheckSmallerCopies();
+	CheckHeights();
 	CheckFileNames();
 
 	if (checksFailed)

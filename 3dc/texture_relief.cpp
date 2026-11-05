@@ -452,21 +452,16 @@ texID_t TextureRelief::CalculatedPictureFor(texID_t picture)
 // Says once for each if a depth map is there, because someone made it for a reason, and it would be easy to think it was doing something
 void TextureRelief::NoteDepthFile(std::string const &pictureName)
 {
-	static char const *const endings[2] = { "_Depth.rim", "_Depth.dds" };
+	std::string depthName;
 
-	for (int i = 0; i < 2; i++)
+	if (ReliefMap_FileName(pictureName, "_Depth.dds", &depthName))
 	{
-		std::string depthName;
+		FileStream file;
+		file.Open(depthName, FileStream::FileRead);
 
-		if (ReliefMap_FileName(pictureName, endings[i], &depthName))
+		if (file.IsGood())
 		{
-			FileStream file;
-			file.Open(depthName, FileStream::FileRead);
-
-			if (file.IsGood())
-			{
-				LogString("texture relief: found " + depthName + ", which isn't used, because nothing draws from depth yet");
-			}
+			LogString("texture relief: found " + depthName + ", which isn't read yet, because only a .rim depth map is");
 		}
 	}
 }
@@ -503,8 +498,9 @@ bool TextureRelief::MayTryAnotherMap()
 	return false;
 }
 
-// The texture's hand-made map, or MISSING_TEXTURE if it hasn't one that can be used. The file is checked all the way through before the card is asked for anything.
-texID_t TextureRelief::HandMadePictureFor(texID_t picture)
+// The texture's hand-made map of either kind, or MISSING_TEXTURE if it hasn't one that can be used. The file is checked all the way through before the card is asked for anything. Both kinds come
+// through here so that each has the same limits and pays from the same allowance, and only what's done with the pixels differs.
+texID_t TextureRelief::HandMadePictureFor(texID_t picture, MapKind kind)
 {
 	// Copied out, because making a texture can move the list these numbers are in.
 	Texture const &details = Tex_GetTextureDetails(picture);
@@ -518,11 +514,14 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		return MISSING_TEXTURE;
 	}
 
-	NoteDepthFile(pictureName);
+	if (kind == kDepthMap)
+	{
+		NoteDepthFile(pictureName);
+	}
 
 	std::string mapName;
 
-	if (!ReliefMap_FileName(pictureName, "_Normal.rim", &mapName))
+	if (!ReliefMap_FileName(pictureName, (kind == kDepthMap) ? "_Depth.rim" : "_Normal.rim", &mapName))
 	{
 		return MISSING_TEXTURE;
 	}
@@ -599,6 +598,16 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		return MISSING_TEXTURE;
 	}
 
+	if (kind == kDepthMap)
+	{
+		size_t const pixelCount = (size_t)rim.side * rim.side;
+
+		for (size_t i = 0; i < pixelCount; i++)
+		{
+			ReliefMap_MakeHeightPixel(pixels.get() + i * 4);
+		}
+	}
+
 	// Each smaller copy goes straight after the one it's made from
 	uint32_t const levels = ReliefMap_Levels(rim.side);
 	uint8_t *copy = pixels.get();
@@ -608,7 +617,15 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		uint32_t const levelSide = ReliefMap_LevelSide(rim.side, level);
 		uint8_t *const next = copy + (size_t)levelSide * levelSide * 4;
 
-		ReliefMap_MakeSmallerCopy(copy, levelSide, next);
+		if (kind == kDepthMap)
+		{
+			ReliefMap_MakeSmallerHeightCopy(copy, levelSide, next);
+		}
+		else
+		{
+			ReliefMap_MakeSmallerCopy(copy, levelSide, next);
+		}
+
 		copy = next;
 	}
 
@@ -661,7 +678,7 @@ void TextureRelief::ReliefPictureFor(texID_t picture, Entry &entry)
 	if (!entry.lookedForFile && MayTryAnotherMap())
 	{
 		entry.lookedForFile = true;
-		relief = HandMadePictureFor(picture);
+		relief = HandMadePictureFor(picture, kNormalMap);
 	}
 
 	if (relief == MISSING_TEXTURE && autoGenerate)
@@ -674,6 +691,25 @@ void TextureRelief::ReliefPictureFor(texID_t picture, Entry &entry)
 	{
 		entry.relief = relief;
 		entry.workedOut = workedOut;
+		picturesHeld++;
+	}
+}
+
+// The one place a texture gets its depth map. Whether it has a relief picture or not makes no difference to this.
+void TextureRelief::DepthPictureFor(texID_t picture, Entry &entry)
+{
+	if (entry.lookedForDepth || !MayTryAnotherMap())
+	{
+		return;
+	}
+
+	entry.lookedForDepth = true;
+
+	texID_t const height = HandMadePictureFor(picture, kDepthMap);
+
+	if (height != MISSING_TEXTURE)
+	{
+		entry.height = height;
 		picturesHeld++;
 	}
 }
@@ -692,7 +728,7 @@ void TextureRelief::Build(texID_t picture)
 
 	if (picture >= reliefOf.size())
 	{
-		Entry const none = { NO_TEXTURE, false, false, 0 };
+		Entry const none = { NO_TEXTURE, false, false, 0, NO_TEXTURE, false };
 		reliefOf.resize(picture + 1, none);
 	}
 
@@ -702,11 +738,19 @@ void TextureRelief::Build(texID_t picture)
 		ReliefPictureFor(picture, reliefOf[picture]);
 	}
 
+	// Reached even when the texture already has its relief picture, because the depth map may not have had its turn yet
+	DepthPictureFor(picture, reliefOf[picture]);
+
 	reliefOf[picture].levelCounted = levelNumber;
 }
 
-texID_t TextureRelief::HeightFor(texID_t) const
+texID_t TextureRelief::HeightFor(texID_t picture) const
 {
+	if (picture < reliefOf.size() && reliefOf[picture].height != NO_TEXTURE)
+	{
+		return reliefOf[picture].height;
+	}
+
 	return flatPicture;
 }
 
@@ -727,7 +771,7 @@ void TextureRelief::LogWhatIsHeld()
 		LogString("texture relief: " + std::to_string(picturesHeld) + " pictures held, " + std::to_string(bytesHeld) + " bytes");
 
 		// What this level asked for, as each would be drawn right now
-		size_t handMade = 0, workedOut = 0, flat = 0;
+		size_t handMade = 0, workedOut = 0, flat = 0, depth = 0;
 
 		for (size_t i = 0; i < reliefOf.size(); i++)
 		{
@@ -735,6 +779,11 @@ void TextureRelief::LogWhatIsHeld()
 
 			if (entry.levelCounted == levelNumber)
 			{
+				if (entry.height != NO_TEXTURE)
+				{
+					depth++;
+				}
+
 				if (entry.relief == NO_TEXTURE || (entry.workedOut && !autoGenerate))
 				{
 					flat++;
@@ -751,7 +800,7 @@ void TextureRelief::LogWhatIsHeld()
 		}
 
 		LogString("texture relief: this level has " + std::to_string(handMade) + " hand-made, " + std::to_string(workedOut) + " worked out and " + std::to_string(flat)
-			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes");
+			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes. It has " + std::to_string(depth) + " depth maps");
 		levelNumber++;
 
 		// The next level has its own allowance
@@ -770,6 +819,7 @@ void TextureRelief::ReleaseAll()
 	for (size_t i = 0; i < reliefOf.size(); i++)
 	{
 		Tex_Release(reliefOf[i].relief);
+		Tex_Release(reliefOf[i].height);
 	}
 
 	if (flatPictureMade)

@@ -603,7 +603,7 @@ static void CheckTheGameSide()
 
 		texID_t const flat = relief.PictureFor(other);
 
-		Check(flat != made && PixelIs(textureList[flat].pixels, 1, 0, 0, 255, 128, 128, 0), "a texture with none gets the flat picture, whose alpha of 0 says it has no depth either");
+		Check(flat != made && PixelIs(textureList[flat].pixels, 1, 0, 0, 255, 128, 128, 0), "a texture with none gets the flat picture, whose alpha of 0 says it has no depth");
 		Check(relief.PictureFor(1000) == flat, "a number nobody has heard of gets the flat picture");
 
 		relief.ReleaseAll();
@@ -720,7 +720,7 @@ static void CheckTheGameSide()
 		relief.LogWhatIsHeld();
 
 		Check(logLines.size() == 2 && logLines[0] == "texture relief: 1 pictures held, 256 bytes", "the log says what's held");
-		Check(logLines.size() == 2 && logLines[1] == "texture relief: this level has 0 hand-made, 1 worked out and 0 flat. Hand-made maps hold 0 bytes", "and what this level has of each kind");
+		Check(logLines.size() == 2 && logLines[1] == "texture relief: this level has 0 hand-made, 1 worked out and 0 flat. Hand-made maps hold 0 bytes. It has 0 depth maps", "and what this level has of each kind");
 
 		relief.TurnOff();
 		logLines.clear();
@@ -1061,7 +1061,7 @@ static void CheckWhatTryingMapsCosts()
 	{
 		StartAgain();
 		WriteMapFile("small_Normal.rim", Bytes(8, 'x'));
-		WriteMapFile("small_Depth.rim", Bytes(8, 'x'));
+		WriteMapFile("small_Depth.dds", Bytes(8, 'x'));
 
 		TextureRelief relief(64 * 1024 * 1024, 256 * 1024 * 1024, 3);
 
@@ -1072,7 +1072,7 @@ static void CheckWhatTryingMapsCosts()
 		}
 
 		Check(LogCount("_Normal.rim isn't used") == 3, "after the most tries, no more files are read");
-		Check(LogCount("found ") == 3, "and depth files aren't looked for either");
+		Check(LogCount("found ") == 2, "and depth files aren't looked for either: the third try used up the last, so its picture's depth wasn't looked for");
 		Check(relief.HandMadeTriesThisLevel() == 3, "and the count stops there");
 		Check(LogCount("no more hand-made maps are read for now, because this level has tried 3 of their files") == 1, "and the log says so, once");
 
@@ -1098,7 +1098,7 @@ static void CheckWhatTryingMapsCosts()
 		Check(LogCount("no more hand-made maps are read for now") == 1, "and it can say so again");
 
 		RemoveMapFile("small_Normal.rim");
-		RemoveMapFile("small_Depth.rim");
+		RemoveMapFile("small_Depth.dds");
 	}
 
 	// The real number, with a file that's wrong in the cheapest way there is
@@ -1119,6 +1119,284 @@ static void CheckWhatTryingMapsCosts()
 		Check(relief.HandMadeTriesThisLevel() == TextureRelief::kMostHandMadeTriesPerLevel && LogCount("_Normal.rim isn't used") == (int)TextureRelief::kMostHandMadeTriesPerLevel, "and a level that names more only gets that many");
 
 		RemoveMapFile("cheap_Normal.rim");
+	}
+}
+
+// Depth maps come through the same read as the others, so here's what's different about them, and that each really does go by the same rules
+static void CheckDepthMaps()
+{
+	printf("Depth maps:\n");
+
+	std::string const wall = MapFolder() + "/wall.rim";
+	std::string const normalFile = "wall_Normal.rim";
+	std::string const depthFile = "wall_Depth.rim";
+	std::string const depthPath = MapFolder() + "/" + depthFile;
+
+	RemoveMapFile(normalFile);
+	RemoveMapFile(depthFile);
+
+	// None of either
+	{
+		StartAgain();
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		Check(relief.HeightFor(picture) == relief.PictureFor(picture) && !CopiesOf(relief.HeightFor(picture)), "with no depth map, a texture gets the flat picture");
+		Check(textureList[relief.HeightFor(picture)].pixels[3] == 0, "whose alpha of 0 is what says there's no depth");
+		Check(relief.HeightFor(picture + 1000) == relief.HeightFor(picture), "and so does a texture nothing has heard of");
+	}
+
+	// A depth map with no relief map beside it. Its colours aren't grey, to show they're averaged.
+	{
+		StartAgain();
+		Bytes const file = DeepMap(16, 10, 20, 60);
+		WriteMapFile(depthFile, file);
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		texID_t const height = relief.HeightFor(picture);
+		StandInCopies const *copies = CopiesOf(height);
+
+		Check(copies != 0, "a depth map beside its picture is used, with no relief map");
+		Check(!CopiesOf(relief.PictureFor(picture)), "and the relief picture stays flat");
+		Check(textureList[height].details.name == depthPath, "it's named after its file");
+		Check(LogCount("texture relief: using " + depthPath + ", 16 x 16, with 5 copies and " + std::to_string(ReliefMap_PlainBytes(16)) + " bytes") == 1, "the log says which file, once, however many times it's asked for");
+		Check(relief.PicturesHeld() == 1 && relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(16), "it's held at what it really takes: four bytes a pixel, with its smaller copies");
+		Check(relief.HandMadeTriesThisLevel() == 1 && relief.HandMadeBytesTriedThisLevel() == file.size() + ReliefMap_PlainBytes(16), "and it pays from the same allowance");
+
+		if (copies)
+		{
+			Check(copies->levels.size() == 5, "it has its smaller copies, all the way down");
+
+			std::vector<uint8_t> const &top = copies->levels[0];
+			Check(top[0] == 30 && top[1] == 30 && top[2] == 30, "each pixel holds the average of its red, green and blue, in all three");
+			Check(top[3] == 255, "with an alpha of 255, which is what says it's a real depth map");
+
+			std::vector<uint8_t> const &last = copies->levels[4];
+			Check(last[0] == 30 && last[1] == 30 && last[2] == 30 && last[3] == 255, "the last copy, 1 x 1, is still the same height: an arrow would have changed it");
+		}
+
+		logLines.clear();
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 0 hand-made, 0 worked out and 1 flat. Hand-made maps hold " + std::to_string(ReliefMap_PlainBytes(16)) + " bytes. It has 1 depth maps"), "the level's log line counts it");
+
+		logLines.clear();
+		relief.LogWhatIsHeld();
+		Check(LogHas("It has 0 depth maps"), "and a level that didn't use it doesn't");
+
+		relief.ReleaseAll();
+		Check(!textureList[height].alive && relief.HandMadeBytesHeld() == 0 && relief.PicturesHeld() == 0, "giving everything back gives it back too");
+
+		RemoveMapFile(depthFile);
+	}
+
+	// Both
+	{
+		StartAgain();
+		WriteMapFile(normalFile, DeepMap(8, 200, 90, 180));
+		WriteMapFile(depthFile, DeepMap(16, 40, 40, 40));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		Check(CopiesOf(relief.PictureFor(picture)) && CopiesOf(relief.HeightFor(picture)) && relief.PictureFor(picture) != relief.HeightFor(picture), "a texture can have both, and they're two pictures");
+		Check(CopiesOf(relief.PictureFor(picture))->levels[0][2] == 200, "the relief map keeps its own pixels, not heights");
+		Check(relief.PicturesHeld() == 2 && relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(8) + ReliefMap_PlainBytes(16), "and both are counted");
+
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 1 hand-made, 0 worked out and 0 flat") && LogHas("It has 1 depth maps"), "and the log counts each as what it is");
+
+		RemoveMapFile(normalFile);
+		RemoveMapFile(depthFile);
+	}
+
+	// A relief map with no depth map still lights
+	{
+		StartAgain();
+		WriteMapFile(normalFile, DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		Check(CopiesOf(relief.PictureFor(picture)) && !CopiesOf(relief.HeightFor(picture)), "a relief map with no depth map is used, and the depth stays flat");
+
+		RemoveMapFile(normalFile);
+	}
+
+	// A film gets neither, and isn't even looked for
+	{
+		StartAgain();
+		WriteMapFile(normalFile, DeepMap(8, 200, 90, 180));
+		WriteMapFile(depthFile, DeepMap(8, 40, 40, 40));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Dynamic);
+		relief.Build(picture);
+
+		Check(!CopiesOf(relief.PictureFor(picture)) && !CopiesOf(relief.HeightFor(picture)) && relief.HandMadeTriesThisLevel() == 0, "a film gets neither");
+
+		RemoveMapFile(normalFile);
+		RemoveMapFile(depthFile);
+	}
+
+	// Every reason a map isn't used is a reason a depth map isn't either, by the same words
+	struct RefusedRow { char const *what; Bytes file; ReliefMapProblem problem; };
+
+	Bytes cutShort = DeepMap(8, 200, 90, 180);
+	cutShort.pop_back();
+
+	RefusedRow const refused[] =
+	{
+		{ "an empty depth map", Bytes(), kMapNoHeading },
+		{ "a depth map of something else", Bytes(100, 'x'), kMapPartsWrong },
+		{ "a depth map that's cut short", cutShort, kMapCutShort },
+		{ "a depth map that isn't a power of two", DeepMap(7, 200, 90, 180), kMapSideNotAPowerOfTwo },
+		{ "a depth map as large as a side can say", DeepMap(4096, 200, 90, 180, 1), kMapSideTooLarge },
+		{ "a depth map wrong at its very last pixel", MapWrongAtItsLastPixel(16), kMapColourPastTable },
+	};
+
+	for (size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); i++)
+	{
+		StartAgain();
+		WriteMapFile(depthFile, refused[i].file);
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		std::string const reason = std::string("texture relief: ") + depthPath + " isn't used, because " + ReliefMap_ProblemWords(refused[i].problem);
+
+		Check(LogCount(reason) == 1 && logLines.size() == 1, std::string(refused[i].what) + " says why, once");
+		Check(!CopiesOf(relief.HeightFor(picture)) && relief.PicturesHeld() == 0 && relief.HandMadeBytesHeld() == 0, std::string(refused[i].what) + " makes nothing, and leaves the flat picture");
+		Check(relief.HandMadeTriesThisLevel() == 1, std::string(refused[i].what) + " still counts as a try");
+	}
+
+	// A file too long to read, with the same words
+	{
+		StartAgain();
+		WriteMapFile(depthFile, Bytes((size_t)kReliefMapMostFileBytes + 1, 'x'));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		Check(LogCount(depthPath + " isn't used, because " + ReliefMap_ProblemWords(kMapFileTooLong)) == 1 && relief.HandMadeBytesTriedThisLevel() == 0, "a depth map too long to read says so, and isn't read");
+	}
+
+	// The card says no, and then the card won't let it be written
+	{
+		StartAgain();
+		WriteMapFile(depthFile, DeepMap(16, 40, 40, 40));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(AddTexture(MapFolder() + "/none.rim", 8, 8, 32, TextureUsage_Normal));    // makes the flat picture first
+		createsLeft = 0;
+		relief.Build(picture);
+
+		Check(LogHas(depthPath + " isn't used, because the graphics card can't make a texture 16 on a side") && !CopiesOf(relief.HeightFor(picture)) && relief.HandMadeBytesHeld() == 0, "a depth map the card can't make goes without, and says why");
+
+		RemoveMapFile(depthFile);
+	}
+
+	// Each pays from the allowance they share. One try left: the relief map has it, and the depth map waits its turn.
+	{
+		StartAgain();
+		WriteMapFile(normalFile, DeepMap(8, 200, 90, 180));
+		WriteMapFile(depthFile, DeepMap(8, 40, 40, 40));
+
+		TextureRelief relief(64 * 1024 * 1024, 256 * 1024 * 1024, 1);
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		Check(CopiesOf(relief.PictureFor(picture)) && !CopiesOf(relief.HeightFor(picture)), "with one try left, the relief map has it, and the depth map isn't read");
+		Check(!LogHas(depthFile), "not even opened");
+		Check(LogCount("no more hand-made maps are read for now, because this level has tried 1 of their files") == 1, "and the log says so");
+
+		relief.LogWhatIsHeld();
+		texID_t const map = relief.PictureFor(picture);
+		relief.Build(picture);
+
+		Check(CopiesOf(relief.HeightFor(picture)) != 0, "the next level, the depth map has its turn, though the texture already has its relief map");
+		Check(relief.PictureFor(picture) == map && relief.HandMadeTriesThisLevel() == 1, "and the relief map isn't read again");
+
+		RemoveMapFile(normalFile);
+		RemoveMapFile(depthFile);
+	}
+
+	// Depth maps wrong at the end use up the bytes like any others
+	{
+		StartAgain();
+		Bytes const bad = MapWrongAtItsLastPixel(16);
+		size_t const limit = (size_t)ReliefMap_PlainBytes(16);
+		uint64_t const eachCosts = bad.size() + ReliefMap_PlainBytes(16);
+		int const triesThatFit = (int)(((uint64_t)limit * 3 + eachCosts - 1) / eachCosts);
+		int const names = triesThatFit + 2;
+
+		for (int i = 0; i < names; i++)
+		{
+			WriteMapFile("deep" + std::to_string(i) + "_Depth.rim", bad);
+		}
+
+		TextureRelief relief(64 * 1024 * 1024, limit);
+
+		for (int i = 0; i < names; i++)
+		{
+			relief.Build(AddTexture(MapFolder() + "/deep" + std::to_string(i) + ".rim", 8, 8, 32, TextureUsage_Normal));
+		}
+
+		Check(LogCount("_Depth.rim isn't used, because " + std::string(ReliefMap_ProblemWords(kMapColourPastTable))) == triesThatFit, "depth maps that keep being wrong at the end are read until the bytes run out");
+		Check(relief.HandMadeTriesThisLevel() == (size_t)triesThatFit, "and no file is opened after that");
+
+		for (int i = 0; i < names; i++)
+		{
+			RemoveMapFile("deep" + std::to_string(i) + "_Depth.rim");
+		}
+	}
+
+	// The kept limit counts depth maps too
+	{
+		StartAgain();
+		WriteMapFile(depthFile, DeepMap(8, 40, 40, 40));
+		WriteMapFile("second_Depth.rim", DeepMap(8, 40, 40, 40));
+
+		TextureRelief relief(64 * 1024 * 1024, (size_t)ReliefMap_PlainBytes(8));
+		texID_t const first = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		texID_t const second = AddTexture(MapFolder() + "/second.rim", 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(first);
+		relief.Build(second);
+
+		Check(CopiesOf(relief.HeightFor(first)) && !CopiesOf(relief.HeightFor(second)) && !LogHas("second_Depth.rim"), "a depth map past what's kept isn't read");
+
+		RemoveMapFile("second_Depth.rim");
+		RemoveMapFile(depthFile);
+	}
+
+	// name_Depth.dds isn't read yet
+	{
+		StartAgain();
+		WriteMapFile("wall_Depth.dds", Bytes(8, 'x'));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.Build(picture);
+
+		Check(LogCount("wall_Depth.dds, which isn't read yet, because only a .rim depth map is") == 1, "a .dds depth map is noticed, once");
+		Check(!CopiesOf(relief.HeightFor(picture)) && relief.PicturesHeld() == 0 && relief.HandMadeTriesThisLevel() == 0, "and isn't read");
+
+		RemoveMapFile("wall_Depth.dds");
 	}
 }
 
@@ -1401,6 +1679,7 @@ static void CheckHandMadeMaps()
 	}
 
 	CheckWhatTryingMapsCosts();
+	CheckDepthMaps();
 
 	// The card says no
 	{
@@ -1469,9 +1748,9 @@ static void CheckHandMadeMaps()
 		relief.Build(picture);
 		relief.Build(picture);
 
-		Check(LogCount("wall_Depth.rim, which isn't used, because nothing draws from depth yet") == 1, "a depth map is noticed, once, whatever it holds");
-		Check(LogCount("wall_Depth.dds, which isn't used, because nothing draws from depth yet") == 1, "with either ending");
-		Check(madeCount == 1 && relief.PicturesHeld() == 0, "and it isn't read, and alone it leaves the flat picture");
+		Check(LogCount("wall_Depth.dds, which isn't read yet, because only a .rim depth map is") == 1, "a .dds depth map is noticed, once, whatever it holds");
+		Check(LogCount("wall_Depth.rim isn't used, because ") == 1, "and a .rim one is read, and says what's wrong with it");
+		Check(madeCount == 1 && relief.PicturesHeld() == 0, "and neither of those leaves anything but the flat picture");
 
 		RemoveMapFile("wall_Depth.rim");
 		RemoveMapFile("wall_Depth.dds");

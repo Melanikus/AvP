@@ -16,6 +16,8 @@
 //
 // THE PIXEL: red is x, green is y and blue is z, each 128 + 127 * a number from -1 to 1, which is what surfaceRelief.psh reads. Alpha holds x again, because DXT5 has room for only two
 // good numbers, which will be alpha and green.
+//
+// name_Depth.rim IS THE SAME KIND OF FILE, WITH THE SAME RULES. It's read by the same code, and only what's done with the pixels differs: see the end of this file.
 
 #ifndef RELIEF_MAP_FILE_H
 #define RELIEF_MAP_FILE_H
@@ -560,6 +562,44 @@ inline void ReliefMap_MakeSmallerCopy(uint8_t const *from, uint32_t fromSide, ui
 			{
 				ReliefMap_PutPixel(pixel, ReliefMap_Number(sum[0] / length), ReliefMap_Number(sum[1] / length), ReliefMap_Number(sum[2] / length));
 			}
+		}
+	}
+}
+
+// ---- A depth map, name_Depth.rim. The same file as any .rim map, but its pixels say how deep the surface is, not which way it leans.
+
+// How high one pixel is: red, green and blue averaged, because a depth map painted in grey can still come out very slightly not grey. It goes in all three, so that whatever reads it reads the
+// same number. Alpha of 255 says this is a real depth map. The flat picture that stands in for one has an alpha of 0, which is how the shader tells them apart.
+inline void ReliefMap_MakeHeightPixel(uint8_t *pixel)
+{
+	uint32_t const sum = (uint32_t)pixel[0] + pixel[1] + pixel[2];
+	uint8_t const height = (uint8_t)((sum + 1) / 3);    // adding 1 rounds to the nearest whole number, when dividing by 3
+
+	pixel[0] = height;
+	pixel[1] = height;
+	pixel[2] = height;
+	pixel[3] = 255;
+}
+
+// One copy from the one above it, each pixel the plain average of the four above it. ReliefMap_MakeSmallerCopy won't do for this: it makes each result 1 long, and a height isn't an arrow.
+inline void ReliefMap_MakeSmallerHeightCopy(uint8_t const *from, uint32_t fromSide, uint8_t *to)
+{
+	uint32_t const toSide = fromSide / 2;
+
+	for (uint32_t y = 0; y < toSide; y++)
+	{
+		for (uint32_t x = 0; x < toSide; x++)
+		{
+			uint8_t const *row0 = from + (size_t)y * 2 * fromSide * 4 + (size_t)x * 2 * 4;
+			uint8_t const *row1 = row0 + (size_t)fromSide * 4;
+			uint32_t const sum = (uint32_t)row0[0] + row0[4] + row1[0] + row1[4];
+			uint8_t const height = (uint8_t)((sum + 2) / 4);    // adding 2 rounds to the nearest whole number, when dividing by 4
+			uint8_t *pixel = to + ((size_t)y * toSide + x) * 4;
+
+			pixel[0] = height;
+			pixel[1] = height;
+			pixel[2] = height;
+			pixel[3] = 255;
 		}
 	}
 }

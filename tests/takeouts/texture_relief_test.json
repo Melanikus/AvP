@@ -69,8 +69,8 @@
 			"changes": [
 				{
 					"file": "3dc/texture_relief.cpp",
-					"from": "if (!entry.lookedForFile && MayTryAnotherMap())\n\t{\n\t\tentry.lookedForFile = true;\n\t\trelief = HandMadePictureFor(picture);\n\t}",
-					"to": "bool const mayTry = !entry.lookedForFile && MayTryAnotherMap();\n\tentry.lookedForFile = true;\n\n\tif (mayTry)\n\t{\n\t\trelief = HandMadePictureFor(picture);\n\t}"
+					"from": "if (!entry.lookedForFile && MayTryAnotherMap())\n\t{\n\t\tentry.lookedForFile = true;\n\t\trelief = HandMadePictureFor(picture, kNormalMap);\n\t}",
+					"to": "bool const mayTry = !entry.lookedForFile && MayTryAnotherMap();\n\tentry.lookedForFile = true;\n\n\tif (mayTry)\n\t{\n\t\trelief = HandMadePictureFor(picture, kNormalMap);\n\t}"
 				}
 			]
 		},
@@ -231,6 +231,316 @@
 					"file": "3dc/texture_relief.h",
 					"from": "kMostHandMadeTriesPerLevel = 2048",
 					"to": "kMostHandMadeTriesPerLevel = 8192"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: reads the relief map instead",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(kind == kDepthMap) ? \"_Depth.rim\" : \"_Normal.rim\"",
+					"to": "\"_Normal.rim\""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: the relief map reads the depth map",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(kind == kDepthMap) ? \"_Depth.rim\" : \"_Normal.rim\"",
+					"to": "\"_Depth.rim\""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: pixels are not made into heights",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "ReliefMap_MakeHeightPixel(pixels.get() + i * 4);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: relief maps are made into heights too",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tsize_t const pixelCount",
+					"to": "\t{\n\t\tsize_t const pixelCount"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: only the top row of pixels is made into heights",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "size_t const pixelCount = (size_t)rim.side * rim.side;",
+					"to": "size_t const pixelCount = (size_t)rim.side;"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: smaller copies are worked out as arrows",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "ReliefMap_MakeSmallerHeightCopy(copy, levelSide, next);",
+					"to": "ReliefMap_MakeSmallerCopy(copy, levelSide, next);"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: relief maps get height copies",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tif (kind == kDepthMap)\n\t\t{\n\t\t\tReliefMap_MakeSmallerHeightCopy",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tReliefMap_MakeSmallerHeightCopy"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: looked for every time",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (entry.lookedForDepth || !MayTryAnotherMap())",
+					"to": "if (!MayTryAnotherMap())"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: never asks whether it may",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (entry.lookedForDepth || !MayTryAnotherMap())",
+					"to": "if (entry.lookedForDepth)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a skipped map shares the first look",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "entry.lookedForDepth = true;",
+					"to": "entry.lookedForDepth = entry.lookedForFile;"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: only read if the texture has no relief map",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tDepthPictureFor(picture, reliefOf[picture]);\n",
+					"to": "\tif (reliefOf[picture].relief == NO_TEXTURE)\n\t{\n\t\tDepthPictureFor(picture, reliefOf[picture]);\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: not read at all",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tDepthPictureFor(picture, reliefOf[picture]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not kept",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tentry.height = height;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not counted as held",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tentry.height = height;\n\t\tpicturesHeld++;\n",
+					"to": "\t\tentry.height = height;\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not handed over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size() && reliefOf[picture].height != NO_TEXTURE)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: past the end of the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size() && reliefOf[picture].height != NO_TEXTURE)",
+					"to": "if (reliefOf[picture].height != NO_TEXTURE)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not given back",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(reliefOf[i].height);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not counted in the log",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\t\t\t\tdepth++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: counted on a level that did not use it",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\t\tif (entry.levelCounted == levelNumber)\n\t\t\t{\n\t\t\t\tif (entry.height != NO_TEXTURE)\n\t\t\t\t{\n\t\t\t\t\tdepth++;\n\t\t\t\t}\n",
+					"to": "\t\t\tif (entry.height != NO_TEXTURE)\n\t\t\t{\n\t\t\t\tdepth++;\n\t\t\t}\n\n\t\t\tif (entry.levelCounted == levelNumber)\n\t\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a .dds depth map is said once per try, not only for depth",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tNoteDepthFile(pictureName);\n\t}\n",
+					"to": "\tNoteDepthFile(pictureName);\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a .dds depth map is not noticed",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tNoteDepthFile(pictureName);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: red does not count",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)pixel[0] + pixel[1] + pixel[2]",
+					"to": "(uint32_t)pixel[0] + pixel[1] + pixel[1]"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: blue does not count",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)pixel[0] + pixel[1] + pixel[2]",
+					"to": "(uint32_t)pixel[2] + pixel[1] + pixel[2]"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: does not round",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint8_t)((sum + 1) / 3)",
+					"to": "(uint8_t)(sum / 3)"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: alpha is left as it was",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\tpixel[2] = height;\n\tpixel[3] = 255;\n}",
+					"to": "\tpixel[2] = height;\n}"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: only one colour holds it",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\tpixel[0] = height;\n\tpixel[1] = height;\n\tpixel[2] = height;\n\tpixel[3] = 255;\n}",
+					"to": "\tpixel[0] = height;\n\tpixel[3] = 255;\n}"
+				}
+			]
+		},
+		{
+			"name": "COPY: does not round",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint8_t)((sum + 2) / 4)",
+					"to": "(uint8_t)(sum / 4)"
+				}
+			]
+		},
+		{
+			"name": "COPY: takes three of four",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)row0[0] + row0[4] + row1[0] + row1[4]",
+					"to": "(uint32_t)row0[0] + row0[4] + row1[0] + row1[0]"
+				}
+			]
+		},
+		{
+			"name": "COPY: copies are in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "uint8_t *pixel = to + ((size_t)y * toSide + x) * 4;\n\n\t\t\tpixel[0] = height;",
+					"to": "uint8_t *pixel = to + ((size_t)x * toSide + y) * 4;\n\n\t\t\tpixel[0] = height;"
+				}
+			]
+		},
+		{
+			"name": "COPY: only one colour holds it",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\t\t\tpixel[0] = height;\n\t\t\tpixel[1] = height;\n\t\t\tpixel[2] = height;\n",
+					"to": "\t\t\tpixel[0] = height;\n"
+				}
+			]
+		},
+		{
+			"name": "COPY: alpha is left as it was",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\t\t\tpixel[2] = height;\n\t\t\tpixel[3] = 255;\n",
+					"to": "\t\t\tpixel[2] = height;\n"
 				}
 			]
 		}
