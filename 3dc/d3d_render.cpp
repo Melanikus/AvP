@@ -11,7 +11,7 @@
 //   particles and coronas are written into their lists before those lists are closed, not after. Every writer now
 //   stops when its list says it has no room, and rain makes room the way the level's other shapes do. A frame that
 //   couldn't start draws nothing, and an overlay in two parts goes whole or not at all
-//   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. This comes out before merge
+//   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. It needs -dev
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting

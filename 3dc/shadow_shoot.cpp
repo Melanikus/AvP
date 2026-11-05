@@ -1,4 +1,4 @@
-// The shoot tool. Written 2026-11-04 by Melanikus for the AvP port. This is debug code, behind -shadowshoot, and it comes out before merge.
+// The shoot tool. Written 2026-11-04 by Melanikus for the AvP port. This is for finding problems. It's kept for whoever works on the shadows next, and it needs -dev and -shadowshoot, so a player never meets it.
 //
 // WHAT IT'S FOR: when a shadow flickers, nobody can tell by looking which polygon and which light are doing it. So point the crosshair at the spot and press F9. A ray goes out through
 // that pixel, and the log gets a block saying what it hit, each light on that spot, and every shadow prism the ray goes through, in order, with how far each is from the wall in

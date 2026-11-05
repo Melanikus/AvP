@@ -1,4 +1,4 @@
-// The test for 3dc/shadow_shoot_sums.h, the sums behind the shoot tool. Written 2026-11-04 by Melanikus for the AvP port. It comes out before merge, with the tool.
+// The test for 3dc/shadow_shoot_sums.h, the sums behind the shoot tool. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // WHAT IT TESTS
 //

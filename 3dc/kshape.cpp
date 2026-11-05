@@ -12,7 +12,7 @@
 //   the rule for a module that never moves is one function, which the static level uses too
 //   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
 //   a shape the game places by the camera is never kept
-//   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. This comes out before merge
+//   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. Only the shoot tool asks, and that needs -dev
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 //   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
