@@ -60,3 +60,8 @@ jobs:
             & $test.FullName
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
+
+      # Not a program like the others: it runs the release checks on made-up folders, and reads the release workflow.
+      - name: Test the release checks
+        shell: pwsh
+        run: ./tests/release-test.ps1

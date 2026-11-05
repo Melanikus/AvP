@@ -1,0 +1,173 @@
+# Makes a release of the game, only when the owner asks for it ("Run workflow", on avpx_main, with a version number).
+#
+# It stops before building anything unless this exact commit may be released: tools/check-release.ps1 is the list of what it
+# checks, and RELEASE-BLOCKERS.md says what's still in the way. Nothing is released while we know about an open hole (AvP Tao #1),
+# and this is a machine holding us to that.
+#
+# It never publishes anything. It ends with a draft release that only people with write access can see, and the owner reads that and
+# presses Publish. Until then there's no tag either: GitHub makes the tag when the draft is published.
+#
+# Why it's started by hand, and not by pushing a tag: a workflow comes from the commit it runs on, so a tag could point at a commit
+# with these checks taken out. Started from avpx_main, this file comes from the protected branch, where changing it has to get past
+# the same checks as anything else.
+#
+# RELEASING.md says how to use this, and what has to be set up on GitHub for it to work. The first real run is what proves the last
+# job: nothing can try it short of a real run. tests/release-test.ps1 proves that each check is there and comes before it.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The version, three numbers such as 1.0.0'
+        required: true
+        type: string
+
+# Nothing by default: each job says what it needs, and only the last one can write anything.
+permissions: {}
+
+# One at a time, so that two runs can't be checking the same version at once.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check this commit may be released
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the gate
+    timeout-minutes: 10
+    permissions:
+      contents: read          # to read the code, and which tags there are
+      checks: read            # to read the scan results of this commit
+      security-events: read   # to read whether any code scanning alert is open
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The version comes in through a setting and not written into the command, because it's typed by a person, and written into
+      # the command it would be run as part of it.
+      - name: Refuse anything that may not be released
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/check-release.ps1 -Version $env:VERSION
+
+  build:
+    name: Build the package
+    needs: check
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    timeout-minutes: 120           # the libraries are built from source, so this takes a while
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same script every pull request runs (game-build.yml), so this can't be the first time these steps have run.
+      - name: Build the game and make its package
+        shell: pwsh
+        run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
+
+      - name: Refuse a package with anything missing
+        shell: pwsh
+        run: ./tools/check-release-package.ps1 -Package "$env:RUNNER_TEMP\package" -Commit $env:GITHUB_SHA
+
+      - name: Zip the package, and work out its hash
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $folder = "$env:RUNNER_TEMP\release"
+          New-Item -ItemType Directory -Force $folder | Out-Null
+          $name = "AvP-$env:VERSION-windows-x86.zip"
+          Compress-Archive -Path "$env:RUNNER_TEMP\package\*" -DestinationPath (Join-Path $folder $name)
+          $hash = (Get-FileHash -Algorithm SHA256 (Join-Path $folder $name)).Hash.ToLower()
+          "$hash  $name" | Out-File -Encoding ascii (Join-Path $folder 'SHA256SUMS')
+          Get-Content (Join-Path $folder 'SHA256SUMS')
+
+      # For the last job, which has no build tools and no copy of the code. Anyone can download what a public repository builds, so
+      # this is kept for the shortest time there is. The checks above have already said nothing is in the way of a release.
+      - name: Keep the package for the next job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/release
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Make the draft release
+    needs: build
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the gate
+    timeout-minutes: 15
+    environment: release    # waits here until the owner approves. See RELEASING.md for how this is set up on GitHub
+    permissions:
+      contents: write       # to make the draft. This is the only job in any workflow here that can write to the repository
+      id-token: write       # to prove to the attestation service which workflow this is
+      attestations: write   # to record how the package was built
+    # This job runs no code from the repository, and doesn't even have a copy of it, so nothing that came through the build can
+    # get at what this job is allowed to do.
+    steps:
+      - name: Get the package
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-package
+          path: release
+
+      # The owner may approve this long after the checks ran.
+      - name: Refuse if anything has changed since the checks
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tip = gh api "repos/$env:GITHUB_REPOSITORY/commits/avpx_main" --jq .sha
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the tip of avpx_main' }
+          if ($tip -cne $env:GITHUB_SHA) { throw "avpx_main has moved on to $tip since this was checked, so this commit is no longer its tip" }
+
+          # Only this job can see drafts, so this is the place to find one that's already using this version.
+          $releases = gh release list --repo $env:GITHUB_REPOSITORY --limit 1000 --json tagName --jq '.[].tagName'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the list of releases' }
+          if ($releases -ccontains "v$env:VERSION") { throw "There is already a release of v$env:VERSION, maybe a draft" }
+
+          $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
+          $wanted, $name = $line -split '  ', 2
+          if ((Get-FileHash -Algorithm SHA256 "release/$name").Hash.ToLower() -cne $wanted) { throw 'The package is not what the build made' }
+
+      - name: Record how the package was built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: release/SHA256SUMS
+
+      # --target says which commit the tag goes on when the owner publishes.
+      - name: Make the draft
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:VERSION"
+          $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
+          $hash, $name = $line -split '  ', 2
+          @(
+            "Built from commit $env:GITHUB_SHA by run $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID.",
+            '',
+            "SHA-256 of ${name}: $hash",
+            '',
+            "To check that this file is what that run built: gh attestation verify $name --repo $env:GITHUB_REPOSITORY",
+            '',
+            'The owner writes what changed here before publishing. RELEASING.md says what to read first.'
+          ) | Out-File -Encoding utf8 notes.md
+
+          gh release create $tag "release/$name" release/SHA256SUMS --repo $env:GITHUB_REPOSITORY --draft --target $env:GITHUB_SHA --title "AvP $tag" --notes-file notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'The draft could not be made' }
+
+          $made = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish | ConvertFrom-Json
+          if (-not $made.isDraft) { throw 'The release is not a draft' }
+          if ($made.targetCommitish -cne $env:GITHUB_SHA) { throw "The draft points at $($made.targetCommitish), not at the commit that was checked" }
+          "The draft of $tag is ready for the owner to read and publish."
