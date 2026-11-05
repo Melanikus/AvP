@@ -9,6 +9,7 @@
 // that asks Windows for the player's Documents can't be made to fail from a test, so GetSaveFolderPath itself is checked by
 // reading it. Run this from the top of the repository, because that's where the source it reads is found from.
 #include "save_folder.h"
+#include "save_file_write.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -196,13 +197,87 @@ static void TestWhatTheyAreTold()
 	Check(Has(asking, "noSaveFolder ? saveFolderProblem : NULL"), "there's only something to say if it went wrong");
 
 	std::string const saving = Between(ReadSourceFile("3dc/avp/savegame.cpp"), "void SaveGame()", "static void EndLoadGame()");
-	std::string const cantWrite = Between(saving, "if (file == INVALID_HANDLE_VALUE)", "WriteFile(file");
+	std::string const cantWrite = Between(saving, "if (!saved)", "TEXTSTRING_SAVEGAME_GAMESAVED");
 
 	Check(!cantWrite.empty(), "the save game's check is where it's expected to be");
+	Check(!Has(saving, "avp_CreateFile") && !Has(saving, "WriteFile(file"), "the save game doesn't open the slot's file itself, because that empties it");
+	Check(Has(saving, "packagePtr && SaveFile_WriteSafely(filename, SaveInfo.BufferStart, headerLength, packagePtr, packagePtr->CompressedDataSize + sizeof(HuffmanPackage));"), "it goes through the safe way, with both parts, and only if it could compress them");
+	Check(Has(saving, "DeallocateMem(packagePtr);"), "and lets go of the compressed copy");
+	Check(ComesBefore(ReadSourceFile("3dc/win95/huffman.cpp"), "if (!outpackage)", "strncpy(outpackage->Identifier"), "compressing with no memory gives back nothing, and doesn't write through nothing");
 	Check(Has(cantWrite, "NewOnScreenMessage(\"GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN\");"), "a save that can't be written tells the player");
 	Check(ComesBefore(cantWrite, "NewOnScreenMessage", "return;"), "before it gives up");
 	Check(Has(cantWrite, "if (!unlimitedSaves)") && Has(cantWrite, "NumberOfSavesLeft++;"), "and they get back the save it took off them");
 	Check(!Has(cantWrite, "GLOBALASSERT"), "and a debug build doesn't stop the game over it");
+}
+
+static std::string ReadWholeFile(const std::string &name)
+{
+	std::ifstream file(name.c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+	return all.str();
+}
+
+static bool FileIsThere(const std::string &name)
+{
+	return ::GetFileAttributesA(name.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+// On real files, because what matters here is what's on the disk afterwards.
+static void TestWritingASave()
+{
+	char const *const outputFolder = getenv("RUNNER_TEMP");
+	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_write_test_files";
+	std::string const slot = base + "/slot_1.sav";
+	std::string const newFile = slot + ".new";
+
+	::DeleteFileA(slot.c_str());
+	::DeleteFileA(newFile.c_str());
+	::RemoveDirectoryA(base.c_str());
+	::CreateDirectoryA(base.c_str(), NULL);
+
+	Check(SaveFile_WriteSafely(slot.c_str(), "abc", 3, "de", 2), "a save gets written");
+	Check(ReadWholeFile(slot) == "abcde", "with both of its parts, in order");
+	Check(!FileIsThere(newFile), "and nothing else left beside it");
+
+	Check(SaveFile_WriteSafely(slot.c_str(), "xy", 2, "z", 1), "a save over an old one gets written");
+	Check(ReadWholeFile(slot) == "xyz", "and takes its place, all of it");
+	Check(!FileIsThere(newFile), "with nothing else left beside it");
+
+	// Windows refuses to read from a null pointer, which is a real failed write without needing a full disk
+	Check(!SaveFile_WriteSafely(slot.c_str(), NULL, 5, "z", 1), "a first part that can't be written is a failed save");
+	Check(ReadWholeFile(slot) == "xyz", "and the old save is just as it was");
+	Check(!FileIsThere(newFile), "with nothing left behind");
+
+	Check(!SaveFile_WriteSafely(slot.c_str(), "abc", 3, NULL, 5), "so is a second part that can't be written");
+	Check(ReadWholeFile(slot) == "xyz", "and the old save is just as it was, though the first part was written");
+	Check(!FileIsThere(newFile), "with nothing left behind");
+
+	// Something else holding the old file stops the new one taking its place
+	HANDLE const held = ::CreateFileA(slot.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	Check(held != INVALID_HANDLE_VALUE, "the test can hold the old save open");
+	Check(!SaveFile_WriteSafely(slot.c_str(), "abc", 3, "de", 2), "a new save that can't take the old one's place is a failed save");
+	::CloseHandle(held);
+	Check(ReadWholeFile(slot) == "xyz", "and the old save is just as it was");
+	Check(!FileIsThere(newFile), "with nothing left behind");
+
+	std::string const nowhere = base + "/there is no such folder/slot_1.sav";
+
+	Check(!SaveFile_WriteSafely(nowhere.c_str(), "abc", 3, "de", 2), "a save with no folder to go in is a failed save");
+	Check(!FileIsThere(nowhere), "and it isn't there");
+	Check(!SaveFile_WriteSafely(NULL, "abc", 3, "de", 2), "and so is one with no name");
+	Check(!SaveFile_WriteSafely("", "abc", 3, "de", 2), "or an empty name");
+
+	std::string const code = ReadSourceFile("3dc/save_file_write.h");
+
+	Check(Has(code, "&& written == size;"), "Windows writing less than it was asked to counts as failing");
+	Check(Has(code, "::FlushFileBuffers(file) != 0;"), "and so does the disk refusing it when it's flushed");
+	Check(Has(code, "if (!::CloseHandle(file))"), "or when the file is closed");
+
+	::DeleteFileA(slot.c_str());
+	::RemoveDirectoryA(base.c_str());
+	Check(!FileIsThere(base), "this test's files are gone again");
 }
 
 int main()
@@ -212,6 +287,7 @@ int main()
 	TestMakingIt();
 	TestTheGamesCode();
 	TestWhatTheyAreTold();
+	TestWritingASave();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 

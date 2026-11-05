@@ -355,6 +355,156 @@
 			]
 		},
 		{
+			"name": "a save goes straight over the old one",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "std::string(path) + \".new\"",
+					"to": "std::string(path)"
+				}
+			]
+		},
+		{
+			"name": "the first part is not written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "SaveFile_WriteOnePart(file, first, firstSize) && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the second part is not written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && SaveFile_WriteOnePart(file, second, secondSize)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the old save is never replaced",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH",
+					"to": "MOVEFILE_WRITE_THROUGH"
+				}
+			]
+		},
+		{
+			"name": "a failed replacement counts as saved",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (saved && !::MoveFileExA(newFile.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))\n\t{\n\t\tsaved = false;",
+					"to": "if (saved && !::MoveFileExA(newFile.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))\n\t{"
+				}
+			]
+		},
+		{
+			"name": "a failed save leaves its file behind",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "::DeleteFileA(newFile.c_str());",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it replaces the old save even after a failed write",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (saved && !::MoveFileExA(",
+					"to": "if (!::MoveFileExA("
+				}
+			]
+		},
+		{
+			"name": "no name is not checked",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (!path)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a short write counts as written",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && written == size;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it does not flush",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": " && ::FlushFileBuffers(file) != 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed close counts as saved",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (!::CloseHandle(file))\n\t{\n\t\tsaved = false;\n\t}",
+					"to": "::CloseHandle(file);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the save game opens the slot itself",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "bool const saved = packagePtr",
+					"to": "avp_CreateFile(filename,GENERIC_WRITE, 0, 0, CREATE_ALWAYS,FILE_FLAG_RANDOM_ACCESS, 0);\n\tbool const saved = packagePtr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the save game does not check it could compress",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "bool const saved = packagePtr && SaveFile_WriteSafely",
+					"to": "bool const saved = SaveFile_WriteSafely"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the compressed copy is never let go",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "DeallocateMem(packagePtr);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: compressing writes through nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/huffman.cpp",
+					"from": "\tif (!outpackage)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "no slash on the end",
 			"changes": [
 				{

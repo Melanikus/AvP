@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   adds a checked Huffman decoder for save games and text files: it refuses data that does not fit or
 //   decodes to fewer bytes than it claims
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   compressing gives back nothing if there's no memory for it, where before it wrote through a null pointer
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
@@ -83,6 +85,12 @@ extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length)
 	MakeHuffmanEncodeTable(EncodingTable,&SymbolCensus[256],Depths);
 	// Step 7: Encoding data
 	outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage)+length);
+
+	if (!outpackage)
+	{
+		return 0;
+	}
+
 	strncpy(outpackage->Identifier,COMPRESSED_RIF_IDENTIFIER,8);
 	outpackage->CompressedDataSize = HuffEncodeBytes((int*)(outpackage+1), sourcePtr, length, EncodingTable);
 	outpackage->UncompressedDataSize = length;
