@@ -7,6 +7,7 @@
 //   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
 //   a shape stays still if a frame of its texture animation names a picture that isn't real
 //   the list of a level's image numbers is freed the way it was made
+//   a level file can only ask for so many pictures
 
 #include <stdlib.h>
 #include <string>
@@ -30,6 +31,7 @@
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
 #include "mempool.h"
+#include "logstring.h"
 #include <math.h>
 // for log file
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
@@ -714,7 +716,33 @@ void close_rif_handle(RIFFHANDLE h)
 
 //////////////////////////////////////////////////////////
 
-static void setup_tex_conv_array(
+// The most pictures one level file can ask for. Each one costs a search through all the textures the game has so far, then a try at opening a file,
+// and it costs that even when there's no such file. A file can hold a list of names for each of its outside shapes, with up to 65,535 names in each,
+// so without a limit a small file could keep the game busy for as long as it liked, and fill the log, before the level even starts. All of a file's
+// lists count together. The most any of the game's 86 files holds is 439, in all its lists, so this leaves plenty of room for a real level.
+static int const kMostPicturesOneFileCanAskFor = 4096;
+
+// Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
+// because any picture can turn out to be missing.
+static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags flags)
+{
+	if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)
+	{
+		if (!h->said_too_many_pictures)
+		{
+			LogErrorStringC("This level file names too many pictures, so the rest of them aren't loaded");
+			h->said_too_many_pictures = true;
+		}
+
+		return GEI_NOTLOADED;
+	}
+
+	h->pictures_asked_for++;
+	return load_rif_bitmap(name, flags);
+}
+
+// Not static, only so that tests/level_pictures_test.cpp can reach it
+void setup_tex_conv_array(
     int &max_indices,
     int *&conv_array,
     RIFFHANDLE h,
@@ -790,7 +818,7 @@ static void setup_tex_conv_array(
 					tex += bns().filename;
 				}
 
-				texID_t imgnum = load_rif_bitmap(tex, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, tex, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{
@@ -1232,7 +1260,7 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 			if (!(bns().flags & ChunkBMPFlag_NotInPC))
 			{
 				// JH 17-2-97 -- image loaders have changed to avoid loading the same image twice
-				texID_t imgnum = load_rif_bitmap(bns().filename, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, bns().filename, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{

@@ -1,0 +1,36 @@
+/std:c++17 /EHsc /MD /J /W3
+/DUSE_D3D9 /D_WINDOWS /DUSE_OPENAL /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0
+/Itests/level_pictures_test_stubs /I3dc /I3dc/video /I3dc/avp /I3dc/avp/support /I3dc/avp/win95 /I3dc/avp/win95/frontend /I3dc/avp/win95/gadgets /I3dc/include /I3dc/win95 /Iwin32
+tests/level_pictures_test.cpp
+3dc/win95/chunk_load.cpp
+3dc/win95/avp_string.cpp
+3dc/win95/chunk.cpp
+3dc/win95/chunk_light.cpp
+3dc/win95/chunk_object.cpp
+3dc/win95/chunk_shape.cpp
+3dc/win95/chunk_type.cpp
+3dc/win95/hierarchy_chunk.cpp
+3dc/win95/huffman.cpp
+3dc/win95/list_tem.cpp
+3dc/win95/md5.c
+3dc/win95/mishchnk.cpp
+3dc/avp/win95/avp_chunk.cpp
+3dc/avp/win95/hierplace.cpp
+3dc/avp/win95/path_chunk.cpp
+3dc/avp/win95/strategy_chunk.cpp
+3dc/win95/animation_chunk.cpp
+3dc/win95/animation_objects.cpp
+3dc/win95/bitmap_names.cpp
+3dc/win95/chunk_dummy.cpp
+3dc/win95/chunk_fragments.cpp
+3dc/win95/chunk_gsprites.cpp
+3dc/win95/chunk_map.cpp
+3dc/win95/chunk_palette.cpp
+3dc/win95/chunk_sound.cpp
+3dc/win95/chunk_sprites.cpp
+3dc/win95/chunk_waypoint.cpp
+3dc/win95/enum_chunk.cpp
+3dc/win95/enumsch.cpp
+3dc/win95/environment_chunk.cpp
+3dc/win95/our_mem.cpp
+user32.lib
