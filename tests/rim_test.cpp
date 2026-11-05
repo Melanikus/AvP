@@ -709,10 +709,10 @@ static void CheckLongFiles()
 	good.body.assign(8, 0);
 	Bytes const goodFile = good.File();
 
-	// That picture has 4 parts: FORM, ILBM with BMHD, CMAP and BODY
+	// That picture has 4 parts: FORM, ILBM with BMHD, CMAP and BODY. The 16 is written out here, because a test that asked the code for its limit couldn't notice the limit being wrong.
 	Bytes parts;
 
-	for (int i = 0; i < kMostRimParts - 4; i++)
+	for (int i = 0; i < 16 - 4; i++)
 	{
 		Add(parts, "FORM");
 		Add32(parts, 0);

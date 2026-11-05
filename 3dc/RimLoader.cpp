@@ -313,14 +313,12 @@ bool RimLoader::BodyCanHoldThePicture()
 	return true;
 }
 
-// The most of its data a picture of this size can use. A plain one takes just its size. A packed one could take twice that, with every byte in a run of its own, which takes 2. Nothing honest
-// takes more: the game's own use 0.9 of their plain size at most. Only no-ops, which add nothing to the picture, could go on past that, and each is a read, so a file of them that zips down to
-// nothing could otherwise keep this busy for as long as it liked.
+// The most of its data a picture of this size can use. A packed one could take twice its plain size, with every byte in a run of its own, which takes 2. Nothing honest takes more: the game's
+// own use 0.9 of their plain size at most. Only no-ops, which add nothing to the picture, could go on past that, and each is a read, so a file of them that zips down to nothing could otherwise
+// keep this busy for as long as it liked. A plain picture never gets this far: it reads its plain size and stops, and BodyCanHoldThePicture has already seen that it has that much.
 uint64_t RimLoader::MostBodyBytes() const
 {
-	uint64_t const needed = (uint64_t)rowBytes * header.nPlanes * header.height;
-
-	return (header.compression == kCompressionNone) ? needed : needed * 2;
+	return (uint64_t)rowBytes * header.nPlanes * header.height * 2;
 }
 
 // The next byte of the picture's data, or 0 and a note that there's none left. Nothing reads past this.

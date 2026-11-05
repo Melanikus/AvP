@@ -584,8 +584,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "needed : needed * 2;",
-					"to": "needed : needed;"
+					"from": "return (uint64_t)rowBytes * header.nPlanes * header.height * 2;",
+					"to": "return (uint64_t)rowBytes * header.nPlanes * header.height;"
 				}
 			]
 		},
@@ -594,18 +594,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "needed : needed * 2;",
-					"to": "needed : needed * 3;"
-				}
-			]
-		},
-		{
-			"name": "CAP: a plain picture is held to the packed limit",
-			"changes": [
-				{
-					"file": "3dc/RimLoader.cpp",
-					"from": "(header.compression == kCompressionNone) ? needed : needed * 2",
-					"to": "needed * 2"
+					"from": "return (uint64_t)rowBytes * header.nPlanes * header.height * 2;",
+					"to": "return (uint64_t)rowBytes * header.nPlanes * header.height * 3;"
 				}
 			]
 		},
