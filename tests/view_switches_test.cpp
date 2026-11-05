@@ -414,6 +414,20 @@ static void TheRealGame()
 	std::string const canAct = Between(render, "static bool DevKeysCanAct()", "}");
 
 	Check(Has(canAct, "DevMode"), "the keys need -dev");
+	Check(Has(canAct, "AvP.Network == I_No_Network"), "and do nothing in a network game, where they'd show what walls hide");
+
+	std::string const keepingOut = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()", "static void ToyShadows_Draw()");
+
+	Check(Has(keepingOut, "if (AvP.Network == I_No_Network)\r\n\t{\r\n\t\treturn;"), "a game that isn't a network game keeps its tools");
+	Check(Has(keepingOut, "ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal"), "in one that is, only OFF and FINAL are allowed");
+	Check(Has(keepingOut, "ToyShadowsMode = kToyViewFinal;"), "anything else goes back to FINAL");
+	Check(Has(keepingOut, "ShadowShootOn = 0;") && Has(keepingOut, "ShadowFlickerOn = 0;") && Has(keepingOut, "ShadowsFullReport = 0;"), "and the tools that say the same in words go off");
+	Check(Has(keepingOut, "LogString("), "and the log says why");
+
+	std::string::size_type const gKey = render.find("if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])");
+	std::string::size_type const keptOut = render.find("KeepDeveloperToolsOutOfNetworkGames();");
+
+	Check(gKey != std::string::npos && keptOut != std::string::npos && gKey < keptOut && keptOut < render.find("bool const lightsOurs"), "that's asked every frame, after G and before anything is drawn");
 	Check(Has(canAct, "AvP.MainLoopRunning"), "and a level being played, so a letter typed into a main menu doesn't press them");
 	Check(Has(canAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
 	Check(Has(canAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");

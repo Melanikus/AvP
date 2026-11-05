@@ -20,6 +20,7 @@
 //   a frame that couldn't start forgets what it collected for shadows, so it can't reach a later frame, or a later level
 //   LIGHTING has four choices: Gouraud, per pixel, normals, and relief, which draws as normals for now
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
+//   the developer tools show what walls hide, so none of them run in a network game
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -6842,7 +6843,42 @@ extern int InGameMenusAreRunning(void);
 
 static bool DevKeysCanAct()
 {
-	return DevMode && AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+	return DevMode && AvP.Network == I_No_Network && AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+}
+
+// The developer tools show what walls hide. EDGES and RED VOLUMES draw the shadow of someone behind a wall straight through it, and the shoot tool and the reports say much the same in
+// words. In a network game that's cheating, so none of it runs there, whatever the command line said, and the log says why once. This is asked every frame, because a game only becomes a
+// network game after it has started, and a view that was put aside can come back.
+static void KeepDeveloperToolsOutOfNetworkGames()
+{
+	if (AvP.Network == I_No_Network)
+	{
+		return;
+	}
+
+	bool const viewShowsTooMuch = ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal;
+
+	if (!viewShowsTooMuch && !ShadowShootOn && !ShadowFlickerOn && !ShadowsFullReport)
+	{
+		return;
+	}
+
+	if (viewShowsTooMuch)
+	{
+		ToyShadowsMode = kToyViewFinal;
+	}
+
+	ShadowShootOn = 0;
+	ShadowFlickerOn = 0;
+	ShadowsFullReport = 0;
+
+	static bool toldThem = false;
+
+	if (!toldThem)
+	{
+		toldThem = true;
+		LogString("shadows: this is a network game, so the developer views, the shoot tool, the flicker count and the full report are off");
+	}
 }
 
 // What the commands and keys have asked for, until the end of this frame's shadows. See view_switches.h.
@@ -7050,6 +7086,8 @@ static void ToyShadows_Draw()
 		NewOnScreenMessage(message);
 		LogString(message);
 	}
+
+	KeepDeveloperToolsOutOfNetworkGames();
 
 	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
 	if (DevKeysCanAct())
