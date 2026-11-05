@@ -274,6 +274,8 @@ static void TestWritingASave()
 	Check(Has(code, "&& written == size;"), "Windows writing less than it was asked to counts as failing");
 	Check(Has(code, "::FlushFileBuffers(file) != 0;"), "and so does the disk refusing it when it's flushed");
 	Check(Has(code, "if (!::CloseHandle(file))"), "or when the file is closed");
+	Check(Has(code, "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED"), "taking the old one's place tries again only when something has the file open for a moment");
+	Check(Has(code, "tries < 5") && Has(code, "::Sleep(100);"), "and only for half a second");
 
 	::DeleteFileA(slot.c_str());
 	::RemoveDirectoryA(base.c_str());

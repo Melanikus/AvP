@@ -399,8 +399,8 @@
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
-					"from": "if (saved && !::MoveFileExA(newFile.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))\n\t{\n\t\tsaved = false;",
-					"to": "if (saved && !::MoveFileExA(newFile.c_str(), path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))\n\t{"
+					"from": "if (saved && !SaveFile_TakeThePlaceOf(newFile.c_str(), path))\n\t{\n\t\tsaved = false;",
+					"to": "if (saved && !SaveFile_TakeThePlaceOf(newFile.c_str(), path))\n\t{"
 				}
 			]
 		},
@@ -419,8 +419,8 @@
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
-					"from": "if (saved && !::MoveFileExA(",
-					"to": "if (!::MoveFileExA("
+					"from": "if (saved && !SaveFile_TakeThePlaceOf(",
+					"to": "if (!SaveFile_TakeThePlaceOf("
 				}
 			]
 		},
@@ -501,6 +501,36 @@
 					"file": "3dc/win95/huffman.cpp",
 					"from": "\tif (!outpackage)\n\t{\n\t\treturn 0;\n\t}\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it tries again whatever went wrong",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it never tries again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "tries < 5",
+					"to": "tries < 1"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it tries again with no pause",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "::Sleep(100);",
+					"to": ";"
 				}
 			]
 		},
