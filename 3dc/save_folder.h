@@ -18,17 +18,33 @@ static const char *const kSaveFolderCantMake = "a folder on the way to the save 
 static const char *const kSaveFolderTooLong = "the save folder's path is too long";
 
 // Makes one folder. A folder that's there already is fine, and so is any other answer from Windows except "the folder this
-// goes in doesn't exist", because that's the only one that means there's no way on. So it says false only for that one.
-inline bool SaveFolder_MakeOne(const std::string &path)
+// goes in doesn't exist", because that's the only one that means there's no way on. So it says false only for that one, and
+// where is told which folder it was, if it was given one.
+inline bool SaveFolder_MakeOne(const std::string &path, std::string *where)
 {
-	return ::CreateDirectoryA(path.c_str(), NULL) != 0 || ::GetLastError() != ERROR_PATH_NOT_FOUND;
+	if (::CreateDirectoryA(path.c_str(), NULL) != 0 || ::GetLastError() != ERROR_PATH_NOT_FOUND)
+	{
+		return true;
+	}
+
+	if (where)
+	{
+		*where = path;
+	}
+
+	return false;
 }
 
 // under is the folder to make it in, and folder is where the answer goes, which has room for size characters.
 // It gives back 0 if it worked. Then folder holds the path, with / between its parts and one on the end, ready for a file's name.
-// Otherwise it gives back what went wrong, and folder is empty, so nobody can mistake half a path for the whole of one.
-inline const char *SaveFolder_Make(const char *under, char *folder, size_t size)
+// Otherwise it gives back what went wrong, and folder is empty, so nobody can mistake half a path for the whole of one. where can be left out. If it's given, it says which folder was the trouble.
+inline const char *SaveFolder_Make(const char *under, char *folder, size_t size, std::string *where)
 {
+	if (where)
+	{
+		where->clear();
+	}
+
 	if (!folder || size == 0)
 	{
 		return kSaveFolderNothingGiven;
@@ -48,27 +64,32 @@ inline const char *SaveFolder_Make(const char *under, char *folder, size_t size)
 
 	path += "/My Games";
 
-	if (!SaveFolder_MakeOne(path))
+	if (!SaveFolder_MakeOne(path, where))
 	{
 		return kSaveFolderCantMake;
 	}
 
 	path += "/Aliens versus Predator";
 
-	if (!SaveFolder_MakeOne(path))
+	if (!SaveFolder_MakeOne(path, where))
 	{
 		return kSaveFolderCantMake;
 	}
 
 	path += "/";
 
-	if (!SaveFolder_MakeOne(path + "User_Profiles/") || !SaveFolder_MakeOne(path + "MPConfig/"))
+	if (!SaveFolder_MakeOne(path + "User_Profiles/", where) || !SaveFolder_MakeOne(path + "MPConfig/", where))
 	{
 		return kSaveFolderCantMake;
 	}
 
 	if (path.length() > size - 1)
 	{
+		if (where)
+		{
+			*where = path;
+		}
+
 		return kSaveFolderTooLong;
 	}
 

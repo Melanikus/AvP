@@ -54,6 +54,9 @@ HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData);
 DWORD avp_GetFileAttributes(LPCTSTR lpFileName);
 // The folder the game keeps its files in, ending in a slash. It's never null. It's empty if the game has nowhere to keep them, and then they go in the folder it started from.
 char *GetSaveFolderPath();
+
+// What went wrong finding that folder, or null if nothing did.
+char const *GetSaveFolderProblem();
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);
 

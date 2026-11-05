@@ -27,6 +27,8 @@
 //   SDK library), and LogErrorStringC, which writes a log line from code that does not use C++ strings
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   lines are written by a thread of their own, so a slow disk or a virus scanner can't hold up the game
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   if the save folder couldn't be found or made, the log says why as soon as it can write
 
 #include "logString.h"
 #include "renderer.h"
@@ -379,7 +381,7 @@ static void WriteLogAtExit()
 }
 
 // It's never given back: it has to outlive everything that might still write to the log as the game ends. It can give back nothing, while it's being
-// made: finding the save folder can log a problem, and that line would come straight back here. So a line that early is dropped.
+// made, so that a line written from inside that doesn't come straight back here. Such a line would be lost, so finding the save folder keeps what went wrong, and it's said here instead.
 static LogWriter *TheLogWriter()
 {
 	static bool beingMade = false;
@@ -390,6 +392,12 @@ static LogWriter *TheLogWriter()
 		logWriter = new LogWriter;
 		filterBeforeOurs = SetUnhandledExceptionFilter(WriteLogBeforeCrash);
 		atexit(WriteLogAtExit);
+
+		// Making the log asked for the save folder. If that went wrong, there was no log yet to say so in, and now there is.
+		if (char const *const problem = GetSaveFolderProblem())
+		{
+			LogErrorString(problem);
+		}
 	}
 
 	return logWriter;

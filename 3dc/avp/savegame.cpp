@@ -3,6 +3,8 @@
 //   every block of a save file is checked before it is read: its header, its size and the compressed data;
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -470,9 +472,15 @@ void SaveGame()
 	//write the file
  	file = avp_CreateFile(filename,GENERIC_WRITE, 0, 0, CREATE_ALWAYS,FILE_FLAG_RANDOM_ACCESS, 0);
 	
+	// The player is told, and it doesn't cost them a save, because SaveGameAllowed took one off for a save that hasn't happened.
 	if (file == INVALID_HANDLE_VALUE)
 	{
-		GLOBALASSERT("Error saving file"==0);
+		if (!unlimitedSaves)
+		{
+			NumberOfSavesLeft++;
+		}
+
+		NewOnScreenMessage("GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN");
 		return;
 	}
 

@@ -26,6 +26,7 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
+//   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
 #include <string>
 #include <algorithm>
@@ -41,6 +42,10 @@
 
 static char saveFolder[MAX_PATH] = {0};
 static bool noSaveFolder = false;
+
+// What went wrong finding the save folder. It isn't logged there, because the log asks for the save folder before it can write anything. See TheLogWriter in logString.cpp.
+// It's plain characters because this can be asked for before the game's own start, when a std::string in this file might not be ready.
+static char saveFolderProblem[MAX_PATH + 100] = {0};
 
 // TODO: remove this
 extern void ReleaseDirect3D();
@@ -111,6 +116,11 @@ int StringToInt(const std::string &string)
 
 }
 
+char const *GetSaveFolderProblem()
+{
+	return noSaveFolder ? saveFolderProblem : NULL;
+}
+
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one
@@ -129,18 +139,21 @@ char *GetSaveFolderPath()
 	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
 	char documents[MAX_PATH] = {0};
 	char const *whatWentWrong = "Can't find the player's Documents folder";
+	std::string where;
 
 	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
 	{
-		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder));
+		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
 	}
 
 	if (whatWentWrong)
 	{
-		// With nowhere to keep its files the game can still run. The path stays empty, so a file goes in the folder the game started from, and if one can't be opened there, that's handled like any other.
-		// This has to be written down before the log is asked to say so, because the log asks this function for the folder, and without this they'd go round and round until the game ran out of memory for it.
+		// With nowhere to keep its files the game can still run. The path stays empty, so its files go in the folder it started from, and the folders for saved games and network settings are made there.
+		// If they can't be, a file that won't open is handled like any other.
 		noSaveFolder = true;
-		LogErrorString(whatWentWrong, __LINE__, __FILE__);
+		_snprintf(saveFolderProblem, sizeof(saveFolderProblem) - 1, "%s%s%s", whatWentWrong, where.empty() ? "" : ": ", where.c_str());
+		SaveFolder_MakeOne("User_Profiles/", NULL);
+		SaveFolder_MakeOne("MPConfig/", NULL);
 	}
 
 	return saveFolder;
