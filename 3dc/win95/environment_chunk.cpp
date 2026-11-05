@@ -4,6 +4,7 @@
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
 //   a level's paths each need a number of their own
+//   a lift in another level file is no longer one of its children
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -35,7 +36,6 @@ Children for Enviornment_Data_Chunk :
 "LIGHTSET"		Light_Set_Chunk
 "PRSETPAL"		Preset_Palette_Chunk
 "SPECLOBJ"		Special_Objects_Chunk
-"AVPEXSTR"		AVP_External_Strategy_Chunk
 "BMPMD5ID"		Bitmap_MD5_Chunk
 "GLOGENDC"		Global_Generator_Data_Chunk
 "FRAGTYPE"		Fragment_Type_Chunk

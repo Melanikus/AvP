@@ -3,6 +3,7 @@
 //   removed code and declarations only the level editor used: the game itself never runs them; added a
 //   check on the shape numbers a level file gives, and on the numbers that give a shape's size
 //   removed the class that read a shape stored in a level as a raw copy of memory
+//   removed the shapes made for the PlayStation and Saturn
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -35,27 +36,7 @@
 class Object_Chunk;
 class Shape_Header_Chunk;
 class Anim_Shape_Frame_Chunk;
-class Console_Shape_Chunk;
 // flags structure
-
-enum Console_Type
-{
-	CT_PSX=0,
-	CT_Saturn=1,
-
-	// IMPORTANT
-	// since enums are not guaranteed to assume any particular
-	// storage class, code compiled on different compilers or
-	// with different settings may result in enums to be written
-	// to the data block as a char and read back in as an int,
-	// with the three most significant bytes containing junk.
-	// THIS MASK MUST BE KEPT UP TO DATE AS THE ENUM IS EXTENDED;
-	// ALSO ENSURE THAT NEW FILES LOADED INTO OLD SOFTWARE WILL
-	// NOT HAVE THEIR ENUM VALUE OVER-MASKED; THE MASK IS ONLY
-	// HERE TO ATTEMPT TO REMOVE PROBLEMS FROM FILES MADE
-	// PRIOR TO ITS INTRODUCTION
-	CT_MASK=0xff
-};
 
 // The shape chunk contains and handles all the interface data for the
 // child chunks that it recognises in ChunkShape
@@ -108,7 +89,6 @@ public:
 
 	virtual void post_input_processing();
 
-	Console_Shape_Chunk* get_console_shape_data(Console_Type);
 
 	BOOL inc_v_no();
 
@@ -161,7 +141,6 @@ public:
 
 	const char * get_shape_name();
 
-	Console_Shape_Chunk* get_console_shape_data(Console_Type);
 
 	// refuses the level if the numbers that give this sub-shape's size can't be real
 	virtual void post_input_processing();
@@ -324,37 +303,6 @@ class Poly_Not_In_Bounding_Box_Chunk : public Chunk
 };
 ///////////////////////////////////////////////
 
-class Console_Type_Chunk: public Chunk
-{
-	public :
-	Console_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t)
-	:Chunk(parent,"CONSTYPE"),console((Console_Type)(*(int*)data & CT_MASK))
-	{}
-
-	Console_Type console;
-
-	virtual size_t size_chunk()
-	{return chunk_size=16;}
-
-	virtual void fill_data_block(char * data_start);
-};
-///////////////////////////////////////////////
-class Console_Shape_Chunk : public Chunk_With_Children
-{
-	public :
-	Console_Shape_Chunk(Chunk_With_Children* const  parent,const char*,size_t);
-
-	const ChunkShape shape_data;
-
-	void generate_console_chunkshape();//needs parent's chunkshape to be set up first
-
-	private:
-	friend class Shape_Polygon_Chunk;
-	friend class Shape_UV_Coord_Chunk;
-	ChunkShape * shape_data_store;
-};
-///////////////////////////////////////////////
-
 class Shape_Vertex_Chunk : public Chunk
 {
 public:
@@ -503,7 +451,6 @@ public:
 	// constructor from buffer
 	Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const char * pdata, size_t psize);
 	Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pdata, size_t psize);
-	Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const char * pdata, size_t psize);
 
 	virtual size_t size_chunk ()
 	{
@@ -522,7 +469,6 @@ private:
 
 	friend class Shape_Chunk;
 	friend class Shape_Sub_Shape_Chunk;
-	friend class Console_Shape_Chunk;
 
 
 
@@ -533,11 +479,6 @@ private:
 	{}
 
 	Shape_Polygon_Chunk (Shape_Chunk * parent, int n_polys)
-	: Chunk (parent, "SHPPOLYS"),
-	poly_data (parent->shape_data_store->poly_list), num_polys (n_polys)
-	{}
-
-	Shape_Polygon_Chunk (Console_Shape_Chunk * parent, int n_polys)
 	: Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (n_polys)
 	{}
@@ -630,7 +571,6 @@ public:
 	// constructor from buffer
 	Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t uvsize);
 	Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t uvsize);
-	Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t uvsize);
 
 	virtual size_t size_chunk ();
 
@@ -646,7 +586,6 @@ private:
 
 	friend class Shape_Chunk;
 	friend class Shape_Sub_Shape_Chunk;
-	friend class Console_Shape_Chunk;
 
 
 	// constructor from data
@@ -656,11 +595,6 @@ private:
 	{}
 
 	Shape_UV_Coord_Chunk (Shape_Chunk * parent, int n_uvs)
-	: Chunk (parent, "SHPUVCRD"),
-	uv_data (parent->shape_data_store->uv_list), num_uvs (n_uvs)
-	{}
-
-	Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, int n_uvs)
 	: Chunk (parent, "SHPUVCRD"),
 	uv_data (parent->shape_data_store->uv_list), num_uvs (n_uvs)
 	{}

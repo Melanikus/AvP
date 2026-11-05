@@ -6,6 +6,7 @@
 //   placed sound with no file name
 //   a track sound with no place of its own is skipped
 //   times and tracks from the level file that would divide by nothing, hang or crash are kept to what the game can use
+//   removed the switched-off code for a lift in another level file
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -3649,70 +3650,8 @@ void SetUpRunTimeLights ()
 		}
 	}
 }
-#if 0
-void SetupExternalLift(AVP_External_Strategy_Chunk* aesc)
-{
-	LiftStrategy* ls=(LiftStrategy*)aesc->Strategy;
-
-	ObjectID ControlID={0x7fffffff,0x7fffffff};
-	for(int i=0;i<ls->NumExternalLifts;i++)
-	{
-		if(ls->ExternalLifts[i].EnvNum==aesc->ThisEnvNum)
-		{
-	  		ControlID=Minimum(ControlID,ls->ExternalLifts[i].LiftID);
-		}
-	}
-	
-	
-	LIFT_TOOLS_TEMPLATE * ltt = new LIFT_TOOLS_TEMPLATE;
-	
-	*((ObjectID *)ltt->my_module_name) = aesc->ObjID;
-	*((ObjectID *)ltt->call_switch_name) = ls->AssocCallSwitch;
-	*((ObjectID *)ltt->lift_door_name) = ls->AssocDoor;
-	*((ObjectID *)ltt->lift_floor_switch_name) = ls->AssocFloorSwitch;
-
-	ltt->environment = aesc->ExtEnvNum-1;
-	
-	ltt->num_floor = ls->Floor;
-
-	*((ObjectID *)ltt->control_sb_name)=ControlID;
-	
-	ltt->controller = 0;
-	
-	ltt->num_stations = ls->NumAssocLifts + ls->NumExternalLifts+1;
-
-	ltt->lift_flags=ls->LiftFlags;
-	
-	*((ObjectID *)ltt->nameID) = aesc->ObjID;
-
-	ltt->orient=ls->Facing;
-	if((ls->LiftFlags & LiftFlag_Airlock) || (ls->LiftFlags & LiftFlag_ExitOtherSide))
-		ltt->orient=(ltt->orient+2) % 4;
-
-	ltt_list.add_entry(ltt);	
-}
-#endif
-
 void DealWithExternalObjectStategies (Environment_Data_Chunk * envd)
 {
-	List<Chunk*> chlist;
-	#if 0
-	envd->lookup_child("AVPEXSTR",chlist);
-	for(LIF<Chunk*> slif(&chlist);!slif.done();slif.next())
-	{
-		AVP_External_Strategy_Chunk* aesc=(AVP_External_Strategy_Chunk*) slif();
-		if(aesc->Strategy)
-		{
-			switch(aesc->Strategy->StrategyType)
-			{
-				case StratLift :
-					SetupExternalLift(aesc);
-					break;
-			}
-		}
-	}
-	#endif
-
 	Chunk * pChunk = envd->lookup_single_child("SPECLOBJ");
 	if(pChunk)
 	{

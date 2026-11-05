@@ -2413,6 +2413,103 @@ static size_t StrategySizeOfKind(int kind)
 	return size;
 }
 
+// Chunks the game has no use for, kept as plain bytes that nothing reads. Each sits right up against memory that can't be read, so a chunk class that looked at what isn't there would crash the test.
+static void TestChunksTheGameDoesNotRead()
+{
+	puts("38. chunks the game doesn't read");
+
+	alignas(int) static char wholeShape[4096];
+
+	// A console shape holding children that fit
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const triangle[5] = { 0, 1, 2, -1, -1 };
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		size_t const typeBytes = ChunkHeaderBytes + sizeof(int);
+		size_t const polygonBytes = ChunkHeaderBytes + 36;
+		size_t const consoleBytes = typeBytes + polygonBytes;
+
+		char * inside = PutChunk(wholeShape + mainBytes, "CONSHAPE", consoleBytes);
+		PutChunk(inside, "CONSTYPE", sizeof(int));
+		PutChunk(inside + typeBytes, "SHPPOLYS", 36);
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + consoleBytes);
+		Chunk * console = shape->lookup_single_child("CONSHAPE");
+
+		Check(console && console->r_u_miscellaneous(), "a console shape holding children that fit is kept as plain bytes, and the loader goes on");
+		Check(file.error_code == 0, "and the level still loads");
+		Parent_File = 0;
+	}
+
+	// One with a child that doesn't fit is the same, because nothing looks inside it
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const triangle[5] = { 0, 1, 2, -1, -1 };
+		size_t const mainBytes = BuildShapeData(wholeShape, false, 4, triangle);
+		char * inside = PutChunk(wholeShape + mainBytes, "CONSHAPE", ChunkHeaderBytes);
+		PutChunk(inside, "CONSTYPE", 0);
+		int const tooBig = 0x7fffffff;
+		memcpy(inside + 8, &tooBig, sizeof(tooBig));
+
+		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + ChunkHeaderBytes);
+		Chunk * console = shape->lookup_single_child("CONSHAPE");
+
+		Check(console && console->r_u_miscellaneous() && file.error_code == 0, "a console shape whose child says it's huge is the same, because nothing looks inside");
+		Parent_File = 0;
+	}
+
+	// A CONSTYPE with no number in it, anywhere a chunk can be. It used to be read from wherever it was put.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char * atTheWall = MemoryEndingAtAWall(ChunkHeaderBytes);
+		PutChunk(atTheWall, "CONSTYPE", 0);
+
+		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes);
+		Chunk * type = level->lookup_single_child("CONSTYPE");
+
+		Check(type && type->r_u_miscellaneous() && file.error_code == 0, "a console type with nothing in it is kept as plain bytes, with nothing read past it");
+		Parent_File = 0;
+	}
+
+	// An external strategy with nothing in it, and one saying it's a lift. These used to be read with no look at their size.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char * atTheWall = MemoryEndingAtAWall(ChunkHeaderBytes);
+		PutChunk(atTheWall, "AVPEXSTR", 0);
+
+		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes);
+		Chunk * external = level->lookup_single_child("AVPEXSTR");
+
+		Check(external && external->r_u_miscellaneous() && file.error_code == 0, "an external strategy with nothing in it is kept as plain bytes, with nothing read past it");
+		Parent_File = 0;
+	}
+
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		size_t const dataBytes = 20 + sizeof(int);
+		char * atTheWall = MemoryEndingAtAWall(ChunkHeaderBytes + dataBytes);
+		char * data = PutChunk(atTheWall, "AVPEXSTR", dataBytes);
+		int const kind = StratLift;
+		memcpy(data + 20, &kind, sizeof(kind));
+
+		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes + dataBytes);
+		Chunk * external = level->lookup_single_child("AVPEXSTR");
+
+		Check(external && external->r_u_miscellaneous() && file.error_code == 0, "one saying it's a lift, with no lift in it, is the same");
+		Parent_File = 0;
+	}
+}
+
 static void TestStrategies()
 {
 	puts("35. strategies");
@@ -2449,6 +2546,31 @@ static void TestStrategies()
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a chunk with no room for its kind is refused");
 		Parent_File = 0;
+	}
+
+	// A kind the game doesn't know keeps whatever comes after its first three numbers. With fewer than three there's a negative amount to keep, and asking for that much memory stops the game.
+	{
+		int const unknownKind = 0x7ffffff0;
+		char strategy[16] = { 0 };
+		memcpy(strategy, &unknownKind, sizeof(unknownKind));
+
+		for (size_t bytes = sizeof(int); bytes < 12; bytes++)
+		{
+			File_Chunk file;
+			Parent_File = &file;
+
+			char * atTheWall = MemoryEndingAtAWall(StrategyNumbersBytes + bytes);
+			memset(atTheWall, 0, StrategyNumbersBytes);
+			memcpy(atTheWall + StrategyNumbersBytes, strategy, bytes);
+
+			new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + bytes);
+
+			Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, (std::string("an unknown kind with ") + std::to_string(bytes) + " bytes, too few for its three numbers, is refused").c_str());
+			Parent_File = 0;
+		}
+
+		Check(StrategyAccepted(strategy, 12), "an unknown kind with exactly its three numbers is accepted");
+		Check(StrategyAccepted(strategy, 13), "and with one byte more, which it keeps");
 	}
 
 	// Each counted list, and where its count is with every list before it empty. An item's size is what each entry in the list takes.
@@ -3347,6 +3469,7 @@ int main()
 	TestPlacedHierarchies();
 	TestModuleBoxes();
 	TestStrategies();
+	TestChunksTheGameDoesNotRead();
 	TestCountedLists();
 	TestNumbersUsedAsPlaces();
 

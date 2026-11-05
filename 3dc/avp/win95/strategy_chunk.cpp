@@ -3,6 +3,7 @@
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
 //   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
 //   a message's number has to be a place in the table of level messages
+//   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -39,7 +40,10 @@ AVP_Strategy_Chunk::AVP_Strategy_Chunk(Chunk_With_Children* parent,const char* d
 	Strategy=0;
 	index=spare2=0;
 
-	if(datasize<numbers_bytes+sizeof(int))
+	// Every kind starts with three numbers: its kind and two more. MiscStrategy holds whatever comes after them, so with fewer it would ask for a negative amount of memory, and the game would stop.
+	size_t const smallest_strategy_bytes=12;
+
+	if(datasize<numbers_bytes+smallest_strategy_bytes)
 	{
 		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 		return;
@@ -241,102 +245,6 @@ void AVP_Strategy_Chunk::fill_data_block(char* data_start)
 
 ////////////////////////////////////////////////////////
 //Class AvP_External_Strategy_Chunk
-RIF_IMPLEMENT_DYNCREATE("AVPEXSTR",AVP_External_Strategy_Chunk)
-
-AVP_External_Strategy_Chunk::AVP_External_Strategy_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
-:Chunk(parent,"AVPEXSTR")
-{
-	ObjID=*(ObjectID*)data;
-	data+=8;
-	ExtEnvNum=*(int*)data;
-	data+=4;
-	ThisEnvNum= *(int*)data;
-	data+=4;
-	spare= *(int*)data;
-	data+=4;
-
-	int type=*((int*)data);
-	switch(type)
-	{
-		case StratLift :
-			Strategy=new LiftStrategy(data,datasize-8);
-			break;
-		case StratDoor :
-			Strategy=new DoorStrategy(data,datasize-8);
-			break;
-		case StratBinSwitch :
-			Strategy=new BinSwitchStrategy(data,datasize-8);
-			break;
-	 	case StratSimpleObject :
-	 		Strategy=new AvpStrat(data);
-			break;
-		case StratPlatLift :
-			Strategy=new PlatLiftStrategy(data,datasize-8);
-			break;
-		default :
-			Strategy=new MiscStrategy(data,datasize-8);	
-	}
-}
-
-AVP_External_Strategy_Chunk::AVP_External_Strategy_Chunk(Chunk_With_Children* parent)
-:Chunk(parent,"AVPEXSTR")
-{
-	ObjID.id1=ObjID.id2=0;
-	ExtEnvNum=0;
-	Strategy=0;
-	ThisEnvNum=0;
-	spare=0;
-}
-
-AVP_External_Strategy_Chunk::~AVP_External_Strategy_Chunk()
-{
-	delete Strategy;
-}
-
-BOOL AVP_External_Strategy_Chunk::output_chunk (HANDLE &hand)
-{
-	unsigned long junk;
-	BOOL ok;
-	char * data_block;
-
-	data_block = this->make_data_block_from_chunk();
-
-	ok = WriteFile (hand, (long *) data_block, (unsigned long) chunk_size, &junk, 0);
-
-	delete[] data_block;
-
-	if (!ok) return FALSE;
-
-	return TRUE;
-}
-
-size_t AVP_External_Strategy_Chunk::size_chunk()
-{
-	chunk_size=32+Strategy->GetStrategySize();
-	return chunk_size;
-}
-
-void AVP_External_Strategy_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-
-	data_start += 8;
-
-	*((int *) data_start) = chunk_size;
-
-	data_start += 4;
-
-	*((ObjectID *) data_start) =ObjID;
-	data_start += 8;
-	*((int *) data_start) = ExtEnvNum;
-	data_start += 4;
-	*((int *) data_start) = ThisEnvNum;
-	data_start += 4;
-	*((int *) data_start) = spare;
-	data_start += 4;
-	
-	Strategy->fill_data_block(data_start);
-}
 /////////////////////////////////////////////////////////////
 //Class Virtual_Object_Chunk
 

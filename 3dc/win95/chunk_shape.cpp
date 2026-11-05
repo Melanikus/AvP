@@ -20,6 +20,7 @@
 //   a chunk of texture animation must fit the polygons it names, and only a shape can have one
 //   a shape's lists of names and polygon changes are measured against their chunks before they're made
 //   a polygon can't bring the flag that says its texture list is a table of pointers
+//   removed the shapes made for the PlayStation and Saturn: nothing made or read one, and a console type read past the end of its chunk
 
 #include <math.h>
 #include <vector>
@@ -642,13 +643,6 @@ void Shape_Chunk::destroy_auxiliary_chunks()
 		chlst.delete_first_entry();
 	}
 
-	lookup_child("CONSHAPE",chlst);
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
 	lookup_child("ASALTTEX",chlst);
 	while (chlst.size())
 	{
@@ -751,25 +745,6 @@ BOOL Shape_Chunk::assoc_with_object_list(File_Chunk *fc)
 		}
 	}
 	return(TRUE);
-}
-
-Console_Shape_Chunk* Shape_Chunk::get_console_shape_data(Console_Type ct)
-{
-	List<Chunk*> chlist;
-	lookup_child("CONSHAPE",chlist);
-	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
-	{
-		Console_Shape_Chunk* csc=(Console_Shape_Chunk*)chlif();
-		List<Chunk*> chlist2;
-		csc->lookup_child("CONSTYPE",chlist2);
-		if(chlist2.size())
-		{
-			if(((Console_Type_Chunk*)chlist2.first_entry())->console==ct)
-				return csc;
-		}
-	}
-
-	return 0;//no console specific shape data
 }
 
 /////////////////////////////////////////
@@ -1050,7 +1025,6 @@ void Shape_Polygon_Normal_Chunk::fill_data_block(char * data_start)
 
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"REBSHAPE",Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"CONSHAPE",Console_Shape_Chunk)
 
 // Reads one polygon from a level file. Each takes 36 bytes: four numbers, then five places for its corners, which end
 // with a -1. vert_ind holds 4 corners, so the reading stops there, whatever the file says: going by the -1 alone, a
@@ -1124,22 +1098,6 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const 
 	for (i=0; i<num_polys; i++)
 	{
 		read_polygon (parent->shape_data_store->poly_list[i], pdata + (36*i));
-	}
-}
-
-Shape_Polygon_Chunk::Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const char * pdata, size_t psize)
-: Chunk (parent, "SHPPOLYS"),
-	poly_data(0), num_polys (psize / 36) // 9 * 4 bytes per polygon
-{
-	int i;
-
-	ChunkPoly* poly_list = new ChunkPoly [num_polys];
-
-	*((ChunkPoly **) &poly_data) =poly_list;
-
-	for (i=0; i<num_polys; i++)
-	{
-		read_polygon (poly_list[i], pdata + (36*i));
 	}
 }
 
@@ -1247,7 +1205,6 @@ void Shape_Centre_Chunk::fill_data_block(char * data_start)
 // the shape chunks data will automatically be updated by it is created
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"REBSHAPE",Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"CONSHAPE",Console_Shape_Chunk)
 
 // How many lists of texture coordinates a chunk says it holds, which sizes the list the game makes. Each list takes at least 4
 // bytes, so a count that couldn't fit in the chunk can't be real, and the level is refused. Turned into an unsigned number, a
@@ -1346,16 +1303,6 @@ uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 	parent->shape_data_store->num_uvs = num_uvs;
 
 	read_uv_lists (parent->shape_data_store->uv_list, num_uvs, uvdata, uvsize);
-}
-
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t uvsize)
-: Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
-{
-	ChunkUV_List * uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
-	*((ChunkUV_List**) &uv_data) = uv_list;
-
-	read_uv_lists (uv_list, num_uvs, uvdata, uvsize);
 }
 
 BOOL Shape_UV_Coord_Chunk::output_chunk (HANDLE &hand)
@@ -2333,25 +2280,6 @@ const char * Shape_Sub_Shape_Chunk::get_shape_name()
 	}
 }
 
-Console_Shape_Chunk* Shape_Sub_Shape_Chunk::get_console_shape_data(Console_Type ct)
-{
-	List<Chunk*> chlist;
-	lookup_child("CONSHAPE",chlist);
-	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
-	{
-		Console_Shape_Chunk* csc=(Console_Shape_Chunk*)chlif();
-		List<Chunk*> chlist2;
-		csc->lookup_child("CONSTYPE",chlist2);
-		if(chlist2.size())
-		{
-			if(((Console_Type_Chunk*)chlist2.first_entry())->console==ct)
-				return csc;
-		}
-	}
-
-	return 0;//no console specific shape data
-}
-
 /////////////////////////////////////////
 
 // Class Shape_Sub_Shape_Header_Chunk functions
@@ -3118,104 +3046,4 @@ void Anim_Shape_Centre_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=flags;
 	data_start+=4;
 	*(int*)data_start=pad2;
-}
-
-
-
-/////////////////////////////////////////
-
-// Class Console_Shape_Chunk functions
-
-/*
-Children for Console_Shape_Chunk :
-
-"SHPPOLYS"		Shape_Polygon_Chunk
-"SHPUVCRD"		Shape_UV_Coord_Chunk
-"TEXTANIM"		Animation_Chunk
-
-"CONSTYPE"		Console_Type_Chunk
-*/
-
-
-Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children * const parent, const char *data, size_t  size)
-: Chunk_With_Children (parent, "CONSHAPE")
-{
-	shape_data_store=(ChunkShape*)&shape_data;
-	
-	const char * buffer_ptr = data;
-
-	while ((data-buffer_ptr)< (signed)size)
-	{
-		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-
-		DynCreate(data);
-		data += *(int *)(data + 8);
-		}
-	}
-}
-
-void Console_Shape_Chunk::generate_console_chunkshape()
-{
-	//sort out the chunkshape
-	if(!strcmp(parent->identifier,"REBSHAPE"))
-	{
-		*shape_data_store=((Shape_Chunk*)parent)->shape_data;
-	}
-	else if(!strcmp(parent->identifier,"SUBSHAPE"))
-	{
-		*shape_data_store=((Shape_Sub_Shape_Chunk*)parent)->shape_data;
-	}
-	else
-	{
-		delete this;
-		return;
-	}
-	
-	Shape_Polygon_Chunk* spc=(Shape_Polygon_Chunk*)lookup_single_child("SHPPOLYS");
-	if(spc)
-	{
-		if(spc->num_polys!=shape_data_store->num_polys)
-		{
-			//console shape is no longer valid.kill it.
-			delete this;
-			return;
-		}
-		
-		ChunkPoly* poly_list=shape_data_store->poly_list;
-		shape_data_store->poly_list=(ChunkPoly*)spc->poly_data;
-		for(int i=0;i<shape_data_store->num_polys;i++)
-		{
-			for(int j=0;j<4;j++)
-			{
-				shape_data_store->poly_list[i].vert_ind[j]=poly_list[i].vert_ind[j];
-			}
-		}
-		delete[] poly_list;
-	}
-	Shape_UV_Coord_Chunk* succ=(Shape_UV_Coord_Chunk*)lookup_single_child("SHPUVCRD");
-	if(succ)
-	{
-		delete[] shape_data_store->uv_list;
-		shape_data_store->uv_list=(ChunkUV_List*)succ->uv_data;
-		shape_data_store->num_uvs=succ->num_uvs;
-	}
-}
-
-
-/////////////////////////////////////////
-
-// Class Console_Type_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("CONSTYPE",Console_Type_Chunk)
-
-void Console_Type_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-	data_start += 8;
-	*((int *) data_start) = chunk_size;
-	data_start += 4;
-
-	*(int*)data_start=(int)console;
 }
