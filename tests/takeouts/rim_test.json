@@ -334,8 +334,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "if (!BodyCanHoldThePicture())\n\t\t\t\t{\n\t\t\t\t\treturn false;\n\t\t\t\t}\n",
-					"to": "BodyCanHoldThePicture();\n"
+					"from": "if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())",
+					"to": "if (!LevelHasRoomForThePicture())"
 				}
 			]
 		},
@@ -866,6 +866,126 @@
 					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
 					"from": "if (!introFontRIM.Decode(srcBuffer, width*4))",
 					"to": "introFontRIM.Decode(srcBuffer, width*4);\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the check is not asked",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())",
+					"to": "if (!BodyCanHoldThePicture())"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a picture is let through whatever has been spent",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: it stops one byte short of the limit",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)",
+					"to": "if (bytes >= kMostRimBytesPerLevel - bytesThisLevel)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: nothing is charged",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tbytesThisLevel += bytes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a picture is charged by its pixels",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(uint64_t)header.width * header.height * 4;\n\n\tif (bytes >",
+					"to": "(uint64_t)header.width * header.height;\n\n\tif (bytes >"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: width is left out of the charge",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(uint64_t)header.width * header.height * 4;\n\n\tif (bytes >",
+					"to": "(uint64_t)header.height * 4;\n\n\tif (bytes >"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a refusal is charged anyway",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\t\treturn Refuse(kRimLevelHasTooMany);\n",
+					"to": "\t\tbytesThisLevel = kMostRimBytesPerLevel;\n\t\treturn Refuse(kRimLevelHasTooMany);\n"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a new level keeps what was spent",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tbytesThisLevel = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the limit is too low",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kMostRimBytesPerLevel = 256 * 1024 * 1024",
+					"to": "kMostRimBytesPerLevel = 128 * 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the limit is too high",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kMostRimBytesPerLevel = 256 * 1024 * 1024",
+					"to": "kMostRimBytesPerLevel = 512 * 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: says something else",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimLevelHasTooMany);",
+					"to": "return Refuse(kRimTooLarge);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level does not start its allowance",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tRimLoader_NewLevel();\n",
+					"to": ""
 				}
 			]
 		}

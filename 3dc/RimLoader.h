@@ -25,7 +25,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   colours are looked up in a way that can't go past the end of the colour table
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   says the most planes a picture can have, the largest a picture can be, the most parts it can have, and why one was refused
+//   says the most planes a picture can have, the largest a picture can be, the most parts it can have, and why one was refused;
+//   says the most bytes of pictures one level can open
 
 #pragma once
 
@@ -74,6 +75,15 @@ const uint64_t kMostRimPixels = 2048 * 2048;
 // busy for as long as the file lasted.
 const int kMostRimParts = 16;
 
+// The most bytes of pictures one level can open, at 4 bytes a pixel. A small file can still make a large picture: about 8 KB of packed data makes a 16 MB texture. Each is fine alone, but a level
+// can name as many as it likes. Past this a picture counts as missing, and the log says why. Every picture the game has, all at once, comes to 72.9 MB, and its largest level names 38 of them,
+// so this leaves plenty of room for a level with better pictures: 64 at 1024 x 1024.
+const uint64_t kMostRimBytesPerLevel = 256 * 1024 * 1024;
+
+// Called as each level starts loading, which gives it the whole allowance. A tool that reads many pictures calls it before each one, because its work isn't a level.
+void RimLoader_NewLevel();
+uint64_t RimLoader_BytesThisLevel();
+
 // Why a picture wasn't used. Each has its own words for the log, so someone who made one can find out what's wrong with it.
 enum RimProblem
 {
@@ -90,6 +100,7 @@ enum RimProblem
 	kRimBodyTooShort,
 	kRimRanOut,
 	kRimBodyTooLong,
+	kRimLevelHasTooMany,
 	kRimProblemCount
 };
 
@@ -129,6 +140,7 @@ class RimLoader
 		uint64_t MostBodyBytes() const;
 		uint32_t GetUnpackedBytes();
 		bool BodyCanHoldThePicture();
+		bool LevelHasRoomForThePicture();
 		uint8_t NextBodyByte();
 		uint32_t GetBody();
 		uint32_t GetScanLine();

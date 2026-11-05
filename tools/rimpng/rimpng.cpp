@@ -347,6 +347,9 @@ static bool PictureToPng(std::string const &picturePath, std::string const &pngP
 {
 	RimLoader picture;
 
+	// This reads one picture after another, and a limit meant for a level means nothing to it
+	RimLoader_NewLevel();
+
 	if (!picture.Open(picturePath))
 	{
 		printf("  can't be read as a picture: %s\n", picturePath.c_str());

@@ -29,10 +29,24 @@
 //   a picture with more planes than a colour number has bits is refused, so is one packed in a way this can't read,
 //   and a no-op in a packed row no longer counts as the bytes of the run before it;
 //   a picture too large is refused, so is one that can't hold what its size says, and reading stops where its data does;
-//   so is one with no planes, too many parts or a colour table past its end, packed data stops at the most a picture needs, and each refusal has its reason
+//   so is one with no planes, too many parts or a colour table past its end, packed data stops at the most a picture needs, and each refusal has its reason;
+//   the pictures one level opens have a limit in bytes
 
 #include "RimLoader.h"
 #include <algorithm>
+
+// How many bytes of pictures have been opened since the level started. See kMostRimBytesPerLevel.
+static uint64_t bytesThisLevel = 0;
+
+void RimLoader_NewLevel()
+{
+	bytesThisLevel = 0;
+}
+
+uint64_t RimLoader_BytesThisLevel()
+{
+	return bytesThisLevel;
+}
 
 // Constructor
 RimLoader::RimLoader()
@@ -80,6 +94,7 @@ const char *RimLoader_ProblemWords(RimProblem problem)
 		case kRimBodyTooShort:       return "its picture is too short for its size";
 		case kRimRanOut:             return "the file ends before the picture does";
 		case kRimBodyTooLong:        return "its packed picture takes more than a picture of its size can need";
+		case kRimLevelHasTooMany:    return "this level's pictures have reached their limit of 256 MB";
 		default:                     return "of a problem with no name";
 	}
 }
@@ -275,7 +290,7 @@ bool RimLoader::Open(const std::string &fileName)
 			case BODY:
 				chunkSize = file.GetUint32BE();
 
-				if (!BodyCanHoldThePicture())
+				if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())
 				{
 					return false;
 				}
@@ -310,6 +325,21 @@ bool RimLoader::BodyCanHoldThePicture()
 
 	bodyLeft = (std::min)((uint64_t)chunkSize, MostBodyBytes());
 	ranOut = false;
+	return true;
+}
+
+// Charged here, so that only a picture that has passed every other check is charged, and so that it comes before the card is asked for anything. The sum can't go below zero, because what's been
+// charged is never more than the limit.
+bool RimLoader::LevelHasRoomForThePicture()
+{
+	uint64_t const bytes = (uint64_t)header.width * header.height * 4;
+
+	if (bytes > kMostRimBytesPerLevel - bytesThisLevel)
+	{
+		return Refuse(kRimLevelHasTooMany);
+	}
+
+	bytesThisLevel += bytes;
 	return true;
 }
 

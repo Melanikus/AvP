@@ -56,6 +56,9 @@ int main(int argc, char **argv)
 	{
 		RimLoader picture;
 
+		// This reads one picture after another, and a limit meant for a level means nothing to it
+		RimLoader_NewLevel();
+
 		if (!picture.Open(folder + "/" + found.name))
 		{
 			printf("%s REFUSED\n", found.name);

@@ -233,6 +233,10 @@ static Result ReadFrom(std::string const &path)
 {
 	Result result;
 	RimLoader picture;
+
+	// Each row here reads pictures of its own. Only CheckLevelAllowance tests what a level can open.
+	RimLoader_NewLevel();
+
 	result.opened = picture.Open(path);
 	result.problem = picture.Problem();
 
@@ -759,6 +763,100 @@ static void CheckLongFiles()
 	Check(menus.find("if (!introFontRIM.Decode(srcBuffer, width*4))") != std::string::npos, "and the menu font doesn't use rows it didn't read");
 }
 
+// All the pictures one level opens share an allowance, because each can be 16 MB from about 8 KB of file, and a level can name as many as it likes.
+static RimProblem OpenOnly(std::string const &path)
+{
+	RimLoader picture;
+	picture.Open(path);
+	return picture.Problem();
+}
+
+static void CheckLevelAllowance()
+{
+	printf("What one level can open:\n");
+
+	// The largest picture there can be, 16 MB, in the smallest file that gets as far as being opened
+	Picture large(2048, 2048, 1, 1);
+	large.colours = CountingColours(2);
+	large.body.assign((size_t)256 * 2048 / 64, 0);
+	WriteFile(large.File());
+	Check(large.File().size() < 9000, "a file of under 9 KB can ask for 16 MB");
+
+	uint64_t const largeBytes = (uint64_t)2048 * 2048 * 4;
+	uint64_t const mostBytes = (uint64_t)256 * 1024 * 1024;
+
+	RimLoader_NewLevel();
+	Check(RimLoader_BytesThisLevel() == 0, "a level starts with nothing spent");
+
+	Check(OpenOnly(TestFilePath()) == kRimFine, "a picture opens");
+	Check(RimLoader_BytesThisLevel() == largeBytes, "and is charged 4 bytes a pixel");
+
+	bool allOpened = true;
+
+	for (int i = 1; i < 16; i++)
+	{
+		allOpened = allOpened && (OpenOnly(TestFilePath()) == kRimFine);
+	}
+
+	Check(allOpened && RimLoader_BytesThisLevel() == mostBytes, "16 of them just fit, which is 256 MB");
+
+	Check(OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "the 17th is refused, and says why");
+	Check(RimLoader_BytesThisLevel() == mostBytes, "and a refused one costs nothing");
+	Check(strstr(RimLoader_ProblemWords(kRimLevelHasTooMany), "256 MB") != 0, "the words give the limit that's really there");
+
+	// The smallest picture there can be still doesn't fit in nothing
+	Picture small(1, 1, 8, 0);
+	small.colours = CountingColours(1);
+	small.body.assign(8, 0);
+	Bytes const smallFile = small.File();
+	WriteFile(smallFile);
+	Check(OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "and with nothing left, even one pixel is refused");
+
+	RimLoader_NewLevel();
+	Check(OpenOnly(TestFilePath()) == kRimFine, "the next level has the whole allowance again");
+
+	// One that won't fit doesn't stop a smaller one that does
+	RimLoader_NewLevel();
+	WriteFile(large.File());
+
+	for (int i = 0; i < 15; i++)
+	{
+		OpenOnly(TestFilePath());
+	}
+
+	Picture nearly(2048, 2047, 1, 1);
+	nearly.colours = CountingColours(2);
+	nearly.body.assign((size_t)256 * 2047 / 64 + 1, 0);
+	WriteFile(nearly.File());
+	Check(OpenOnly(TestFilePath()) == kRimFine, "a picture a little smaller than what's left fits");
+
+	WriteFile(large.File());
+	Check(OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "and after it, a large one doesn't");
+
+	WriteFile(smallFile);
+	Check(OpenOnly(TestFilePath()) == kRimFine, "but a small one still does, because there's still room for it");
+
+	// A picture refused for any other reason hasn't cost anything
+	RimLoader_NewLevel();
+	Picture tooShort(2048, 2048, 8, 0);
+	tooShort.colours = CountingColours(2);
+	tooShort.body.assign(10, 0);
+	WriteFile(tooShort.File());
+	Check(OpenOnly(TestFilePath()) == kRimBodyTooShort && RimLoader_BytesThisLevel() == 0, "a picture refused for something else isn't charged");
+
+	// No level the game has can reach this: all its pictures together come to 72.9 MB
+	uint64_t const everyPictureTheGameHas = (uint64_t)73 * 1024 * 1024;
+	Check(kMostRimBytesPerLevel >= everyPictureTheGameHas * 3, "the limit is over three times every picture the game has");
+
+	std::string const system = ReadSourceFile("3dc/avp/win95/system.cpp");
+	size_t const load = system.find("void LoadRifFile()");
+	size_t const start = (load == std::string::npos) ? load : system.find("RimLoader_NewLevel();", load);
+	size_t const env = (load == std::string::npos) ? load : system.find("avp_load_rif((const char*)&file_and_path[0])", load);
+	Check(start != std::string::npos && env != std::string::npos && start < env, "the game starts each level's allowance before it loads the level");
+
+	RimLoader_NewLevel();
+}
+
 static void CheckDamagedPictures()
 {
 	printf("Damaged pictures:\n");
@@ -1023,6 +1121,7 @@ int main()
 	CheckRefusals();
 	CheckBadPixels();
 	CheckLongFiles();
+	CheckLevelAllowance();
 	CheckDamagedPictures();
 	CheckInsideAFastFile();
 	CheckLetterWidths();
