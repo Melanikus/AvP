@@ -231,7 +231,7 @@ void ChangeTextureAddressMode(uint32_t, enum TEXTURE_ADDRESS_MODE)
 D3DInfo d3d;
 TextureRelief textureRelief;
 
-TextureRelief::TextureRelief(size_t, size_t)
+TextureRelief::TextureRelief(size_t, size_t, size_t)
 {
 }
 

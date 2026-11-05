@@ -412,6 +412,9 @@ static bool ExecuteBuffer();
 static bool MainDrawUsesHeights();
 static void DrawSolidsWithHeights();
 
+// Did the last main draw go through the heights? The tag says so, because Relief map being chosen doesn't mean it could be drawn.
+static bool mainDrawUsedHeights = false;
+
 // Draws everything waiting in the lists and starts them again, for when a list is full in the middle of a frame. If the frame couldn't start, there's nothing to draw.
 static void FlushLists()
 {
@@ -7015,9 +7018,6 @@ void ReliefDepthCommand(char *words)
 }
 
 extern int DrawFullBright;
-
-// Did the last main draw go through the heights? The tag says so, because Relief map being chosen doesn't mean it could be drawn.
-static bool mainDrawUsedHeights = false;
 
 // Does the main draw go through the heights? Only in the real picture with Relief map chosen, and not when something moves corners or flips the view in a way the lists of normals and
 // tangents don't know about. Then it draws the way it always has. The fixed buffer has already said no in this mode: see StaticScene_ViewAllows and ChooseStaticRoute.
