@@ -16,6 +16,7 @@
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting
 //   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
+//   the developer keys only work in a level being played, so a letter typed into a menu can't press them
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -6808,6 +6809,15 @@ static bool ViewAddsLightsPerPixel()
 	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
 }
 
+// Can a developer's key do anything right now? Only with -dev, only in a level being played, and not while typing. A menu reads what's typed into it from a queue of its
+// own, and it leaves the game's controls switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.
+extern int InGameMenusAreRunning(void);
+
+static bool DevKeysCanAct()
+{
+	return DevMode && AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+}
+
 // What the commands and keys have asked for, until the end of this frame's shadows. See view_switches.h.
 static int shadowsAsked = kAskedNothing;
 static int lightingAsked = kAskedNothing;
@@ -6855,7 +6865,7 @@ void LightingCommand(char *words)
 static void ViewSwitches_ApplyAsked()
 {
 	// Not while typing, or an L in the console or a chat message would change the lighting. Only with -dev, so that a player's own controls can't be taken by accident.
-	if (DevMode && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_L])
 		{
@@ -6959,7 +6969,7 @@ static void ToyShadows_Draw()
 	}
 
 	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
-	if (DevMode && DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])
 	{
 		ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
 
@@ -6971,7 +6981,7 @@ static void ToyShadows_Draw()
 	}
 
 	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
-	if (DevMode && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
 		{

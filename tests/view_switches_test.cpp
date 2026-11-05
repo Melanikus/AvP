@@ -333,12 +333,21 @@ static void TheRealGame()
 
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
 	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\r\n{", "static void ToyShadows_Draw()");
-	std::string const keys = Between(applying, "if (DevMode", "bool const hasStencil");
+	std::string const keys = Between(applying, "if (DevKeysCanAct())", "bool const hasStencil");
 
 	Check(CountOf(render, "ViewSwitches_ApplyAsked();") == 2, "the switches change from one place, named once ahead and called once");
 	Check(Has(render, "ToyShadows_Draw();\r\n\t\tViewSwitches_ApplyAsked();"), "and that's straight after the frame's shadows");
 
-	Check(Has(keys, "if (DevMode && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))"), "the keys need -dev, and do nothing while typing");
+	std::string const canAct = Between(render, "static bool DevKeysCanAct()", "}");
+
+	Check(Has(canAct, "DevMode"), "the keys need -dev");
+	Check(Has(canAct, "AvP.MainLoopRunning"), "and a level being played, so a letter typed into a main menu doesn't press them");
+	Check(Has(canAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
+	Check(Has(canAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
+	Check(Has(keys, "if (DevKeysCanAct())"), "L and H ask that");
+	Check(Has(render, "if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])"), "and so does G");
+	Check(Has(render, "Not while typing, like G.\r\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
+	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 1, "and nothing else in the drawing code reads those keys");
 	Check(Has(keys, "DebouncedKeyboardInput[KEY_L]") && Has(keys, "lightingAsked = kAskedNext"), "L is the next lighting, once a press");
 	Check(Has(keys, "DebouncedKeyboardInput[KEY_H]") && Has(keys, "shadowsAsked = kAskedNext"), "H switches the shadows, once a press");
 	Check(CountOf(render, "KEY_L]") == 1 && CountOf(render, "KEY_H]") == 1, "and nothing else in the drawing code reads those keys");
