@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   reading past the end of a file gives zero, not whatever was in memory
+
 #include "FileStream.h"
 #include "FastFile.h"
 #include "utilities.h"
@@ -263,21 +266,21 @@ uint32_t FileStream::GetFileSize()
 // Read
 uint8_t FileStream::GetByte()
 {
-	uint8_t ret;
+	uint8_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(&ret, sizeof(ret));
 	return ret;
 }
 
 uint16_t FileStream::GetUint16LE()
 {
-	uint16_t ret;
+	uint16_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint16_t FileStream::GetUint16BE()
 {
-	uint16_t ret;
+	uint16_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 //	return _byteswap_ushort(ret);
 	return swapBytes<uint16_t>(ret);
@@ -285,21 +288,21 @@ uint16_t FileStream::GetUint16BE()
 
 int32_t FileStream::GetInt32LE()
 {
-	int32_t ret;
+	int32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint32_t FileStream::GetUint32LE()
 {
-	uint32_t ret;
+	uint32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint32_t FileStream::GetUint32BE()
 {
-	uint32_t ret;
+	uint32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 //	return _byteswap_ulong(ret);
 	return swapBytes<uint32_t>(ret);
@@ -307,21 +310,21 @@ uint32_t FileStream::GetUint32BE()
 
 uint64_t FileStream::GetUint64LE()
 {
-	uint64_t ret;
+	uint64_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 /*
 uint64_t FileStream::GetUint64BE()
 {
-	uint64_t ret;
+	uint64_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return _byteswap_uint64(ret);
 }
 */
 uint8_t FileStream::PeekByte()
 {
-	uint8_t ret;
+	uint8_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(&ret, sizeof(ret));
 	Seek(-1, SeekCurrent);
 	return ret;
