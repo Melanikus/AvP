@@ -7,9 +7,12 @@
 //   the level's still polygons are built and sent to the graphics card once a level has loaded
 //   -keptsnap and -keptsnapfar
 //   -shadowshoot
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 
 #include "3dc.h"
 #include "texture_relief.h"
+#include "view_switches.h"
 #include "static_level.h"
 #include "module.h"
 #include "inline.h"
@@ -259,10 +262,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	if (strstr(command_line, "-reliefoff"))
 	{
 		textureRelief.TurnOff();
+		LightingNow = kLightingPerPixel;
 	}
 
 	{
-		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, F7 and F8, the shoot tool, the flicker
+		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, L, H, F7 and F8, the shoot tool, the flicker
 		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
 		extern int DevMode;
 		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
@@ -290,6 +294,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (strstr(command_line, "-shadowsoff"))
 		{
 			ToyShadowsMode = 0;
+			ShadowVolumesOn = 0;
+			LightingNow = kLightingGouraud;
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))

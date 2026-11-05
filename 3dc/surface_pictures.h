@@ -13,6 +13,9 @@ bool SurfacePictures_CardCanDrawThem(LPDIRECT3DDEVICE9 device);
 // Whether the pictures exist, making them the first time it's asked. False on a card that can't do this, and then no light may rely on them.
 bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device);
 
+// Whether the relief pictures and what draws them are all there, so that asking for relief really would draw it.
+bool SurfacePictures_ReliefCanRun();
+
 // Gives the pictures back. The graphics card holds them, so they go whenever the device resets, and are made again after it.
 void SurfacePictures_Release();
 

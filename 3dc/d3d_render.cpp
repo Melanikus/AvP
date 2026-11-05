@@ -12,6 +12,8 @@
 //   stops when its list says it has no room, and rain makes room the way the level's other shapes do. A frame that
 //   couldn't start draws nothing, and an overlay in two parts goes whole or not at all
 //   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. This comes out before merge
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -59,6 +61,7 @@
 #include "frame_timing.h"
 #include "shadow_debug.h"
 #include "texture_relief.h"
+#include "view_switches.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
 #if __has_include("build_commit.h")
@@ -410,6 +413,7 @@ static bool toyFinalFlush = false;
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
+static void ViewSwitches_ApplyAsked();
 static void ShadowStatus_Draw();
 extern int ToyShadowsMode;
 void ToyShadows_NoteFrameLights(int frame);
@@ -487,6 +491,7 @@ static bool ExecuteBuffer()
 
 		ProcessorStageClock shadowClock(kProcessorShadowPass);
 		ToyShadows_Draw();
+		ViewSwitches_ApplyAsked();
 	}
 
 	if (seeThroughLast && mainList->GetSize())
@@ -3695,7 +3700,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 // the end of its range. The stencil counts which pixels are inside a prism, and those pixels are darkened.
 // Each prism is closed, so z-fail counts come out right with no edge data, and neighbours' shared sides cancel out.
 
-// What the shadows show. G steps through these while playing, so they can be compared live.
+// What the shadows show. G steps through these while playing, so they can be compared live. view_switches.h says how this goes with LIGHTING and SHADOWS.
 enum ToyShadowsView
 {
 	kToyViewOff,
@@ -3705,16 +3710,17 @@ enum ToyShadowsView
 	kViewRedVolumes,    // every light's shadowed pixels filled in red, and every volume drawn over them as red lines
 	kToyViewMask,       // just what final multiplies the picture by: white is untouched, black is the full depth of shadow
 	kViewNormals,       // which way each pixel faces, from the surface pictures
-	kViewFinalNoRelief, // the real thing without relief pictures, to compare with
 	kToyViewCount
 };
 
-static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "RED VOLUMES", "MASK", "NORMALS", "FINAL WITHOUT RELIEF" };
+static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "RED VOLUMES", "MASK", "NORMALS" };
 static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
 
 extern void NewOnScreenMessage(char *messagePtr);
 
 int ToyShadowsMode = kToyViewFinal;
+int LightingNow = kLightingRelief;
+int ShadowVolumesOn = 1;
 int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8: how many steady lights
 int ToyShadowsMaxBrief = 4;   // -shadowbrief=N, 0 to 4: how many brief lights on top of those, such as muzzle flashes and explosions
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
@@ -3815,7 +3821,7 @@ static int captureCornersKept[kToyMostLights];
 static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
-int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and G, F7, F8 and the shoot tool's keys do nothing
+int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and G, L, H, F7, F8 and the shoot tool's keys do nothing
 int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
@@ -5155,7 +5161,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, ToyShadowsMode != kViewFinalNoRelief, useStatic);
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, LightingNow == kLightingRelief, useStatic);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -5173,7 +5179,7 @@ extern int StaticSceneOn;
 // views draw things the buffer doesn't hold. A frame that's being compared needs the old route, to have something to compare with.
 bool StaticScene_ViewAllows()
 {
-	return ToyShadowsLightsByPixel && (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kViewFinalNoRelief) && !(StaticSurfaceCompare && ShadowReportIsDue());
+	return ToyShadowsLightsByPixel && ToyShadowsMode == kToyViewFinal && !(StaticSurfaceCompare && ShadowReportIsDue());
 }
 
 static const int kMostFrameRanges = 16384;
@@ -6510,6 +6516,24 @@ static bool ToyDepthBufferHasStencil()
 	return format == D3DFMT_D24S8 || format == D3DFMT_D24FS8;
 }
 
+// Whether lights can be added per pixel. They go through the shadow pass, so that needs stencil bits as well as the pictures. Asking makes the pictures if they
+// aren't there yet, so anything that has no use for them shouldn't ask.
+static bool PerPixelLightsCanRun()
+{
+	return ToyDepthBufferHasStencil() && ToyPicturesCanRun(d3d.lpD3DDevice);
+}
+
+// What's really being drawn, whatever was asked for
+static int LightingReallyDrawn()
+{
+	if (LightingNow == kLightingGouraud || !PerPixelLightsCanRun())
+	{
+		return kLightingGouraud;
+	}
+
+	return Lighting_Drawn(LightingNow, SurfacePictures_ReliefCanRun(), true);
+}
+
 // One line of the tag, with its right edge at rightX. The same sums as D3D_RenderHUDString_Centred, which is the game's own text, at another size.
 static void DrawStatusLine(const char *text, int rightX, int y, int scale)
 {
@@ -6567,12 +6591,12 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 12, kLineLength = 48 };
+	enum { kMostLines = 13, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
 	_snprintf(lines[numLines++], kLineLength - 1, "KEPT PRISMS %s%s", KeptPrismsOff ? "OFF" : ShadowVolumesCard_Ready() ? "ON" : "ON, NO STORE", ShadowVolumesCard_TagWords());
-	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF %s", (textureRelief.IsReady() && ToyShadowsMode != kViewFinalNoRelief) ? "ON" : "OFF");
+	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_Word(LightingReallyDrawn()), ShadowVolumesOn ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
 	{
@@ -6584,6 +6608,7 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
 	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: G VIEW, F7 TAG, F8 CAPTURE");   // so that nobody has to remember them
+	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: L LIGHTING, H SHADOWS");
 
 	if (ShadowShootOn)
 	{
@@ -6747,6 +6772,138 @@ static void ShootDrawTints(LPDIRECT3DDEVICE9 device)
 	}
 }
 
+// What the commands and keys have asked for, until the end of this frame's shadows. See view_switches.h.
+static int shadowsAsked = kAskedNothing;
+static int lightingAsked = kAskedNothing;
+
+// Whether LIGHTING and SHADOWS were both off when last looked at, for G and for seeing when that changes
+static bool switchesWereAllOff = false;
+static int viewToComeBackTo = kToyViewFinal;
+
+static void SaySwitch(const char *words)
+{
+	static char message[100];
+	_snprintf(message, sizeof(message) - 1, "%s", words);
+	message[sizeof(message) - 1] = 0;
+	NewOnScreenMessage(message);
+	LogString(message);
+}
+
+// A reason is worth hearing once. After that, a press only needs to say what it did.
+static void SayReasonOnce(bool *said, const char *words)
+{
+	if (!*said)
+	{
+		*said = true;
+		SaySwitch(words);
+	}
+}
+
+void ShadowsCommand(char *words)
+{
+	if (!SwitchWords_ShadowsAsk(words, &shadowsAsked))
+	{
+		SaySwitch("SHADOWS TAKES 0 OR 1, OR NOTHING TO SWITCH IT");
+	}
+}
+
+void LightingCommand(char *words)
+{
+	if (!SwitchWords_LightingAsk(words, &lightingAsked))
+	{
+		SaySwitch("LIGHTING TAKES 1 RELIEF, 2 PERPIXEL OR 3 GOURAUD, OR NOTHING FOR THE NEXT");
+	}
+}
+
+// Where LIGHTING and SHADOWS change. It runs after this frame's shadows, so everything the next frame reads, from its lights onwards, agrees.
+static void ViewSwitches_ApplyAsked()
+{
+	// Not while typing, or an L in the console or a chat message would change the lighting. Only with -dev, so that a player's own controls can't be taken by accident.
+	if (DevMode && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
+	{
+		if (DebouncedKeyboardInput[KEY_L])
+		{
+			lightingAsked = kAskedNext;
+		}
+
+		if (DebouncedKeyboardInput[KEY_H])
+		{
+			shadowsAsked = kAskedNext;
+		}
+	}
+
+	bool const hasStencil = ToyDepthBufferHasStencil();
+
+	// ToyShadows_Draw has already put the view at OFF for good on a card like this. Holding these off as well means nothing here can ever bring it back.
+	if (!hasStencil)
+	{
+		ShadowVolumesOn = 0;
+		LightingNow = kLightingGouraud;
+	}
+
+	static char const kNoStencil[] = "THE DEPTH BUFFER HAS NO STENCIL BITS, SO THERE ARE NO SHADOWS AND ONLY GOURAUD LIGHTING";
+
+	if (shadowsAsked != kAskedNothing)
+	{
+		static bool saidNoStencil = false;
+
+		if (hasStencil)
+		{
+			ShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);
+		}
+
+		SaySwitch(ShadowVolumesOn ? "SHADOWS: ON" : "SHADOWS: OFF");
+
+		if (!hasStencil)
+		{
+			SayReasonOnce(&saidNoStencil, kNoStencil);
+		}
+
+		shadowsAsked = kAskedNothing;
+	}
+
+	if (lightingAsked != kAskedNothing)
+	{
+		static bool saidNoStencil = false, saidNoPerPixel = false, saidNoRelief = false;
+
+		bool const perPixelThere = PerPixelLightsCanRun();
+		bool const reliefThere = SurfacePictures_ReliefCanRun();
+
+		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, reliefThere, perPixelThere);
+
+		static char message[40];
+		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_Word(Lighting_Drawn(LightingNow, reliefThere, perPixelThere)));
+		message[sizeof(message) - 1] = 0;
+		SaySwitch(message);
+
+		if (!hasStencil)
+		{
+			SayReasonOnce(&saidNoStencil, kNoStencil);
+		}
+		else if (!perPixelThere)
+		{
+			SayReasonOnce(&saidNoPerPixel, "THIS CARD CANNOT DRAW LIGHTS PER PIXEL, SO ONLY GOURAUD IS THERE");
+		}
+		else if (!reliefThere)
+		{
+			SayReasonOnce(&saidNoRelief, textureRelief.IsOn() ? "THIS CARD CANNOT DRAW RELIEF, SO IT IS SKIPPED" : "RELIEF WAS NOT BUILT, BECAUSE OF -RELIEFOFF, SO IT IS SKIPPED");
+		}
+
+		lightingAsked = kAskedNothing;
+	}
+
+	bool const allOff = !ShadowVolumesOn && LightingReallyDrawn() == kLightingGouraud;
+
+	ToyShadowsMode = View_AfterSwitches(ToyShadowsMode, kToyViewOff, switchesWereAllOff, allOff, &viewToComeBackTo);
+	switchesWereAllOff = allOff;
+
+	// The next frame's lights are chosen before its polygons are known, from this. Going to Gouraud, they have to stay in the game's own lighting from that very frame.
+	if (LightingNow == kLightingGouraud)
+	{
+		ToyShadowsLightsByPixel = 0;
+	}
+}
+
 static void ToyShadows_Draw()
 {
 	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
@@ -6767,10 +6924,10 @@ static void ToyShadows_Draw()
 	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
 	if (DevMode && DebouncedKeyboardInput[KEY_G] && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK)))
 	{
-		ToyShadowsMode = (ToyShadowsMode + 1) % kToyViewCount;
+		ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
 
 		static char message[40];
-		_snprintf(message, sizeof(message) - 1, "SHADOWS: %s", kToyViewNames[ToyShadowsMode]);
+		_snprintf(message, sizeof(message) - 1, "VIEW: %s", kToyViewNames[ToyShadowsMode]);
 		message[sizeof(message) - 1] = 0;
 		NewOnScreenMessage(message);
 		LogString(message);
@@ -6815,7 +6972,7 @@ static void ToyShadows_Draw()
 
 	// Chosen live lights are ours while the real view is on. With no polygons this frame the pass isn't running, so they go back to
 	// the game. This takes effect from the next frame, because this frame's lights were chosen before its polygons were known.
-	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief)
+	bool const lightsOurs = (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals)
 		&& (toyNumCasters > 0 || numWalkedGroups > 0) && ToyPicturesCanRun(d3d.lpD3DDevice);
 
 	bool const logThisFrame = (++toyFrame % kFramesBetweenReports) == 0;
@@ -6953,7 +7110,7 @@ static void ToyShadows_Draw()
 	IDirect3DSurface9 *screen = 0;
 	D3DVIEWPORT9 viewport;
 
-	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals || ToyShadowsMode == kViewFinalNoRelief;
+	bool const darkening = ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
 	bool const haveCloaked = toyPolygonsOfKind[kToyCasterCloaked] > 0;
 
 	if (darkening && ToyPicturesCanRun(device)
@@ -7220,7 +7377,7 @@ static void ToyShadows_Draw()
 			}
 		}
 
-		if (ToyShadowsMode == kToyViewFinal || ToyShadowsMode == kViewFinalNoRelief)
+		if (ToyShadowsMode == kToyViewFinal)
 		{
 			ToyDimWorld(device);
 			FrameTiming_Mark(kStageDimming);
