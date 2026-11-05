@@ -1,0 +1,98 @@
+# Asserts on limits that have been read, and why each is safe, for tests/assert_limits_test.cpp. Written 2026-11-05 by Melanikus for the AvP port.
+#
+# Each line is: the file | what the assert says | why it's safe.
+#
+# Before adding a line: an assert is left out of the game players run, so it guards nothing. If a level, a model, a save, a picture, another player or anything else from outside the code can reach
+# it, it needs a real check. Add a line only when nothing can, and say why, so that someone reading this years from now can check the reason for themselves.
+#
+# Two kinds here are not yet safe, and say so: a save file can still reach the weapon slots and path numbers (card SAVE-2), and a network message can still reach one damage number until the branch
+# that fixes it lands.
+
+# ---- Not safe yet: each has a fix on another branch or a card of its own
+3dc/avp/hud.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET from a save file: card SAVE-2, fixed on the save-2 branch. Nothing else sets it past the list
+3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET from a save file: card SAVE-2, fixed on the save-2 branch. Nothing else sets it past the list
+3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | NOT SAFE YET from a save file: card SAVE-2. A level's path numbers are checked by the loader, which this needs under it
+3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | NOT SAFE YET from a save file: card SAVE-2. A level's path numbers are checked by the loader, which this needs under it
+3dc/avp/win95/pldnet.cpp | GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES); | NOT SAFE YET from the network: the number comes off the wire, and the fix is on the fix-net-damage-number branch
+
+# ---- A real check is right beside it
+3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them
+3dc/avp/dynblock.cpp | GLOBALASSERT(templateID<MAX_NO_OF_DYNAMICS_TEMPLATES); | every caller passes one of the names in DYNAMICS_TEMPLATE_ID, and none comes from outside
+3dc/avp/language.cpp | LOCALASSERT(stringID < MAX_NO_OF_TEXTSTRINGS); | a real check on the next lines gives anything outside the table the empty string
+3dc/avp/lighting.cpp | LOCALASSERT(lightElementPtr<=&LightElementStorage[MAX_NO_OF_LIGHTELEMENTS-1]); | the pointer being handed back came from this same list, never from outside
+3dc/avp/mempool.cpp | GLOBALASSERT(CurrentMemoryBlock < MAX_NUM_MEMORY_BLOCK); | a real check on the same number comes just before it
+3dc/avp/mempool.cpp | GLOBALASSERT(amount <= MEMORY_BLOCK_SIZE) | a real check on the same number comes on the next line
+3dc/avp/particle.cpp | LOCALASSERT(particlePtr<=&ParticleStorage[MAX_NO_OF_PARTICLES-1]); | the pointer being handed back came from this same list, never from outside
+3dc/avp/particle.cpp | LOCALASSERT(trailPtr<=&TrailStorage[MAX_NO_OF_PHEROMONE_TRAILS-1]); | the pointer being handed back came from this same list, never from outside
+3dc/avp/support/console_batch.cpp | GLOBALASSERT(CharsReadInLine<=MaxBatchFileLineLength); | a character is only added under a real check on the length
+3dc/mslhand.cpp | LOCALASSERT(ends[sect] + num_shapes <= maxend); | a real check on the same sum comes on the next line, and gives back an error
+3dc/avp/win95/pldnet.cpp | LOCALASSERT(nBytes <= NET_MESSAGEBUFFERSIZE); | every function that adds to the send buffer checks for room first, the variable-sized one using its largest size
+
+# ---- Only numbers from the code can get there
+3dc/avp/particle.cpp | LOCALASSERT(i<MAX_RAINDROPS); | rain, and its callers pass 999, 10, 16 and 1
+3dc/avp/language.cpp | GLOBALASSERT(AvP.Language < I_MAX_NO_OF_LANGUAGES); | AvP.Language is only ever set to I_English
+3dc/avp/support/string_table.cpp | GLOBALASSERT( NumStrings < MAX_NO_OF_TEXTSTRINGS ); | language.cpp adds exactly as many strings as the table holds, once, at start-up
+3dc/avp/support/index_font.cpp | GLOBALASSERT( I_Font_New < IndexedFonts_MAX_NUMBER_OF_FONTS ); | font numbers come from the code
+3dc/avp/support/scstring.cpp | GLOBALASSERT( I_Font_Changed < IndexedFonts_MAX_NUMBER_OF_FONTS ); | font numbers come from the code
+3dc/avp/win95/gadgets/alien_hud_gadget.cpp | GLOBALASSERT( I_StatusPanel < NUM_STATUS_PANELS ); | it's in an empty function
+3dc/avp/support/index_font.cpp | GLOBALASSERT( MaxChars >= 0 ); | every caller passes a real size or a constant
+3dc/avp/support/index_font.cpp | GLOBALASSERT( MaxChars >=0 ); | every caller passes a real size or a constant
+3dc/avp/support/strutil.cpp | GLOBALASSERT(LogCol<NUM_BASE_COLOURS); | every caller passes a constant
+3dc/avp/support/strutil.cpp | GLOBALASSERT(MaxSize > 0); | every caller passes a real size or a constant
+3dc/avp/support/strutil.cpp | GLOBALASSERT(MaxSize>0); | every caller passes a real size or a constant
+win32/d3_func.cpp | assert(registerIndex < pixelShader.constantsArray.size()); | shader register numbers come from the code
+win32/d3_func.cpp | assert(registerIndex < vertexShader.constantsArray.size()); | shader register numbers come from the code
+
+# ---- The number is checked, or made, before it gets here
+3dc/avp/hmodel.cpp | GLOBALASSERT(this_keyframe->Sequence_Length > 0); | projload.cpp gives every frame a length of at least 1 as it's read, and none of the 304,817 frames in the stock files has none
+3dc/avp/inventory.cpp | LOCALASSERT(ammoID<MAX_NO_OF_AMMO_TEMPLATES); | the number only goes through a switch, and nothing is indexed by it
+3dc/avp/inventory.cpp | LOCALASSERT(weaponID<MAX_NO_OF_WEAPON_TEMPLATES); | the number only goes through a switch, and nothing is indexed by it
+3dc/avp/pfarlocs.cpp | LOCALASSERT(ThisModuleIndex < ModuleArraySize); | a module number the loader hands out itself
+3dc/avp/pfarlocs.cpp | LOCALASSERT(epHeader->numEntryPoints<(NumAdjacentModules(thisModule))); | a real check just above returns when there are no places left
+3dc/avp/pfarlocs.cpp | LOCALASSERT(locationsIndex < (FAR_GRID_SIZE*FAR_GRID_SIZE)); | the search only runs when there are more valid places than it takes, and nextToTake ends exactly on the last valid one
+3dc/avp/pfarlocs.cpp | LOCALASSERT(nextToTake <= NumLocsValid); | nextToTake goes up by at least 1 each time and ends exactly on the last valid place
+3dc/avp/pfarlocs.cpp | LOCALASSERT(numFound <= NumLocsValid); | counted by this same code from the same list
+3dc/avp/pheromone.cpp | LOCALASSERT(ThisModuleIndex < AIModuleArraySize); | a module number the loader hands out itself
+3dc/avp/pheromone.cpp | LOCALASSERT(ThisModuleIndex < ModuleArraySize); | a module number the loader hands out itself
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT ((activeIndex >= 0) && (activeIndex < SOUND_MAXACTIVE)); | the active number comes from Sound_Play's own search
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT ((gameIndex >= 0) && (gameIndex < SID_MAXIMUM)); | Sound_Play checks the sound number before anything reaches this
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT ((activeIndex >= 0) && (activeIndex < SOUND_MAXACTIVE)); | not compiled, because it needs USE_XAUDIO2. The same as openal_audio.cpp if it ever is
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT ((gameIndex >= 0) && (gameIndex < SID_MAXIMUM)); | not compiled, because it needs USE_XAUDIO2. The same as openal_audio.cpp if it ever is
+3dc/avp/win95/gadgets/text_expansion.cpp | GLOBALASSERT( NumToDelete > 0 ); | it goes through DeleteAt, and its end can't come before its start
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( CursorPos < List_ProjChar . size() ); | the cursor only moves inside the line
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( CursorPos <= List_ProjChar . size() ); | the cursor only moves inside the line
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( CursorPos <= NumChars ); | the cursor only moves inside the line
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( NumChars < MAX_LENGTH_INPUT ); | each write has a real NumChars < MAX_LENGTH_INPUT check
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( NumChars <= MAX_LENGTH_INPUT ); | each write has a real NumChars < MAX_LENGTH_INPUT check
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( NumChars > 0 ); | DeleteAt's callers check first
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( Pos < NumChars ); | DeleteAt's callers check first
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( Pos <= MAX_LENGTH_INPUT ); | each write has a real Pos < MAX_LENGTH_INPUT check
+3dc/avp/win95/gadgets/text_input.cpp | GLOBALASSERT( Pos_Where <= MAX_LENGTH_INPUT ); | each write has a real Pos < MAX_LENGTH_INPUT check
+
+# ---- Not a limit: nothing is indexed by the number, or going past it does no harm
+3dc/avp/particle.cpp | LOCALASSERT(NumberOfBloodParticles>=0); | a count of what's in play, and nothing is indexed by it
+3dc/avp/pfarlocs.cpp | LOCALASSERT(FL_TotalNumAuxLocs>0); | only says the count made by the code above is not empty, and with none, nothing is written to what it asks for
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume2.maxX >= MI_Volume2.minX); | a box's own sides, and nothing is indexed by them
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume2.maxY >= MI_Volume2.minY); | a box's own sides, and nothing is indexed by them
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume2.maxZ >= MI_Volume2.minZ); | a box's own sides, and nothing is indexed by them
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume3.maxX >= MI_Volume3.minX); | a box's own sides, and nothing is indexed by them
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume3.maxY >= MI_Volume3.minY); | a box's own sides, and nothing is indexed by them
+3dc/avp/pfarlocs.cpp | LOCALASSERT(MI_Volume3.maxZ >= MI_Volume3.minZ); | a box's own sides, and nothing is indexed by them
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT((currentFrequency>=FREQUENCY_MINPLAT)&&(currentPitch<=FREQUENCY_MAXPLAT)); | pitch is only arithmetic, and it's limited on the next lines
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT((currentPitch>=PITCH_MINPLAT)&&(currentPitch<=PITCH_MAXPLAT)); | pitch is only arithmetic, and it's limited on the next lines
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT((pitch >= PITCH_MIN) && (pitch <= PITCH_MAX)); | pitch is only arithmetic
+3dc/avp/win95/openal_audio.cpp | LOCALASSERT((volume >= VOLUME_MIN) && (volume <= VOLUME_MAX)); | VolumeToGain limits it
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT((currentFrequency>=FREQUENCY_MINPLAT)&&(currentPitch<=FREQUENCY_MAXPLAT)); | not compiled, because it needs USE_XAUDIO2
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT((currentPitch>=PITCH_MINPLAT)&&(currentPitch<=PITCH_MAXPLAT)); | not compiled, because it needs USE_XAUDIO2
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT((pitch >= PITCH_MIN) && (pitch <= PITCH_MAX)); | not compiled, because it needs USE_XAUDIO2
+3dc/avp/win95/xa2_audio.cpp | LOCALASSERT((volume >= VOLUME_MIN) && (volume <= VOLUME_MAX)); | not compiled, because it needs USE_XAUDIO2
+3dc/avp/win95/pldnet.cpp | LOCALASSERT((ghostData->playerObjectId >= -NET_MAXOBJECTID)&&(ghostData->playerObjectId <= NET_MAXOBJECTID)); */ | inside a comment that spreads over several lines, so it isn't code
+3dc/mem3dc.c | GLOBALASSERT(TotalMallocNum<MAXMALLOCS); /* just increase MAXMALLOCS define above if this fires */ | debug tracking, which is never compiled into the game
+3dc/mem3dc.c | GLOBALASSERT(i<MAXMALLOCS);  /* This should never fire - oh well */ | debug tracking, which is never compiled into the game
+3dc/mem3dc.c | GLOBALASSERT(size>0);  /* should be redundant cos picked up by above malloc attempt */ | debug tracking, which is never compiled into the game
+3dc/win95/bitmap_names.hpp | assert(v<=MAXVAL_RGB); // sensible value | a setter that masks the number into its bits, so going past only loses the top of it
+3dc/win95/bitmap_names.hpp | assert(v<=MAXVAL_WH); // sensible value | a setter that masks the number into its bits, so going past only loses the top of it
+3dc/win95/chunk_type.cpp | assert(texture_index<=CHUNK_MAX_TEXTUREINDEX); | a setter that masks the number into its bits, so going past only loses the top of it
+3dc/win95/chunk_type.cpp | assert(uv_index <= CHUNK_MAX_UVINDEX); | a setter that masks the number into its bits, so going past only loses the top of it
+3dc/win95/mishchnk.cpp | assert (e_list.size() < 2); | says a file has one environment, and only the first of them is used
+3dc/win95/our_mem.cpp | GLOBALASSERT(__size>0); | a request for no memory, which is harmless
