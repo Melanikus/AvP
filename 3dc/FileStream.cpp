@@ -24,6 +24,8 @@
 
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   reading past the end of a file gives zero, not whatever was in memory
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   RanOutOfData says a read came up short, and PeekByte steps back only after it really read a byte
 
 #include "FileStream.h"
 #include "FastFile.h"
@@ -56,10 +58,17 @@ bool FileStream::IsGood()
 	return isGood;
 }
 
+bool FileStream::RanOutOfData()
+{
+	return ranOutOfData;
+}
+
 bool FileStream::Open(const std::string &fileName, eAccess accessType, eFastFileCheck skipFastFileCheck)
 {
 	// TODO - write this properly. Also, add write append mode
 	std::string realFileName;
+
+	ranOutOfData = false;
 
 	// handle write mode
 	if (accessType == FileStream::FileWrite) {
@@ -235,7 +244,12 @@ DWORD FileStream::ReadBytes(uint8_t *buffer, size_t nBytes)
 	DWORD nBytesRead = 0;
 
 	if (::ReadFile(fileHandle, static_cast<LPVOID>(buffer), nBytes, &nBytesRead, NULL) == 0) {
+		ranOutOfData = true;
 		return 0;
+	}
+
+	if (nBytesRead < nBytes) {
+		ranOutOfData = true;
 	}
 
 	return nBytesRead;
@@ -325,8 +339,12 @@ uint64_t FileStream::GetUint64BE()
 uint8_t FileStream::PeekByte()
 {
 	uint8_t ret = 0; // stays zero if the file has nothing left to read
-	ReadBytes(&ret, sizeof(ret));
-	Seek(-1, SeekCurrent);
+
+	// step back only if a byte really came in. At the end of the file none does, and stepping back anyway would
+	// hand the caller the last byte again and again, for ever.
+	if (ReadBytes(&ret, sizeof(ret)) == sizeof(ret)) {
+		Seek(-1, SeekCurrent);
+	}
 	return ret;
 }
 

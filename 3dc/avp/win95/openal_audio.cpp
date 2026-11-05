@@ -4,6 +4,7 @@
 //   a sound volume is kept inside the volume table before the table is read
 //   a WAV file's size for its sound data is checked before the memory is asked for, and failing to
 //   get that memory now loses only that sound
+//   a WAV file with no sound data in it is refused; the search for it used to go round for ever
 
 #ifdef USE_OPENAL
 
@@ -24,6 +25,7 @@
 #include "ourasert.h"
 #include <math.h>
 #include <new>
+#include "wav_chunks.h"
 #include <AL\al.h>
 #include <AL\alc.h>
 #include <AL\alext.h>
@@ -1291,18 +1293,9 @@ int LoadWavFile(int soundNum, const std::string &fileName)
 		return 0;
 	}
 
-	while (1)
+	if (!FindWavDataChunk(fStream))
 	{
-		subChunkID = fStream.GetUint32BE();
-
-		if (subChunkID != 'data') 
-		{
-			subChunkSize = fStream.GetUint32LE();
-			fStream.Seek(subChunkSize, FileStream::SeekCurrent);
-		}
-		else {
-			break;
-		}
+		return ReturnInvalidWAV();
 	}
 
 	uint32_t nAudioBytes = fStream.GetUint32LE();
@@ -1403,18 +1396,9 @@ int ExtractWavFile(int soundNum, FileStream &fStream)
 		return 0;
 	}
 
-	while (1)
+	if (!FindWavDataChunk(fStream))
 	{
-		subChunkID = fStream.GetUint32BE();
-
-		if (subChunkID != 'data') 
-		{
-			subChunkSize = fStream.GetUint32LE();
-			fStream.Seek(subChunkSize, FileStream::SeekCurrent);
-		}
-		else {
-			break;
-		}
+		return ReturnInvalidWAV();
 	}
 
 	uint32_t nAudioBytes = fStream.GetUint32LE();
