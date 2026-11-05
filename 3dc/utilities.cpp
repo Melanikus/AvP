@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the save folder is never missing: without one the path is empty and the log says why once, where before the log and this went round until the game crashed
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -29,6 +31,7 @@
 #include <algorithm>
 #include "configFile.h"
 #include "logString.h"
+#include "save_folder.h"
 #include <assert.h>
 
 #ifdef _WIN32
@@ -37,6 +40,7 @@
 #endif
 
 static char saveFolder[MAX_PATH] = {0};
+static bool noSaveFolder = false;
 
 // TODO: remove this
 extern void ReleaseDirect3D();
@@ -109,8 +113,8 @@ int StringToInt(const std::string &string)
 
 char *GetSaveFolderPath()
 {
-	// check if we've got the path previously and use it again
-	if (*saveFolder) {
+	// check if we've got the path previously and use it again, or if we've found there isn't one
+	if (*saveFolder || noSaveFolder) {
 		return saveFolder;
 	}
 
@@ -122,91 +126,23 @@ char *GetSaveFolderPath()
 #endif
 #ifdef _WIN32
 
-	// get path to users "My Documents" folder
-	if (FAILED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, saveFolder)))
+	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
+	char documents[MAX_PATH] = {0};
+	char const *whatWentWrong = "Can't find the player's Documents folder";
+
+	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
 	{
-		LogErrorString("Can't find save folder path. ", __LINE__, __FILE__);
-		return 0;
+		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder));
 	}
 
-	std::string path = saveFolder;
-
-	// change backslashes in path to forwardslashes
-	std::replace(path.begin(), path.end(), '\\', '/');
-
-	path += "/My Games";
-
-	// first check if "My Games" folder exists, we try create it..
-	if (::CreateDirectory(path.c_str(), NULL) == 0)
+	if (whatWentWrong)
 	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + path, __LINE__, __FILE__);
-			return NULL;
-		}
+		// With nowhere to keep its files the game can still run. The path stays empty, so a file goes in the folder the game started from, and if one can't be opened there, that's handled like any other.
+		// This has to be written down before the log is asked to say so, because the log asks this function for the folder, and without this they'd go round and round until the game ran out of memory for it.
+		noSaveFolder = true;
+		LogErrorString(whatWentWrong, __LINE__, __FILE__);
 	}
 
-	path += "/Aliens versus Predator";
-
-	// then check the "Aliens versus Predator" folder
-	if (::CreateDirectory(path.c_str(), NULL) == 0)
-	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + path, __LINE__, __FILE__);
-			return NULL;
-		}
-	}
-
-	// add a slash to the end of the path
-	path += "/";
-
-	// also, create User_Profiles folder if required
-	std::string profilePath = path + "User_Profiles/";
-
-	if (::CreateDirectory(profilePath.c_str(), NULL) == 0)
-	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, __FILE__);
-			return NULL;
-		}
-	}
-
-	// lets create MPConfig folder too
-	profilePath = path + "MPConfig/";
-
-	if (::CreateDirectory(profilePath.c_str(), NULL) == 0)
-	{
-		// something went wrong..
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, __FILE__);
-			return NULL;
-		}
-	}
-
-	// check our path string will fit in saveFolder char[]
-	if (path.length() <= MAX_PATH - 1)
-	{
-		strncpy(saveFolder, path.c_str(), path.length());
-		saveFolder[path.length()] = '\0';
-	}
-	else
-	{
-		// fatal error?
-		LogErrorString("Save folder path too long");
-		return NULL;
-	}
-
-	// we're ok if we're here?
 	return saveFolder;
 #endif
 }

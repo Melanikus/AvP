@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   says what GetSaveFolderPath gives back when there's no save folder
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -50,6 +52,7 @@ FILE *avp_open_userfile(const char *fileName, const char *mode);
 HANDLE avp_CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile);
 HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData);
 DWORD avp_GetFileAttributes(LPCTSTR lpFileName);
+// The folder the game keeps its files in, ending in a slash. It's never null. It's empty if the game has nowhere to keep them, and then they go in the folder it started from.
 char *GetSaveFolderPath();
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);
