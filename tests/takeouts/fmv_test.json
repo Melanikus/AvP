@@ -1,0 +1,629 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"dependencies/libsmackerdec/include",
+		"dependencies/libsmackerdec/src",
+		"dependencies/libbinkdec/include",
+		"dependencies/libbinkdec/src",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "OLD: a film writes its own size, whatever the picture is",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameHeight < height) ? _frameHeight : height",
+					"to": "_frameHeight"
+				},
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameWidth < width) ? _frameWidth : width",
+					"to": "_frameWidth"
+				}
+			]
+		},
+		{
+			"name": "OLD: the list of screens has no limit",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (NumberOfFMVTextures >= MAX_NO_FMVTEXTURES)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a picture of any size makes a screen",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if ((width != kFMVTextureSize) || (height != kFMVTextureSize))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a frame is drawn whatever size the picture is",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (width != kFMVTextureSize || height != kFMVTextureSize || !DestBufferPtr) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "OLD: a film with no sound has its stream used anyway",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (fmvList[ftPtr->fmvHandle]->_audioStream)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a film too tall is not stopped",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameHeight < height) ? _frameHeight : height",
+					"to": "_frameHeight"
+				}
+			]
+		},
+		{
+			"name": "a film too wide is not stopped",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameWidth < width) ? _frameWidth : width",
+					"to": "_frameWidth"
+				}
+			]
+		},
+		{
+			"name": "a film always writes the picture's whole height",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameHeight < height) ? _frameHeight : height",
+					"to": "height"
+				}
+			]
+		},
+		{
+			"name": "a film always writes the picture's whole width",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "(_frameWidth < width) ? _frameWidth : width",
+					"to": "width"
+				}
+			]
+		},
+		{
+			"name": "a wide film reads its rows from the wrong place",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "uint32_t index = y * _frameWidth;",
+					"to": "uint32_t index = y * columns;"
+				}
+			]
+		},
+		{
+			"name": "the list stops one too soon",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (NumberOfFMVTextures >= MAX_NO_FMVTEXTURES)",
+					"to": "if (NumberOfFMVTextures + 1 >= MAX_NO_FMVTEXTURES)"
+				}
+			]
+		},
+		{
+			"name": "the list stops one too late",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (NumberOfFMVTextures >= MAX_NO_FMVTEXTURES)",
+					"to": "if (NumberOfFMVTextures > MAX_NO_FMVTEXTURES)"
+				}
+			]
+		},
+		{
+			"name": "a full list goes on looking, and complains for each",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "the game has room for, so the rest stay still\");\n\t\t\t\tbreak;",
+					"to": "the game has room for, so the rest stay still\");\n\t\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "a full list says nothing",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "Con_PrintError(\"This level has more video screens than the game has room for, so the rest stay still\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a wrong picture says nothing",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "Con_PrintError(\"The video screen picture \" + fmvTextures[i] + \" is the wrong size, so it stays still\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the size check ignores width",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if ((width != kFMVTextureSize) || (height != kFMVTextureSize))",
+					"to": "if (height != kFMVTextureSize)"
+				}
+			]
+		},
+		{
+			"name": "the size check ignores height",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if ((width != kFMVTextureSize) || (height != kFMVTextureSize))",
+					"to": "if (width != kFMVTextureSize)"
+				}
+			]
+		},
+		{
+			"name": "a frame ignores the picture's width",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (width != kFMVTextureSize || height != kFMVTextureSize || !DestBufferPtr) {",
+					"to": "if (height != kFMVTextureSize || !DestBufferPtr) {"
+				}
+			]
+		},
+		{
+			"name": "a frame ignores the picture's height",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (width != kFMVTextureSize || height != kFMVTextureSize || !DestBufferPtr) {",
+					"to": "if (width != kFMVTextureSize || !DestBufferPtr) {"
+				}
+			]
+		},
+		{
+			"name": "a frame ignores missing memory",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (width != kFMVTextureSize || height != kFMVTextureSize || !DestBufferPtr) {",
+					"to": "if (width != kFMVTextureSize || height != kFMVTextureSize) {"
+				}
+			]
+		},
+		{
+			"name": "a film with sound has none set",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (fmvList[ftPtr->fmvHandle]->_audioStream)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a film is never closed, as it used to be",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "\tSmacker_Close(_handle);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a film closes without stopping its sound",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "\t\t_audioStream->Stop();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a thread that fails counts as success, as it used to",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "\t\t_fmvPlaying = false;\n\t\treturn FMV_ERROR;\n\t}\n\t_decodeThreadInited = true;",
+					"to": "\t\treturn false;\n\t}\n\t_decodeThreadInited = true;"
+				}
+			]
+		},
+		{
+			"name": "a thread that fails leaves the film playing",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "\t\t_fmvPlaying = false;\n\t\treturn FMV_ERROR;\n\t}\n\t_decodeThreadInited = true;",
+					"to": "\t\treturn FMV_ERROR;\n\t}\n\t_decodeThreadInited = true;"
+				}
+			]
+		},
+		{
+			"name": "a finished film keeps its place, as it used to",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "\t\t\tif (FMVTexture[i].fmvHandle != -1)\n\t\t\t{\n\t\t\t\tdelete fmvList[FMVTexture[i].fmvHandle];\n\t\t\t\tfmvList[FMVTexture[i].fmvHandle] = 0;\n\t\t\t\tFMVTexture[i].fmvHandle = -1;\n\t\t\t}\n\n\t\t\tFMVTexture[i].fmvHandle = OpenFMV(buffer);",
+					"to": "\t\t\tFMVTexture[i].fmvHandle = OpenFMV(buffer);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the decoder always says one track, as it used to",
+			"changes": [
+				{
+					"file": "dependencies/libsmackerdec/src/SmackerDecoder.cpp",
+					"from": "return decoder->GetNumAudioTracks();",
+					"to": "return 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a track it lacks holds what was in memory, as it used to",
+			"changes": [
+				{
+					"file": "dependencies/libsmackerdec/src/SmackerDecoder.cpp",
+					"from": "\t\taudioTracks[i].sampleRate = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: stopping a stream that never started",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\tif (_source)\n\t{\n\t\talSourceStop(_source->_alSource);\n\t\talGetError();\n\t}",
+					"to": "\talSourceStop(_source->_alSource);\n\talGetError();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: letting go waits for a thread that never started",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "\tif (_threadStarted)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: waiting on a stopped stream never ends",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "while (_freeBufferQueue.size() == 0 && _isPlaying)",
+					"to": "while (_freeBufferQueue.size() == 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room echo number with no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "if (env_index >= (unsigned int)kMaxReverbPresets)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the other player waits for its sound",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t\t_audioStream->Stop();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a Bink film whose thread failed says it opened",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "BinkDecodeThread, static_cast<void*>(this)) != 0) {\n\t\t_fmvPlaying = false;\n\t\treturn FMV_ERROR;",
+					"to": "BinkDecodeThread, static_cast<void*>(this)) != 0) {\n\t\t_fmvPlaying = false;\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "OLD: a Bink film whose sound thread failed says it opened",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "BinkAudioThread, static_cast<void*>(this)) != 0) {\n\t\t\t_fmvPlaying = false;\n\t\t\treturn FMV_ERROR;",
+					"to": "BinkAudioThread, static_cast<void*>(this)) != 0) {\n\t\t\t_fmvPlaying = false;\n\t\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a Bink film whose thread failed still says it is playing",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "BinkDecodeThread, static_cast<void*>(this)) != 0) {\n\t\t_fmvPlaying = false;",
+					"to": "BinkDecodeThread, static_cast<void*>(this)) != 0) {"
+				}
+			]
+		},
+		{
+			"name": "OLD: the first Bink thread is only noted at the end",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t_decodeThreadInited = true;\n\n\tif (_nAudioTracks) {",
+					"to": "\tif (_nAudioTracks) {"
+				},
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t\t_audioThreadInited  = true;\n\t}\n",
+					"to": "\t\t_audioThreadInited  = true;\n\t}\n\t_decodeThreadInited = true;\n"
+				}
+			]
+		},
+		{
+			"name": "the Bink sound thread is never noted",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t\t_audioThreadInited  = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a Bink decoder is never closed",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\tBink_Close(_handle);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a Bink handle nobody set up",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.h",
+					"from": "\t\t\t\t_handle.isValid = false;\n\t\t\t\t_handle.instanceIndex = -1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: the Bink ring is three frames at any size",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "FmvPlayback_RingSize(idealBufferSize, _audioStream->GetBufferSize(), kAudioBufferCount)",
+					"to": "idealBufferSize * kAudioBufferCount"
+				}
+			]
+		},
+		{
+			"name": "OLD: the Smacker ring is three frames at any size",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "FmvPlayback_RingSize(info.idealBufferSize, _audioStream->GetBufferSize(), kAudioBufferCount)",
+					"to": "info.idealBufferSize * kAudioBufferCount"
+				}
+			]
+		},
+		{
+			"name": "the ring takes the smaller size",
+			"changes": [
+				{
+					"file": "3dc/FmvPlayback.h",
+					"from": "(usual < least) ? least : usual",
+					"to": "(usual < least) ? usual : least"
+				}
+			]
+		},
+		{
+			"name": "the least ring forgets the frame",
+			"changes": [
+				{
+					"file": "3dc/FmvPlayback.h",
+					"from": "frameSoundSize + streamBufferSize",
+					"to": "streamBufferSize"
+				}
+			]
+		},
+		{
+			"name": "the least ring forgets the stream buffer",
+			"changes": [
+				{
+					"file": "3dc/FmvPlayback.h",
+					"from": "frameSoundSize + streamBufferSize",
+					"to": "frameSoundSize"
+				}
+			]
+		},
+		{
+			"name": "the usual ring is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/FmvPlayback.h",
+					"from": "frameSoundSize * usualFramesOfSound",
+					"to": "frameSoundSize * 2"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Bink decoders are on a list that grows",
+			"changes": [
+				{
+					"file": "dependencies/libbinkdec/src/BinkDecoder.cpp",
+					"from": "static class BinkDecoder *classInstances[kMostOpenDecoders];",
+					"to": "std::vector<class BinkDecoder*> classInstances;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Bink handle is not checked against the list",
+			"changes": [
+				{
+					"file": "dependencies/libbinkdec/src/BinkDecoder.cpp",
+					"from": "handle.instanceIndex >= kMostOpenDecoders",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Bink decoder goes on the list before it is ready",
+			"changes": [
+				{
+					"file": "dependencies/libbinkdec/src/BinkDecoder.cpp",
+					"from": "\t\tnewDecoder = new BinkDecoder();\n",
+					"to": "\t\tnewDecoder = new BinkDecoder();\n\t\tclassInstances[place] = newDecoder;\n"
+				},
+				{
+					"file": "dependencies/libbinkdec/src/BinkDecoder.cpp",
+					"from": "\t\t\t\tclassInstances[place] = newDecoder;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for the Bink ring is not noticed",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "if (!_ringBuffer || !_ringBuffer->Init(",
+					"to": "if (!_ringBuffer->Init("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for the Bink sound buffer is not noticed",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "if (_audioDataBuffer == NULL)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "OLD: a Bink handle says it has a decoder when none is open",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.h",
+					"from": "\t\t\t\t_handle.instanceIndex = -1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sound thread never sleeps",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "\t\t::Sleep(timetoSleep);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for a Bink stream stops the game",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "new(std::nothrow) AudioStream()",
+					"to": "new AudioStream()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for a Bink stream is not noticed",
+			"changes": [
+				{
+					"file": "3dc/video/BinkPlayback.cpp",
+					"from": "!_audioStream || !_audioStream->Init(",
+					"to": "!_audioStream->Init("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for a Smacker stream stops the game",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "new(std::nothrow) AudioStream()",
+					"to": "new AudioStream()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no memory for a Smacker stream is not noticed",
+			"changes": [
+				{
+					"file": "3dc/video/SmackerPlayback.cpp",
+					"from": "!_audioStream || !_audioStream->Init(",
+					"to": "!_audioStream->Init("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a music thread that did not start is waited for",
+			"changes": [
+				{
+					"file": "3dc/VorbisPlayer.cpp",
+					"from": "\t\tif (pthread_create(&_playbackThread, NULL, VorbisUpdateThread, static_cast<void*>(this)) == 0) {\n",
+					"to": "\t\tpthread_create(&_playbackThread, NULL, VorbisUpdateThread, static_cast<void*>(this)); {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Bink keeps its last error in a string",
+			"changes": [
+				{
+					"file": "dependencies/libbinkdec/src/LogError.cpp",
+					"from": "void LogError(const std::string &)\n{\n}",
+					"to": "static std::string LastError;\nvoid LogError(const std::string &error)\n{\n\tLastError = error;\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Smacker keeps its last error in a string",
+			"changes": [
+				{
+					"file": "dependencies/libsmackerdec/src/LogError.cpp",
+					"from": "void LogError(const std::string &)\n{\n}",
+					"to": "static std::string LastError;\nvoid LogError(const std::string &error)\n{\n\tLastError = error;\n}"
+				}
+			]
+		}
+	]
+}

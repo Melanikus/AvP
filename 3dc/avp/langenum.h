@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the rendering page's text, after everything language.txt holds
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1364,6 +1366,23 @@ enum TEXTSTRING_ID
 	TEXTSTRING_CUSTOM_LEVEL,
 	TEXTSTRING_MULTIPLAYER_OPERATETORESPAWN,
 	TEXTSTRING_MULTIPLAYER_OPERATETOOBSERVE,
+
+	// Ours, and not in anyone's language.txt, whose order must not change. language.cpp holds their words, and stops reading the file before it gets here.
+	TEXTSTRING_RENDERING_TITLE,
+	TEXTSTRING_RENDERING_TITLE_HELP,
+	TEXTSTRING_RENDERING_MODE,
+	TEXTSTRING_RENDERING_MODE_HELP,
+	TEXTSTRING_RENDERING_GOURAUD,      // these four in the order of LightingChoice: the menu adds the choice's number to the first
+	TEXTSTRING_RENDERING_PERPIXEL,
+	TEXTSTRING_RENDERING_NORMALS,
+	TEXTSTRING_RENDERING_RELIEF,
+	TEXTSTRING_RENDERING_SHADOWS,
+	TEXTSTRING_RENDERING_SHADOWS_HELP,
+	TEXTSTRING_RENDERING_SHADOWS_CANT,
+	TEXTSTRING_RENDERING_AUTOGENERATE,
+	TEXTSTRING_RENDERING_AUTOGENERATE_HELP,
+	TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING,
+
 	MAX_NO_OF_TEXTSTRINGS
 };
 

@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the rendering page, and the way to it from both audio and video pages
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -7,6 +9,7 @@
 #include "hud_gfx.h"
 #include "user_io.h"
 #include "menu_data.h"
+#include "view_settings.h"
 #include "menus.h"
 #include "user_profile.h"
 #include "gammacontrol.h"
@@ -219,9 +222,26 @@ static AVPMENU_ELEMENT AvPMenu_InGameVideoModeOptions[] =
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
+// How the world is drawn. These settings are the same from wherever the page is reached, so both ways in share these lines. view_settings.cpp notices when one changes.
+static AVPMENU_ELEMENT AvPMenu_Rendering[] =
+{
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_MODE},			{3},	{&MenuRendering},		{TEXTSTRING_RENDERING_GOURAUD},	TEXTSTRING_RENDERING_MODE_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_SHADOWS},			{1},	{&MenuShadows},			{TEXTSTRING_NO},				TEXTSTRING_RENDERING_SHADOWS_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_AUTOGENERATE},	{1},	{&MenuAutoGenerate},	{TEXTSTRING_NO},				TEXTSTRING_RENDERING_AUTOGENERATE_HELP},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// Each of the page's lines says when it does nothing, so what a line says can change while the page is showing. See view_settings.cpp.
+void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead)
+{
+	AvPMenu_Rendering[1].HelpString = shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT;
+	AvPMenu_Rendering[2].HelpString = mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING;
+}
+
 static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] = 
 {
 	{AVPMENU_ELEMENT_GOTOMENU,      {TEXTSTRING_VIDEOOPTIONS_TITLE},  {AVPMENU_INGAMEVIDEOMODE}}, // bjd - for ingame resolution changing
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_RENDERING_TITLE},	{AVPMENU_INGAMERENDERING},	{0},	{0},	TEXTSTRING_RENDERING_TITLE_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_GAMMASETTING},	{255},	{&RequestedGammaSetting}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume}},
@@ -235,6 +255,7 @@ static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] =
 static AVPMENU_ELEMENT AvPMenu_MainMenuAVOptions[] = 
 {
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_VIDEOOPTIONS_TITLE},	{AVPMENU_VIDEOMODE},	{0},	{0},	TEXTSTRING_VIDEOOPTIONS_TITLE_HELP},
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_RENDERING_TITLE},	{AVPMENU_RENDERING},	{0},	{0},	TEXTSTRING_RENDERING_TITLE_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_EFFECTSVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_MUSICVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_CDVOLUME},	 {CDDA_VOLUME_MAX},	{&musicVolume},		{0},	TEXTSTRING_AVOPTIONS_CDVOLUME_HELP},
@@ -879,6 +900,12 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_INGAMEVIDEOMODE
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_VIDEOOPTIONS_TITLE,		AvPMenu_InGameVideoModeOptions,		AVPMENU_INGAMEAVOPTIONS,	0},
+
+	// AVPMENU_RENDERING
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_RENDERING_TITLE,			AvPMenu_Rendering,					AVPMENU_MAINMENUAVOPTIONS, 0},
+
+	// AVPMENU_INGAMERENDERING
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_RENDERING_TITLE,			AvPMenu_Rendering,					AVPMENU_INGAMEAVOPTIONS, 0},
 };
 
 extern void MakeSelectSessionMenu(void)

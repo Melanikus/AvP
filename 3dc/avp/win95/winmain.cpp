@@ -3,8 +3,19 @@
 //   LevelName has room for any custom level name and the "-n" name from the command line is limited to
 //   it; the Debug build's console output is closed properly on every way the game exits; the "-ip" address
 //   from the command line is limited to its buffer
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the level's still polygons are built and sent to the graphics card once a level has loaded
+//   -keptsnap and -keptsnapfar
+//   -shadowshoot
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
+//   how the world is drawn comes from the settings file, and those two switches change it for this run only
 
 #include "3dc.h"
+#include "texture_relief.h"
+#include "view_settings.h"
+#include "view_switches.h"
+#include "static_level.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -39,6 +50,8 @@
 #include "renderer.h"
 #include "mp_config.h"
 #include "logString.h"
+#include "command_line_word.h"
+#include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
 
@@ -184,6 +197,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	// load AliensVsPredator.cfg
 	Config_Load();
+	ViewSettings_Load();
 
 	Music_Init(); //load list of music tracks assigned to levels , from a text file
 	LoadVorbisTrackList(); // do the same for any user ogg vorbis music files
@@ -245,6 +259,253 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 			strpos = strstr(strpos, "-l");
 		}
+	}
+
+	// not -norelief, for the same reason as -shadowsoff below
+	if (strstr(command_line, "-reliefoff"))
+	{
+		textureRelief.TurnOff();
+
+		if (Lighting_UsesMaps(LightingNow))
+		{
+			LightingNow = kLightingPerPixel;
+		}
+	}
+
+	{
+		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, L, H, F7 and F8, the shoot tool, the flicker
+		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		extern int DevMode;
+		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
+		if (DevMode)
+		{
+			LogString("shadows: the developer tools are on (-dev)");
+		}
+
+		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't
+		auto const devSwitch = [&](const char *name)
+		{
+			if (!strstr(command_line, name))
+			{
+				return false;
+			}
+			if (!DevMode)
+			{
+				LogString(std::string("shadows: ") + name + " needs -dev, so it's off");
+			}
+			return DevMode != 0;
+		};
+
+		extern int ToyShadowsMode;
+		// not -noshadows: the level name switch further down takes anything starting with -n
+		if (strstr(command_line, "-shadowsoff"))
+		{
+			ToyShadowsMode = 0;
+			ShadowVolumesOn = 0;
+			LightingNow = kLightingGouraud;
+		}
+		extern int ShadowFlickerOn;
+		if (devSwitch("-shadowflicker"))
+		{
+			ShadowFlickerOn = 1;
+		}
+		extern int ShadowShootOn;
+		if (devSwitch("-shadowshoot"))
+		{
+			ShadowShootOn = 1;
+			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
+		}
+		extern int ShadowStatusOn;
+		if (strstr(command_line, "-statusoff"))
+		{
+			ShadowStatusOn = 0;
+		}
+		extern int ShadowsFullReport;
+		if (devSwitch("-shadowreport"))
+		{
+			ShadowsFullReport = 1;
+		}
+		extern int ShadowsEvenGap;
+		if (strstr(command_line, "-shadowevengap"))
+		{
+			ShadowsEvenGap = 1;
+		}
+		extern int StaticSurfaceOn;
+		if (strstr(command_line, "-staticsurface"))
+		{
+			StaticSurfaceOn = 1;
+		}
+		extern int StaticSceneOn;
+		if (strstr(command_line, "-staticscene"))
+		{
+			StaticSceneOn = 1;
+		}
+		extern int StaticSceneNoLiveLights;
+		if (strstr(command_line, "-staticnolivelights"))
+		{
+			StaticSceneNoLiveLights = 1;
+		}
+		extern int StaticSurfaceCompare;
+		if (strstr(command_line, "-staticcompare"))
+		{
+			StaticSurfaceCompare = 1;
+		}
+		extern int KeptPrismsOff;
+		// not -nokeptprisms, for the same reason as -shadowsoff
+		// they're off unless this says otherwise, and -keptprismsoff is still accepted, so that an old launch option does no harm
+		if (strstr(command_line, "-keptprismson"))
+		{
+			KeptPrismsOff = 0;
+		}
+		extern int ShadowsDepthGap;
+		if (strstr(command_line, "-shadowdepthgap"))
+		{
+			ShadowsDepthGap = 1;
+			LogString("shadows: a shadow's start stands further behind its polygon as depth gets coarser (-shadowdepthgap), on prisms made each frame only: not kept prisms, and not the walls -staticscene walks");
+		}
+		char const *biasSwitch = strstr(command_line, "-shadowbiassteps=");
+		if (biasSwitch)
+		{
+			extern float ShadowSurfaceBias;
+			extern int ShadowBiasSteps;
+			// anything but a number from 1 to 64 leaves the margin as it was, rather than quietly testing a margin nobody asked for
+			char const *number = biasSwitch + strlen("-shadowbiassteps=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
+
+			// it has to start with a digit and stop where the switch stops, so that 5abc and 5.9 aren't taken for 5
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 1 && asked <= 64)
+			{
+				ShadowBiasSteps = (int)asked;
+				ShadowSurfaceBias = -(float)ShadowBiasSteps / 16777216.0f;
+				LogString("shadows: the surface pictures' margin is " + std::to_string(asked) + " depth steps (-shadowbiassteps)");
+			}
+			else
+			{
+				LogString("shadows: -shadowbiassteps needs a number from 1 to 64, so it was ignored");
+			}
+		}
+		extern int KeptSnap;
+		// the longer word first, because the shorter one is inside it
+		if (strstr(command_line, "-keptsnapfar"))
+		{
+			KeptSnap = 2;
+		}
+		else if (strstr(command_line, "-keptsnap"))
+		{
+			KeptSnap = 1;
+		}
+
+		// Walls drawn from the fixed buffer have no corners on the list, so their prisms always go through the card's own sums. Exact corners against
+		// the scene's cut ones are what made kept prisms flicker, so these always use the cut ones.
+		if (StaticSceneOn && !KeptSnap)
+		{
+			KeptSnap = 1;
+		}
+		extern int ToyShadowsDarkness;
+		char const *darkSwitch = strstr(command_line, "-shadowdark=");
+		if (darkSwitch)
+		{
+			int const asked = atoi(darkSwitch + strlen("-shadowdark="));
+			ToyShadowsDarkness = (asked < 0) ? 0 : (asked > 99) ? 99 : asked;
+		}
+		extern int ToyShadowsSoft;
+		char const *softSwitch = strstr(command_line, "-shadowsoft=");
+		if (softSwitch)
+		{
+			int const asked = atoi(softSwitch + strlen("-shadowsoft="));
+			ToyShadowsSoft = (asked < 0) ? 0 : (asked > 32) ? 32 : asked;
+		}
+		extern int ToyShadowsPositions;
+		char const *positionsSwitch = strstr(command_line, "-shadowpositions=");
+		if (positionsSwitch)
+		{
+			int const asked = atoi(positionsSwitch + strlen("-shadowpositions="));
+			ToyShadowsPositions = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+		}
+		extern int ToyShadowsNearLights;
+		char const *nearSwitch = strstr(command_line, "-shadownearlights=");
+		if (nearSwitch)
+		{
+			int const asked = atoi(nearSwitch + strlen("-shadownearlights="));
+			ToyShadowsNearLights = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;
+		}
+		extern int ToyShadowsLampSize;
+		char const *lampSwitch = strstr(command_line, "-shadowlampsize=");
+		if (lampSwitch)
+		{
+			int const asked = atoi(lampSwitch + strlen("-shadowlampsize="));
+			ToyShadowsLampSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
+		}
+		extern int ToyShadowsFlareSize;
+		char const *flareSizeSwitch = strstr(command_line, "-shadowflaresize=");
+		if (flareSizeSwitch)
+		{
+			int const asked = atoi(flareSizeSwitch + strlen("-shadowflaresize="));
+			ToyShadowsFlareSize = (asked < 0) ? 0 : (asked > 2000) ? 2000 : asked;
+		}
+		extern int ToyShadowsModelGap;
+		char const *modelGapSwitch = strstr(command_line, "-shadowmodelgap=");
+		if (modelGapSwitch)
+		{
+			int const asked = atoi(modelGapSwitch + strlen("-shadowmodelgap="));
+			ToyShadowsModelGap = (asked < 8) ? 8 : (asked > 200) ? 200 : asked;
+		}
+		extern int ToyShadowsFlareReach;
+		char const *reachSwitch = strstr(command_line, "-shadowflarereach=");
+		if (reachSwitch)
+		{
+			int const asked = atoi(reachSwitch + strlen("-shadowflarereach="));
+			ToyShadowsFlareReach = (asked < 50) ? 50 : (asked > 400) ? 400 : asked;
+		}
+		extern int ToyShadowsFlareCap;
+		char const *flareSwitch = strstr(command_line, "-shadowflare=");
+		if (flareSwitch)
+		{
+			int const asked = atoi(flareSwitch + strlen("-shadowflare="));
+			ToyShadowsFlareCap = (asked < 10) ? 10 : (asked > 800) ? 800 : asked;
+		}
+		extern int ToyShadowsWorld;
+		char const *worldSwitch = strstr(command_line, "-shadowworld=");
+		if (worldSwitch)
+		{
+			int const asked = atoi(worldSwitch + strlen("-shadowworld="));
+			ToyShadowsWorld = (asked < 10) ? 10 : (asked > 100) ? 100 : asked;
+		}
+		extern int ToyShadowsTest;
+		if (strstr(command_line, "-shadowtest"))
+		{
+			ToyShadowsTest = 1;
+		}
+		extern int ToyShadowsMaxLights;
+		char const *lightsSwitch = strstr(command_line, "-shadowlights=");
+		if (lightsSwitch)
+		{
+			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
+			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+		}
+		extern int ToyShadowsMaxBrief;
+		char const *briefSwitch = strstr(command_line, "-shadowbrief=");
+		if (briefSwitch)
+		{
+			int const asked = atoi(briefSwitch + strlen("-shadowbrief="));
+			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;
+		}
+		extern int ToyShadowsCasters;
+		char const *castersSwitch = strstr(command_line, "-shadowcasters=");
+		if (castersSwitch)
+		{
+			int const asked = atoi(castersSwitch + strlen("-shadowcasters="));
+			ToyShadowsCasters = (asked < 0) ? 0 : (asked > 7) ? 7 : asked;
+		}
+		LogString(ToyShadowsMode ? "toy-shadows: on" : "toy-shadows: off");
+		extern int KeptSnap;
+		LogString((KeptSnap == 2) ? "shadows: a kept prism's near ends are cut each frame like the walls, and its far ends stay exact (-keptsnapfar)"
+			: (KeptSnap == 1) ? "shadows: a kept prism's corners are cut each frame like the walls (-keptsnap)" : "shadows: a kept prism's corners stay exact");
+		extern int ShadowsEvenGap;
+		LogString(ShadowsEvenGap ? "shadows: each corner works out where its shadow starts (-shadowevengap)" : "shadows: one gap for a whole polygon");
 	}
 
 	if (strstr(command_line, "-intro"))	{
@@ -478,6 +739,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		AssignAllSBNames();
 		StartGame();
 
+		// after StartGame, because that's when every module that's controlled by something has been told so
+		StaticLevel_BuildThisLevel();
+
 		/* JH 28/5/97 */
 		/* remove resident loaded 'fast' files */
 //		ffcloseall();
@@ -507,9 +771,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 		while (AvP.MainLoopRunning && bRunning) 
 		{
-			CheckForWindowsMessages();
+			{
+				ProcessorStageClock clock(kProcessorMessages);
 
-			CursorHome();
+				CheckForWindowsMessages();
+
+				CursorHome();
+			}
 
 			#if debug
 			if (memoryInitialisationFailure)
@@ -545,19 +813,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 						ThisFramesRenderingHasBegun();
 
-						DoAllShapeAnimations();
+						{
+							ProcessorStageClock clock(kProcessorGame);
 
-						UpdateGame();
+							DoAllShapeAnimations();
 
-						AvpShowViews();
+							UpdateGame();
+						}
 
-						// Do screen shot here so that text and hud graphics aren't shown
-						MaintainHUD();
+						{
+							ProcessorStageClock clock(kProcessorViews);
 
-						FlushTextprintBuffer();
+							AvpShowViews();
+						}
 
-						// check music status
-						Music_Check();
+						{
+							ProcessorStageClock clock(kProcessorHud);
+
+							// Do screen shot here so that text and hud graphics aren't shown
+							MaintainHUD();
+
+							FlushTextprintBuffer();
+
+							// check music status
+							Music_Check();
+						}
 
 						// check to see if we're pausing the game;
 						// if so kill off any sound effects
@@ -574,7 +854,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 					}
 
 					// draw ingame menu
-					menusActive = AvP_InGameMenus();
+					{
+						ProcessorStageClock clock(kProcessorMenus);
+
+						menusActive = AvP_InGameMenus();
+					}
+
 					if (AvP.RestartLevel) menusActive = FALSE;
 
 					if (AvP.LevelCompleted)

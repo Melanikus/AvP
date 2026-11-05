@@ -22,6 +22,8 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
 #include "utilities.h"
 #include <string>
 #include <algorithm>
@@ -326,16 +328,6 @@ HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData)
 #ifdef _WIN32
 	return FindFirstFile(lpFileName, lpFindFileData);
 #endif
-}
-
-void avp_GetCommandLineArgs(char *args, uint32_t size)
-{
-	assert (args);
-	std::string commandLine = Config_GetString("[Misc]", "CommandLine", "");
-
-	size_t copySize = (std::min)(size, commandLine.size());
-
-	strncpy(args, commandLine.c_str(), copySize);
 }
 
 void avp_MessageBox(const char* message, int type)

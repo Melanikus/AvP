@@ -1,3 +1,5 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   it notes which polygon of its shape a ray hit, for -shadowshoot
 /* routines which check an object to see if it is in the player's line of sight */
 extern int CameraCanSeeThisPosition_WithIgnore(DISPLAYBLOCK *ignoredObjectPtr,VECTORCH *positionPtr);
 
@@ -25,6 +27,7 @@ extern int 				LOS_Lambda;			/* distance in mm to point from player */
 extern DISPLAYBLOCK*	LOS_ObjectHitPtr;	/* pointer to object that was hit */
 extern VECTORCH			LOS_ObjectNormal;	/* normal of the object's face which was hit */
 extern SECTION_DATA*	LOS_HModel_Section;	/* Section of HModel hit */
+extern int				LOS_PolygonNumber;	/* which polygon of its shape was hit: only -shadowshoot reads this */
 
 /*KJL**********************************************************************************
 * The interface for this function is a bit muddle since it was originally a static fn *

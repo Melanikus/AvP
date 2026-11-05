@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the list's index is always freed and cleared in one step, so its pointer is never left aimed at freed memory
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a release build no longer asks for a list's type name just to throw it away, which changes nothing it does
 // Doubly linked list class.
 //
 // Inserts new entries at the *end* of the list -- so add_entry()
@@ -27,6 +29,11 @@
 
 #ifdef _CPPRTTI // run time type information available
 	#include <typeinfo>
+#endif
+
+// The name of a list's type, for the message when something goes wrong with that list. A release build has no such
+// message, as "fail" below shows, so it doesn't ask for the name: nothing would use the answer.
+#if defined(_CPPRTTI) && !defined(NDEBUG)
 	#define LIST_TEM_TYPEID_THIS typeid(*this).name()
 #else
 	#define LIST_TEM_TYPEID_THIS "?"

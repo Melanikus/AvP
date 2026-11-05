@@ -1,0 +1,99 @@
+{
+	"copy": [
+		"3dc",
+		"tools",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "TOOL: running out of memory stops it with no word",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "catch (std::bad_alloc const &)",
+					"to": "catch (int)"
+				}
+			]
+		},
+		{
+			"name": "TOOL: running out of memory counts as success",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "printf(\"There isn't the memory for that. Nothing more was written.\\n\");\n\t\treturn 1;",
+					"to": "printf(\"There isn't the memory for that. Nothing more was written.\\n\");\n\t\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "TOOL: what the tool gives back is lost",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "\t\treturn run(argc, argv);\n",
+					"to": "\t\trun(argc, argv);\n\t\treturn 1;\n"
+				}
+			]
+		},
+		{
+			"name": "TOOL: a level's limit applies to it",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "\tRimLoader_NewLevel();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "TOOL: a depth map as a .dds is let through",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "if (isDepth && asDds)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "TOOL: a map named anything is let through",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "if (!asDds && !EndsWith(to, \".rim\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "TOOL: an unknown option is ignored",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "\t\t\t\tprintf(\"I don't know %s\\n\", option.c_str());\n\t\t\t\treturn 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "TOOL: a side that is not a number is taken as none",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "\t\t\t\t\tprintf(\"--side needs a number: 256, 512, 1024 or 2048, say\\n\");\n\t\t\t\t\treturn 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "TOOL: asking for nothing counts as success",
+			"changes": [
+				{
+					"file": "tools/rimpng/rimpng.cpp",
+					"from": "\tprintf(\"rimpng tomap   <depth.png> <name_Depth.rim>\\n\");\n\treturn 1;",
+					"to": "\tprintf(\"rimpng tomap   <depth.png> <name_Depth.rim>\\n\");\n\treturn 0;"
+				}
+			]
+		}
+	]
+}

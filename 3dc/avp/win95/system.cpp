@@ -1,9 +1,12 @@
 /* inits the system and controls environment and player loading */
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   a level starts with its whole allowance of pictures;
 //   the level file path is built with a size limit; a path that does not fit counts as a missing file
 
 #include "3dc.h"
+#include "texture_relief.h"
+#include "RimLoader.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "gamedef.h"
@@ -465,6 +468,9 @@ void LoadRifFile()
 {
 	char file_and_path[MAX_PATH];
 	
+	// Every level comes through here, whichever way it was started
+	RimLoader_NewLevel();
+
 	Set_Progress_Bar_Position(PBAR_LEVEL_START);
 	
 	// clear the dir names
@@ -494,6 +500,8 @@ void LoadRifFile()
 	};
 
 	copy_rif_data(env_rif, CCF_ENVIRONMENT, PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4, PBAR_LEVEL_INTERVAL*.6);
+
+	textureRelief.LogWhatIsHeld();
 }
 
 int Destroy_CurrentEnvironment(void)

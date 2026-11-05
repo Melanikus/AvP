@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the rendering page
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
@@ -118,7 +120,10 @@ enum AVPMENU_ID
 	AVPMENU_LOADGAME,
 	AVPMENU_SAVEGAME,
 
-	AVPMENU_INGAMEVIDEOMODE // bjd - added for ingame resolution changing
+	AVPMENU_INGAMEVIDEOMODE, // bjd - added for ingame resolution changing
+
+	AVPMENU_RENDERING,        // the same page, reached from the main menus or from a level, so that going back goes to where it came from
+	AVPMENU_INGAMERENDERING
 };
 
 enum AVPMENU_FONT_ID

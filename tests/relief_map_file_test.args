@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/relief_map_file_test.cpp
