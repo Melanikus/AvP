@@ -25,6 +25,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open;
 //   a file that cannot be decoded, or that holds no audio, is refused instead of being read again
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
 
 #include <stdio.h>
 #include "VorbisPlayer.h"
@@ -190,9 +192,6 @@ void *VorbisUpdateThread(void *argument)
 {
 	VorbisPlayback *vorbis = static_cast<VorbisPlayback*>(argument);
 
-#ifdef USE_XAUDIO2
-	::CoInitializeEx (NULL, COINIT_MULTITHREADED);
-#endif
 
 	while (vorbis->_isPlaying)
 	{

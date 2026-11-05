@@ -495,9 +495,6 @@
     <ClCompile Include="..\..\3dc\avp\win95\winmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\win95\xa2_audio.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
