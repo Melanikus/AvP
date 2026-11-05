@@ -23,7 +23,7 @@ void ViewSwitches_AskLighting(int choice);
 void ViewSwitches_AskShadows(int on);
 bool ViewSwitches_SomethingAsked();
 void ViewSwitches_SetAtStart(int lighting, int volumes);
-void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere);
+void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere, bool *marchThere);
 int ViewSwitches_DrawnForTheMenu();
 bool ViewSwitches_ShadowsCanBeOn();
 void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead);   // menu_data.cpp
@@ -78,10 +78,11 @@ void ViewSettings_MenuFrame()
 		{
 			bool mapsThere = false;
 			bool perPixelThere = false;
+			bool marchThere = false;
 
-			ViewSwitches_WhatsThere(&mapsThere, &perPixelThere);
+			ViewSwitches_WhatsThere(&mapsThere, &perPixelThere, &marchThere);
 
-			int const choice = Lighting_MenuStep(lastRendering, MenuRendering, mapsThere, perPixelThere);
+			int const choice = Lighting_MenuStep(lastRendering, MenuRendering, mapsThere, perPixelThere, marchThere);
 
 			// Nothing else may be there to move to, and then there's nothing to ask for, and nothing to save.
 			if (choice != lastRendering)

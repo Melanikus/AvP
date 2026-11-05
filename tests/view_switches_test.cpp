@@ -157,6 +157,16 @@ static void TheCycle()
 	Check(Lighting_Drawn(kLightingNormals, false, true) == kLightingPerPixel, "normals asked for and not there draws per pixel");
 	Check(Lighting_Drawn(kLightingRelief, false, true) == kLightingPerPixel, "and so does relief");
 
+	// the shader that marches couldn't be made: only relief needs it
+	Check(!Lighting_IsThere(kLightingRelief, true, true, false), "with no march, relief isn't there");
+	Check(Lighting_IsThere(kLightingNormals, true, true, false) && Lighting_IsThere(kLightingPerPixel, true, true, false), "and everything else still is");
+	Check(Lighting_Drawn(kLightingRelief, true, true, false) == kLightingNormals, "a saved relief with no march draws normals, as near as it can get");
+	Check(Lighting_Drawn(kLightingRelief, false, true, false) == kLightingPerPixel, "and with no maps either, per pixel");
+	Check(Lighting_AfterAsking(kLightingNormals, kAskedNext, true, true, false) == kLightingGouraud, "the cycle goes past it");
+	Check(Lighting_AfterAsking(kLightingGouraud, kLightingRelief, true, true, false) == kLightingGouraud, "asking for it by name changes nothing");
+	Check(Lighting_MenuStep(kLightingNormals, kLightingRelief, true, true, false) == kLightingGouraud, "the menu's line goes past it, forward");
+	Check(Lighting_MenuStep(kLightingGouraud, kLightingRelief, true, true, false) == kLightingNormals, "and back");
+
 	// the card can't draw per pixel at all, or not for this moment
 	for (int choice = 0; choice < kLightingChoices; choice++)
 	{
@@ -602,6 +612,7 @@ static void TheRealGame()
 	}
 
 	Check(!Has(language, "Classic"), "and Classic has gone from the words");
+	Check(Has(language, "Maps are read when a level loads"), "and the page says when maps come");
 	Check(Has(shadowsOff, "ToyShadowsMode = 0;") && Has(shadowsOff, "ShadowVolumesOn = 0;") && Has(shadowsOff, "LightingNow = kLightingGouraud;"), "-shadowsoff starts with everything off");
 
 	// A new page is only as good as the line that gets people to it, and the file has to be in the filters too, or Visual Studio won't show it.
@@ -618,7 +629,7 @@ static void TheVolumesSwitch()
 
 	// the commands reach the switches, once each
 	Check(Has(applying, "if (hasStencil)\n\t\t{\n\t\t\tShadowVolumesOn = Shadows_AfterAsking(ShadowVolumesOn, shadowsAsked);"), "SHADOWS changes the switch, where there are stencil bits");
-	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);"), "LIGHTING changes the choice");
+	Check(Has(applying, "LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere, reliefShaderIsThere);"), "LIGHTING changes the choice");
 	Check(Has(applying, "\t\tshadowsAsked = kAskedNothing;"), "what SHADOWS asked for is done once, not again every frame");
 	Check(Has(applying, "\t\tlightingAsked = kAskedNothing;"), "and the same for LIGHTING");
 	Check(Has(render, "\"LIGHTING %s, SHADOWS %s\", Lighting_WordsOnScreen(LightingReallyDrawn(), mainDrawUsedHeights), ShadowVolumesOn ? \"ON\" : \"OFF\""), "the tag shows both, and relief says what it really draws");

@@ -6611,7 +6611,7 @@ static int LightingReallyDrawn()
 		return kLightingGouraud;
 	}
 
-	return Lighting_Drawn(LightingNow, SurfacePictures_ReliefCanRun(), true);
+	return Lighting_Drawn(LightingNow, SurfacePictures_ReliefCanRun(), true, d3d.reliefMainEffect != kNullEffectID);
 }
 
 // One line of the tag, with its right edge at rightX. The same sums as D3D_RenderHUDString_Centred, which is the game's own text, at another size.
@@ -7078,10 +7078,11 @@ bool ViewSwitches_SomethingAsked()
 }
 
 // Asking makes the pictures if they aren't there yet, so only a change of mind asks, and a player who stays on Gouraud never does.
-void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere)
+void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere, bool *marchThere)
 {
 	*perPixelThere = PerPixelLightsCanRun();
 	*mapsThere = SurfacePictures_ReliefCouldRun();
+	*marchThere = d3d.reliefMainEffect != kNullEffectID;
 }
 
 // What the menu shows: what's really being drawn. In the main menus no level has loaded any maps yet, so what counts is whether they could be drawn. Gouraud never asks, so a
@@ -7095,10 +7096,11 @@ int ViewSwitches_DrawnForTheMenu()
 
 	bool mapsThere = false;
 	bool perPixelThere = false;
+	bool marchThere = false;
 
-	ViewSwitches_WhatsThere(&mapsThere, &perPixelThere);
+	ViewSwitches_WhatsThere(&mapsThere, &perPixelThere, &marchThere);
 
-	return Lighting_Drawn(LightingNow, mapsThere, perPixelThere);
+	return Lighting_Drawn(LightingNow, mapsThere, perPixelThere, marchThere);
 }
 
 bool ViewSwitches_ShadowsCanBeOn()
@@ -7159,13 +7161,13 @@ static void ViewSwitches_ApplyAsked()
 
 		bool const perPixelThere = PerPixelLightsCanRun();
 		bool const mapsThere = SurfacePictures_ReliefCouldRun();
+		bool const reliefShaderIsThere = d3d.reliefMainEffect != kNullEffectID;
 
-		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere);
+		LightingNow = Lighting_AfterAsking(LightingNow, lightingAsked, mapsThere, perPixelThere, reliefShaderIsThere);
 
-		int const drawn = Lighting_Drawn(LightingNow, mapsThere, perPixelThere);
+		int const drawn = Lighting_Drawn(LightingNow, mapsThere, perPixelThere, reliefShaderIsThere);
 
 		static char message[40];
-		bool const reliefShaderIsThere = d3d.reliefMainEffect != kNullEffectID;
 		_snprintf(message, sizeof(message) - 1, "LIGHTING: %s", Lighting_WordsOnScreen(drawn, reliefShaderIsThere));
 		message[sizeof(message) - 1] = 0;
 		SaySwitch(message);
@@ -7182,9 +7184,9 @@ static void ViewSwitches_ApplyAsked()
 		{
 			SayReasonOnce(&saidNoMaps, textureRelief.IsOn() ? "THIS CARD CANNOT DRAW MAPS, SO NORMALS AND RELIEF ARE SKIPPED" : "THERE ARE NO MAPS, BECAUSE OF -RELIEFOFF, SO NORMALS AND RELIEF ARE SKIPPED");
 		}
-		else if (drawn == kLightingRelief && !reliefShaderIsThere)
+		else if (!reliefShaderIsThere)
 		{
-			SayReasonOnce(&saidReliefIsNormals, "THE RELIEF MAP SHADER COULD NOT BE MADE, SO IT DRAWS THE SAME AS NORMALS");
+			SayReasonOnce(&saidReliefIsNormals, "THE RELIEF MAP SHADER COULD NOT BE MADE, SO RELIEF MAP IS SKIPPED");
 		}
 
 		lightingAsked = kAskedNothing;

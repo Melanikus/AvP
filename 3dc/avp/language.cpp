@@ -37,7 +37,7 @@ static char OurTextStrings[][200] =
 	"Rendering options",
 	"How the world is lit, and whether things cast shadows.",
 	"Rendering",
-	"How the world is lit. A choice this card can't draw is skipped.",
+	"How the world is lit. A choice this card can't draw is skipped. Maps are read when a level loads, so changing to a choice that uses them shows them from the next level.",
 	"Gouraud",
 	"Per-pixel (flat)",
 	"Per-pixel + normals",

@@ -215,20 +215,28 @@ inline bool Lighting_UsesMaps(int choice)
 	return choice == kLightingNormals || choice == kLightingRelief;
 }
 
-// Whether this choice can be drawn right now. The game's own lighting always can. mapsThere says whether the pictures that hold the maps, and what draws them, are all there.
-inline bool Lighting_IsThere(int choice, bool mapsThere, bool perPixelThere)
+// Whether this choice can be drawn right now. The game's own lighting always can. mapsThere says whether the pictures that hold the maps, and what draws them, are all there. marchThere
+// says whether the shader that marches through a height picture could be made, which only Relief needs.
+inline bool Lighting_IsThere(int choice, bool mapsThere, bool perPixelThere, bool marchThere = true)
 {
 	return choice == kLightingGouraud
 		|| (choice == kLightingPerPixel && perPixelThere)
-		|| (Lighting_UsesMaps(choice) && perPixelThere && mapsThere);
+		|| (choice == kLightingNormals && perPixelThere && mapsThere)
+		|| (choice == kLightingRelief && perPixelThere && mapsThere && marchThere);
 }
 
 // What really gets drawn when this is what was asked for
-inline int Lighting_Drawn(int asked, bool mapsThere, bool perPixelThere)
+inline int Lighting_Drawn(int asked, bool mapsThere, bool perPixelThere, bool marchThere = true)
 {
-	if (Lighting_IsThere(asked, mapsThere, perPixelThere))
+	if (Lighting_IsThere(asked, mapsThere, perPixelThere, marchThere))
 	{
 		return asked;
+	}
+
+	// Relief with no march still has its maps, so it's as near as it can get
+	if (asked == kLightingRelief && perPixelThere && mapsThere)
+	{
+		return kLightingNormals;
 	}
 
 	return perPixelThere ? kLightingPerPixel : kLightingGouraud;
@@ -238,7 +246,7 @@ inline int Lighting_Drawn(int asked, bool mapsThere, bool perPixelThere)
 //
 // When a card can't draw per pixel, a press can't change anything anyway, so it also leaves what was asked for alone. That can be true for just a moment around a device
 // reset, and this way the lighting a player chose comes back afterwards.
-inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixelThere)
+inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixelThere, bool marchThere = true)
 {
 	if (asked == kAskedNothing)
 	{
@@ -247,7 +255,7 @@ inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixe
 
 	if (asked != kAskedNext)
 	{
-		return Lighting_IsThere(asked, mapsThere, perPixelThere) ? asked : now;
+		return Lighting_IsThere(asked, mapsThere, perPixelThere, marchThere) ? asked : now;
 	}
 
 	if (!perPixelThere)
@@ -256,13 +264,13 @@ inline int Lighting_AfterAsking(int now, int asked, bool mapsThere, bool perPixe
 	}
 
 	// From what's on the screen, so that a press never lands on what's already there. Gouraud is always there, so this always finds one.
-	int choice = Lighting_Drawn(now, mapsThere, perPixelThere);
+	int choice = Lighting_Drawn(now, mapsThere, perPixelThere, marchThere);
 
 	do
 	{
 		choice = (choice + 1) % kLightingChoices;
 	}
-	while (!Lighting_IsThere(choice, mapsThere, perPixelThere));
+	while (!Lighting_IsThere(choice, mapsThere, perPixelThere, marchThere));
 
 	return choice;
 }
@@ -300,14 +308,14 @@ inline bool Lighting_FromSavedWord(char const *words, int *choice)
 
 // Where the menu's line goes, when the player has moved it from last to pressed. The line goes round and round, one step at a time, so it can only have gone one way. A choice that
 // can't be drawn is passed over in that same direction, so the player can always get to everything that is there. Gouraud always is, so this always finds one.
-inline int Lighting_MenuStep(int last, int pressed, bool mapsThere, bool perPixelThere)
+inline int Lighting_MenuStep(int last, int pressed, bool mapsThere, bool perPixelThere, bool marchThere = true)
 {
 	int const step = ((last + 1) % kLightingChoices == pressed) ? 1 : kLightingChoices - 1;
 	int choice = ((pressed % kLightingChoices) + kLightingChoices) % kLightingChoices;
 
 	for (int tried = 0; tried < kLightingChoices; tried++)
 	{
-		if (Lighting_IsThere(choice, mapsThere, perPixelThere))
+		if (Lighting_IsThere(choice, mapsThere, perPixelThere, marchThere))
 		{
 			return choice;
 		}
