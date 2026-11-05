@@ -1,0 +1,238 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "MAP: kept maps can go past their limit",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (handMadeBytesHeld >= mostHandMadeBytesHeld)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can try any number of files",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "else if (handMadeTries >= mostHandMadeTries)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can spend any number of bytes",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "else if (handMadeBytesTried >= (uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can only spend the limit once over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "(uint64_t)mostHandMadeBytesHeld * 1)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can spend the limit thousands of times over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "(uint64_t)mostHandMadeBytesHeld * 3000)"
+				}
+			]
+		},
+		{
+			"name": "MAP: nothing asks whether another map may be tried",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "!entry.lookedForFile && MayTryAnotherMap()",
+					"to": "!entry.lookedForFile"
+				}
+			]
+		},
+		{
+			"name": "MAP: a texture skipped is marked as looked at",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!entry.lookedForFile && MayTryAnotherMap())\n\t{\n\t\tentry.lookedForFile = true;\n\t\trelief = HandMadePictureFor(picture);\n\t}",
+					"to": "bool const mayTry = !entry.lookedForFile && MayTryAnotherMap();\n\tentry.lookedForFile = true;\n\n\tif (mayTry)\n\t{\n\t\trelief = HandMadePictureFor(picture);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "MAP: a try is not counted",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: reading a file costs nothing",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += fileBytes;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: unpacking a map costs nothing",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += allBytes;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: only a map that is used pays for unpacking",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += allBytes;\n\n\tproblem = ReliefMap_DecodeRim(rim, pixels.get());\n\n\tif (problem != kMapFine)\n\t{\n\t\tLogString(notUsed + ReliefMap_ProblemWords(problem));\n\t\treturn MISSING_TEXTURE;\n\t}\n",
+					"to": "\tproblem = ReliefMap_DecodeRim(rim, pixels.get());\n\n\tif (problem != kMapFine)\n\t{\n\t\tLogString(notUsed + ReliefMap_ProblemWords(problem));\n\t\treturn MISSING_TEXTURE;\n\t}\n\n\thandMadeBytesTried += allBytes;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: a file too long to read is charged as if it was read",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries++;\n",
+					"to": "\thandMadeTries++;\n\thandMadeBytesTried += file.GetFileSize();\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: stopping is said every time",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!stoppedTryingWasLogged)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "MAP: stopping is never said",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!stoppedTryingWasLogged)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level starts with the tries used",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n",
+					"to": "// The next level has its own allowance\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level starts with the bytes spent",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n\t\thandMadeBytesTried = 0;\n",
+					"to": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level can not say it stopped",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\thandMadeBytesTried = 0;\n\t\tstoppedTryingWasLogged = false;\n",
+					"to": "\t\thandMadeBytesTried = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back keeps the tries used",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesHeld = 0;\n\thandMadeTries = 0;\n",
+					"to": "\thandMadeBytesHeld = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back keeps the bytes spent",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n}",
+					"to": "\thandMadeTries = 0;\n\tstoppedTryingWasLogged = false;\n}"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back can not say it stopped",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n}",
+					"to": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n}"
+				}
+			]
+		},
+		{
+			"name": "MAP: a map too big for the room left is kept",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (allBytes > mostHandMadeBytesHeld - handMadeBytesHeld)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: too few tries for every picture the game has",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.h",
+					"from": "kMostHandMadeTriesPerLevel = 2048",
+					"to": "kMostHandMadeTriesPerLevel = 1000"
+				}
+			]
+		},
+		{
+			"name": "MAP: so many tries that trying them would take long",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.h",
+					"from": "kMostHandMadeTriesPerLevel = 2048",
+					"to": "kMostHandMadeTriesPerLevel = 8192"
+				}
+			]
+		}
+	]
+}

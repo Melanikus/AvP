@@ -1076,6 +1076,17 @@ static void CheckWhatTryingMapsCosts()
 		Check(relief.HandMadeTriesThisLevel() == 3, "and the count stops there");
 		Check(LogCount("no more hand-made maps are read for now, because this level has tried 3 of their files") == 1, "and the log says so, once");
 
+		// The next level, when it stops too, says so again
+		relief.LogWhatIsHeld();
+		logLines.clear();
+
+		for (int i = 4; i < 8; i++)
+		{
+			relief.Build(AddTexture(MapFolder() + "/s" + std::to_string(i) + "/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		}
+
+		Check(LogCount("no more hand-made maps are read for now") == 1, "and a later level that stops says so too");
+
 		relief.ReleaseAll();
 		Check(relief.HandMadeTriesThisLevel() == 0 && relief.HandMadeBytesTriedThisLevel() == 0, "giving everything back starts the count again");
 
