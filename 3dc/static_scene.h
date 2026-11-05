@@ -26,6 +26,10 @@ bool StaticScene_TookModule(int moduleNumber);
 // Whether this frame took any at all. If it did, the surface pictures have to draw from the fixed buffer: there's nothing else to draw those walls from.
 bool StaticScene_TookAny();
 
+// How many frames of this level were asked to use this route, and how many of them drew walls from the fixed buffer. A run reports these, because a route that said no looks just the same.
+int StaticScene_FramesAskedThisLevel();
+int StaticScene_FramesWithWallsThisLevel();
+
 // Whether the walls still have to be drawn this frame. They go once, after the solid part of the game's list and before anything that needs them behind it.
 bool StaticScene_WallsAreDue();
 void StaticScene_DrawWalls(LPDIRECT3DDEVICE9 device);

@@ -45,6 +45,16 @@ extern bool MirroringActive;
 extern int RequestedGammaSetting;
 
 bool StaticScene_ViewAllows();      // d3d_render.cpp: is this a view of the real picture, on a frame that isn't being compared?
+bool ShadowReportIsDue();           // d3d_render.cpp: is this frame one the shadow pass reports on?
+
+// What this route took, for the log, so that a run can say whether it really ran. A switch that's on and a route that said no look the same on the screen.
+static int modulesTakenThisFrame = 0;
+static int modulesNotWholeThisFrame = 0;
+static int modulesNoRoomThisFrame = 0;
+static int framesAsked = 0;
+static int framesWithWalls = 0;
+static int framesAskedInAllLevel = 0;
+static int framesWithWallsInAllLevel = 0;
 int StaticScene_GatherLights(float *table, int mostLights, bool *passedLimit);   // view.cpp, where the game's own list of lights lives
 
 int StaticSceneOn = 0;              // -staticscene
@@ -78,6 +88,38 @@ void StaticScene_StartLevel()
 {
 	refused = false;
 	toldAboutNotLit = false;
+	framesAsked = 0;
+	framesWithWalls = 0;
+	framesAskedInAllLevel = 0;
+	framesWithWallsInAllLevel = 0;
+}
+
+int StaticScene_FramesAskedThisLevel()
+{
+	return framesAskedInAllLevel;
+}
+
+int StaticScene_FramesWithWallsThisLevel()
+{
+	return framesWithWallsInAllLevel;
+}
+
+// As often as the shadow pass's own report, so that they can be read side by side. Only with the switch on.
+static void ReportIfDue()
+{
+	if (!StaticSceneOn || !ShadowReportIsDue())
+	{
+		return;
+	}
+
+	char line[220] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "static scene: %d of the last %d frames drew walls from the fixed buffer. This one: %d modules from the buffer, on the old route %d not all in the buffer, %d not lit, %d with no room left, %d runs",
+		framesWithWalls, framesAsked, modulesTakenThisFrame, modulesNotWholeThisFrame, modulesNotLit, modulesNoRoomThisFrame, numRanges);
+	LogString(line);
+
+	framesAsked = 0;
+	framesWithWalls = 0;
 }
 
 static bool FrameCanUseThisRoute()
@@ -105,7 +147,16 @@ void StaticScene_StartChoosing()
 	numRanges = 0;
 	wallsAreDue = false;
 	modulesNotLit = 0;
+	modulesTakenThisFrame = 0;
+	modulesNotWholeThisFrame = 0;
+	modulesNoRoomThisFrame = 0;
 	choosing = FrameCanUseThisRoute();
+
+	if (StaticSceneOn)
+	{
+		framesAsked++;
+		framesAskedInAllLevel++;
+	}
 
 	frameNumber++;
 
@@ -128,6 +179,7 @@ void StaticScene_OfferModule(const DISPLAYBLOCK *block)
 
 	if (moduleNumber < 0 || !StaticLevel_ModuleIsWhole(moduleNumber))
 	{
+		modulesNotWholeThisFrame++;
 		return;
 	}
 
@@ -148,6 +200,7 @@ void StaticScene_OfferModule(const DISPLAYBLOCK *block)
 	// a module that doesn't fit stays on the old route, and the rest of the frame carries on
 	if (count > kMostRanges - numRanges)
 	{
+		modulesNoRoomThisFrame++;
 		return;
 	}
 
@@ -157,6 +210,7 @@ void StaticScene_OfferModule(const DISPLAYBLOCK *block)
 	}
 
 	frameTaken[moduleNumber] = frameNumber;
+	modulesTakenThisFrame++;
 
 	for (int i = 0; i < count; i++)
 	{
@@ -168,6 +222,7 @@ void StaticScene_FinishChoosing()
 {
 	if (!choosing)
 	{
+		ReportIfDue();
 		return;
 	}
 
@@ -190,6 +245,14 @@ void StaticScene_FinishChoosing()
 
 	numRanges = StaticFrame_SortAndJoin(ranges, numRanges, mostTriangles);
 	wallsAreDue = numRanges > 0;
+
+	if (wallsAreDue)
+	{
+		framesWithWalls++;
+		framesWithWallsInAllLevel++;
+	}
+
+	ReportIfDue();
 }
 
 bool StaticScene_TookModule(int moduleNumber)
