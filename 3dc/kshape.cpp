@@ -13,6 +13,8 @@
 //   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
 //   a shape the game places by the camera is never kept
 //   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. This comes out before merge
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -5962,8 +5964,8 @@ static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int
 	return placesUsed;
 }
 
-// Picks the lamps drawn from several positions: the nearest few, leaving out lights added per pixel. Those are gone too soon for the shape of a
-// shadow's edge to be seen, apart from flares, which always have positions. A lamp that has them keeps them until another is clearly nearer, the
+// Picks the lamps drawn from several positions: the nearest few, leaving out live lights, whichever way they're lit. Those are gone too soon for the shape of a
+// shadow's edge to be seen, apart from flares added per pixel, which always have positions. A lamp that has them keeps them until another is clearly nearer, the
 // same way a light keeps its place. Otherwise, two lamps about as near as each other would swap as the camera moved, and both their shadows
 // would jump. Each position is another stencil pass, so this can't be every lamp.
 static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, const int *placeOf, const bool *hadPositions)
@@ -5977,7 +5979,7 @@ static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, co
 
 		for (int i = 0; i < numChosen; i++)
 		{
-			if (picked[i] || toyChosenLights[placeOf[i] * kToyLightFloats + 7] == 2.0f)
+			if (picked[i] || toyChosenLights[placeOf[i] * kToyLightFloats + 7] != 0.0f)
 			{
 				continue;
 			}
@@ -6130,7 +6132,11 @@ void ToyShadows_ChooseLights()
 		// live light counts at its real brightness, worked out as the game works it out (view.cpp, UpdateObjectLights).
 		if (live)
 		{
-			float const liveBright = (float)MUL_FIXED(light->LightBright, LightScale) / 65536.0f;
+			// A flare left in the game's lighting is held to its cap (ToyHoldFlaresToTheirCap), so the cap is all it adds to a wall. Counting its full brightness
+			// would let its shadow take more of a wall's light than it ever gave. A flare added per pixel gets numbers of its own further down.
+			int const flareCap = (int)(((long long)ONE_FIXED * ToyShadowsFlareCap) / 100);
+			int const reallyAdds = (chosen[i].order < 0 && light->LightBright > flareCap) ? flareCap : light->LightBright;
+			float const liveBright = (float)MUL_FIXED(reallyAdds, LightScale) / 65536.0f;
 			float const weight = (liveBright < 0.0f) ? 0.0f : (liveBright > 8.0f) ? 8.0f : liveBright;
 
 			out[4] = weight * ToyFraction(light->RedScale);

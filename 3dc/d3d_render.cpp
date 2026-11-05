@@ -4467,9 +4467,9 @@ static void ToyAddPrism(const ToyVec *pts, int count, const ToyFlatSurface &surf
 	}
 
 	// A flare comes to rest touching a surface, so it can end up a hair behind it, and then the floor it's lying on would block
-	// it from the whole room. So a polygon that close doesn't cast for that flare, or for any other light added per pixel, measured
-	// from where the light really is. A light's eighth number is its kind, and 2 means added per pixel.
-	if (light[7] == 2.0f && fabsf(centreFacing) < kToyFlareTouching)
+	// it from the whole room. So a polygon that close doesn't cast for that flare, or for any other live light, measured from where
+	// the light really is. A light's eighth number is its kind: 0 is baked into the walls, and 1 and 2 are live, in the game's lighting or added per pixel.
+	if (light[7] != 0.0f && fabsf(centreFacing) < kToyFlareTouching)
 	{
 		return;
 	}
