@@ -445,7 +445,7 @@ static void TheRealGame()
 	Check(CountOf(render, "KEY_L]") == 1 && CountOf(render, "KEY_H]") == 1, "and nothing else in the drawing code reads those keys");
 
 	std::string const shadowsCommand = Between(render, "void ShadowsCommand(char *words)", "void LightingCommand(char *words)");
-	std::string const lightingCommand = Between(render, "void LightingCommand(char *words)", "// Where LIGHTING and SHADOWS change");
+	std::string const lightingCommand = Between(render, "void LightingCommand(char *words)", "// The menu asks the same way the commands do");
 
 	Check(Has(shadowsCommand, "SwitchWords_ShadowsAsk(words, &shadowsAsked)") && !Has(shadowsCommand, "ShadowVolumesOn"), "SHADOWS only notes what it's asked for");
 	Check(Has(lightingCommand, "SwitchWords_LightingAsk(words, &lightingAsked)") && !Has(lightingCommand, "LightingNow ="), "LIGHTING only notes what it's asked for");
@@ -520,8 +520,8 @@ static void TheRealGame()
 	std::string::size_type const menuFrameStarts = settings.find("void ViewSettings_MenuFrame()");
 	std::string const menuFrame = (menuFrameStarts == std::string::npos) ? "" : settings.substr(menuFrameStarts);
 
-	Check(Has(menuFrame, "ViewSwitches_AskLighting(lastRendering);") && !Has(menuFrame, "LightingNow ="), "after loading, only the one safe moment changes the lighting: the menu asks");
-	Check(Has(menuFrame, "ViewSwitches_AskShadows(lastShadows);") && !Has(menuFrame, "ShadowVolumesOn ="), "and the same for shadows");
+	Check(Has(menuFrame, "ViewSwitches_AskLighting(choice);") && !Has(menuFrame, "LightingNow ="), "after loading, only the one safe moment changes the lighting: the menu asks");
+	Check(Has(menuFrame, "ViewSwitches_AskShadows(MenuShadows);") && !Has(menuFrame, "ShadowVolumesOn ="), "and the same for shadows");
 	Check(Has(settings, "Config_Save();"), "the menu saves");
 
 	// the text
