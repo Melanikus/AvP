@@ -603,7 +603,7 @@ static void CheckTheGameSide()
 
 		texID_t const flat = relief.PictureFor(other);
 
-		Check(flat != made && PixelIs(textureList[flat].pixels, 1, 0, 0, 255, 128, 128, 128), "a texture with none gets the flat picture");
+		Check(flat != made && PixelIs(textureList[flat].pixels, 1, 0, 0, 255, 128, 128, 0), "a texture with none gets the flat picture, whose alpha of 0 says it has no depth either");
 		Check(relief.PictureFor(1000) == flat, "a number nobody has heard of gets the flat picture");
 
 		relief.ReleaseAll();

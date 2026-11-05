@@ -453,7 +453,7 @@ static void TheRealGame()
 
 	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
 	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
-	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic)"), "the surface pass only asks for the maps when the choice reads them");
+	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights())"), "the surface pass only asks for the maps when the choice reads them");
 	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
@@ -472,6 +472,26 @@ static void TheRealGame()
 
 	Check(Has(applying, "ToyShadowsMode = View_AfterSwitches(ToyShadowsMode, kToyViewOff, switchesWereAllOff, allOff, &viewToComeBackTo);"), "everything off goes to the OFF view");
 	Check(Has(applying, "if (!hasStencil)\n\t{\n\t\tShadowVolumesOn = 0;\n\t\tLightingNow = kLightingGouraud;"), "with no stencil bits, both are held off every frame");
+
+	// The developers' relief switches: what's typed can't reach the shader unchecked, they can't run in a network game, and a player who hasn't asked for maps doesn't read any.
+	Check(ReliefDepth_Clamped(0.1f) == 0.1f, "a depth in range stays as it is");
+	Check(ReliefDepth_Clamped(0.0f) == 0.0f && ReliefDepth_Clamped(-1.0f) == 0.0f, "no depth and less than none both come to none");
+	Check(ReliefDepth_Clamped(1000.0f) == kReliefDepthMost, "too deep comes back to the most");
+
+	{
+		float volatile zero = 0.0f;
+		float const notANumber = zero / zero;
+		Check(ReliefDepth_Clamped(notANumber) == 0.0f, "and something that isn't a number comes to none, not on to the shader");
+	}
+
+	std::string const reliefSwitches = Between(render, "static bool ReliefToolsCanAct(char const *name)", "extern int DrawFullBright;");
+	Check(Has(reliefSwitches, "if (DevMode && AvP.Network == I_No_Network)"), "the relief switches need -dev, and not in a network game");
+	Check(CountOf(reliefSwitches, "if (ReliefToolsCanAct(") == 3, "and all three ask");
+	Check(Has(reliefSwitches, "ReliefDepth_Clamped((float)atof(words))"), "and the depth typed goes through the clamp");
+
+	std::string const loader = ReadSourceFile("3dc/avp/win95/projload.cpp");
+	Check(Has(loader, "if (DevMode || Lighting_UsesMaps(LightingNow))\n\t{\n\t\ttextureRelief.Build(textureID);"), "a level loaded with a lighting that draws no maps reads no map");
+	Check(CountOf(loader, "textureRelief.Build(") == 1, "and that's the only way in");
 
 	// The tag is a fixed list of lines on the stack, and more lines than it has room for would write past its end.
 	std::string const tag = Between(render, "enum { kMostLines = ", "int characters = 0;");

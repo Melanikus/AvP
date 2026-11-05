@@ -6671,7 +6671,7 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 13, kLineLength = 48 };
+	enum { kMostLines = 14, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
@@ -6681,7 +6681,7 @@ static void ShadowStatus_Draw()
 	}
 
 	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn(), mainDrawUsedHeights), ShadowVolumesOn ? "ON" : "OFF");
-	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF DEPTH %.3f%s%s", ReliefDepthNow, ReliefHeightFlipped ? ", HEIGHT FLIPPED" : "", ReliefTiltFlipped ? ", TILT FLIPPED" : "");
+	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF DEPTH %.3f%s%s", ReliefDepthNow, ReliefHeightFlipped ? ", HEIGHT FLIP" : "", ReliefTiltFlipped ? ", TILT FLIP" : "");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
 	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
 	{
@@ -6966,6 +6966,17 @@ void LightingCommand(char *words)
 	}
 }
 
+// The menu asks the same way the commands do. See view_settings.cpp.
+void ViewSwitches_AskLighting(int choice)
+{
+	lightingAsked = choice;
+}
+
+void ViewSwitches_AskShadows(int on)
+{
+	shadowsAsked = on;
+}
+
 bool ReliefHeightFlipped = false;
 bool ReliefTiltFlipped = false;
 float ReliefDepthNow = kReliefDepthAtStart;
@@ -7059,17 +7070,6 @@ static void DrawSolidsWithHeights()
 	SurfaceNormals_StopUsingList();
 
 	device->SetSamplerState(2, D3DSAMP_MIPFILTER, D3DTEXF_POINT);
-}
-
-// The menu asks the same way the commands do. See view_settings.cpp.
-void ViewSwitches_AskLighting(int choice)
-{
-	lightingAsked = choice;
-}
-
-void ViewSwitches_AskShadows(int on)
-{
-	shadowsAsked = on;
 }
 
 bool ViewSwitches_SomethingAsked()
