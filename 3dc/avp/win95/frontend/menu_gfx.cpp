@@ -7,6 +7,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a font picture too small to hold its letters is refused before they're read, and its letters then all get one width, so that text doesn't pile up on one spot;
 //   each row is found from the picture's real row length
+//   the menus get a fresh allowance for their pictures, whatever the last level spent; and the font's texture number goes
+//   back to the missing one when the font is released or can't be read, so it can't name someone else's picture
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
@@ -185,6 +187,10 @@ static void LoadMenuFont(void)
 	IntroFont_Light.charWidth = 30;
 	IntroFont_Light.swidth = 5;
 	IntroFont_Light.ascii  = 32;
+
+	// Until this has worked, the font has no picture. Without this, a failure below would leave the number from last time,
+	// which by now can be another picture altogether.
+	IntroFont_Light.textureID = MISSING_TEXTURE;
 
 	RimLoader introFontRIM;
 	if (!introFontRIM.Open("graphics/Menus/IntroFont.RIM"))
@@ -928,6 +934,10 @@ void LoadAllMenuTextures()
 
 extern void LoadAllAvPMenuGfx(void)
 {
+	// Coming back from a level, what it spent on pictures still counts, and a level that spent it all would leave the menus
+	// with none. The menus are the game's own, so they start again.
+	RimLoader_NewLevel();
+
 	LoadAllMenuTextures();
 	LoadMenuFont();
 //	CalculateWidthsOfAAFont();
@@ -1006,6 +1016,7 @@ extern void ReleaseAllAvPMenuGfx(void)
 	Tex_Release(AVPMENUGFX_SPLASH_SCREEN5);
 
 	Tex_Release(IntroFont_Light.textureID);
+	IntroFont_Light.textureID = MISSING_TEXTURE;
 }
 
 extern void DrawAvPMenuGfx(texID_t textureID, int topleftX, int topleftY, int alpha, enum AVPMENUFORMAT_ID format)

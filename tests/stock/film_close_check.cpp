@@ -71,45 +71,69 @@ static uint32_t Decode(SmackerHandle &film, int frames)
 	return total;
 }
 
-template <class Handle, class Open, class Close>
-static bool Exercise(std::string const &path, Open open, Close close, uint64_t &soundBytes)
+// Closes a film when it goes out of scope, whichever way out was taken, unless it's already been closed.
+template <class Handle, class CloseFilm>
+class HeldFilm
+{
+public:
+	HeldFilm(Handle const &opened, CloseFilm closer) : film(opened), closeFilm(closer) {}
+
+	~HeldFilm()
+	{
+		if (film.isValid)
+		{
+			closeFilm(film);
+		}
+	}
+
+	HeldFilm(HeldFilm const &) = delete;
+	HeldFilm &operator=(HeldFilm const &) = delete;
+
+	Handle film;
+
+private:
+	CloseFilm closeFilm;
+};
+
+template <class Handle, class OpenFilm, class CloseFilm>
+static bool Exercise(std::string const &path, OpenFilm openFilm, CloseFilm closeFilm, uint64_t &soundBytes)
 {
 	// alone, then again in the place the first one left free
 	for (int round = 0; round < 2; round++)
 	{
-		Handle film = open(path.c_str());
+		HeldFilm<Handle, CloseFilm> held(openFilm(path.c_str()), closeFilm);
 
-		if (!film.isValid)
+		if (!held.film.isValid)
 		{
 			return false;
 		}
 
-		soundBytes += Decode(film, kFramesEach);
-		close(film);
+		soundBytes += Decode(held.film, kFramesEach);
+		closeFilm(held.film);
 
-		if (film.isValid)
+		if (held.film.isValid)
 		{
 			return false;
 		}
 	}
 
 	// two at once, closing the first while the second goes on, as happens when a film starts over the menu background
-	Handle first = open(path.c_str());
-	Handle second = open(path.c_str());
+	HeldFilm<Handle, CloseFilm> first(openFilm(path.c_str()), closeFilm);
+	HeldFilm<Handle, CloseFilm> second(openFilm(path.c_str()), closeFilm);
 
-	if (!first.isValid || !second.isValid || first.instanceIndex == second.instanceIndex)
+	if (!first.film.isValid || !second.film.isValid || first.film.instanceIndex == second.film.instanceIndex)
 	{
 		return false;
 	}
 
-	soundBytes += Decode(first, 10);
-	soundBytes += Decode(second, 10);
-	close(first);
-	soundBytes += Decode(second, 10);
-	close(second);
+	soundBytes += Decode(first.film, 10);
+	soundBytes += Decode(second.film, 10);
+	closeFilm(first.film);
+	soundBytes += Decode(second.film, 10);
+	closeFilm(second.film);
 
 	// a closed handle is refused, and closing twice is safe
-	close(second);
+	closeFilm(second.film);
 	return true;
 }
 
@@ -137,6 +161,13 @@ int main(int argc, char **argv)
 	do
 	{
 		std::string const name = found.name;
+
+		// What's found in the folder is only ever opened in that folder.
+		if (name.find_first_of("/\\:") != std::string::npos || name == "." || name == "..")
+		{
+			continue;
+		}
+
 		std::string const path = folder + "/" + name;
 		std::string lower = name;
 
