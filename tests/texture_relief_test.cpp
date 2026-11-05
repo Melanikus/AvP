@@ -836,6 +836,29 @@ static Bytes DeepMap(uint32_t side, uint8_t x, uint8_t y, uint8_t z, uint32_t pl
 	return file;
 }
 
+// A deep .rim leaning one way on its left half and the other way on its right half, so that each smaller copy can be told from the one above
+static Bytes LeftAndRightMap(uint32_t side)
+{
+	Bytes file = DeepMap(side, 0, 128, 180);
+	size_t const body = std::string((char const *)&file[0], file.size()).find("BODY") + 8;
+	uint32_t const rowBytes = (side + 7) / 8;
+
+	// The red planes are the first 8 of each row. Left is 200 and right is 56. This only works for a whole number of bytes a row, and each half is a whole number of bytes.
+	for (uint32_t row = 0; row < side; row++)
+	{
+		for (uint32_t plane = 0; plane < 8; plane++)
+		{
+			for (uint32_t across = 0; across < rowBytes; across++)
+			{
+				uint8_t const value = (across < rowBytes / 2) ? 200 : 56;
+				file[body + (size_t)row * 24 * rowBytes + (size_t)plane * rowBytes + across] = ((value >> plane) & 1) ? 0xFF : 0x00;
+			}
+		}
+	}
+
+	return file;
+}
+
 static void WriteMapFile(std::string const &name, Bytes const &bytes)
 {
 	std::string const path = MapFolder() + "/" + name;
@@ -983,6 +1006,77 @@ static void CheckHandMadeMaps()
 		Check(relief.HandMadeBytesHeld() == 0 && !textureList[map].alive, "giving everything back gives it back too");
 
 		RemoveMapFile(mapFile);
+	}
+
+	// A map is what's used even when working one out is on, and nothing's worked out for it
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief;
+		relief.SetAutoGenerate(true);
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+
+		Check(CopiesOf(relief.PictureFor(picture)) != 0 && relief.BytesHeld() == 0 && madeCount == 2, "with working maps out on, a hand-made map still comes first, and nothing is worked out");
+
+		RemoveMapFile(mapFile);
+	}
+
+	// Each smaller copy is really that copy
+	{
+		StartAgain();
+		WriteMapFile(mapFile, LeftAndRightMap(16));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+
+		StandInCopies const *copies = CopiesOf(relief.PictureFor(picture));
+		Check(copies != 0, "a map that's different on each side is used");
+
+		if (copies)
+		{
+			// the next copy down is 8 x 8, with a pitch of 8 * 4 * 2, so its first row's middle is where left turns to right
+			std::vector<uint8_t> const &half = copies->levels[1];
+			Check(half[2] > 128 && half[(4 - 1) * 4 + 2] > 128 && half[4 * 4 + 2] < 128 && half[7 * 4 + 2] < 128, "the next copy down is the whole map at half the size, not its top corner");
+
+			std::vector<uint8_t> const &quarter = copies->levels[2];
+			Check(quarter[2] > 128 && quarter[2 * 4 + 2] < 128, "and so is the one below that");
+		}
+
+		RemoveMapFile(mapFile);
+	}
+
+	// Two levels, each with a picture of its own
+	{
+		StartAgain();
+		TextureRelief relief;
+		texID_t const first = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		texID_t const second = AddTexture(MapFolder() + "/other.rim", 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(first);
+		relief.LogWhatIsHeld();
+		logLines.clear();
+
+		relief.Build(second);
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 0 hand-made, 0 worked out and 1 flat"), "the next level counts only what it asked for");
+	}
+
+	// What a level is said to have is what it would draw
+	{
+		StartAgain();
+		TextureRelief relief;
+		relief.SetAutoGenerate(true);
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(picture);
+		relief.SetAutoGenerate(false);
+		relief.LogWhatIsHeld();
+		Check(LogHas("this level has 0 hand-made, 0 worked out and 1 flat"), "one worked out counts as flat while the switch says not to draw it");
 	}
 
 	// The switch
@@ -1164,6 +1258,10 @@ static void CheckHandMadeMaps()
 	// The parts that only the real game has, and so only reading can check
 	std::string const pictures = ReadSourceFile("3dc/surface_pictures.cpp");
 	std::string const card = ReadSourceFile("win32/d3_func.cpp");
+	std::string const reader = ReadSourceFile("3dc/texture_relief.cpp");
+
+	// the check further on says the same words, so a file past the limit couldn't show this: only that it isn't read first
+	Check(reader.find("if (fileBytes > kReliefMapMostFileBytes)") != std::string::npos && reader.find("if (fileBytes > kReliefMapMostFileBytes)") < reader.find("file.ReadBytes(bytes.get()"), "a file's length is asked before any of it is read");
 
 	Check(pictures.find("device->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);") != std::string::npos, "the surface pass blends between a map's smaller copies");
 	Check(card.find("side > caps.MaxTextureWidth || side > caps.MaxTextureHeight") != std::string::npos, "the card is asked before a map is made");
