@@ -18,6 +18,7 @@
 #include <string.h>
 #include <corecrt_io.h>
 
+#include <new>
 #include <string>
 #include <vector>
 
@@ -568,7 +569,7 @@ static int ToMap(std::string const &from, std::string const &to, MapChoices cons
 
 	if (isDepth && asDds)
 	{
-		printf("A depth map can only be a .rim for now, because nothing reads one yet: %s\n", to.c_str());
+		printf("A depth map can only be a .rim for now, because the game doesn't read a .dds one yet: %s\n", to.c_str());
 		return 1;
 	}
 
@@ -628,8 +629,7 @@ static int ToMap(std::string const &from, std::string const &to, MapChoices cons
 	return 0;
 }
 
-#ifndef RIMPNG_TEST
-int main(int argc, char **argv)
+static int RunTool(int argc, char **argv)
 {
 	std::string const command = (argc > 1) ? argv[1] : "";
 
@@ -686,5 +686,25 @@ int main(int argc, char **argv)
 	printf("rimpng tomap   <map.png> <name_Normal.dds or name_Normal.rim> [--flip-green] [--flip-both] [--side N]\n");
 	printf("rimpng tomap   <depth.png> <name_Depth.rim>\n");
 	return 1;
+}
+
+// A picture can ask for a lot of memory, and asking for more than there is throws, which would stop the program with no word about why
+static int RunWithMemoryCheck(int (*run)(int, char **), int argc, char **argv)
+{
+	try
+	{
+		return run(argc, argv);
+	}
+	catch (std::bad_alloc const &)
+	{
+		printf("There isn't the memory for that. Nothing more was written.\n");
+		return 1;
+	}
+}
+
+#ifndef RIMPNG_TEST
+int main(int argc, char **argv)
+{
+	return RunWithMemoryCheck(RunTool, argc, argv);
 }
 #endif
