@@ -13,6 +13,7 @@
 //   couldn't start draws nothing, and an overlay in two parts goes whole or not at all
 //   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. It needs -dev
 // Modified 2026-11-05 by Melanikus for the AvP port:
+//   a network game puts back whatever the command line changed about how shadows and lights are drawn
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting
 //   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
@@ -68,6 +69,7 @@
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "shadow_debug.h"
+#include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
 
@@ -6876,6 +6878,39 @@ static bool DevKeysCanAct()
 // The developer tools show what walls hide. EDGES and RED VOLUMES draw the shadow of someone behind a wall straight through it, and the shoot tool and the reports say much the same in
 // words. In a network game that's cheating, so none of it runs there, whatever the command line said, and the log says why once. This is asked every frame, because a game only becomes a
 // network game after it has started, and a view that was put aside can come back.
+// Everything the command line can change about how shadows and lights are drawn, with what it was when the game was built: this is read before WinMain reads the command line.
+extern int StaticSceneNoLiveLights;
+extern int KeptSnap;
+
+static const ShadowTuningNumber shadowTuning[] =
+{
+	{ &ShadowsEvenGap, ShadowsEvenGap },
+	{ &StaticSurfaceOn, StaticSurfaceOn },
+	{ &StaticSceneOn, StaticSceneOn },
+	{ &StaticSceneNoLiveLights, StaticSceneNoLiveLights },
+	{ &StaticSurfaceCompare, StaticSurfaceCompare },
+	{ &KeptPrismsOff, KeptPrismsOff },
+	{ &ShadowsDepthGap, ShadowsDepthGap },
+	{ &ShadowBiasSteps, ShadowBiasSteps },
+	{ &KeptSnap, KeptSnap },
+	{ &ToyShadowsDarkness, ToyShadowsDarkness },
+	{ &ToyShadowsSoft, ToyShadowsSoft },
+	{ &ToyShadowsPositions, ToyShadowsPositions },
+	{ &ToyShadowsNearLights, ToyShadowsNearLights },
+	{ &ToyShadowsLampSize, ToyShadowsLampSize },
+	{ &ToyShadowsFlareSize, ToyShadowsFlareSize },
+	{ &ToyShadowsModelGap, ToyShadowsModelGap },
+	{ &ToyShadowsFlareReach, ToyShadowsFlareReach },
+	{ &ToyShadowsFlareCap, ToyShadowsFlareCap },
+	{ &ToyShadowsWorld, ToyShadowsWorld },
+	{ &ToyShadowsTest, ToyShadowsTest },
+	{ &ToyShadowsMaxLights, ToyShadowsMaxLights },
+	{ &ToyShadowsMaxBrief, ToyShadowsMaxBrief },
+	{ &ToyShadowsCasters, ToyShadowsCasters }
+};
+
+static float const shadowSurfaceBiasAsBuilt = ShadowSurfaceBias;
+
 static void KeepDeveloperToolsOutOfNetworkGames()
 {
 	if (AvP.Network == I_No_Network)
@@ -6883,9 +6918,13 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 		return;
 	}
 
+	bool const tuningWasChanged = ShadowTuning_PutBack(shadowTuning, (int)(sizeof(shadowTuning) / sizeof(shadowTuning[0])));
+
+	ShadowSurfaceBias = shadowSurfaceBiasAsBuilt;
+
 	bool const viewShowsTooMuch = ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal;
 
-	if (!viewShowsTooMuch && !ShadowShootOn && !ShadowFlickerOn && !ShadowsFullReport)
+	if (!viewShowsTooMuch && !ShadowShootOn && !ShadowFlickerOn && !ShadowsFullReport && !tuningWasChanged)
 	{
 		return;
 	}
@@ -6904,7 +6943,7 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 	if (!toldThem)
 	{
 		toldThem = true;
-		LogString("shadows: this is a network game, so the developer views, the shoot tool, the flicker count and the full report are off");
+		LogString("shadows: this is a network game, so the developer views, the shoot tool, the flicker count and the full report are off, and what the command line changed about how shadows and lights are drawn is back as it was built");
 	}
 }
 

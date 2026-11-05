@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "shadow_tuning.h"
 
 #include "view_switches.h"
 
@@ -434,6 +435,39 @@ static void TheRealGame()
 
 	std::string const keepingOut = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()", "static void ToyShadows_Draw()");
 
+	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
+	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport" };
+	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
+
+	for (char const *const name : devToggles)
+	{
+		Check(Has(switches, (std::string("devSwitch(\"") + name + "\")").c_str()), std::string(name) + " needs -dev");
+		Check(!Has(switches, (std::string("strstr(command_line, \"") + name + "\")").c_str()), std::string(name) + " has no way round that");
+	}
+
+	for (char const *const name : devNumbers)
+	{
+		Check(Has(switches, (std::string("devNumber(\"") + name + "\")").c_str()), std::string(name) + " needs -dev");
+		Check(!Has(switches, (std::string("strstr(command_line, \"") + name + "\")").c_str()), std::string(name) + " has no way round that");
+	}
+
+	Check(Has(switches, "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");"), "asking without -dev says why it's off");
+	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
+	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
+
+	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ToyShadowsCasters" };
+
+	for (char const *const name : tuned)
+	{
+		Check(Has(render, (std::string("{ &") + name + ", " + name + " }").c_str()), std::string("a network game puts ") + name + " back");
+	}
+
+	Check(Has(keepingOut, "ShadowTuning_PutBack(shadowTuning,"), "and it does that for the whole list");
+	Check(Has(keepingOut, "ShadowSurfaceBias = shadowSurfaceBiasAsBuilt;"), "and for the one that isn't a whole number");
+	Check(Has(keepingOut, "and what the command line changed about how shadows and lights are drawn is back as it was built"), "and the log says that's why");
+	Check(render.find("shadowSurfaceBiasAsBuilt = ShadowSurfaceBias;") != std::string::npos, "what it goes back to is what the game was built with");
+
 	Check(Has(keepingOut, "if (AvP.Network == I_No_Network)\n\t{\n\t\treturn;"), "a game that isn't a network game keeps its tools");
 	Check(Has(keepingOut, "ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal"), "in one that is, only OFF and FINAL are allowed");
 	Check(Has(keepingOut, "ToyShadowsMode = kToyViewFinal;"), "anything else goes back to FINAL");
@@ -702,8 +736,21 @@ static void TheVolumesSwitch()
 	Check(Has(render, "float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;"), "the report doesn't divide by no passes");
 }
 
+static void PuttingTheTuningBack()
+{
+	int dark = 85;
+	int world = 100;
+	ShadowTuningNumber const numbers[] = { { &dark, 85 }, { &world, 70 } };
+
+	Check(ShadowTuning_PutBack(numbers, 2), "a number that was changed is noticed");
+	Check(dark == 85 && world == 70, "and it goes back to what the game was built with, and one that wasn't changed stays");
+	Check(!ShadowTuning_PutBack(numbers, 2), "and the next look finds nothing to do, so the log only says it once");
+	Check(!ShadowTuning_PutBack(numbers, 0), "and no numbers is nothing to do");
+}
+
 int main()
 {
+	PuttingTheTuningBack();
 	WordsForShadows();
 	WordsForLighting();
 	ShadowsAnswers();
