@@ -22,6 +22,10 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   AddItem now says no when the list's buffers are full or closed, and the list keeps count of what it left out.
+//   Its buffers can be missing without harm
+
 #include <stdint.h>
 #include <vector>
 #include "renderStates.h"
@@ -77,18 +81,30 @@ class RenderList
 		IndexBuffer  **ib;
 		VertexDeclaration **decl;
 
+		// What this list has had to leave out, counted so a log or a test can tell. A busy game should never get here.
+		uint32_t leftOutBecauseFull;
+		uint32_t leftOutBecauseClosed;
+
+		// How many quarters of its room this list has been seen using, so the log can say so once for each quarter
+		uint32_t quartersReported;
+
+		void MakeRoomForOneMoreItem();
+		void ReportHowFullItGot();
+		bool BuffersExist() const { return *vb && *ib; }
+
 	public:
 		RenderList(const std::string &listName, size_t size, VertexBuffer **vb, IndexBuffer **ib, VertexDeclaration **decl);
 		~RenderList();
 
 		void Reset();
 		void Init(size_t size);
+		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false);
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }
 
-		uint32_t GetVertexCount() const { return (**vb).GetSize(); }
-		uint32_t GetIndexCount()  const { return (**ib).GetSize(); }
+		uint32_t GetVertexCount() const { return *vb ? (**vb).GetSize() : 0; }
+		uint32_t GetIndexCount()  const { return *ib ? (**ib).GetSize() : 0; }
 
 		int GetCurrentLayer() const { return layer; }
 	
@@ -96,12 +112,24 @@ class RenderList
 		void SetLayer(int layer);
 
 		bool Check(uint32_t numVerts);
+		bool Check(uint32_t numVerts, uint32_t numIndices);
+		void NoteLeftOutBecauseFull();
 		void Sort();
 		void AddTriangle(uint16_t *indexArray, uint32_t a, uint32_t b, uint32_t c, uint32_t n);
-		void AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY_TYPE translucencyMode, enum FILTERING_MODE_ID filteringMode = FILTERING_BILINEAR_ON, enum TEXTURE_ADDRESS_MODE textureAddress = TEXTURE_WRAP);
+		// Saves room for one more shape. Returns false, and saves nothing, when there's no room or the list is closed.
+		// The caller must then write nothing, which is why the compiler complains about a caller that doesn't look.
+		[[nodiscard]] bool AddItem(uint32_t numVerts, texID_t textureID, enum TRANSLUCENCY_TYPE translucencyMode, enum FILTERING_MODE_ID filteringMode = FILTERING_BILINEAR_ON, enum TEXTURE_ADDRESS_MODE textureAddress = TEXTURE_WRAP);
 		void CreateIndices(uint16_t *indexArray, uint32_t numVerts);
 		void CreateOrthoIndices(uint16_t *indexArray);
-		void Draw();
+		// Which polygons Draw draws. Solid and see-through are two halves of the same list, drawn at different moments of a frame.
+		enum Part { kEverything, kSolid, kSeeThrough };
+		// With declarationWithHeights, it's the main draw for Relief map: the corners also get what that declaration brings them, and each polygon's height picture is on stage 2. See
+		// DrawSolidsWithHeights in d3d_render.cpp. Without it, this is the game's own draw, unchanged.
+		void Draw(Part part = kEverything, class VertexDeclaration *declarationWithHeights = 0);
+
+		uint32_t GetLeftOutBecauseFull()   const { return leftOutBecauseFull; }
+		uint32_t GetLeftOutBecauseClosed() const { return leftOutBecauseClosed; }
+		size_t   GetItemRoom()             const { return Items.size(); }
 
 		// test
 		void EnableIndicesOffset();

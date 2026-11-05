@@ -1,7 +1,10 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the LIGHTING and SHADOWS commands
 #include "3dc.h"
 #include "console_command.hpp"
 #include "strutil.h"
 #include "fmvCutscenes.h"
+#include "view_switches.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "3dc.h"
@@ -316,6 +319,26 @@ void CreateGameSpecificConsoleCommands(void)
 	ShowDebuggingText.GunPos = 0;
 	ShowDebuggingText.Tears = 0;
 	ShowDebuggingText.PolyCount = 0;
+
+	// Player settings, not cheats or developer tools, so anyone can use them, or put them on a key: BIND L LIGHTING. See view_switches.h.
+	ConsoleCommand::Make
+	(
+		"LIGHTING",
+		"HOW THE WORLD IS LIT: 1 GOURAUD, 2 PERPIXEL, 3 NORMALS, 4 RELIEF. ON ITS OWN, THE NEXT ONE",
+		LightingCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"SHADOWS",
+		"SHADOWS: 1 ON, 0 OFF. ON ITS OWN, SWITCHES THEM",
+		ShadowsCommand
+	);
+
+	// Only do anything with -dev, and they say so without it. See view_switches.h.
+	ConsoleCommand::Make("RELIEFFLIP", "SWAPS WHICH OF BLACK AND WHITE IS THE POLYGON'S LEVEL IN A DEPTH MAP, LIVE", ReliefFlipCommand);
+	ConsoleCommand::Make("TILTFLIP", "SWAPS BUMPS AND DENTS IN A NORMAL MAP, LIVE", TiltFlipCommand);
+	ConsoleCommand::Make("RELIEFDEPTH", "HOW DEEP A DEPTH MAP GOES, AS A FRACTION OF A PICTURE'S WIDTH, FROM 0 TO 0.2", ReliefDepthCommand);
 
 	#ifndef AVP_DEBUG_VERSION 
 	bool IsACheat = true;

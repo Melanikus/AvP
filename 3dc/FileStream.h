@@ -77,6 +77,7 @@ class FileStream
 			fromFastFile = false;
 			fileOffset = 0;
 			fileSize = 0;
+			memberBytesLeft = 0;
 			ranOutOfData = false;
 		}
 		~FileStream();
@@ -116,6 +117,7 @@ class FileStream
 		bool WriteString(const std::string &theString);
 		bool WriteString(const char *theString);
 		uint32_t GetFileSize();
+		uint64_t BytesLeft();
 		bool Seek(int64_t offset, eSeek seekType);
 		bool SkipBytes(int64_t nBytes);
 		int64_t GetCurrentPos();
@@ -129,6 +131,7 @@ class FileStream
 		bool fromFastFile;
 		uint32_t fileOffset;
 		uint32_t fileSize;
+		uint32_t memberBytesLeft;    // how much of a file inside a fastfile is still to be read
 
 		bool OpenActual(const std::string &fileName, eAccess accessType);
 };

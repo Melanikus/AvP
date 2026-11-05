@@ -1,0 +1,38 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float2 ScreenPlace : VPOS;
+};
+
+#include "lightShapes.fxh"
+
+// Global variables. c0 is Screen: see lightShapes.fxh
+float4 Lights[12] : register(c1);     // each chosen light: x y z, and one over its range
+float4 Kinds[12]  : register(c13);    // x: how bright it is. y: its shape. z: 0 if it's in the mask's total, 1 if it's in the total of lights added per pixel
+
+
+// Name: Light total pixel shader
+// Type: Pixel shader
+// Desc: Adds up all the lights at each pixel, once a frame. Each light then works out its share of this number, and so that sum is never
+// done twice. There are two totals, and a light is in only one of them: the lights baked into the walls, which the mask takes out of the
+// picture, and the lights added per pixel, which are put in afterwards. A pixel with no surface is left alone, and nothing reads it.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    float4 place = PlaceOnPicture(In.ScreenPlace);
+
+    clip(tex2Dlod(Colours, place).a - 0.5f);
+
+    float3 position = PositionHere(In.ScreenPlace, tex2Dlod(Depth, place).r);
+    float3 normal   = NormalHere(place);
+    float2 totals   = float2(0.0f, 0.0f);
+
+    for (int i = 0; i < 12; i++)
+    {
+        float amount = Kinds[i].x * LightShape(Lights[i], Kinds[i].y, position, normal);
+
+        totals += amount * float2(1.0f - Kinds[i].z, Kinds[i].z);
+    }
+
+    return float4(totals, 0.0f, 1.0f);
+}

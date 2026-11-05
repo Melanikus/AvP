@@ -25,6 +25,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every packed file's name is checked when a file is looked up, so a damaged archive cannot hand back the
 //   wrong file; reading the list of packed files stops at the end of the archive, whatever count it claims
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   FF_FileIsThere asks whether a file is there and writes nothing, for a file that's allowed not to be
 
 #include "FastFile.h"
 #include "FileStream.h"
@@ -57,8 +59,8 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex);
 
 // pass this function the name of a file within a fast file you want to find (eg comp1.wav) and it'll return
 // a handle to the file if it exists in a known fast file, or a null handle if file doesn't exist in a known fast file,
-// or also null if the fast file system hasn't been initialised
-FastFileHandle* FF_Find(const std::string &fileName)
+// or also null if the fast file system hasn't been initialised. sayIfNotThere is whether a missing file matters enough to write an error.
+static FastFileHandle* FF_Search(const std::string &fileName, bool sayIfNotThere)
 {
 	if (!isInited) {
 		return NULL;
@@ -98,8 +100,22 @@ FastFileHandle* FF_Find(const std::string &fileName)
 	}
 
 	// not in any fast file. The old code returned entry 0 here: log what it would have returned
-	Con_PrintError("FF_Find - '" + fileName + "' is not in a fast file (before, this lookup returned '" + fastFileHandles[hash][0].fileName + "' from " + FF_GetFastFileName(fastFileHandles[hash][0].fastFileIndex) + ")");
+	if (sayIfNotThere)
+	{
+		Con_PrintError("FF_Find - '" + fileName + "' is not in a fast file (before, this lookup returned '" + fastFileHandles[hash][0].fileName + "' from " + FF_GetFastFileName(fastFileHandles[hash][0].fastFileIndex) + ")");
+	}
+
 	return NULL;
+}
+
+FastFileHandle* FF_Find(const std::string &fileName)
+{
+	return FF_Search(fileName, true);
+}
+
+bool FF_FileIsThere(const std::string &fileName)
+{
+	return DoesFileExist(fileName) || FF_Search(fileName, false) != NULL;
 }
 
 const std::string & FF_GetFastFileName(int32_t fastFileIndex)

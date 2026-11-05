@@ -8,7 +8,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the polygon clipping is one whole macro (Clip_Polygon) instead of a start and an end macro, so code scanners
-//   can read it; the compiled code is the same
+//   can read it; the compiled code is the same;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 
 #if 1
 
@@ -33,7 +34,7 @@ extern VECTORCH RotatedPts[];
 extern MORPHDISPLAY MorphDisplay;
 extern DISPLAYBLOCK *Global_ODB_Ptr;
 extern SHAPEHEADER *Global_ShapeHeaderPtr;
-extern int *Global_ShapePoints;
+extern VECTORCH *Global_ShapePoints;
 extern int *Global_ShapeNormals;
 
 extern VECTORCH LocalView;
@@ -921,7 +922,7 @@ int PolygonWithinFrustum(POLYHEADER *polyPtr)
 		}
 
 		/* Get the 1st polygon point as the POP */
-		VECTORCH *pointsArray = (VECTORCH*)(Global_ShapePoints);
+		VECTORCH *pointsArray = Global_ShapePoints;
 		pop = pointsArray[polyPtr->Poly1stPt];
 	
 		pop.vx -= LocalView.vx;
@@ -959,7 +960,7 @@ int PolygonShouldBeDrawn(POLYHEADER *polyPtr)
 		*/
 		VECTORCH pop;
 		VECTORCH *normalPtr = (VECTORCH*)(Global_ShapeNormals + polyPtr->PolyNormalIndex);
-		VECTORCH *pointsArray = (VECTORCH*)(Global_ShapePoints);
+		VECTORCH *pointsArray = Global_ShapePoints;
 		/* Get the 1st polygon point as the POP */
 
 		pop.vx = pointsArray[polyPtr->Poly1stPt].vx - LocalView.vx;

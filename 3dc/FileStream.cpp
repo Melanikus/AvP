@@ -25,11 +25,13 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   reading past the end of a file gives zero, not whatever was in memory
 // Modified 2026-11-05 by Melanikus for the AvP port:
+//   a file inside a fastfile stops at the end of its own bytes, whoever reads it
 //   RanOutOfData says a read came up short, and PeekByte steps back only after it really read a byte
 
 #include "FileStream.h"
 #include "FastFile.h"
 #include "utilities.h"
+#include <algorithm>
 
 template <class T>
 T swapBytes(T a) {
@@ -225,6 +227,11 @@ bool FileStream::Seek(int64_t offset, eSeek seekType)
 		return false;
 	}
 
+	// reading from a new place leaves a different amount of a fastfile's file to read
+	if (fromFastFile) {
+		memberBytesLeft = (uint32_t)BytesLeft();
+	}
+
 	return true;
 }
 
@@ -243,12 +250,25 @@ DWORD FileStream::ReadBytes(uint8_t *buffer, size_t nBytes)
 {
 	DWORD nBytesRead = 0;
 
+	// What was asked for, before the limit below. Reaching the end of a file inside a fastfile counts as running out,
+	// and the limit would hide that, because at the end of the file it's 0, and nothing would ever look short.
+	size_t const nBytesAsked = nBytes;
+
+	// A file inside a fastfile ends where its own bytes end. What comes next is some other file, so reading there gives nothing, as it would at the end of any file.
+	if (fromFastFile) {
+		nBytes = (std::min)(nBytes, (size_t)memberBytesLeft);
+	}
+
 	if (::ReadFile(fileHandle, static_cast<LPVOID>(buffer), nBytes, &nBytesRead, NULL) == 0) {
 		ranOutOfData = true;
 		return 0;
 	}
 
-	if (nBytesRead < nBytes) {
+	if (fromFastFile) {
+		memberBytesLeft -= nBytesRead;
+	}
+
+	if (nBytesRead < nBytesAsked) {
 		ranOutOfData = true;
 	}
 
@@ -265,6 +285,16 @@ bool FileStream::WriteString(const std::string &theString)
 bool FileStream::WriteString(const char *theString)
 {
 	return WriteBytes(reinterpret_cast<const uint8_t*>(theString), strlen(theString));
+}
+
+// How much of this file is left to read. A file inside a fastfile ends where it ends, not where the fastfile does.
+uint64_t FileStream::BytesLeft()
+{
+	int64_t const place = GetCurrentPos();
+	int64_t const start = fromFastFile ? (int64_t)fileOffset : 0;
+	int64_t const end = (fromFastFile ? (int64_t)fileOffset : 0) + (int64_t)GetFileSize();
+
+	return (place < start || place > end) ? 0 : (uint64_t)(end - place);
 }
 
 uint32_t FileStream::GetFileSize()

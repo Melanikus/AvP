@@ -1,0 +1,59 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float3 ViewPosition : TEXCOORD0;
+    float3 Normal       : TEXCOORD1;
+    float2 Texture      : TEXCOORD2;
+    float3 Keep         : TEXCOORD3;
+};
+
+// Pixel shader output structure: one colour for each picture being drawn on
+struct PS_OUTPUT
+{
+    float4 Distance : COLOR0;    // how far away this pixel is
+    float4 Normal   : COLOR1;    // which way it faces, as colours from 0 to 1. Read it back with no normalising: it can be zero
+    float4 Colour   : COLOR2;    // the colour of its texture. An alpha of 1 means a surface is here, and 0 means nothing is
+};
+
+// Global variables
+sampler2D Tex0 : register(s0);
+float4    WorldAxes[3] : register(c0);    // the world's x, y and z directions, as the camera sees them
+
+
+// Name: Surface pixel shader
+// Type: Pixel shader
+// Desc: Writes down what every light needs to know about this pixel, once, so that no light has to draw the polygon again to find out.
+
+PS_OUTPUT ps_main(in PS_INPUT In)
+{
+    PS_OUTPUT Out;
+
+    float4 texel = tex2D(Tex0, In.Texture);
+
+    // A polygon nobody wrote a normal for stays out of the pictures, and keeps the light the game gave it.
+    clip(In.Keep.x - 0.5f);
+
+    // A hole in a texture, such as the gaps in a grate. The game's alpha test drew nothing here, so what shows is the surface behind, and
+    // that's the one the pictures must hold. This is the game's own sum, from pixel.psh.
+    //
+    // It looks as if the test should be against 0.5, because d3_func.cpp sets the game's to 0.5. It isn't. That line hands the card the
+    // bits of a float where it wants a whole number, and the card reads the low 8 bits, which are 0. So the game drops only an alpha of
+    // exactly 0, and this is half of one step above that. At 0.5, the soft edge of a grate would be drawn by the game but missing from
+    // the pictures, and it would show as a thin unlit line.
+    clip(texel.a * In.Keep.y + In.Keep.z - 0.002f);
+
+    Out.Distance = float4(In.ViewPosition.z, 0.0f, 0.0f, 1.0f);
+    Out.Colour   = float4(texel.rgb, 1.0f);
+
+    // A shape can really have a zero normal. Normalising zero gives nonsense, so that's kept as zero. The game lights such a point as a
+    // surface turned side-on, and so do the light shaders.
+    // Normals arrive in the world's directions, and the lights are in the camera's. This pass runs once a frame, so this is the one place
+    // they're turned to match.
+    float3 normal = In.Normal.x * WorldAxes[0].xyz + In.Normal.y * WorldAxes[1].xyz + In.Normal.z * WorldAxes[2].xyz;
+    float  size   = dot(normal, normal);
+    float3 facing = (size > 0.0f) ? normal / sqrt(size) : float3(0.0f, 0.0f, 0.0f);
+
+    Out.Normal = float4(facing * 0.5f + 0.5f, 1.0f);
+
+    return Out;
+}

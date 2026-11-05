@@ -4,6 +4,7 @@
 tests/level_pictures_test.cpp
 3dc/win95/chunk_load.cpp
 3dc/win95/avp_string.cpp
+3dc/surface_tangent.cpp
 3dc/win95/chunk.cpp
 3dc/win95/chunk_light.cpp
 3dc/win95/chunk_object.cpp

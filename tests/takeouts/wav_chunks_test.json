@@ -1,0 +1,199 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a short read is not noted",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "if (nBytesRead < nBytesAsked) {\n\t\tranOutOfData = true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a failed read is not noted",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "ranOutOfData = true;\n\t\treturn 0;",
+					"to": "return 0;"
+				}
+			]
+		},
+		{
+			"name": "opening a file does not start afresh",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "\tranOutOfData = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "PeekByte always steps back",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "if (ReadBytes(&ret, sizeof(ret)) == sizeof(ret)) {\n\t\tSeek(-1, SeekCurrent);\n\t}",
+					"to": "ReadBytes(&ret, sizeof(ret));\n\tSeek(-1, SeekCurrent);"
+				}
+			]
+		},
+		{
+			"name": "a byte past the end is not zero",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "uint8_t FileStream::GetByte()\n{\n\tuint8_t ret = 0;",
+					"to": "uint8_t FileStream::GetByte()\n{\n\tuint8_t ret;"
+				}
+			]
+		},
+		{
+			"name": "the search does not stop at the end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/wav_chunks.h",
+					"from": "if (stream.RanOutOfData())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the search takes any chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/wav_chunks.h",
+					"from": "if (chunkName == 'data')",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a WAV file has a search of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "int LoadWavFile(int soundNum, const std::string &fileName)",
+					"to": "int LoadWavFile(int soundNum, const std::string &fileName) // while (1)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a loader stops using the search",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "if (!FindWavDataChunk(fStream))\n\t{\n\t\treturn ReturnInvalidWAV();\n\t}\n\n\tuint32_t nAudioBytes = fStream.GetUint32LE();\n\n\tALenum alFormat = GetALFormat(wBitsPerSample, nChannels);\n\n\tif (!AllocateWavData(soundNum, nAudioBytes))\n\t{\n\t\treturn ReturnInvalidWAV();",
+					"to": "if (false)\n\t{\n\t\treturn ReturnInvalidWAV();\n\t}\n\n\tuint32_t nAudioBytes = fStream.GetUint32LE();\n\n\tALenum alFormat = GetALFormat(wBitsPerSample, nChannels);\n\n\tif (!AllocateWavData(soundNum, nAudioBytes))\n\t{\n\t\treturn ReturnInvalidWAV();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sound bank is read without being opened",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "if (!fStream.IsGood())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sound bank loop does not stop",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": " && !fStream.RanOutOfData())",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an archive list does not stop",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": " && !file.RanOutOfData()",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the WAV limit is different",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "kMaxWavDataBytes = 64 * 1024 * 1024",
+					"to": "kMaxWavDataBytes = 4000u * 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the WAV size is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "if (nAudioBytes > kMaxWavDataBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: running out of memory stops the game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "new(std::nothrow) uint8_t[nAudioBytes]",
+					"to": "new uint8_t[nAudioBytes]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a loader asks for memory itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "if (!AllocateWavData(soundNum, nAudioBytes))\n\t{\n\t\treturn ReturnInvalidWAV();",
+					"to": "GameSounds[soundNum].audioBuffer = new uint8_t[nAudioBytes];\n\tif (false)\n\t{\n\t\treturn ReturnInvalidWAV();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused sound in the bank is not stepped over",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "fStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);\n\t\treturn ReturnInvalidWAV();",
+					"to": "return ReturnInvalidWAV();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a scream count is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/scream.cpp",
+					"from": "if (count < 0 || count > (int)kMaxScreamFileSize)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a scream list asks for memory itself",
+			"changes": [
+				{
+					"file": "3dc/avp/scream.cpp",
+					"from": "AllocateScreamList(num_voice_types, sizeof(ScreamVoiceType))",
+					"to": "PoolAllocateMem(num_voice_types * sizeof(ScreamVoiceType))"
+				}
+			]
+		}
+	]
+}

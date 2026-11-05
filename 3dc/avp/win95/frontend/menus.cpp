@@ -13,6 +13,7 @@
 #include "pldnet.h"
 #include "Input.h"
 #include "menus.h"
+#include "view_settings.h"
 #include "env_info.h"
 #include "io.h"
 #include "hud_Layout.h"
@@ -344,6 +345,7 @@ int AvP_MainMenus(void)
 
 		SoundSys_Management();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		CheckForLoadGame();
 
@@ -474,6 +476,7 @@ extern int AvP_InGameMenus(void)
 		D3D_FadeDownScreen(ONE_FIXED/8,0);
 		AvP_UpdateMenus();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		return 1;
 	}

@@ -24,6 +24,8 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   each packed file keeps its name, so a lookup can check it (see FastFile.cpp)
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   adds FF_FileIsThere
 
 #ifndef _FastFile_h_
 #define _FastFile_h_
@@ -42,6 +44,10 @@ struct FastFileHandle
 
 bool FF_Init();
 FastFileHandle* FF_Find(const std::string &fileName);
+
+// Is this file there to be read, loose in the game's folder or packed in a fast file? Those are the two places FileStream::Open looks. It writes nothing either way, so it's the way to ask about a file that's allowed
+// not to be there, such as a texture's hand-made map. Use FF_Find, or just open it, for a file that should be there, so that the log says if it isn't.
+bool FF_FileIsThere(const std::string &fileName);
 const std::string & FF_GetFastFileName(int32_t fastFileIndex);
 
 #endif

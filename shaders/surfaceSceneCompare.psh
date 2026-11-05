@@ -1,0 +1,39 @@
+// What the scene's walls come to, written into the surface pictures so that the two ways of drawing them can be compared. See CompareSceneRoutes in
+// 3dc/d3d_render.cpp. The colour is surfaceScene.psh's sum, and the picture's alpha says a surface is here, as it does in the surface pictures.
+struct PS_INPUT
+{
+    float4 Diffuse      : COLOR0;
+    float4 Specular     : COLOR1;
+    float2 Texture      : TEXCOORD0;
+    float3 ViewPosition : TEXCOORD1;
+};
+
+struct PS_OUTPUT
+{
+    float4 Distance : COLOR0;
+    float4 Normal   : COLOR1;    // not compared here, so both routes write the same
+    float4 Colour   : COLOR2;
+};
+
+sampler2D Tex0 : register(s0);
+
+
+// Name: Scene comparison pixel shader
+// Type: Pixel shader
+// Desc: Writes down the colour and the distance of one wall pixel
+
+PS_OUTPUT ps_main(in PS_INPUT In)
+{
+    PS_OUTPUT Out;
+
+    float4 colour = tex2D(Tex0, In.Texture) * In.Diffuse + In.Specular;
+
+    // the game's alpha test, which keeps anything above zero
+    clip(colour.a - 0.002f);
+
+    Out.Distance = float4(In.ViewPosition.z, 0.0f, 0.0f, 1.0f);
+    Out.Normal   = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    Out.Colour   = float4(saturate(colour.rgb), 1.0f);
+
+    return Out;
+}
