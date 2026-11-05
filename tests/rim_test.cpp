@@ -207,11 +207,12 @@ struct Result
 {
 	bool opened;
 	bool finished;      // whether it read all its picture
+	RimProblem problem; // why it didn't, or why it wouldn't open
 	uint32_t width, height;
 	std::vector<uint8_t> pixels;
 	bool nothingPastTheEnd;
 
-	Result() : opened(false), finished(false), width(0), height(0), nothingPastTheEnd(true) {}
+	Result() : opened(false), finished(false), problem(kRimFine), width(0), height(0), nothingPastTheEnd(true) {}
 
 	// blue, green, red and alpha of a pixel, in the order they're written
 	bool PixelIs(uint32_t x, uint32_t y, int b, int g, int r, int a) const
@@ -233,6 +234,7 @@ static Result ReadFrom(std::string const &path)
 	Result result;
 	RimLoader picture;
 	result.opened = picture.Open(path);
+	result.problem = picture.Problem();
 
 	if (result.opened)
 	{
@@ -241,6 +243,7 @@ static Result ReadFrom(std::string const &path)
 
 		std::vector<uint8_t> memory(size + kWatched, kPattern);
 		result.finished = picture.Decode(&memory[0], result.width * 4);
+		result.problem = picture.Problem();
 
 		for (size_t i = size; i < memory.size(); i++)
 		{
@@ -379,7 +382,7 @@ static void CheckRefusals()
 		Picture p(1, 1, tooMany[i], 0);
 		p.colours = CountingColours(1);
 		p.body.assign(tooMany[i], 0);
-		Check(!Read(p.File()).opened, std::to_string(tooMany[i]) + " planes is refused, because the sum that works out a colour number can't hold them");
+		Check(Read(p.File()).problem == kRimPlanesWrong, std::to_string(tooMany[i]) + " planes is refused, because the sum that works out a colour number can't hold them");
 	}
 
 	uint32_t const compressions[3] = { 2, 3, 255 };
@@ -389,31 +392,31 @@ static void CheckRefusals()
 		Picture p(1, 1, 8, compressions[i]);
 		p.colours = CountingColours(1);
 		p.body.assign(8, 0);
-		Check(!Read(p.File()).opened, "packing method " + std::to_string(compressions[i]) + " is refused, because it can't be read");
+		Check(Read(p.File()).problem == kRimPackingWrong, "packing method " + std::to_string(compressions[i]) + " is refused, because it can't be read");
 	}
 
-	Check(!Read(Bytes()).opened, "an empty file is refused");
+	Check(Read(Bytes()).problem == kRimPartsWrong, "an empty file is refused");
 
 	// A few bytes asking for a huge picture: this used to take 256 MB, and minutes of reading from nothing
 	{
 		Picture p(8192, 8192, 16, 1);
 		p.colours = CountingColours(1);
-		Check(p.File().size() < 100 && !Read(p.File()).opened, "a tiny file saying it's 8192 x 8192 is refused");
+		Check(p.File().size() < 100 && Read(p.File()).problem == kRimTooLarge, "a tiny file saying it's 8192 x 8192 is refused");
 
 		Picture tooWide(8193, 1, 1, 0);
 		tooWide.colours = CountingColours(1);
 		tooWide.body.assign(1025, 0);
-		Check(!Read(tooWide.File()).opened, "a picture wider than the limit is refused, with all its data there");
+		Check(Read(tooWide.File()).problem == kRimTooLarge, "a picture wider than the limit is refused, with all its data there");
 
 		Picture tooTall(1, 8193, 1, 0);
 		tooTall.colours = CountingColours(1);
 		tooTall.body.assign(8193, 0);
-		Check(!Read(tooTall.File()).opened, "and one taller");
+		Check(Read(tooTall.File()).problem == kRimTooLarge, "and one taller");
 
 		Picture tooMany(2049, 2048, 1, 0);
 		tooMany.colours = CountingColours(1);
 		tooMany.body.assign((size_t)257 * 2048, 0);
-		Check(!Read(tooMany.File()).opened, "and one with too many pixels in all");
+		Check(Read(tooMany.File()).problem == kRimTooLarge, "and one with too many pixels in all");
 
 		Picture most(2048, 2048, 1, 0);
 		most.colours = CountingColours(2);
@@ -432,37 +435,37 @@ static void CheckRefusals()
 		Picture plain(8, 8, 8, 0);
 		plain.colours = CountingColours(1);
 		plain.body.assign(63, 0);
-		Check(!Read(plain.File()).opened, "a plain picture one byte short is refused");
+		Check(Read(plain.File()).problem == kRimBodyTooShort, "a plain picture one byte short is refused");
 		plain.body.assign(64, 0);
 		Check(Read(plain.File()).opened, "and with exactly enough it opens");
 
 		Picture packed(8, 8, 8, 1);
 		packed.colours = CountingColours(1);
-		Check(!Read(packed.File()).opened, "a packed picture with nothing in it is refused");
+		Check(Read(packed.File()).problem == kRimBodyTooShort, "a packed picture with nothing in it is refused");
 		packed.body.assign(1, 0);
 		Check(Read(packed.File()).opened, "a 64th of its size can't be ruled out until it's unpacked");
 
 		Picture big(64, 64, 8, 1);
 		big.colours = CountingColours(1);
 		big.body.assign(63, 0);
-		Check(!Read(big.File()).opened, "less than the best packing could make it from is refused");
+		Check(Read(big.File()).problem == kRimBodyTooShort, "less than the best packing could make it from is refused");
 		big.body.assign(64, 0);
 		Check(Read(big.File()).opened, "and exactly that opens");
 
 		Bytes file = plain.File();
 		file.pop_back();
-		Check(!Read(file).opened, "a body that says it's longer than the file is refused");
+		Check(Read(file).problem == kRimBodyPastEnd, "a body that says it's longer than the file is refused");
 
 		Bytes tableFile;
 		Add(tableFile, "CMAP");
 		Add32(tableFile, 300);
-		Check(!Read(tableFile).opened, "and so is a colour table longer than the file");
+		Check(Read(tableFile).problem == kRimColourTablePastEnd, "and so is a colour table longer than the file");
 
 		// really there, all of it, with more colours than a number can name
 		Picture manyColours(1, 1, 16, 0);
 		manyColours.colours.assign(3 * 65537, 0);
 		manyColours.body.assign(16, 0);
-		Check(!Read(manyColours.File()).opened, "a colour table with more colours than can be used is refused");
+		Check(Read(manyColours.File()).problem == kRimColourTableTooBig, "a colour table with more colours than can be used is refused");
 		manyColours.colours.assign(3 * 65536, 0);
 		Check(Read(manyColours.File()).opened, "and with exactly as many as can be used it opens");
 	}
@@ -471,7 +474,7 @@ static void CheckRefusals()
 		Bytes junk;
 		Add(junk, "JUNK");
 		Add32(junk, 0);
-		Check(!Read(junk).opened, "a file that starts with something else is refused");
+		Check(Read(junk).problem == kRimPartsWrong, "a file that starts with something else is refused");
 	}
 
 	{
@@ -479,21 +482,21 @@ static void CheckRefusals()
 		Add(file, "FORM");
 		Add32(file, 0);
 		Add(file, "ILBM");
-		Check(!Read(file).opened, "a file that ends before its picture is refused, instead of being searched forever");
+		Check(Read(file).problem == kRimPartsWrong, "a file that ends before its picture is refused, instead of being searched forever");
 	}
 
 	{
 		Bytes file;
 		Add(file, "ILBM");
 		Add(file, "JUNK");
-		Check(!Read(file).opened, "a part it doesn't know is refused");
+		Check(Read(file).problem == kRimPartsWrong, "a part it doesn't know is refused");
 	}
 
 	{
 		Bytes file;
 		Add(file, "CMAP");
 		Add32(file, 3u * 65537u);
-		Check(!Read(file).opened, "a colour table bigger than it can be is refused");
+		Check(Read(file).problem == kRimColourTableTooBig, "a colour table bigger than it can be is refused");
 	}
 }
 
@@ -524,7 +527,7 @@ static void CheckBadPixels()
 		p.colours = CountingColours(2);
 		p.body.assign(5000, 0x80);
 		Result const r = Read(p.File());
-		Check(r.opened && !r.finished && r.nothingPastTheEnd, "a picture of nothing but no-ops ends, says so, and writes nothing past the end");
+		Check(r.opened && !r.finished && r.problem == kRimBodyTooLong && r.nothingPastTheEnd, "a picture of nothing but no-ops ends, says so, and writes nothing past the end");
 	}
 
 	{
@@ -535,7 +538,7 @@ static void CheckBadPixels()
 		Bytes file = p.File();
 		file.insert(file.end(), 100, 0xFF);
 		Result const r = Read(file);
-		Check(r.opened && !r.finished, "what comes after a picture's data isn't read as part of it");
+		Check(r.opened && !r.finished && r.problem == kRimRanOut, "what comes after a picture's data isn't read as part of it");
 	}
 
 	{
@@ -546,7 +549,7 @@ static void CheckBadPixels()
 		Bytes file = p.File();
 		file.insert(file.end(), 10, 0xFF);
 		Result const r = Read(file);
-		Check(r.opened && !r.finished, "a repeated run with nothing to repeat stops there");
+		Check(r.opened && !r.finished && r.problem == kRimRanOut, "a repeated run with nothing to repeat stops there");
 	}
 
 	{
@@ -588,7 +591,7 @@ static void CheckBadPixels()
 		Picture p(2, 2, 0, 0);
 		p.colours = CountingColours(1);
 		Result const r = Read(p.File());
-		Check(r.opened && r.ShowsColour(0, 0, 0) && r.nothingPastTheEnd, "a picture with no planes is all colour 0");
+		Check(r.problem == kRimPlanesWrong, "a picture with no planes is refused, because a few bytes could ask for any size");
 	}
 
 	{
@@ -604,7 +607,7 @@ static void CheckBadPixels()
 
 		p.body.resize(32 * 8 * 4 / 64 > p.body.size() ? 32 * 8 * 4 / 64 : p.body.size());
 		Result const r = Read(p.File());
-		Check(r.opened && !r.finished, "packed and cut short: it opens, and says it couldn't finish");
+		Check(r.opened && !r.finished && r.problem == kRimRanOut, "packed and cut short: it opens, and says it couldn't finish");
 		Check(r.nothingPastTheEnd, "and writes nothing past the end");
 		Check(r.pixels.size() > 32 * 4 && r.pixels[32 * 4] == kPattern, "and a row it couldn't finish isn't written at all");
 	}
@@ -651,6 +654,109 @@ static uint32_t RandomBits()
 	randomState ^= randomState >> 17;
 	randomState ^= randomState << 5;
 	return randomState;
+}
+
+// A file can be any length, and every byte read is a call to Windows. So no file should be able to keep this reading just by going on.
+static void CheckLongFiles()
+{
+	printf("Long files:\n");
+
+	{
+		// The longest honest way to pack a row: every byte in a run of its own, which takes 2
+		Picture p(8, 1, 1, 1);
+		p.colours = CountingColours(2);
+		uint8_t const body[2] = { 0, 0xFF };
+		p.body.assign(body, body + 2);
+		Result const r = Read(p.File());
+		Check(r.opened && r.finished && r.problem == kRimFine && r.ShowsColour(0, 0, 1), "every byte packed in a run of its own is read");
+	}
+
+	{
+		Picture p(32, 32, 8, 1);
+		p.colours = CountingColours(2);
+
+		for (int i = 0; i < 4 * 8 * 32; i++)
+		{
+			p.body.push_back(0);
+			p.body.push_back(0xFF);
+		}
+
+		Result const r = Read(p.File());
+		Check(r.opened && r.finished && r.problem == kRimFine, "a whole picture packed that way is read to its end");
+	}
+
+	{
+		// One no-op in front of the longest honest row, with all of the row's data there after it. Only the limit can stop this.
+		Picture p(8, 1, 1, 1);
+		p.colours = CountingColours(2);
+		uint8_t const body[3] = { 0x80, 0, 0xFF };
+		p.body.assign(body, body + 3);
+		Result const r = Read(p.File());
+		Check(r.opened && !r.finished && r.problem == kRimBodyTooLong, "one byte past the most a picture can need is refused, though the rest of it is there");
+	}
+
+	{
+		// A plain picture's data can be longer than it needs. The game's own include some, and the rest just isn't read.
+		Picture p(8, 1, 1, 0);
+		p.colours = CountingColours(2);
+		p.body.assign(100, 0x80);
+		Result const r = Read(p.File());
+		Check(r.opened && r.finished && r.problem == kRimFine && r.ShowsColour(0, 0, 1), "a plain picture with more data than it needs is fine");
+	}
+
+	Picture good(1, 1, 8, 0);
+	good.colours = CountingColours(1);
+	good.body.assign(8, 0);
+	Bytes const goodFile = good.File();
+
+	// That picture has 4 parts: FORM, ILBM with BMHD, CMAP and BODY
+	Bytes parts;
+
+	for (int i = 0; i < kMostRimParts - 4; i++)
+	{
+		Add(parts, "FORM");
+		Add32(parts, 0);
+	}
+
+	Bytes atTheLimit = parts;
+	atTheLimit.insert(atTheLimit.end(), goodFile.begin(), goodFile.end());
+	Check(Read(atTheLimit).finished, "a picture with the most parts there can be is read");
+
+	Bytes overTheLimit = atTheLimit;
+	overTheLimit.insert(overTheLimit.begin(), goodFile.begin(), goodFile.begin() + 8);
+	Check(Read(overTheLimit).problem == kRimTooManyParts, "and one more is refused");
+
+	Bytes onlyParts;
+
+	for (int i = 0; i < 100000; i++)
+	{
+		Add(onlyParts, "FORM");
+		Add32(onlyParts, 0);
+	}
+
+	Check(Read(onlyParts).problem == kRimTooManyParts, "a long file of nothing but parts is refused early");
+
+	Check(ReadFrom(TestFilePath() + ".not-there").problem == kRimNoFile, "a file that isn't there says so");
+
+	bool allSayDifferentThings = true;
+
+	for (int i = 0; i < kRimProblemCount; i++)
+	{
+		std::string const words = RimLoader_ProblemWords((RimProblem)i);
+		allSayDifferentThings = allSayDifferentThings && !words.empty() && words != RimLoader_ProblemWords(kRimProblemCount);
+
+		for (int j = 0; j < i; j++)
+		{
+			allSayDifferentThings = allSayDifferentThings && words != RimLoader_ProblemWords((RimProblem)j);
+		}
+	}
+
+	Check(allSayDifferentThings, "every reason has words of its own for the log");
+
+	std::string const textures = ReadSourceFile("3dc/TextureManager.cpp");
+	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menu_gfx.cpp");
+	Check(textures.find("if (newRim.Problem() != kRimNoFile)") != std::string::npos, "a picture that's there and refused says why in the game, not one that isn't there");
+	Check(menus.find("if (!introFontRIM.Decode(srcBuffer, width*4))") != std::string::npos, "and the menu font doesn't use rows it didn't read");
 }
 
 static void CheckDamagedPictures()
@@ -736,14 +842,39 @@ static void CheckInsideAFastFile()
 	// The same bytes, with the file said to end one byte sooner: its body now reaches past its end, into its neighbour
 	{
 		memberHandle.fileSize = (uint32_t)goodFile.size() - 1;
-		Check(!ReadFrom(memberName).opened, "a body past the end of its own file is refused, with a neighbour there to read");
+		Check(ReadFrom(memberName).problem == kRimBodyPastEnd, "a body past the end of its own file is refused, with a neighbour there to read");
 	}
 
 	// The file said to end inside its colour table. All the rest of a good picture is right after it, so read on and it would open.
 	{
 		size_t const table = std::string((char const *)&goodFile[0], goodFile.size()).find("CMAP");
 		memberHandle.fileSize = (uint32_t)table + 8 + 3;
-		Check(!ReadFrom(memberName).opened, "and so is a file that ends inside its colour table, because no body can follow it");
+		Check(ReadFrom(memberName).problem == kRimColourTablePastEnd, "and so is a file that ends inside its colour table, because no body can follow it");
+	}
+
+	// Any reader of a file inside a fastfile, not just the picture loader, stops at the end of its own bytes
+	{
+		memberHandle.fileSize = 4;
+
+		FileStream member;
+		member.Open(memberName, FileStream::FileRead);
+		Check(member.BytesLeft() == 4, "a file inside a fastfile knows how much of it there is");
+
+		uint8_t bytes[8];
+		memset(bytes, 0x11, sizeof(bytes));
+		Check(member.ReadBytes(bytes, sizeof(bytes)) == 4, "asking for more than it holds gets what it holds");
+		Check(memcmp(bytes, &goodFile[0], 4) == 0 && bytes[4] == 0x11, "from the right place, and nothing more");
+		Check(member.GetByte() == 0 && member.GetUint32LE() == 0, "past its end it reads as 0, with a neighbour there to read");
+
+		member.Seek(-2, FileStream::SeekCurrent);
+		Check(member.BytesLeft() == 2 && member.GetByte() == goodFile[2], "going back finds its own bytes again");
+		Check(member.GetUint16LE() == goodFile[3], "and a number across its end only gets the bytes that are its own");
+
+		member.Seek(100, FileStream::SeekCurrent);
+		Check(member.GetByte() == 0, "going past its end finds nothing, though the neighbour is there");
+
+		member.Seek(0, FileStream::SeekStart);
+		Check(member.GetByte() == 0, "going before its start finds nothing, though there's something there");
 	}
 
 	memberName.clear();
@@ -870,7 +1001,7 @@ static void CheckFontSum()
 	Check(loader.find("y < header.height && !ranOut") != std::string::npos, "no more rows are read once the data has run out");
 
 	// The game's side of a picture that can't be finished
-	Check(textures.find("if (!decoded)") != std::string::npos && textures.find("R_ReleaseTexture(newTexture);") > textures.find("if (!decoded)") && textures.find("R_ReleaseTexture(newTexture);") != std::string::npos, "the game doesn't keep a picture that couldn't be finished");
+	Check(textures.find("if (!decoded)") != std::string::npos && textures.find("R_ReleaseTexture(newTexture);", textures.find("if (!decoded)")) != std::string::npos, "the game doesn't keep a picture that couldn't be finished");
 
 	// What's past the end of a table is whatever memory holds, which can happen to be zero, so a picture alone can't always show this.
 	Check(loader.find("if (index < numColours)") != std::string::npos, "a colour is only looked up if it's in the table");
@@ -891,6 +1022,7 @@ int main()
 	CheckGoodPictures();
 	CheckRefusals();
 	CheckBadPixels();
+	CheckLongFiles();
 	CheckDamagedPictures();
 	CheckInsideAFastFile();
 	CheckLetterWidths();

@@ -74,6 +74,7 @@ class FileStream
 			fromFastFile = false;
 			fileOffset = 0;
 			fileSize = 0;
+			memberBytesLeft = 0;
 		}
 		~FileStream();
 
@@ -121,6 +122,7 @@ class FileStream
 		bool fromFastFile;
 		uint32_t fileOffset;
 		uint32_t fileSize;
+		uint32_t memberBytesLeft;    // how much of a file inside a fastfile is still to be read
 
 		bool OpenActual(const std::string &fileName, eAccess accessType);
 };

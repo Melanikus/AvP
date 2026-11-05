@@ -218,7 +218,14 @@ static void LoadMenuFont(void)
 
 	// allocate buffer to decode into
 	uint8_t *srcBuffer = new uint8_t[width*height*4];
-	introFontRIM.Decode(srcBuffer, width*4);
+
+	// Packed data that runs out only shows now, and the rows it didn't reach hold whatever was in memory
+	if (!introFontRIM.Decode(srcBuffer, width*4))
+	{
+		Con_PrintError(std::string("Menus/IntroFont.RIM isn't used, because ") + RimLoader_ProblemWords(introFontRIM.Problem()));
+		delete[] srcBuffer;
+		return;
+	}
 
 	uint8_t *srcPtr = srcBuffer;
 

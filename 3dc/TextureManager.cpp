@@ -32,7 +32,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a picture whose texture can't be locked lets go of the texture
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   a picture that ends before it should isn't kept
+//   a picture that ends before it should isn't kept, and one that's refused says why
 
 #include <sstream>
 #include "renderer.h"
@@ -263,6 +263,12 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 
 	if (!newRim.Open(fileName))
 	{
+		// A file that isn't there is nothing new. One that is, and can't be used, was made for a reason, and whoever made it needs to know what's wrong with it.
+		if (newRim.Problem() != kRimNoFile)
+		{
+			Con_PrintError("The picture " + fileName + " isn't used, because " + RimLoader_ProblemWords(newRim.Problem()));
+		}
+
 		return MISSING_TEXTURE;
 	}
 
@@ -300,7 +306,7 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	// A file can say it's larger than what it holds, and that only shows when it's unpacked.
 	if (!decoded)
 	{
-		Con_PrintError("The picture " + fileName + " ends before it should, so it isn't used");
+		Con_PrintError("The picture " + fileName + " isn't used, because " + RimLoader_ProblemWords(newRim.Problem()));
 		R_ReleaseTexture(newTexture);
 		return MISSING_TEXTURE;
 	}

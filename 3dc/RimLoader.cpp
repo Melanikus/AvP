@@ -28,7 +28,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a picture with more planes than a colour number has bits is refused, so is one packed in a way this can't read,
 //   and a no-op in a packed row no longer counts as the bytes of the run before it;
-//   a picture too large is refused, so is one that can't hold what its size says, and reading stops where its data does
+//   a picture too large is refused, so is one that can't hold what its size says, and reading stops where its data does;
+//   so is one with no planes, too many parts or a colour table past its end, packed data stops at the most a picture needs, and each refusal has its reason
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -49,6 +50,7 @@ RimLoader::RimLoader()
 	destRowIndex = 0;
 	bodyLeft = 0;
 	ranOut = false;
+	problem = kRimFine;
 
 	// change this when code works
 	dest = 0;
@@ -59,6 +61,39 @@ RimLoader::RimLoader()
 RimLoader::~RimLoader()
 {
 	delete[] colourMap;
+}
+
+const char *RimLoader_ProblemWords(RimProblem problem)
+{
+	switch (problem)
+	{
+		case kRimFine:               return "there's nothing wrong with it";
+		case kRimNoFile:             return "the file isn't there";
+		case kRimTooLarge:           return "it's larger than a picture can be, which is 8192 on a side and 2048 x 2048 in all";
+		case kRimPlanesWrong:        return "it has a number of planes that can't be read, which is 1 to 16";
+		case kRimPackingWrong:       return "it's packed in a way that can't be read";
+		case kRimColourTableTooBig:  return "its colour table has more colours than can be used";
+		case kRimColourTablePastEnd: return "its colour table runs past the end of the file";
+		case kRimTooManyParts:       return "it has too many parts before its picture";
+		case kRimPartsWrong:         return "its parts aren't what a .rim's should be";
+		case kRimBodyPastEnd:        return "its picture runs past the end of the file";
+		case kRimBodyTooShort:       return "its picture is too short for its size";
+		case kRimRanOut:             return "the file ends before the picture does";
+		case kRimBodyTooLong:        return "its packed picture takes more than a picture of its size can need";
+		default:                     return "of a problem with no name";
+	}
+}
+
+RimProblem RimLoader::Problem() const
+{
+	return problem;
+}
+
+// Notes why, and gives back the false that Open's steps give when they say no
+bool RimLoader::Refuse(RimProblem why)
+{
+	problem = why;
+	return false;
 }
 
 void RimLoader::GetDimensions(uint32_t &width, uint32_t &height)
@@ -115,19 +150,25 @@ bool RimLoader::HandleBMHD()
 
 	if ((uint32_t)header.width > kLargestRimSide || (uint32_t)header.height > kLargestRimSide || (uint64_t)header.width * header.height > kMostRimPixels)
 	{
-		return false;
+		return Refuse(kRimTooLarge);
+	}
+
+	// A picture with no planes has no data at all, so a few bytes could still ask for the largest picture there is. None of the game's own has none.
+	if (header.nPlanes == 0)
+	{
+		return Refuse(kRimPlanesWrong);
 	}
 
 	// Both of these come from the file. A colour number is made of one bit from each plane, and it only has room for 16. The game's own pictures have 11 at most.
 	if (header.nPlanes > kMostPlanes)
 	{
-		return false;
+		return Refuse(kRimPlanesWrong);
 	}
 
 	// There are only two ways of packing a row that this can read. All of the game's own pictures use one of them.
 	if (header.compression > kCompressionByteRun1)
 	{
-		return false;
+		return Refuse(kRimPackingWrong);
 	}
 
 	return true;
@@ -143,7 +184,13 @@ bool RimLoader::HandleCMAP()
 	// the size comes from the file, so it could be far more memory than the game could ever get
 	if (nEntries > kMaxColours)
 	{
-		return false;
+		return Refuse(kRimColourTableTooBig);
+	}
+
+	// Each colour is three reads, so one that isn't there is no reason to read them from nothing
+	if ((uint64_t)nEntries * 3 > file.BytesLeft())
+	{
+		return Refuse(kRimColourTablePastEnd);
 	}
 
 	// a file can hold more than one table: the last one counts, and the one before it is freed
@@ -168,14 +215,20 @@ bool RimLoader::Open(const std::string &fileName)
 	if (!file.IsGood())
 	{
 		// unable to open file
-		return false;
+		return Refuse(kRimNoFile);
 	}
 
 	// we want to search to the BODY tag
 	bool gotBody = false;
+	int parts = 0;
 
 	while (!gotBody)
 	{
+		if (++parts > kMostRimParts)
+		{
+			return Refuse(kRimTooManyParts);
+		}
+
 		chunkID = file.GetUint32BE();
 
 		switch (chunkID)
@@ -205,7 +258,7 @@ bool RimLoader::Open(const std::string &fileName)
 						break;
 					default:
 						// ERROR!
-						return false;
+						return Refuse(kRimPartsWrong);
 				}
 				break;
 			}
@@ -231,7 +284,7 @@ bool RimLoader::Open(const std::string &fileName)
 				break;
 			default:
 				// ERROR!
-				return false;
+				return Refuse(kRimPartsWrong);
 		}
 	}
 
@@ -247,17 +300,27 @@ bool RimLoader::BodyCanHoldThePicture()
 
 	if (chunkSize > file.BytesLeft())
 	{
-		return false;
+		return Refuse(kRimBodyPastEnd);
 	}
 
 	if (header.compression == kCompressionNone ? chunkSize < needed : (uint64_t)chunkSize * 64 < needed)
 	{
-		return false;
+		return Refuse(kRimBodyTooShort);
 	}
 
-	bodyLeft = chunkSize;
+	bodyLeft = (std::min)((uint64_t)chunkSize, MostBodyBytes());
 	ranOut = false;
 	return true;
+}
+
+// The most of its data a picture of this size can use. A plain one takes just its size. A packed one could take twice that, with every byte in a run of its own, which takes 2. Nothing honest
+// takes more: the game's own use 0.9 of their plain size at most. Only no-ops, which add nothing to the picture, could go on past that, and each is a read, so a file of them that zips down to
+// nothing could otherwise keep this busy for as long as it liked.
+uint64_t RimLoader::MostBodyBytes() const
+{
+	uint64_t const needed = (uint64_t)rowBytes * header.nPlanes * header.height;
+
+	return (header.compression == kCompressionNone) ? needed : needed * 2;
 }
 
 // The next byte of the picture's data, or 0 and a note that there's none left. Nothing reads past this.
@@ -265,6 +328,7 @@ uint8_t RimLoader::NextBodyByte()
 {
 	if (bodyLeft == 0)
 	{
+		problem = (chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut;
 		ranOut = true;
 		return 0;
 	}

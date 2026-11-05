@@ -25,7 +25,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   colours are looked up in a way that can't go past the end of the colour table
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   says the most planes a picture can have, and the largest a picture can be
+//   says the most planes a picture can have, the largest a picture can be, the most parts it can have, and why one was refused
 
 #pragma once
 
@@ -70,6 +70,31 @@ const int kMostPlanes = 16;     // a colour number is held in 16 bits, one from 
 const uint32_t kLargestRimSide = 8192;
 const uint64_t kMostRimPixels = 2048 * 2048;
 
+// The most parts a picture can have, up to and including its data. The game's own all have 7. Each takes a read or two whatever it says, so a long file of nothing but parts would keep this
+// busy for as long as the file lasted.
+const int kMostRimParts = 16;
+
+// Why a picture wasn't used. Each has its own words for the log, so someone who made one can find out what's wrong with it.
+enum RimProblem
+{
+	kRimFine,
+	kRimNoFile,
+	kRimTooLarge,
+	kRimPlanesWrong,
+	kRimPackingWrong,
+	kRimColourTableTooBig,
+	kRimColourTablePastEnd,
+	kRimTooManyParts,
+	kRimPartsWrong,
+	kRimBodyPastEnd,
+	kRimBodyTooShort,
+	kRimRanOut,
+	kRimBodyTooLong,
+	kRimProblemCount
+};
+
+const char *RimLoader_ProblemWords(RimProblem problem);
+
 struct ColourRegister
 {
 	uint8_t red;
@@ -97,8 +122,11 @@ class RimLoader
 		bool Open(const std::string &fileName);
 		bool Decode(uint8_t *dest, uint32_t destPitch);
 		void GetDimensions(uint32_t &width, uint32_t &height);
+		RimProblem Problem() const;     // why Open or Decode said no
 
 	private:
+		bool Refuse(RimProblem why);
+		uint64_t MostBodyBytes() const;
 		uint32_t GetUnpackedBytes();
 		bool BodyCanHoldThePicture();
 		uint8_t NextBodyByte();
@@ -126,6 +154,7 @@ class RimLoader
 		std::vector<uint8_t> destRow;
 		uint64_t bodyLeft;      // how much of the picture's data is still to be read
 		bool ranOut;            // whether it ran out before the picture was finished
+		RimProblem problem;
 		uint32_t destRowIndex;
 
 		// change this when code works
