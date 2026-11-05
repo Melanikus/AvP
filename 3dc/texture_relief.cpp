@@ -285,9 +285,9 @@ bool TextureRelief::Calculate(uint8_t const *picture, uint32_t picturePitch, uin
 	return true;
 }
 
-TextureRelief::TextureRelief(size_t mostBytes, size_t mostHandMadeBytes)
+TextureRelief::TextureRelief(size_t mostBytes, size_t mostHandMadeBytes, size_t mostTries)
 : mostBytesHeld(mostBytes), mostHandMadeBytesHeld(mostHandMadeBytes), limitWasLogged(false), on(true), autoGenerate(false), flatPictureMade(false), flatPicture(0),
-  picturesHeld(0), bytesHeld(0), handMadeBytesHeld(0), levelNumber(1)
+  picturesHeld(0), bytesHeld(0), handMadeBytesHeld(0), mostHandMadeTries(mostTries), handMadeTries(0), handMadeBytesTried(0), stoppedTryingWasLogged(false), levelNumber(1)
 {
 }
 
@@ -299,6 +299,16 @@ void TextureRelief::SetAutoGenerate(bool wanted)
 bool TextureRelief::AutoGenerates() const
 {
 	return autoGenerate;
+}
+
+size_t TextureRelief::HandMadeTriesThisLevel() const
+{
+	return handMadeTries;
+}
+
+uint64_t TextureRelief::HandMadeBytesTriedThisLevel() const
+{
+	return handMadeBytesTried;
 }
 
 size_t TextureRelief::HandMadeBytesHeld() const
@@ -460,6 +470,38 @@ void TextureRelief::NoteDepthFile(std::string const &pictureName)
 	}
 }
 
+// Whether another map file may be opened. See texture_relief.h for why every try counts. The last try before the bytes run out can go a little over, by one map at most, and that's fine:
+// what this limits is how long a level can spend, and one more map is a fraction of a second.
+bool TextureRelief::MayTryAnotherMap()
+{
+	std::string why;
+
+	if (handMadeBytesHeld >= mostHandMadeBytesHeld)
+	{
+		why = "they've reached their limit of " + std::to_string(mostHandMadeBytesHeld) + " bytes";
+	}
+	else if (handMadeTries >= mostHandMadeTries)
+	{
+		why = "this level has tried " + std::to_string(mostHandMadeTries) + " of their files";
+	}
+	else if (handMadeBytesTried >= (uint64_t)mostHandMadeBytesHeld * 3)
+	{
+		why = "this level has spent " + std::to_string(handMadeBytesTried) + " bytes reading and unpacking them";
+	}
+	else
+	{
+		return true;
+	}
+
+	if (!stoppedTryingWasLogged)
+	{
+		stoppedTryingWasLogged = true;
+		LogString("texture relief: no more hand-made maps are read for now, because " + why);
+	}
+
+	return false;
+}
+
 // The texture's hand-made map, or MISSING_TEXTURE if it hasn't one that can be used. The file is checked all the way through before the card is asked for anything.
 texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 {
@@ -492,6 +534,8 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		return MISSING_TEXTURE;
 	}
 
+	handMadeTries++;
+
 	std::string const notUsed = "texture relief: " + mapName + " isn't used, because ";
 	uint64_t const fileBytes = file.GetFileSize();
 
@@ -500,6 +544,8 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		LogString(notUsed + ReliefMap_ProblemWords(kMapFileTooLong));
 		return MISSING_TEXTURE;
 	}
+
+	handMadeBytesTried += fileBytes;
 
 	std::unique_ptr<uint8_t[]> const bytes(new(std::nothrow) uint8_t[(size_t)fileBytes + 1]);
 
@@ -540,6 +586,9 @@ texID_t TextureRelief::HandMadePictureFor(texID_t picture)
 		LogString(notUsed + "there isn't the memory to read it");
 		return MISSING_TEXTURE;
 	}
+
+	// Charged now, because a map can be wrong at its very last pixel: all the work has been done by the time that shows.
+	handMadeBytesTried += allBytes;
 
 	problem = ReliefMap_DecodeRim(rim, pixels.get());
 
@@ -608,7 +657,7 @@ void TextureRelief::ReliefPictureFor(texID_t picture, Entry &entry)
 	texID_t relief = MISSING_TEXTURE;
 	bool workedOut = false;
 
-	if (!entry.lookedForFile)
+	if (!entry.lookedForFile && MayTryAnotherMap())
 	{
 		entry.lookedForFile = true;
 		relief = HandMadePictureFor(picture);
@@ -698,6 +747,11 @@ void TextureRelief::LogWhatIsHeld()
 		LogString("texture relief: this level has " + std::to_string(handMade) + " hand-made, " + std::to_string(workedOut) + " worked out and " + std::to_string(flat)
 			+ " flat. Hand-made maps hold " + std::to_string(handMadeBytesHeld) + " bytes");
 		levelNumber++;
+
+		// The next level has its own allowance
+		handMadeTries = 0;
+		handMadeBytesTried = 0;
+		stoppedTryingWasLogged = false;
 	}
 	else
 	{
@@ -723,4 +777,7 @@ void TextureRelief::ReleaseAll()
 	picturesHeld = 0;
 	bytesHeld = 0;
 	handMadeBytesHeld = 0;
+	handMadeTries = 0;
+	handMadeBytesTried = 0;
+	stoppedTryingWasLogged = false;
 }

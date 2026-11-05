@@ -922,6 +922,195 @@ static std::string ReadSourceFile(char const *name)
 	return all.str();
 }
 
+// A map that passes every check until its very last pixel, which uses a colour past the end of its table. Everything has been read and unpacked by then.
+static Bytes MapWrongAtItsLastPixel(uint32_t side)
+{
+	Bytes file;
+	uint32_t const rowBytes = (side + 7) / 8;
+
+	AddWords(file, "FORM");
+	Add32(file, 0);
+	AddWords(file, "ILBMBMHD");
+	Add32(file, 20);
+	file.push_back((uint8_t)(side >> 8));
+	file.push_back((uint8_t)side);
+	file.push_back((uint8_t)(side >> 8));
+	file.push_back((uint8_t)side);
+	Add32(file, 0);
+	file.push_back(1);
+	file.push_back(0);
+	file.push_back(0);
+	file.push_back(0);
+	Add32(file, 0);
+	Add32(file, 0);
+	AddWords(file, "CMAP");
+	Add32(file, 3);
+	file.push_back(128);
+	file.push_back(128);
+	file.push_back(255);
+	file.push_back(0);
+	AddWords(file, "BODY");
+	Add32(file, rowBytes * side);
+	file.insert(file.end(), (size_t)rowBytes * side, 0);
+	file.back() = 1;
+	return file;
+}
+
+// Refused maps have to cost something, or a hostile level can have the game unpack very large ones without end
+static void CheckWhatTryingMapsCosts()
+{
+	std::string const wall = MapFolder() + "/wall.rim";
+	std::string const mapFile = "wall_Normal.rim";
+	std::string const lastPixelReason = std::string(" isn't used, because ") + ReliefMap_ProblemWords(kMapColourPastTable);
+
+	// One map, wrong at the very end
+	{
+		StartAgain();
+		Bytes const bad = MapWrongAtItsLastPixel(16);
+		WriteMapFile(mapFile, bad);
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+
+		Check(LogCount(lastPixelReason) == 1, "a map wrong at its very last pixel gets all the way there");
+		Check(relief.HandMadeBytesHeld() == 0, "and nothing is kept");
+		Check(relief.HandMadeTriesThisLevel() == 1, "but it counts as a try");
+		Check(relief.HandMadeBytesTriedThisLevel() == bad.size() + ReliefMap_PlainBytes(16), "and is charged for reading it and for unpacking it");
+	}
+
+	// A map that's used is charged the same way
+	{
+		StartAgain();
+		Bytes const good = DeepMap(16, 200, 90, 180);
+		WriteMapFile(mapFile, good);
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+
+		Check(relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(16) && relief.HandMadeTriesThisLevel() == 1 && relief.HandMadeBytesTriedThisLevel() == good.size() + ReliefMap_PlainBytes(16), "a map that's used costs the same to try");
+	}
+
+	// A file too long to read costs a try, and no bytes, because none are read
+	{
+		StartAgain();
+		WriteMapFile(mapFile, Bytes((size_t)kReliefMapMostFileBytes + 1, 'x'));
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+
+		Check(relief.HandMadeTriesThisLevel() == 1 && relief.HandMadeBytesTriedThisLevel() == 0, "a file too long to read costs a try and no bytes");
+	}
+
+	// No file at all costs nothing, or a level with no maps would use up its tries for nothing
+	{
+		StartAgain();
+		RemoveMapFile(mapFile);
+
+		TextureRelief relief;
+		relief.Build(AddTexture(wall, 8, 8, 32, TextureUsage_Normal));
+
+		Check(relief.HandMadeTriesThisLevel() == 0 && relief.HandMadeBytesTriedThisLevel() == 0, "a texture with no map costs nothing");
+	}
+
+	// Many maps, all wrong at the end: the bytes run out. Each is written under its own name, and the last few wouldn't be refused for what the first ones were.
+	{
+		StartAgain();
+		Bytes const bad = MapWrongAtItsLastPixel(16);
+		uint64_t const eachCosts = bad.size() + ReliefMap_PlainBytes(16);
+		size_t const limit = (size_t)ReliefMap_PlainBytes(16);
+		uint64_t const allowed = (uint64_t)limit * 3;
+		int const triesThatFit = (int)((allowed + eachCosts - 1) / eachCosts);
+		int const names = triesThatFit + 3;
+
+		for (int i = 0; i < names; i++)
+		{
+			WriteMapFile("many" + std::to_string(i) + "_Normal.rim", bad);
+		}
+
+		TextureRelief relief(64 * 1024 * 1024, limit);
+		texID_t lastPicture = 0;
+
+		for (int i = 0; i < names; i++)
+		{
+			lastPicture = AddTexture(MapFolder() + "/many" + std::to_string(i) + ".rim", 8, 8, 32, TextureUsage_Normal);
+			relief.Build(lastPicture);
+		}
+
+		Check(LogCount(lastPixelReason) == triesThatFit, "maps that keep being wrong at the end are read until the bytes run out, " + std::to_string(triesThatFit) + " of them");
+		Check(relief.HandMadeTriesThisLevel() == (size_t)triesThatFit, "and no file is opened after that");
+		Check(LogCount("no more hand-made maps are read for now, because this level has spent ") == 1, "and the log says so, once");
+		Check(!LogHas("many" + std::to_string(names - 1) + "_Normal.rim"), "and the last isn't mentioned, because it wasn't read");
+
+		// A new level has its own allowance, and a texture that wasn't looked at gets its turn
+		logLines.clear();
+		relief.LogWhatIsHeld();
+		Check(relief.HandMadeTriesThisLevel() == 0 && relief.HandMadeBytesTriedThisLevel() == 0, "the next level starts with nothing spent");
+
+		WriteMapFile("many" + std::to_string(names - 1) + "_Normal.rim", DeepMap(8, 200, 90, 180));
+		relief.Build(lastPicture);
+		Check(LogHas("using " + MapFolder() + "/many" + std::to_string(names - 1) + "_Normal.rim"), "and a texture skipped before gets its map now");
+		Check(LogCount("no more hand-made maps are read for now") == 0, "with nothing said about stopping");
+
+		for (int i = 0; i < names; i++)
+		{
+			RemoveMapFile("many" + std::to_string(i) + "_Normal.rim");
+		}
+	}
+
+	// The most tries, with a small number. Nothing here is big, so only the count can stop it.
+	{
+		StartAgain();
+		WriteMapFile("small_Normal.rim", Bytes(8, 'x'));
+		WriteMapFile("small_Depth.rim", Bytes(8, 'x'));
+
+		TextureRelief relief(64 * 1024 * 1024, 256 * 1024 * 1024, 3);
+
+		// The same file four times over, under names that lead to the same place, which is what a hostile level would do
+		for (int i = 0; i < 4; i++)
+		{
+			relief.Build(AddTexture(MapFolder() + "/s" + std::to_string(i) + "/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		}
+
+		Check(LogCount("_Normal.rim isn't used") == 3, "after the most tries, no more files are read");
+		Check(LogCount("found ") == 3, "and depth files aren't looked for either");
+		Check(relief.HandMadeTriesThisLevel() == 3, "and the count stops there");
+		Check(LogCount("no more hand-made maps are read for now, because this level has tried 3 of their files") == 1, "and the log says so, once");
+
+		relief.ReleaseAll();
+		Check(relief.HandMadeTriesThisLevel() == 0 && relief.HandMadeBytesTriedThisLevel() == 0, "giving everything back starts the count again");
+
+		logLines.clear();
+		relief.Build(AddTexture(MapFolder() + "/s9/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		relief.Build(AddTexture(MapFolder() + "/s10/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		relief.Build(AddTexture(MapFolder() + "/s11/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		relief.Build(AddTexture(MapFolder() + "/s12/../small.rim", 8, 8, 32, TextureUsage_Normal));
+		Check(LogCount("no more hand-made maps are read for now") == 1, "and it can say so again");
+
+		RemoveMapFile("small_Normal.rim");
+		RemoveMapFile("small_Depth.rim");
+	}
+
+	// The real number, with a file that's wrong in the cheapest way there is
+	{
+		StartAgain();
+		WriteMapFile("cheap_Normal.rim", Bytes(8, 'x'));
+
+		TextureRelief relief;
+		int const tries = (int)TextureRelief::kMostHandMadeTriesPerLevel + 1;
+
+		for (int i = 0; i < tries; i++)
+		{
+			relief.Build(AddTexture(MapFolder() + "/c" + std::to_string(i) + "/../cheap.rim", 8, 8, 32, TextureUsage_Normal));
+		}
+
+		Check(TextureRelief::kMostHandMadeTriesPerLevel >= 1028, "a level may try a map for every picture the game has");
+		Check(TextureRelief::kMostHandMadeTriesPerLevel <= 4096, "and not so many that trying them would take long");
+		Check(relief.HandMadeTriesThisLevel() == TextureRelief::kMostHandMadeTriesPerLevel && LogCount("_Normal.rim isn't used") == (int)TextureRelief::kMostHandMadeTriesPerLevel, "and a level that names more only gets that many");
+
+		RemoveMapFile("cheap_Normal.rim");
+	}
+}
+
 static void CheckHandMadeMaps()
 {
 	printf("Hand-made maps:\n");
@@ -1175,10 +1364,32 @@ static void CheckHandMadeMaps()
 
 		Check(relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(8) && CopiesOf(relief.PictureFor(first)) != 0, "a map that exactly fills the limit is kept");
 		Check(madeCount == madeBefore && !CopiesOf(relief.PictureFor(second)), "the next one goes without, and nothing is made for it");
+		Check(LogHas("no more hand-made maps are read for now, because they've reached their limit of " + std::to_string(ReliefMap_PlainBytes(8)) + " bytes"), "and the log says so");
+		Check(!LogHas("second_Normal.rim") && relief.HandMadeTriesThisLevel() == 1, "and its file isn't even read");
+
+		RemoveMapFile("second_Normal.rim");
+	}
+
+	// Room left, but not enough for this one
+	{
+		StartAgain();
+		WriteMapFile(mapFile, DeepMap(4, 200, 90, 180));
+		WriteMapFile("second_Normal.rim", DeepMap(8, 200, 90, 180));
+
+		TextureRelief relief(64 * 1024 * 1024, (size_t)ReliefMap_PlainBytes(8));
+		texID_t const first = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		texID_t const second = AddTexture(MapFolder() + "/second.rim", 8, 8, 32, TextureUsage_Normal);
+
+		relief.Build(first);
+		relief.Build(second);
+
+		Check(relief.HandMadeBytesHeld() == ReliefMap_PlainBytes(4) && !CopiesOf(relief.PictureFor(second)), "a map too big for the room that's left goes without");
 		Check(LogHas("second_Normal.rim isn't used, because hand-made maps have reached their limit of " + std::to_string(ReliefMap_PlainBytes(8)) + " bytes"), "and the log says so");
 
 		RemoveMapFile("second_Normal.rim");
 	}
+
+	CheckWhatTryingMapsCosts();
 
 	// The card says no
 	{

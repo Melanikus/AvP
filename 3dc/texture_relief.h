@@ -36,7 +36,15 @@ class TextureRelief
 		// so if that count ever proves short, the last few textures of a very long session would lose their relief.
 		// The limit's other job is to hold back a hostile level: it fits 16 of the largest pictures allowed, about 0.6 seconds of work.
 		// mostHandMadeBytes is the same for hand-made maps, which are larger, and can be many. A map past it goes without, and the log says so.
-		explicit TextureRelief(size_t mostBytes = 64 * 1024 * 1024, size_t mostHandMadeBytes = 256 * 1024 * 1024);
+		//
+		// A map costs time to read and check whether it's used or not, and a hostile level can name thousands of them, each one only wrong at its very end. So every file that's tried
+		// is charged to what one level may spend: mostHandMadeTries files, and three times mostHandMadeBytes in bytes read and unpacked. Once either is spent, or the maps kept have reached
+		// mostHandMadeBytes, no more files are opened until the next level, and the log says so once. A texture that wasn't looked at this way can still get its map on a later level.
+		//
+		// These leave room for real maps. The game has 1,028 pictures in all and its largest level names 38, so a map for every one of them is well under the tries. And a map that's kept
+		// takes at most about 2.1 times what it holds to read and unpack, so maps that fill mostHandMadeBytes never run out of bytes first.
+		static size_t const kMostHandMadeTriesPerLevel = 2048;
+		explicit TextureRelief(size_t mostBytes = 64 * 1024 * 1024, size_t mostHandMadeBytes = 256 * 1024 * 1024, size_t mostHandMadeTries = kMostHandMadeTriesPerLevel);
 
 		// With -reliefoff on the command line. Nothing is built after this, and the game draws exactly as if none of this existed.
 		void TurnOff();
@@ -67,6 +75,8 @@ class TextureRelief
 		size_t PicturesHeld() const;
 		size_t BytesHeld() const;
 		size_t HandMadeBytesHeld() const;
+		size_t HandMadeTriesThisLevel() const;
+		uint64_t HandMadeBytesTriedThisLevel() const;
 
 		// Whether a picture of this size may be worked on. Every size comes from a file, so this comes before anything is allocated or added up.
 		static bool SizeIsFine(uint32_t width, uint32_t height);
@@ -86,6 +96,7 @@ class TextureRelief
 		};
 
 		void ReliefPictureFor(texID_t picture, Entry &entry);
+		bool MayTryAnotherMap();
 		texID_t HandMadePictureFor(texID_t picture);
 		texID_t CalculatedPictureFor(texID_t picture);
 		void NoteDepthFile(std::string const &pictureName);
@@ -102,6 +113,10 @@ class TextureRelief
 		size_t picturesHeld;
 		size_t bytesHeld;
 		size_t handMadeBytesHeld;
+		size_t mostHandMadeTries;
+		size_t handMadeTries;               // map files opened on this level, used or not
+		uint64_t handMadeBytesTried;        // bytes of them read and unpacked on this level, used or not
+		bool stoppedTryingWasLogged;        // on this level
 		size_t levelNumber;                 // goes up each time LogWhatIsHeld says what a level had
 };
 
