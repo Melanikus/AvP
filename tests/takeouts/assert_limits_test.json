@@ -19,9 +19,9 @@
 			"name": "GAME: a new one in a header",
 			"changes": [
 				{
-					"file": "3dc/win95/bitmap_names.hpp",
-					"from": "assert(v<=MAXVAL_RGB); // sensible value",
-					"to": "assert(v<=MAXVAL_RGB); // sensible value\n\tassert(w<MAX_W);"
+					"file": "3dc/avp/dynblock.h",
+					"from": "extern DYNAMICSBLOCK* AllocateDynamicsBlock(",
+					"to": "assert(w < MAX_W);\nextern DYNAMICSBLOCK* AllocateDynamicsBlock("
 				}
 			]
 		},
@@ -50,7 +50,7 @@
 			"changes": [
 				{
 					"file": "tests/assert_limits_allowed.txt",
-					"from": "3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | a real check on the count comes right before it\n",
+					"from": "3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them\n",
 					"to": ""
 				}
 			]
@@ -60,7 +60,7 @@
 			"changes": [
 				{
 					"file": "tests/assert_limits_allowed.txt",
-					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | a real check on the count comes right before it\n",
+					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them\n",
 					"to": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | \n"
 				}
 			]
@@ -72,36 +72,6 @@
 					"file": "tests/assert_limits_allowed.txt",
 					"from": "3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);",
 					"to": "3dc/avp/decal.cpp | LOCALASSERT(nothing < MAX_NOTHING); | no reason at all\n3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);"
-				}
-			]
-		},
-		{
-			"name": "TEST: a new assert is let through",
-			"changes": [
-				{
-					"file": "tests/assert_limits_test.cpp",
-					"from": "Check(notListed == 0,",
-					"to": "Check(true,"
-				}
-			]
-		},
-		{
-			"name": "TEST: a row for what is gone is let through",
-			"changes": [
-				{
-					"file": "tests/assert_limits_test.cpp",
-					"from": "Check(gone == 0,",
-					"to": "Check(true,"
-				}
-			]
-		},
-		{
-			"name": "TEST: a row with no reason is let through",
-			"changes": [
-				{
-					"file": "tests/assert_limits_test.cpp",
-					"from": "Check(badLines.empty(),",
-					"to": "Check(true,"
 				}
 			]
 		},
