@@ -1386,6 +1386,34 @@ static void CheckDepthMaps()
 		RemoveMapFile(depthFile);
 	}
 
+	// A relief picture worked out while the tries were spent means the relief map was never looked for. The depth map has its own flag, so it's still only read once when its turn comes.
+	{
+		StartAgain();
+		WriteMapFile("spent1_Normal.rim", Bytes(8, 'x'));
+		WriteMapFile("spent2_Normal.rim", Bytes(8, 'x'));
+		WriteMapFile(depthFile, DeepMap(8, 40, 40, 40));
+
+		TextureRelief relief(64 * 1024 * 1024, 256 * 1024 * 1024, 2);
+		relief.SetAutoGenerate(true);
+		relief.Build(AddTexture(MapFolder() + "/spent1.rim", 8, 8, 32, TextureUsage_Normal));
+		relief.Build(AddTexture(MapFolder() + "/spent2.rim", 8, 8, 32, TextureUsage_Normal));
+
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+		Check(relief.PictureFor(picture) != relief.HeightFor(picture) && !CopiesOf(relief.HeightFor(picture)), "with the tries spent, a relief picture is still worked out, and the depth map waits");
+
+		relief.LogWhatIsHeld();
+		logLines.clear();
+		relief.Build(picture);
+		relief.Build(picture);
+
+		Check(LogCount("texture relief: using " + depthPath) == 1 && relief.HandMadeTriesThisLevel() == 1, "on the next level it's read, and only once, however often it's asked for");
+
+		RemoveMapFile("spent1_Normal.rim");
+		RemoveMapFile("spent2_Normal.rim");
+		RemoveMapFile(depthFile);
+	}
+
 	// Depth maps wrong at the end use up the bytes like any others
 	{
 		StartAgain();
