@@ -21,9 +21,8 @@
 void ViewSwitches_AskLighting(int choice);
 void ViewSwitches_AskShadows(int on);
 bool ViewSwitches_SomethingAsked();
+void ViewSwitches_SetAtStart(int lighting, int volumes);
 void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere);
-
-extern int ToyShadowsMode;
 
 static const char kHeading[] = "[Video]";
 static const char kRendering[] = "Rendering";
@@ -55,15 +54,9 @@ void ViewSettings_Load()
 		Config_SetString(kHeading, kRendering, Lighting_Word(kLightingGouraud));
 	}
 
-	LightingNow = choice;
-	ShadowVolumesOn = shadows ? 1 : 0;
-	textureRelief.SetAutoGenerate(autoGenerate);
-
 	// Everything off is the game as it has always been drawn, from the very first frame. See view_switches.h.
-	if (choice == kLightingGouraud && !shadows)
-	{
-		ToyShadowsMode = 0;
-	}
+	ViewSwitches_SetAtStart(choice, shadows ? 1 : 0);
+	textureRelief.SetAutoGenerate(autoGenerate);
 
 	MenuRendering = lastRendering = choice;
 	MenuShadows = lastShadows = shadows ? 1 : 0;

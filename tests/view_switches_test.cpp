@@ -492,7 +492,12 @@ static void TheRealGame()
 	Check(Has(loading, "Config_GetBool(kHeading, kShadows, false)"), "shadows off");
 	Check(Has(loading, "Config_GetBool(kHeading, kAutoGenerate, false)"), "and no maps worked out");
 	Check(Has(loading, "textureRelief.SetAutoGenerate(autoGenerate);"), "which the picture code is told");
-	Check(Has(loading, "ToyShadowsMode = 0;"), "and everything off is the OFF view from the first frame");
+	Check(Has(loading, "ViewSwitches_SetAtStart(choice, shadows ? 1 : 0);"), "and the switches and the view are set together");
+
+	std::string const settingAtStart = Between(render, "void ViewSwitches_SetAtStart(int lighting, int volumes)", "}");
+
+	Check(Has(settingAtStart, "switchesWereAllOff = lighting == kLightingGouraud && !volumes;"), "so everything off is known to be off, and coming back from it returns to a view");
+	Check(Has(settingAtStart, "ToyShadowsMode = switchesWereAllOff ? kToyViewOff : kToyViewFinal;"), "and everything off is the OFF view from the first frame, and anything else isn't");
 	std::string::size_type const menuFrameStarts = settings.find("void ViewSettings_MenuFrame()");
 	std::string const menuFrame = (menuFrameStarts == std::string::npos) ? "" : settings.substr(menuFrameStarts);
 

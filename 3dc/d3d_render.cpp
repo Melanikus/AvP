@@ -6853,6 +6853,15 @@ static int lightingAsked = kAskedNothing;
 static bool switchesWereAllOff = false;
 static int viewToComeBackTo = kToyViewFinal;
 
+// At the game's start, before any frame: the two switches and the view that goes with them, together, so they can't disagree.
+void ViewSwitches_SetAtStart(int lighting, int volumes)
+{
+	LightingNow = lighting;
+	ShadowVolumesOn = volumes;
+	switchesWereAllOff = lighting == kLightingGouraud && !volumes;
+	ToyShadowsMode = switchesWereAllOff ? kToyViewOff : kToyViewFinal;
+}
+
 static void SaySwitch(const char *words)
 {
 	static char message[100];
