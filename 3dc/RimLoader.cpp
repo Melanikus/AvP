@@ -25,6 +25,9 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   colours are looked up in a way that can't go past the end of the colour table, a colour table too big
 //   to use is refused, and a file with no header reads as an empty picture
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a picture with more planes than a colour number has bits is refused, so is one packed in a way this can't read,
+//   and a no-op in a packed row no longer counts as the bytes of the run before it
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -106,7 +109,17 @@ bool RimLoader::HandleBMHD()
 
 	rowBytes = (header.width+7) / 8;
 
-	assert(header.compression != 2); // COMPRESS_S3TC
+	// Both of these come from the file. A colour number is made of one bit from each plane, and it only has room for 16. The game's own pictures have 11 at most.
+	if (header.nPlanes > kMostPlanes)
+	{
+		return false;
+	}
+
+	// There are only two ways of packing a row that this can read. All of the game's own pictures use one of them.
+	if (header.compression > kCompressionByteRun1)
+	{
+		return false;
+	}
 
 	return true;
 }
@@ -175,7 +188,10 @@ bool RimLoader::Open(const std::string &fileName)
 						file.Seek(4+8, FileStream::SeekCurrent);
 						break;
 					case BMHD:
-						HandleBMHD();
+						if (!HandleBMHD())
+						{
+							return false;
+						}
 						OddChunkSizeCheck();
 						break;
 					default:
@@ -220,7 +236,8 @@ uint32_t RimLoader::GetUnpackedBytes()
 
 		if (val == -128)
 		{
-			// no op
+			// A no-op adds nothing to the row, so it counts as nothing. A file of nothing but no-ops can't keep this going for ever, because past the end of a file every byte reads as 0, which isn't one.
+			length = 0;
 		}
 		else if (val >= 0)
 		{

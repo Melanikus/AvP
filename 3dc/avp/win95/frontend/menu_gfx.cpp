@@ -4,11 +4,14 @@
 //   treats a plain char; the wrapped text function stops counting a word's width at a limit, so a huge word in a
 //   file cannot make the sum overflow; the size of the menu font picture is checked before it is used, and its
 //   memory is given back afterwards; the menu font's letter widths are looked up with an unsigned byte too
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a font picture too small to hold its letters is refused before they're read, and each row is found from the picture's real row length
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
 #include "chunk_textures.h"
 #include "hud_layout.h"
+#include "font_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "renderer.h"
@@ -1136,6 +1139,7 @@ extern int HeightOfMenuGfx(texID_t textureID)
 
 extern texID_t AAFontImageNumber;
 
+// Works out how wide each letter is, by looking for the last column with anything in it at the place the letter should be. font_checks.h has where that is.
 /*static*/ void CalculateWidthsOfAAFont()
 {
 	if (MISSING_TEXTURE == AAFontImageNumber)
@@ -1149,9 +1153,21 @@ extern texID_t AAFontImageNumber;
 
 	Tex_GetDimensions(AAFontImageNumber, textureWidth, textureHeight);
 
-	// we'll assume it can't be smaller than the original AvP font texture
-//	assert(textureWidth  >= 256);
-//	assert(textureHeight >= 256);
+	int nChars;
+
+	if (IsDemoVersion()) {
+		nChars = 64;
+	}
+	else {
+		nChars = 255;
+	}
+
+	// The picture is a file anyone can replace, and the places below are fixed, so it might not reach them. Its letters then have no width, the same as when the picture is missing.
+	if (!FontChecks_LettersFit(textureWidth, textureHeight, nChars, HUD_FONT_WIDTH, HUD_FONT_HEIGHT))
+	{
+		Con_PrintError("The font picture is too small to hold its letters, so its letters have no width");
+		return;
+	}
 
 	uint8_t *originalSrcPtr = NULL;
 	uint32_t pitch = 0;
@@ -1166,20 +1182,11 @@ extern texID_t AAFontImageNumber;
 
 	AAFontWidths[32] = 3;
 
-	int nChars;
-	
-	if (IsDemoVersion()) {
-		nChars = 64;
-	}
-	else {
-		nChars = 255;
-	}
-
 	for (int c = 33; c < nChars; c++) 
 	{
 		int x,y;
-		int x1 = 1+((c-32)&15)*16;
-		int y1 = 1+((c-32)>>4)*16;
+		int x1 = FontChecks_LetterX(c);
+		int y1 = FontChecks_LetterY(c);
 
 		AAFontWidths[c] = MAX_SMALL_LETTER_WIDTH;
 
@@ -1189,7 +1196,7 @@ extern texID_t AAFontImageNumber;
 
 			for (y = y1; y < y1 + HUD_FONT_HEIGHT; y++)
 			{
-				uint8_t *s = &srcPtr[(x + y*textureWidth) * 4]; // FIXME - pitch?
+				uint8_t *s = &srcPtr[y*pitch + x*4];
 
 				if (s[0] >= 0x80) // checking blue.
 				{

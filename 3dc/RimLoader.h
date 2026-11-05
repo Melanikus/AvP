@@ -24,6 +24,8 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   colours are looked up in a way that can't go past the end of the colour table
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   says the most planes a picture can have
 
 #pragma once
 
@@ -62,6 +64,7 @@ const int kMaskLasso = 3;
 // Each pixel is a number that fits in 16 bits, so a colour table can never use more colours than this. The biggest
 // table in the game's own pictures has 1769.
 const uint32_t kMaxColours = 65536;
+const int kMostPlanes = 16;     // a colour number is held in 16 bits, one from each plane
 
 struct ColourRegister
 {
