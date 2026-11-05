@@ -8,6 +8,8 @@
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
 //   number is left out; when two sounds have the same number, the earlier one is given back; a shape's list of
 //   baked colours has a place for every point, even if the file has fewer colours
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -58,6 +60,7 @@
 #include "TextureManager.h"
 #include "utilities.h"
 #include "logString.h"
+#include "level_file_name.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -2683,11 +2686,22 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 // hook to load a bitmap - so you can load them from test directories, etc. should return tex index
 texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 {
-	std::string fileName = fname;
+	// The name comes from the level file, which can come from anyone. A refused one goes on as a texture that isn't there, which the game already copes with.
+	char const *const whyRefused = LevelFileName_WhyRefused(fname);
+
+	if (whyRefused)
+	{
+		char safeName[64];
+
+		LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));
+		LogErrorString(std::string("level file names a texture the game won't open: ") + whyRefused + ": " + safeName);
+	}
+
+	std::string fileName = whyRefused ? "" : fname;
 
 	Util::ChangeSlashes(fileName);
 
-	texID_t textureID = Tex_CreateFromRIM("graphics/" + fileName);
+	texID_t textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
 /*
 		CL_LoadImageOnce
 		(
