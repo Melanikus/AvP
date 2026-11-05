@@ -1463,6 +1463,46 @@ static void CheckDepthMaps()
 		RemoveMapFile(depthFile);
 	}
 
+	// A number used again doesn't bring the old picture's maps with it
+	{
+		StartAgain();
+		WriteMapFile(normalFile, DeepMap(8, 200, 90, 180));
+		WriteMapFile(depthFile, DeepMap(8, 40, 40, 40));
+		WriteMapFile("other_Normal.rim", DeepMap(8, 10, 90, 180));
+
+		TextureRelief relief;
+		texID_t const picture = AddTexture(wall, 8, 8, 32, TextureUsage_Normal);
+		relief.Build(picture);
+
+		texID_t const map = relief.PictureFor(picture);
+		texID_t const height = relief.HeightFor(picture);
+		Check(CopiesOf(map) != 0 && CopiesOf(height) != 0, "a picture has its maps");
+
+		relief.ForgetPicture(picture);
+		Check(relief.PictureFor(picture) != map && !CopiesOf(relief.PictureFor(picture)), "once its number is free, it has no relief map");
+		Check(relief.HeightFor(picture) != height && !CopiesOf(relief.HeightFor(picture)), "and no depth map");
+		Check(!textureList[map].alive && !textureList[height].alive, "and both are given back");
+
+		// The next picture to have that number looks for its own
+		textureList[picture].details.name = MapFolder() + "/other.rim";
+		logLines.clear();
+		relief.Build(picture);
+
+		Check(LogHas("using " + MapFolder() + "/other_Normal.rim"), "the next picture with that number looks for its own map");
+		Check(!LogHas(depthFile), "and doesn't find the old one's depth map");
+		Check(CopiesOf(relief.PictureFor(picture)) != 0 && relief.PictureFor(picture) != map, "and gets its own");
+
+		// Nothing to forget, and a number nothing has heard of
+		relief.ForgetPicture(picture + 1000);
+		relief.ForgetPicture(picture);
+		relief.ForgetPicture(picture);
+		Check(!CopiesOf(relief.PictureFor(picture)), "forgetting twice, or a number nothing has heard of, is fine");
+
+		RemoveMapFile(normalFile);
+		RemoveMapFile(depthFile);
+		RemoveMapFile("other_Normal.rim");
+	}
+
 	// name_Depth.dds isn't read yet
 	{
 		StartAgain();
@@ -1838,6 +1878,14 @@ static void CheckHandMadeMaps()
 	}
 
 	// The parts that only the real game has, and so only reading can check
+	{
+		std::string const manager = ReadSourceFile("3dc/TextureManager.cpp");
+		size_t const release = manager.find("void Tex_Release(texID_t textureID)");
+		size_t const invalid = (release == std::string::npos) ? release : manager.find("textureList[textureID].isValid = false;", release);
+		size_t const forget = (release == std::string::npos) ? release : manager.find("textureRelief.ForgetPicture(textureID);", release);
+		Check(release != std::string::npos && invalid != std::string::npos && forget != std::string::npos && invalid < forget, "the game forgets a picture's maps when its texture is let go");
+	}
+
 	std::string const pictures = ReadSourceFile("3dc/surface_pictures.cpp");
 	std::string const card = ReadSourceFile("win32/d3_func.cpp");
 	std::string const reader = ReadSourceFile("3dc/texture_relief.cpp");

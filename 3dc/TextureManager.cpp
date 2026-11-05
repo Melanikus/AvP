@@ -32,13 +32,15 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a picture whose texture can't be locked lets go of the texture
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   a picture that ends before it should isn't kept, and one that's refused says why
+//   a picture that ends before it should isn't kept, and one that's refused says why;
+//   letting a texture go also lets go of its relief pictures, so a number used again doesn't bring them with it
 
 #include <sstream>
 #include "renderer.h"
 #include "console.h"
 #include <assert.h>
 #include "RimLoader.h"
+#include "texture_relief.h"
 
 std::vector<Texture> textureList;
 std::vector<Texture>::iterator texIt;
@@ -582,6 +584,8 @@ void Tex_Release(texID_t textureID)
 		// set as invalid
 		textureList[textureID].isValid = false;
 		textureList[textureID].name.clear();
+
+		textureRelief.ForgetPicture(textureID);
 
 //		Tex_CheckMemoryUsage();
 	}

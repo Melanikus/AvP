@@ -454,8 +454,7 @@ texID_t TextureRelief::CalculatedPictureFor(texID_t picture)
 	return relief;
 }
 
-// THE ONE PLACE a texture gets its relief picture. Later: "use somerimname_Normal.rim if it exists, otherwise calculate" goes here. See texture_relief.h.
-// Says once for each if a depth map is there, because someone made it for a reason, and it would be easy to think it was doing something
+// Says once if a .dds depth map is there, because someone made it for a reason, and it would be easy to think it was doing something
 void TextureRelief::NoteDepthFile(std::string const &pictureName)
 {
 	std::string depthName;
@@ -828,6 +827,21 @@ void TextureRelief::LogWhatIsHeld()
 	else
 	{
 		LogString("texture relief: off");
+	}
+}
+
+void TextureRelief::ForgetPicture(texID_t picture)
+{
+	if (picture < reliefOf.size())
+	{
+		Entry const entry = reliefOf[picture];
+		Entry const none = { NO_TEXTURE, false, false, 0, NO_TEXTURE, false };
+
+		// Cleared first, because letting a texture go comes back here, for its own number
+		reliefOf[picture] = none;
+
+		Tex_Release(entry.relief);
+		Tex_Release(entry.height);
 	}
 }
 

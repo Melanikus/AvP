@@ -9,7 +9,7 @@
 //
 // WHERE ONE COMES FROM, in this order. TextureRelief::ReliefPictureFor is the one place that decides.
 //   1. A hand-made map: a file beside the texture, with _Normal on the end of its name, so graphics/Envrnmts/Derelict/Hive01_Normal.rim goes with graphics/Envrnmts/Derelict/Hive01.rim.
-//      It's a file from a stranger: relief_map_file.h says what it has to be, and that's checked before anything is allocated. If it fails, the log says why, and the texture
+//      It's a file from a stranger: relief_map_file.h says what it has to be. Its length is checked before it's read, and its headings before its pixels are given any memory. If it fails, the log says why, and the texture
 //      carries on as if the file weren't there. It can be larger than its texture, because it's read by position on the picture, not by pixel.
 //   2. One worked out from the texture, if SetAutoGenerate has been asked for.
 //   3. Otherwise a flat picture, which changes nothing.
@@ -51,7 +51,7 @@ class TextureRelief
 		void TurnOff();
 		bool IsOn() const;
 
-		// Whether a texture with no hand-made map gets one worked out. The Video menu's "Auto-generate maps", and off to start with. Turned off, it takes effect at once. Turned on, it takes
+		// Whether a texture with no hand-made map gets one worked out. The Rendering page's "Auto-generate maps", and off to start with. Turned off, it takes effect at once. Turned on, it takes
 		// effect for each texture when a level next asks for it. A hand-made map stays either way.
 		void SetAutoGenerate(bool wanted);
 		bool AutoGenerates() const;
@@ -72,9 +72,12 @@ class TextureRelief
 		void LogWhatIsHeld();
 
 		// Gives every relief picture back. Only release_rif_bitmaps asks for this, and nothing calls that today: the game keeps a level's textures until it
-		// exits, so that a picture used again later doesn't have to load again, and these stay with them. A picture keeps its number all that time, so a
-		// relief picture can't end up beside the wrong texture.
+		// exits, so that a picture used again later doesn't have to load again, and these stay with them.
 		void ReleaseAll();
+
+		// Says a texture's number is free. The next picture to get that number would otherwise be given the old picture's maps. A level can make this happen by naming a picture the menus or the
+		// loading screen also use, which share a number with it and later let it go. Tex_Release asks for this. What the maps counted isn't given back, which only errs on the safe side.
+		void ForgetPicture(texID_t picture);
 
 		size_t PicturesHeld() const;
 		size_t BytesHeld() const;

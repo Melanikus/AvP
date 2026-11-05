@@ -1,13 +1,14 @@
-// What a hand-made relief map's file has to be, checked before anything is allocated for it. Written 2026-11-05 by Melanikus for the AvP port.
+// What a hand-made relief map's file has to be. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // A map is a file from a stranger, so nothing in it is trusted. This is all sums on bytes already in memory, with nothing of the game and no graphics card, so a test can throw
-// anything at it. The game and tools/rimpng both use it, so a map the tool says is good is one the game will take. tools/rimpng/README.md is the page for people making maps.
+// anything at it. The game and tools/rimpng both use it, so a map the tool says is good passes the same checks in the game. The game can still go without one, if the level has spent its allowance or the card can't
+// make it. tools/rimpng/README.md is the page for people making maps.
 //
 // THE RULES FOR BOTH KINDS: square, a power of two, from 4 to 2048 a side. The map is read by texture position, so it needn't be the size of its picture. Any size of picture can
 // have any size of map. Each kind says exactly what's wrong with a file, so the log can say why it wasn't used.
 //
-// name_Normal.rim IS WHAT THE GAME READS TODAY. It's the game's own kind of picture, and it can be up to 24 bits a pixel here, which the ordinary loader refuses: RimLoader only ever
-// sees stock pictures and has no way in to this code, nor this code to it. Its smaller copies (mipmaps), which are what stop a detailed map shimmering in the distance, are worked out
+// name_Normal.rim IS WHAT THE GAME READS TODAY. It's the game's own kind of picture, and it can be up to 24 bits a pixel here, which the ordinary loader refuses: RimLoader reads
+// a level's pictures, this code reads their maps, and neither calls the other. Its smaller copies (mipmaps), which are what stop a detailed map shimmering in the distance, are worked out
 // when it loads.
 //
 // name_Normal.dds IS CHECKED HERE, AND THE GAME DOESN'T READ IT YET. One layout only: DXT5, with a full set of smaller copies. It takes a quarter of the memory, and the graphics card does

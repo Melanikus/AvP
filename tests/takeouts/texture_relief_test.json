@@ -514,6 +514,56 @@
 					"to": "\" depth maps\");"
 				}
 			]
+		},
+		{
+			"name": "FORGET: a number past the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size())\n\t{\n\t\tEntry const entry = reliefOf[picture];",
+					"to": "if (true)\n\t{\n\t\tEntry const entry = reliefOf[picture];"
+				}
+			]
+		},
+		{
+			"name": "FORGET: nothing is forgotten",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\treliefOf[picture] = none;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FORGET: the relief map stays",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(entry.relief);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FORGET: the depth map stays",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(entry.height);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: letting a texture go keeps its maps",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\t\ttextureRelief.ForgetPicture(textureID);\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
