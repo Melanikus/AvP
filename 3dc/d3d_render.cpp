@@ -2733,6 +2733,14 @@ void ThisFramesRenderingHasFinished()
 		DrawParticles();
 		DrawCoronas();
 
+		// The render lists need the same. Their buffers are closed, so no corners go in, but a command uses no buffer, so commands do. With nothing to draw them, each list would
+		// keep them and grow, frame after frame.
+		particleList->Reset();
+		mainList->Reset();
+		orthoList->Reset();
+		decalList->Reset();
+		weaponList->Reset();
+
 		// The same for the shadow pass, which would otherwise never run to forget them. The next frame that opens would cast shadows from this one's polygons too, and
 		// what it keeps points at shapes, which are gone if the level ends while frames can't start.
 		ToyForgetCasters();

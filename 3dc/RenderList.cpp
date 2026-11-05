@@ -181,12 +181,12 @@ void RenderList::CreateIndices(uint16_t *indexArray, uint32_t numVerts)
 		default:
 		{
 			// Six corners or more: a fan of triangles, all from the first corner. Stored polygons have three or four corners. More can only come from
-			// the game's clipping (3dc/frustum.cpp), which cuts a polygon against five flat surfaces, and each cut can add corners. Clipping is switched
-			// off in this build, because USE_FRUSTUM_CULL isn't defined, except for the trail behind a thrown disc (RenderTrailSegment), which calls it
-			// directly. Nine is not a limit on what clipping can make. It's what a flat polygon with no dent comes to when each cut adds one. With the
-			// switch on, every polygon crossing a surface would be clipped, including those from level files, and a crafted one with a dent or a twist
-			// comes out with more, about fourteen in the arithmetic. That would write past the end of the nine-corner arrays the clipper uses, unless the
-			// clipper itself stops at nine. This code copes with any number of corners, so it isn't what keeps that safe.
+			// the game's clipping (3dc/frustum.cpp), which cuts a polygon against five flat surfaces, and each cut can add corners. USE_FRUSTUM_CULL isn't
+			// defined in this build, so the only thing clipped is the trail behind a thrown disc (RenderTrailSegment), which calls it directly. Nine is not a
+			// limit on what clipping can make. It's what a flat polygon with no dent comes to when each cut adds one. With the switch off each cut assumes its
+			// first corner is on the visible side, and a dent or a twist adds more, so that trail can go past the nine-corner arrays the clipper uses as things
+			// stand. The arithmetic came to about fourteen for the shapes tried, which isn't a proven ceiling. Only the clipper stopping at nine itself (CLIP-1)
+			// keeps that safe. This code copes with any number of corners, so it isn't what does.
 			for (uint32_t i = numVerts - 2; i >= 1; i--)
 			{
 				AddIndices(indexArray, 0, i, i + 1, numVerts);

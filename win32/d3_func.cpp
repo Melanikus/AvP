@@ -399,23 +399,41 @@ bool R_BeginScene()
 		XInputEnable(true);
 	}
 
+	// A frame that can't start usually goes on not starting, so each of these says so once, until a frame gets through. Otherwise the log would gain a line every frame for as
+	// long as that lasted.
+	static bool saidBeginFailed = false;
+	static bool saidClearFailed = false;
+
 	LastError = d3d.lpD3DDevice->BeginScene();
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		if (!saidBeginFailed)
+		{
+			LogDxError(LastError, __LINE__, __FILE__);
+			saidBeginFailed = true;
+		}
+
 		return false;
 	}
+
+	saidBeginFailed = false;
 
 	LastError = d3d.lpD3DDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0,0,0), 1.0f, 0);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		if (!saidClearFailed)
+		{
+			LogDxError(LastError, __LINE__, __FILE__);
+			saidClearFailed = true;
+		}
 
 		// This frame stops here, so nothing else will close the scene opened just above. The card refuses to open a scene while one
 		// is open, so if this one stayed open, no frame could ever start again.
 		R_EndScene();
 		return false;
 	}
+
+	saidClearFailed = false;
 
 	nDrawIndexedPrimCalls = 0;
 

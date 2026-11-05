@@ -1369,6 +1369,7 @@ struct SourceFindings
 	bool frameEndChecksTheFrame;
 	bool frameEndAlwaysFinishes;
 	bool frameEndForgetsCasters;
+	bool frameEndEmptiesTheLists;
 	bool frameStartRemembers;
 	int writersRead;
 	int mainWritersRead;
@@ -1534,6 +1535,11 @@ static SourceFindings ReadTheWriters(std::string const &source)
 			found.frameEndChecksTheFrame = guard != std::string::npos && guard < body.find("UnlockExecuteBufferAndPrepareForUse()");
 			found.frameEndAlwaysFinishes = body.find("LightBlockDeallocation()") != std::string::npos && body.find("return") == std::string::npos;
 			found.frameEndForgetsCasters = guard != std::string::npos && body.find("ToyForgetCasters();", guard) < body.find("frameIsOpen = false");
+			found.frameEndEmptiesTheLists = guard != std::string::npos
+				&& guard < body.find("particleList->Reset();") && guard < body.find("mainList->Reset();") && guard < body.find("orthoList->Reset();")
+				&& guard < body.find("decalList->Reset();") && guard < body.find("weaponList->Reset();")
+				&& body.find("weaponList->Reset();") != std::string::npos && body.find("decalList->Reset();") != std::string::npos
+				&& body.find("orthoList->Reset();") != std::string::npos && body.find("mainList->Reset();") != std::string::npos && body.find("particleList->Reset();") != std::string::npos;
 		}
 
 		if (function.name == "ThisFramesRenderingHasBegun")
@@ -1585,6 +1591,7 @@ static void CheckTheRealWriters()
 	Check(found.frameEndChecksTheFrame, "the end of a frame checks it too");
 	Check(found.frameEndAlwaysFinishes, "and a frame that couldn't be drawn still gets to the end of that function, where the lights that are due to go are let go of");
 	Check(found.frameEndForgetsCasters, "and it forgets what it collected for shadows, because the shadow pass, which would have, didn't run");
+	Check(found.frameEndEmptiesTheLists, "and every list is emptied, because commands still go on them with nothing to draw them");
 	Check(found.frameStartRemembers, "and the start of a frame only says it's open if it did start");
 
 	// That these checks can catch anything has to be shown as well. Each of these breaks one writer in a copy of the file.
