@@ -1,0 +1,45 @@
+# Builds the game on a clean machine, for every pull request. If it doesn't build, the merge stops, for everyone. This is a required check.
+#
+# The other checks scan the code and run the small test programs, and none of them builds the game. So without this, a change could pass
+# every check and still not build, and nobody would find out until after it had merged (AvP Tao #2: the gate proves the game builds on a
+# clean machine).
+#
+# Nothing is kept: the build isn't uploaded, because anyone can download what a public repository builds, and nothing is released until
+# it's safe. A test build is a separate step that only the owner starts: see build.yml, which uses the same script as this.
+name: Game build
+
+on:
+  push:
+    branches: [avpx_main]
+  pull_request:
+    branches: [avpx_main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-the-game:
+    name: Build the game
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    # The libraries are built from source, so this takes a while, but it shouldn't sit forever if something hangs
+    timeout-minutes: 120
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A copy of these on the machine could hide one that's missing from the package, so the log says whether this machine has them.
+      - name: Say which of Microsoft's old DirectX files this machine already has
+        shell: pwsh
+        run: |
+          foreach ($name in 'D3DCompiler_43.dll', 'd3dx9_43.dll') {
+            foreach ($folder in "$env:windir\SysWOW64", "$env:windir\System32") {
+              '{0} in {1}: {2}' -f $name, $folder, (Test-Path (Join-Path $folder $name))
+            }
+          }
+
+      - name: Build the game and make its package
+        shell: pwsh
+        run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
