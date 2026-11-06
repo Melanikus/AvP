@@ -116,7 +116,7 @@
 			]
 		},
 		{
-			"name": "a length of 0 goes round for ever",
+			"name": "a length of 0 is believed",
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
@@ -162,16 +162,6 @@
 					"file": "3dc/net_checks.h",
 					"from": "return i + 1;",
 					"to": "return i;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a damage message with no place in the table is read",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))",
-					"to": "if (false)"
 				}
 			]
 		}

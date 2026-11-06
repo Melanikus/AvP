@@ -188,7 +188,10 @@ static void TestMessageParts()
 	unsigned char const variesMissing[] = { kPartVaries };
 	unsigned char const variesFar[] = { kPartVaries, 200, 1 };
 
-	Check(Walk(variesNothing, sizeof(variesNothing)) == kNetPartsTooShort, "saying it doesn't fit is taken at its word, or a message could go round for ever");
+	unsigned char const variesThenWhatLooksFine[] = { kPartVaries, 0, 1, 2, 3 };
+
+	Check(Walk(variesNothing, sizeof(variesNothing)) == kNetPartsTooShort, "saying it doesn't fit is taken at its word");
+	Check(Walk(variesThenWhatLooksFine, sizeof(variesThenWhatLooksFine)) == kNetPartsTooShort, "even when what's after it would make a good message on its own");
 	Check(Walk(variesMissing, sizeof(variesMissing)) == kNetPartsTooShort, "with no bytes at all it isn't even asked");
 	Check(Walk(variesFar, sizeof(variesFar)) == kNetPartsTooShort, "and it can't claim more than there is");
 }
@@ -209,6 +212,11 @@ static void TestChatLines()
 	line[1] = 'x';
 	line[3] = 'x';
 	Check(NetChatPartLength(line, kNetMostChatLetters) == 0, "with no zero in what's there, it doesn't fit, however long it could have been");
+
+	line[5] = 0;
+	Check(NetChatPartLength(line, 5) == 0, "and a zero just past the end of the message doesn't count, because that isn't part of it");
+	Check(NetChatPartLength(line, 6) == 6, "but one just inside it does");
+	line[5] = 'x';
 
 	line[kNetMostChatLetters + 1] = 0;
 	Check(NetChatPartLength(line, sizeof(line)) == kNetMostChatLetters + 2, "the longest there can be ends at the end of its letters");

@@ -1293,6 +1293,16 @@
 					"to": "static uint8_t msg[NET_MESSAGEBUFFERSIZE];"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a damage message with no place in the table is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }
