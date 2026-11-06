@@ -491,8 +491,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "view[0], -view[1], view[2]",
-					"to": "view[0], view[1], view[2]"
+					"from": "lightChoiceSamples, view[0], -view[1], view[2]",
+					"to": "lightChoiceSamples, view[0], view[1], view[2]"
 				}
 			]
 		},

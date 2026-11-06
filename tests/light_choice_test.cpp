@@ -279,9 +279,12 @@ static void WhatAScoreMeans()
 	Check(reachingFar == 0.0f, "a light with no surface in reach scores nothing");
 	Check(LightChoice_Score(samples, 0.0f, 0.0f, 400.0f, 90000.0f, 1.0f, true) > LightChoice_Score(samples, 0.0f, 0.0f, 400.0f, 800.0f, 1.0f, true) * 0.9f, "and a long range is only worth what it lights");
 
-	// The most a light counts as reaching
-	StartWithAWallAhead();
-	Check(LightChoice_Score(samples, 0.0f, 0.0f, 1000.0f, 400000.0f, 1.0f, true) == LightChoice_Score(samples, 0.0f, 0.0f, 1000.0f, kLightChoiceMostRange, 1.0f, true), "a range past the most counts as the most");
+	// The most a light counts as reaching. A small wall, a long way off, so that how far it reaches makes a difference.
+	LightChoice_Forget(&samples);
+	AddWall(-50.0f, 50.0f, -50.0f, 50.0f, 500.0f);
+	LightChoice_KeepTheLargest(&samples);
+	Check(LightChoice_Score(samples, 0.0f, 0.0f, -50000.0f, 400000.0f, 1.0f, true) == LightChoice_Score(samples, 0.0f, 0.0f, -50000.0f, kLightChoiceMostRange, 1.0f, true), "a range past the most counts as the most");
+	Check(LightChoice_Score(samples, 0.0f, 0.0f, -50000.0f, kLightChoiceMostRange, 1.0f, true) < LightChoice_Score(samples, 0.0f, 0.0f, -50000.0f, kLightChoiceMostRange * 0.99f, 1.0f, true) + 0.01f, "which is still a real distance");
 
 	// Over the whole of what's on screen, so a light on all of it gets what it gives each part, whatever size the screen's surfaces are
 	LightChoice_Forget(&samples);
