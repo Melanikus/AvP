@@ -1615,6 +1615,11 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tNet_NoteRefused("), "and one with no shape isn't made");
 	Check(CountOf(Between(makeGhost, "STRATEGYBLOCK *CreateNetGhost(", "int UseExtrapolation=1;"), "if (!root_section)") == 3, "a level without a disc's model can't crash on one");
 
+	// What goes on the screen
+	Check(Has(pldnet, "NetMakeNameUnique(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH,"), "a new player's name has to be free");
+	Check(Has(pldnet, "\"%.*s says: %s\""), "a chat line says someone is speaking");
+	Check(Has(pldnet, "NetCleanText(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer));"), "and can't break into lines of its own");
+
 	// What the numbers in a message mean, as an independent read of this code asked
 	Check(Has(pldnet, "if (objectPtr->I_SBtype != I_BehaviourInanimateObject)\n\t{\n\t\tNet_NoteRefused("), "only something that can be picked up gets treated as a pick-up");
 	Check(Has(pldnet, "if (!GhostKindCanBeMadeByMessage(type))") && Has(pldnet, "if (objectId == GHOST_PLAYEROBJECTID)"), "a message can't make a player's body, or a kind that isn't on the list");

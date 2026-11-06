@@ -6,6 +6,36 @@
 	],
 	"rows": [
 		{
+			"name": "control characters stay in text",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (letter < 32 || letter == 127)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a copied name isn't cleaned",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\tNetCleanText(to, size);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name someone has is kept",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!used(name))\n\t{\n\t\treturn true;\n\t}\n\n\tchar original[32];",
+					"to": "return true;\n\n\tchar original[32];"
+				}
+			]
+		},
+		{
 			"name": "a typed address part can be any size",
 			"changes": [
 				{

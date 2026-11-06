@@ -178,11 +178,88 @@ inline size_t NetChatPartLength(const unsigned char *part, size_t bytesLeft)
 	return 0;
 }
 
+// Text that came from another machine and goes on the screen. Anything that isn't a character to draw becomes a space, so it can't break a line in two, or pretend to be a line of its own.
+inline void NetCleanText(char *text, size_t size)
+{
+	for (size_t i = 0; i < size && text[i] != 0; i++)
+	{
+		unsigned char const letter = (unsigned char)text[i];
+
+		if (letter < 32 || letter == 127)
+		{
+			text[i] = ' ';
+		}
+	}
+}
+
 // A player's name, from one fixed place to another. Nothing says the one that arrived ends, and the game treats a name as ending, so this makes sure of it.
 inline void NetCopyPlayerName(char *to, const char *from, size_t size)
 {
 	memcpy(to, from, size);
 	to[size - 1] = '\0';
+	NetCleanText(to, size);
+}
+
+// A name the host is about to give a new player, when someone already has it. Two players with one name could speak for each other. This puts a number on the end, cutting the name if it has to, and takes numbers from 2 up. used says whether a name is taken, and most is the most numbers to try.
+template <typename Used>
+inline bool NetMakeNameUnique(char *name, size_t size, Used used, int most)
+{
+	if (!used(name))
+	{
+		return true;
+	}
+
+	char original[32];
+
+	if (size > sizeof(original))
+	{
+		return false;
+	}
+
+	memcpy(original, name, size);
+
+	for (int number = 2; number <= most; number++)
+	{
+		char ending[12];
+		size_t endingLength = 0;
+		int value = number;
+		char digits[12];
+		size_t digitCount = 0;
+
+		do
+		{
+			digits[digitCount++] = (char)('0' + value % 10);
+			value /= 10;
+		} while (value > 0);
+
+		while (digitCount > 0)
+		{
+			ending[endingLength++] = digits[--digitCount];
+		}
+
+		if (endingLength >= size)
+		{
+			return false;
+		}
+
+		size_t kept = 0;
+
+		while (kept < size - 1 - endingLength && original[kept] != 0)
+		{
+			name[kept] = original[kept];
+			kept++;
+		}
+
+		memcpy(name + kept, ending, endingLength);
+		name[kept + endingLength] = 0;
+
+		if (!used(name))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 #endif

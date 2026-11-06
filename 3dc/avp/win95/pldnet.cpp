@@ -907,6 +907,21 @@ bool AddPlayerToGame(NetID id, const char *name)
 	netGameData.playerData[freePlayerIndex].playerId = id;
 	strncpy(netGameData.playerData[freePlayerIndex].name, name, NET_PLAYERNAMELENGTH - 1);
 	netGameData.playerData[freePlayerIndex].name[NET_PLAYERNAMELENGTH - 1] = '\0';
+	NetCleanText(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH);
+
+	// Nobody else may have this name, or they could seem to speak for each other. Eight players can always find a number.
+	NetMakeNameUnique(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH, [freePlayerIndex](const char *candidate)
+	{
+		for (int i = 0; i < NET_MAXPLAYERS; i++)
+		{
+			if (i != freePlayerIndex && netGameData.playerData[i].playerId != 0 && _strnicmp(netGameData.playerData[i].name, candidate, NET_PLAYERNAMELENGTH) == 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}, NET_MAXPLAYERS + 1);
 
 	//  ConvertNetNameToUpperCase(netGameData.playerData[freePlayerIndex].name);
 	netGameData.playerData[freePlayerIndex].characterType = NGCT_Marine;
@@ -4287,14 +4302,14 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 		}
 		while (*ptr++);
 	}
-	// Show our own chat line on our screen as "NAME: message".
+	// Show our own chat line on our screen as "NAME says: message".
 	// OnScreenMessageBuffer holds 300 bytes: up to 299 characters (letters,
 	// digits, spaces and so on), then a zero byte that marks where the text
 	// stops (the "end marker").
 	// The check near the top of this function turns away a message of 254
 	// characters or more, and a player's name is kept in a 13-byte box (at
 	// most 12 characters and its end marker). So today the line is at most
-	// 12 + 2 + 253 = 267 characters long and always fits.
+	// 12 + 7 + 253 = 272 characters long and always fits.
 	// The limits are also put right here, so the line can never run past the
 	// end of the buffer, even if one of those checks is changed one day:
 	// - "%.*s" with NET_PLAYERNAMELENGTH reads no more than the 13 bytes of
@@ -4303,7 +4318,7 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 	//   short it leaves out the end marker, so we always write one ourselves
 	//   into the last byte.
 	// A line that fits comes out exactly as before.
-	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
 	OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
@@ -7348,7 +7363,7 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 		}
 
 		// Another player's computer sent us this chat line over the network.
-		// We show it as "NAME: message" in OnScreenMessageBuffer, which holds 300
+		// We show it as "NAME says: message" in OnScreenMessageBuffer, which holds 300
 		// bytes: up to 299 characters, then the end marker (the zero byte that
 		// marks where the text stops).
 		// The check at the top of this function refuses a line of 254 characters
@@ -7359,8 +7374,10 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 		// (_snprintf), and the end marker written by us into the last byte,
 		// because _snprintf leaves it out when it cuts the text short.
 		// A line that fits comes out exactly as before.
-		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
 		OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
+		// Every chat line says who's speaking, and can't break into a line that looks like the game's own
+		NetCleanText(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer));
 		NewOnScreenMessage(OnScreenMessageBuffer);
 
 		/* KJL 99/2/5 - play 'incoming message' sound */

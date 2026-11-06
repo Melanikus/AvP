@@ -295,8 +295,58 @@ static void TestTypedAddresses()
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
 }
 
+static void TestWhatGoesOnTheScreen()
+{
+	char text[] = "one\ntwo\tthree\x7f four";
+
+	NetCleanText(text, sizeof(text));
+	Check(strcmp(text, "one two three  four") == 0, "control characters become spaces");
+
+	char noEnd[4] = { 'a', 1, 'b', 2 };
+
+	NetCleanText(noEnd, sizeof(noEnd));
+	Check(noEnd[1] == ' ' && noEnd[3] == ' ', "text with no end is only read within its room");
+
+	char high[] = { (char)0xC0, 'x', 0 };
+
+	NetCleanText(high, sizeof(high));
+	Check(high[0] == (char)0xC0, "a letter past plain English stays");
+
+	char from[13];
+	char to[13];
+
+	memset(from, 3, sizeof(from));
+	NetCopyPlayerName(to, from, sizeof(to));
+	Check(to[0] == ' ' && to[12] == 0, "a name is cleaned as it's copied");
+
+	auto const justOne = [](const char *candidate) { return strcmp(candidate, "BOB") == 0; };
+	char name[13] = "BOB";
+
+	Check(NetMakeNameUnique(name, sizeof(name), justOne, 9) && strcmp(name, "BOB2") == 0, "the second BOB gets a number");
+
+	char other[13] = "ANN";
+
+	Check(NetMakeNameUnique(other, sizeof(other), justOne, 9) && strcmp(other, "ANN") == 0, "a name nobody has stays as it is");
+
+	auto const manyTaken = [](const char *candidate) { return strcmp(candidate, "BOB") == 0 || strcmp(candidate, "BOB2") == 0 || strcmp(candidate, "BOB3") == 0; };
+	char third[13] = "BOB";
+
+	Check(NetMakeNameUnique(third, sizeof(third), manyTaken, 9) && strcmp(third, "BOB4") == 0, "it takes the first number that's free");
+
+	char full[13] = "ABCDEFGHIJKL";
+	auto const fullTaken = [](const char *candidate) { return strcmp(candidate, "ABCDEFGHIJKL") == 0; };
+
+	Check(NetMakeNameUnique(full, sizeof(full), fullTaken, 9) && strcmp(full, "ABCDEFGHIJK2") == 0, "a name that fills its room is cut to fit the number");
+
+	auto const everything = [](const char *) { return true; };
+	char none[13] = "BOB";
+
+	Check(!NetMakeNameUnique(none, sizeof(none), everything, 9), "it says so if no number was free");
+}
+
 int main()
 {
+	TestWhatGoesOnTheScreen();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();
