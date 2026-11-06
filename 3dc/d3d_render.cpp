@@ -7299,7 +7299,7 @@ static void ViewSwitches_ApplyAsked()
 
 // A frame with no light on the list has nothing for the shadow pass to do, but its world still gets turned down like any other frame's. Without this, the whole screen would jump brighter each time
 // the last light left the list, and back when one came. The game caches its render states, so nothing is changed here unless it can be put back: that one frame then stays bright.
-static void ToyDimWorldWithNoLights()
+static void DimWorldWithNoLights()
 {
 	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
 
@@ -7420,7 +7420,7 @@ static void ToyShadows_Draw()
 	{
 		if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)
 		{
-			ToyDimWorldWithNoLights();
+			DimWorldWithNoLights();
 		}
 
 		if (ShadowShootOn)

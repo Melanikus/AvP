@@ -796,7 +796,7 @@ static void TheMapLightsInTheGame()
 	// Which kind of light is which
 	// A light's kind comes from two real fields, and both start out in the level file: has_corona, which InitPlacedLight sets from the polygon flag iflag_light_corona, and LFlag_AbsPos, which
 	// setup_light_data gives a level light, on top of flags copied from the file. A crafted level can say anything in them, and all that can do is say yes or no to a shadow on one player's screen.
-	std::string const kinds = Between(shapes, "static LightKindForShadows ToyKindOfLight(", "// What became of every light the choosing looked at");
+	std::string const kinds = Between(shapes, "static LightKindForShadows KindOfLight(", "// What became of every light the choosing looked at");
 
 	Check(Has(kinds, "if (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;"), "a light with LFlag_AbsPos is a level light");
 	Check(Has(kinds, "owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr"), "only a placed light's data is read as a placed light's");
@@ -819,7 +819,7 @@ static void TheMapLightsInTheGame()
 	std::string const considering = Between(shapes, "static void ToyConsiderLight(", "int const distance = ToyDistanceToCamera(light);");
 
 	Check(Has(considering, "if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))"), "every light on its way to the list is asked about, with what SHADOWAMBIENT says");
-	Check(Has(considering, "LightKindForShadows const kind = ToyKindOfLight(light, block);"), "by the block that carries it");
+	Check(Has(considering, "LightKindForShadows const kind = KindOfLight(light, block);"), "by the block that carries it");
 
 	// How it's set
 	Check(Has(render, "int ShadowAmbientOn = 0;"), "SHADOWAMBIENT starts off");

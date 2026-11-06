@@ -5747,7 +5747,7 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 // iflag_light_corona (InitPlacedLight in bh_light.cpp). LFlag_AbsPos is given to a level light by setup_light_data in object_setup.cpp, and to nothing else in the game. Both start out in the
 // level file, so a level could be crafted to say anything here. All that can do is say yes or no to a shadow on this player's own screen, and nothing else reads the answer. A placed light is
 // looked for first, because a light's flags are copied from the file, so a crafted flag can't change what a lamp counts as. block is what carries the light, or nothing for a light element.
-static LightKindForShadows ToyKindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
+static LightKindForShadows KindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
 {
 	STRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;
 
@@ -5782,7 +5782,7 @@ struct LightsLookedAt
 
 static LightsLookedAt lightsThisFrame;
 
-// Keeps the nearest lights seen so far, in order, up to as many as can be scored: see ToyKeepTheLightsThatShowMost. A light marked first goes ahead of every other, nearest of those first, and
+// Keeps the nearest lights seen so far, in order, up to as many as can be scored: see KeepTheLightsThatShowMost. A light marked first goes ahead of every other, nearest of those first, and
 // none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
 // light element, which is on no block.
 //
@@ -5801,7 +5801,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 	}
 
 	// The map's lights with no corona stay out of the list unless SHADOWAMBIENT is on. Leaving the list takes nothing away from the map: what lights it stays in the game's lighting. See light_choice.h.
-	LightKindForShadows const kind = ToyKindOfLight(light, block);
+	LightKindForShadows const kind = KindOfLight(light, block);
 
 	if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))
 	{
@@ -5896,7 +5896,7 @@ static float ToyFraction(int fixedPoint)
 
 // How much light a light gives at full strength, for its score, with its colours counted as an eye counts them. A dark lamp is judged by how bright it'll be when it comes back, or it would score
 // nothing and lose its place for a flicker. A live light can be brighter than 1: see ToyShadows_ChooseLights.
-static float ToyLightStrength(const LIGHTBLOCK *light)
+static float LightStrength(const LIGHTBLOCK *light)
 {
 	int const brightness = light->LightBright ? light->LightBright : light->LightBrightStore;
 	float bright = ToyFraction(brightness);
@@ -5912,7 +5912,7 @@ static float ToyLightStrength(const LIGHTBLOCK *light)
 
 // Cuts a list of the nearest lights down to the ones that put the most light on what was on screen last frame, best first, and gives back how many that is. See light_choice.h. With nothing to go by, as
 // on the first frame of a level, or with walls that were never noted, or if -shadownearest asks, it goes by nearest, as the list already is. Only ever moves pointers around that it was given.
-static int ToyKeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int most, int *inReach)
+static int KeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int most, int *inReach)
 {
 	if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)
 	{
@@ -5933,7 +5933,7 @@ static int ToyKeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int 
 
 		bool const hasAPlace = LightHasAPlace(light);
 
-		candidates[i].score = LightChoice_Score(lightChoiceSamples, view[0], -view[1], view[2], (float)light->LightRange, ToyLightStrength(light), (light->LightFlags & LFlag_PreLitSource) != 0);
+		candidates[i].score = LightChoice_Score(lightChoiceSamples, view[0], -view[1], view[2], (float)light->LightRange, LightStrength(light), (light->LightFlags & LFlag_PreLitSource) != 0);
 		candidates[i].comesFirst = found[i].comesFirst;
 		candidates[i].hasAPlace = hasAPlace;
 		candidates[i].keepsItsPlace = hasAPlace && LightIsDarkForNow(light);
@@ -6230,8 +6230,8 @@ void ToyShadows_ChooseLights()
 	}
 
 	LightChoice_KeepTheLargest(&lightChoiceSamples);
-	numSteady = ToyKeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
-	numBrief = ToyKeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);
+	numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
+	numBrief = KeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);
 
 	lightsThisFrame.steadyChosen = numSteady;
 	lightsThisFrame.briefChosen = numBrief;

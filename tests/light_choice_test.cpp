@@ -455,15 +455,15 @@ static void TheRealGame()
 	std::string const choosing = Between(shapes, "void ToyShadows_ChooseLights()", "int placeOf[kToyMostLights];");
 
 	Check(Has(choosing, "memcpy(samplesViewMatrix, toyViewMatrix, sizeof(samplesViewMatrix));\n\tmemcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));"), "the samples are from the frame before, so the view of that frame is kept for them");
-	Check(Has(choosing, "numSteady = ToyKeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);"), "the steady lights are chosen by score");
-	Check(Has(choosing, "numBrief = ToyKeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);"), "and the brief lights");
+	Check(Has(choosing, "numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);"), "the steady lights are chosen by score");
+	Check(Has(choosing, "numBrief = KeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);"), "and the brief lights");
 	Check(Has(choosing, "ToyFoundLight steady[kLightChoiceMostCandidates];") && Has(choosing, "ToyFoundLight brief[kLightChoiceMostCandidates];"), "from a list with room for all it can score");
 	Check(Has(choosing, "LightChoice_KeepTheLargest(&lightChoiceSamples);\n\tnumSteady = "), "only the largest samples are scored, which is what holds the cost down");
 	Check(Has(Between(choosing, "lightsThisFrame.briefChosen = numBrief;", "ToyFoundLight chosen[kToyMostLights];"), "LightChoice_Forget(&lightChoiceSamples);"), "and the samples start again for the frame about to be drawn");
 	Check(Has(Between(choosing, "if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)", "return;"), "LightChoice_Forget(&lightChoiceSamples);"), "and when nothing's chosen, so old ones can't meet a newer view");
 	Check(Has(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "LightChoice_Forget(&lightChoiceSamples);\n\t\tStaticLevel_BuildThisLevel();"), "a new level starts with nothing to go by");
 
-	std::string const keeping = Between(shapes, "static int ToyKeepTheLightsThatShowMost(", "// The lights chosen for this frame");
+	std::string const keeping = Between(shapes, "static int KeepTheLightsThatShowMost(", "// The lights chosen for this frame");
 
 	Check(Has(keeping, "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)"), "with nothing to go by, or walls that were never noted, or if -shadownearest asks, it goes by nearest");
 	Check(Has(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "if (devSwitch(\"-shadownearest\"))\n\t\t{\n\t\t\tShadowLightsByNearest = 1;"), "-shadownearest needs -dev");
@@ -481,13 +481,13 @@ static void TheRealGame()
 	Check(Has(considering, "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));"), "what comes first is the player's own lights and flares");
 
 	// The strength
-	std::string const strength = Between(shapes, "static float ToyLightStrength(", "static int ToyKeepTheLightsThatShowMost(");
+	std::string const strength = Between(shapes, "static float LightStrength(", "static int KeepTheLightsThatShowMost(");
 
 	Check(Has(strength, "light->LightBright ? light->LightBright : light->LightBrightStore"), "a dark lamp is judged by how bright it'll be when it comes back");
 
 	// With no light on the list, the screen stays as bright as it was with one
 	std::string const noLights = Between(render, "if (!report.lights)\n\t{", "float worldAxes[9];");
-	std::string const dimming = Between(render, "static void ToyDimWorldWithNoLights()", "static void ToyShadows_Draw()");
+	std::string const dimming = Between(render, "static void DimWorldWithNoLights()", "static void ToyShadows_Draw()");
 
 	Check(Has(noLights, "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorldWithNoLights();"), "a frame with no light chosen still has its world turned down");
 	Check(Has(render, "if (ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorld(device);"), "which is the same view as on a frame with lights");

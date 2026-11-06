@@ -501,7 +501,7 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "numSteady = ToyKeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);",
+					"from": "numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);",
 					"to": ";"
 				}
 			]
@@ -511,7 +511,7 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "numBrief = ToyKeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);",
+					"from": "numBrief = KeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);",
 					"to": ";"
 				}
 			]
