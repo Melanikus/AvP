@@ -12,4 +12,5 @@ tests/limits_test.cpp
 3dc/avp/support/strutil.cpp
 3dc/avp/win95/gadgets/text_input.cpp
 3dc/win95/our_mem.cpp
+3dc/avp/game_statistics.cpp
 /link /FORCE:UNRESOLVED

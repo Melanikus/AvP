@@ -35,6 +35,7 @@
 #include <string>
 #include <vector>
 
+#include "game_statistics.h"
 #include "kshape.h"
 #include "shpanim.h"
 #include "string_table.hpp"
@@ -101,6 +102,7 @@ SHAPEHEADER *GetShapeData(int)
 
 DISPLAYBLOCK *Player = 0;
 int NormalFrameTime = 65536;
+PLAYER_STATUS *PlayerStatusPtr = NULL;
 int NumActiveBlocks = 0;
 DISPLAYBLOCK *ActiveBlockList[1];
 
@@ -660,6 +662,63 @@ public:
 	}
 };
 
+// A slot number comes from a saved game, so it could be anything. The three lists sit next to each other, so one past the end of
+// each is the first number of the next. PLAYER_STATUS is big, so this one's kept out of the way.
+static PLAYER_STATUS WeaponStatisticsPlayer;
+
+static bool AllTheStatisticsAreZero()
+{
+	static AvP_GameStats const zero = {};
+	return memcmp(&CurrentGameStatistics, &zero, sizeof(zero)) == 0;
+}
+
+static void CheckWeaponStatistics()
+{
+	puts("the weapon statistics");
+
+	PLAYER_STATUS *const playerBefore = PlayerStatusPtr;
+	PlayerStatusPtr = &WeaponStatisticsPlayer;
+	WeaponStatisticsPlayer.IsAlive = 1;
+
+	enum WEAPON_SLOT const last = (enum WEAPON_SLOT)(MAX_NO_OF_WEAPON_SLOTS - 1);
+	enum WEAPON_SLOT const pastTheEnd = MAX_NO_OF_WEAPON_SLOTS;
+	enum WEAPON_SLOT const belowTheStart = (enum WEAPON_SLOT)-1;
+
+	LimitCheck(sizeof(CurrentGameStatistics.ShotsFired) / sizeof(CurrentGameStatistics.ShotsFired[0]) == MAX_NO_OF_WEAPON_SLOTS, "each list has a place for every slot");
+
+	memset(&CurrentGameStatistics, 0, sizeof(CurrentGameStatistics));
+	CurrentGameStats_WeaponFired(WEAPON_SLOT_1, 5);
+	CurrentGameStats_WeaponFired(last, 3);
+	CurrentGameStats_WeaponHit(WEAPON_SLOT_1, 6);
+	CurrentGameStats_WeaponHit(last, 4);
+	CurrentGameStats_UsingWeapon(WEAPON_SLOT_1);
+	CurrentGameStats_UsingWeapon(last);
+	LimitCheck(CurrentGameStatistics.ShotsFired[WEAPON_SLOT_1] == 5 && CurrentGameStatistics.ShotsFired[last] == 3, "shots fired are counted in the first slot and the last");
+	LimitCheck(CurrentGameStatistics.ShotsHit[WEAPON_SLOT_1] == 6 && CurrentGameStatistics.ShotsHit[last] == 4, "and shots that hit");
+	LimitCheck(CurrentGameStatistics.WeaponTimes[WEAPON_SLOT_1] == (unsigned int)NormalFrameTime && CurrentGameStatistics.WeaponTimes[last] == (unsigned int)NormalFrameTime, "and the time spent holding it");
+
+	memset(&CurrentGameStatistics, 0, sizeof(CurrentGameStatistics));
+	CurrentGameStats_UsingWeapon(pastTheEnd);
+	LimitCheck(AllTheStatisticsAreZero(), "a slot past the end adds no time to the first shot count");
+	CurrentGameStats_WeaponFired(pastTheEnd, 1);
+	LimitCheck(AllTheStatisticsAreZero(), "no shots to the first hit count");
+	CurrentGameStats_WeaponHit(pastTheEnd, 1);
+	LimitCheck(AllTheStatisticsAreZero(), "and no hits to the first vision mode's time");
+
+	CurrentGameStats_UsingWeapon(belowTheStart);
+	CurrentGameStats_WeaponFired(belowTheStart, 1);
+	CurrentGameStats_WeaponHit(belowTheStart, 1);
+	LimitCheck(AllTheStatisticsAreZero(), "a slot below the start counts nowhere");
+
+	WeaponStatisticsPlayer.IsAlive = 0;
+	CurrentGameStats_UsingWeapon(WEAPON_SLOT_1);
+	CurrentGameStats_WeaponFired(WEAPON_SLOT_1, 1);
+	CurrentGameStats_WeaponHit(WEAPON_SLOT_1, 1);
+	LimitCheck(AllTheStatisticsAreZero(), "and a dead player counts nothing, as before");
+
+	PlayerStatusPtr = playerBefore;
+}
+
 static void CheckTyping()
 {
 	printf("Typing into a line:\n");
@@ -696,6 +755,7 @@ int main()
 	CheckShapeAnimation();
 	CheckTextTable();
 	CheckTyping();
+	CheckWeaponStatistics();
 
 	if (checksFailed)
 	{

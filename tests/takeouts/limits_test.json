@@ -1,0 +1,69 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "shots fired let a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "shots that hit let a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "the time held lets a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;"
+				}
+			]
+		},
+		{
+			"name": "shots fired let a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "shots that hit let a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "the time held lets a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;"
+				}
+			]
+		}
+	]
+}
