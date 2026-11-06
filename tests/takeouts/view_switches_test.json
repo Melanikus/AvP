@@ -1,0 +1,140 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the static route can be switched on without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devSwitch(\"-staticscene\")",
+					"to": "strstr(command_line, \"-staticscene\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a number for how shadows look works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devNumber(\"-shadowworld=\")",
+					"to": "strstr(command_line, \"-shadowworld=\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every number gets past the check for -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "return devSwitch(name) ? strstr(command_line, name) : 0;",
+					"to": "return strstr(command_line, name);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: asking without -dev doesn't say why it's off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: turning the new look off now needs -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "strstr(command_line, \"-shadowsoff\")",
+					"to": "devSwitch(\"-shadowsoff\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps a brighter world",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &ToyShadowsWorld, ToyShadowsWorld },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the static route",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &StaticSceneOn, StaticSceneOn },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game puts nothing back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "bool const tuningWasChanged = ShadowTuning_PutBack(shadowTuning, (int)(sizeof(shadowTuning) / sizeof(shadowTuning[0])));",
+					"to": "bool const tuningWasChanged = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the margin that isn't a whole number",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tShadowSurfaceBias = shadowSurfaceBiasAsBuilt;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say why the look changed",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": ", and what the command line changed about how shadows and lights are drawn is back as it was built",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a changed number isn't put back",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "*numbers[i].value = numbers[i].asBuilt;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a change isn't reported, so the log never says it",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "anyChanged = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "nothing is ever looked at",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "if (*numbers[i].value != numbers[i].asBuilt)",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}

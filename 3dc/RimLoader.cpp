@@ -31,16 +31,27 @@
 //   a picture too large is refused, so is one that can't hold what its size says, and reading stops where its data does;
 //   so is one with no planes, too many parts or a colour table past its end, packed data stops at the most a picture needs, and each refusal has its reason;
 //   the pictures one level opens have a limit in bytes
+//   every picture costs at least 64 KB of that limit, even one that's no use; one with no size is refused; and once the
+//   limit is reached, no more pictures are even opened
 
 #include "RimLoader.h"
 #include <algorithm>
 
 // How many bytes of pictures have been opened since the level started. See kMostRimBytesPerLevel.
 static uint64_t bytesThisLevel = 0;
+static bool saidLevelIsFull = false;
 
 void RimLoader_NewLevel()
 {
 	bytesThisLevel = 0;
+	saidLevelIsFull = false;
+}
+
+bool RimLoader_SayLevelIsFull()
+{
+	bool const say = !saidLevelIsFull;
+	saidLevelIsFull = true;
+	return say;
 }
 
 uint64_t RimLoader_BytesThisLevel()
@@ -54,7 +65,7 @@ RimLoader::RimLoader()
 	chunkSize = 0;
 	chunkID   = 0;
 
-	// a file can leave out the part that sets these, so they need a safe value: an empty picture
+	// a file can leave out the part that sets these, so they need a safe value: no size at all, which Open refuses
 	memset(&header, 0, sizeof(header));
 
 	colourMap = 0;
@@ -84,6 +95,7 @@ const char *RimLoader_ProblemWords(RimProblem problem)
 		case kRimFine:               return "there's nothing wrong with it";
 		case kRimNoFile:             return "the file isn't there";
 		case kRimTooLarge:           return "it's larger than a picture can be, which is 8192 on a side and 2048 x 2048 in all";
+		case kRimHasNoSize:         return "it has no size";
 		case kRimPlanesWrong:        return "it has a number of planes that can't be read, which is 1 to 16";
 		case kRimPackingWrong:       return "it's packed in a way that can't be read";
 		case kRimColourTableTooBig:  return "its colour table has more colours than can be used";
@@ -108,6 +120,14 @@ RimProblem RimLoader::Problem() const
 bool RimLoader::Refuse(RimProblem why)
 {
 	problem = why;
+
+	// A picture that's no use still took the time to open and read, so it pays for that. A file that isn't there took next
+	// to none, and a stock level may name one. A picture refused because the level is full has nothing left to pay with.
+	if (why != kRimNoFile && why != kRimLevelHasTooMany)
+	{
+		bytesThisLevel += kLeastRimChargeBytes;   // Open made sure there's room for this before it started
+	}
+
 	return false;
 }
 
@@ -226,6 +246,12 @@ bool RimLoader::HandleCMAP()
 
 bool RimLoader::Open(const std::string &fileName)
 {
+	// With no room for even the smallest picture, nothing can fit, so there's no reason to spend any time on this one.
+	if (kMostRimBytesPerLevel - bytesThisLevel < kLeastRimChargeBytes)
+	{
+		return Refuse(kRimLevelHasTooMany);
+	}
+
 	file.Open(fileName, FileStream::FileRead);
 	if (!file.IsGood())
 	{
@@ -290,6 +316,13 @@ bool RimLoader::Open(const std::string &fileName)
 			case BODY:
 				chunkSize = file.GetUint32BE();
 
+				// A picture with no size has nothing in it to show. The game has none, and a texture can't be made for one. This is checked
+				// here, where every picture has to come through, and not where the size is read, because a file can leave that part out.
+				if (header.width == 0 || header.height == 0)
+				{
+					return Refuse(kRimHasNoSize);
+				}
+
 				if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())
 				{
 					return false;
@@ -328,11 +361,12 @@ bool RimLoader::BodyCanHoldThePicture()
 	return true;
 }
 
-// Charged here, so that only a picture that has passed every other check is charged, and so that it comes before the card is asked for anything. The sum can't go below zero, because what's been
-// charged is never more than the limit.
+// A picture that has passed every other check is charged its real size here, before the card is asked for anything. One refused before this has paid the smallest charge, in Refuse. The sum can't
+// go below zero, because what's been charged is never more than the limit: this looks before it charges, Open looks before Refuse can charge, the first refusal ends Open, and nothing can refuse
+// a picture after this.
 bool RimLoader::LevelHasRoomForThePicture()
 {
-	uint64_t const bytes = (uint64_t)header.width * header.height * 4;
+	uint64_t const bytes = (std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes);
 
 	if (bytes > kMostRimBytesPerLevel - bytesThisLevel)
 	{

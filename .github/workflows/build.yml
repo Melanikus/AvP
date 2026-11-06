@@ -6,8 +6,8 @@
 # closed. Before that, a tag must be checked by something a commit can't remove, because this file comes from the commit
 # being built.
 #
-# The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release. To install one, see
-# PLAYTEST.md.
+# The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release: release.yml makes those. To install
+# one of these, see PLAYTEST.md.
 name: Build
 
 on:

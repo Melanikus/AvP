@@ -1,4 +1,4 @@
-// The sums behind the shoot tool, -shadowshoot. Written 2026-11-04 by Melanikus for the AvP port. This is debug code, and it comes out before merge, with shadow_shoot.cpp.
+// The sums behind the shoot tool, -shadowshoot. Written 2026-11-04 by Melanikus for the AvP port. These are only used by shadow_shoot.cpp.
 //
 // They're in a file of their own, touching nothing of the game's or the graphics card's, so that a test can run them with neither: tests/shadow_shoot_test.cpp.
 //

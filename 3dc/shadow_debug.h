@@ -1,5 +1,5 @@
 // Tools for finding out what the shadows are doing. Written 2026-11-04 by Melanikus for the AvP port.
-// See shadow_debug.cpp for how they work. These are for finding problems. They come out, or go behind a switch, before this is merged.
+// See shadow_debug.cpp for how they work. These are for finding problems. They're kept for whoever works on the shadows next, and they need -dev, so a player never meets them.
 
 #ifndef SHADOW_DEBUG_H
 #define SHADOW_DEBUG_H

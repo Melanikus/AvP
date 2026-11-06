@@ -26,7 +26,7 @@
 //   colours are looked up in a way that can't go past the end of the colour table
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   says the most planes a picture can have, the largest a picture can be, the most parts it can have, and why one was refused;
-//   says the most bytes of pictures one level can open
+//   says the most bytes of pictures one level can open, and the least any picture costs of them
 
 #pragma once
 
@@ -80,9 +80,19 @@ const int kMostRimParts = 16;
 // so this leaves plenty of room for a level with better pictures: 64 at 1024 x 1024.
 const uint64_t kMostRimBytesPerLevel = 256 * 1024 * 1024;
 
-// Called as each level starts loading, which gives it the whole allowance. A tool that reads many pictures calls it before each one, because its work isn't a level.
+// The least any picture costs of that, however small it is, and even if it turns out to be no use. Without this, a level
+// could name a million tiny pictures, or one bad picture a million ways, and they'd cost next to nothing, while each one
+// takes time to find and open, and each one kept makes the search for the next one longer. So a level gets 4,096 at most.
+// The game has 1,028 in all, and only 32 of them are small enough to pay this, so they come to 74.0 MB instead of 72.9.
+const uint64_t kLeastRimChargeBytes = 64 * 1024;
+
+// Called as each level starts loading, and as the menus load, which gives each the whole allowance: what one level spent mustn't stop the menus having their pictures. A tool that reads many pictures calls it before each one, because its work isn't a level.
 void RimLoader_NewLevel();
 uint64_t RimLoader_BytesThisLevel();
+
+// True the first time it's asked since the allowance began, and false after that, so that a level naming a million pictures
+// past its limit makes one line in the log and not a million.
+bool RimLoader_SayLevelIsFull();
 
 // Why a picture wasn't used. Each has its own words for the log, so someone who made one can find out what's wrong with it.
 enum RimProblem
@@ -90,6 +100,7 @@ enum RimProblem
 	kRimFine,
 	kRimNoFile,
 	kRimTooLarge,
+	kRimHasNoSize,
 	kRimPlanesWrong,
 	kRimPackingWrong,
 	kRimColourTableTooBig,

@@ -619,7 +619,22 @@ static void CheckBadPixels()
 	{
 		Picture p(0, 0, 8, 0);
 		Result const r = Read(p.File());
-		Check(r.opened && r.width == 0 && r.height == 0 && r.nothingPastTheEnd, "a picture with no size has nothing to write, and writes nothing");
+		Check(!r.opened && r.problem == kRimHasNoSize, "a picture with no size is refused, and says why");
+
+		Picture noWidth(0, 16, 8, 0);
+		Check(Read(noWidth.File()).problem == kRimHasNoSize, "and one with no width");
+
+		Picture noHeight(16, 0, 8, 0);
+		Check(Read(noHeight.File()).problem == kRimHasNoSize, "and one with no height");
+
+		// A file can leave out the part that gives the size altogether, and go straight to the picture's data.
+		Bytes neverSays;
+		Add(neverSays, "FORM");
+		Add32(neverSays, 0);
+		Add(neverSays, "BODY");
+		Add32(neverSays, 0);
+		Result const none = Read(neverSays);
+		Check(!none.opened && none.problem == kRimHasNoSize, "and one that never says what size it is");
 	}
 
 	{
@@ -759,7 +774,7 @@ static void CheckLongFiles()
 
 	std::string const textures = ReadSourceFile("3dc/TextureManager.cpp");
 	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menu_gfx.cpp");
-	Check(textures.find("if (newRim.Problem() != kRimNoFile)") != std::string::npos, "a picture that's there and refused says why in the game, not one that isn't there");
+	Check(textures.find("if (newRim.Problem() != kRimNoFile") != std::string::npos, "a picture that's there and refused says why in the game, not one that isn't there");
 	Check(menus.find("if (!introFontRIM.Decode(srcBuffer, width*4))") != std::string::npos, "and the menu font doesn't use rows it didn't read");
 }
 
@@ -824,9 +839,10 @@ static void CheckLevelAllowance()
 		OpenOnly(TestFilePath());
 	}
 
-	Picture nearly(2048, 2047, 1, 1);
+	// leaves exactly enough for one more small picture
+	Picture nearly(2048, 2040, 1, 1);
 	nearly.colours = CountingColours(2);
-	nearly.body.assign((size_t)256 * 2047 / 64 + 1, 0);
+	nearly.body.assign((size_t)256 * 2040 / 64 + 1, 0);
 	WriteFile(nearly.File());
 	Check(OpenOnly(TestFilePath()) == kRimFine, "a picture a little smaller than what's left fits");
 
@@ -835,17 +851,79 @@ static void CheckLevelAllowance()
 
 	WriteFile(smallFile);
 	Check(OpenOnly(TestFilePath()) == kRimFine, "but a small one still does, because there's still room for it");
+	Check(RimLoader_BytesThisLevel() == mostBytes, "and that uses the last of it");
+	Check(OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "and the next is refused");
 
-	// A picture refused for any other reason hasn't cost anything
+	// A picture refused for any other reason costs the least a picture can, for the time it took
 	RimLoader_NewLevel();
 	Picture tooShort(2048, 2048, 8, 0);
 	tooShort.colours = CountingColours(2);
 	tooShort.body.assign(10, 0);
 	WriteFile(tooShort.File());
-	Check(OpenOnly(TestFilePath()) == kRimBodyTooShort && RimLoader_BytesThisLevel() == 0, "a picture refused for something else isn't charged");
+	Check(OpenOnly(TestFilePath()) == kRimBodyTooShort && RimLoader_BytesThisLevel() == kLeastRimChargeBytes, "a picture refused for something else costs the least a picture can");
 
-	// No level the game has can reach this: all its pictures together come to 72.9 MB
-	uint64_t const everyPictureTheGameHas = (uint64_t)73 * 1024 * 1024;
+	// The least a picture can cost
+	Check(kLeastRimChargeBytes == 64 * 1024, "that's 64 KB");
+
+	RimLoader_NewLevel();
+	WriteFile(smallFile);
+	Check(OpenOnly(TestFilePath()) == kRimFine && RimLoader_BytesThisLevel() == kLeastRimChargeBytes, "one pixel costs it too");
+
+	RimLoader_NewLevel();
+	Picture justAtIt(128, 128, 1, 1);
+	justAtIt.colours = CountingColours(2);
+	justAtIt.body.assign((size_t)16 * 128 + 1, 0);
+	WriteFile(justAtIt.File());
+	Check(OpenOnly(TestFilePath()) == kRimFine && RimLoader_BytesThisLevel() == (uint64_t)128 * 128 * 4, "a picture of just that size costs just that");
+
+	RimLoader_NewLevel();
+	Picture justOver(129, 128, 1, 1);
+	justOver.colours = CountingColours(2);
+	justOver.body.assign((size_t)18 * 128 + 1, 0);
+	WriteFile(justOver.File());
+	Check(OpenOnly(TestFilePath()) == kRimFine && RimLoader_BytesThisLevel() == (uint64_t)129 * 128 * 4, "and one just over costs what it really is");
+
+	// So only so many tiny pictures fit
+	RimLoader_NewLevel();
+	WriteFile(smallFile);
+	int tinyOnes = 0;
+
+	while (tinyOnes < 5000 && OpenOnly(TestFilePath()) == kRimFine)
+	{
+		tinyOnes++;
+	}
+
+	Check(tinyOnes == 4096, "4,096 tiny pictures fit in a level, and the next is refused");
+
+	// And so many bad ones: each costs the same, and so they can't hold the load up for ever
+	RimLoader_NewLevel();
+	WriteFile(tooShort.File());
+	int badOnes = 0;
+
+	while (badOnes < 5000 && OpenOnly(TestFilePath()) == kRimBodyTooShort)
+	{
+		badOnes++;
+	}
+
+	Check(badOnes == 4096 && OpenOnly(TestFilePath()) == kRimLevelHasTooMany, "4,096 bad pictures use it up the same way");
+	Check(RimLoader_BytesThisLevel() == mostBytes, "and that doesn't go past the limit");
+
+	// Once it's full, nothing is even opened: this file isn't there, and it isn't told so
+	Check(OpenOnly(TestFilePath() + ".not-there") == kRimLevelHasTooMany, "once a level is full, no file is opened at all");
+
+	// A file that isn't there costs nothing, because a level may well name one
+	RimLoader_NewLevel();
+	Check(OpenOnly(TestFilePath() + ".not-there") == kRimNoFile && RimLoader_BytesThisLevel() == 0, "a file that isn't there costs nothing");
+
+	// One line in the log for a full level, and the next one gets its own
+	RimLoader_NewLevel();
+	Check(RimLoader_SayLevelIsFull(), "a full level is said once");
+	Check(!RimLoader_SayLevelIsFull(), "and not again");
+	RimLoader_NewLevel();
+	Check(RimLoader_SayLevelIsFull(), "and the next level can say it too");
+
+	// No level the game has can reach this: all its pictures together come to 74.0 MB, counting the least each can cost
+	uint64_t const everyPictureTheGameHas = (uint64_t)74 * 1024 * 1024;
 	Check(kMostRimBytesPerLevel >= everyPictureTheGameHas * 3, "the limit is over three times every picture the game has");
 
 	std::string const system = ReadSourceFile("3dc/avp/win95/system.cpp");
@@ -853,6 +931,26 @@ static void CheckLevelAllowance()
 	size_t const start = (load == std::string::npos) ? load : system.find("RimLoader_NewLevel();", load);
 	size_t const env = (load == std::string::npos) ? load : system.find("avp_load_rif((const char*)&file_and_path[0])", load);
 	Check(start != std::string::npos && env != std::string::npos && start < env, "the game starts each level's allowance before it loads the level");
+
+	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menu_gfx.cpp");
+	size_t const menusLoad = menus.find("extern void LoadAllAvPMenuGfx(void)");
+	size_t const menusAllowance = (menusLoad == std::string::npos) ? menusLoad : menus.find("RimLoader_NewLevel();", menusLoad);
+	size_t const menusFirst = (menusLoad == std::string::npos) ? menusLoad : menus.find("LoadAllMenuTextures();", menusLoad);
+	Check(menusAllowance != std::string::npos && menusFirst != std::string::npos && menusAllowance < menusFirst, "the menus get a fresh allowance before they load a picture");
+
+	size_t const fontLoad = menus.find("static void LoadMenuFont(void)\n");
+	size_t const fontLoadCrlf = menus.find("static void LoadMenuFont(void)\r\n");
+	size_t const fontStart = (fontLoad != std::string::npos) ? fontLoad : fontLoadCrlf;
+	size_t const fontForgets = (fontStart == std::string::npos) ? fontStart : menus.find("IntroFont_Light.textureID = MISSING_TEXTURE;", fontStart);
+	size_t const fontOpens = (fontStart == std::string::npos) ? fontStart : menus.find("introFontRIM.Open(", fontStart);
+	Check(fontForgets != std::string::npos && fontOpens != std::string::npos && fontForgets < fontOpens, "the menu font forgets its old picture before it tries to read a new one");
+
+	size_t const fontRelease = menus.find("Tex_Release(IntroFont_Light.textureID);");
+	size_t const fontGone = (fontRelease == std::string::npos) ? fontRelease : menus.find("IntroFont_Light.textureID = MISSING_TEXTURE;", fontRelease);
+	Check(fontGone != std::string::npos && fontGone - fontRelease < 60, "and forgets it when it's released");
+
+	std::string const textures = ReadSourceFile("3dc/TextureManager.cpp");
+	Check(textures.find("newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()") != std::string::npos, "a level past its limit says so once in the log");
 
 	RimLoader_NewLevel();
 }

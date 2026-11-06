@@ -1,4 +1,4 @@
-// The shoot tool, -shadowshoot. Written 2026-11-04 by Melanikus for the AvP port. See shadow_shoot.cpp. This is debug code, and it comes out before merge.
+// The shoot tool, -shadowshoot. Written 2026-11-04 by Melanikus for the AvP port. See shadow_shoot.cpp. This is for finding problems, and it needs -dev and -shadowshoot.
 
 #ifndef SHADOW_SHOOT_H
 #define SHADOW_SHOOT_H

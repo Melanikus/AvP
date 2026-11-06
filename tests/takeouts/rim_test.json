@@ -854,7 +854,7 @@
 			"changes": [
 				{
 					"file": "3dc/TextureManager.cpp",
-					"from": "if (newRim.Problem() != kRimNoFile)",
+					"from": "if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))",
 					"to": "if (false)"
 				}
 			]
@@ -914,8 +914,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "(uint64_t)header.width * header.height * 4;\n\n\tif (bytes >",
-					"to": "(uint64_t)header.width * header.height;\n\n\tif (bytes >"
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >",
+					"to": "(std::max)((uint64_t)header.width * header.height, kLeastRimChargeBytes);\n\n\tif (bytes >"
 				}
 			]
 		},
@@ -924,8 +924,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "(uint64_t)header.width * header.height * 4;\n\n\tif (bytes >",
-					"to": "(uint64_t)header.height * 4;\n\n\tif (bytes >"
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >",
+					"to": "(std::max)((uint64_t)header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >"
 				}
 			]
 		},
@@ -934,8 +934,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "\t\treturn Refuse(kRimLevelHasTooMany);\n",
-					"to": "\t\tbytesThisLevel = kMostRimBytesPerLevel;\n\t\treturn Refuse(kRimLevelHasTooMany);\n"
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);",
+					"to": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\tbytesThisLevel = kMostRimBytesPerLevel;\n\t\treturn Refuse(kRimLevelHasTooMany);"
 				}
 			]
 		},
@@ -974,8 +974,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "return Refuse(kRimLevelHasTooMany);",
-					"to": "return Refuse(kRimTooLarge);"
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);",
+					"to": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimTooLarge);"
 				}
 			]
 		},
@@ -986,6 +986,181 @@
 					"file": "3dc/avp/win95/system.cpp",
 					"from": "\tRimLoader_NewLevel();\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture has no least cost",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes)",
+					"to": "(uint64_t)header.width * header.height * 4"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the least cost is half what it says",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kLeastRimChargeBytes = 64 * 1024",
+					"to": "kLeastRimChargeBytes = 32 * 1024"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the least cost is more than it says",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kLeastRimChargeBytes = 64 * 1024",
+					"to": "kLeastRimChargeBytes = 128 * 1024"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no size is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no width is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (header.height == 0)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no height is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (header.width == 0)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the size is checked only where a file gives it, which a file can leave out",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (false)"
+				},
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "rowBytes = (header.width+7) / 8;",
+					"to": "rowBytes = (header.width+7) / 8;\n\n\tif (header.width == 0 || header.height == 0)\n\t{\n\t\treturn Refuse(kRimHasNoSize);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a bad picture costs nothing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (why != kRimNoFile && why != kRimLevelHasTooMany)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a file that is not there costs the least",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (why != kRimNoFile && why != kRimLevelHasTooMany)",
+					"to": "if (why != kRimLevelHasTooMany)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level still opens files",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (kMostRimBytesPerLevel - bytesThisLevel < kLeastRimChargeBytes)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);\n\t}\n\n\tfile.Open(",
+					"to": "if (false)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);\n\t}\n\n\tfile.Open("
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level is said every time",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bool const say = !saidLevelIsFull;",
+					"to": "bool const say = true;"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level is never said",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bool const say = !saidLevelIsFull;",
+					"to": "bool const say = false;"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the next level can not say it",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tsaidLevelIsFull = false;\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus get no fresh allowance",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tRimLoader_NewLevel();\n\n\tLoadAllMenuTextures();",
+					"to": "\tLoadAllMenuTextures();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the font keeps its old picture when it can not read a new one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tIntroFont_Light.textureID = MISSING_TEXTURE;\n\n\tRimLoader introFontRIM;",
+					"to": "\tRimLoader introFontRIM;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the font keeps its picture after it is released",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tTex_Release(IntroFont_Light.textureID);\n\tIntroFont_Light.textureID = MISSING_TEXTURE;\n",
+					"to": "\tTex_Release(IntroFont_Light.textureID);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a full level is logged for every picture",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))",
+					"to": "if (newRim.Problem() != kRimNoFile)"
 				}
 			]
 		}

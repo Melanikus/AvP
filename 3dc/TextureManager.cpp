@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a square picture with all its smaller copies, for a hand-made relief map
+//   a level past its limit for pictures gets one line in the log, not one for every picture it names
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a texture's size can be asked for with a number that isn't trusted
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -266,7 +267,7 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	if (!newRim.Open(fileName))
 	{
 		// A file that isn't there is nothing new. One that is, and can't be used, was made for a reason, and whoever made it needs to know what's wrong with it.
-		if (newRim.Problem() != kRimNoFile)
+		if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))
 		{
 			Con_PrintError("The picture " + fileName + " isn't used, because " + RimLoader_ProblemWords(newRim.Problem()));
 		}
