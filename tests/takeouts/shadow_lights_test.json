@@ -775,6 +775,76 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a light the rule held back is not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLamp++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: how many of those were in view is not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLampInView++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamps competing are not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.lampsInReach++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rule is counted after the other reasons",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\tlightsThisFrame.notAVisibleLamp++;\n",
+					"to": "\t\tlightsThisFrame.outOfView++;\n\t\tlightsThisFrame.notAVisibleLamp += 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report mixes up what the rule held back",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn",
+					"to": "lightsThisFrame.notAVisibleLampInView, lightsThisFrame.notAVisibleLamp, ShadowAmbientOn"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report leaves out which way SHADOWAMBIENT is",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "ShadowAmbientOn ? \"ON\" : \"OFF\", lightsThisFrame.lampsInReach",
+					"to": "\"OFF\", lightsThisFrame.lampsInReach"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report does not say what the rule held back",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; ",
+					"to": "%d %d %s %d; "
+				}
+			]
 		}
 	]
 }

@@ -1,5 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS commands
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
 #include "3dc.h"
 #include "console_command.hpp"
 #include "strutil.h"
@@ -333,6 +335,13 @@ void CreateGameSpecificConsoleCommands(void)
 		"SHADOWS",
 		"SHADOWS: 1 ON, 0 OFF. ON ITS OWN, SWITCHES THEM",
 		ShadowsCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"SHADOWAMBIENT",
+		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
+		ShadowAmbientCommand
 	);
 
 	// Only do anything with -dev, and they say so without it. See view_switches.h.

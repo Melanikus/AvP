@@ -28,6 +28,8 @@
 //   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
 //   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
 
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -3799,6 +3801,7 @@ int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from t
 // Whether anything casts a shadow. With this at 0, no polygons are collected for casting and no prisms are built or drawn, kept ones included. The mask stays at nothing
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 0;
+int ShadowAmbientOn = 0;       // SHADOWAMBIENT, -shadowambient: whether the map's lights with no corona can cast shadows. See light_choice.h
 int ToyShadowsMaxLights = kToyMostSteadyLights;  // -shadowlights=N, 1 to 20: how many steady lights
 int ToyShadowsMaxBrief = kToyMostBriefLights;    // -shadowbrief=N, 0 to 12: how many brief lights on top of those, such as muzzle flashes and explosions
 int ShadowsPretendNoFloatBlend = 0;              // -shadownofloatblend: what the game does on a card that can't add to a float picture, on any card, so it can be tried
@@ -6953,6 +6956,7 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 // What the commands and keys have asked for, until the end of this frame's shadows. See view_switches.h.
 static int shadowsAsked = kAskedNothing;
 static int lightingAsked = kAskedNothing;
+static int shadowAmbientAsked = kAskedNothing;
 
 // Whether LIGHTING and SHADOWS were both off when last looked at, for G and for seeing when that changes
 static bool switchesWereAllOff = false;
@@ -7005,6 +7009,14 @@ void LightingCommand(char *words)
 	if (!SwitchWords_LightingAsk(words, &lightingAsked))
 	{
 		SaySwitch("LIGHTING TAKES 1 GOURAUD, 2 PERPIXEL, 3 NORMALS OR 4 RELIEF, OR NOTHING FOR THE NEXT");
+	}
+}
+
+void ShadowAmbientCommand(char *words)
+{
+	if (!SwitchWords_ShadowAmbientAsk(words, &shadowAmbientAsked))
+	{
+		SaySwitch("SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
 	}
 }
 
@@ -7195,6 +7207,13 @@ static void ViewSwitches_ApplyAsked()
 		}
 
 		shadowsAsked = kAskedNothing;
+	}
+
+	if (shadowAmbientAsked != kAskedNothing)
+	{
+		ShadowAmbientOn = Shadows_AfterAsking(ShadowAmbientOn, shadowAmbientAsked);
+		SaySwitch(ShadowAmbientOn ? "SHADOWAMBIENT: ON" : "SHADOWAMBIENT: OFF");
+		shadowAmbientAsked = kAskedNothing;
 	}
 
 	if (lightingAsked != kAskedNothing)

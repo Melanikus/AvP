@@ -17,6 +17,7 @@
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 //   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
 //   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
 #include "3dc.h"
 #include "surface_normals.h"
@@ -62,6 +63,9 @@
 #include "d3d_render.h"
 #include "los.h"
 #include "shadow_shoot.h"
+#include "bh_light.h"
+#include "light_choice.h"
+#include "view_switches.h"
 
 const RCOLOR ALIENS_LIFEFORCE_GLOW_COLOUR    = 0x20ff8080;
 const RCOLOR MARINES_LIFEFORCE_GLOW_COLOUR   = 0x208080ff;
@@ -5733,14 +5737,38 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 	return Approximate3dMagnitude(&toLight);
 }
 
+// Which kind of light this is, for the rule in light_choice.h. It comes from two real things. A placed light's has_corona is set when the level loads, if a polygon of its shape has
+// iflag_light_corona (InitPlacedLight in bh_light.cpp). LFlag_AbsPos is given to a level light by setup_light_data in object_setup.cpp, and to nothing else in the game. Both start out in the
+// level file, so a level could be crafted to say anything here. All that can do is say yes or no to a shadow on this player's own screen, and nothing else reads the answer. A placed light is
+// looked for first, because a light's flags are copied from the file, so a crafted flag can't change what a lamp counts as. block is what carries the light, or nothing for a light element.
+static LightKindForShadows ToyKindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
+{
+	STRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;
+
+	if (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)
+	{
+		return ((PLACED_LIGHT_BEHAV_BLOCK const *)owner->SBdataptr)->has_corona ? kLampWithACorona : kLampWithNoCorona;
+	}
+
+	if (light->LightFlags & LFlag_AbsPos)
+	{
+		return kLightFromTheLevel;
+	}
+
+	return kLightOfAnyOtherKind;
+}
+
 // What became of every light the choosing looked at on the latest frame, for the log.
 struct LightsLookedAt
 {
+	int notAVisibleLamp;  // one of the map's lights with no corona, which the rule in light_choice.h holds back, whatever would have become of it next
+	int notAVisibleLampInView;  // how many of those could have reached the view
 	int dark;             // nothing to give just now
 	int atTheCamera;      // so close that its shadows would all fall straight away from the eye
 	int outOfView;        // nothing it lights can be on screen
 	int steadyInReach;    // lit and in view: these compete for the steady places
 	int briefInReach;     // and these for the brief places
+	int lampsInReach;     // how many of those competing are lamps with a corona
 	int steadyChosen;
 	int briefChosen;
 };
@@ -5762,6 +5790,21 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 	if (!ToyLightIsLit(light) && !(hasAPlace && LightIsDarkForNow(light)))
 	{
 		lightsThisFrame.dark++;
+		return;
+	}
+
+	// The map's lights with no corona stay out of the list unless SHADOWAMBIENT is on. Leaving the list takes nothing away from the map: what lights it stays in the game's lighting. See light_choice.h.
+	LightKindForShadows const kind = ToyKindOfLight(light, block);
+
+	if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))
+	{
+		lightsThisFrame.notAVisibleLamp++;
+
+		if (ToyLightCanReachTheView(light, false))
+		{
+			lightsThisFrame.notAVisibleLampInView++;
+		}
+
 		return;
 	}
 
@@ -5807,6 +5850,11 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 	}
 
 	(*inReach)++;
+
+	if (kind == kLampWithACorona)
+	{
+		lightsThisFrame.lampsInReach++;
+	}
 
 	int place = *numFound;
 	while (place > 0 && found[place - 1].order > order)
@@ -6042,6 +6090,7 @@ static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, co
 // one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
 // once, before this.
 //
+// The map's own lights only count if they're lamps you can see, unless SHADOWAMBIENT is on: see light_choice.h.
 // Up to 20 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
 // flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 12 brief lights of their own. A live
 // light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
@@ -6250,10 +6299,12 @@ void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float m
 	char line[480];
 
 	_snprintf(line, sizeof(line) - 1,
-		"shadow lights: frame %d: %d in reach; chosen %d steady and %d brief, of %d and %d allowed; passed over: %d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark; %d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame",
+		"shadow lights: frame %d: %d in reach; chosen %d steady and %d brief, of %d and %d allowed; passed over: %d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark; held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; %d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame",
 		frame, lightsThisFrame.steadyInReach + lightsThisFrame.briefInReach, lightsThisFrame.steadyChosen, lightsThisFrame.briefChosen, ToyShadowsMaxLights, ToyShadowsMaxBrief,
 		lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen,
-		lightsThisFrame.outOfView, lightsThisFrame.atTheCamera, lightsThisFrame.dark, passes, screensOfTotal, milliseconds, frameMilliseconds);
+		lightsThisFrame.outOfView, lightsThisFrame.atTheCamera, lightsThisFrame.dark,
+		lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn ? "ON" : "OFF", lightsThisFrame.lampsInReach,
+		passes, screensOfTotal, milliseconds, frameMilliseconds);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
 

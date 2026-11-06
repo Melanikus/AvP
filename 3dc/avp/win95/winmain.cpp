@@ -11,6 +11,7 @@
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   -shadowambient starts with the map's lights that show no corona casting shadows
 //   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
 
 #include "3dc.h"
@@ -311,6 +312,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ToyShadowsMode = 0;
 			ShadowVolumesOn = 0;
 			LightingNow = kLightingGouraud;
+		}
+		// Like SHADOWAMBIENT, this only changes what this player's own screen draws, so it needs no -dev. See light_choice.h.
+		if (strstr(command_line, "-shadowambient"))
+		{
+			ShadowAmbientOn = 1;
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))

@@ -284,6 +284,11 @@ static void CheckTheLog()
 	Check(Has(consider, "lightsThisFrame.atTheCamera++;"), "and one at the camera");
 	Check(Has(consider, "lightsThisFrame.outOfView++;"), "and one that can't reach the view");
 	Check(Has(consider, "(*inReach)++;"), "and one that competes for a place");
+	Check(Has(consider, "lightsThisFrame.notAVisibleLamp++;"), "and one of the map's lights held back for showing no corona");
+	Check(ComesBefore(consider, "lightsThisFrame.notAVisibleLamp++;", "lightsThisFrame.outOfView++;"), "ahead of the other reasons, so the count says how many the rule held back");
+	Check(Has(consider, "lightsThisFrame.notAVisibleLampInView++;"), "and how many of those could have reached the view");
+	Check(Has(consider, "lightsThisFrame.lampsInReach++;"), "and how many lamps with a corona are competing");
+	Check(ComesBefore(consider, "(*inReach)++;", "lightsThisFrame.lampsInReach++;"), "which is only those that got past the other reasons");
 	Check(ComesBefore(consider, "(*inReach)++;", "int place = *numFound;"), "whether or not it gets one");
 
 	Check(ComesBefore(choosing, "memset(&lightsThisFrame, 0, sizeof(lightsThisFrame));", "if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)"), "the counts start afresh every frame, even one with nothing to choose");
@@ -292,6 +297,8 @@ static void CheckTheLog()
 	Check(Has(say, "lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen"), "passed over with no place left is what competed and didn't get one");
 	Check(Has(say, "%d in reach; chosen %d steady and %d brief, of %d and %d allowed"), "each report says how many were in reach and chosen");
 	Check(Has(say, "%d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark"), "and which were passed over and why");
+	Check(Has(say, "held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach"), "and how many the rule held back");
+	Check(Has(say, "lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn ? \"ON\" : \"OFF\", lightsThisFrame.lampsInReach,"), "with the right numbers in the right places");
 	Check(Has(say, "%d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame"), "and what it cost");
 	Check(Has(say, "the most in one frame so far: %d in reach (frame %d, room %s), %d chosen, %d shadow passes, %.1f ms on the processor"), "and the most there have been");
 
