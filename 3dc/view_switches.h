@@ -1,6 +1,7 @@
 // The two things a player can change while playing: how the world is lit, and whether shadows are drawn. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // LIGHTING has four choices, and SHADOWS is on or off. Either can be set whatever the other says, so there are eight ways the world can look.
+// SHADOWAMBIENT is a third word, and only changes which lights cast those shadows: see light_choice.h. It goes the same way as the other two.
 // Both are console commands, so they can go on any key: BIND L LIGHTING. With -dev they also have keys of their own, L and H.
 //
 // WHEN THEY CHANGE: the drawing code reads these many times a frame, and a command can arrive at any moment. So a command only notes what it was asked for, and the
@@ -31,10 +32,12 @@ enum LightingChoice
 
 extern int LightingNow;      // one of the choices above. It's what was asked for, which a card may not be able to draw: see Lighting_Drawn
 extern int ShadowVolumesOn;  // 1 draws shadows, 0 doesn't
+extern int ShadowAmbientOn;  // 1 lets the map's lights with no corona cast shadows too, 0 doesn't. See light_choice.h
 
 // The two commands, for the console to call
 void ShadowsCommand(char *words);
 void LightingCommand(char *words);
+void ShadowAmbientCommand(char *words);
 
 // For developers, to judge a depth map or a normal map on the spot: which way round is it, and how deep should it be? They do nothing without -dev, or in a network game, and the tag shows them.
 //   RELIEFFLIP          swaps which of black and white is the polygon's level, in the depth map
@@ -42,6 +45,7 @@ void LightingCommand(char *words);
 //   RELIEFDEPTH 0.08    how deep the depth map's deepest part is, as a fraction of a picture's width
 void ReliefFlipCommand();
 void TiltFlipCommand();
+void ShadowEvenGapCommand(char *words);
 void ReliefDepthCommand(char *words);
 
 extern bool ReliefHeightFlipped;
@@ -143,6 +147,38 @@ inline bool SwitchWords_ShadowsAsk(char const *words, int *asked)
 		*asked = 0;
 	}
 	else if (SwitchWords_Are(start, length, "1"))
+	{
+		*asked = 1;
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}
+
+// SHADOWAMBIENT: nothing switches it, and OFF or 0 is off, and ON or 1 is on. Shadows_AfterAsking below works out what that comes to.
+inline bool SwitchWords_ShadowAmbientAsk(char const *words, int *asked)
+{
+	if (!words)
+	{
+		return false;
+	}
+
+	char const *start;
+	size_t length;
+	SwitchWords_Trim(words, &start, &length);
+
+	if (length == 0)
+	{
+		*asked = kAskedNext;
+	}
+	else if (SwitchWords_Are(start, length, "0") || SwitchWords_Are(start, length, "OFF"))
+	{
+		*asked = 0;
+	}
+	else if (SwitchWords_Are(start, length, "1") || SwitchWords_Are(start, length, "ON"))
 	{
 		*asked = 1;
 	}
