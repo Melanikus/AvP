@@ -171,8 +171,8 @@
 			"changes": [
 				{
 					"file": "3dc/light_choice.h",
-					"from": "\t}\n\n\treturn true;\n}\n\n#endif",
-					"to": "\t}\n\n\treturn ambientCasts;\n}\n\n#endif"
+					"from": "\t}\n\n\treturn true;\n}\n\n// THE SCORE:",
+					"to": "\t}\n\n\treturn ambientCasts;\n}\n\n// THE SCORE:"
 				}
 			]
 		},

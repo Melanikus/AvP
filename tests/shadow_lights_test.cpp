@@ -321,6 +321,7 @@ static void CheckTheEvenGapWord()
 	Check(ComesBefore(word, "ReliefToolsCanAct(\"SHADOWEVENGAP\")", "ShadowsEvenGap ="), "it needs -dev and no network game before it changes anything");
 	Check(ComesBefore(word, "SwitchWords_ShadowAmbientAsk(words, &asked)", "ShadowsEvenGap ="), "a word it doesn't know changes nothing");
 	Check(Has(word, "SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT"), "and says what it takes");
+	Check(Has(Between(word, "SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT", "ShadowsEvenGap ="), "return;"), "and stops there, so the switch stays as it was");
 	Check(Has(word, "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);"), "alone it switches, and ON or OFF says which");
 	Check(Has(word, "ShadowVolumes_Empty();"), "kept prisms made the old way don't stay");
 	Check(Has(word, "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");"), "the screen says which it is now");
