@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a module link starts with no name, so one a broken list never reached is safe to free
+//   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
 
 #ifndef wpchunk_hpp
 #define wpchunk_hpp 1
@@ -67,8 +69,6 @@ class Module_Waypoint_Chunk : public Chunk
 	short NumAlienWaypoints;
 	short NumGroundWaypoints;
 
-	int spare1;
-	int spare2;
 };
 
 class AI_Module_Master_Chunk : public Chunk

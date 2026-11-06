@@ -1,6 +1,8 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a list of enums is measured against its chunk before it's read
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include <string.h>
 
@@ -92,7 +94,7 @@ void Enum_Constant::fill_data_block (char * data_start)
 
 
 ///////
-RIF_IMPLEMENT_DYNCREATE("BMPENUMS",BMP_Enums_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPENUMS",BMP_Enums_Chunk,8)
 
 BMP_Enums_Chunk::BMP_Enums_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"BMPENUMS"), ctype(0), reserved1(*(int *)sdata), reserved2(*(int *)(sdata+4))

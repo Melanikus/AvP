@@ -7,6 +7,8 @@
 //   a lift in another level file is no longer one of its children
 //   a name is only read as far as the end of its chunk
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -82,7 +84,7 @@ void Environment_Data_Chunk::post_input_processing()
 ///////////////////////////////////////
 
 // Class Environment_Data_Header_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("ENDTHEAD",Environment_Data_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENDTHEAD",Environment_Data_Header_Chunk,24)
 
 // from buffer
 Environment_Data_Header_Chunk::Environment_Data_Header_Chunk (Chunk_With_Children * parent, const char * hdata, size_t /*hsize*/)
@@ -138,7 +140,7 @@ void Environment_Data_Header_Chunk::prepare_for_output()
 ///////////////////////////////////////
 
 // Class Environment_Scale_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("ENVSDSCL",Environment_Scale_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVSDSCL",Environment_Scale_Chunk,8)
 
 void Environment_Scale_Chunk::fill_data_block ( char * data_start)
 {
@@ -155,7 +157,7 @@ void Environment_Scale_Chunk::fill_data_block ( char * data_start)
 
 ///////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("ENVACOUS",Environment_Acoustics_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVACOUS",Environment_Acoustics_Chunk,12)
 
 Environment_Acoustics_Chunk::Environment_Acoustics_Chunk(Environment_Data_Chunk* parent)
 :Chunk(parent,"ENVACOUS")
@@ -250,8 +252,8 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 		CHUNK_EXTRACT(type,int);
 		random_types.add_entry(type);
 	}
-	CHUNK_EXTRACT(spare1,int);
-	CHUNK_EXTRACT(spare2,int);
+	spare1=ReadFromChunk<int>(start,size,data);
+	spare2=ReadFromChunk<int>(start,size,data);
 }
 
 Random_Texture_ID_Chunk::~Random_Texture_ID_Chunk()

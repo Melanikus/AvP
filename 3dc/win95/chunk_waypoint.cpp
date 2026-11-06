@@ -5,6 +5,9 @@
 //   counted lists are measured against their chunks before they're made
 //   a waypoint's links have to lead to places in its own list
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
+//   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
 
 #include "chunk_waypoint.hpp"
 
@@ -115,8 +118,7 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 				size_t name_length=0;
 				ml->module_name=CopyNameFromChunk(start,size,data,&name_length);
 				data+=(name_length+4)&~3;
-				ml->flags=*(int*)data;
-				data+=4;
+				ml->flags=ReadFromChunk<int>(start,size,data);
 			}
 
 			if(cw->flags & WaypointFlag_FirstGroundWaypoint)
@@ -153,11 +155,6 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			}
 		}
 	}
-
-	spare1=*(int*)data;
-	data+=4;
-	spare2=*(int*)data;
-	data+=4;
 }
 
 Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)
@@ -171,9 +168,6 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)
 	
 	NumGroundWaypoints=0;
 	GroundWaypoints=0;
-
-	spare1=0;
-	spare2=0;	
 }
 
 Module_Waypoint_Chunk::~Module_Waypoint_Chunk()
@@ -446,7 +440,7 @@ Object_Chunk* AI_Module_Master_Chunk::get_my_object_chunk()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AIMODSLA",AI_Module_Slave_Chunk,"MODULEDT",Object_Module_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("AIMODSLA",AI_Module_Slave_Chunk,"MODULEDT",Object_Module_Data_Chunk,4)
 
 AI_Module_Slave_Chunk::AI_Module_Slave_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"AIMODSLA")

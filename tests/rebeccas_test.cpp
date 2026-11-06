@@ -2862,7 +2862,8 @@ static void TestCountedLists()
 	alignas(int) static char bytes[4096];
 
 	// where each count is, with any name before it empty, and what each item takes at the least
-	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; };
+	// bytesAfter is what the kind holds after its list. A whole chunk has it, and the bad counts are tried without it, so that only the check on the count can refuse them.
+	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; };
 	CountedRow const rows[] =
 	{
 		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
@@ -2873,13 +2874,13 @@ static void TestCountedLists()
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,  12, sizeof(int),                  "a sequence header's extra numbers are accepted" },
 		{ MakeChunk<Object_Animation_All_Sequence_Chunk>,     0,  4 * sizeof(int),              "a list of sequences is accepted" },
 		{ MakeChunk<Object_Hierarchy_Data_Chunk>,             0,  sizeof(int),                  "a hierarchy's extra numbers are accepted" },
-		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, 8, 8,                          "a set of alternate shapes is accepted" },
-		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,    8,  sizeof(int),                  "a collection of shape sets is accepted" },
+		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, 8, 8,                          "a set of alternate shapes is accepted", 16 },
+		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,    8,  sizeof(int),                  "a collection of shape sets is accepted", 8 },
 		{ MakeChunk<Hierarchy_Degradation_Distance_Chunk>,    0,  sizeof(int),                  "a list of detail levels is accepted" },
 		{ MakeChunk<Sprite_Bitmap_Scale_Chunk>,               0,  sizeof(float),                "a sprite's scales are accepted" },
-		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted" },
+		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted", 4 },
 		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
-		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8 },
 		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
 		{ MakeChunk<Preset_Palette_Chunk>,                    20, 24,                           "a list of palettes is accepted" },
@@ -2897,7 +2898,7 @@ static void TestCountedLists()
 
 		memset(bytes, 0, sizeof(bytes));
 		PutNumber(bytes, row.countAt, 2);
-		Check(ChunkAccepted(row.make, bytes, size), row.good);
+		Check(ChunkAccepted(row.make, bytes, size + row.bytesAfter), row.good);
 
 		TestBadCounts(row.make, bytes, size, row.countAt, row.itemBytes);
 
