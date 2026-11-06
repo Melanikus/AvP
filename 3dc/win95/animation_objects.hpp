@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
+//   a sequence starts with no frames, so one a broken list never reached is safe to free
+//   a sequence checks that each of its frames has a place of its own
 
 #ifndef _animobs_hpp
 #define _animobs_hpp 1
@@ -49,6 +51,9 @@ public:
 	Object_Animation_Sequence_Header_Chunk * get_header();
 	
 	void get_frames(List <Object_Animation_Sequence_Frame_Chunk	*>* );
+
+	// Refuses the level unless every frame has a place of its own. See the .cpp.
+	virtual void post_input_processing();
 
 	int get_sequence_time(); //gets time in ms
 	int get_sequence_speed(); //gets movement speed in mm/second
@@ -230,6 +235,8 @@ struct Object_Animation_Frame
 
 struct Object_Animation_Sequence
 {
+	// A file's list can stop early, and the sequences it didn't reach still get freed, so each starts with nothing to free.
+	Object_Animation_Sequence() : num_frames(0), frames(0) {}
 	~Object_Animation_Sequence() {delete[] frames;}
 
 	unsigned long num_frames;

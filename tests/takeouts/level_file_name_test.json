@@ -1,0 +1,508 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "no name is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (!name || !name[0])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a long name is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (length >= kLevelFileNameMost)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the longest allowed is one too few",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (length >= kLevelFileNameMost)",
+					"to": "if (length + 1 >= kLevelFileNameMost)"
+				}
+			]
+		},
+		{
+			"name": "one too long is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (length >= kLevelFileNameMost)",
+					"to": "if (length > kLevelFileNameMost)"
+				}
+			]
+		},
+		{
+			"name": "a leading slash is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (LevelFileName_IsSeparator(name[0]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only a forward slash counts as leading",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (LevelFileName_IsSeparator(name[0]))",
+					"to": "if (name[0] == '/')"
+				}
+			]
+		},
+		{
+			"name": "only a backslash counts as leading",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (LevelFileName_IsSeparator(name[0]))",
+					"to": "if (name[0] == '\\\\')"
+				}
+			]
+		},
+		{
+			"name": "any character is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (!LevelFileName_CharacterIsAllowed(name[length]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "two dots are let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (name[length] == '.' && name[length + 1] == '.')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an empty part is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (partLength == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a part ending in a dot is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (last == '.' || last == ' ')",
+					"to": "if (last == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a part ending in a space is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (last == '.' || last == ' ')",
+					"to": "if (last == '.')"
+				}
+			]
+		},
+		{
+			"name": "a device is let through",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (LevelFileName_PartIsDevice(name + partStart, partLength))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the first part is looked at",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "partStart = i + 1;",
+					"to": "return 0;"
+				}
+			]
+		},
+		{
+			"name": "a colon is allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "|| c == '_' ||",
+					"to": "|| c == ':' || c == '_' ||"
+				}
+			]
+		},
+		{
+			"name": "an opening bracket is allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "|| c == '_' ||",
+					"to": "|| c == '(' || c == '_' ||"
+				}
+			]
+		},
+		{
+			"name": "a closing bracket is allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "|| c == '_' ||",
+					"to": "|| c == ')' || c == '_' ||"
+				}
+			]
+		},
+		{
+			"name": "a dollar is allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "|| c == '_' ||",
+					"to": "|| c == '$' || c == '_' ||"
+				}
+			]
+		},
+		{
+			"name": "an ampersand is not allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": " || c == '&'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an at sign is not allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": " || c == '@'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a plus is not allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": " || c == '+'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a space is not allowed",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": " || c == ' ' || LevelFileName_IsSeparator(c)",
+					"to": " || LevelFileName_IsSeparator(c)"
+				}
+			]
+		},
+		{
+			"name": "a backslash is not a separator",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "return c == '/' || c == '\\\\';",
+					"to": "return c == '/';"
+				}
+			]
+		},
+		{
+			"name": "a forward slash is not a separator",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "return c == '/' || c == '\\\\';",
+					"to": "return c == '\\\\';"
+				}
+			]
+		},
+		{
+			"name": "CON is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "\"CON\", ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "PRN is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "\"PRN\", ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "AUX is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "\"AUX\", ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "NUL is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": ", \"NUL\"",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "COM is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "(a == 'C' && b == 'O' && c == 'M') || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LPT is not a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": " || (a == 'L' && b == 'P' && c == 'T')",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "COM0 counts as a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "part[3] >= '1'",
+					"to": "part[3] >= '0'"
+				}
+			]
+		},
+		{
+			"name": "COM9 does not count",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "part[3] <= '9'",
+					"to": "part[3] <= '8'"
+				}
+			]
+		},
+		{
+			"name": "capitals matter for a device",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;",
+					"to": "return c;"
+				}
+			]
+		},
+		{
+			"name": "a dot does not end a device name",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "part[nameLength] != '.' && part[nameLength] != ' '",
+					"to": "part[nameLength] != ' '"
+				}
+			]
+		},
+		{
+			"name": "a space does not end a device name",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "part[nameLength] != '.' && part[nameLength] != ' '",
+					"to": "part[nameLength] != '.'"
+				}
+			]
+		},
+		{
+			"name": "the log gets the name as it is",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "LevelFileName_CharacterIsAllowed(name[used]) ? name[used] : '?'",
+					"to": "name[used]"
+				}
+			]
+		},
+		{
+			"name": "the log runs past its room",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "used + 1 < room",
+					"to": "used < room"
+				}
+			]
+		},
+		{
+			"name": "the log has no guard for no room",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "if (room == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the log has no guard for no name",
+			"changes": [
+				{
+					"file": "3dc/level_file_name.h",
+					"from": "for (; name && name[used]",
+					"to": "for (; name[used]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a texture name is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "char const *const whyRefused = LevelFileName_WhyRefused(fname);",
+					"to": "char const *const whyRefused = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused texture is opened anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM(\"graphics/\" + fileName)",
+					"to": "Tex_CreateFromRIM(\"graphics/\" + fileName)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused texture name goes on being used",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "whyRefused ? \"\" : fname",
+					"to": "fname"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the texture log gets the raw name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));",
+					"to": "strcpy(safeName, fname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another texture opening appears",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "ingameTextureList.push_back(textureID);",
+					"to": "ingameTextureList.push_back(textureID); Tex_CreateFromRIM(fname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sound name is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "char const *const whyRefused = LevelFileName_WhyRefused(fname);",
+					"to": "char const *const whyRefused = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused sound goes on anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": " + safeName);\n\t\treturn 0;",
+					"to": " + safeName);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sound log gets the raw name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));",
+					"to": "strcpy(safeName, fname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another way to a sound file appears",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/jsndsup.cpp",
+					"from": "int ok = FindAndLoadWavFile(soundNum, fname);",
+					"to": "int ok = FindAndLoadWavFile(soundNum, fname); FindAndLoadWavFile(soundNum, wavname);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dead NPC route comes back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "LoadedNPC::LoadedNPC(char const * name)",
+					"to": "LoadedNPC::LoadedNPC(RIF_Child_Chunk const * rcc) { use(rcc->filename); }\nLoadedNPC::LoadedNPC(char const * name)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a placed hierarchy number is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(phdc->hierarchy_index<0 || phdc->hierarchy_index>=NumPlacedHierarchy) continue;",
+					"to": ""
+				}
+			]
+		}
+	]
+}

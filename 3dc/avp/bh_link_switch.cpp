@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a switch copes with a link, a resting sequence or a track that the level file got wrong
+
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -32,6 +36,12 @@ static BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)
 
 	while (i < lsbb->num_linked_switches)
 	{
+		// a level file can name a switch that doesn't exist, and that one can never be on
+		if(!lsi[i].bswitch)
+		{
+			return(FALSE);
+		}
+
 		if(lsi[i].bswitch->I_SBtype==I_BehaviourBinarySwitch)
 		{
 			BINARY_SWITCH_BEHAV_BLOCK * bsbb = ((BINARY_SWITCH_BEHAV_BLOCK *)lsi[i].bswitch->SBdataptr);
@@ -185,12 +195,19 @@ void* LinkSwitchBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 
 					pnew_txactrlblk->tac_flags = 0;
 					pnew_txactrlblk->tac_item = item_num;
-					pnew_txactrlblk->tac_sequence = ls_tt->rest_state;
+					pnew_txactrlblk->tac_sequence = 0;
 					pnew_txactrlblk->tac_node = 0;
 					pnew_txactrlblk->tac_txarray = GetTxAnimArrayZ(shape_num, item_num);
-					pnew_txactrlblk->tac_txah_s = GetTxAnimHeaderFromShape(pnew_txactrlblk, shape_num);
 
 					while(pnew_txactrlblk->tac_txarray[num_seq+1])num_seq++;
+
+					// the sequence it rests on comes from the level file, and it's used as a place in this list of sequences
+					if(ls_tt->rest_state >= 0 && ls_tt->rest_state < num_seq)
+					{
+						pnew_txactrlblk->tac_sequence = ls_tt->rest_state;
+					}
+
+					pnew_txactrlblk->tac_txah_s = GetTxAnimHeaderFromShape(pnew_txactrlblk, shape_num);
 
 					// Assert does not work at this point so
 					GLOBALASSERT(num_seq==2);
@@ -234,6 +251,12 @@ void* LinkSwitchBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
 		ls_bhv->ls_dtype = linkswitch_animate_me;
 	}
 	ls_bhv->ls_track=ls_tt->track;
+
+	// a level file can ask for a switch that starts out moving, and with no track there's nothing to move along
+	if(ls_bhv->ls_mode==I_lswitch_moving && !ls_bhv->ls_track)
+	{
+		ls_bhv->ls_mode=I_lswitch_timer;
+	}
 
 	if (ls_bhv->ls_track)
 	{

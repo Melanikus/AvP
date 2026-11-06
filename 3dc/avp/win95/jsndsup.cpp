@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a sound's name from a level file has to pass the check in level_file_name.h before it's opened
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -6,6 +8,9 @@
 #include "psndplat.h"
 #include "list_tem.hpp"
 #include "jsndsup.h"
+#include "logString.h"
+#include "level_file_name.h"
+#include <string>
 
 extern int SoundSwitchedOn;
 // Pat sets this up
@@ -96,6 +101,18 @@ static int find_permanent_game_sound(const char * wavname)
 LOADED_SOUND const * GetSound(char const *fname)
 {
 	if (!SoundSwitchedOn) return 0;
+
+	// The name comes from the level file, which can come from anyone. A refused one goes on as a sound that isn't there, which the game already copes with.
+	char const *const whyRefused = LevelFileName_WhyRefused(fname);
+
+	if (whyRefused)
+	{
+		char safeName[64];
+
+		LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));
+		LogErrorString(std::string("level file names a sound the game won't open: ") + whyRefused + ": " + safeName);
+		return 0;
+	}
 
 	const char * wavname = strrchr (fname, '/');
 	

@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a chunk of texture animation has to fit its own size and the game's limits before any of it is believed, and an animation can
+//   say whether every picture it shows is a real one
 #include "animation_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -11,9 +14,102 @@ Animation_Chunk::Animation_Chunk(Chunk_With_Children* parent)
 	NumPolys=0;
 	AnimList=0;
 }
-Animation_Chunk::Animation_Chunk(Chunk_With_Children* parent,const char* data,size_t /*datasize*/)
+// How a chunk of texture animation is laid out. It's lists inside lists: a count of polygons, then each polygon's six numbers and its
+// sequences, then each sequence's five numbers and its frames. A frame is one texture number, then two numbers for each corner.
+static size_t const animation_polygon_bytes = 24;
+static size_t const animation_sequence_bytes = 20;
+
+// chunk_load.cpp goes straight to the six numbers of each frame, so every animated polygon has to be a triangle. Each of the 3552 in the
+// game's own levels is.
+static int const animation_corners = 3;
+static size_t const animation_frame_bytes = sizeof(int) + 2 * sizeof(int) * animation_corners;
+
+// The game keeps a count of frames in the top half of a number (txa_maxframe, in chunk_load.cpp), so it can't count more than this. The most
+// in any sequence in the game's own levels is 6.
+static int const most_animation_frames = 32767;
+
+// Walks the whole chunk the way the constructor does, believing nothing until it has checked it, so the constructor can read it without
+// looking. Every number here comes from the level file. All 418 of these chunks in the game's own levels end exactly at their end.
+// - A count of polygons is checked as the walk reaches each one, so it only needs to be not negative. A big one soon runs out of room.
+// - A sequence with no frames would have the game read the first frame of an empty list, and a polygon with no sequences would leave the
+//   game a sequence that's only an empty place, which it goes on to read while the level runs.
+// - The game normally adds a frame that leads back to the first, and this flag leaves it out. With only one frame that leaves nothing to move
+//   through, and the game would work out frame number -1 (kshape.cpp, where it clamps the frame).
+static bool animation_fits_chunk (char const * data, size_t bytes_left)
+{
+	if (bytes_left < sizeof(int))
+	{
+		return false;
+	}
+
+	int const polygons = *(int const *) data;
+	data += sizeof(int);
+	bytes_left -= sizeof(int);
+
+	if (polygons < 0)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < polygons; i++)
+	{
+		if (bytes_left < animation_polygon_bytes)
+		{
+			return false;
+		}
+
+		int const sequences = *(int const *) (data + 8);
+		int const corners = *(int const *) (data + 12);
+		data += animation_polygon_bytes;
+		bytes_left -= animation_polygon_bytes;
+
+		if (corners != animation_corners || sequences < 1)
+		{
+			return false;
+		}
+
+		for (int j = 0; j < sequences; j++)
+		{
+			if (bytes_left < animation_sequence_bytes)
+			{
+				return false;
+			}
+
+			int const flags = *(int const *) (data + 4);
+			int const frames = *(int const *) (data + 8);
+			data += animation_sequence_bytes;
+			bytes_left -= animation_sequence_bytes;
+
+			if (frames < 1 || frames > most_animation_frames || !CountFitsChunk (frames, animation_frame_bytes, bytes_left))
+			{
+				return false;
+			}
+
+			if (frames == 1 && (flags & txa_flag_nointerptofirst))
+			{
+				return false;
+			}
+
+			data += frames * animation_frame_bytes;
+			bytes_left -= frames * animation_frame_bytes;
+		}
+	}
+
+	return bytes_left == 0;
+}
+
+Animation_Chunk::Animation_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 : Chunk(parent, "TEXTANIM")
 {
+	NumPolys=0;
+	AnimList=0;
+
+	if (!animation_fits_chunk (data, datasize))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	NumPolys=*((int*)data);
 	data+=4;
 	if(NumPolys)
@@ -247,6 +343,32 @@ TEXANIM::~TEXANIM()
 		delete Seq[i];
 	}
 	delete[] Seq;	
+}
+
+// Are the pictures all real? image_numbers has a place for each texture number up to max_index, holding its picture, or -1 if there's none.
+bool TEXANIM::ImagesAreKnown(int max_index, int const * image_numbers) const
+{
+	if (!image_numbers)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < NumSeq; i++)
+	{
+		FrameList const * sequence = Seq[i];
+
+		for (int j = 0; j < sequence->NumFrames; j++)
+		{
+			int const texture = sequence->Textures[j];
+
+			if (texture < 0 || texture > max_index || image_numbers[texture] == -1)
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 void TEXANIM::CopyAnimData(TEXANIM* ta,int*conv)

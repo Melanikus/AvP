@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, so it always fits
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out the unused way of making a LoadedNPC from a name in a level file
 #include "npcsetup.h"
 #include "ourasert.h"
 #include "list_tem.hpp"
@@ -84,7 +86,6 @@ static BOOL Load_HNPC[HNPC_Last];
 class LoadedNPC
 {
 public:		
-	LoadedNPC(RIF_Child_Chunk const *);
 	LoadedNPC(char const *);
 	LoadedNPC();
 	LoadedNPC(LoadedNPC const &);
@@ -111,36 +112,6 @@ private:
 	
 List<LoadedNPC> loaded_npcs;
 	
-LoadedNPC::LoadedNPC(RIF_Child_Chunk const * rcc)
-: rifname(0)
-, filename(0)
-, img_group(-1)
-, npc_rif(INVALID_RIFFHANDLE)
-{
-	if (rcc->filename && *rcc->filename)
-	{
-		char const * fnptr = rcc->filename;
-		if (strchr(fnptr,'/')) fnptr = strrchr(fnptr,'/')+1;
-		if (strchr(fnptr,':')) fnptr = strrchr(fnptr,':')+1;
-		
-		if (!_strnicmp(fnptr,"npc",3) || 
-			!_strnicmp (fnptr, "hnpc", 4) ||
-			!_strnicmp (fnptr, "loof", 4) ||
-			!_strnicmp (fnptr, "marwep", 6) ||
-			!_strnicmp (fnptr, "pred_hud", 8) ||
-			!_strnicmp (fnptr, "bmantest", 8)
-			) // all thes files names start with 'npc'
-		{
-			filename = new char[strlen(DIRECTORY_FOR_RIFS)+strlen(fnptr)+1];
-			strcpy(filename,DIRECTORY_FOR_RIFS);
-			strcat(filename,fnptr);
-
-			size_t const rifname_size = strlen(rcc->rifname)+1;
-			rifname = new char[rifname_size];
-			memcpy(rifname,rcc->rifname,rifname_size);
-		}
-	}
-}
 LoadedNPC::LoadedNPC(char const * name)
 : rifname(0)
 , filename(0)

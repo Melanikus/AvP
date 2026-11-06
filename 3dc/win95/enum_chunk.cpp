@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #include "enum_chunk.hpp"
 //#include "enumsch.hpp"
@@ -22,10 +23,7 @@ Children for Enum_Chunk :
 
 
 
-BOOL Enum_Chunk::file_equals (HANDLE & /*rif_file*/)
-{
-	return(TRUE);
-}	
+	
 
 Enum_Header_Chunk * Enum_Chunk::get_header()
 {
@@ -33,15 +31,7 @@ Enum_Header_Chunk * Enum_Chunk::get_header()
 	return (Enum_Header_Chunk *) this->lookup_single_child ("ENUMHEAD");
 }	
 
-const char * Enum_Chunk::get_head_id()
-{
-	Enum_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
 	
-}	
 
 void Enum_Chunk::set_lock_user (char * user)
 {
