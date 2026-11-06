@@ -23,6 +23,12 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+//   the marine's shoulder lamp is drawn on the finished picture of the world, under the HUD, and while it's on in Gouraud the surface pictures are drawn for it. See shoulder_lamp.h
+//   it goes on before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
+//   the developers' view moves from G to J, which no default control set uses
+//   the LAMPFOLLOW command says how long the shoulder lamp takes to catch up with the view
+//   the keys for the lighting, the shadows and the developers' views can be changed on the rendering page. The first two now work for everyone, and a control with the same key wins
+//   the LAMPSPOTSIZE and LAMPINTENSITY commands say how big and how strong its spot is, playing alone. A network game keeps them as built
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
 //   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
@@ -31,6 +37,7 @@
 //   the SHADOWEVENGAP console command switches -shadowevengap while the game runs, and the tag always says which it is
 //   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
 //   a frame with no light chosen has its world turned down like any other, so the screen doesn't jump brighter when the last light leaves the list
+
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -45,6 +52,8 @@
 #include "VertexBuffer.h"
 #include "FmvCutscenes.h"
 #include "surface_normals.h"
+#include "shoulder_lamp.h"
+#include "view_settings.h"
 #include "surface_pictures.h"
 #include "shadow_gap.h"
 #include "static_scene.h"
@@ -287,6 +296,9 @@ bool staticDecalsTest = false;
 // lock our dynamic vertex and index buffers, and reset counters and array indexes used to keep 
 // track of the number of verts and indices in those buffers. Function could be renamed as 
 // we no longer use an execute buffer
+// A frame the lamp was switched on during hasn't written its normals, so its surface pictures would come out of whatever was left in the list
+static bool surfaceNormalsWereWrittenThisFrame = false;
+
 static bool LockExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorLocks);
@@ -304,13 +316,15 @@ static bool LockExecuteBuffer()
 	d3d.mainVB->Lock((void**)&mainVertex);
 
 	// Only the shadow pass reads the normals. With its view off, none are written, and this leaves the game's frame the way it always was. The view only changes at the very end of a
-	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by G collected no polygons, so its pass has nothing to do.
+	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by J collected no polygons, so its pass has nothing to do.
 	{
 		extern int ToyShadowsMode;
 
-		if (ToyShadowsMode)
+		// The shoulder lamp reads the surface pictures too, and in Gouraud nothing else will have asked for them
+		if (ToyShadowsMode || ShoulderLamp_CouldBeDrawn())
 		{
 			SurfaceNormals_Lock();
+			surfaceNormalsWereWrittenThisFrame = true;
 		}
 	}
 
@@ -445,6 +459,12 @@ float cot(float in)
 }
 
 static bool toyFinalFlush = false;
+
+// Were the surface pictures drawn this frame? A picture left from an earlier frame would show the lamp on walls that aren't there any more.
+static bool surfacePicturesAreFromThisFrame = false;
+
+static void DrawShoulderLamp();
+static void DrawSurfacePicturesForTheLamp();
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
@@ -548,6 +568,7 @@ static bool ExecuteBuffer()
 		ProcessorStageClock shadowClock(kProcessorShadowPass);
 		ToyShadows_Draw();
 		ViewSwitches_ApplyAsked();
+		DrawSurfacePicturesForTheLamp();
 	}
 
 	if (seeThroughLast && mainList->GetSize())
@@ -568,6 +589,15 @@ static bool ExecuteBuffer()
 
 		// Draw the particles in the list
 		particleList->Draw();
+	}
+
+	// The marine's shoulder lamp, on the finished picture of the world. Only on the last drawing of a frame, because a frame can be drawn in several goes when its buffers fill up.
+	// It comes before the gun on purpose. The lamp lights a wall by adding the wall's own colour, read from a picture of the walls, at each spot on the screen. The gun and the hands aren't
+	// in that picture, so a lamp drawn over them added the colour of the wall behind them, which made the gun look see-through. Now the gun goes on afterwards, whole and solid.
+	// The price: the painted lamp doesn't light the gun at all.
+	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
+	{
+		DrawShoulderLamp();
 	}
 
 	// draw player weapon
@@ -2761,6 +2791,9 @@ void D3D_DrawMoltenMetalMesh_Unclipped()
 
 void ThisFramesRenderingHasBegun()
 {
+	surfacePicturesAreFromThisFrame = false;
+	surfaceNormalsWereWrittenThisFrame = false;
+
 	// calls a function to perform d3d_device->Begin();
 	if (R_BeginScene())
 	{
@@ -3768,7 +3801,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 // the end of its range. The stencil counts which pixels are inside a prism, and those pixels are darkened.
 // Each prism is closed, so z-fail counts come out right with no edge data, and neighbours' shared sides cancel out.
 
-// What the shadows show. G steps through these while playing, so they can be compared live. view_switches.h says how this goes with LIGHTING and SHADOWS.
+// What the shadows show. J steps through these while playing, so they can be compared live. view_switches.h says how this goes with LIGHTING and SHADOWS.
 enum ToyShadowsView
 {
 	kToyViewOff,
@@ -3907,7 +3940,7 @@ static int captureCornersKept[kToyMostLights];
 static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
-int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and G, L, H, F7, F8 and the shoot tool's keys do nothing
+int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and J, F7, F8 and the shoot tool's keys do nothing
 int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
@@ -5139,6 +5172,103 @@ static IDirect3DSurface9 *toyMaskSurface = 0;
 static IDirect3DSurface9 *toyDepthSurface = 0;
 static bool toyTargetsFailed = false;
 
+// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. Everything about how this looks is in shaders/shoulderLamp.psh.
+static void DrawShoulderLamp()
+{
+	if (d3d.shoulderLampEffect == kNullEffectID)
+	{
+		return;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+
+	// The whole screen. The last two numbers are how far across and down each corner is, which is what the shader works from.
+	ORTHOVERTEX const corners[4] =
+	{
+		{ -1.0f,  1.0f, 1.0f, 0xFFFFFFFF, 0.0f, 1.0f },
+		{ -1.0f, -1.0f, 1.0f, 0xFFFFFFFF, 0.0f, 0.0f },
+		{  1.0f,  1.0f, 1.0f, 0xFFFFFFFF, 1.0f, 1.0f },
+		{  1.0f, -1.0f, 1.0f, 0xFFFFFFFF, 1.0f, 0.0f }
+	};
+
+	float const flicker = ShoulderLamp_Flicker((double)timeGetTime() / 1000.0);
+
+	// The image intensifier already makes everything bright, so a lamp through it needs less
+	float const strength = flicker * (CurrentVisionMode == VISION_MODE_IMAGEINTENSIFIER ? 0.4f : 1.0f);
+	float const wide = (float)ScreenDescriptorBlock.SDB_Width / (float)ScreenDescriptorBlock.SDB_Height;
+
+	d3d.orthoDecl->Set();
+	d3d.effectSystem->SetActive(d3d.shoulderLampEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.shoulderLampEffect, 0, CONST_MATRIX, &d3d.matOrtho);
+	ChangeZWriteEnable(ZWRITE_DISABLED);
+
+	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
+	bool const onWalls = surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
+
+	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
+	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
+
+	device->SetPixelShaderConstantF(1, aim, 1);
+
+	// A network game keeps these as built. KeepDeveloperToolsOutOfNetworkGames sees to that, but ToyShadows_Draw leaves before it on a card with no stencil, so it's asked again here, where the numbers are used.
+	if (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())
+	{
+		LogString("lamp: this is a network game, so its size and strength are back as they were built");
+	}
+
+	// How big and how strong the spot is. See LAMPSPOTSIZE and LAMPINTENSITY.
+	float spot[4];
+
+	ShoulderLamp_SpotNumbers(spot);
+	device->SetPixelShaderConstantF(2, spot, 1);
+
+	// Each drawing of this can at most double a pixel, and these rooms are dark enough that twice nothing much is still nothing much, so it brightens twice
+	float const brighten[4] = { strength, 0.0f, 0.0f, wide };
+
+	device->SetPixelShaderConstantF(0, brighten, 1);
+	ChangeTranslucencyMode(TRANSLUCENCY_BRIGHTEN);
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+
+	// This one adds, rather than multiplies, so it shows on black
+	float const add[4] = { strength, 1.0f, 0.0f, wide };
+
+	device->SetPixelShaderConstantF(0, add, 1);
+
+	if (onWalls)
+	{
+		// Stages the game's own drawing doesn't use, so that what it remembers about its textures stays true
+		IDirect3DTexture9 *const pictures[2] = { SurfacePictures_Colour(), toyDepthTexture };
+
+		for (DWORD i = 0; i < 2; i++)
+		{
+			device->SetTexture(3 + i, pictures[i]);
+			device->SetSamplerState(3 + i, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+			device->SetSamplerState(3 + i, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+			device->SetSamplerState(3 + i, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+			device->SetSamplerState(3 + i, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			device->SetSamplerState(3 + i, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		}
+	}
+	else
+	{
+		// An empty stage reads as black, and black adds nothing, which is how the shader leaves walls out when there are no pictures from this frame
+		device->SetTexture(3, NULL);
+		device->SetTexture(4, NULL);
+	}
+
+	ChangeTranslucencyMode(TRANSLUCENCY_GLOWING);
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, corners, sizeof(ORTHOVERTEX));
+
+	if (onWalls)
+	{
+		device->SetTexture(3, NULL);
+		device->SetTexture(4, NULL);
+	}
+
+	ChangeZWriteEnable(ZWRITE_ENABLED);
+}
+
 template <class T> static void ToyRelease(T *&thing)
 {
 	if (thing)
@@ -5516,6 +5646,46 @@ static void CompareSceneRoutes(LPDIRECT3DDEVICE9 device, int frame)
 static bool ToyPicturesCanRun(LPDIRECT3DDEVICE9 device)
 {
 	return d3d.shadowBlurEffect != kNullEffectID && PixelLights_Ready(device) && ToyMakeTargets(device);
+}
+
+// The shoulder lamp lights each wall's own colour, and reads that from the surface pictures. With lights added per pixel they're already there. In Gouraud nothing else draws them, so while the lamp is on this does: the solid polygons once more, into the
+// pictures, off the screen. Nothing on the screen changes, and with the lamp off, or for a player who can't have one, this does nothing at all.
+static void DrawSurfacePicturesForTheLamp()
+{
+	if (surfacePicturesAreFromThisFrame || !surfaceNormalsWereWrittenThisFrame || !ShoulderLamp_IsAskedForThisFrame())
+	{
+		return;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DSurface9 *screen = 0;
+	D3DVIEWPORT9 viewport;
+
+	if (!ToyPicturesCanRun(device) || FAILED(device->GetViewport(&viewport)) || FAILED(device->GetRenderTarget(0, &screen)))
+	{
+		return;
+	}
+
+	// The game caches its render states, so everything is put back exactly as it was
+	HRESULT const saved = savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings);
+
+	if (SUCCEEDED(saved))
+	{
+		float worldAxes[9];
+
+		ToyShadows_WorldAxes(worldAxes);
+		device->SetRenderTarget(0, toyDepthSurface);
+		device->SetViewport(&viewport);
+		device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+		surfacePicturesAreFromThisFrame = ToyDrawPictures(device, worldAxes, false);
+
+		device->SetRenderTarget(0, screen);
+		device->SetViewport(&viewport);
+		savedCardSettings->Apply();
+	}
+
+	screen->Release();
 }
 
 // The stencil now marks the pixels this light can't reach. On each of those, this adds the light's share of all the light there to the mask. So
@@ -6707,8 +6877,18 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
-	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: G VIEW, F7 TAG, F8 CAPTURE");   // so that nobody has to remember them
-	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: L LIGHTING, H SHADOWS");
+
+	// So that nobody has to remember them. These are the keys the player has now, because they can be changed on the rendering page. For some keys the name is written in the same place each time, so the first is kept while the second is asked for.
+	{
+		extern char *GetDescriptionOfKey(unsigned char key);
+
+		char lightingKey[kLineLength] = { 0 };
+
+		strncpy(lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyRendering))), sizeof(lightingKey) - 1);
+
+		_snprintf(lines[numLines++], kLineLength - 1, "KEYS: %s VIEW, F7 TAG, F8 CAPTURE", GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyDevViews))));
+		_snprintf(lines[numLines++], kLineLength - 1, "KEYS: %s LIGHTING, %s SHADOWS", lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyShadows))));
+	}
 
 	if (ShadowShootOn)
 	{
@@ -6879,13 +7059,19 @@ static bool ViewAddsLightsPerPixel()
 	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
 }
 
-// Can a developer's key do anything right now? Only with -dev, only in a level being played, and not while typing. A menu reads what's typed into it from a queue of its
-// own, and it leaves the game's controls switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.
+// Can a key that anyone may press do anything right now? Only in a level being played, and not while typing. A menu reads what's typed into it from a queue of its own, and it leaves the game's controls
+// switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.
 extern int InGameMenusAreRunning(void);
 
+static bool PlayerKeysCanAct()
+{
+	return AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+}
+
+// And a developer's key? Only with -dev as well, and not in a network game.
 static bool DevKeysCanAct()
 {
-	return DevMode && AvP.Network == I_No_Network && AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+	return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();
 }
 
 // The developer tools show what walls hide. EDGES and RED VOLUMES draw the shadow of someone behind a wall straight through it, and the shoot tool and the reports say much the same in
@@ -6935,6 +7121,12 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 
 	bool const tuningWasChanged = ShadowTuning_PutBack(shadowTuning, (int)(sizeof(shadowTuning) / sizeof(shadowTuning[0])));
 
+	// A bigger or brighter lamp than the others have would be cheating. How quickly it follows the view isn't: LAMPFOLLOW only moves the lamp.
+	if (ShoulderLamp_PutSpotBack())
+	{
+		LogString("lamp: this is a network game, so its size and strength are back as they were built");
+	}
+
 	ShadowSurfaceBias = shadowSurfaceBiasAsBuilt;
 
 	bool const viewShowsTooMuch = ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal;
@@ -6968,7 +7160,7 @@ static int lightingAsked = kAskedNothing;
 static int shadowAmbientAsked = kAskedNothing;
 static int shadowEvenGapAsked = kAskedNothing;
 
-// Whether LIGHTING and SHADOWS were both off when last looked at, for G and for seeing when that changes
+// Whether LIGHTING and SHADOWS were both off when last looked at, for J and for seeing when that changes
 static bool switchesWereAllOff = false;
 static int viewToComeBackTo = kToyViewFinal;
 
@@ -7028,6 +7220,116 @@ void ShadowAmbientCommand(char *words)
 	{
 		SaySwitch("SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
 	}
+}
+
+// Anyone can use this, like LIGHTING: it only changes how quickly this player's own lamp moves. On its own it says what it is now. It's only for this run of the game.
+void LampFollowCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	double seconds = ShoulderLamp_FollowSeconds();
+
+	if (length > 0 && !ShoulderLamp_FollowSecondsFromWords(start, (unsigned int)length, &seconds))
+	{
+		SaySwitch("LAMPFOLLOW TAKES SECONDS FROM 0 TO 5, LIKE 0.5. 0 STICKS THE LAMP TO THE VIEW");
+		return;
+	}
+
+	ShoulderLamp_SetFollowSeconds(seconds);
+
+	char said[60] = { 0 };
+
+	if (seconds > 0.0)
+	{
+		_snprintf(said, sizeof(said) - 1, "LAMP CATCHES UP IN %.2f SECONDS", seconds);
+	}
+	else
+	{
+		_snprintf(said, sizeof(said) - 1, "LAMP IS STUCK TO THE VIEW");
+	}
+
+	SaySwitch(said);
+}
+
+// In a network game a number is refused, and says why. On its own, either command can still say what it is.
+static bool LampStaysAsBuiltHere(const char *why, size_t length)
+{
+	if (AvP.Network == I_No_Network || length == 0)
+	{
+		return false;
+	}
+
+	SaySwitch(why);
+	return true;
+}
+
+// LAMPSPOTSIZE and LAMPINTENSITY: how big and how strong this player's lamp is, for this run of the game. On its own, each says what it is now.
+void LampSpotSizeCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	if (LampStaysAsBuiltHere("LAMPSPOTSIZE IS OFF IN A NETWORK GAME: A BIGGER LAMP WOULD BE CHEATING", length))
+	{
+		return;
+	}
+
+	double size = ShoulderLamp_SpotSize();
+
+	if (length > 0 && !ShoulderLamp_SpotSizeFromWords(start, (unsigned int)length, &size))
+	{
+		SaySwitch("LAMPSPOTSIZE TAKES A NUMBER FROM 0.05 TO 0.35, LIKE 0.21");
+		return;
+	}
+
+	ShoulderLamp_SetSpotSize(size);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP SPOT SIZE IS %.2f", size);
+	SaySwitch(said);
+}
+
+void LampIntensityCommand(char *words)
+{
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	if (LampStaysAsBuiltHere("LAMPINTENSITY IS OFF IN A NETWORK GAME: A BRIGHTER LAMP WOULD BE CHEATING", length))
+	{
+		return;
+	}
+
+	double intensity = ShoulderLamp_Intensity();
+
+	if (length > 0 && !ShoulderLamp_IntensityFromWords(start, (unsigned int)length, &intensity))
+	{
+		SaySwitch("LAMPINTENSITY TAKES A NUMBER FROM 0.25 TO 2, LIKE 1");
+		return;
+	}
+
+	ShoulderLamp_SetIntensity(intensity);
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "LAMP INTENSITY IS %.2f", intensity);
+	SaySwitch(said);
 }
 
 // The menu asks the same way the commands do. See view_settings.cpp.
@@ -7191,15 +7493,16 @@ bool ViewSwitches_ShadowsCanBeOn()
 // Where LIGHTING and SHADOWS change. It runs after this frame's shadows, so everything the next frame reads, from its lights onwards, agrees.
 static void ViewSwitches_ApplyAsked()
 {
-	// Not while typing, or an L in the console or a chat message would change the lighting. Only with -dev, so that a player's own controls can't be taken by accident.
-	if (DevKeysCanAct())
+	// L and H, or whichever keys the player has chosen on the rendering page. These are for everyone, with or without -dev and in a network game too, like the page itself and the LIGHTING and SHADOWS
+	// commands. Not while typing, or an L in the console or a chat message would change the lighting. A control with the same key wins, so a player's own controls can't be taken by accident: see view_settings.cpp.
+	if (PlayerKeysCanAct())
 	{
-		if (DebouncedKeyboardInput[KEY_L])
+		if (ViewSettings_KeyPressed(kViewKeyRendering))
 		{
 			lightingAsked = kAskedNext;
 		}
 
-		if (DebouncedKeyboardInput[KEY_H])
+		if (ViewSettings_KeyPressed(kViewKeyShadows))
 		{
 			shadowsAsked = kAskedNext;
 		}
@@ -7317,7 +7620,7 @@ static void DimWorldWithNoLights()
 
 static void ToyShadows_Draw()
 {
-	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
+	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the J key, so nothing can turn
 	// them back on, and with ToyShadowsMode at 0 nothing collects polygons or chooses lights.
 	if (!ToyDepthBufferHasStencil())
 	{
@@ -7332,10 +7635,10 @@ static void ToyShadows_Draw()
 		return;
 	}
 
-	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
-	if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])
+	// J, which no default control set uses, or whichever key the player has chosen on the rendering page. Not while typing, or a J in the console or a chat message would change the view.
+	if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))
 	{
-		ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
+		ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
 
 		static char message[40];
 		_snprintf(message, sizeof(message) - 1, "VIEW: %s", kToyViewNames[ToyShadowsMode]);
@@ -7346,7 +7649,7 @@ static void ToyShadows_Draw()
 
 	KeepDeveloperToolsOutOfNetworkGames();
 
-	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
+	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like J.
 	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
@@ -7383,7 +7686,7 @@ static void ToyShadows_Draw()
 		}
 	}
 
-	// The G key above can change the view after the polygons were collected. That's safe both ways: going to a view with volumes, this frame's prisms come out empty, and
+	// The J key above can change the view after the polygons were collected. That's safe both ways: going to a view with volumes, this frame's prisms come out empty, and
 	// going to one without, the polygons on the list are just forgotten at the end.
 	bool const volumesThisFrame = ToyShadows_VolumesInThisView();
 
@@ -7578,6 +7881,7 @@ static void ToyShadows_Draw()
 
 		if (ToyDrawPictures(device, worldAxes, useStatic))
 		{
+			surfacePicturesAreFromThisFrame = true;
 			FrameTiming_Mark(kStageSurfacePictures);
 
 			// Which part of the screen each light can reach, in the screen's own numbers

@@ -403,6 +403,7 @@
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
+    <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
@@ -415,6 +416,7 @@
     <ClCompile Include="..\..\3dc\flicker_meter.cpp" />
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
+    <ClCompile Include="..\..\3dc\view_keys.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -692,6 +694,7 @@
     <None Include="..\..\shaders\fmvVertex.vsh" />
     <None Include="..\..\shaders\orthoPixel.psh" />
     <None Include="..\..\shaders\orthoVertex.vsh" />
+    <None Include="..\..\shaders\shoulderLamp.psh" />
     <None Include="..\..\shaders\particle.psh" />
     <None Include="..\..\shaders\particle.vsh" />
     <None Include="..\..\shaders\pixel.psh" />
