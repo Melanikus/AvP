@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a sound can forget an address in memory that is about to go
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP sound management header
   Provides support for sound samples, and for playing CDDA tracks.

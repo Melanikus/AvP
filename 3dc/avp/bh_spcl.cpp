@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a room with no display block left leaves its shape alone
 #include "3dc.h"
 #include "bh_spcl.h"
 #include "dynblock.h"

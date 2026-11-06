@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   how many times a hit counts comes from another machine, so a number below nothing can't run away, and a spear with no dynamics block doesn't use one
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch

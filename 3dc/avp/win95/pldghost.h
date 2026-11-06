@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   what only an autogun's ghost used has gone, because no network game has one
 /*---------------------------Patrick 28/3/97----------------------------
   Header for Multi-Player ghost object support header
   ----------------------------------------------------------------------*/

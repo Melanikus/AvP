@@ -1,4 +1,6 @@
 // The test of the checks on what arrives from other players' machines. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the checks added since: names, chat lines, a client's budget, typed addresses, who has asked lately, and a sound's address
 //
 // WHAT IT TESTS
 //

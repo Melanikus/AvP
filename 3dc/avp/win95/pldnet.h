@@ -1,5 +1,6 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the game description has the players' names, because a client has no other way to learn them
+//   what a client can afford, and whether the blocks are short, can be asked here, and nothing sends an autogun's state any more
 /* Patrick 10/7/97------------------------------------------------------
   Header for Multi-Player game support header
   ----------------------------------------------------------------------*/

@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a level load answers other machines all the way through
 #include "3dc.h"
 #include "module.h"
 #include "platform.h"

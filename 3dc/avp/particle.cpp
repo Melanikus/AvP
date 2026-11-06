@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a flare with no light left has no corona
 /* KJL 14:50:53 10/13/97 - 
  *
  *	Experimental particle system

@@ -8,6 +8,10 @@
 //   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
 //   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition, the weapons or the score tables are checked before they're used
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
+//   a client may only send so many of the kinds of part that cost every machine something, what one player has alive is counted as well, and what's kept back of the blocks is for this machine's own player
+//   no network game has an autogun, so a message about one is refused by name, and what only such a message reached has gone
+//   a machine sends 60 times a second, not every frame, and what has to go out before it stops playing goes at once
+//   the build stops if a message or a level list changes while the multiplayer version doesn't
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -1025,7 +1029,6 @@ void RemovePlayerFromGame(NetID id)
   What a game message is allowed to be. See WHAT A GAME MESSAGE IS MADE OF in net_checks.h
   ----------------------------------------------------------------------*/
 
-// In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
 // What a client may send each second of the kinds that cost every machine something. Each is far more than a real game sends: nobody dies twice in a second, and a burst of cluster grenades is a few explosions. A big explosion alone makes about 4 pieces of flying debris, and a message can hold 180 of them.
 static const unsigned short kMostKillsEachSecond = 2;
 static const unsigned short kMostChatLinesEachSecond = 4;
@@ -1035,6 +1038,7 @@ static const unsigned short kMostThingsDestroyedEachSecond = 60;
 static const unsigned short kMostHitsEachSecond = 240; // far more than any gun can land in a second
 static const unsigned short kMostLeavingsEachSecond = 2;
 
+// In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
 static constexpr NetPartRule kNetPartRules[] =
 {
 	{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true },
@@ -1179,7 +1183,7 @@ bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection)
 	return false;
 }
 
-// What's kept back of the game's 1000 strategy blocks and 750 display blocks. A player's own corpse and shots come out of this. Primary's sums for a crowded level, about 70 computer players near, use 70 of the first and up to 140 of the second.
+// What's kept back of the game's 1000 strategy blocks and 750 display blocks. A player's own corpse and shots come out of this. The sums for a crowded level, about 70 computer players near, use 70 of the first and up to 140 of the second.
 static const int kStrategyBlocksKeptBack = 100;
 static const int kDisplayBlocksKeptBack = 75;
 

@@ -1,6 +1,8 @@
 /***** HModel.c *****/
 /***** CDF 21/10/97 *****/
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a part of a model that goes with a fragment is no longer freed twice
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole

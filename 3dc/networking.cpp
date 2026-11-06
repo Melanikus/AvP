@@ -22,6 +22,7 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted the switched-off (#if 0) code inside Net_ConnectToAddress; the "connect" console command still
 //   does nothing;
@@ -36,6 +37,9 @@
 //   a player ID comes from a count, because two people can join within the same thousandth of a second
 //   a game message has to pass Net_GameMessageIsGood before anyone reads it or it's passed on, and a client takes the host's word only from whoever gave it its ID
 //   LogThisDrop moved to net_checks.h, so that a test can run it, and so can the code that reads the game's messages
+//   a connection may stay silent for a named time, and a level load answers all the way through
+//   a packet has a checksum, a connection that never finishes starting or a player who goes silent loses their place, one address can hold 4 places, and a client can only send so many bytes each second
+//   one address gets only so many answers to a search, and can list 2 games at most
 
 #include "3dc.h"
 #include "enet\enet.h"

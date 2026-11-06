@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   running out of strategy blocks is checked before one is used
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   an object of a type the game doesn't know is left out
 

@@ -1,5 +1,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a ghost of a kind this game can't show, or with a shape it hasn't loaded, isn't made
+//   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
+//   a corpse with no display block stays far, and what only an autogun's ghost used has gone, because no network game has one
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/

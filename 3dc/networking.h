@@ -22,11 +22,14 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the page of games found can stop the search, so that nothing stays open on the network
 //   a message's header says whether it's a system message in a byte, because any number can arrive from another machine
+//   a level load answers other machines all the way through
+//   the multiplayer version is 103, and the build now stops if a message changes without it: see net_version_check.h
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_

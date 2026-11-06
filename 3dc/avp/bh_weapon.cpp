@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   running out of dynamics blocks or lights no longer crashes, and a molotov with no strategy block gives back its display block
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
 //   so code scanners can read the file; the game runs the same code as before
