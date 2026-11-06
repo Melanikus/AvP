@@ -5,6 +5,16 @@
 	],
 	"rows": [
 		{
+			"name": "SOURCE: a machine sends every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static const int kSendsEachSecond = 60;",
+					"to": "static const int kSendsEachSecond = 1000000000;"
+				}
+			]
+		},
+		{
 			"name": "a connection that never starts keeps its place",
 			"changes": [
 				{

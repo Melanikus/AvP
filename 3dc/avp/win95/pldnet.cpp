@@ -156,6 +156,9 @@ NETGAME_GAMEDATA netGameData =
 	"", // char customLevelName[];
 };
 
+// How many times a second a machine sends what it has. Without a limit it was every frame, so traffic rose with frame rate, about 200 a second on a fast machine, and one lost packet holds up everything behind it. What's said between sends waits for the next one.
+static const int kSendsEachSecond = 60;
+
 void SetDefaultMultiplayerConfig()
 {
 	netGameData.scoreLimit = 1000000;
@@ -491,7 +494,7 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 		}
 		else
 		{
-			netGameData.sendFrequency = 0; //ONE_FIXED/15;
+			netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;
 			netGameData.sendDecals = TRUE;
 		}
 	}
@@ -598,7 +601,7 @@ void InitAVPNetGameForJoin(void)
 		}
 		else
 		{
-			netGameData.sendFrequency = 0; //ONE_FIXED/15;
+			netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;
 			netGameData.sendDecals = TRUE;
 		}
 

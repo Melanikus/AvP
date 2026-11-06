@@ -1907,6 +1907,10 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
 	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\tNet_NoteRefused") >= 2, "a game left off the host's list doesn't write before the list");
 
+	// How often a machine sends. A host and a joiner each set this, and left at nothing it would be every frame.
+	Check(CountOf(pldnet, "netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;") == 2, "both a host and a joiner send a fixed number of times a second");
+	Check(Has(pldnet, "static const int kSendsEachSecond = 60;"), "and that's 60");
+
 	// No network game has an autogun, so a message about one is refused by name, and nothing in the game makes or sends one
 	Check(Has(Between(reading, "case (NetMT_PlayerAutoGunState):", "subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);"), "Net_NoteRefused("), "an autogun message is refused");
 	Check(Has(Between(ReadSourceFile("3dc/avp/bh_agun.cpp"), "void AutoGunBehaveInit(", "sbPtr->shapeIndex = toolsData->shapenum;"), "if(AvP.Network != I_No_Network)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"), "a level's own autoguns are taken away in a network game");
