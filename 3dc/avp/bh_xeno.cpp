@@ -6,7 +6,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
-//   compiled, so code scanners can read the file; the game runs the same code as before
+//   compiled, so code scanners can read the file; the game runs the same code as before;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -4637,7 +4638,7 @@ int Xeno_Activation_Test(STRATEGYBLOCK *sbPtr) {
 void Xeno_MaintainLasers(STRATEGYBLOCK *sbPtr) {
 
 	XENO_STATUS_BLOCK *xenoStatusPointer;
-	SECTION_DATA *dum;
+	SECTION_DATA *dum = 0;
 	VECTORCH alpha;
 	VECTORCH beta;
 	int a,uselaser;

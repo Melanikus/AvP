@@ -5,6 +5,9 @@
 //   a queen's death is read from her own block
 
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 
 #include "3dc.h"
 #include "inline.h"
@@ -1005,7 +1008,7 @@ int NPCOrientateToVector(STRATEGYBLOCK *sbPtr, VECTORCH *zAxisVector,int turnspe
 int NPCFindTargetEP(STRATEGYBLOCK *sbPtr, VECTORCH *targetPosn, AIMODULE **targetModule, int alien)
 {
 	AIMODULE **AdjModuleRefPtr;
-	FARENTRYPOINT *bestEp;
+	FARENTRYPOINT *bestEp = 0;
 	int bestSmell = 0;
 	int aTargetExists = 0;
 	AIMODULE *bestModule = (AIMODULE *)0;
