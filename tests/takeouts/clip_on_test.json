@@ -1,0 +1,44 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "OLD: no limit at all, switch on",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				},
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		},
+		{
+			"name": "switch on: corners kept have no limit",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		},
+		{
+			"name": "switch on: corners made have no limit",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		}
+	]
+}
