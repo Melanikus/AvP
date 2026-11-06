@@ -1,0 +1,33 @@
+Keep the header of the packet being sent in the host, not on the stack.
+
+Our own patch (AvP), from CodeQL's stack-address-escape rule. The host's first
+send buffer was pointed at a local array in the send function. The array was
+only used before that function returned, but the pointer stayed behind in the
+host, aimed at memory that had gone. Now the array lives in the host as well, so
+the pointer is always good. The bytes that get sent don't change.
+
+diff --git a/include/enet/enet.h b/include/enet/enet.h
+index 3001018..1b8551f 100644
+--- a/include/enet/enet.h
++++ b/include/enet/enet.h
+@@ -382,6 +382,7 @@ typedef struct _ENetHost
+    enet_uint16          headerFlags;
+    ENetProtocol         commands [ENET_PROTOCOL_MAXIMUM_PACKET_COMMANDS];
+    size_t               commandCount;
++   enet_uint8           headerData [sizeof (ENetProtocolHeader) + sizeof (enet_uint32)]; /**< header of the packet being sent; buffers [0] points here */
+    ENetBuffer           buffers [ENET_BUFFER_MAXIMUM];
+    size_t               bufferCount;
+    ENetChecksumCallback checksum;                    /**< callback the user can set to enable packet checksums for this host */
+diff --git a/protocol.c b/protocol.c
+index 843a719..3c3b8d3 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -1599,7 +1599,7 @@ enet_protocol_check_outgoing_commands (ENetHost * host, ENetPeer * peer, ENetLis
+ static int
+ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int checkForTimeouts)
+ {
+-    enet_uint8 headerData [sizeof (ENetProtocolHeader) + sizeof (enet_uint32)];
++    enet_uint8 * headerData = host -> headerData;
+     ENetProtocolHeader * header = (ENetProtocolHeader *) headerData;
+     int sentLength = 0;
+     size_t shouldCompress = 0;

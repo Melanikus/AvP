@@ -50,7 +50,6 @@
 #include "MemoryStream.h"
 
 static ENetHost *host = NULL;
-static bool isHost = false;
 
 static ENetAddress  ServerAddress;
 static ENetAddress  ClientAddress;
@@ -94,6 +93,25 @@ static const unsigned int kMostMillisecondsToBeLetIn = 15000;
 
 // When each of the host's connections was made
 static unsigned int connectionStartedAt[kMostClients + 1];
+
+// A real client answers ENet's first reply straight away. Someone starting connections from addresses that aren't theirs never does, and each one holds a place until this runs out. ENet's own wait is much longer.
+static const unsigned int kMostMillisecondsHalfOpen = 3000;
+static unsigned int halfOpenSince[kMostClients + 1];
+
+// A player sends something many times a second, even waiting in a menu, and a level loads in much less than this. So a player silent for this long has gone, and is asked to go.
+static const unsigned int kMostMillisecondsSilent = 300000;
+static unsigned int lastHeardFrom[kMostClients + 1];
+
+// How many bytes one client may send in a second, on top of how many messages. A real game sends a tenth of this. A host keeps what it's passing on until the other machines say they have it, for as long as the patience, so this also limits how much one client can make it keep.
+static const int kMostBytesEachSecond = 512 * 1024;
+static unsigned int bytesSecond[kMostClients + 1];
+static int bytesUsed[kMostClients + 1];
+
+// One address can hold this many of the seven places. People sharing an address at home get in, and someone flooding from one address can't take them all.
+static const size_t kMostConnectionsFromOneAddress = 4;
+
+// How much ENet may keep waiting for the game to read, from one connection. A level load is the longest wait there is. ENet's own limit is 32 MB.
+static const size_t kMostBytesWaitingForTheGame = 8 * 1024 * 1024;
 
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
@@ -552,11 +570,14 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
-			// One address can only hold this many of the places
-			host->duplicatePeers = 2;
+			host->duplicatePeers = kMostConnectionsFromOneAddress;
 
 			// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
 			host->maximumPacketSize = kMostMessageBytes;
+			host->maximumWaitingData = kMostBytesWaitingForTheGame;
+
+			// A packet that's been changed on the way, or forged by someone who doesn't know the connection's number, is thrown away. It isn't a password, because anyone who sees the traffic can work this out.
+			host->checksum = enet_crc32;
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
 			OpenDiscoverySocket();
@@ -762,6 +783,34 @@ static void ForgetConnectionsNotLetIn()
 	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
 	{
 		ENetPeer *const peer = &host->peers[i];
+
+		if (peer->state == ENET_PEER_STATE_ACKNOWLEDGING_CONNECT || peer->state == ENET_PEER_STATE_CONNECTION_PENDING)
+		{
+			// 0 means "isn't half open", so a clock reading 0 counts as 1
+			if (halfOpenSince[i] == 0)
+			{
+				halfOpenSince[i] = now != 0 ? now : 1;
+			}
+			else if (now - halfOpenSince[i] >= kMostMillisecondsHalfOpen)
+			{
+				LogDroppedMessage("a connection never finished starting");
+				enet_peer_reset(peer);
+				halfOpenSince[i] = 0;
+			}
+
+			continue;
+		}
+
+		halfOpenSince[i] = 0;
+
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent)
+		{
+			// The ordinary way out, so that the game hears this player has gone
+			LogDroppedMessage("a player has sent nothing for minutes");
+			lastHeardFrom[i] = now;
+			enet_peer_disconnect(peer, 0);
+			continue;
+		}
 
 		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn)
 		{
@@ -1005,6 +1054,17 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 
 	size_t const connection = (size_t)(from - host->peers);
 
+	if (connection <= kMostClients)
+	{
+		lastHeardFrom[connection] = enet_time_get();
+	}
+
+	if (connection <= kMostClients && !NetThisSecondHasRoomFor(enet_time_get(), &bytesSecond[connection], &bytesUsed[connection], kMostBytesEachSecond, (int)size))
+	{
+		LogDroppedMessage("a client sent more bytes in a second than any game does");
+		return false;
+	}
+
 	if (connection <= kMostClients && !NetThisSecondHasRoom(enet_time_get(), &messagesSecond[connection], &messagesUsed[connection], kMostMessagesEachSecond))
 	{
 		LogDroppedMessage("a client sent more messages in a second than any game does");
@@ -1112,6 +1172,8 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					if (AvP.Network == I_Host && (size_t)(eEvent.peer - host->peers) <= kMostClients)
 					{
 						connectionStartedAt[eEvent.peer - host->peers] = enet_time_get();
+						lastHeardFrom[eEvent.peer - host->peers] = enet_time_get();
+						bytesUsed[eEvent.peer - host->peers] = 0;
 						messagesUsed[eEvent.peer - host->peers] = 0;
 					}
 
@@ -1307,6 +1369,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 	// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
 	host->maximumPacketSize = kMostMessageBytes;
+	host->maximumWaitingData = kMostBytesWaitingForTheGame;
+	host->checksum = enet_crc32;
 
 	ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);
 	if (ServerPeer == NULL)

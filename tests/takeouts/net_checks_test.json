@@ -6,6 +6,26 @@
 	],
 	"rows": [
 		{
+			"name": "an amount that doesn't fit is counted anyway",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (amount > most - *used)\n\t{\n\t\treturn false;\n\t}\n\n\t*used += amount;",
+					"to": "*used += amount;\n\n\tif (*used > most)\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "amounts have no limit",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (amount > most - *used)\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a client's budget never comes back",
 			"changes": [
 				{

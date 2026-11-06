@@ -301,6 +301,20 @@ static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, s
 	return 1 + (size_t)part[0];
 }
 
+static void TestRoomForAmounts()
+{
+	unsigned int started = 1000;
+	int used = 0;
+
+	Check(NetThisSecondHasRoomFor(1000, &started, &used, 100, 60), "an amount that fits has room");
+	Check(!NetThisSecondHasRoomFor(1500, &started, &used, 100, 41), "one that wouldn't doesn't");
+	Check(used == 60, "and what's refused isn't counted");
+	Check(NetThisSecondHasRoomFor(1600, &started, &used, 100, 40), "so what still fits does");
+	Check(!NetThisSecondHasRoomFor(1700, &started, &used, 100, 1), "up to the limit exactly");
+	Check(NetThisSecondHasRoomFor(2000, &started, &used, 100, 100), "and the next second it starts again");
+	Check(!NetThisSecondHasRoomFor(3000, &started, &used, 100, 2000000000), "a huge amount can't overflow the sum");
+}
+
 static void TestWhatAClientMaySpend()
 {
 	// Kind 0 is one byte long with no limit, kind 1 is one byte long and at most 3 a second, kind 2 varies and at most 1 a second
@@ -464,6 +478,7 @@ int main()
 	TestCountingRefusals();
 	TestSoundAddresses();
 	TestWhatAClientMaySpend();
+	TestRoomForAmounts();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();

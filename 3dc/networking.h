@@ -69,6 +69,7 @@ void      Net_KeepAnsweringWhileLoading();
 
 // At the end of a load: says in the log how long the longest gap between answers was, because that's what the patience below has to be longer than.
 void      Net_SayLongestGapWhileLoading();
+
 uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);

@@ -18,7 +18,7 @@ enum { ENET_SOCKET_TYPE_DATAGRAM = 2 };
 enum { ENET_SOCKET_WAIT_RECEIVE = 2 };
 enum { ENET_SOCKOPT_NONBLOCK = 1, ENET_SOCKOPT_BROADCAST = 2 };
 enum { ENET_PACKET_FLAG_RELIABLE = 1 };
-enum ENetPeerState { ENET_PEER_STATE_DISCONNECTED = 0, ENET_PEER_STATE_CONNECTED = 5 };
+enum ENetPeerState { ENET_PEER_STATE_DISCONNECTED = 0, ENET_PEER_STATE_ACKNOWLEDGING_CONNECT = 2, ENET_PEER_STATE_CONNECTION_PENDING = 3, ENET_PEER_STATE_CONNECTED = 5 };
 enum ENetEventType { ENET_EVENT_TYPE_NONE = 0, ENET_EVENT_TYPE_CONNECT = 1, ENET_EVENT_TYPE_DISCONNECT = 2, ENET_EVENT_TYPE_RECEIVE = 3 };
 
 struct ENetAddress
@@ -52,6 +52,8 @@ struct ENetPeer
 struct ENetHost
 {
 	size_t maximumPacketSize;
+	size_t maximumWaitingData;
+	enet_uint32 (*checksum)(const ENetBuffer *buffers, size_t bufferCount);
 	size_t duplicatePeers;
 	ENetPeer *peers;
 	size_t peerCount;
@@ -79,6 +81,8 @@ ENetPacket *enet_packet_create(const void *data, size_t dataLength, enet_uint32 
 void enet_packet_destroy(ENetPacket *packet);
 int enet_peer_send(ENetPeer *peer, uint8_t channel, ENetPacket *packet);
 void enet_peer_disconnect(ENetPeer *peer, enet_uint32 data);
+void enet_peer_reset(ENetPeer *peer);
+enet_uint32 enet_crc32(const ENetBuffer *buffers, size_t bufferCount);
 void enet_peer_timeout(ENetPeer *peer, enet_uint32 limit, enet_uint32 minimum, enet_uint32 maximum);
 enet_uint32 enet_time_get();
 void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32 data);

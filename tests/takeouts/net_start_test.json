@@ -5,6 +5,46 @@
 	],
 	"rows": [
 		{
+			"name": "a connection that never starts keeps its place",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "else if (now - halfOpenSince[i] >= kMostMillisecondsHalfOpen)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a silent player keeps their place",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "what a player sends doesn't count as being heard from",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (connection <= kMostClients)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a client can send any number of bytes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "kMostBytesEachSecond, (int)size)",
+					"to": "kMostBytesEachSecond, 0)"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: an autogun message is not refused",
 			"changes": [
 				{

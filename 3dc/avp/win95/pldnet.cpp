@@ -1173,6 +1173,9 @@ bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection)
 static const int kStrategyBlocksKeptBack = 100;
 static const int kDisplayBlocksKeptBack = 75;
 
+// In object.cpp: how many display blocks are in use
+extern int NumActiveBlocks;
+
 bool Net_BlocksAreShort()
 {
 	return AvP.Network != I_No_Network && (NetPoolIsShort(NumActiveStBlocks, maxstblocks, kStrategyBlocksKeptBack) || NetPoolIsShort(NumActiveBlocks, maxobjects, kDisplayBlocksKeptBack));

@@ -451,6 +451,19 @@ void enet_host_broadcast(ENetHost *host, uint8_t channel, ENetPacket *packet)
 	}
 }
 
+enet_uint32 enet_crc32(const ENetBuffer *, size_t)
+{
+	return 0;
+}
+
+static int peersReset = 0;
+
+void enet_peer_reset(ENetPeer *peer)
+{
+	peersReset++;
+	peer->state = ENET_PEER_STATE_DISCONNECTED;
+}
+
 void enet_peer_disconnect(ENetPeer *, enet_uint32)
 {
 	closedGently++;
@@ -1160,6 +1173,72 @@ static void HostWithClients(int clients)
 
 	EverythingArrives();
 	sentMessages.clear();
+}
+
+static void TestConnectionsThatHoldAPlace()
+{
+	HostWithClients(1);
+
+	// One that never finishes starting
+	int const resetBefore = peersReset;
+
+	peers[2].state = ENET_PEER_STATE_ACKNOWLEDGING_CONNECT;
+	Net_ServiceNetwork();
+	enetClock += 2999;
+	Net_ServiceNetwork();
+	Check(peersReset == resetBefore && peers[2].state == ENET_PEER_STATE_ACKNOWLEDGING_CONNECT, "a connection still starting keeps its place for a moment");
+	enetClock += 1;
+	Net_ServiceNetwork();
+	Check(peersReset == resetBefore + 1 && peers[2].state == ENET_PEER_STATE_DISCONNECTED, "and loses it if it never finishes");
+
+	// One that was let in, and went quiet
+	int const askedBefore = closedGently;
+
+	Hears(1, AGameMessage(IDOf(1)));
+	enetClock += 299999;
+	Net_ServiceNetwork();
+	Check(closedGently == askedBefore, "a player can be quiet for a while");
+	Hears(1, AGameMessage(IDOf(1)));
+	enetClock += 299999;
+	Net_ServiceNetwork();
+	Check(closedGently == askedBefore, "and anything it sends starts that again");
+	enetClock += 1;
+	Net_ServiceNetwork();
+	Check(closedGently == askedBefore + 1, "but a player silent for minutes is asked to go, the ordinary way, so the game hears");
+	EndTheGame();
+}
+
+static void TestTooManyBytes()
+{
+	HostWithClients(1);
+
+	enetClock += 1000;
+
+	std::vector<uint8_t> big = AGameMessage(IDOf(1));
+
+	// As big as a message can be and still be read at all. 400 of these are more than the limit.
+	big.resize(2048, 0);
+
+	int acceptedBytes = 0;
+	int refused = 0;
+
+	for (int i = 0; i < 400; i++)
+	{
+		if (Hears(1, big) == big.size())
+		{
+			acceptedBytes += (int)big.size();
+		}
+		else
+		{
+			refused++;
+		}
+	}
+
+	Check(acceptedBytes > 400 * 1024, "a client can send a lot of bytes in a second");
+	Check(acceptedBytes <= 512 * 1024 && refused > 0, "but only so many");
+	enetClock += 1000;
+	Check(Hears(1, big) == big.size(), "and it has more the next second");
+	EndTheGame();
 }
 
 static void TestAnsweringWhileLoading()
@@ -1992,6 +2071,8 @@ int main()
 	TestARealClientGetsIn();
 	TestWhatAClientCantAfford();
 	TestAnsweringWhileLoading();
+	TestConnectionsThatHoldAPlace();
+	TestTooManyBytes();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
 	TestWhoDoesntGetIn();

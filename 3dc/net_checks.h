@@ -208,6 +208,24 @@ inline bool NetPoolIsShort(int inUse, int total, int keptBack)
 	return inUse >= total - keptBack;
 }
 
+// The same as NetThisSecondHasRoom below, for something counted in amounts, like bytes. What's refused isn't counted.
+inline bool NetThisSecondHasRoomFor(unsigned int now, unsigned int *secondStarted, int *used, int most, int amount)
+{
+	if (now - *secondStarted >= 1000)
+	{
+		*secondStarted = now;
+		*used = 0;
+	}
+
+	if (amount > most - *used)
+	{
+		return false;
+	}
+
+	*used += amount;
+	return true;
+}
+
 // For something anyone can make this game do for free, like answering a question from an address it has never heard of. At most this many in any one second. Not per address, because an address in a question can be made up.
 inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, int *used, int most)
 {
