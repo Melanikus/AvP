@@ -1811,7 +1811,8 @@ static char * PutAnimation(char * where, int polygon, int frames)
 }
 
 // Loads a shape from memory that ends right after it, so that a read past the end of its last chunk crashes the test, every time.
-static bool ShapeIsAcceptedAtTheWall(char const * end)
+// objectNamesKept, if it's asked for, gets how many names the shape's header ended up holding in its list of objects.
+static bool ShapeIsAcceptedAtTheWall(char const * end, int * objectNamesKept = 0)
 {
 	size_t const allBytes = end - wholeShape;
 	char * atTheWall = MemoryEndingAtAWall(allBytes);
@@ -1825,6 +1826,11 @@ static bool ShapeIsAcceptedAtTheWall(char const * end)
 	file.post_input_processing();
 
 	bool const accepted = (file.error_code == 0);
+
+	if (objectNamesKept)
+	{
+		*objectNamesKept = made->get_header()->object_names_store.size();
+	}
 
 	Parent_File = 0;
 	return accepted;
@@ -3130,6 +3136,67 @@ static void TestCountedLists()
 		Check(!ChunkAccepted(MakeChunk<Matching_Images_Chunk>, bytes, firstMatchAt + 2 * 52), "matching images that run out of room are refused");
 	}
 
+	// The rows above use up a list's room with a long name. A name can't be read past the end of its chunk any more, so reading the name would refuse those files by itself,
+	// and they can't show that a list's own check is there at all. In these rows every name does end inside the chunk, and nothing else is wrong. The last entry just has less
+	// room than any entry takes, so the list's own check is the only thing that can refuse it. Without that check, the rest of the entry would be read from past the chunk's end.
+	{
+		// Each entry here is two names. The first takes 12 bytes, which leaves 5 of the 17 for the second. Its two empty names start 4 bytes apart, so they fit in those 5, and
+		// the smallest entry takes 8.
+		size_t const firstNameAt = 12;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 8, 2);
+		memset(bytes + firstNameAt, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, bytes, firstNameAt + 17), "a shape set's last entry with too little room is refused");
+
+		// One waypoint with two modules, each a name and a number. The first takes 12 bytes, which leaves 4 of the 16 for the second: enough for its name, and none for its number.
+		size_t const modulesAt = sizeof(int) + 44 + sizeof(int);
+		size_t const firstModuleAt = modulesAt + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, modulesAt, 2);
+		memset(bytes + firstModuleAt, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<Module_Waypoint_Chunk>, bytes, firstModuleAt + 16), "a waypoint's last module with too little room is refused");
+
+		// Each image is two numbers and a name. The first takes 16 bytes, which leaves 9 of the 25 for the second: its numbers and an empty name, in less than the smallest 12.
+		size_t const firstImageAt = 24 + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 24, 2);
+		memset(bytes + firstImageAt + 8, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<RIF_Child_Chunk>, bytes, firstImageAt + 25), "a child file's last image with too little room is refused");
+
+		// A pair of images takes at least 52 bytes, because each image is padded to a multiple of 4. A name of 2 letters makes the first pair 56, which leaves 51 of the 107 for
+		// the second. All its names end in those 51, and only its padding is missing.
+		size_t const firstMatchAt = 16;
+		size_t const firstFileNameAt = firstMatchAt + 12 + 16;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 12, 2);
+		memset(bytes + firstFileNameAt, 'x', 2);
+		Check(!ChunkAccepted(MakeChunk<Matching_Images_Chunk>, bytes, firstMatchAt + 107), "the last pair of matching images with too little room is refused");
+
+		// A palette is five numbers, then its colours and name padded to a multiple of 4. Four colours make the first one 36 bytes, which leaves 21 of the 57 for the second: its
+		// numbers and an empty name, in less than the smallest 24.
+		struct PaletteRow { MakesChunk make; size_t countAt; char const * says; };
+		PaletteRow const palettes[] =
+		{
+			{ MakeChunk<Preset_Palette_Chunk>,       20, "a list of palettes' last one with too little room is refused" },
+			{ MakeChunk<Preset_Palette_Store_Chunk>, 24, "a store of palettes' last one with too little room is refused" },
+		};
+
+		for (size_t i = 0; i < sizeof(palettes) / sizeof(palettes[0]); i++)
+		{
+			size_t const firstAt = palettes[i].countAt + sizeof(int);
+
+			memset(bytes, 0, sizeof(bytes));
+			PutNumber(bytes, palettes[i].countAt, 2);
+			PutNumber(bytes, firstAt, 4);
+			Check(!ChunkAccepted(palettes[i].make, bytes, firstAt + 57), palettes[i].says);
+		}
+	}
+
 	// A shape's list of texture names, in a whole shape and in a sub-shape. Each name ends with a zero, with nothing after it, so one byte is the least a name takes.
 	{
 		for (int subShape = 0; subShape < 2; subShape++)
@@ -3167,6 +3234,18 @@ static void TestCountedLists()
 
 			char const * end = data + ShapeHeaderDataBytes + nameRows[i].bytes;
 			Check(ShapeIsAcceptedAtTheWall(end) == nameRows[i].good, nameRows[i].says);
+		}
+
+		// The list stops as soon as its room has gone. Two objects are counted here, and the first one's name takes all the room, so there's nothing to keep for the second.
+		// Reading a name with no room left refuses the file by itself, so being refused can't show this: only how many names were kept can.
+		{
+			int const twoObjects = 2;
+			char * data = PutChunk(wholeShape, "SHPHEAD1", ShapeHeaderDataBytes + 3);
+			memcpy(data + ShapeHeaderDataBytes - sizeof(int), &twoObjects, sizeof(int));
+			memcpy(data + ShapeHeaderDataBytes, "xy", 3);
+
+			int kept = 0;
+			Check(!ShapeIsAcceptedAtTheWall(data + ShapeHeaderDataBytes + 3, &kept) && kept == 1, "a shape's list of objects stops when its room runs out");
 		}
 
 		// A header that ends partway through its count, at the wall, so that reading the count at all would stop the test.
