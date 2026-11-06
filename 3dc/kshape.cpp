@@ -6296,7 +6296,7 @@ void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
 // still in the game's own lighting, so it hasn't gone dark. It just casts no shadow.
 void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float milliseconds, float frameMilliseconds)
 {
-	char line[480];
+	char line[640];  // the longest numbers still fit, and a longer line would only be cut short
 
 	_snprintf(line, sizeof(line) - 1,
 		"shadow lights: frame %d: %d in reach; chosen %d steady and %d brief, of %d and %d allowed; passed over: %d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark; held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; %d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame",
