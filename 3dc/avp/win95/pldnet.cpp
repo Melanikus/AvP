@@ -1036,7 +1036,7 @@ static const unsigned short kMostExplosionsEachSecond = 24;
 static const unsigned short kMostGibbingsEachSecond = 16;
 static const unsigned short kMostThingsDestroyedEachSecond = 60;
 static const unsigned short kMostHitsEachSecond = 240; // far more than any gun can land in a second
-static const unsigned short kMostLeavingsEachSecond = 2;
+static const unsigned short kMostLeavingsEachSecond = NET_MESSAGEITERATIONS; // a machine that's leaving says so this many times, because it gets no other chance
 
 // In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
 static constexpr NetPartRule kNetPartRules[] =

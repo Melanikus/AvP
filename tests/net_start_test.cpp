@@ -2076,6 +2076,9 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();"), "and the start of a game");
 	Check(Has(pldnet, "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();"), "and the end of one");
 
+	// Someone leaving says so several times over, and every one of those is honest
+	Check(Has(pldnet, "kMostLeavingsEachSecond = NET_MESSAGEITERATIONS;") && Has(pldnet, "for (int i = 0; i < NET_MESSAGEITERATIONS; i++)\n\t{\n\t\tAddNetMsg_PlayerLeaving();"), "a goodbye said as many times as a game says it isn't refused");
+
 	// A corpse's message is honest, and isn't counted as a refusal
 	Check(Has(pldnet, "if (type == I_BehaviourNetCorpse)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n\t\t// The kind is the sender's word"), "a message about a corpse that's gone is simply ignored");
 

@@ -5,6 +5,16 @@
 	],
 	"rows": [
 		{
+			"name": "SOURCE: an honest goodbye is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kMostLeavingsEachSecond = NET_MESSAGEITERATIONS;",
+					"to": "kMostLeavingsEachSecond = 2;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the build doesn't check the version",
 			"changes": [
 				{
