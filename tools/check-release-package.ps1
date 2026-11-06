@@ -4,7 +4,7 @@ Says whether a finished package is fit to be a release. release.yml runs this af
 The build has already passed if we get here, so this looks for what a build wouldn't notice:
 - A file the game only asks for while it's running. The game compiles its shaders from text files every time it starts, using
   D3DCompiler_43.dll, and nothing links to that file, so the build can't tell if it's gone. Without it, on a Windows that doesn't
-  already have one, shadows and shaders wouldn't work.
+  already have one, no shader would compile and the game wouldn't start.
 - Shaders that aren't the ones in this commit, or that aren't there at all.
 - A package from another commit, or with a list of hashes that doesn't match it.
 - A program in it that isn't the game.
