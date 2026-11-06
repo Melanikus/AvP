@@ -70,6 +70,7 @@
 #include "frustum.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
+#include "light_reach.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "shadow_debug.h"
@@ -6076,43 +6077,20 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 static bool ToyLightRectangle(LPDIRECT3DDEVICE9 device, const float *light, RECT *rectangle)
 {
 	float const x = light[0], y = light[1], z = light[2], range = light[3];
+	LightReachBox box;
 
-	if (z + range < zNear)
+	if (!LightReach_Box(x, y, z, range, zNear, d3d.matProjection._11, d3d.matProjection._22, &box))
 	{
-		return false;  // all of it is behind the camera
-	}
-
-	float left = -1.0f, right = 1.0f, bottom = -1.0f, top = 1.0f;
-
-	// with the camera inside the box, or the box round the camera's side, the whole screen is the safe answer
-	if (z - range > zNear)
-	{
-		float const nearZ = z - range, farZ = z + range;
-		float const across = d3d.matProjection._11, up = d3d.matProjection._22;
-
-		left   = across * min((x - range) / nearZ, (x - range) / farZ);
-		right  = across * max((x + range) / nearZ, (x + range) / farZ);
-		bottom = up * min((y - range) / nearZ, (y - range) / farZ);
-		top    = up * max((y + range) / nearZ, (y + range) / farZ);
-
-		if (left >= 1.0f || right <= -1.0f || bottom >= 1.0f || top <= -1.0f)
-		{
-			return false;
-		}
-
-		left   = (left < -1.0f) ? -1.0f : left;
-		right  = (right > 1.0f) ? 1.0f : right;
-		bottom = (bottom < -1.0f) ? -1.0f : bottom;
-		top    = (top > 1.0f) ? 1.0f : top;
+		return false;
 	}
 
 	D3DVIEWPORT9 viewport;
 	device->GetViewport(&viewport);
 
-	rectangle->left   = viewport.X + (LONG)floor((left + 1.0f) * 0.5f * viewport.Width);
-	rectangle->right  = viewport.X + (LONG)ceil((right + 1.0f) * 0.5f * viewport.Width);
-	rectangle->top    = viewport.Y + (LONG)floor((1.0f - top) * 0.5f * viewport.Height);
-	rectangle->bottom = viewport.Y + (LONG)ceil((1.0f - bottom) * 0.5f * viewport.Height);
+	rectangle->left   = viewport.X + (LONG)floor((box.left + 1.0f) * 0.5f * viewport.Width);
+	rectangle->right  = viewport.X + (LONG)ceil((box.right + 1.0f) * 0.5f * viewport.Width);
+	rectangle->top    = viewport.Y + (LONG)floor((1.0f - box.top) * 0.5f * viewport.Height);
+	rectangle->bottom = viewport.Y + (LONG)ceil((1.0f - box.bottom) * 0.5f * viewport.Height);
 
 	return true;
 }

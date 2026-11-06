@@ -437,7 +437,7 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
 
 	for (char const *const name : devToggles)
@@ -456,7 +456,7 @@ static void TheRealGame()
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
 	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
-	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ToyShadowsCasters" };
+	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ShadowsPretendNoFloatBlend", "ToyShadowsCasters" };
 
 	for (char const *const name : tuned)
 	{
