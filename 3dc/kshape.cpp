@@ -16,6 +16,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 //   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -60,6 +62,9 @@
 #include "d3d_render.h"
 #include "los.h"
 #include "shadow_shoot.h"
+#include "bh_light.h"
+#include "light_choice.h"
+#include "view_switches.h"
 
 const RCOLOR ALIENS_LIFEFORCE_GLOW_COLOUR    = 0x20ff8080;
 const RCOLOR MARINES_LIFEFORCE_GLOW_COLOUR   = 0x208080ff;
@@ -5731,6 +5736,30 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 	return Approximate3dMagnitude(&toLight);
 }
 
+// Which kind of light this is, for the rule in light_choice.h. Only a level light has LFlag_AbsPos (setup_light_data in object_setup.cpp), because its place is written in the level file. block is
+// what carries the light, or nothing for a light element.
+static LightKindForShadows ToyKindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
+{
+	if (light->LightFlags & LFlag_AbsPos)
+	{
+		return kLightFromTheLevel;
+	}
+
+	STRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;
+
+	if (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)
+	{
+		return ((PLACED_LIGHT_BEHAV_BLOCK const *)owner->SBdataptr)->has_corona ? kLampWithACorona : kLampWithNoCorona;
+	}
+
+	return kLightOfAnyOtherKind;
+}
+
+// What the log says about the rule, counted afresh each frame by ToyConsiderLight
+static int toyMapLightsLeftOut = 0;
+static int toyMapLightsLeftOutInReach = 0;
+static int toyCoronaLampsInReach = 0;
+
 // Keeps the best lights seen so far, in order. A light marked first goes ahead of every other, nearest of those first, and
 // none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
 // light element, which is on no block.
@@ -5746,6 +5775,26 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 	if (!ToyLightIsLit(light) && !(hasAPlace && LightIsDarkForNow(light)))
 	{
 		return;
+	}
+
+	// The map's lights with no corona stay out of the list unless SHADOWAMBIENT is on. Leaving the list takes nothing away from the map: what lights it stays in the game's lighting. See light_choice.h.
+	LightKindForShadows const kind = ToyKindOfLight(light, block);
+
+	if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))
+	{
+		toyMapLightsLeftOut++;
+
+		if (ToyLightCanReachTheView(light, false))
+		{
+			toyMapLightsLeftOutInReach++;
+		}
+
+		return;
+	}
+
+	if (kind == kLampWithACorona && ToyLightCanReachTheView(light, hasAPlace))
+	{
+		toyCoronaLampsInReach++;
 	}
 
 	int const distance = ToyDistanceToCamera(light);
@@ -6012,7 +6061,8 @@ static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, co
 // one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
 // once, before this.
 //
-// Up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
+// The map's own lights only count if they're lamps you can see, unless SHADOWAMBIENT is on: see light_choice.h. Of what's left,
+// up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
 // flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 4 brief lights of their own. A live
 // light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
 // ToyHoldFlaresToTheirCap.
@@ -6034,6 +6084,9 @@ void ToyShadows_ChooseLights()
 
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;
+	toyMapLightsLeftOut = 0;
+	toyMapLightsLeftOutInReach = 0;
+	toyCoronaLampsInReach = 0;
 
 	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
@@ -6338,6 +6391,11 @@ void ToyShadows_NoteFrameLights(int frame)
 	LogString(line);
 	placesChangedSinceReport = 0;
 	lightsBackSoon = 0;
+
+	_snprintf(line, sizeof(line) - 1, "shadow lights: SHADOWAMBIENT %s: %d of the map's lights left out for showing no corona, %d of those could reach the view; %d lamps with a corona could reach the view",
+		ShadowAmbientOn ? "ON" : "OFF", toyMapLightsLeftOut, toyMapLightsLeftOutInReach, toyCoronaLampsInReach);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
 
 	for (int i = 0; i < toyNumChosen; i++)
 	{
