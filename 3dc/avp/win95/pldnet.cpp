@@ -6,7 +6,7 @@
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
 //   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
-//   numbers in messages that are places in the player list, the alien kinds or the decals are checked before they're used
+//   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition or the weapons are checked before they're used
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
@@ -6351,6 +6351,12 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 
 	if (!sbPtr)
 	{
+		// Someone can later walk over this, and the game then uses this number as a place in its table of ammunition or of weapons. See inventory.cpp.
+		if ((messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES)) || (messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES)))
+		{
+			return;
+		}
+
 		/* we don't seem to have a ghost for this object, so create one */
 		VECTORCH position;
 		EULER orientation;
@@ -8026,6 +8032,11 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr)
 {
 	// if we're not playing, ignore it
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// It becomes a pickup, and the game uses this number as a place in its table of weapons when someone walks over it
+	if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {
 		return;
 	}
 

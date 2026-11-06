@@ -2,6 +2,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
 
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a death code nobody knows gives the first death on the list, because the code can come from another player's machine
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
 #include "3dc.h"
@@ -2308,8 +2310,12 @@ DEATH_DATA *GetThisDeath_FromCode(HMODELCONTROLLER *controller,DEATH_DATA *First
                 this_death++;
         }
 
-        GLOBALASSERT(retval);
-        return(retval);
+	// The code can come from another player's machine, so it can be anything. Everyone who calls this reads what it gives back, so it gives the first death on the list rather than nothing.
+	if (!retval) {
+		retval=FirstDeath;
+	}
+
+	return(retval);
 }
 
 DEATH_DATA *GetThisDeath_FromUniqueCode(int code) 

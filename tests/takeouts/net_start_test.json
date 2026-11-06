@@ -1363,6 +1363,46 @@
 					"to": "if (false) {"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a ghost can be any ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "(messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES)) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost can be any weapon",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": " || (messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES))",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a weapon left behind can be any number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a death code nobody knows gives nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "if (!retval) {\n\t\tretval=FirstDeath;\n\t}\n\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
