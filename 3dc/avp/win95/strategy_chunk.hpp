@@ -1,3 +1,6 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   removed the chunk for a lift in another level file, which nothing used
+
 #ifndef strachnk_hpp
 #define strachnk_hpp 1
 
@@ -64,25 +67,6 @@ class AVP_Strategy_Chunk :public Chunk
 
 	int index;// for matching strategy up with the object it belongs to, currently only used by for light strategies
 	int spare2;
-	
-	AvpStrat* Strategy; 
-};
-
-class AVP_External_Strategy_Chunk :public Chunk
-{
-	public:
-	AVP_External_Strategy_Chunk(Chunk_With_Children* ,const char*,size_t);
-	AVP_External_Strategy_Chunk(Chunk_With_Children*);
-	~AVP_External_Strategy_Chunk();
-	
-	virtual BOOL output_chunk (HANDLE &hand);
-	virtual size_t size_chunk();
-	virtual void fill_data_block(char* data_start);
-
-	ObjectID ObjID;
-	int ExtEnvNum;
-	int ThisEnvNum;
-	int spare;
 	
 	AvpStrat* Strategy; 
 };

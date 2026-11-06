@@ -103,7 +103,7 @@ void InitTextStrings(void)
 	if (!strncmp(TextBufferPtr, "REBCRIF1", 8))
 	{
 		// checked decompression: bounded by the file's size, NULL for a package that cannot be decoded safely
-		// (a truncated file); for a complete file the result is the same as HuffmanDecompress's
+		// (a truncated file)
 		int uncompressedSize = (textSize >= sizeof(HuffmanPackage)) ? ((HuffmanPackage*)TextBufferPtr)->UncompressedDataSize : 0;
 		textPtr = HuffmanDecompressChecked((HuffmanPackage*)(TextBufferPtr), (textSize > 0x7fffffff) ? 0x7fffffff : (int)textSize);
 		DeallocateMem(TextBufferPtr);
@@ -124,7 +124,7 @@ void InitTextStrings(void)
 			return;
 		}
 
-		// the decompressed buffer has 16 spare bytes after the data (HuffmanDecompressChecked): end it with a 0
+		// the decompressed buffer has spare bytes after the data (HuffmanDecompressChecked): end it with a 0
 		textEnd = textPtr + uncompressedSize;
 		*textEnd = 0;
 	}

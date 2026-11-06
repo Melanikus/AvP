@@ -61,6 +61,7 @@ struct TEXANIM
 	FrameList** Seq;
 
 	void CopyAnimData(TEXANIM* ta,int* conv);
+	bool ImagesAreKnown(int max_index, int const * image_numbers) const;
 };
 
 #endif

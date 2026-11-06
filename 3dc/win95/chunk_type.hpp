@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an object's name can now be 63 characters long (it was 49), so the longest name in the stock levels,
 //   53 characters, fits; its size now comes from chunk_object_name.hpp
+//   is_textured is declared here too, for the checks made as a level is read
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _chnktype_hpp
 #define _chnktype_hpp 1
@@ -121,6 +123,8 @@ struct ChunkUV_List
 	friend BOOL operator!= (const ChunkUV_List &, const ChunkUV_List &);
 
 };
+
+BOOL is_textured(int type);
 
 class ChunkPoly
 {
@@ -272,16 +276,6 @@ struct a_frame
 
 
 // Data structures for bits and pieces
-
-struct obinfile
-{
-	int filepos;
-	char name[50];
-	size_t length;
-
-	friend BOOL operator==(const obinfile &o1, const obinfile &o2);
-	friend BOOL operator!=(const obinfile &o1, const obinfile &o2);
-};
 
 struct shpinfile
 {

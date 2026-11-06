@@ -2,9 +2,15 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
+//   counted lists are measured against their chunks before they're made
+//   a level's paths each need a number of their own
+//   a lift in another level file is no longer one of its children
+//   a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
+#include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(environment_chunk)
@@ -32,7 +38,6 @@ Children for Enviornment_Data_Chunk :
 "LIGHTSET"		Light_Set_Chunk
 "PRSETPAL"		Preset_Palette_Chunk
 "SPECLOBJ"		Special_Objects_Chunk
-"AVPEXSTR"		AVP_External_Strategy_Chunk
 "BMPMD5ID"		Bitmap_MD5_Chunk
 "GLOGENDC"		Global_Generator_Data_Chunk
 "FRAGTYPE"		Fragment_Type_Chunk
@@ -45,24 +50,14 @@ Children for Enviornment_Data_Chunk :
 
 
 
-BOOL Environment_Data_Chunk::file_equals (HANDLE & /*rif_file*/)
-{
-	return(TRUE);
-}	
+	
 
 Environment_Data_Header_Chunk * Environment_Data_Chunk::get_header()
 {
 	return (Environment_Data_Header_Chunk *) this->lookup_single_child ("ENDTHEAD");
 }	
 
-const char * Environment_Data_Chunk::get_head_id()
-{
-	Environment_Data_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
-}	
+	
 
 void Environment_Data_Chunk::set_lock_user (char * user)
 {
@@ -207,11 +202,10 @@ Sound_Directory_Chunk::Sound_Directory_Chunk(Environment_Data_Chunk* parent,cons
 	strcpy(directory,dir);
 }
 
-Sound_Directory_Chunk::Sound_Directory_Chunk(Chunk_With_Children * const parent, const char* data, size_t const )
+Sound_Directory_Chunk::Sound_Directory_Chunk(Chunk_With_Children * const parent, const char* data, size_t const chunk_bytes)
 :Chunk(parent,"SOUNDDIR")
 {
-	directory=new char[strlen(data)+1];
-	strcpy(directory,data);
+	directory=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 Sound_Directory_Chunk::~Sound_Directory_Chunk()
@@ -243,13 +237,14 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 }
 
 
-Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"RANTEXID")
 {
-	CHUNK_EXTRACT_STRING(name);
+	char const * const start = data;
+	CHUNK_EXTRACT_STRING(name,start,size);
 	
-	int num_types,type;		
-	CHUNK_EXTRACT(num_types,int);
+	int type;
+	int const num_types=ReadListCount(start,data,size,sizeof(int));
 	for(int i=0;i<num_types;i++)
 	{
 		CHUNK_EXTRACT(type,int);
@@ -295,6 +290,35 @@ size_t Random_Texture_ID_Chunk::size_chunk()
 RIF_IMPLEMENT_DYNCREATE("SPECLOBJ",Special_Objects_Chunk)
 
 CHUNK_WITH_CHILDREN_LOADER("SPECLOBJ",Special_Objects_Chunk)
+
+// A path's number is its place in the game's list of paths. Two paths with one number would share that place, and the second one's shorter list would then be
+// filled to the length of the first. So each number can only be used once. A number outside the list has refused the level already: see AVP_Path_Chunk.
+void Special_Objects_Chunk::post_input_processing()
+{
+	bool number_taken[MostPathNumbers] = { false };
+
+	List<Chunk *> paths;
+	lookup_child ("AVPPATH2", paths);
+
+	for (LIF<Chunk *> path (&paths); !path.done(); path.next())
+	{
+		int const number = path()->r_u_miscellaneous() ? -1 : ((AVP_Path_Chunk *) path())->PathID;
+
+		if (number < 0 || number >= MostPathNumbers)
+		{
+			continue;
+		}
+
+		if (number_taken[number])
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
+		number_taken[number] = true;
+	}
+
+	Chunk_With_Children::post_input_processing();
+}
 /*
 Children for Special_Objects_Chunk :
 "AVPGENER"		AVP_Generator_Chunk

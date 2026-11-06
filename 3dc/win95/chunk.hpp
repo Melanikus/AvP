@@ -4,10 +4,16 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a group of helper macros that nothing used
 //   added ChildChunkFits, which checks that a child chunk's size from the file can be real
+//   added CountFitsChunk and NameLengthInChunk, which check a count and a name from the file against the room left in a chunk
+//   added ReadListCount, which reads a list's count and measures it against its chunk
+//   added CountIfItFits and BytesLeftAfter, for a count that has to be checked before a chunk's body runs
+//   added CopyNameFromChunk and CopyOptionalNameFromChunk, so that a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
 
+	#include <string.h>
 	#include "3dc.h"
 	#include "mem3dc.h" // for debug new and delete
 	#include "inline.h"
@@ -32,7 +38,6 @@
 #define CHUNK_FAILED_ON_WRITE -3
 #define CHECK_FAILED_NOT_OPEN -4
 
-#define DisableLock 1
 
 #define GENERAL_FLAG_LOCKED 0x0000001
 
@@ -45,10 +50,6 @@
 // we start at the header of the chunk we are in
 // so that we can stop at the end of the chunk
 
-#ifndef RIFF_OPTIMIZE // define this to get compiler errors where you are calling the old slow functions
-extern List<int> list_chunks_in_file (HANDLE &, const char * chunk_id);
-#endif
-extern void list_chunks_in_file (List<int> * pList, HANDLE, const char * chunk_id);
 
 // Structures for interfacing with the outside application
 // these are going to be basically very C-ee so that C
@@ -134,34 +135,8 @@ extern void list_chunks_in_file (List<int> * pList, HANDLE, const char * chunk_i
 //
 
 
-// The logic behind the locking is as follows.
-
-// There are two functions for locking and unlocking chunks
-// these are currently only in the shape and object chunks
-
-// lock_chunk(File_Chunk &)
-// will lock a chunk, this must only be called once
-// and will return false if it tries to lock a chunk
-// that has already been locked by anyone.
-
-// unlock_chunk (File_Chunk &, BOOL updatedyn)
-// will unlock the chunk locally and in the file if it is not to be updated
-// If it is to be updated, it will set the updated flag and
-// the chunk can only be locked again once it is written to a file.
-
-// The user may call File_Chunk::update_file() whenever
-// (either after every chunk update, or once a minute)
-// Note that this fully unlocks locally locked chunks
-// that are being written to the file.
-
-// Another function File_Chunk::update_chunks_from_file()
-// will reload those chunks that have been externally upadted
-// This must be done with care!!
-
-// The objects are associated with shapes primarily
-// When a shape is being edited, a list of objects will
-// be with that shape in the header.  These objects will be locked
-// also.
+// A chunk can be marked as locked, and as updated, but only in memory. Marking a chunk as locked inside a level file on disk was for several people
+// editing one level at a time, in the tools the game was made with, and it's gone: see REMOVED-CODE.md.
 
 
 
@@ -366,6 +341,122 @@ inline bool ChildChunkFits(char const * child, char const * start, signed int to
 	return child_size >= 12 && child_size <= bytes_left;
 }
 
+// Is there room in bytes_left for count items of item_bytes each? A count comes from the file, so it can be negative, and it can be so big
+// that the sum wraps round in a 32-bit number and looks small. A negative count is refused, and this sum is done in numbers wide enough
+// not to wrap. Ask this before making a list of that size: asking for too much memory ends the game, and a chunk's own size can't be
+// too big for the file it came from.
+inline bool CountFitsChunk(int count, size_t item_bytes, size_t bytes_left)
+{
+	return count >= 0 && (unsigned long long) count * item_bytes <= bytes_left;
+}
+
+// How many bytes are left of size once used have gone, and never less than none.
+inline size_t BytesLeftAfter(size_t size, size_t used)
+{
+	return (size > used) ? size - used : 0;
+}
+
+// Gives back a count from the file if it fits in what's left of its chunk. If it doesn't, the level is refused, and this gives back 0, so the chunk goes
+// on with an empty list. A real count always fits, because the items it counts are in the chunk.
+inline int CountIfItFits(int count, size_t item_bytes, size_t bytes_left)
+{
+	if (!CountFitsChunk(count, item_bytes, bytes_left))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	return count;
+}
+
+// Reads a list's count from the file, and steps past it. A count sizes a list, so it's measured against what's left of the chunk before anything is
+// made: asking for more memory than there is ends the game, and a count too big reads past the end. start is where the reading began, size
+// how many bytes it can use, and data where the count is. If the count is wrong, the level is refused, and this gives back 0, so the chunk goes on with an
+// empty list. A real count always fits, because the items it counts are in the chunk, so no level that's whole can be refused by this.
+inline int ReadListCount(char const * start, char const * & data, size_t size, size_t item_bytes)
+{
+	size_t const used = data - start;
+
+	if (used + sizeof(int) > size)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	int const count = *(int *)data;
+	data += sizeof(int);
+
+	return CountIfItFits(count, item_bytes, size - used - sizeof(int));
+}
+
+// How long is the name that starts here? A name in a level file ends at a zero byte, and strlen reads until it finds one, so a name with no
+// zero byte would run off the end of the chunk. This only looks at the bytes_left bytes it's given, and says -1 if there's no zero in them.
+inline int NameLengthInChunk(char const * name, size_t bytes_left)
+{
+	char const * const zero = (char const *) memchr(name, 0, bytes_left);
+
+	return zero ? (int)(zero - name) : -1;
+}
+
+// Copies a name out of a level file's chunk, into a new list that the caller gives back with delete[]. start and size are the chunk's own: where its data begins
+// and how many bytes it holds. name is where in it the name begins. A name ends at a zero byte, and this only looks for one inside the chunk, so it never goes on
+// into whatever comes after. If there isn't one, the file is refused, and the name comes back empty, so the code after this needs no special case. length, if it's
+// asked for, gets how long the name is, not counting its zero byte.
+inline char * CopyNameFromChunk(char const * start, size_t size, char const * name, size_t * length = 0)
+{
+	size_t const used = (size_t)(name - start);
+	int const found = NameLengthInChunk(name, used < size ? size - used : 0);
+
+	if (found < 0)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	size_t const bytes = found < 0 ? 0 : (size_t)found;
+	char * const copy = new char[bytes + 1];
+
+	memcpy(copy, name, bytes);
+	copy[bytes] = 0;
+
+	if (length)
+	{
+		*length = bytes;
+	}
+
+	return copy;
+}
+
+// The same, for a name a chunk can do without: an empty one, or none because the chunk has ended, gives back no list at all. Letters with no zero byte after them are
+// still refused, because that's not a name left out.
+inline char * CopyOptionalNameFromChunk(char const * start, size_t size, char const * name, size_t * length = 0)
+{
+	if (length)
+	{
+		*length = 0;
+	}
+
+	if ((size_t)(name - start) >= size)
+	{
+		return 0;
+	}
+
+	size_t bytes = 0;
+	char * const copy = CopyNameFromChunk(start, size, name, &bytes);
+
+	if (length)
+	{
+		*length = bytes;
+	}
+
+	if (bytes == 0)
+	{
+		delete[] copy;
+		return 0;
+	}
+
+	return copy;
+}
+
 ///////////////////////////////////////////////
 //macros for use in chunk construction from buffer, assume buffer is called data
 
@@ -374,15 +465,10 @@ inline bool ChildChunkFits(char const * child, char const * start, signed int to
 	var=*(type*)data; \
 	data+=sizeof(type);
 
-//read 4 byte aligned string
-#define CHUNK_EXTRACT_STRING(var) { \
-	int __length=strlen(data); \
-	if(__length) \
-	{ \
-		var=new char[__length+1]; \
-		strcpy(var,data); \
-	} \
-	else var=0; \
+//read 4 byte aligned string. start and size are the chunk's own: see CopyOptionalNameFromChunk
+#define CHUNK_EXTRACT_STRING(var,start,size) { \
+	size_t __length=0; \
+	var=CopyOptionalNameFromChunk(start,size,data,&__length); \
 	data+=(__length+4) &~3 ;}
 
 //read array

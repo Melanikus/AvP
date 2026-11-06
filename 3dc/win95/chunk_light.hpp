@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed the declarations of code only the level editor used: the game itself never runs it
+//   removed the declarations of code only the level editor used: the game itself never runs it; added the
+//   number of places a shape needs for its baked colours
 
 #ifndef _ltchunk_hpp
 #define _ltchunk_hpp 1
@@ -188,6 +189,14 @@ public:
 	int num_vertices;
 	
 	int * intensity_array;
+
+	// How many places a shape's list of baked colours needs. The game looks up a colour for each point of the shape, so
+	// there must be a place for every point, even if the file has fewer colours than that. One stock object does: 224
+	// colours for 228 points. A few stock objects have more colours than points, and those are all kept too.
+	int colour_places_for_shape(int shape_points) const
+	{
+		return num_vertices > shape_points ? num_vertices : shape_points;
+	}
 
 	size_t size_chunk()
 	{

@@ -3,8 +3,12 @@
 //   the TLTCONFG data in a level file is read without going past its end, text is copied using its exact
 //   measured length, level file names are kept in a list that grows as needed, and level-editor code was removed
 //   a child chunk whose size cannot be real is refused
+//   a game mode, its header and its children are only made in their right places, and a game mode must have a header
+//   counted lists are measured against their chunks before they're made, and a lighting table's size can't wrap round
+//   a name is only read as far as the end of its chunk
 
 #include "chunk_palette.hpp"
+#include "environment_chunk.hpp"
 #include "mishchnk.hpp"
 
 #ifndef UseLocalAssert
@@ -214,7 +218,7 @@ void Preset_Palette::fill_data_block (char * data_start)
 
 RIF_IMPLEMENT_DYNCREATE("PRSETPAL",Preset_Palette_Chunk)
 
-Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const /*ssize*/)
+Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"PRSETPAL")
 , flags(*(int *)(sdata+4))
 , version_num(*(int *)sdata)
@@ -222,12 +226,23 @@ Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, c
 , reserved2(*(int *)(sdata+12))
 , reserved3(*(int *)(sdata+16))
 {
-	int const pplistsize = *(int *)(sdata+20);
-	sdata += 24;
+	char const * const start = sdata;
+	size_t const smallest_palette = 24;   // five numbers and a name, with no colours
+
+	sdata += 20;
+
+	int const pplistsize = ReadListCount(start, sdata, ssize, smallest_palette);
 
 	for (int i = pplistsize; i; --i)
 	{
-		Preset_Palette current(sdata);
+		// colours can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_palette > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		Preset_Palette current(sdata, ssize - (sdata - start));
 		sdata += current.size_chunk();
 		pplist.add_entry(current);
 	}
@@ -290,12 +305,11 @@ Environment_TLT_Chunk::Environment_TLT_Chunk (Chunk_With_Children * parent, cons
 
 	if (flags & ChunkTLTFlag_ExternalFile)
 	{
-		size_t const filename_size = strlen(sdata+32)+1;
-		filename = new char[filename_size];
-		memcpy(filename,sdata+32,filename_size);
+		filename = CopyNameFromChunk(sdata, ssize, sdata+32);
 	}
-	else if ((signed) ssize >= 32 + width*num_levels)
+	else if (width >= 0 && num_levels >= 0 && (unsigned long long)width * num_levels + 32 <= ssize)
 	{
+		// both numbers come from the file, so it's measured with room to spare, and a table that doesn't fit is left out
 		table = new unsigned char [width*num_levels];
 		unsigned char * tableptr = table;
 		unsigned char const * sdataptr = (unsigned char *)(sdata+32);
@@ -523,7 +537,9 @@ void TLT_Config_Chunk::fill_data_block (char * data_start)
 
 // constructor from buffer
 
-RIF_IMPLEMENT_DYNCREATE("GAMEMODE",Environment_Game_Mode_Chunk)
+// These two keep a pointer to their parent as a particular kind of chunk, so they can only be made under that kind. In the game's own
+// levels all 14 game modes are in the environment data, and all 88 of these children are in a game mode.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("GAMEMODE",Environment_Game_Mode_Chunk,"REBENVDT",Environment_Data_Chunk)
 
 /*
 Children For  Environment_Game_Mode_Chunk :
@@ -543,7 +559,7 @@ Children For  Environment_Game_Mode_Chunk :
 
 
 Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* const parent,const char* data,size_t const size)
-:Chunk_With_Children(parent,"GAMEMODE") , envd_parent((Environment_Data_Chunk *)parent)
+:Chunk_With_Children(parent,"GAMEMODE") , header(0), envd_parent((Environment_Data_Chunk *)parent)
 {
 	const char * buffer_ptr = data;
 	while ((data-buffer_ptr)< (signed) size) {
@@ -555,14 +571,23 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 		DynCreate(data);
 		data += *(int *)(data + 8);
 	}
+
+	// The game reads a game mode's name through its header with no check. All 14 in the game's own levels have one.
+	if (!header)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 }
 
 // header chunk
-RIF_IMPLEMENT_DYNCREATE("GMODHEAD",Environment_Game_Mode_Header_Chunk)
+// This constructor writes into its parent, so it can only be made under a game mode. Under anything else it's a chunk nothing reads.
+// All 14 of these in the game's own levels are inside a game mode.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("GMODHEAD",Environment_Game_Mode_Header_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
 
-Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_With_Children * const parent, const char * pdata, size_t const /*psize*/)
+Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_With_Children * const parent, const char * pdata, size_t const chunk_bytes)
 : Chunk (parent, "GMODHEAD"), flags(0), rif_files()
 {
+	char const * const chunk_start = pdata;
 	flags = *((int *) pdata);
 
 	pdata+=4;
@@ -575,19 +600,24 @@ Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_Wit
 	version_num = *(int *)pdata;
 	pdata+=4;
 	
-	mode_identifier = new char[strlen(pdata)+1];
+	size_t length = 0;
+	mode_identifier = CopyNameFromChunk(chunk_start, chunk_bytes, pdata, &length);
+	pdata += length + 1;
 
-	strcpy (mode_identifier, (pdata));
-
-	pdata += strlen(mode_identifier) + 1;
-
-	while (*pdata)
+	// A list of names, which ends at an empty one or at the end of the chunk
+	while ((size_t)(pdata - chunk_start) < chunk_bytes && *pdata)
 	{
-		size_t len = strlen(pdata)+1;
+		int const name_length = NameLengthInChunk(pdata, chunk_bytes - (size_t)(pdata - chunk_start));
+
+		if (name_length < 0)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
 
 		rif_files.push_back(pdata);
 
-		pdata += len;
+		pdata += name_length + 1;
 	}
 
 	((Environment_Game_Mode_Chunk*)parent)->header = this;
@@ -655,7 +685,7 @@ size_t Environment_Game_Mode_Header_Chunk::size_chunk ()
 ////////////////////////////////////////
 
 // Class RIF_Child_Chunk - for RIFs in game modes containing graphics
-RIF_IMPLEMENT_DYNCREATE("RIFCHILD",RIF_Child_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("RIFCHILD",RIF_Child_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
 
 RIF_Child_Chunk::~RIF_Child_Chunk()
 {
@@ -753,9 +783,10 @@ Bitmap_MD5_Chunk * RIF_Child_Chunk::GetMD5Chunk(char const * bname)
 	return 0;
 }
 
-RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const /*ssize*/)
+RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char * sdata, size_t const ssize)
 : Chunk(parent,"RIFCHILD"), egm_parent((Environment_Game_Mode_Chunk * const)parent)
 {
+	char const * const start = sdata;
 	int i;
 	for (i=0; i<ChunkRIFChild_NumReserved; i++, sdata+=4)
 	{
@@ -764,24 +795,28 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 	flags = *(RCC_Flags *)sdata;
 	sdata += 4;
 
-	size_t len = strlen(sdata)+1;
-	rifname = new char[len];
-	strcpy(rifname,sdata);
-	sdata += len+3 &~3;
+	size_t len = 0;
+	rifname = CopyNameFromChunk(start, ssize, sdata, &len);
+	sdata += len+4 &~3;
 
 	version_num = *(int *)sdata;
 	sdata += 4;
 
-	len = strlen(sdata)+1;
-	filename = new char[len];
-	strcpy(filename,sdata);
-	sdata += len+3 &~3;
+	filename = CopyNameFromChunk(start, ssize, sdata, &len);
+	sdata += len+4 &~3;
 
-	int listsize = *(int *)sdata;
-	sdata+=4;
+	size_t const smallest_image = 12;   // two numbers and a name
+	int const listsize = ReadListCount(start, sdata, ssize, smallest_image);
 
 	for (i = listsize; i; --i)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_image > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		BMP_Flags temp;
 		temp.flags = *(BMPN_Flags *)sdata;
 		sdata += 4;
@@ -789,10 +824,8 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 		temp.version_num = *(int *)sdata & BMPFLAGS_VERSION_NUM_MASK;
 		sdata += 4;
 
-		len = strlen(sdata)+1;
-		temp.filename = new char[len];
-		strcpy(temp.filename,sdata);
-		sdata += len+3 &~3;
+		temp.filename = CopyNameFromChunk(start, ssize, sdata, &len);
+		sdata += len+4 &~3;
 
 		bmps.add_entry(temp);
 	}
@@ -806,7 +839,7 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 
 RIF_IMPLEMENT_DYNCREATE("SETPALST",Preset_Palette_Store_Chunk)
 
-Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const /*ssize*/)
+Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"SETPALST")
 , flags(*(int *)(sdata+4))
 , version_num(*(int *)sdata)
@@ -814,19 +847,27 @@ Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * con
 , reserved2(*(int *)(sdata+12))
 , reserved3(*(int *)(sdata+16))
 {
+	char const * const start = sdata;
+	size_t const smallest_palette = 24;   // five numbers and a name, with no colours
+
 	sdata += 20;
 
-	size_t const len = strlen(sdata)+1;
-	rifname = new char[len];
-	strcpy(rifname,sdata);
-	sdata += len + 3 &~3;
-	
-	int const pplistsize = *(int *)sdata;
-	sdata += 4;
+	size_t len = 0;
+	rifname = CopyNameFromChunk(start, ssize, sdata, &len);
+	sdata += len + 4 &~3;
+
+	int const pplistsize = ReadListCount(start, sdata, ssize, smallest_palette);
 
 	for (int i = pplistsize; i; --i)
 	{
-		Preset_Palette current(sdata);
+		// colours can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_palette > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		Preset_Palette current(sdata, ssize - (sdata - start));
 		sdata += current.size_chunk();
 		pplist.add_entry(current);
 	}
@@ -891,7 +932,7 @@ void Preset_Palette_Store_Chunk::fill_data_block (char * data_start)
 
 RIF_IMPLEMENT_DYNCREATE("CLRLOOKP",Coloured_Polygons_Lookup_Chunk)
 
-Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Children * parent, const char * sdata, size_t /*ssize*/)
+Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Children * parent, const char * sdata, size_t const ssize)
 : Chunk (parent, "CLRLOOKP"), flags (*((int*)(sdata))),
 	filename(0), table (0)
 {
@@ -900,9 +941,7 @@ Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Child
 
 	if (flags & ChunkCPLUFlag_ExternalFile)
 	{
-		size_t const filename_size = strlen(sdata+32)+1;
-		filename = new char[filename_size];
-		memcpy(filename,sdata+32,filename_size);
+		filename = CopyNameFromChunk(sdata, ssize, sdata+32);
 	}
 	else
 	{
