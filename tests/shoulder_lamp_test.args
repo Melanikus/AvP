@@ -1,0 +1,5 @@
+/std:c++17 /EHsc /MD /J /W3 /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/shoulder_lamp_test.cpp
+3dc/shoulder_lamp.cpp

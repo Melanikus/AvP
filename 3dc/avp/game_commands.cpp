@@ -1,5 +1,10 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS commands
+//   the LAMPFOLLOW command
+//   the LAMPSPOTSIZE and LAMPINTENSITY commands
+//   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
+//   the SHADOWEVENGAP command, which says whether a shadow starts the same distance behind every part of its polygon
 #include "3dc.h"
 #include "console_command.hpp"
 #include "strutil.h"
@@ -335,9 +340,38 @@ void CreateGameSpecificConsoleCommands(void)
 		ShadowsCommand
 	);
 
+	ConsoleCommand::Make
+	(
+		"SHADOWAMBIENT",
+		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
+		ShadowAmbientCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPFOLLOW",
+		"HOW MANY SECONDS THE SHOULDER LAMP TAKES TO CATCH UP WITH THE VIEW, FROM 0 TO 5. 0 STICKS IT TO THE VIEW. ON ITS OWN, SAYS WHAT IT IS",
+		LampFollowCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPSPOTSIZE",
+		"HOW BIG THE SHOULDER LAMP'S SPOT IS, FROM 0.05 TO 0.35. 0.21 IS AS BUILT. NOT IN A NETWORK GAME",
+		LampSpotSizeCommand
+	);
+
+	ConsoleCommand::Make
+	(
+		"LAMPINTENSITY",
+		"HOW STRONG THE SHOULDER LAMP'S SPOT IS, FROM 0.25 TO 2. 1 IS AS BUILT. NOT IN A NETWORK GAME",
+		LampIntensityCommand
+	);
+
 	// Only do anything with -dev, and they say so without it. See view_switches.h.
 	ConsoleCommand::Make("RELIEFFLIP", "SWAPS WHICH OF BLACK AND WHITE IS THE POLYGON'S LEVEL IN A DEPTH MAP, LIVE", ReliefFlipCommand);
 	ConsoleCommand::Make("TILTFLIP", "SWAPS BUMPS AND DENTS IN A NORMAL MAP, LIVE", TiltFlipCommand);
+	ConsoleCommand::Make("SHADOWEVENGAP", "WHETHER A SHADOW STARTS THE SAME DISTANCE BEHIND EVERY PART OF ITS POLYGON: ON OR OFF. ON ITS OWN, SWITCHES IT", ShadowEvenGapCommand);
 	ConsoleCommand::Make("RELIEFDEPTH", "HOW DEEP A DEPTH MAP GOES, AS A FRACTION OF A PICTURE'S WIDTH, FROM 0 TO 0.2", ReliefDepthCommand);
 
 	#ifndef AVP_DEBUG_VERSION 

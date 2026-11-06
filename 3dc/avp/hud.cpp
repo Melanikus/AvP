@@ -5,6 +5,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles read from a save file are kept between 0 and 4095 before a sine or cosine lookup, and the
 //   zoom-level search stops at the last zoom level
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   asks for the marine's shoulder lamp on each frame of the game, and tells it where he's looking
 
 
 /*
@@ -51,6 +53,7 @@
 #include "language.h"
 #include "tables.h"
 #include "assert.h"
+#include "shoulder_lamp.h"
 
 #define DO_PREDATOR_OVERLAY FALSE
 #define DO_ALIEN_OVERLAY FALSE
@@ -266,6 +269,26 @@ void MaintainHUD(void)
 	HandleDecalSystem();
 
 	RenderGrapplingHook();
+
+	// Asking from here means the shoulder lamp can only ever be drawn on a frame of the game itself: menus and films don't come through this function.
+	ShoulderLamp_AskForThisFrame(AvP.PlayerType == I_Marine && playerStatusPtr->IsAlive);
+
+	{
+		// The lamp follows where he's looking. These are the view's three directions, as the world has them, and how far the camera has moved since the last frame, which says if he's been put somewhere new.
+		MATRIXCH const &view = Global_VDB_Ptr->VDB_Mat;
+		double const right[3] = { view.mat11 / 65536.0, view.mat21 / 65536.0, view.mat31 / 65536.0 };
+		double const down[3] = { view.mat12 / 65536.0, view.mat22 / 65536.0, view.mat32 / 65536.0 };
+		double const look[3] = { view.mat13 / 65536.0, view.mat23 / 65536.0, view.mat33 / 65536.0 };
+		static VECTORCH cameraBefore = Global_VDB_Ptr->VDB_World;
+		VECTORCH moved;
+
+		moved.vx = Global_VDB_Ptr->VDB_World.vx - cameraBefore.vx;
+		moved.vy = Global_VDB_Ptr->VDB_World.vy - cameraBefore.vy;
+		moved.vz = Global_VDB_Ptr->VDB_World.vz - cameraBefore.vz;
+		cameraBefore = Global_VDB_Ptr->VDB_World;
+
+		ShoulderLamp_FollowTheView(look, right, down, (double)Approximate3dMagnitude(&moved), (double)NormalFrameTime / 65536.0);
+	}
 
 	gunLayer = true;
 
