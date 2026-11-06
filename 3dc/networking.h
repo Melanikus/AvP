@@ -92,8 +92,9 @@ struct MessageHeader
 Version 0 - Original multiplayer + save patch
 Version 100 - Added pistol,skeeter (and new levels)
 Version 102 - A host answers each client itself, and the game description has the players' names
+Version 103 - Every packet has a checksum, and ENet refuses the kinds of message the game never sends
 */
-const int kMultiplayerVersion = 102; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 103; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;

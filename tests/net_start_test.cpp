@@ -2060,6 +2060,16 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
 	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\tNet_NoteRefused") >= 2, "a game left off the host's list doesn't write before the list");
 
+	// The build itself stops if a message or a level list changes while the version doesn't
+	std::string const versionCheck = ReadSourceFile("3dc/avp/win95/net_version_check.h");
+
+	Check(Has(pldnet, "#include \"net_version_check.h\""), "the build checks the version against the sizes");
+	Check(Has(versionCheck, "static_assert(kMultiplayerVersion == kVersionTheseSizesBelongTo,"), "the version has to be the one the sizes were written down for");
+	Check(Has(versionCheck, "kSizesNow == kSizesAtThatVersion"), "and the sizes have to be those");
+	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
+	Check(Has(versionCheck, "57 * MAX_NO_OF_MULTIPLAYER_EPISODES +") && Has(versionCheck, "58 * MAX_NO_OF_COOPERATIVE_EPISODES;"), "and so are the level lists");
+	Check(Has(versionCheck, "56 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
+
 	// What has to go out before a machine stops playing can't wait for the next turn of the send clock
 	Check(Has(pldnet, "static void NetSendMessagesNow(void)\n{\n\tnetGameData.sendTimer = 0;\n\tNetSendMessages();"), "something urgent doesn't wait for the turn of the clock");
 	Check(Has(pldnet, "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessagesNow();"), "someone saying he's leaving is one");
@@ -2204,7 +2214,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 102;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 103;"), "and an older game can tell this one isn't what it speaks");
 }
 
 // Called last: every message from every test above has been looked at by now, and each of them had a stack under it

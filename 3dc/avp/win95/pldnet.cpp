@@ -24,6 +24,7 @@
 #include "pvisible.h"
 #include "bh_platform_lift.h"
 #include "pldnet.h"
+#include "env_info.h"
 #include "net_checks.h"
 #include "logString.h"
 #include "pldghost.h"
@@ -1089,6 +1090,9 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, true },
 	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, false }
 };
+
+// The build stops here if a message changes while the multiplayer version doesn't. See that file.
+#include "net_version_check.h"
 
 static constexpr bool NetPartRulesAreInOrder()
 {

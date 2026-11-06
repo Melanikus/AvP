@@ -5,6 +5,76 @@
 	],
 	"rows": [
 		{
+			"name": "SOURCE: the build doesn't check the version",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "#include \"net_version_check.h\"\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the version isn't checked against the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "static_assert(kMultiplayerVersion == kVersionTheseSizesBelongTo,",
+					"to": "static_assert(true,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "kSizesNow == kSizesAtThatVersion",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game description isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the multiplayer level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "57 * MAX_NO_OF_MULTIPLAYER_EPISODES +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the co-op level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "58 * MAX_NO_OF_COOPERATIVE_EPISODES;",
+					"to": "0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor how many kinds of message",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "56 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "SOURCE: leaving waits for the clock",
 			"changes": [
 				{
@@ -1199,8 +1269,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 102;",
-					"to": "const int kMultiplayerVersion = 101;"
+					"from": "const int kMultiplayerVersion = 103;",
+					"to": "const int kMultiplayerVersion = 102;"
 				}
 			]
 		},
