@@ -6281,6 +6281,13 @@ static void ProcessNetMsg_PlayerKilled(NETMESSAGE_PLAYERKILLED *messagePtr, NetI
 		return;
 	}
 
+	// The number names the new corpse. A corpse with the number of the player's body would go on being treated as the player's body, by later messages that were never meant for a corpse.
+	if (messagePtr->objectId == GHOST_PLAYEROBJECTID)
+	{
+		Net_NoteRefused("a kill message gave the corpse the number of a player's body");
+		return;
+	}
+
 	/* we have a ghost for this player: remove it if it's an alien */
 	//  if(netGameData.playerData[senderPlayerIndex].characterType==NGCT_Alien)
 	// RemoveGhost(sbPtr);

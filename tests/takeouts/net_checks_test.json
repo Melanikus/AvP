@@ -6,6 +6,26 @@
 	],
 	"rows": [
 		{
+			"name": "an address one past the end counts as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/sound_address.h",
+					"from": "(size_t)(place - first) < bytes",
+					"to": "(size_t)(place - first) <= bytes"
+				}
+			]
+		},
+		{
+			"name": "an address before the start counts as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/sound_address.h",
+					"from": "place >= first && ",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "all reasons share one count",
 			"changes": [
 				{

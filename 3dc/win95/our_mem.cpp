@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   before any memory is freed, a sound still holding an address in it forgets it. See sound_address.h.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   when the computer has no memory left to give, the game now stops with a clear message, instead of carrying
 //   on with nothing and crashing somewhere else; a block can now change size, and a list can be asked for by
@@ -115,6 +117,9 @@ void StopGameIfNewFails(void)
 	signal(SIGABRT, OnAbort);
 }
 
+// In psnd.cpp. A sound may be holding an address inside memory that's about to go.
+extern void Sound_ForgetAddressesInside(const void *start, size_t bytes);
+
 /* Note: Never use AllocMem directly !   */
 /* Instead use AllocateMem() which is a  */
 /* macro defined in mem3dc.h that allows */
@@ -182,7 +187,10 @@ void DeallocMem(void *__ptr)
 	#endif
 
 	if(__ptr)
+	{
+		Sound_ForgetAddressesInside(__ptr, _msize(__ptr));
 		free(__ptr);
+	}
 
 	#if debug
 	else {

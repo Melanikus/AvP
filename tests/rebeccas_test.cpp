@@ -1,5 +1,7 @@
 // Rebecca's test: the first unit test in this repository.
 // Written 2026-11-03 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a stand-in for what the memory code now tells the game's sounds
 //
 // WHAT IT TESTS
 //
@@ -96,6 +98,11 @@ void avp_exit(int code)
 }
 
 void LogErrorStringC(const char *)
+{
+}
+
+// The memory code tells the game's sounds about memory that's about to go. There are no sounds in this test.
+void Sound_ForgetAddressesInside(const void *, size_t)
 {
 }
 

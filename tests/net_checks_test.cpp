@@ -17,6 +17,7 @@
 #include "3dc.h"
 #include "equipment.h"
 #include "net_checks.h"
+#include "avp/sound_address.h"
 
 // The field the number travels in, in all three damage messages (pldnet.h).
 struct AmmunitionField
@@ -295,6 +296,17 @@ static void TestTypedAddresses()
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
 }
 
+static void TestSoundAddresses()
+{
+	int block[4];
+
+	Check(SoundAddressIsInside(&block[0], block, sizeof(block)), "the first number of a block is inside it");
+	Check(SoundAddressIsInside(&block[3], block, sizeof(block)), "and so is the last");
+	Check(!SoundAddressIsInside(&block[3] + 1, block, sizeof(block)), "one past the end isn't");
+	Check(!SoundAddressIsInside(&block[1], &block[2], sizeof(int)), "one before the start isn't");
+	Check(!SoundAddressIsInside(NULL, block, sizeof(block)), "and a sound with no address has nothing to forget");
+}
+
 static void TestCountingRefusals()
 {
 	NetRefusalCounts counts;
@@ -396,6 +408,7 @@ int main()
 {
 	TestWhatGoesOnTheScreen();
 	TestCountingRefusals();
+	TestSoundAddresses();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();
