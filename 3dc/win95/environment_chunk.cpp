@@ -5,6 +5,8 @@
 //   counted lists are measured against their chunks before they're made
 //   a level's paths each need a number of their own
 //   a lift in another level file is no longer one of its children
+//   a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -48,24 +50,14 @@ Children for Enviornment_Data_Chunk :
 
 
 
-BOOL Environment_Data_Chunk::file_equals (HANDLE & /*rif_file*/)
-{
-	return(TRUE);
-}	
+	
 
 Environment_Data_Header_Chunk * Environment_Data_Chunk::get_header()
 {
 	return (Environment_Data_Header_Chunk *) this->lookup_single_child ("ENDTHEAD");
 }	
 
-const char * Environment_Data_Chunk::get_head_id()
-{
-	Environment_Data_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
-}	
+	
 
 void Environment_Data_Chunk::set_lock_user (char * user)
 {
@@ -210,11 +202,10 @@ Sound_Directory_Chunk::Sound_Directory_Chunk(Environment_Data_Chunk* parent,cons
 	strcpy(directory,dir);
 }
 
-Sound_Directory_Chunk::Sound_Directory_Chunk(Chunk_With_Children * const parent, const char* data, size_t const )
+Sound_Directory_Chunk::Sound_Directory_Chunk(Chunk_With_Children * const parent, const char* data, size_t const chunk_bytes)
 :Chunk(parent,"SOUNDDIR")
 {
-	directory=new char[strlen(data)+1];
-	strcpy(directory,data);
+	directory=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 Sound_Directory_Chunk::~Sound_Directory_Chunk()
@@ -250,7 +241,7 @@ Random_Texture_ID_Chunk::Random_Texture_ID_Chunk(Chunk_With_Children* parent,con
 :Chunk(parent,"RANTEXID")
 {
 	char const * const start = data;
-	CHUNK_EXTRACT_STRING(name);
+	CHUNK_EXTRACT_STRING(name,start,size);
 	
 	int type;
 	int const num_types=ReadListCount(start,data,size,sizeof(int));

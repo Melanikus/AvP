@@ -4,6 +4,7 @@
 //   a module's master and slave chunks are only made inside a module's data
 //   counted lists are measured against their chunks before they're made
 //   a waypoint's links have to lead to places in its own list
+//   a name is only read as far as the end of its chunk
 
 #include "chunk_waypoint.hpp"
 
@@ -111,9 +112,9 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 				}
 
 				ModuleLink* ml=&cw->ModLinks[j];
-				ml->module_name=new char[strlen(data)+1];
-				strcpy(ml->module_name,data);
-				data+=(strlen(data)+4)&~3;
+				size_t name_length=0;
+				ml->module_name=CopyNameFromChunk(start,size,data,&name_length);
+				data+=(name_length+4)&~3;
 				ml->flags=*(int*)data;
 				data+=4;
 			}

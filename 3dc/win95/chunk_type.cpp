@@ -3,6 +3,7 @@
 //   is_textured moved here from chunk_load.cpp, because the checks made as a level is read need it too
 //   the texture file names of a shape are copied using their exact measured length, so they always fit
 //   a texture's file name is freed the way it was made, as a list of letters
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #include "chunk.hpp"
 #include <math.h>
@@ -13,15 +14,6 @@
 #define assert(x) GLOBALASSERT(x)
 
 // misc data structures functions
-BOOL operator==(const obinfile &o1, const obinfile &o2)
-{
-	return (&o1 == &o2);
-}
-BOOL operator!=(const obinfile &o1, const obinfile &o2)
-{
-	return (&o1 != &o2);
-}
-
 BOOL operator==(const shpinfile &s1, const shpinfile &s2)
 {
 	return (&s1 == &s2);

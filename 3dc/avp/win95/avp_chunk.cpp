@@ -7,6 +7,7 @@
 //   a generator's weights have to fit their chunk, and are freed the same way they were made
 //   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
 //   a level's generators have to make aliens or marines
+//   a name is only read as far as the end of its chunk
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -64,9 +65,10 @@ size_t AVP_Generator_Chunk::size_chunk ()
 	return(chunk_size);
 }
 
-AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "AVPGENER")
 {
+	char const * const chunk_start = data;
 	location = *((ChunkVectorInt*) data);
 	data += sizeof(ChunkVectorInt);
 		
@@ -91,8 +93,7 @@ AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const ch
 	extra2 = *(unsigned char*)(data);
 	data ++;
 	
-	name = new char [strlen(data) + 1];
-	strcpy (name, data);
+	name = CopyNameFromChunk(chunk_start, chunk_bytes, data);
 }
 
 
@@ -206,12 +207,10 @@ AVP_Generator_Chunk* AVP_Generator_Extra_Data_Chunk::get_generator_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("AVPGENNM",AVP_Generator_Extra_Name_Chunk)
 
-AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 :Chunk(parent,"AVPGENNM")
 {
-	int length=strlen(data);
-	name=new char[length+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * _name)
@@ -453,9 +452,10 @@ size_t AVP_Player_Start_Chunk::size_chunk ()
 //////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("AVPCABLE",AVP_Power_Cable_Chunk)
 
-AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk (parent,"AVPCABLE")
 {
+	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 
@@ -480,16 +480,7 @@ AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const c
 		data+=4;
 	}
 
-	int length=strlen(data);
-	if(length)
-	{
-		name=new char[length+1];
-		strcpy(name,data);	
-	}
-	else
-	{
-		name=0;
-	}
+	name=CopyOptionalNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* _name,ObjectID _id)
@@ -781,9 +772,10 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 }
 
 
-AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t)
+AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t const chunk_bytes)
 :Chunk(parent,"PARGENDA")
 {
+	char const * const chunk_start = data;
 	
 	CHUNK_EXTRACT(type,int)
 	CHUNK_EXTRACT(flags,int)
@@ -797,7 +789,7 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(parent_id,ObjectID)
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkQuat)
-	CHUNK_EXTRACT_STRING(name);
+	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }
 
 AVP_Particle_Generator_Data_Chunk::~AVP_Particle_Generator_Data_Chunk()

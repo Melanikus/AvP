@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of code only the level editor used: the game itself never runs it; added a
 //   check on the object numbers a level file gives
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _obchunk_hpp
 #define _obchunk_hpp 1
@@ -80,8 +81,6 @@ public:
 
 	// functions for the locking functionality
 
-	BOOL file_equals (HANDLE &);
-	const char * get_head_id();
 	void set_lock_user(char *);
 
 	virtual void post_input_processing();

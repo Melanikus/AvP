@@ -68,6 +68,8 @@
 #include "chunk_sprites.hpp"
 #include "chunk_waypoint.hpp"
 #include "path_chunk.hpp"
+#include "chunk_dummy.hpp"
+#include "chunk_fragments.hpp"
 #include <new>
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -2318,7 +2320,7 @@ static void TestPlacedHierarchies()
 		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const chunk(new Placed_Hierarchy_Data_Chunk(&file, atTheWall, size));
 
 		Check(file.error_code == 0, "a placed hierarchy with a 7 letter name is accepted");
-		Check(chunk->name != 0 && strcmp(chunk->name, "abcdefg") == 0, "and its name is copied whole");
+		Check(chunk->name != 0 && memcmp(chunk->name, "abcdefg", 8) == 0, "and its name is copied whole");
 		Check(chunk->hierarchy_index == hierarchyIndex, "and what comes after the name is read from the right place");
 	}
 
@@ -2333,7 +2335,7 @@ static void TestPlacedHierarchies()
 
 		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const chunk(new Placed_Hierarchy_Data_Chunk(&file, atTheWall, 4 + numbersBytes + 4));
 
-		Check(chunk->name != 0 && strcmp(chunk->name, "ab") == 0, "a name stops at its first end marker");
+		Check(chunk->name != 0 && memcmp(chunk->name, "ab", 3) == 0, "a name stops at its first end marker");
 	}
 
 	// That chunk would be refused anyway, because its count can't be right. The one way past that takes a count with no zero byte in it, and a
@@ -2767,7 +2769,7 @@ typedef void (*MakesChunk)(Chunk_With_Children * parent, char const * data, size
 template <class Kind>
 static void MakeChunk(Chunk_With_Children * parent, char const * data, size_t size)
 {
-	std::unique_ptr<Kind> const made(new Kind(parent, data, size));
+	std::unique_ptr<Chunk> const made(new Kind(parent, data, size));
 }
 
 static bool ChunkAccepted(MakesChunk make, char const * bytes, size_t size)
@@ -3536,6 +3538,241 @@ static void TestNumbersUsedAsPlaces()
 	Check(!FramePlacesAccepted(farBelow, 2), "a frame far below the start of its sequence is refused");
 }
 
+// 33b. A name in a level file ends at a zero byte, and the search for it must stop at the end of its chunk. Here there's no zero byte in the chunk or in anything after
+// it, right up to the wall, so a search that doesn't stop runs into the wall and ends the test. flagsAt is where to put a 1, for a chunk that only has a name if a flag says so.
+static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+	memset(atTheWall, 'x', size + SpareAfterChunk);
+
+	if (flagsAt >= 0)
+	{
+		PutNumber(atTheWall, flagsAt, 1);
+	}
+
+	make(&file, atTheWall, size);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// A chunk with a list, where the name is only reached by way of a count: the numbers before it are given here, and the name after them never ends
+static bool AcceptedWithNumbersThenNoEnd(MakesChunk make, int const * numbers, size_t numbersCount, size_t size)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+	memset(atTheWall, 'x', size + SpareAfterChunk);
+	memcpy(atTheWall, numbers, numbersCount * sizeof(int));
+
+	make(&file, atTheWall, size);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// The same, for a chunk that only exists inside other chunks: kinds are the chunks from the outside in, numbers are what the innermost one starts with, and lastBytes is how
+// much it holds in all. Everything after the numbers is letters, right up to the wall.
+static bool AcceptedInsideOtherChunks(MakesChunk make, char const * const * kinds, size_t kindCount, int const * numbers, size_t numbersCount, size_t lastBytes)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const whole = kindCount * ChunkHeaderBytes + lastBytes;
+	char * atTheWall = MemoryEndingAtAWall(whole + SpareAfterChunk);
+	memset(atTheWall, 'x', whole + SpareAfterChunk);
+
+	char * at = atTheWall;
+
+	for (size_t i = 0; i < kindCount; i++)
+	{
+		int const chunkBytes = (int)(whole - i * ChunkHeaderBytes);
+		memcpy(at, kinds[i], 8);
+		memcpy(at + 8, &chunkBytes, sizeof(chunkBytes));
+		at += ChunkHeaderBytes;
+	}
+
+	if (numbersCount)
+	{
+		memcpy(at, numbers, numbersCount * sizeof(int));
+	}
+
+	make(&file, atTheWall, whole);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestNamesStayInTheirChunks()
+{
+	puts("33b. names stay in their chunks");
+
+	// the two helpers themselves
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char const bytes[] = "abc\0xyz";
+		size_t length = 99;
+		std::unique_ptr<char[]> const name(CopyNameFromChunk(bytes, sizeof(bytes), bytes, &length));
+		Check(length == 3 && memcmp(name.get(), "abc", 4) == 0 && file.error_code == 0, "a name is copied up to its zero byte");
+
+		std::unique_ptr<char[]> const onTheLastByte(CopyNameFromChunk(bytes, 4, bytes, &length));
+		Check(length == 3 && memcmp(onTheLastByte.get(), "abc", 4) == 0 && file.error_code == 0, "a zero byte on the chunk's very last byte counts");
+
+		std::unique_ptr<char[]> const oneShort(CopyNameFromChunk(bytes, 3, bytes, &length));
+		Check(oneShort[0] == 0 && length == 0 && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "one past the chunk doesn't, and the file is refused, with an empty name");
+
+		file.error_code = 0;
+		std::unique_ptr<char[]> const nothingLeft(CopyNameFromChunk(bytes, 4, bytes + 4, &length));
+		Check(nothingLeft[0] == 0 && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a name that has to be there, with no room left for it, is refused");
+
+		file.error_code = 0;
+		std::unique_ptr<char[]> const leftOut(CopyOptionalNameFromChunk(bytes, 4, bytes + 4, &length));
+		Check(!leftOut && length == 0 && file.error_code == 0, "one that can be left out, with no room left for it, is just not there");
+
+		std::unique_ptr<char[]> const empty(CopyOptionalNameFromChunk(bytes + 3, 4, bytes + 3, &length));
+		Check(!empty && length == 0 && file.error_code == 0, "and neither is an empty one");
+
+		std::unique_ptr<char[]> const optional(CopyOptionalNameFromChunk(bytes, 4, bytes, &length));
+		Check(optional && length == 3 && memcmp(optional.get(), "abc", 4) == 0, "and one that's there is copied");
+
+		std::unique_ptr<char[]> const noEnd(CopyOptionalNameFromChunk(bytes, 3, bytes, &length));
+		Check(!noEnd && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "but letters with no end are still refused");
+		Parent_File = 0;
+	}
+
+	struct NameRow { MakesChunk make; int flagsAt; char const * what; };
+	NameRow const rows[] =
+	{
+		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused" },
+		{ MakeChunk<AVP_Generator_Extra_Name_Chunk>,              -1, "a generator's other name" },
+		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name" },
+		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name" },
+		{ MakeChunk<AVP_Path_Chunk>,                              -1, "a path's name" },
+		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name" },
+		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,      -1, "an animation sequence's name" },
+		{ MakeChunk<External_Shape_BMPs_Store_Chunk>,             -1, "an outside shape's list of bitmaps" },
+		{ MakeChunk<Bitmap_MD5_Chunk>,                            -1, "a bitmap's check sum names" },
+		{ MakeChunk<Fragment_Type_Data_Chunk>,                    -1, "a fragment type's name" },
+		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name" },
+		{ MakeChunk<Fragment_Type_Sound_Chunk>,                   -1, "a fragment sound's name" },
+		{ MakeChunk<Object_Track_Sound_Chunk>,                    -1, "a track sound's name" },
+		{ MakeChunk<Environment_TLT_Chunk>,                       28, "a lighting table's outside file" },
+		{ MakeChunk<Coloured_Polygons_Lookup_Chunk>,               0, "a colour table's outside file" },
+		{ MakeChunk<RIF_Child_Chunk>,                             -1, "a child file's name" },
+		{ MakeChunk<Preset_Palette_Store_Chunk>,                  -1, "a palette store's file name" },
+		{ MakeChunk<Shape_External_Filename_Chunk>,               -1, "an outside shape's file name" },
+		{ MakeChunk<Shape_External_Object_Name_Chunk>,            -1, "an outside shape's object name" },
+		{ MakeChunk<Shape_Name_Chunk>,                            -1, "a shape's name" },
+		{ MakeChunk<Shape_Fragment_Type_Chunk>,                   -1, "a shape's fragment type" },
+		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name" },
+		{ MakeChunk<Sound_Object_Extra_Name_Chunk>,               -1, "a sound's other name" },
+		{ MakeChunk<Indexed_Sound_Chunk>,                         -1, "an indexed sound's file name" },
+		{ MakeChunk<BMP_Enums_Chunk>,                             -1, "a list of enums' type name" },
+		{ MakeChunk<Sound_Directory_Chunk>,                       -1, "a sound folder's name" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                     -1, "a random texture's name" },
+		{ MakeChunk<Object_Hierarchy_Data_Chunk>,                 -1, "a hierarchy section's object name" },
+		{ MakeChunk<Object_Hierarchy_Name_Chunk>,                 -1, "a hierarchy's name" },
+		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>,  -1, "an alternate shape set's name" },
+		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,        -1, "a shape set collection's name" },
+		{ MakeChunk<RIF_Name_Chunk>,                              -1, "a level's name" },
+		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name" },
+		{ MakeChunk<Dummy_Object_Text_Chunk>,                     -1, "a dummy object's text" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt), rows[i].what);
+	}
+
+	// A list of bitmap names: how many, then four numbers and the name's place in the list, then the name
+	{
+		int const numbers[] = { 1, 0, 0, 0, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Global_BMP_Name_Chunk>, numbers, 6, 40), "a name in a list of bitmaps");
+	}
+
+	// Enums: two numbers, an empty type name, how many, then each one's two numbers and its name
+	{
+		int const numbers[] = { 0, 0, 0, 1, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<BMP_Enums_Chunk>, numbers, 6, 40), "a name in a list of enums");
+	}
+
+	// Matching images: three numbers, how many, then three numbers and an image's four numbers, then its names
+	{
+		int const numbers[] = { 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Matching_Images_Chunk>, numbers, 11, 100), "a name in a list of matching images");
+	}
+
+	// A child file: two numbers and flags, an empty name, a version, an empty file name, how many images, then each one's two numbers and its name
+	{
+		int const numbers[] = { 0, 0, 0, 0, 0, 0, 1, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<RIF_Child_Chunk>, numbers, 9, 52), "a name in a child file's list of images");
+	}
+
+	// A waypoint: how many waypoints, three corners, flags and a spare, no links to other waypoints, one link to a module, then that module's name
+	{
+		int const numbers[] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Module_Waypoint_Chunk>, numbers, 14, 72), "a module's name in a waypoint");
+	}
+
+	// An alternate shape set: its number, an empty name, how many shapes, then each one's old name and new name. 0x00636261 is "abc" and its zero byte.
+	{
+		int const oldName[] = { 0, 0, 1 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, oldName, 3, 28), "a shape's old name in an alternate shape set");
+
+		int const newName[] = { 0, 0, 1, 0x00636261 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, newName, 4, 32), "and its new name");
+	}
+
+	// A game mode's header: flags, three spares and a version, its name, then a list of file names that ends at an empty one
+	{
+		char const * const kinds[] = { "GMODHEAD" };
+
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, 0, 0, 60), "a game mode's name");
+
+		int const nameThenList[] = { 0, 0, 0, 0, 0, 0x00636261 };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, nameThenList, 6, 60), "a name in a game mode's list of files");
+
+		// "abc", then "de" and its zero byte, which is the last byte of the chunk: the list stops at the chunk's end, with nothing wrong with it.
+		// The top byte of the last number, 0x78, is the letter x, and it's the first byte past the chunk. It has to be a letter: a zero there would also stop a list
+		// that never looked for the chunk's end, and this row couldn't tell the two apart.
+		int const allThere[] = { 0, 0, 0, 0, 0, 0x00636261, 0x78006564 };
+		Check(AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, allThere, 7, 27), "a game mode whose list reaches the end of its chunk is accepted");
+	}
+
+	// A shape's header: its numbers, how many objects use it, then their names. The count is the last of the 68 bytes every header has.
+	{
+		char const * const kinds[] = { "SHPHEAD1" };
+		int numbers[ShapeHeaderDataBytes / sizeof(int)] = { 0 };
+		numbers[ShapeHeaderDataBytes / sizeof(int) - 1] = 1;
+
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, kinds, 1, numbers, ShapeHeaderDataBytes / sizeof(int), ShapeHeaderDataBytes + 16), "an object's name in a shape's header");
+	}
+
+	// A morphing shape's parts, which are only made inside the chunk they belong to. A sequence that isn't valid frees itself, so it's made as a level makes it, inside a shape.
+	{
+		char const * const sequence[] = { "ANIMSEQU", "ANISEQDT" };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, sequence, 2, 0, 0, 80), "a morph sequence's name");
+
+		char const * const frame[] = { "ANIMSEQU", "ANIMFRAM", "ANIFRADT" };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, frame, 3, 0, 0, 80), "a morph frame's name");
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -3566,6 +3803,7 @@ int main()
 	TestTextureAnimation();
 	TestGeneratorSettings();
 	TestPlacedHierarchies();
+	TestNamesStayInTheirChunks();
 	TestModuleBoxes();
 	TestStrategies();
 	TestChunksTheGameDoesNotRead();

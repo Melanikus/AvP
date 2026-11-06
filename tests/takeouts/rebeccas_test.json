@@ -64,6 +64,476 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "name = CopyNameFromChunk(chunk_start, chunk_bytes, data);",
+					"to": "name = new char [strlen(data) + 1];\n\tstrcpy (name, data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "name=CopyNameFromChunk(data,chunk_bytes,data);",
+					"to": "int length=strlen(data);\n\tname=new char[length+1];\n\tstrcpy(name,data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: avp_chunk.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "name=CopyOptionalNameFromChunk(chunk_start,chunk_bytes,data);",
+					"to": "int length=strlen(data);\n\tif(length)\n\t{\n\t\tname=new char[length+1];\n\t\tstrcpy(name,data);\t\n\t}\n\telse\n\t{\n\t\tname=0;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "NAMES: path_chunk.cpp PathName reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/path_chunk.cpp",
+					"from": "size_t name_length=0;\n\tPathName=CopyNameFromChunk(start,datasize,data,&name_length);\n\tdata+=(name_length+4)&~3;",
+					"to": "int name_length=strlen(data);\n\tPathName=new char[name_length+1];\n\tstrcpy(PathName,data);\n\tdata+=(name_length+4)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: strategy_chunk.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "size_t length = 0;\n\tname = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
+					"to": "size_t length = strlen(data);\n\tname = new char[length+1];\n\tstrcpy(name, data);\n\tdata += (length+4)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: animation_objects.cpp sequence_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "sequence_name = CopyOptionalNameFromChunk(start, size, data_start);",
+					"to": "if (strlen(data_start))\n\t{\n\t\tsequence_name = new char [strlen(data_start) + 1];\n\t\tstrcpy (sequence_name, data_start);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "NAMES: bitmap_names.cpp row 6 reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "\t\t// BMP_Name measures its name by looking for its end, so that has to be inside the chunk\n\t\tif (NameLengthInChunk(bdata, bsize - (size_t)(bdata - start)) < 0)\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tbreak;\n\t\t}\n\n\t\tBMP_Name bn (bdata);\n",
+					"to": "\t\tBMP_Name bn (bdata);\n"
+				}
+			]
+		},
+		{
+			"name": "NAMES: bitmap_names.cpp rifname reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "size_t l1 = 0, l2 = 0;\n\trifname = CopyNameFromChunk(chunk_start, ssize, sdata, &l1);\n\tl1++;\n\tshapename = CopyNameFromChunk(chunk_start, ssize, sdata+l1, &l2);\n\tl2++;",
+					"to": "unsigned int const l1 = strlen(sdata)+1;\n\trifname = new char [l1];\n\tmemcpy(rifname,sdata,l1);\n\tunsigned int const l2 = strlen(sdata+l1)+1;\n\tshapename = new char [l2];\n\tmemcpy(shapename,sdata+l1,l2);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: bitmap_names.cpp bmpname reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "size_t length = 0;\n\tbmpname = CopyNameFromChunk(chunk_start, chunk_bytes, datablock, &length);\n\tdatablock += length + 1;",
+					"to": "size_t length = strlen(datablock);\n\tbmpname = new char [length+1];\n\tstrcpy(bmpname, datablock);\n\tdatablock += length + 1;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: bitmap_names.cpp rifname reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "rifname = CopyNameFromChunk(chunk_start, chunk_bytes, datablock, &length);\n\tdatablock += length + 1;",
+					"to": "unsigned int const rlen = strlen(datablock)+1;\n\trifname = new char [rlen];\n\tstrcpy(rifname, datablock);\n\tdatablock += rlen;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: bitmap_names.cpp shapename reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "shapename = CopyNameFromChunk(chunk_start, chunk_bytes, datablock);",
+					"to": "unsigned int const slen = strlen(datablock)+1;\n\tshapename = new char [slen];\n\tstrcpy(shapename, datablock);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_fragments.cpp frag_type_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "size_t length = 0;\n\tfrag_type_name = CopyNameFromChunk(data, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
+					"to": "size_t length = strlen(data)+1;\n\tfrag_type_name = new char[length];\n\tstrcpy(frag_type_name,data);\n\tdata += (length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_fragments.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "size_t length = 0;\n\tname = CopyNameFromChunk(data, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
+					"to": "size_t length = strlen(data)+1;\n\tname = new char[length];\n\tstrcpy(name,data);\n\tdata += (length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_fragments.cpp wav_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "wav_name=CopyNameFromChunk(chunk_start,chunk_bytes,data);",
+					"to": "wav_name=new char[strlen(data)+1];\n\tstrcpy(wav_name,data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_object.cpp wav_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "wav_name=CopyNameFromChunk(chunk_start,chunk_bytes,data);",
+					"to": "wav_name=new char[strlen(data)+1];\n\tstrcpy(wav_name,data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "filename = CopyNameFromChunk(sdata, ssize, sdata+32);\n\t}\n\telse ",
+					"to": "size_t const filename_size = strlen(sdata+32)+1;\n\t\tfilename = new char[filename_size];\n\t\tmemcpy(filename,sdata+32,filename_size);\n\t}\n\telse "
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp mode_identifier reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "size_t length = 0;\n\tmode_identifier = CopyNameFromChunk(chunk_start, chunk_bytes, pdata, &length);\n\tpdata += length + 1;\n\n\t// A list of names, which ends at an empty one or at the end of the chunk\n\twhile ((size_t)(pdata - chunk_start) < chunk_bytes && *pdata)\n\t{\n\t\tint const name_length = NameLengthInChunk(pdata, chunk_bytes - (size_t)(pdata - chunk_start));\n\n\t\tif (name_length < 0)\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tbreak;\n\t\t}\n\n\t\trif_files.push_back(pdata);\n\n\t\tpdata += name_length + 1;\n\t}",
+					"to": "mode_identifier = new char[strlen(pdata)+1];\n\n\tstrcpy (mode_identifier, (pdata));\n\n\tpdata += strlen(mode_identifier) + 1;\n\n\twhile (*pdata)\n\t{\n\t\tsize_t len = strlen(pdata)+1;\n\n\t\trif_files.push_back(pdata);\n\n\t\tpdata += len;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp rifname reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "size_t len = 0;\n\trifname = CopyNameFromChunk(start, ssize, sdata, &len);\n\tsdata += len+4 &~3;",
+					"to": "size_t len = strlen(sdata)+1;\n\trifname = new char[len];\n\tstrcpy(rifname,sdata);\n\tsdata += len+3 &~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "filename = CopyNameFromChunk(start, ssize, sdata, &len);\n\tsdata += len+4 &~3;",
+					"to": "len = strlen(sdata)+1;\n\tfilename = new char[len];\n\tstrcpy(filename,sdata);\n\tsdata += len+3 &~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "temp.filename = CopyNameFromChunk(start, ssize, sdata, &len);\n\t\tsdata += len+4 &~3;",
+					"to": "len = strlen(sdata)+1;\n\t\ttemp.filename = new char[len];\n\t\tstrcpy(temp.filename,sdata);\n\t\tsdata += len+3 &~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp rifname reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "size_t len = 0;\n\trifname = CopyNameFromChunk(start, ssize, sdata, &len);\n\tsdata += len + 4 &~3;",
+					"to": "size_t const len = strlen(sdata)+1;\n\trifname = new char[len];\n\tstrcpy(rifname,sdata);\n\tsdata += len + 3 &~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_palette.cpp filename reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "filename = CopyNameFromChunk(sdata, ssize, sdata+32);\n\t}\n\telse ",
+					"to": "size_t const filename_size = strlen(sdata+32)+1;\n\t\tfilename = new char[filename_size];\n\t\tmemcpy(filename,sdata+32,filename_size);\n\t}\n\telse "
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp obj_store reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "size_t length = 0;\n\t\tobj_store = CopyNameFromChunk(start, hsize, hdata, &length);\n\t\tobject_names_store.add_entry(obj_store);\n\t\thdata += length + 1;",
+					"to": "obj_store = new char [strlen (hdata) +1];\n\t\tstrcpy (obj_store, (hdata));\n\t\tobject_names_store.add_entry(obj_store);\n\t\thdata += (strlen (hdata)+1);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp file_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "file_name = CopyNameFromChunk(chunk_start, chunk_bytes, fdata);",
+					"to": "file_name = new char [strlen(fdata)+1];\n\tstrcpy (file_name, fdata);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp object_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "object_name = CopyNameFromChunk(chunk_start, chunk_bytes, data);",
+					"to": "object_name = new char [strlen(data)+1];\n\tstrcpy (object_name, data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp shape_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "shape_name = CopyNameFromChunk(sndata, chunk_bytes, sndata);",
+					"to": "shape_name = new char [strlen(sndata)+1];\n\tstrcpy (shape_name, sndata);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp frag_type_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "size_t length=0;\n\tfrag_type_name=CopyNameFromChunk(data,chunk_bytes,data,&length);\n\tdata+=(length+4)&~3;",
+					"to": "int length=strlen(data)+1;\n\tfrag_type_name=new char[length];\n\tstrcpy(frag_type_name,data);\n\tdata+=(length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "name=CopyNameFromChunk(chunk_start,chunk_bytes,data);\n}\n\nv",
+					"to": "name=new char[strlen(data)+1];\n\tstrcpy(name,data);\n}\n\nv"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_shape.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "name=CopyNameFromChunk(chunk_start,chunk_bytes,data);\n}\n\nv",
+					"to": "name=new char[strlen(data)+1];\n\tstrcpy(name,data);\n}\n\nv"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_sound.cpp snd_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "size_t length = 0;\n\tsnd_name = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);\n\tdata += length + 1;\n\twav_name = CopyOptionalNameFromChunk(chunk_start, chunk_bytes, data);",
+					"to": "snd_name = new char [strlen (data) + 1];\n\tstrcpy (snd_name, data);\n\tdata += strlen (data) + 1;\n\tif (strlen(data))\n\t{\n\t\twav_name = new char [strlen (data) + 1];\n\t\tstrcpy (wav_name, data);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_sound.cpp name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "name=CopyNameFromChunk(data,chunk_bytes,data);",
+					"to": "int length=strlen(data);\n\tname=new char[length+1];\n\tstrcpy(name,data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: chunk_waypoint.cpp module_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_waypoint.cpp",
+					"from": "size_t name_length=0;\n\t\t\t\tml->module_name=CopyNameFromChunk(start,size,data,&name_length);\n\t\t\t\tdata+=(name_length+4)&~3;",
+					"to": "ml->module_name=new char[strlen(data)+1];\n\t\t\t\tstrcpy(ml->module_name,data);\n\t\t\t\tdata+=(strlen(data)+4)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: enumsch.cpp ctype reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/enumsch.cpp",
+					"from": "size_t len = 0;\n\tctype = CopyOptionalNameFromChunk(start, ssize, sdata, &len);\n\n\tsdata += len + 4 &~3;",
+					"to": "const size_t len = strlen(sdata)+1;\n\n\tif (len>1)\n\t{\n\t\tctype = new char[len];\n\t\tstrcpy(ctype,sdata);\n\t}\n\n\tsdata += len + 3 &~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: enumsch.cpp row 33 reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/enumsch.cpp",
+					"from": "\t\t// An enum measures its name by looking for its end, 8 bytes in, so that has to be inside the chunk\n\t\tif (NameLengthInChunk(sdata + 8, ssize - ((size_t)(sdata - start) + 8)) < 0)\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t\t\tbreak;\n\t\t}\n\n\t\tEnum_Constant current(sdata);\n",
+					"to": "\t\tEnum_Constant current(sdata);\n"
+				}
+			]
+		},
+		{
+			"name": "NAMES: environment_chunk.cpp directory reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "directory=CopyNameFromChunk(data,chunk_bytes,data);",
+					"to": "directory=new char[strlen(data)+1];\n\tstrcpy(directory,data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp ob_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "ob_name = CopyOptionalNameFromChunk(start, size, data_start);",
+					"to": "if (strlen(data_start))\n\t{\n\t\tob_name = new char [strlen(data_start) + 1];\n\t\tstrcpy (ob_name, data_start);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp hierarchy_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "hierarchy_name = CopyNameFromChunk(data, chunk_bytes, data);",
+					"to": "hierarchy_name = new char [strlen(data)+1];\n\tstrcpy (hierarchy_name, data);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp Shape_Set_Name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "size_t name_length=0;\n\tShape_Set_Name=CopyNameFromChunk(start,size,data,&name_length);\n\tdata+=(name_length+4)&~3;",
+					"to": "size_t name_length=strlen(data);\n\tShape_Set_Name=new char[name_length+1];\n\tstrcpy(Shape_Set_Name,data);\n\tdata+=(name_length+4)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp old_object_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);\n\t\tdata+=(name_length+4)&~3;",
+					"to": "name_length=strlen(data)+1;\n\t\trsd->old_object_name=new char[name_length];\n\t\tstrcpy(rsd->old_object_name,data);\n\t\tdata+=(name_length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp new_object_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "rsd->new_object_name=CopyNameFromChunk(start,size,data,&name_length);\n\t\tdata+=(name_length+4)&~3;",
+					"to": "name_length=strlen(data)+1;\n\t\trsd->new_object_name=new char[name_length];\n\t\tstrcpy(rsd->new_object_name,data);\n\t\tdata+=(name_length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: hierarchy_chunk.cpp Set_Collection_Name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "size_t name_length=0;\n\tSet_Collection_Name=CopyNameFromChunk(start,size,data,&name_length);\n\tdata+=(name_length+4)&~3;",
+					"to": "int name_length=strlen(data)+1;\n\tSet_Collection_Name=new char[name_length];\n\tstrcpy(Set_Collection_Name,data);\n\tdata+=(name_length+3)&~3;"
+				}
+			]
+		},
+		{
+			"name": "NAMES: mishchnk.cpp rif_name reads on past its chunk",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "rif_name = CopyNameFromChunk(rdata, chunk_bytes, rdata);",
+					"to": "rif_name = new char [strlen(rdata)+1];\n\tstrcpy (rif_name, rdata);"
+				}
+			]
+		},
+		{
+			"name": "NAMES: a name with no end marker is let through",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "\tif (found < 0)\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\t}\n\n\tsize_t const bytes",
+					"to": "\tsize_t const bytes"
+				}
+			]
+		},
+		{
+			"name": "NAMES: the images' names aren't asked about",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "if (!MatchingImagesEndInChunk(datablock, size - (size_t)(datablock - datastart)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NAMES: a list of bitmap names isn't asked about",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "if (NameLengthInChunk(bdata, bsize - (size_t)(bdata - start)) < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NAMES: a list of enums isn't asked about",
+			"changes": [
+				{
+					"file": "3dc/win95/enumsch.cpp",
+					"from": "if (NameLengthInChunk(sdata + 8, ssize - ((size_t)(sdata - start) + 8)) < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NAMES: a game mode's list of files isn't asked about",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "while ((size_t)(pdata - chunk_start) < chunk_bytes && *pdata)",
+					"to": "while (*pdata)"
+				}
+			]
 		}
 	]
 }

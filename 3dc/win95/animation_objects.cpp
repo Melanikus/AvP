@@ -3,6 +3,7 @@
 //   removed code only the level editor used: the game itself never runs it
 //   counted lists are measured against their chunks before they're made
 //   a sequence checks that each of its frames has a place of its own
+//   a name is only read as far as the end of its chunk
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -186,11 +187,7 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 		data_start += 4;
 	}
 
-	if (strlen(data_start))
-	{
-		sequence_name = new char [strlen(data_start) + 1];
-		strcpy (sequence_name, data_start);
-	}
+	sequence_name = CopyOptionalNameFromChunk(start, size, data_start);
 }
 
 Object_Animation_Sequence_Header_Chunk * Object_Animation_Sequence_Chunk::get_header()

@@ -4,6 +4,7 @@
 //   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
 //   a message's number has to be a place in the table of level messages
 //   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
+//   a name is only read as far as the end of its chunk
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -292,17 +293,17 @@ Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Chil
 	CalculateID();
 }
 
-Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"VOBJPROP")
 {
+	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 	size=*(int*)data;
 	data+=sizeof(int);
 	
-	size_t length = strlen(data);
-	name = new char[length+1];
-	strcpy(name, data);
+	size_t length = 0;
+	name = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);
 	data += (length+4)&~3;
 	
 	ID = *(ObjectID*)data;

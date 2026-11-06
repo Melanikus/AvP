@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
 //   a level's paths each need a number of their own
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _envchunk_hpp
 #define _envchunk_hpp 1
@@ -24,8 +25,6 @@ public:
 
 	// functions for the locking functionality
 
-	BOOL file_equals (HANDLE &);
-	const char * get_head_id();
 	void set_lock_user(char *);
 	
 	void post_input_processing();

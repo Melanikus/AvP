@@ -3,6 +3,7 @@
 //   text is copied using its exact measured length, so it always fits; a level with a hierarchy section that
 //   has no name is refused
 //   counted lists are measured against their chunks before they're made
+//   a name is only read as far as the end of its chunk
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -155,11 +156,7 @@ Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * 
 		data_start += 4;
 	}
 	
-	if (strlen(data_start))
-	{
-		ob_name = new char [strlen(data_start) + 1];
-		strcpy (ob_name, data_start);
-	}
+	ob_name = CopyOptionalNameFromChunk(start, size, data_start);
 }
 
 void Object_Hierarchy_Data_Chunk::post_input_processing ()
@@ -235,11 +232,10 @@ void Object_Hierarchy_Name_Chunk::fill_data_block (char *data_start)
 	
 }
 
-Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * parent, const char * data, size_t /*ssize*/)
+Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "OBHIERNM")
 {
-	hierarchy_name = new char [strlen(data)+1];
-	strcpy (hierarchy_name, data);
+	hierarchy_name = CopyNameFromChunk(data, chunk_bytes, data);
 }
 
 
@@ -294,10 +290,9 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 	Shape_Set_Num=*(int*)data;
 	data+=4;
 	
-	int name_length=strlen(data)+1;
-	Shape_Set_Name=new char[name_length];
-	strcpy(Shape_Set_Name,data);
-	data+=(name_length+3)&~3;
+	size_t name_length=0;
+	Shape_Set_Name=CopyNameFromChunk(start,size,data,&name_length);
+	data+=(name_length+4)&~3;
 
 	// two names, which take at least 4 bytes each
 	size_t const smallest_entry=8;
@@ -314,15 +309,11 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
-		name_length=strlen(data)+1;
-		rsd->old_object_name=new char[name_length];
-		strcpy(rsd->old_object_name,data);
-		data+=(name_length+3)&~3;
+		rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);
+		data+=(name_length+4)&~3;
 
-		name_length=strlen(data)+1;
-		rsd->new_object_name=new char[name_length];
-		strcpy(rsd->new_object_name,data);
-		data+=(name_length+3)&~3;
+		rsd->new_object_name=CopyNameFromChunk(start,size,data,&name_length);
+		data+=(name_length+4)&~3;
 
 		Replaced_Shape_List.add_entry(rsd);	
 	}
@@ -424,10 +415,9 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 	Set_Collection_Num=*(int*)data;
 	data+=4;
 	
-	int name_length=strlen(data)+1;
-	Set_Collection_Name=new char[name_length];
-	strcpy(Set_Collection_Name,data);
-	data+=(name_length+3)&~3;
+	size_t name_length=0;
+	Set_Collection_Name=CopyNameFromChunk(start,size,data,&name_length);
+	data+=(name_length+4)&~3;
 
 	int list_length=ReadListCount(start,data,size,sizeof(int));
 

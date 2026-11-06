@@ -1,6 +1,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a path's list of points is measured against its chunk before it's made
 //   a path's number has to be a place in the list of paths
+//   a name is only read as far as the end of its chunk
 
 #include "path_chunk.hpp"
 
@@ -23,9 +24,8 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size
 :Chunk(parent,"AVPPATH2")
 {
 	char const * const start = data;
-	int name_length=strlen(data);
-	PathName=new char[name_length+1];
-	strcpy(PathName,data);
+	size_t name_length=0;
+	PathName=CopyNameFromChunk(start,datasize,data,&name_length);
 	data+=(name_length+4)&~3;
 	
 	PathID=*(int*)data;

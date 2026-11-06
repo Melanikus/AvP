@@ -3,6 +3,7 @@
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
+//   a name is only read as far as the end of its chunk
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -42,9 +43,10 @@ Sound_Object_Chunk::~Sound_Object_Chunk()
 	delete[] wav_name;
 }
 
-Sound_Object_Chunk::Sound_Object_Chunk (Chunk_With_Children * parent, const char * data, size_t /*ssize*/)
+Sound_Object_Chunk::Sound_Object_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "SOUNDOB2"), snd_name (0), wav_name (0)
 {
+	char const * const chunk_start = data;
 	position = *((ChunkVectorInt *) data);
 	data += sizeof(ChunkVectorInt);
 
@@ -62,14 +64,10 @@ Sound_Object_Chunk::Sound_Object_Chunk (Chunk_With_Children * parent, const char
 	data += 4;
 	pad3 = *((int *)data);
 	data += 4;
-	snd_name = new char [strlen (data) + 1];
-	strcpy (snd_name, data);
-	data += strlen (data) + 1;
-	if (strlen(data))
-	{
-		wav_name = new char [strlen (data) + 1];
-		strcpy (wav_name, data);
-	}
+	size_t length = 0;
+	snd_name = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);
+	data += length + 1;
+	wav_name = CopyOptionalNameFromChunk(chunk_start, chunk_bytes, data);
 }
 
 void Sound_Object_Chunk::fill_data_block ( char * data_start)
@@ -195,12 +193,10 @@ Sound_Object_Chunk* Sound_Object_Extra_Data_Chunk::get_sound_chunk()
 /////////////////////////////////////////////////////////////////////////////////////
 RIF_IMPLEMENT_DYNCREATE("SOUNDNAM",Sound_Object_Extra_Name_Chunk)
 
-Sound_Object_Extra_Name_Chunk::Sound_Object_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t /*size*/)
+Sound_Object_Extra_Name_Chunk::Sound_Object_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 :Chunk(parent,"SOUNDNAM")
 {
-	int length=strlen(data);
-	name=new char[length+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 Sound_Object_Extra_Name_Chunk::~Sound_Object_Extra_Name_Chunk()
@@ -233,7 +229,7 @@ Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char*
 {
 	char const * const start = data;
 	CHUNK_EXTRACT(index,int)
-	CHUNK_EXTRACT_STRING(wav_name)
+	CHUNK_EXTRACT_STRING(wav_name,start,size)
 	CHUNK_EXTRACT(inner_range,int)
 	CHUNK_EXTRACT(outer_range,int)
 	CHUNK_EXTRACT(max_volume,int)
