@@ -27,6 +27,9 @@
 //   does nothing;
 //   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
 //   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a system message with no server to send it to fails, and leaving a game forgets the server
+//   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -229,10 +232,66 @@ static void Net_AddSession(SessionDescription &session)
 	NumberOfSessionsFound++;
 }
 
+// THE SOCKET FOR FINDING GAMES. Other machines on the network can send to it, so it's only open while it has a job: for the few seconds after a player asks for the list of games, and while hosting, so that
+// others can find this game. A game doing neither has nothing open on any network. Gives back whether it's open.
+static bool OpenDiscoverySocket()
+{
+	if (ENET_SOCKET_NULL != broadcastSocket)
+	{
+		return true;
+	}
+
+	broadcastSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+
+	if (ENET_SOCKET_NULL == broadcastSocket)
+	{
+		Con_PrintError("OpenDiscoverySocket - Couldn't create broadcast socket");
+		return false;
+	}
+
+	enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_NONBLOCK,  1);
+	enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_BROADCAST, 1);
+
+	ENetAddress thisHost;
+	thisHost.host = ENET_HOST_ANY;
+	thisHost.port = broadcastPort;
+
+	if (enet_socket_bind(broadcastSocket, &thisHost) < 0)
+	{
+		Con_PrintError("OpenDiscoverySocket - Couldn't bind broadcast socket");
+		enet_socket_destroy(broadcastSocket);
+		broadcastSocket = ENET_SOCKET_NULL;
+		return false;
+	}
+
+	return true;
+}
+
+static void CloseDiscoverySocket()
+{
+	if (ENET_SOCKET_NULL != broadcastSocket)
+	{
+		enet_socket_destroy(broadcastSocket);
+		broadcastSocket = ENET_SOCKET_NULL;
+	}
+}
+
+// The search's time is up, or the player has left the page. A host keeps the socket, because that's how others find its game.
+void Net_StopSearchingForSessions()
+{
+	sessionCheckTimer = 0;
+
+	if (AvP.Network != I_Host)
+	{
+		CloseDiscoverySocket();
+	}
+}
+
 bool Net_UpdateSessionList(int &SelectedItem)
 {
-	if (timeGetTime() - sessionCheckTimer >= sessionCheckTimeout) {
-		sessionCheckTimer = 0;
+	if (sessionCheckTimer == 0 || timeGetTime() - sessionCheckTimer >= sessionCheckTimeout)
+	{
+		Net_StopSearchingForSessions();
 		return false;
 	}
 
@@ -347,23 +406,7 @@ NetResult Net_Initialise()
 	incomingBandwidth = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
 	outgoingBandwidth = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
 
-	broadcastSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
-	if (ENET_SOCKET_NULL == broadcastSocket) {
-		Con_PrintError("Net_Initialise - Couldn't create broadcast socket");
-	}
-	else {
-		enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_NONBLOCK,  1);
-		enet_socket_set_option(broadcastSocket, ENET_SOCKOPT_BROADCAST, 1);
-
-		ENetAddress thisHost;
-		thisHost.host = ENET_HOST_ANY;
-		thisHost.port = broadcastPort;
-		if (enet_socket_bind(broadcastSocket, &thisHost) < 0) {
-			Con_PrintError("Net_Initialise - Couldn't bind broadcast socket");
-			enet_socket_destroy(broadcastSocket);
-			broadcastSocket = ENET_SOCKET_NULL;
-		}
-	}
+	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network. See OpenDiscoverySocket.
 
 	// register console commands
 	Con_AddCommand("connect", Net_ConnectToAddress);
@@ -434,9 +477,13 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	// are we already connected?
 	if (host)
 	{
-		// TODO
-		Con_PrintError("already connected to something!");
+		Con_PrintError("already connected to something, so that's being closed first");
+		enet_host_destroy(host);
+		host = NULL;
 	}
+
+	// A host has no server to send to. Whatever was here belonged to the last game.
+	ServerPeer = NULL;
 
 	int maxPlayers = DetermineAvailableCharacterTypes(false);
 	if (maxPlayers < 1) maxPlayers = 1;
@@ -463,6 +510,9 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			// no packet the game sends is larger than its message buffer (Net_Send builds each one in
 			// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
 			host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
+
+			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
+			OpenDiscoverySocket();
 
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
@@ -522,18 +572,15 @@ void Net_Disconnect()
 	destroyPlayer.ID   = AvPNetID;
 	destroyPlayer.type = NET_PLAYERTYPE_PLAYER;
 
-	if (AvP.Network != I_Host) // don't do this if this is the host
+	// Only a client has a server to tell, and this also runs from the console's disconnect command, in a game that isn't on any network
+	if (AvP.Network != I_Host && ServerPeer)
 	{
 		// TODO - from and to IDs
 		if (Net_SendSystemMessage(NET_DESTROYPLAYERORGROUP, 0, 0, &destroyPlayer, sizeof(DestroyPlayerOrGroup)) != NET_OK)
 		{
+			// Carry on: whether or not the server hears about it, this is still leaving
 			Con_PrintError("Net_Disconnect - Problem sending destroy player system message!");
-			return; // what do we do in this case?
 		}
-	}
-	else
-	{
-		// DPSYS_HOST or DPSYS_SESSIONLOST ?
 	}
 
 	if (host)
@@ -542,8 +589,11 @@ void Net_Disconnect()
 		host = NULL;
 	}
 
-	enet_socket_destroy(broadcastSocket);
-	return;
+	// The ENet host owned this, and has just freed it
+	ServerPeer = NULL;
+
+	sessionCheckTimer = 0;
+	CloseDiscoverySocket();
 }
 
 uint32_t Net_JoinGame()
@@ -576,6 +626,12 @@ int Net_InitLobbiedGame()
 
 static void Net_CheckForSessionRequest()
 {
+	// It couldn't be opened, so others can't find this game, and anyone with its address can still join
+	if (ENET_SOCKET_NULL == broadcastSocket)
+	{
+		return;
+	}
+
 	enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
 
 	while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
@@ -723,10 +779,20 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 // used to send a message to the server only
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize)
 { 
-	if (!ServerPeer) {
-		printf("ServerPeer is NULL! tring to send message type: %s\n", Net_MessageTypeToString(messageType));
+	// Only a client has a server to send to. This can come up once for each message that arrives, so the log only says so now and then.
+	if (!ServerPeer)
+	{
+		static unsigned long long nobodyToSendTo = 0;
+
+		if (LogThisDrop(nobodyToSendTo))
+		{
+			std::stringstream sstream;
+			sstream << "Net_SendSystemMessage - no server to send " << Net_MessageTypeToString(messageType) << " to (" << nobodyToSendTo << " so far)";
+			Con_PrintError(sstream.str());
+		}
+
+		return NET_FAIL;
 	}
-	assert(ServerPeer);
 
 	// create a new header and copy it into the packet buffer
 	MessageHeader newMessageHeader;
@@ -823,6 +889,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		enet_host_destroy(host);
 		host = NULL;
 	}
+
+	// The ENet host owned this, and has just freed it
+	ServerPeer = NULL;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -934,8 +1003,8 @@ void Net_FindAvPSessions()
 		return;
 	}
 
-	if (ENET_SOCKET_NULL == broadcastSocket) {
-		sessionCheckTimer = 0;
+	if (!OpenDiscoverySocket())
+	{
 		return;
 	}
 
@@ -964,6 +1033,7 @@ void Net_FindAvPSessions()
 		}
 		else if (0 > ret) {
 			Con_PrintError("Couldn't send broadcast packet");
+			Net_StopSearchingForSessions();
 			return;
 		}
 		else {
