@@ -469,9 +469,9 @@ void MakeQueenNear(STRATEGYBLOCK *sbPtr)
 	tempModule.m_dptr=NULL;
 	AllocateModuleObject(&tempModule); 
 	dPtr = tempModule.m_dptr;
-	if(dPtr==NULL) {
-		GLOBALASSERT(0);
-	}
+
+	// The game can run out of room for things to draw. Like every other NPC, she stays far and it tries again next frame.
+	if(dPtr==NULL) return;
 		
 	sbPtr->SBdptr = dPtr;
 	dPtr->ObStrategyBlock = sbPtr;

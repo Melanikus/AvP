@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a xenoborg that has just been killed no longer has its freed block read and written
 /* Patrick 4/7/97 ----------------------------------------------------
   Source file for Xenoborg AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -1128,6 +1130,8 @@ void XenoborgIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
 		if (xenoStatusPointer->behaviourState!=XS_Dying) {
 			CurrentGameStats_CreatureKilled(sbPtr,NULL);
 			KillXeno(sbPtr,wounds,damage,multiple,incoming);
+			/* KillXeno can free this xenoborg's block, so nothing below may read it */
+			return;
 		}
 	}
 
