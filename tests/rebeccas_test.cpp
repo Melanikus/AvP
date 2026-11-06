@@ -3139,10 +3139,10 @@ static void TestCountedLists()
 
 	// The rows above use up a list's room with a long name. A name can't be read past the end of its chunk any more, so reading the name would refuse those files by itself,
 	// and they can't show that a list's own check is there at all. In these rows every name does end inside the chunk, and nothing else is wrong. The last entry just has less
-	// room than any entry takes, so the list's own check is the only thing that can refuse it. Without that check, the rest of the entry would be read from past the chunk's end.
+	// room than any entry takes. Where a list has a check of its own, it's the only thing that can refuse these. Without it, the rest of the entry would be read from past the chunk's end.
 	{
 		// Each entry here is two names. The first takes 12 bytes, which leaves 5 of the 17 for the second. Its two empty names start 4 bytes apart, so they fit in those 5, and
-		// the smallest entry takes 8.
+		// the smallest entry takes 8. This list has no check of its own: the numbers read after it are what refuse this.
 		size_t const firstNameAt = 12;
 
 		memset(bytes, 0, sizeof(bytes));
@@ -3151,6 +3151,7 @@ static void TestCountedLists()
 		Check(!ChunkAccepted(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, bytes, firstNameAt + 17), "a shape set's last entry with too little room is refused");
 
 		// One waypoint with two modules, each a name and a number. The first takes 12 bytes, which leaves 4 of the 16 for the second: enough for its name, and none for its number.
+		// This list has no check of its own either: reading that number is what refuses this.
 		size_t const modulesAt = sizeof(int) + 44 + sizeof(int);
 		size_t const firstModuleAt = modulesAt + sizeof(int);
 

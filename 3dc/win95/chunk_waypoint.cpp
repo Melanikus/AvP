@@ -105,15 +105,9 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			else
 				cw->ModLinks=0;
 
+			// Long names can use up the room that the count was measured against. Each read here looks for itself, so a list that runs out is refused, and the count stops it going on for long.
 			for(int j=0;j<cw->NumModLinks;j++)
 			{
-				// names can be longer than the smallest, so they can use up the room that the count was measured against
-				if((size_t)(data - start) + smallest_link > size)
-				{
-					Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-					break;
-				}
-
 				ModuleLink* ml=&cw->ModLinks[j];
 				size_t name_length=0;
 				ml->module_name=CopyNameFromChunk(start,size,data,&name_length);

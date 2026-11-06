@@ -18,7 +18,7 @@ struct WaypointLink
 
 struct ModuleLink
 {
-	// A file's list can stop early, and the links it didn't reach still get freed, so each starts with nothing to free.
+	// Each starts with nothing to free, until a name from the file is copied into it.
 	ModuleLink() : module_name(0), flags(0) {}
 	~ModuleLink();
 

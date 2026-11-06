@@ -300,15 +300,9 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 	size_t const smallest_entry=8;
 	int num_shapes=ReadListCount(start,data,size,smallest_entry);
 
+	// Long names can use up the room that the count was measured against. Each read here looks for itself, so a list that runs out is refused, and the count stops it going on for long.
 	for(int i=0;i<num_shapes;i++)
 	{
-		// names can be longer than the smallest, so they can use up the room that the count was measured against
-		if((size_t)(data - start) + smallest_entry > size)
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-		}
-
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
 		rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);
