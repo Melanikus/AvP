@@ -1,0 +1,118 @@
+// The marine's shoulder lamp, like the small spotlights the marines wear on the shoulder in the film Aliens. See 3dc/shoulder_lamp.h.
+// Written 2026-11-05 by Melanikus for the AvP port.
+//
+// It's drawn over the finished picture, and works out from nothing but a pixel's place on the screen how much of the lamp falls there. There are two parts, and they do different things:
+// - The spot: a soft round pool in the middle of the screen, where the light lands. Only the spot lights anything. It brightens what's already in the picture, which works in every rendering mode, but anything times black is black. So it also adds
+//   each wall's own colour, read from the surface pictures, and that's what lights up a dark room. In Gouraud those pictures are drawn just for the lamp. There's also a little glow.
+// - The cone: a long soft beam coming in from the right of the screen, where his right shoulder would be, and widening until it reaches the spot. It's only a faint haze of light in the air. It lights nothing, and shows nothing of what's behind it.
+//   The user asked for that after seeing a version where the whole cone lit the walls: "looking through the cone gives you nightvision". In a pitch-dark room you should see a dim beam leading to one lit circle, and everything else stays black.
+// DrawShoulderLamp in d3d_render.cpp says how each of these is blended.
+//
+// WHY THE CONE LOOKS LIKE A CONE. The user judged two versions side by side, and this is what they liked, so please keep it. The look is saved as commit 9f7da0f, on branch lamp-look-bottom-right. What made it a cone with a direction and not a circle was:
+// - One shape, not two. The width grows steadily along the line, from 0.04 to 0.34 of the screen's height in that version, and the far end is simply where it stops. Its widest was over 8 times its narrowest. A version that didn't widen much would read as a tube.
+// - It's long. The line was about 0.87 of the screen's height, and it starts off the edge of the screen, so you never see where it begins.
+// - Its edge is very soft: the slope covered 60% of the way in. At 12% it looked like a mask.
+// - It gets brighter along its length, from 0.3 at the shoulder to 1 at the far end, which is what says which way the light is going.
+
+// THIS SHADER IS FULL. It takes 63 of the 64 sums shader model 2 allows, with both the game's own compiler and the newest. A number that used to be fixed here costs more when it comes from the
+// game, because the compiler can't work it out beforehand. So measure before adding anything: tests/shader_test.cpp is the one that counts.
+//
+// THIS GOES WITH THE GAME. It reads the numbers in Spot, so a game too old to send them draws no spot at all. Copy this file and the exe together.
+//
+// ---- HOW IT LOOKS. All of it is these numbers. The game reads this file as it starts, so changing one needs no rebuild, only a restart.
+// Places on the screen go from (0, 0) at the top left to (1, 1) at the bottom right. Sizes are parts of the screen's height.
+
+// Where the cone starts: just off the right of the screen, three quarters of the way up.
+static const float2 kShoulder = float2(1.05f, 0.25f);
+
+// Where it's aimed, and so where the spot is: the middle of the screen, which is what he's looking at.
+static const float2 kAim = float2(0.50f, 0.50f);
+
+// THE SPOT'S SIZE AS BUILT: how far it reaches from its middle, unless the LAMPSPOTSIZE command says otherwise. The spot's edges are worked out for this size, and a different one
+// is the same shape seen nearer or further. This has to be the same number as kShoulderLampSpotSize in shoulder_lamp.h, which is where a change has to go as well.
+static const float kSizeAtFarEnd = 0.21f;
+
+// How far the cone reaches from its line, where it leaves the shoulder.
+static const float kSizeAtShoulder = 0.02f;
+
+// How much of the spot's and the cone's edge is a soft slope, from 0 for a hard line to 1 for soft all the way in. The saved look was 0.6.
+static const float kEdgeSoftness = 0.48f;
+
+// How big the spot's brighter middle is, as a part of the spot's size, and how much of its light is in that middle, from 0 to 1. The saved look was 0.55 and 0.5.
+static const float kMiddleSize = 0.55f;
+static const float kLightInTheMiddle = 0.5f;
+
+// THE CONE'S BRIGHTNESS: the haze it adds to the picture, as a colour from 0 to 1, where it's strongest. It can't show anything of what's behind it, whatever this is.
+static const float3 kHaze = float3(0.040f, 0.037f, 0.030f);
+
+// How bright the cone is where it leaves the shoulder, where its far end is 1. The saved look was 0.3.
+static const float kBrightnessAtShoulder = 0.3f;
+
+// How much each brightening adds to what's already there in the spot, for red, green and blue. 1 is double, and it brightens twice. The saved look was 1, 0.92, 0.78.
+static const float3 kBrighten = float3(1.0f, 0.92f, 0.78f);
+
+// The little glow that's added in the spot, as a colour from 0 to 1. The saved look was 0.026, 0.024, 0.019.
+static const float3 kGlow = float3(0.026f, 0.024f, 0.019f);
+
+// How much of a wall's own colour the spot shows, where it's strongest and the wall is close. 1 shows the wall as bright as its picture.
+static const float3 kOnWalls = float3(1.1f, 1.02f, 0.88f);
+
+// How far away, in millimetres, the light on a wall has fallen to half. This is what makes near walls brighter than far ones.
+static const float kHalfDistance = 7000.0f;
+
+// The lamp is on a little robot arm, and follows where he's looking a moment behind him. This is how much of that shows, from 0 for a spot that never leaves the middle of the screen, to 1 for all of it. How fast it follows, and how far behind it can get, are in 3dc/shoulder_lamp.h, and those need a rebuild.
+static const float kFollowing = 1.0f;
+
+// ---- THE REST WORKS FROM THOSE
+
+struct PS_INPUT
+{
+    float4 Diffuse : COLOR0;
+    float2 Place   : TEXCOORD0;   // how far across and down the screen, each from 0 to 1
+};
+
+sampler2D SurfaceColour : register(s3);     // what colour each wall really is, with no light on it. Where nothing was drawn it's black, so that adds nothing
+sampler2D SurfaceDistance : register(s4);   // how far away it is
+
+// .x is how strong the lamp is at this moment, which is where the flicker comes in. .y is 0 to brighten and 1 to add. .w is how wide the screen is for its height.
+float4 Lamp : register(c0);
+
+// .xy is how far the lamp's aim is from the middle of the screen, as a place on the screen.
+float4 Swing : register(c1);
+
+// What the LAMPSPOTSIZE and LAMPINTENSITY commands ask for: see ShoulderLamp_SpotNumbers. .x is the spot's size now, which is also how wide the cone is where it arrives.
+// .y is kSizeAtFarEnd over that, which turns a distance into what it would be at the size the edges are worked out for. .z is how strong the spot is, where 1 is as built.
+float4 Spot : register(c2);
+
+// 1 well inside the edge, 0 outside it, and a slope between
+float Inside(float distance, float edge)
+{
+    return 1.0f - smoothstep(edge * (1.0f - kEdgeSoftness), edge, distance);
+}
+
+float4 ps_main(in PS_INPUT In) : COLOR
+{
+    // Measured in screen heights across as well as down, so that the spot stays round on a wide screen
+    float2 wide = float2(Lamp.w, 1.0f);
+    float2 here = In.Place * wide;
+    float2 start = kShoulder * wide;
+    float2 aim = (kAim + Swing.xy * kFollowing) * wide;
+    float2 beam = aim - start;
+
+    // The cone. How far along the line from the shoulder to the spot this pixel is, from 0 to 1, and so how far it is from that line.
+    float along = saturate(dot(here - start, beam) / dot(beam, beam));
+    float cone = Inside(distance(here, start + beam * along), lerp(kSizeAtShoulder, Spot.x, along)) * lerp(kBrightnessAtShoulder, 1.0f, along);
+    float3 haze = kHaze * cone;
+
+    // The spot, with a wide layer and a smaller one, so that it has a hot middle with no edge of its own
+    float fromAim = distance(here, aim) * Spot.y;
+    float spot = lerp(Inside(fromAim, kSizeAtFarEnd), Inside(fromAim, kSizeAtFarEnd * kMiddleSize), kLightInTheMiddle) * Spot.z;
+
+    // The wall's own colour, less the further away it is. With no pictures to read, DrawShoulderLamp leaves these stages empty, which reads as black, and black adds nothing.
+    float4 surface = tex2D(SurfaceColour, In.Place);
+    float howFar = tex2D(SurfaceDistance, In.Place).r / kHalfDistance;
+    float3 onWall = surface.rgb * kOnWalls / (1.0f + howFar * howFar);
+
+    // Only the spot lights anything. All the cone ever does is add its haze, and the haze is left out of how strong the spot is, so that LAMPINTENSITY can't turn the cone into night vision.
+    return float4(lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y) * Lamp.x, 1.0f);
+}
