@@ -97,16 +97,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the log doesn't say why the look changed",
-			"changes": [
-				{
-					"file": "3dc/d3d_render.cpp",
-					"from": ", and what the command line changed about how shadows and lights are drawn is back as it was built",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "a changed number isn't put back",
 			"changes": [
 				{
@@ -367,56 +357,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the log count never starts again",
-			"changes": [
-				{
-					"file": "3dc/kshape.cpp",
-					"from": "toyMapLightsLeftOut = 0;",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the log never counts what is left out",
-			"changes": [
-				{
-					"file": "3dc/kshape.cpp",
-					"from": "toyMapLightsLeftOut++;",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the log never counts what is in reach",
-			"changes": [
-				{
-					"file": "3dc/kshape.cpp",
-					"from": "toyMapLightsLeftOutInReach++;",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the log never counts the lamps",
-			"changes": [
-				{
-					"file": "3dc/kshape.cpp",
-					"from": "toyCoronaLampsInReach++;",
-					"to": ";"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: the report leaves out what was left out",
-			"changes": [
-				{
-					"file": "3dc/kshape.cpp",
-					"from": "ShadowAmbientOn ? \"ON\" : \"OFF\", toyMapLightsLeftOut, toyMapLightsLeftOutInReach, toyCoronaLampsInReach",
-					"to": "ShadowAmbientOn ? \"ON\" : \"OFF\", 0, 0, 0"
-				}
-			]
-		},
-		{
 			"name": "SHADOWAMBIENT alone does not switch it",
 			"changes": [
 				{
@@ -453,6 +393,16 @@
 					"file": "3dc/view_switches.h",
 					"from": "inline bool SwitchWords_ShadowAmbientAsk(char const *words, int *asked)\n{\n\tif (!words)\n\t{\n\t\treturn false;\n\t}\n",
 					"to": "inline bool SwitchWords_ShadowAmbientAsk(char const *words, int *asked)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flag crafted in the level file can make a lamp a level light",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tSTRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;\n\n\tif (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)",
+					"to": "\tSTRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;\n\n\tif (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;\n\t}\n\n\tif (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)"
 				}
 			]
 		}

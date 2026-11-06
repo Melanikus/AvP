@@ -1,0 +1,850 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "a card that can add on two numbers is given four",
+			"changes": [
+				{
+					"file": "3dc/light_total_picture.h",
+					"from": "return kLightTotalTwoNumbers;",
+					"to": "return kLightTotalFourNumbers;"
+				}
+			]
+		},
+		{
+			"name": "a card that can only add on four numbers gets no picture",
+			"changes": [
+				{
+					"file": "3dc/light_total_picture.h",
+					"from": "return canAddToFourNumbers ? kLightTotalFourNumbers : kLightTotalNoPicture;",
+					"to": "return kLightTotalNoPicture;"
+				}
+			]
+		},
+		{
+			"name": "a card that can add on neither gets a picture anyway",
+			"changes": [
+				{
+					"file": "3dc/light_total_picture.h",
+					"from": "return canAddToFourNumbers ? kLightTotalFourNumbers : kLightTotalNoPicture;",
+					"to": "return kLightTotalFourNumbers;"
+				}
+			]
+		},
+		{
+			"name": "a light behind the camera that comes round in front is dropped",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "if (z + range < nearest)",
+					"to": "if (z < nearest)"
+				}
+			]
+		},
+		{
+			"name": "a light whose whole ball is behind the camera still counts",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "if (z + range < nearest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the camera inside a ball gets a rectangle worked out by dividing by too little",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "if (z - range > nearest)",
+					"to": "if (z > nearest)"
+				}
+			]
+		},
+		{
+			"name": "the left edge only looks at the far side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "across * LightReach_Smaller((x - range) / nearZ, (x - range) / farZ)",
+					"to": "across * (x - range) / farZ"
+				}
+			]
+		},
+		{
+			"name": "the left edge only looks at the near side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "across * LightReach_Smaller((x - range) / nearZ, (x - range) / farZ)",
+					"to": "across * (x - range) / nearZ"
+				}
+			]
+		},
+		{
+			"name": "the right edge only looks at the far side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "across * LightReach_Larger((x + range) / nearZ, (x + range) / farZ)",
+					"to": "across * (x + range) / farZ"
+				}
+			]
+		},
+		{
+			"name": "the right edge only looks at the near side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "across * LightReach_Larger((x + range) / nearZ, (x + range) / farZ)",
+					"to": "across * (x + range) / nearZ"
+				}
+			]
+		},
+		{
+			"name": "the bottom edge only looks at the far side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "up * LightReach_Smaller((y - range) / nearZ, (y - range) / farZ)",
+					"to": "up * (y - range) / farZ"
+				}
+			]
+		},
+		{
+			"name": "the bottom edge only looks at the near side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "up * LightReach_Smaller((y - range) / nearZ, (y - range) / farZ)",
+					"to": "up * (y - range) / nearZ"
+				}
+			]
+		},
+		{
+			"name": "the top edge only looks at the far side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "up * LightReach_Larger((y + range) / nearZ, (y + range) / farZ)",
+					"to": "up * (y + range) / farZ"
+				}
+			]
+		},
+		{
+			"name": "the top edge only looks at the near side of the box",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "up * LightReach_Larger((y + range) / nearZ, (y + range) / farZ)",
+					"to": "up * (y + range) / nearZ"
+				}
+			]
+		},
+		{
+			"name": "up is forgotten for the height",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "float const top    = up * ",
+					"to": "float const top    = "
+				}
+			]
+		},
+		{
+			"name": "a light off to the right still counts",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "if (left >= 1.0f || right <= -1.0f",
+					"to": "if (right <= -1.0f"
+				}
+			]
+		},
+		{
+			"name": "a light off to the left still counts",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "left >= 1.0f || right <= -1.0f || ",
+					"to": "left >= 1.0f || "
+				}
+			]
+		},
+		{
+			"name": "a light above still counts",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "bottom >= 1.0f || top <= -1.0f",
+					"to": "top <= -1.0f"
+				}
+			]
+		},
+		{
+			"name": "a light below still counts",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "bottom >= 1.0f || top <= -1.0f",
+					"to": "bottom >= 1.0f"
+				}
+			]
+		},
+		{
+			"name": "the rectangle goes past the left of the screen",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "box->left   = LightReach_Larger(left, -1.0f);",
+					"to": "box->left   = left;"
+				}
+			]
+		},
+		{
+			"name": "the rectangle goes past the right of the screen",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "box->right  = LightReach_Smaller(right, 1.0f);",
+					"to": "box->right  = right;"
+				}
+			]
+		},
+		{
+			"name": "the rectangle goes past the bottom of the screen",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "box->bottom = LightReach_Larger(bottom, -1.0f);",
+					"to": "box->bottom = bottom;"
+				}
+			]
+		},
+		{
+			"name": "the rectangle goes past the top of the screen",
+			"changes": [
+				{
+					"file": "3dc/light_reach.h",
+					"from": "box->top    = LightReach_Smaller(top, 1.0f);",
+					"to": "box->top    = top;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the steady limit is back at 8",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.h",
+					"from": "kToyMostSteadyLights = 20,",
+					"to": "kToyMostSteadyLights = 8,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the brief limit is back at 4",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.h",
+					"from": "kToyMostBriefLights = 12,",
+					"to": "kToyMostBriefLights = 4,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game starts with 8 steady lights",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int ToyShadowsMaxLights = kToyMostSteadyLights;",
+					"to": "int ToyShadowsMaxLights = 8;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game starts with 4 brief lights",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int ToyShadowsMaxBrief = kToyMostBriefLights;",
+					"to": "int ToyShadowsMaxBrief = 4;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -shadowlights stops at 8",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "(asked > 20) ? 20 : asked",
+					"to": "(asked > 8) ? 8 : asked"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -shadowbrief stops at 4",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;",
+					"to": "ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the steady list can be overrun",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "(ToyShadowsMaxLights < kToyMostSteadyLights) ? ToyShadowsMaxLights : kToyMostSteadyLights",
+					"to": "ToyShadowsMaxLights"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the brief list can be overrun",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "(ToyShadowsMaxBrief < kToyMostBriefLights) ? ToyShadowsMaxBrief : kToyMostBriefLights",
+					"to": "ToyShadowsMaxBrief"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a place on the list can have no colour",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "static_assert(sizeof(kToyLightColours) / sizeof(kToyLightColours[0]) == kToyMostLights, \"every place on the list of lights needs a colour\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the store can have too little room",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "static_assert(kToyMostLights <= kShadowVolumeMostLights, \"the store of kept prisms needs room for every light on the list\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fresh install has shadows on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int ShadowVolumesOn = 0;",
+					"to": "int ShadowVolumesOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fresh install lights per pixel",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int LightingNow = kLightingGouraud;",
+					"to": "int LightingNow = kLightingPerPixel;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log prints a fixed number of lights",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "for (int i = 0; i < report.lights; i++)\n\t\t\t{\n\t\t\t\tchar number[16];",
+					"to": "for (int i = 0; i < 12; i++)\n\t\t\t{\n\t\t\t\tchar number[16];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader goes through a list again",
+			"changes": [
+				{
+					"file": "shaders/lightTotal.psh",
+					"from": "float  amount   = ThisWeight.x * LightShape(ThisLight, ThisWeight.y, position, normal);",
+					"to": "float amount = 0.0f;\n    for (int i = 0; i < 2; i++) amount += ThisWeight.x * LightShape(ThisLight, ThisWeight.y, position, normal);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light goes in both totals",
+			"changes": [
+				{
+					"file": "shaders/lightTotal.psh",
+					"from": "amount * (1.0f - ThisWeight.z), amount * ThisWeight.z",
+					"to": "amount, amount * ThisWeight.z"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the light total starts with last frame's numbers",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\tdevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);\n\n\td3d.effectSystem->SetActive(d3d.lightTotalEffect);",
+					"to": "\td3d.effectSystem->SetActive(d3d.lightTotalEffect);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: each light writes over the one before",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "SetRectangleState(device, false, true);\n\tdevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);",
+					"to": "SetRectangleState(device, false, false);\n\tdevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the scissor is left off, so each light covers the screen",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "SetRectangleState(device, false, true);\n\tdevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);",
+					"to": "SetRectangleState(device, false, true);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every light uses the same rectangle",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "device->SetScissorRect(&reach[i]);",
+					"to": "device->SetScissorRect(&reach[0]);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: only the first light is drawn",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "device->SetPixelShaderConstantF(1, constants, 2);",
+					"to": "device->SetPixelShaderConstantF(1, constants, 1);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light that reaches nothing is drawn with a rectangle nobody worked out",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "LightOnListIsDark(light) || !reachesScreen[i] || ",
+					"to": "LightOnListIsDark(light) || "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an empty rectangle is drawn",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": " || reach[i].right <= reach[i].left || reach[i].bottom <= reach[i].top",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a baked light counts by its brightest colour",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "perPixel ? Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]) : (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f,",
+					"to": "Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]),"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the scissor stays on after the total",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\tdevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);\n\tStopReadingPictures(device);\n\n\treturn (float)",
+					"to": "\tStopReadingPictures(device);\n\n\treturn (float)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rectangle uses a fixed view",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "LightReach_Box(x, y, z, range, zNear, d3d.matProjection._11, d3d.matProjection._22, &box)",
+					"to": "LightReach_Box(x, y, z, range, zNear, 1.0f, 1.0f, &box)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: part of a pixel is left out on the left",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "(LONG)floor((box.left + 1.0f)",
+					"to": "(LONG)ceil((box.left + 1.0f)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: part of a pixel is left out on the right",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "(LONG)ceil((box.right + 1.0f)",
+					"to": "(LONG)floor((box.right + 1.0f)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the total is drawn with no rectangles",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "lightReachesScreen[light] = ToyLightRectangle(device, &lights[light * kToyLightFloats], &lightReach[light]);",
+					"to": "lightReachesScreen[light] = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the card is only asked if it can draw on the picture",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING, D3DRTYPE_TEXTURE, pictures[i]",
+					"to": "D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, pictures[i]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its answers are ignored",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "LightTotal_BestPicture(canAdd[0], canAdd[1])",
+					"to": "LightTotal_BestPicture(true, canAdd[1])"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a card that can't add gets the smaller picture anyway",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "default:\n\t\t\treturn D3DFMT_UNKNOWN;",
+					"to": "default:\n\t\t\treturn pictures[0];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch doesn't reach the total",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "canAdd[i] = !ShadowsPretendNoFloatBlend && direct3D->CheckDeviceFormat(",
+					"to": "canAdd[i] = direct3D->CheckDeviceFormat("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch doesn't reach the mask",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!ShadowsPretendNoFloatBlend && direct3D->CheckDeviceFormat(",
+					"to": "if (direct3D->CheckDeviceFormat("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say why",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "LogString(\"pixel lights: the card can't add to a float picture, so lights stay in the game's own lighting, and shadows are drawn without the surface pictures\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it's worked out and logged on every frame",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\tif (format == D3DFMT_UNKNOWN)\n\t{\n\t\ttotalFailed = true;\n",
+					"to": "\tif (format == D3DFMT_UNKNOWN)\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shadow pass isn't told no",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "and shadows are drawn without the surface pictures\");\n\t\treturn false;",
+					"to": "and shadows are drawn without the surface pictures\");\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pictures don't ask whether the total can be made",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "d3d.shadowBlurEffect != kNullEffectID && PixelLights_Ready(device) && ToyMakeTargets(device)",
+					"to": "d3d.shadowBlurEffect != kNullEffectID && ToyMakeTargets(device)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lights leave the game's lighting whatever the card can do",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "&& ToyWorldWasDrawn() && ToyPicturesCanRun(d3d.lpD3DDevice);",
+					"to": "&& ToyWorldWasDrawn();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: shadows use the pictures whatever the card can do",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (darkening && ToyPicturesCanRun(device)\n",
+					"to": "if (darkening\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devSwitch(\"-shadownofloatblend\")",
+					"to": "strstr(command_line, \"-shadownofloatblend\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the switch",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &ShadowsPretendNoFloatBlend, ShadowsPretendNoFloatBlend },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dark light isn't counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.dark++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light at the camera isn't counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.atTheCamera++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light that competes isn't counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "(*inReach)++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the counts never start afresh",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tmemset(&lightsThisFrame, 0, sizeof(lightsThisFrame));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what was chosen isn't noted, steady",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tlightsThisFrame.steadyChosen = numSteady;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what was chosen isn't noted, brief",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tlightsThisFrame.briefChosen = numBrief;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: passed over is worked out wrong",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen",
+					"to": "lightsThisFrame.steadyChosen, lightsThisFrame.briefChosen"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most in reach never goes up",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (inReach > mostInReach)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most chosen never goes up",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "mostChosen = (chosen > mostChosen) ? chosen : mostChosen;",
+					"to": "mostChosen = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most passes never go up",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "mostPasses = (passes > mostPasses) ? passes : mostPasses;",
+					"to": "mostPasses = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the longest time never goes up",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;",
+					"to": "mostMilliseconds = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most are only noted on a report",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tShadowLights_NoteFrame(report.frame, passes, report.milliseconds);\n\n\tif (logThisFrame)\n\t{\n",
+					"to": "\tif (logThisFrame)\n\t{\n\t\tShadowLights_NoteFrame(report.frame, passes, report.milliseconds);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: reports don't say the counts",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tShadowLights_SayCounts(report.frame, report.passes, report.screensOfTotal, report.milliseconds, report.frameMilliseconds);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light the rule held back is not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLamp++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: how many of those were in view is not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLampInView++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamps competing are not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.lampsInReach++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rule is counted after the other reasons",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\tlightsThisFrame.notAVisibleLamp++;\n",
+					"to": "\t\tlightsThisFrame.outOfView++;\n\t\tlightsThisFrame.notAVisibleLamp += 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report mixes up what the rule held back",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn",
+					"to": "lightsThisFrame.notAVisibleLampInView, lightsThisFrame.notAVisibleLamp, ShadowAmbientOn"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report leaves out which way SHADOWAMBIENT is",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "ShadowAmbientOn ? \"ON\" : \"OFF\", lightsThisFrame.lampsInReach",
+					"to": "\"OFF\", lightsThisFrame.lampsInReach"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the report does not say what the rule held back",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; ",
+					"to": "%d %d %s %d; "
+				}
+			]
+		}
+	]
+}

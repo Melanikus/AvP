@@ -12,6 +12,7 @@
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   -shadowambient starts with the map's lights that show no corona casting shadows
+//   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
 
 #include "3dc.h"
 #include "texture_relief.h"
@@ -492,19 +493,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsTest = 1;
 		}
+		extern int ShadowsPretendNoFloatBlend;
+		if (devSwitch("-shadownofloatblend"))
+		{
+			ShadowsPretendNoFloatBlend = 1;
+		}
 		extern int ToyShadowsMaxLights;
 		char const *lightsSwitch = devNumber("-shadowlights=");
 		if (lightsSwitch)
 		{
 			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
-			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 20) ? 20 : asked;
 		}
 		extern int ToyShadowsMaxBrief;
 		char const *briefSwitch = devNumber("-shadowbrief=");
 		if (briefSwitch)
 		{
 			int const asked = atoi(briefSwitch + strlen("-shadowbrief="));
-			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;
+			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;
 		}
 		extern int ToyShadowsCasters;
 		char const *castersSwitch = devNumber("-shadowcasters=");

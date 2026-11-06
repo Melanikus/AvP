@@ -23,6 +23,10 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
+//   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
+//   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
 
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
@@ -68,6 +72,7 @@
 #include "frustum.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
+#include "light_reach.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "shadow_debug.h"
@@ -3775,7 +3780,19 @@ enum ToyShadowsView
 };
 
 static char const * const kToyViewNames[kToyViewCount] = { "OFF", "FINAL", "EDGES", "POLYGONS", "RED VOLUMES", "MASK", "NORMALS" };
-static DWORD const kToyLightColours[kToyMostLights] = { 0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF, 0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF };
+
+// The colour each place on the list of lights is drawn in, in the views that show one light's shadows from another's.
+static DWORD const kToyLightColours[] =
+{
+	0xFF0000, 0x00FF00, 0x0060FF, 0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF8000, 0xFFFFFF,
+	0xFF0080, 0x80FF00, 0x00FF80, 0x8080FF, 0xFF6060, 0x60FF60, 0x6060FF, 0xFFFF80,
+	0xFF80FF, 0x80FFFF, 0xC04000, 0x808080, 0x800040, 0x408000, 0x008040, 0x404080,
+	0xA00000, 0x00A000, 0x0000C0, 0xA0A000, 0xA000A0, 0x00A0A0, 0xFFC080, 0xC080FF,
+};
+
+// If either of these fails, the build stops here, so a limit can't be raised past what depends on it.
+static_assert(sizeof(kToyLightColours) / sizeof(kToyLightColours[0]) == kToyMostLights, "every place on the list of lights needs a colour");
+static_assert(kToyMostLights <= kShadowVolumeMostLights, "the store of kept prisms needs room for every light on the list");
 
 extern void NewOnScreenMessage(char *messagePtr);
 
@@ -3785,8 +3802,9 @@ int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from t
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 0;
 int ShadowAmbientOn = 0;       // SHADOWAMBIENT, -shadowambient: whether the map's lights with no corona can cast shadows. See light_choice.h
-int ToyShadowsMaxLights = 8;  // -shadowlights=N, 1 to 8: how many steady lights
-int ToyShadowsMaxBrief = 4;   // -shadowbrief=N, 0 to 4: how many brief lights on top of those, such as muzzle flashes and explosions
+int ToyShadowsMaxLights = kToyMostSteadyLights;  // -shadowlights=N, 1 to 20: how many steady lights
+int ToyShadowsMaxBrief = kToyMostBriefLights;    // -shadowbrief=N, 0 to 12: how many brief lights on top of those, such as muzzle flashes and explosions
+int ShadowsPretendNoFloatBlend = 0;              // -shadownofloatblend: what the game does on a card that can't add to a float picture, on any card, so it can be tried
 int ToyShadowsDarkness = 85;  // -shadowdark=N, 0 to 99: how much of a pixel goes when no light reaches it. What's left is the glow
 int ToyShadowsFlareReach = 100; // -shadowflarereach=N, 50 to 400: how far a flare's light goes, in percent of the game's 10 metres
 int ToyShadowsFlareCap = 150;  // -shadowflare=N, 10 to 800: the brightest a flare's light gets, in percent. See ToyShadows_ChooseLights
@@ -4773,7 +4791,12 @@ struct ToyFrameReport
 	unsigned int pixels;
 	float milliseconds;        // the time spent here on this one frame, which also waits for the card to answer its counts
 	float frameMilliseconds;   // how long a frame took on average since the last report, which is the number to compare
+	int passes;                // how many times a light marked its shadows. Each one is its own prisms, stencil and mask
+	float screensOfTotal;      // how many screens' worth of pixels the lights asked of the light total
 };
+
+void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float milliseconds, float frameMilliseconds);
+void ShadowLights_NoteFrame(int frame, int passes, float milliseconds);
 
 static void ToyLogFrame(const ToyFrameReport &report)
 {
@@ -4804,6 +4827,8 @@ static void ToyLogFrame(const ToyFrameReport &report)
 		report.frame, polygonsReachKept, polygonsReachLeftOut, toyVertsOfKind[kToyCasterCastOnly], numDrawnBoxes, prismsOutOfRange, vertsOutOfRange, report.verts);
 	line[sizeof(line) - 1] = 0;
 	LogString(line);
+
+	ShadowLights_SayCounts(report.frame, report.passes, report.screensOfTotal, report.milliseconds, report.frameMilliseconds);
 }
 
 static void ToySetVolumeState(LPDIRECT3DDEVICE9 device)
@@ -5153,7 +5178,7 @@ static D3DFORMAT ToyBestMaskFormat(LPDIRECT3DDEVICE9 device)
 		{
 			for (int i = 1; i >= 0; i--)
 			{
-				if (direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format,
+				if (!ShadowsPretendNoFloatBlend && direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format,
 					D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING, D3DRTYPE_TEXTURE, wanted[i]) == D3D_OK)
 				{
 					chosen = wanted[i];
@@ -6055,43 +6080,20 @@ static void ToyMarkShadow(LPDIRECT3DDEVICE9 device, ToyFrameReport *report)
 static bool ToyLightRectangle(LPDIRECT3DDEVICE9 device, const float *light, RECT *rectangle)
 {
 	float const x = light[0], y = light[1], z = light[2], range = light[3];
+	LightReachBox box;
 
-	if (z + range < zNear)
+	if (!LightReach_Box(x, y, z, range, zNear, d3d.matProjection._11, d3d.matProjection._22, &box))
 	{
-		return false;  // all of it is behind the camera
-	}
-
-	float left = -1.0f, right = 1.0f, bottom = -1.0f, top = 1.0f;
-
-	// with the camera inside the box, or the box round the camera's side, the whole screen is the safe answer
-	if (z - range > zNear)
-	{
-		float const nearZ = z - range, farZ = z + range;
-		float const across = d3d.matProjection._11, up = d3d.matProjection._22;
-
-		left   = across * min((x - range) / nearZ, (x - range) / farZ);
-		right  = across * max((x + range) / nearZ, (x + range) / farZ);
-		bottom = up * min((y - range) / nearZ, (y - range) / farZ);
-		top    = up * max((y + range) / nearZ, (y + range) / farZ);
-
-		if (left >= 1.0f || right <= -1.0f || bottom >= 1.0f || top <= -1.0f)
-		{
-			return false;
-		}
-
-		left   = (left < -1.0f) ? -1.0f : left;
-		right  = (right > 1.0f) ? 1.0f : right;
-		bottom = (bottom < -1.0f) ? -1.0f : bottom;
-		top    = (top > 1.0f) ? 1.0f : top;
+		return false;
 	}
 
 	D3DVIEWPORT9 viewport;
 	device->GetViewport(&viewport);
 
-	rectangle->left   = viewport.X + (LONG)floor((left + 1.0f) * 0.5f * viewport.Width);
-	rectangle->right  = viewport.X + (LONG)ceil((right + 1.0f) * 0.5f * viewport.Width);
-	rectangle->top    = viewport.Y + (LONG)floor((1.0f - top) * 0.5f * viewport.Height);
-	rectangle->bottom = viewport.Y + (LONG)ceil((1.0f - bottom) * 0.5f * viewport.Height);
+	rectangle->left   = viewport.X + (LONG)floor((box.left + 1.0f) * 0.5f * viewport.Width);
+	rectangle->right  = viewport.X + (LONG)ceil((box.right + 1.0f) * 0.5f * viewport.Width);
+	rectangle->top    = viewport.Y + (LONG)floor((1.0f - box.top) * 0.5f * viewport.Height);
+	rectangle->bottom = viewport.Y + (LONG)ceil((1.0f - box.bottom) * 0.5f * viewport.Height);
 
 	return true;
 }
@@ -6909,6 +6911,7 @@ static const ShadowTuningNumber shadowTuning[] =
 	{ &ToyShadowsTest, ToyShadowsTest },
 	{ &ToyShadowsMaxLights, ToyShadowsMaxLights },
 	{ &ToyShadowsMaxBrief, ToyShadowsMaxBrief },
+	{ &ShadowsPretendNoFloatBlend, ShadowsPretendNoFloatBlend },
 	{ &ToyShadowsCasters, ToyShadowsCasters }
 };
 
@@ -7522,7 +7525,19 @@ static void ToyShadows_Draw()
 		if (ToyDrawPictures(device, worldAxes, useStatic))
 		{
 			FrameTiming_Mark(kStageSurfacePictures);
-			PixelLights_DrawTotal(device, lights, report.lights, toyDepthTexture);
+
+			// Which part of the screen each light can reach, in the screen's own numbers
+			RECT lightReach[kToyMostLights];
+			bool lightReachesScreen[kToyMostLights];
+
+			device->SetViewport(&viewport);
+
+			for (int light = 0; light < report.lights; light++)
+			{
+				lightReachesScreen[light] = ToyLightRectangle(device, &lights[light * kToyLightFloats], &lightReach[light]);
+			}
+
+			report.screensOfTotal = PixelLights_DrawTotal(device, lights, report.lights, lightReach, lightReachesScreen, toyDepthTexture);
 			FrameTiming_Mark(kStageLightTotal);
 
 			// the mask starts at nothing blocked
@@ -7906,23 +7921,27 @@ static void ToyShadows_Draw()
 		savedCardSettings->Apply();
 	}
 
+	// the number that says what the positions are costing: each pass is its own prisms, stencil and mask
+	int passes = 0;
+	for (int i = 0; i < report.lights; i++)
+	{
+		if (volumesThisFrame && !LightOnListIsDark(&lights[i * kToyLightFloats]))
+		{
+			passes += darkening ? ToyPositionsForLight(&lights[i * kToyLightFloats]) : 1;
+		}
+	}
+
+	QueryPerformanceCounter(&finished);
+	report.passes = passes;
+	report.milliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
+	ShadowLights_NoteFrame(report.frame, passes, report.milliseconds);
+
 	if (logThisFrame)
 	{
-		QueryPerformanceCounter(&finished);
-		report.milliseconds = (float)((double)(finished.QuadPart - started.QuadPart) * 1000.0 / (double)ticksPerSecond.QuadPart);
 		ToyLogFrame(report);
 
 		char line[480];
 
-		// the number that says what the positions are costing: each pass is its own prisms, stencil and mask
-		int passes = 0;
-		for (int i = 0; i < report.lights; i++)
-		{
-			if (volumesThisFrame && !LightOnListIsDark(&lights[i * kToyLightFloats]))
-			{
-				passes += darkening ? ToyPositionsForLight(&lights[i * kToyLightFloats]) : 1;
-			}
-		}
 		_snprintf(line, sizeof(line) - 1, "toy-shadows: %d passes for %d lit lights; %d positions, on flares and the nearest %d others; lamp size %d, flare size %d",
 			passes, litLights, ToyShadowsPositions, ToyShadowsNearLights, ToyShadowsLampSize, ToyShadowsFlareSize);
 		line[sizeof(line) - 1] = 0;
@@ -8005,12 +8024,17 @@ static void ToyShadows_Draw()
 		if (counting)
 		{
 			// (only the full report counts pixels)
-			_snprintf(line, sizeof(line) - 1, "toy-shadows: pixels in shadow by light: %u %u %u %u %u %u %u %u %u %u %u %u",
-				pixelsByLight[0], pixelsByLight[1], pixelsByLight[2], pixelsByLight[3],
-				pixelsByLight[4], pixelsByLight[5], pixelsByLight[6], pixelsByLight[7],
-				pixelsByLight[8], pixelsByLight[9], pixelsByLight[10], pixelsByLight[11]);
-			line[sizeof(line) - 1] = 0;
-			LogString(line);
+			std::string pixelsLine = "toy-shadows: pixels in shadow by light:";
+
+			for (int i = 0; i < report.lights; i++)
+			{
+				char number[16];
+				_snprintf(number, sizeof(number) - 1, " %u", pixelsByLight[i]);
+				number[sizeof(number) - 1] = 0;
+				pixelsLine += number;
+			}
+
+			LogString(pixelsLine);
 		}
 		else if (fullReport)
 		{

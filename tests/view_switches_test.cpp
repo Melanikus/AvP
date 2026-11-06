@@ -485,7 +485,7 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
 
 	for (char const *const name : devToggles)
@@ -504,7 +504,7 @@ static void TheRealGame()
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
 	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
-	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ToyShadowsCasters" };
+	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ShadowsPretendNoFloatBlend", "ToyShadowsCasters" };
 
 	for (char const *const name : tuned)
 	{
@@ -794,12 +794,19 @@ static void TheMapLightsInTheGame()
 	std::string const launch = ReadSourceFile("3dc/avp/win95/winmain.cpp");
 
 	// Which kind of light is which
-	std::string const kinds = Between(shapes, "static LightKindForShadows ToyKindOfLight(", "// What the log says about the rule");
+	// A light's kind comes from two real fields, and both start out in the level file: has_corona, which InitPlacedLight sets from the polygon flag iflag_light_corona, and LFlag_AbsPos, which
+	// setup_light_data gives a level light, on top of flags copied from the file. A crafted level can say anything in them, and all that can do is say yes or no to a shadow on one player's screen.
+	std::string const kinds = Between(shapes, "static LightKindForShadows ToyKindOfLight(", "// What became of every light the choosing looked at");
 
 	Check(Has(kinds, "if (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;"), "a light with LFlag_AbsPos is a level light");
 	Check(Has(kinds, "owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr"), "only a placed light's data is read as a placed light's");
 	Check(Has(kinds, "has_corona ? kLampWithACorona : kLampWithNoCorona"), "and its corona says which kind of lamp it is");
 	Check(Has(kinds, "return kLightOfAnyOtherKind;"), "and anything else is left alone");
+
+	std::string::size_type const placedIsLookedFor = kinds.find("I_BehaviourPlacedLight");
+	std::string::size_type const flagIsLookedFor = kinds.find("LFlag_AbsPos");
+
+	Check(placedIsLookedFor != std::string::npos && flagIsLookedFor != std::string::npos && placedIsLookedFor < flagIsLookedFor, "a placed light is looked for first, so a flag crafted in the level file can't change what a lamp counts as");
 	Check(Has(kinds, "block ? block->ObStrategyBlock : 0"), "a light element, which is on no block, is safe to ask about");
 
 	std::string const levelLights = Between(setup, "void setup_light_data (LIGHTBLOCK * lPtr, Light_Chunk * lc)\n{", "void setup_placed_light_data");
@@ -842,16 +849,6 @@ static void TheMapLightsInTheGame()
 	std::string const tuningTable = Between(render, "static const ShadowTuningNumber shadowTuning[] =", "static float const shadowSurfaceBiasAsBuilt");
 
 	Check(!Has(tuningTable, "ShadowAmbientOn"), "a network game doesn't put it back");
-
-	// What the log says
-	std::string const choosing = Between(shapes, "void ToyShadows_ChooseLights()\n{", "if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)");
-
-	Check(Has(choosing, "toyMapLightsLeftOut = 0;") && Has(choosing, "toyMapLightsLeftOutInReach = 0;") && Has(choosing, "toyCoronaLampsInReach = 0;"), "the log's counts start again each frame");
-	Check(Has(considering, "toyMapLightsLeftOut++;") && Has(considering, "toyMapLightsLeftOutInReach++;") && Has(considering, "toyCoronaLampsInReach++;"), "and each is counted");
-
-	std::string const report = Between(shapes, "void ToyShadows_NoteFrameLights(int frame)", "static bool ToyBlockIsCloaked");
-
-	Check(Has(report, "ShadowAmbientOn ? \"ON\" : \"OFF\", toyMapLightsLeftOut, toyMapLightsLeftOutInReach, toyCoronaLampsInReach"), "and the report says what was left out, and what's left");
 }
 
 static void PuttingTheTuningBack()
