@@ -981,16 +981,45 @@ static std::vector<uint8_t> AMessage(uint8_t system, uint32_t type, NetID from, 
 	return all;
 }
 
+// The bytes a real client's own code sends when it asks to join, taken from what it really sent. A test that fills in its own good message can't see the day the client stops sending one. That happened once: the host's version check refused every real client, and every test passed, because each one filled in the version by hand.
+static std::vector<uint8_t> realClientsAsk;
+
+static void ListenToARealClient()
+{
+	realClientsAsk.clear();
+	sentMessages.clear();
+	Check(JoinAGame() == NET_OK, "a real client joins, to hear what it says");
+
+	for (size_t i = 0; i < sentMessages.size(); i++)
+	{
+		if (sentMessages[i].header.isSystemMessage == 1 && sentMessages[i].header.messageType == NET_CREATEPLAYERORGROUP)
+		{
+			uint8_t const *const headerBytes = (uint8_t const *)&sentMessages[i].header;
+
+			realClientsAsk.assign(headerBytes, headerBytes + sizeof(MessageHeader));
+			realClientsAsk.insert(realClientsAsk.end(), sentMessages[i].body.begin(), sentMessages[i].body.end());
+		}
+	}
+
+	EndTheGame();
+	sentMessages.clear();
+	Check(realClientsAsk.size() == sizeof(MessageHeader) + sizeof(PlayerDetails), "it asks to join, with its details");
+}
+
+// Only the name is changed, from what a real client said
 static std::vector<uint8_t> AskingToJoin(const char *name)
 {
-	PlayerDetails details;
+	std::vector<uint8_t> asking = realClientsAsk;
 
-	memset(&details, 0, sizeof(details));
-	strncpy(details.name, name, sizeof(details.name) - 1);
-	details.type = NET_PLAYERTYPE_PLAYER;
-	details.version = kMultiplayerVersion;
+	if (asking.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+	{
+		PlayerDetails *const details = (PlayerDetails *)(asking.data() + sizeof(MessageHeader));
 
-	return AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details));
+		memset(details->name, 0, sizeof(details->name));
+		strncpy(details->name, name, sizeof(details->name) - 1);
+	}
+
+	return asking;
 }
 
 static std::vector<uint8_t> AGameMessage(NetID from)
@@ -1077,6 +1106,16 @@ static void HostWithClients(int clients)
 
 	EverythingArrives();
 	sentMessages.clear();
+}
+
+static void TestARealClientGetsIn()
+{
+	HostWithClients(0);
+	Connects(1);
+	TakeEverything();
+	Check(Hears(1, realClientsAsk) == 0, "what a real client says isn't for the game to read");
+	Check(playersInGame.size() == 1 && playersInGame[0].name == playerName, "and the host lets it in, by the name it gave");
+	EndTheGame();
 }
 
 static void TestLettingPeopleIn()
@@ -1208,14 +1247,17 @@ static void TestWhoDoesntGetIn()
 {
 	HostWithClients(0);
 
-	PlayerDetails details;
+	// Everything is what a real client says, except its version
+	std::vector<uint8_t> oldVersion = AskingToJoin("OLD");
 
-	memset(&details, 0, sizeof(details));
-	strcpy(details.name, "OLD");
-	details.version = kMultiplayerVersion - 1;
+	if (oldVersion.size() >= sizeof(MessageHeader) + sizeof(PlayerDetails))
+	{
+		((PlayerDetails *)(oldVersion.data() + sizeof(MessageHeader)))->version = kMultiplayerVersion - 1;
+	}
+
 	Connects(1);
 	TakeEverything();
-	Hears(1, AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details)));
+	Hears(1, oldVersion);
 	Check(playersInGame.empty(), "a game of another version isn't let in");
 	Check(peers[1].state != ENET_PEER_STATE_CONNECTED || peers[1].data == NULL, "and has no player ID");
 	EndTheGame();
@@ -1848,6 +1890,8 @@ int main()
 	TestHostingWhileStillInAGame();
 	TestJoiningWhileAPageIsSearching();
 	DirtyTheStack();
+	ListenToARealClient();
+	TestARealClientGetsIn();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
 	TestWhoDoesntGetIn();

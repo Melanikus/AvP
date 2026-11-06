@@ -5,6 +5,16 @@
 	],
 	"rows": [
 		{
+			"name": "a real client doesn't say its version",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n\tthisClientPlayer.version = kMultiplayerVersion;\n",
+					"to": "thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;\n"
+				}
+			]
+		},
+		{
 			"name": "a system message's header keeps what was on the stack",
 			"changes": [
 				{

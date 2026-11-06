@@ -1304,6 +1304,7 @@ static bool Net_CreatePlayer(char *playerName)
 	}
 
 	thisClientPlayer.type = NET_PLAYERTYPE_PLAYER;
+	thisClientPlayer.version = kMultiplayerVersion;
 	strncpy(thisClientPlayer.name, playerName, kPlayerNameSize - 1);
 	thisClientPlayer.name[kPlayerNameSize-1] = 0;
 
