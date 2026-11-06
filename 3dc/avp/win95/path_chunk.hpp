@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   says how many numbers a path can have
+
 #ifndef pathchnk_hpp
 #define pathchnk_hpp 1
 
@@ -18,6 +21,9 @@ struct ChunkPathPoint
 
 #define PathFlag_LoopPath 0x00000001
 #define PathFlag_BackAndForth 0x00000002
+
+// A path's number is its place in the game's list of paths, and a switch can only name a path up to 255.
+enum { MostPathNumbers = 256 };
  
 class AVP_Path_Chunk : public Chunk
 {

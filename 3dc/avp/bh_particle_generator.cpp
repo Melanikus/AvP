@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a particle generator placed outside every module does nothing
+
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -156,9 +160,9 @@ void ParticleGeneratorBehaveFun(STRATEGYBLOCK* sbptr)
 		{
 			sbptr->containingModule=ModuleFromPosition(&(pargen->position),0);
 		}
-		GLOBALASSERT(sbptr->containingModule);
-		
-		if(ModuleCurrVisArray[(sbptr->containingModule->m_index)])
+
+		// a generator placed outside every module is never near anything
+		if(sbptr->containingModule && ModuleCurrVisArray[(sbptr->containingModule->m_index)])
 		{
 			//if containing module is near create particles.
 			

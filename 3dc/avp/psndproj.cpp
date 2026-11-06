@@ -1,7 +1,11 @@
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP Project sound source
   ----------------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a sound bank that cannot be opened, or that has no end mark, no longer makes the game hang
 #include "3dc.h"
+#include "logString.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -591,10 +595,18 @@ void LoadSounds(char *soundDirectory)
 	FileStream fStream;
 	fStream.Open(filename, FileStream::FileRead, FileStream::SkipFastFileCheck);
 
+	// without the sound bank there is nothing to load here
+	if (!fStream.IsGood())
+	{
+		LogErrorString(std::string("LoadSounds - cannot open the sound bank: ") + filename);
+		return;
+	}
+
 	soundIndex = fStream.GetByte();
 	pitch      = fStream.GetByte();
 
-	while ((soundIndex != 0xff) || (pitch != -1))
+	// the bank finishes with an end mark, but a damaged one may not have it, so stop at the end of the file as well
+	while (((soundIndex != 0xff) || (pitch != -1)) && !fStream.RanOutOfData())
 	{
 		if ((soundIndex < 0) || (soundIndex >= SID_MAXIMUM))
 		{
