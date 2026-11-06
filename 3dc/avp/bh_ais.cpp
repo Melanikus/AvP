@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a queen's death is read from her own block
 
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
@@ -144,8 +146,15 @@ int NPC_IsDead(STRATEGYBLOCK *sbPtr)
                         if(alienStatusPointer->BehaviourState==ABS_Dying) return 1;
                         break;
                 }
-                case(I_BehaviourPredatorAlien):
                 case(I_BehaviourQueenAlien):
+                {
+                        // A queen has her own kind of block, which this used to read as the one below
+                        QUEEN_STATUS_BLOCK *queenStatusPointer = (QUEEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+                        LOCALASSERT(queenStatusPointer);
+                        if(queenStatusPointer->QueenState==QBS_Dead) return 1;
+                        break;
+                }
+                case(I_BehaviourPredatorAlien):
                 {
                         PAQ_STATUS_BLOCK *paqStatusPointer;    
                         paqStatusPointer = (PAQ_STATUS_BLOCK *)(sbPtr->SBdataptr);
