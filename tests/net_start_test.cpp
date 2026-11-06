@@ -135,6 +135,13 @@ static bool gameMessagesAreGood = true;
 static bool lastAskedFromTheHost = false;
 static size_t lastAskedSize = 0;
 
+static bool clientCanAfford = true;
+
+bool Net_ClientCanAfford(const uint8_t *, size_t, size_t)
+{
+	return clientCanAfford;
+}
+
 bool Net_GameMessageIsGood(const uint8_t *, size_t size, bool fromTheHost)
 {
 	lastAskedFromTheHost = fromTheHost;
@@ -311,8 +318,15 @@ ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *, size_t, enet_uint32
 	return &thePeer;
 }
 
+static int servicesWithNowhereForAnEvent = 0;
+
 int enet_host_service(ENetHost *, ENetEvent *event, enet_uint32)
 {
+	if (!event)
+	{
+		servicesWithNowhereForAnEvent++;
+	}
+
 	if (event && connectGetsAnAnswer)
 	{
 		event->type = ENET_EVENT_TYPE_CONNECT;
@@ -457,6 +471,14 @@ char IPAddressString[16] = "";
 enet_uint32 enet_time_get()
 {
 	return enetClock;
+}
+
+void LogString(const std::string &)
+{
+}
+
+void enet_peer_timeout(ENetPeer *, enet_uint32, enet_uint32, enet_uint32)
+{
 }
 
 int enet_address_set_host_ip(ENetAddress *address, const char *)
@@ -1140,6 +1162,44 @@ static void HostWithClients(int clients)
 	sentMessages.clear();
 }
 
+static void TestAnsweringWhileLoading()
+{
+	int const before = servicesWithNowhereForAnEvent;
+
+	Net_KeepAnsweringWhileLoading();
+	Check(servicesWithNowhereForAnEvent == before, "with no game going, a load has nobody to answer");
+
+	HostWithClients(1);
+	Net_SayLongestGapWhileLoading();
+
+	int const hosting = servicesWithNowhereForAnEvent;
+
+	Net_KeepAnsweringWhileLoading();
+	Check(servicesWithNowhereForAnEvent == hosting + 1, "in a game, a load answers, and with nowhere for an event, so ENet keeps what arrives until the level is ready");
+	Net_KeepAnsweringWhileLoading();
+	Check(servicesWithNowhereForAnEvent == hosting + 1, "it doesn't answer at every step");
+	enetClock += 100;
+	Net_KeepAnsweringWhileLoading();
+	Check(servicesWithNowhereForAnEvent == hosting + 2, "only every so often");
+	EndTheGame();
+}
+
+static void TestWhatAClientCantAfford()
+{
+	HostWithClients(2);
+
+	std::vector<uint8_t> const message = AGameMessage(IDOf(1));
+	int const passedOnBefore = packetsToAPeer;
+
+	clientCanAfford = false;
+	Check(Hears(1, message) == 0, "the game doesn't read what a client can't afford");
+	Check(packetsToAPeer == passedOnBefore, "and nobody else is sent it");
+	clientCanAfford = true;
+	Check(Hears(1, message) == message.size(), "a message it can afford goes to the game");
+	Check(packetsToAPeer > passedOnBefore, "and on to everyone else");
+	EndTheGame();
+}
+
 static void TestARealClientGetsIn()
 {
 	HostWithClients(0);
@@ -1768,6 +1828,12 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
 	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\tNet_NoteRefused") >= 2, "a game left off the host's list doesn't write before the list");
 
+	// No network game has an autogun, so a message about one is refused by name, and nothing in the game makes or sends one
+	Check(Has(Between(reading, "case (NetMT_PlayerAutoGunState):", "subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);"), "Net_NoteRefused("), "an autogun message is refused");
+	Check(Has(Between(ReadSourceFile("3dc/avp/bh_agun.cpp"), "void AutoGunBehaveInit(", "sbPtr->shapeIndex = toolsData->shapenum;"), "if(AvP.Network != I_No_Network)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"), "a level's own autoguns are taken away in a network game");
+	Check(Has(Between(ReadSourceFile("3dc/avp/bh_agun.cpp"), "void CastSentrygun(void) {", "CreateSentrygun(&position, 0);"), "if (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO SENTRYGUNS IN MULTIPLAYER MODE\");\n\t\treturn;"), "and a player can't place one in a network game");
+	Check(!Has(pldnet, "AddNetMsg_PlayerAutoGunState"), "so nothing sends one");
+
 	// Who may say what. These are the ones whoever hears them just believes.
 	std::vector<std::string> const onlyTheHost = { "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores" };
 	int rightOnes = 0;
@@ -1924,6 +1990,8 @@ int main()
 	TestJoiningWhileAPageIsSearching();
 	DirtyTheStack();
 	TestARealClientGetsIn();
+	TestWhatAClientCantAfford();
+	TestAnsweringWhileLoading();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
 	TestWhoDoesntGetIn();

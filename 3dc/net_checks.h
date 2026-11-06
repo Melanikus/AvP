@@ -74,6 +74,7 @@ struct NetPartRule
 	unsigned short bytes;     // how long it is after that first byte. For one whose length varies, the least it can be
 	bool lengthVaries;        // if so, it's asked how long this one is
 	bool onlyFromTheHost;     // the host's word on how things are, like the scores. Anyone else saying these would be believed by whoever hears it
+	unsigned short mostEachSecond; // how many of these a client may send in a second, for a kind that costs every machine something. 0 means there's no limit.
 };
 
 enum NetPartsAnswer
@@ -131,6 +132,80 @@ inline NetPartsAnswer NetCheckParts(const unsigned char *parts, size_t size, con
 	}
 
 	return kNetPartsGood;
+}
+
+// WHAT A CLIENT MAY SPEND. Some kinds of part make every machine in the game do something costly, and one message can hold hundreds of them. Each client has its own count. A message that would go over is refused whole, and spends nothing. This is only asked about a message that has already passed NetCheckParts.
+struct NetPartsSpent
+{
+	unsigned int secondStarted;
+	int used[256];
+};
+
+inline bool NetPartsFitTheBudget(const unsigned char *parts, size_t size, const NetPartRule *rules, size_t ruleCount, NetPartLength lengthOf, NetPartsSpent &spent, unsigned int now)
+{
+	if (now - spent.secondStarted >= 1000)
+	{
+		spent.secondStarted = now;
+		memset(spent.used, 0, sizeof(spent.used));
+	}
+
+	int wanted[256];
+	size_t at = 0;
+
+	memset(wanted, 0, sizeof(wanted));
+
+	while (at < size)
+	{
+		unsigned char const kind = parts[at];
+
+		at++;
+
+		// None of these can happen after NetCheckParts, and they keep this safe if that ever changes
+		if (kind >= ruleCount)
+		{
+			return false;
+		}
+
+		NetPartRule const &rule = rules[kind];
+		size_t const bytesLeft = size - at;
+		size_t length = rule.bytes;
+
+		if (length > bytesLeft)
+		{
+			return false;
+		}
+
+		if (rule.lengthVaries)
+		{
+			length = lengthOf(kind, parts + at, bytesLeft);
+
+			if (length == 0 || length > bytesLeft)
+			{
+				return false;
+			}
+		}
+
+		at += length;
+		wanted[kind]++;
+
+		if (rule.mostEachSecond != 0 && spent.used[kind] + wanted[kind] > rule.mostEachSecond)
+		{
+			return false;
+		}
+	}
+
+	for (size_t i = 0; i < ruleCount; i++)
+	{
+		spent.used[i] += wanted[i];
+	}
+
+	return true;
+}
+
+// The game has a fixed number of blocks. Whether fewer than the ones kept back are left.
+inline bool NetPoolIsShort(int inUse, int total, int keptBack)
+{
+	return inUse >= total - keptBack;
 }
 
 // For something anyone can make this game do for free, like answering a question from an address it has never heard of. At most this many in any one second. Not per address, because an address in a question can be made up.

@@ -78,8 +78,6 @@ extern void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn);
 extern void HandlePlayerGhostWeaponSound(STRATEGYBLOCK *sbPtr, int weapon, int firingPrimary, int firingSecondary);
 extern void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon);
 extern void MaintainGhosts(void);
-extern void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing);
-extern void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing);
 extern void MaintainGhostCloakingStatus(STRATEGYBLOCK *sbPtr, int IsCloaked);
 extern void MaintainGhostFireStatus(STRATEGYBLOCK *sbPtr, int IsOnFire);
 

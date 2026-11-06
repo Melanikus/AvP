@@ -59,6 +59,9 @@ static bool net_IsInitialised = false;
 
 static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
 
+// How long a machine that's stopped answering may go before ENet drops it. Nothing answers ENet while a level loads, and one machine can take much longer than another. ENet's own number was about 5 seconds, which a joiner on a big level can't meet. A machine that never comes back is still dropped when this runs out.
+static const enet_uint32 kConnectionPatienceMilliseconds = 15000;
+
 extern void NewOnScreenMessage(char *messagePtr);
 
 NetID AvPNetID = 0; // rename this
@@ -113,6 +116,7 @@ extern bool AddPlayerToGame(NetID id, const char *name);
 extern void Net_PlayerHasGone(NetID id);
 extern void Net_HostHasGone();
 extern bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost);
+extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
 extern unsigned char DebouncedKeyboardInput[];
 
 static bool Net_CreatePlayer(char *playerName);
@@ -767,6 +771,50 @@ static void ForgetConnectionsNotLetIn()
 	}
 }
 
+// How long a load may go between answers before it answers again. Answering costs little, but this is called for every step of a load.
+static const unsigned int kAnswerWhileLoadingEveryMilliseconds = 100;
+static bool hasAnsweredWhileLoading = false;
+static unsigned int lastAnsweredWhileLoading = 0;
+static unsigned int longestGapWhileLoading = 0;
+
+void Net_KeepAnsweringWhileLoading()
+{
+	if (!host)
+	{
+		return;
+	}
+
+	unsigned int const now = enet_time_get();
+	unsigned int const gap = now - lastAnsweredWhileLoading;
+
+	if (hasAnsweredWhileLoading && gap < kAnswerWhileLoadingEveryMilliseconds)
+	{
+		return;
+	}
+
+	if (hasAnsweredWhileLoading && gap > longestGapWhileLoading)
+	{
+		longestGapWhileLoading = gap;
+	}
+
+	hasAnsweredWhileLoading = true;
+	lastAnsweredWhileLoading = now;
+
+	// With nowhere to put an event, ENet acknowledges what's arrived and keeps it for later
+	enet_host_service(host, NULL, 0);
+}
+
+void Net_SayLongestGapWhileLoading()
+{
+	if (host)
+	{
+		LogString("net: while loading, the longest gap between answers was " + std::to_string(longestGapWhileLoading) + " ms, and the patience is " + std::to_string(kConnectionPatienceMilliseconds) + " ms");
+	}
+
+	hasAnsweredWhileLoading = false;
+	longestGapWhileLoading = 0;
+}
+
 void Net_ServiceNetwork()
 {
 	if (host)
@@ -970,6 +1018,12 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 		return false;
 	}
 
+	// This too comes before it's passed on, so a flood costs the host once, and costs nobody else anything
+	if (!Net_ClientCanAfford(data, size, connection))
+	{
+		return false;
+	}
+
 	// Clients can't reach each other, so the host passes this on to the rest
 	ENetPacket *packet = enet_packet_create(data, size, ENET_PACKET_FLAG_RELIABLE);
 
@@ -1053,6 +1107,8 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 			{
 				case ENET_EVENT_TYPE_CONNECT:
 				{
+					enet_peer_timeout(eEvent.peer, 0, kConnectionPatienceMilliseconds, kConnectionPatienceMilliseconds);
+
 					if (AvP.Network == I_Host && (size_t)(eEvent.peer - host->peers) <= kMostClients)
 					{
 						connectionStartedAt[eEvent.peer - host->peers] = enet_time_get();
@@ -1260,6 +1316,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		host = NULL;
 		return NET_FAIL;
 	}
+
+	enet_peer_timeout(ServerPeer, 0, kConnectionPatienceMilliseconds, kConnectionPatienceMilliseconds);
 
 	ENetEvent eEvent;
 

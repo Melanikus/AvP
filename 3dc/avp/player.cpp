@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a player dying when the game has no block left for a corpse still dies, and everyone hears of it
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the marine's shoulder lamp starts off
 /* KJL 16:23:20 10/25/96 - I'm moved all the weapon stuff to the newly created weapon.c,
@@ -1116,6 +1118,14 @@ static void PlayerIsDead(DAMAGE_PROFILE* damage,int multiplier,VECTORCH* incomin
 	if(AvP.Network!=I_No_Network)
 	{
 		playerStatusPtr->MyCorpse=MakeNewCorpse();
+
+		// With no block left there's no corpse here. Other machines still have to hear this player died. The number only has to not be the one for a player's body.
+		if (!playerStatusPtr->MyCorpse)
+		{
+			AddNetMsg_PlayerKilled((int)(FastRandom() & 0x7FFFFFFF) | 1, damage);
+		}
+		else
+		{
 		AddNetMsg_PlayerKilled((*((int *)(&(playerStatusPtr->MyCorpse->SBname[4])))),damage);
 
 		/*---------------------------------------------------------**
@@ -1126,7 +1136,8 @@ static void PlayerIsDead(DAMAGE_PROFILE* damage,int multiplier,VECTORCH* incomin
 		suitable death anim sequence*/
 		if(damage)
 		{
-			HMODELCONTROLLER* hmodel=playerStatusPtr->MyCorpse->SBdptr->HModelControlBlock;
+			// A corpse with no display block has no model to tear apart: see below
+			HMODELCONTROLLER* hmodel=playerStatusPtr->MyCorpse->SBdptr ? playerStatusPtr->MyCorpse->SBdptr->HModelControlBlock : NULL;
 			//was the player killed by a jaw attack?
 			if(damage->Id==AMMO_ALIEN_BITE_KILLSECTION && AvP.PlayerType!=I_Alien)
 			{
@@ -1246,6 +1257,7 @@ static void PlayerIsDead(DAMAGE_PROFILE* damage,int multiplier,VECTORCH* incomin
 			//tell everyone else about the chosen death
 			AddNetMsg_PlayerDeathAnim(deathId,*(int*)&playerStatusPtr->MyCorpse->SBname[4]);
 		}
+		} // the end of what's done to a corpse
 
 //		if(AvP.Network==I_Host) DoNetScoresForHostDeath();
 

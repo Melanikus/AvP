@@ -6,6 +6,66 @@
 	],
 	"rows": [
 		{
+			"name": "a client's budget never comes back",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (now - spent.secondStarted >= 1000)\n\t{\n\t\tspent.secondStarted = now;\n\t\tmemset(spent.used, 0, sizeof(spent.used));\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a client can go over its budget",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (rule.mostEachSecond != 0 && spent.used[kind] + wanted[kind] > rule.mostEachSecond)\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind with no limit is limited",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "rule.mostEachSecond != 0 && spent.used[kind]",
+					"to": "spent.used[kind]"
+				}
+			]
+		},
+		{
+			"name": "a refused message is still paid for",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "wanted[kind]++;\n",
+					"to": "wanted[kind]++;\n\t\tspent.used[kind]++;\n"
+				}
+			]
+		},
+		{
+			"name": "a part's length that varies is taken as its least",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "length = lengthOf(kind, parts + at, bytesLeft);\n\n\t\t\tif (length == 0 || length > bytesLeft)\n\t\t\t{\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\n\t\tat += length;\n\t\twanted",
+					"to": "}\n\n\t\tat += length;\n\t\twanted"
+				}
+			]
+		},
+		{
+			"name": "a pool is short one block later",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return inUse >= total - keptBack;",
+					"to": "return inUse > total - keptBack;"
+				}
+			]
+		},
+		{
 			"name": "an address one past the end counts as inside",
 			"changes": [
 				{

@@ -40,7 +40,6 @@
 #include "bh_alien.h"
 #include "bh_marine.h"
 #include "bh_binary_switch.h"
-#include "bh_agun.h"
 #include "bh_weapon.h"
 #include "bh_corpse.h"
 #include "bh_light.h"
@@ -311,7 +310,6 @@ static void ProcessNetMsg_InanimateObjectDestroyed(NETMESSAGE_INANIMATEDESTROYED
 static void ProcessNetMsg_LOSRequestBinarySwitch(NETMESSAGE_LOSREQUESTBINARYSWITCH *msgPtr);
 static void ProcessNetMsg_PlatformLiftState(NETMESSAGE_PLATFORMLIFTSTATE *msgPtr);
 static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE *msgPtr);
-static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);
 static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, NetID senderId);
 static void ProcessNetMsg_MakeExplosion(NETMESSAGE_MAKEEXPLOSION *messagePtr);
 static void ProcessNetMsg_MakeFlechetteExplosion(NETMESSAGE_MAKEFLECHETTEEXPLOSION *messagePtr);
@@ -1024,6 +1022,12 @@ void RemovePlayerFromGame(NetID id)
   ----------------------------------------------------------------------*/
 
 // In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
+// What a client may send each second of the kinds that cost every machine something. Each is far more than a real game sends: nobody dies twice in a second, and a burst of cluster grenades is a few explosions. A big explosion alone makes about 4 pieces of flying debris, and a message can hold 180 of them.
+static const unsigned short kMostKillsEachSecond = 2;
+static const unsigned short kMostChatLinesEachSecond = 4;
+static const unsigned short kMostExplosionsEachSecond = 24;
+static const unsigned short kMostGibbingsEachSecond = 16;
+
 static constexpr NetPartRule kNetPartRules[] =
 {
 	{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true },
@@ -1032,7 +1036,7 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, false },
 	{ NetMT_PlayerState_Minimal, sizeof(NETMESSAGE_PLAYERSTATE_MINIMAL), false, false },
 	{ NetMT_PlayerState_Medium, sizeof(NETMESSAGE_PLAYERSTATE_MEDIUM), false, false },
-	{ NetMT_PlayerKilled, sizeof(NETMESSAGE_PLAYERKILLED), false, false },
+	{ NetMT_PlayerKilled, sizeof(NETMESSAGE_PLAYERKILLED), false, false, kMostKillsEachSecond },
 	{ NetMT_PlayerLeaving, 0, false, false },
 	{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true },
 	{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true },
@@ -1048,10 +1052,10 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_RequestPlatformLiftActivate, sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE), false, false },
 	{ NetMT_PlayerAutoGunState, sizeof(NETMESSAGE_AGUNSTATE), false, true },
 	{ NetMT_MakeDecal, sizeof(NETMESSAGE_MAKEDECAL), false, false },
-	{ NetMT_ChatBroadcast, 2, true, false },
-	{ NetMT_MakeExplosion, sizeof(NETMESSAGE_MAKEEXPLOSION), false, false },
-	{ NetMT_MakeFlechetteExplosion, sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION), false, false },
-	{ NetMT_MakePlasmaExplosion, sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION), false, false },
+	{ NetMT_ChatBroadcast, 2, true, false, kMostChatLinesEachSecond },
+	{ NetMT_MakeExplosion, sizeof(NETMESSAGE_MAKEEXPLOSION), false, false, kMostExplosionsEachSecond },
+	{ NetMT_MakeFlechetteExplosion, sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION), false, false, kMostExplosionsEachSecond },
+	{ NetMT_MakePlasmaExplosion, sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION), false, false, kMostExplosionsEachSecond },
 	{ NetMT_PredatorSights, sizeof(NETMESSAGE_PREDATORSIGHTS), false, false },
 	{ NetMT_LocalObjectOnFire, sizeof(NETMESSAGE_LOBONFIRE), false, false },
 	{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true },
@@ -1071,8 +1075,8 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_CreateWeapon, sizeof(NETMESSAGE_CREATEWEAPON), false, false },
 	{ NetMT_RespawnPickups, 0, false, true },
 	{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true },
-	{ NetMT_Gibbing, sizeof(NETMESSAGE_GIBBING), false, false },
-	{ NetMT_CorpseDeathAnim, sizeof(NETMESSAGE_CORPSEDEATHANIM), false, false },
+	{ NetMT_Gibbing, sizeof(NETMESSAGE_GIBBING), false, false, kMostGibbingsEachSecond },
+	{ NetMT_CorpseDeathAnim, sizeof(NETMESSAGE_CORPSEDEATHANIM), false, false, kMostKillsEachSecond },
 	{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true },
 	{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },
 	{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true },
@@ -1147,6 +1151,33 @@ bool Net_HostsLevelIsOnItsList()
 	return false;
 }
 
+bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection)
+{
+	static NetPartsSpent spent[NET_MAXPLAYERS + 1];
+
+	if (connection >= sizeof(spent) / sizeof(spent[0]) || size < kMessageHeaderSize)
+	{
+		return false;
+	}
+
+	if (NetPartsFitTheBudget(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), LengthOfANetPart, spent[connection], timeGetTime()))
+	{
+		return true;
+	}
+
+	Net_NoteRefused("a client sent more of one kind of part in a second than any game does");
+	return false;
+}
+
+// What's kept back of the game's 1000 strategy blocks and 750 display blocks. A player's own corpse and shots come out of this. Primary's sums for a crowded level, about 70 computer players near, use 70 of the first and up to 140 of the second.
+static const int kStrategyBlocksKeptBack = 100;
+static const int kDisplayBlocksKeptBack = 75;
+
+bool Net_BlocksAreShort()
+{
+	return AvP.Network != I_No_Network && (NetPoolIsShort(NumActiveStBlocks, maxstblocks, kStrategyBlocksKeptBack) || NetPoolIsShort(NumActiveBlocks, maxobjects, kDisplayBlocksKeptBack));
+}
+
 bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)
 {
 	if (size < kMessageHeaderSize)
@@ -1171,8 +1202,9 @@ bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost
 	}
 }
 
-// How many new things other machines may make here in a second. Far more than a real battle, and small enough that the blocks they use can't run out before the first ones time out.
+// How many new things other machines may make here in a second. Far more than a real battle. A limit on a second isn't enough by itself, because a spear lasts 20 seconds, so what one player has alive is counted as well.
 static const int kMostNewGhostsEachSecond = 60;
+static const int kMostLiveThingsOfOnePlayer = 48;
 static const int kMostDroppedGunsEachSecond = 16;
 
 // Each player has their own count, so one flooding can't stop anyone else's ghosts appearing
@@ -1422,7 +1454,8 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			case (NetMT_PlayerAutoGunState):
 			{
-				ProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);
+				// No network game has an autogun: a level's own are taken away as the game starts (AutoGunBehaveInit), and a player can't place one (CastSentrygun). So no honest game ever sends this.
+				Net_NoteRefused("an autogun message came, and no network game has autoguns");
 				subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);
 				break;
 			}
@@ -1941,14 +1974,6 @@ static void AddPlayerAndObjectUpdateMessages(void)
 					AddNetMsg_LocalObjectState(sbPtr);
 				}
 
-				break;
-			}
-
-			case (I_BehaviourAutoGun):
-			{
-				/* this MUST be a player placed autogun */
-				/* the autogun update message */
-				AddNetMsg_PlayerAutoGunState(sbPtr);
 				break;
 			}
 
@@ -4095,113 +4120,6 @@ void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr)
 	COPY_NAME((&messagePtr->name[0]), &(sbPtr->SBname));
 }
 
-void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)
-{
-	NETMESSAGEHEADER *headerPtr;
-	NETMESSAGE_AGUNSTATE *messagePtr;
-	int headerSize = sizeof(NETMESSAGEHEADER);
-	int messageSize = sizeof(NETMESSAGE_AGUNSTATE);
-
-	/* only send this if we are playing */
-	if (netGameData.myGameState != NGS_Playing) {
-		return;
-	}
-
-	/* check there's enough room in the send buffer */
-	{
-		int numBytesReqd = headerSize + messageSize;
-		int numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
-
-		if (numBytesReqd > numBytesLeft)
-		{
-			LOCALASSERT(1 == 0);
-			/* don't add it */
-			return;
-		}
-	}
-	/* set up pointers to header and message structures */
-	headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
-	endSendBuffer += headerSize;
-	messagePtr = (NETMESSAGE_AGUNSTATE *)endSendBuffer;
-	endSendBuffer += messageSize;
-	/* fill out the header */
-	headerPtr->type = (unsigned char)NetMT_PlayerAutoGunState;
-	/* fill out the message */
-	{
-		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
-		LOCALASSERT(dynPtr);
-		LOCALASSERT((dynPtr->Position.vx < 4194304) && (dynPtr->Position.vx > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->Position.vy < 4194304) && (dynPtr->Position.vy > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->Position.vz < 4194304) && (dynPtr->Position.vz > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerX >= 0) && (dynPtr->OrientEuler.EulerX < 4096)); /* 9 bits of signed data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerY >= 0) && (dynPtr->OrientEuler.EulerY < 4096)); /* 9 bits of signed data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerZ >= 0) && (dynPtr->OrientEuler.EulerZ < 4096));  /* 9 bits of signed data */
-
-		/* NB we can fit +-4194303 into 23 bits */
-		if (dynPtr->Position.vx < -4100000) {
-			messagePtr->xPos = -4100000;
-		}
-		else if (dynPtr->Position.vx > 4100000) {
-			messagePtr->xPos = 4100000;
-		}
-		else {
-			messagePtr->xPos = dynPtr->Position.vx;
-		}
-
-		messagePtr->xOrient = (dynPtr->OrientEuler.EulerX >> NET_EULERSCALESHIFT);
-
-		if (dynPtr->Position.vy < -4100000) {
-			messagePtr->yPos = -4100000;
-		}
-		else if (dynPtr->Position.vy > 4100000) {
-			messagePtr->yPos = 4100000;
-		}
-		else {
-			messagePtr->yPos = dynPtr->Position.vy;
-		}
-
-		messagePtr->yOrient = (dynPtr->OrientEuler.EulerY >> NET_EULERSCALESHIFT);
-
-		if (dynPtr->Position.vz < -4100000) {
-			messagePtr->zPos = -4100000;
-		}
-		else if (dynPtr->Position.vz > 4100000) {
-			messagePtr->zPos = 4100000;
-		}
-		else {
-			messagePtr->zPos = dynPtr->Position.vz;
-		}
-
-		messagePtr->zOrient = (dynPtr->OrientEuler.EulerZ >> NET_EULERSCALESHIFT);
-	}
-	/* add the object Id */
-	{
-		int obId = *((int *)(&(sbPtr->SBname[4])));
-		//      LOCALASSERT((obId >= -NET_MAXOBJECTID)&&(obId <= NET_MAXOBJECTID));
-		messagePtr->objectId = obId;
-	}
-	/* am I firing?? */
-	{
-		AUTOGUN_STATUS_BLOCK *agData;
-		agData = (AUTOGUN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-		LOCALASSERT(agData);
-
-		if (agData->Firing) {
-			messagePtr->IAmFiring = 1;
-		}
-		else {
-			messagePtr->IAmFiring = 0;
-		}
-
-		if (agData->behaviourState == I_disabled) {
-			messagePtr->IAmEnabled = 0;
-		}
-		else {
-			messagePtr->IAmEnabled = 1;
-		}
-	}
-}
-
 /* KJL 17:49:31 20/01/98 - transmit make decal info */
 void AddNetMsg_MakeDecal(enum DECAL_ID decalID, VECTORCH *normalPtr, VECTORCH *positionPtr, int moduleIndex)
 {
@@ -4335,7 +4253,15 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 	//   short it leaves out the end marker, so we always write one ourselves
 	//   into the last byte.
 	// A line that fits comes out exactly as before.
-	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	// A host's description can leave this machine off the list, and it would be read from before the list's start
+	int const myPlaceInTheList = PlayerIdInPlayerList(AvPNetID);
+
+	if (myPlaceInTheList == NET_IDNOTINPLAYERLIST)
+	{
+		return;
+	}
+
+	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[myPlaceInTheList].name, string);
 	OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
@@ -6541,6 +6467,30 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 			return;
 		}
 
+		// Only the kinds a message can make count. A player's body and the computer's fighters are made some other way, and don't use this up.
+		int liveThings = 0;
+
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+			if (block && block->I_SBtype == I_BehaviourNetGhost && block->SBdataptr)
+			{
+				NETGHOSTDATABLOCK const *const liveGhost = (NETGHOSTDATABLOCK const *)block->SBdataptr;
+
+				if (liveGhost->playerId == senderId && GhostKindCanBeMadeByMessage(liveGhost->type))
+				{
+					liveThings++;
+				}
+			}
+		}
+
+		if (liveThings >= kMostLiveThingsOfOnePlayer)
+		{
+			Net_NoteRefused("a player has as many things alive as one player may");
+			return;
+		}
+
 		if (type == I_BehaviourNetCorpse)
 		{
 			/* This *should* never happen... */
@@ -7289,55 +7239,6 @@ static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORM
 		ActivatePlatformLift(objectPtr);
 	}
 }
-
-static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *messagePtr, NetID senderId)
-{
-	// only do this if we're playing
-	if (netGameData.myGameState != NGS_Playing) {
-		return;
-	}
-
-	// get the object id from the message
-	int objectId = (int)messagePtr->objectId;
-	STRATEGYBLOCK *sbPtr = FindGhost(senderId, objectId);
-
-	if (!sbPtr)
-	{
-		// we don't seem to have a ghost for this autoGun, so create one
-		VECTORCH position;
-		EULER orientation;
-		position.vx = messagePtr->xPos;
-		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
-		position.vy = messagePtr->yPos;
-		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
-		position.vz = messagePtr->zPos;
-		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
-		// NB there is no sequence required for autoguns, so just pass zero
-		sbPtr = CreateNetGhost(senderId, objectId, &position, &orientation, I_BehaviourAutoGun, IOT_Non, 0);
-
-		if (sbPtr)
-		{
-			HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
-			HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
-		}
-	}
-	else
-	{
-		// update the autogun ghost...
-		VECTORCH position;
-		EULER orientation;
-		position.vx = messagePtr->xPos;
-		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
-		position.vy = messagePtr->yPos;
-		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
-		position.vz = messagePtr->zPos;
-		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
-		UpdateGhost(sbPtr, &position, &orientation, 0, 0);
-		HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
-		HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
-	}
-}
-
 
 static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
 {
@@ -8262,6 +8163,12 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetI
 	if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond[sender], &droppedGunsUsed[sender], kMostDroppedGunsEachSecond))
 	{
 		Net_NoteRefused("too many dropped guns from one player in a second");
+		return;
+	}
+
+	if (Net_BlocksAreShort())
+	{
+		Net_NoteRefused("the game is short of blocks, so a dropped gun wasn't made");
 		return;
 	}
 

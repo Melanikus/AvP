@@ -296,6 +296,60 @@ static void TestTypedAddresses()
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
 }
 
+static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, size_t)
+{
+	return 1 + (size_t)part[0];
+}
+
+static void TestWhatAClientMaySpend()
+{
+	// Kind 0 is one byte long with no limit, kind 1 is one byte long and at most 3 a second, kind 2 varies and at most 1 a second
+	static const NetPartRule rules[] =
+	{
+		{ 0, 1, false, false, 0 },
+		{ 1, 1, false, false, 3 },
+		{ 2, 1, true, false, 1 }
+	};
+	static const size_t ruleCount = sizeof(rules) / sizeof(rules[0]);
+
+	NetPartsSpent spent;
+
+	memset(&spent, 0, sizeof(spent));
+
+	unsigned char const threeLimited[] = { 1, 9, 1, 9, 1, 9 };
+	unsigned char const oneLimited[] = { 1, 9 };
+	unsigned char const manyFree[] = { 0, 9, 0, 9, 0, 9, 0, 9, 0, 9, 0, 9 };
+	unsigned char const twoLimited[] = { 1, 9, 1, 9 };
+
+	Check(NetPartsFitTheBudget(threeLimited, sizeof(threeLimited), rules, ruleCount, LengthForTheBudgetTest, spent, 5000), "a client can spend all of its budget");
+	Check(!NetPartsFitTheBudget(oneLimited, sizeof(oneLimited), rules, ruleCount, LengthForTheBudgetTest, spent, 5100), "but not one more in that second");
+	Check(NetPartsFitTheBudget(manyFree, sizeof(manyFree), rules, ruleCount, LengthForTheBudgetTest, spent, 5200), "and a kind with no limit isn't touched by that");
+	Check(NetPartsFitTheBudget(oneLimited, sizeof(oneLimited), rules, ruleCount, LengthForTheBudgetTest, spent, 6000), "the next second it has its budget back");
+
+	// A message that doesn't fit spends nothing
+	unsigned char const tooMany[] = { 1, 9, 1, 9, 1, 9 };
+
+	Check(!NetPartsFitTheBudget(tooMany, sizeof(tooMany), rules, ruleCount, LengthForTheBudgetTest, spent, 6100), "one message can't go over either, whatever's in it");
+	Check(NetPartsFitTheBudget(twoLimited, sizeof(twoLimited), rules, ruleCount, LengthForTheBudgetTest, spent, 6200), "and a refused message spends nothing");
+
+	// A part whose length varies is walked by its real length, so what's inside it isn't read as parts
+	NetPartsSpent spentOnChat;
+
+	memset(&spentOnChat, 0, sizeof(spentOnChat));
+
+	unsigned char const chatHoldingWhatLooksLikeParts[] = { 2, 3, 1, 1, 1 };
+
+	Check(NetPartsFitTheBudget(chatHoldingWhatLooksLikeParts, sizeof(chatHoldingWhatLooksLikeParts), rules, ruleCount, LengthForTheBudgetTest, spentOnChat, 100), "a part's inside isn't counted as parts");
+	Check(!NetPartsFitTheBudget(chatHoldingWhatLooksLikeParts, sizeof(chatHoldingWhatLooksLikeParts), rules, ruleCount, LengthForTheBudgetTest, spentOnChat, 200), "and the part itself is");
+
+	unsigned char const unknown[] = { 200 };
+
+	Check(!NetPartsFitTheBudget(unknown, sizeof(unknown), rules, ruleCount, LengthForTheBudgetTest, spentOnChat, 300), "a kind that doesn't exist isn't paid for, it's refused");
+
+	Check(!NetPoolIsShort(899, 1000, 100), "with more than what's kept back left, a pool isn't short");
+	Check(NetPoolIsShort(900, 1000, 100), "with only that left, it is");
+}
+
 static void TestSoundAddresses()
 {
 	int block[4];
@@ -409,6 +463,7 @@ int main()
 	TestWhatGoesOnTheScreen();
 	TestCountingRefusals();
 	TestSoundAddresses();
+	TestWhatAClientMaySpend();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();

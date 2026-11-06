@@ -3,6 +3,7 @@
 #include "platform.h"
 #include "kshape.h"
 #include "progress_bar.h"
+#include "networking.h"
 #include "chunk_textures.h"
 #include "inline.h"
 #include "gamedef.h"
@@ -105,6 +106,9 @@ void Start_Progress_Bar()
 
 void Set_Progress_Bar_Position(int pos)
 {
+	// Other machines think this one has gone if it stops answering, and a level can take a long time to load.
+	Net_KeepAnsweringWhileLoading();
+
 	uint32_t NewPosition = DIV_FIXED(pos, PBAR_LENGTH);
 
 	if (NewPosition > CurrentPosition)
@@ -151,34 +155,13 @@ void Set_Progress_Bar_Position(int pos)
 		ThisFramesRenderingHasFinished();
 		
 		FlipBuffers();
-		/*
-		If this is a network game , then check the received network messages from 
-		time to time (~every second).
-		Has nothing to do with the progress bar , but this is a convenient place to
-		do the check.
-		*/
-	
-#if 0
-		if (AvP.Network != I_No_Network)
-		{
-			static uint32_t LastSendTime;
-			uint32_t time = timeGetTime();
-			if (time - LastSendTime > 1000 || time < LastSendTime)
-			{
-				//time to check our messages 
-				LastSendTime = time;
-				MinimalNetCollectMessages();
-				//send messages , mainly  needed so that the host will send the game description
-				//allowing people to join while the host is loading
-				NetSendMessages();
-			}
-		}
-#endif
 	}
 }
 
 void Game_Has_Loaded()
 {
+	Net_SayLongestGapWhileLoading();
+
 	SoundSys_StopAll();
 	SoundSys_Management();
 

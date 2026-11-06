@@ -900,7 +900,6 @@ extern void AddNetMsg_LOSRequestBinarySwitch(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_PlatformLiftState(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RequestPlatformLiftReverse(STRATEGYBLOCK *sbPtr);
-extern void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_EndGame(void);
 extern void AddNetMsg_MakeDecal(enum DECAL_ID decalID, VECTORCH *normalPtr, VECTORCH *positionPtr, int moduleIndex);
 extern void AddNetMsg_ChatBroadcast(char *string,BOOL same_species_only);
@@ -916,6 +915,12 @@ extern void Net_NoteRefused(const char *why);
 
 // Whether the level a host named is on the list for the game type it named. It says why in the log if not.
 extern bool Net_HostsLevelIsOnItsList();
+
+// Whether a client may send this message now, by the limits on the costly kinds of part. It says why in the log if not. connection is its place in the host's list.
+extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
+
+// In a network game, whether the blocks are down to what's kept back for this machine's own player. Anything a message asks for, or that's only for show, isn't made then.
+extern bool Net_BlocksAreShort();
 extern void AddNetMsg_FragmentalObjectsStatus(void);
 extern void AddNetMsg_StrategySynch(void);
 extern void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr);
