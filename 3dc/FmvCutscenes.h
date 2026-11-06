@@ -1,3 +1,5 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   says what size a video screen's picture has to be
 #ifndef _fmvCutscenes_h_
 #define _fmvCutscenes_h_
 #define HAVE_STRUCT_TIMESPEC
@@ -25,6 +27,10 @@ typedef struct FMVTEXTURE
 // variables
 extern uint32_t NumberOfFMVTextures;
 #define MAX_NO_FMVTEXTURES 10
+
+// How wide and tall a video screen's picture has to be. Its RGBBuffer is made for this size in SetupFMVTexture, and every picture the stock game has is this size.
+const uint32_t kFMVTextureSize = 128;
+
 extern FMVTEXTURE FMVTexture[MAX_NO_FMVTEXTURES];
 
 // functions

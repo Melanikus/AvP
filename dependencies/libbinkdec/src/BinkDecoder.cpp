@@ -58,6 +58,8 @@
  *   BK-P17: fail Open when an audio track can't be created
  *   BK-P20: keep C++ exceptions inside Bink_Open and Bink_GetNextFrame; Bink_Open deletes a failed decoder in one place
  *   BK-P21: reject a header that claims more data than the file has
+ *   BK-P22: the list of decoders has a fixed place for each, so it can't move under a playing film (port of libsmackerdec SM-P18)
+ *   BK-P23: LogError no longer writes one string from every film's thread (see LogError.cpp)
  *   removed an unfinished switched-off (#if 0) block: its bare "class" stopped code-checking tools reading this file
  */
 
@@ -65,12 +67,15 @@
 #include "LogError.h"
 #include "FFmpeg_includes.h"
 
-std::vector<class BinkDecoder*> classInstances;
+// Each film plays on its own thread and looks its decoder up here on every frame, while the main thread can be opening another, as when the menu background is playing and the logos film
+// opens. A list that could grow would move in memory under that thread, so this one has a fixed size. The game itself uses two at most. If it were ever full, a film just wouldn't open.
+static const int kMostOpenDecoders = 32;
+static class BinkDecoder *classInstances[kMostOpenDecoders];
 
 // the decoder a handle refers to, or 0 for an invalid or closed handle
 static BinkDecoder *GetDecoder(const BinkHandle &handle)
 {
-	if (handle.instanceIndex < 0 || (size_t)handle.instanceIndex >= classInstances.size())
+	if (handle.instanceIndex < 0 || handle.instanceIndex >= kMostOpenDecoders)
 		return 0;
 
 	return classInstances[handle.instanceIndex];
@@ -92,9 +97,20 @@ BinkHandle Bink_Open(const char* fileName)
 		newDecoder = new BinkDecoder();
 		if (newDecoder->Open(fileName))
 		{
-			// add instance to global instance vector
-			classInstances.push_back(newDecoder);
-			opened = true;
+			// find it a place in the list. It only goes in once it's ready, so a thread can't find a decoder that's half made.
+			int place = 0;
+
+			while (place < kMostOpenDecoders && classInstances[place])
+			{
+				place++;
+			}
+
+			if (place < kMostOpenDecoders)
+			{
+				classInstances[place] = newDecoder;
+				newHandle.instanceIndex = place;
+				opened = true;
+			}
 		}
 	}
 	catch (...)
@@ -113,9 +129,6 @@ BinkHandle Bink_Open(const char* fileName)
 	// loaded ok, make handle valid
 	newHandle.isValid = true;
 
-	// get a handle ID
-	newHandle.instanceIndex = classInstances.size() - 1;
-	
 	return newHandle;
 }
 

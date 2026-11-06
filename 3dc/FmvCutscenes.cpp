@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the name of a triggered film is built in a buffer with room for any number the level file can hold
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a level can't overfill the list of video screens or give one a picture of the wrong size, and a video with no sound plays;
+//   starting a film on a screen lets go of the last one, even if it had finished
 
 #ifdef _XBOX
 	#define _fseeki64 fseek // ensure libvorbis uses fseek and not _fseeki64 for xbox
@@ -81,6 +84,12 @@ int NextFMVTextureFrame(FMVTEXTURE *ftPtr)
 
 	uint8_t *DestBufferPtr = ftPtr->RGBBuffer;
 
+	// Everything below writes width x height into that buffer, and the buffer is only ever this size. ScanImagesForFMVs lets no other
+	// picture through, but the number comes from the texture, so this checks what's really about to be written.
+	if (width != kFMVTextureSize || height != kFMVTextureSize || !DestBufferPtr) {
+		return 0;
+	}
+
 	if (MoviesAreActive && ftPtr->fmvHandle != -1)
 	{
 		int volume = MUL_FIXED(FmvSoundVolume*256, GetVolumeOfNearestVideoScreen());
@@ -97,8 +106,12 @@ int NextFMVTextureFrame(FMVTEXTURE *ftPtr)
 
 		// panning of 32768 = centre (both speakers)
 
-		fmvList[ftPtr->fmvHandle]->_audioStream->SetVolume(volume);
-		fmvList[ftPtr->fmvHandle]->_audioStream->SetPan(PanningOfNearestVideoScreen);
+		// a video with no sound track has no sound stream to set
+		if (fmvList[ftPtr->fmvHandle]->_audioStream)
+		{
+			fmvList[ftPtr->fmvHandle]->_audioStream->SetVolume(volume);
+			fmvList[ftPtr->fmvHandle]->_audioStream->SetPan(PanningOfNearestVideoScreen);
+		}
 
 		ftPtr->SoundVolume = FmvSoundVolume;
 
@@ -312,14 +325,12 @@ extern void StartTriggerPlotFMV(int number)
 		if (FMVTexture[i].IsTriggeredPlotFMV)
 		{
 			// close it if it's open
+			// A film that had finished used to stay here, holding its place on the list of films for good
 			if (FMVTexture[i].fmvHandle != -1)
 			{
-				if (fmvList[FMVTexture[i].fmvHandle]->IsPlaying())
-				{
-					delete fmvList[FMVTexture[i].fmvHandle];
-					fmvList[FMVTexture[i].fmvHandle] = 0;
-					FMVTexture[i].fmvHandle = -1;
-				}
+				delete fmvList[FMVTexture[i].fmvHandle];
+				fmvList[FMVTexture[i].fmvHandle] = 0;
+				FMVTexture[i].fmvHandle = -1;
 			}
 
 			FMVTexture[i].fmvHandle = OpenFMV(buffer);
@@ -359,6 +370,14 @@ void ScanImagesForFMVs()
 		}
 		else
 		{
+			// The list of video screens has room for so many. These names come from the level file, and no stock level has more than one.
+			// Any more stay as the still pictures they are.
+			if (NumberOfFMVTextures >= MAX_NO_FMVTEXTURES)
+			{
+				Con_PrintError("This level has more video screens than the game has room for, so the rest stay still");
+				break;
+			}
+
 			// we found an occurrence. Now find offset of fullstop to allow us to remove the .RIM extension
 			std::string::size_type offset2 = fmvTextures[i].find(".");
 
@@ -383,7 +402,12 @@ void ScanImagesForFMVs()
 
 			Tex_GetDimensions(i, width, height); // TODO: check that i is always going to be correct as texture id
 
-			assert((width == 128) && (height == 128));
+			// A picture from a level file can be any size, and only this size fits the video screen's buffer. It stays a still picture.
+			if ((width != kFMVTextureSize) || (height != kFMVTextureSize))
+			{
+				Con_PrintError("The video screen picture " + fmvTextures[i] + " is the wrong size, so it stays still");
+				continue;
+			}
 
 			FMVTexture[NumberOfFMVTextures].textureID = i;
 			FMVTexture[NumberOfFMVTextures].width     = width;
