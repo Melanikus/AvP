@@ -427,12 +427,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: only the first light is drawn",
+			"name": "SOURCE: only one line of a light's numbers is sent",
 			"changes": [
 				{
 					"file": "3dc/pixel_lights.cpp",
-					"from": "device->SetPixelShaderConstantF(1, constants, 2);",
-					"to": "device->SetPixelShaderConstantF(1, constants, 1);"
+					"from": "device->SetScissorRect(&reach[i]);\n\t\tdevice->SetPixelShaderConstantF(1, constants, 2);",
+					"to": "device->SetScissorRect(&reach[i]);\n\t\tdevice->SetPixelShaderConstantF(1, constants, 1);"
 				}
 			]
 		},

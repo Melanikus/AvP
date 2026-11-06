@@ -227,7 +227,7 @@ static void CheckTheTotalsPasses()
 	Check(Has(total, "SetRectangleState(device, false, true);"), "what a light writes goes on top of what's there");
 	Check(Has(total, "device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);"), "and only on its own part of the screen");
 	Check(Has(total, "device->SetScissorRect(&reach[i]);"), "which is its own, for each light");
-	Check(Has(total, "device->SetPixelShaderConstantF(1, constants, 2);") && Has(total, "DrawRectangle(device);"), "and each light is drawn on its own");
+	Check(Has(total, "device->SetScissorRect(&reach[i]);\n\t\tdevice->SetPixelShaderConstantF(1, constants, 2);\n\t\tDrawRectangle(device);"), "and each light is drawn on its own, with both lines of its numbers");
 	Check(Has(total, "LightOnListIsDark(light) || !reachesScreen[i]"), "a dark place, or a light that reaches nothing, is left out");
 	Check(Has(total, "reach[i].right <= reach[i].left || reach[i].bottom <= reach[i].top"), "and so is a rectangle with nothing in it");
 	Check(Has(total, "Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]) : (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f"), "a light added per pixel counts by its brightest colour, and a baked one by the average");
@@ -297,7 +297,7 @@ static void CheckTheLog()
 
 	Check(Has(note, "if (inReach > mostInReach)") && Has(note, "(chosen > mostChosen)") && Has(note, "(passes > mostPasses)") && Has(note, "(milliseconds > mostMilliseconds)"), "each of the most goes up on its own");
 	Check(Has(render, "ShadowLights_NoteFrame(report.frame, passes, report.milliseconds);"), "they're noted on every frame the pass finishes");
-	Check(!Has(Between(render, "ShadowLights_NoteFrame(report.frame, passes, report.milliseconds);", "ToyLogFrame(report);"), "if (logThisFrame)\n\t{\n\t\tShadowLights_NoteFrame"), "not only on a report");
+	Check(Has(render, "ShadowLights_NoteFrame(report.frame, passes, report.milliseconds);\n\n\tif (logThisFrame)\n\t{\n\t\tToyLogFrame(report);"), "not only on a report");
 	Check(ComesBefore(render, "if (volumesThisFrame && !LightOnListIsDark(&lights[i * kToyLightFloats]))", "ShadowLights_NoteFrame(report.frame, passes, report.milliseconds);"), "with this frame's passes counted first");
 	Check(Has(Between(render, "static void ToyLogFrame(", "static void ToySetVolumeState("), "ShadowLights_SayCounts(report.frame, report.passes, report.screensOfTotal, report.milliseconds, report.frameMilliseconds);"), "every report says them, even with no light chosen");
 }
