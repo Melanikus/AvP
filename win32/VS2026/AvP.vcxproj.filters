@@ -129,6 +129,9 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\shoulder_lamp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\surface_normals.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1435,6 +1438,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\orthoPixel.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\shoulderLamp.psh">
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\orthoVertex.vsh">

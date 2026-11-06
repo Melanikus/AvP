@@ -37,6 +37,8 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the settings file can't say where shaders come from
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine's shoulder lamp has a shader of its own, and a way of blending that brightens what's already there
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
@@ -2848,6 +2850,7 @@ bool InitialiseDirect3D()
 
 	d3d.mainEffect  = d3d.effectSystem->Add("main", "vertex.vsh", "pixel.psh", d3d.mainDecl);
 	d3d.orthoEffect = d3d.effectSystem->Add("ortho", "orthoVertex.vsh", "orthoPixel.psh", d3d.orthoDecl);
+	d3d.shoulderLampEffect = d3d.effectSystem->Add("shoulderLamp", "orthoVertex.vsh", "shoulderLamp.psh", d3d.orthoDecl);
 	d3d.decalEffect = d3d.effectSystem->Add("decal", "decal.vsh", "decal.psh", d3d.decalDecl);
 	d3d.fmvEffect   = d3d.effectSystem->Add("fmv", "fmvVertex.vsh", "fmvPixel.psh", d3d.fmvDecl);
 	d3d.rhwEffect   = d3d.effectSystem->Add("rhw", "rhw.vsh", "rhw.psh", d3d.rhwDecl);
@@ -3112,6 +3115,26 @@ void ChangeTranslucencyMode(enum TRANSLUCENCY_TYPE translucencyRequired)
 			{
 				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 				D3DSrcBlend = D3DBLEND_SRCALPHA;
+			}
+			if (D3DDestBlend != D3DBLEND_ONE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+				D3DDestBlend = D3DBLEND_ONE;
+			}
+			break;
+		}
+		// The picture's own colour times what's drawn, added to the picture, so it can make something up to twice as bright, and black stays black
+		case TRANSLUCENCY_BRIGHTEN:
+		{
+			if (D3DAlphaBlendEnable != TRUE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				D3DAlphaBlendEnable = TRUE;
+			}
+			if (D3DSrcBlend != D3DBLEND_DESTCOLOR)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+				D3DSrcBlend = D3DBLEND_DESTCOLOR;
 			}
 			if (D3DDestBlend != D3DBLEND_ONE)
 			{

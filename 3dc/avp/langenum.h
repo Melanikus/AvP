@@ -1,6 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's text, after everything language.txt holds
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the name of the marine's shoulder lamp key
 //   the rendering page's lines for choosing a key
 #ifndef _langenum_h_
 #define _langenum_h_ 1
@@ -1384,6 +1385,7 @@ enum TEXTSTRING_ID
 	TEXTSTRING_RENDERING_AUTOGENERATE,
 	TEXTSTRING_RENDERING_AUTOGENERATE_HELP,
 	TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING,
+	TEXTSTRING_MARINE_KEY_SHOULDER_LAMP,
 	TEXTSTRING_RENDERING_KEY_RENDERING,
 	TEXTSTRING_RENDERING_KEY_RENDERING_HELP,
 	TEXTSTRING_RENDERING_KEY_SHADOWS,

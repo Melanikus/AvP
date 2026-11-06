@@ -1,6 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page, and the way to it from both audio and video pages
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine's controls page has the shoulder lamp
 //   the rendering page's lines for choosing a key
 #include "3dc.h"
 #include "module.h"
@@ -1061,7 +1062,8 @@ extern void MakeMarineKeyConfigMenu(void)
 	for(j=0; j<NUMBER_OF_MARINE_INPUTS; j++)
 	{
 		AvPMenu_KeyConfig[i+j].ElementID = AVPMENU_ELEMENT_KEYCONFIG;
-		AvPMenu_KeyConfig[i+j].TextDescription = TEXTSTRING_MARINE_KEY_FORWARD+j;
+		// The lamp came after everything in the language file, so its name isn't next in line after the others
+		AvPMenu_KeyConfig[i+j].TextDescription = (j == NUMBER_OF_MARINE_INPUTS - 1) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j;
 		AvPMenu_KeyConfig[i+j].MenuToGoTo = AVPMENU_MAIN;
 		AvPMenu_KeyConfig[i+j].HelpString = TEXTSTRING_KEYCONTROLS_HELP;
 	}
