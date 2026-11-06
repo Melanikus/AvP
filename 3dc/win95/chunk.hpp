@@ -9,6 +9,8 @@
 //   added CountIfItFits and BytesLeftAfter, for a count that has to be checked before a chunk's body runs
 //   added CopyNameFromChunk and CopyOptionalNameFromChunk, so that a name is only read as far as the end of its chunk
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   added the "holding at least" registrations, so that a kind of chunk that always reads a fixed set of fields is never made from a chunk too small to hold them
+//   removed CHUNK_EXTRACT_ARRAY, which sized a list from a count in the file with no check: only code in a comment used it
 
 #ifndef _chunk_hpp
 #define _chunk_hpp
@@ -389,6 +391,26 @@ inline int ReadListCount(char const * start, char const * & data, size_t size, s
 	return CountIfItFits(count, item_bytes, size - used - sizeof(int));
 }
 
+// Reads one number, or anything else of a fixed size, from a level file's chunk, and moves data on past it. start and size are the chunk's own. This is for what comes after a name or a
+// list: how far along those end depends on the file, so nobody can say in advance that there's room left. If there isn't, the file is refused, and the answer is a zero, so the code after
+// this needs no special case.
+template <class Type>
+inline Type ReadFromChunk(char const * start, size_t size, char const * & data)
+{
+	size_t const used = (size_t)(data - start);
+
+	if (used > size || size - used < sizeof(Type))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return Type();
+	}
+
+	Type const value = *(Type const *)data;
+	data += sizeof(Type);
+
+	return value;
+}
+
 // How long is the name that starts here? A name in a level file ends at a zero byte, and strlen reads until it finds one, so a name with no
 // zero byte would run off the end of the chunk. This only looks at the bytes_left bytes it's given, and says -1 if there's no zero in them.
 inline int NameLengthInChunk(char const * name, size_t bytes_left)
@@ -471,20 +493,6 @@ inline char * CopyOptionalNameFromChunk(char const * start, size_t size, char co
 	var=CopyOptionalNameFromChunk(start,size,data,&__length); \
 	data+=(__length+4) &~3 ;}
 
-//read array
-//length is an int (filled in by macro)
-//pointer is a pointer of type 'type'
-#define CHUNK_EXTRACT_ARRAY(length,pointer,type){\
-	CHUNK_EXTRACT(length,int) \
-	if(length) \
-	{ \
-		pointer=new type[length]; \
-		for(int __i=0;__i<length;__i++) \
-		{ \
-			CHUNK_EXTRACT(pointer[__i],type)	\
-		} \
-	} \
-	else pointer=0;}
 
 
 //macros for use in fill_data_block
@@ -581,6 +589,48 @@ Chunks registered this way will only be created as children of the parent named
 
 #define _RIF_IMPLEMENT_DYNCREATE_PARENT_LINE(idChunk,tokenClassName,idParent,parentClassName,nLine) \
 static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \
+	Chunk * pChunk = new tokenClassName((parentClassName*)parent,data+12,(*(int *) (data + 8))-12); \
+	return pChunk; \
+} \
+ class RegisterRifChunkClass ## tokenClassName ##_## nLine { \
+	public: RegisterRifChunkClass ## tokenClassName ##_## nLine () { \
+		Chunk::Register(idChunk ,idParent,RifCreateClassObject ## tokenClassName ##_## nLine); \
+	} \
+} rifcc ## tokenClassName ##_## nLine;
+
+/*
+The same two, for a kind of chunk that always reads at least leastBytes bytes as it's made, whatever they turn out to hold. A level file can say a chunk holds any number of bytes, so this
+has to be asked before the chunk is made. One that holds too few never reaches its constructor: it's kept as plain bytes instead, and the level is refused. tests/chunk_room_test.cpp
+tries every kind at every size with memory ending right after the chunk, so a number here that's too small stops the test, and level files that a number too big would refuse show up
+in the run over the game's own levels.
+*/
+
+// Is this chunk too small to hold leastBytes bytes? If it is, this refuses the level and gives back the chunk kept as plain bytes, and if not it gives back 0.
+Chunk * KeepIfItHoldsTooLittle(Chunk_With_Children * parent, const char * data, int leastBytes);
+
+#define RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(idChunk,tokenClassName,leastBytes) _RIF_IMPLEMENT_DYNCREATE_LEAST_LINE_EX(idChunk,tokenClassName,leastBytes,__LINE__)
+#define _RIF_IMPLEMENT_DYNCREATE_LEAST_LINE_EX(idChunk,tokenClassName,leastBytes,nLine) _RIF_IMPLEMENT_DYNCREATE_LEAST_LINE(idChunk,tokenClassName,leastBytes,nLine)
+
+#define _RIF_IMPLEMENT_DYNCREATE_LEAST_LINE(idChunk,tokenClassName,leastBytes,nLine) \
+static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \
+	Chunk * const tooSmall = KeepIfItHoldsTooLittle(parent,data,leastBytes); \
+	if (tooSmall) return tooSmall; \
+	Chunk * pChunk = new tokenClassName(parent,data+12,(*(int *) (data + 8))-12); \
+	return pChunk; \
+} \
+ class RegisterRifChunkClass ## tokenClassName ##_## nLine { \
+	public: RegisterRifChunkClass ## tokenClassName ##_## nLine () { \
+		Chunk::Register(idChunk ,0,RifCreateClassObject ## tokenClassName ##_## nLine); \
+	} \
+} rifcc ## tokenClassName ##_## nLine;
+
+#define RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(idChunk,tokenClassName,idParent,parentClassName,leastBytes) _RIF_IMPLEMENT_DYNCREATE_PARENT_LEAST_LINE_EX(idChunk,tokenClassName,idParent,parentClassName,leastBytes,__LINE__)
+#define _RIF_IMPLEMENT_DYNCREATE_PARENT_LEAST_LINE_EX(idChunk,tokenClassName,idParent,parentClassName,leastBytes,nLine) _RIF_IMPLEMENT_DYNCREATE_PARENT_LEAST_LINE(idChunk,tokenClassName,idParent,parentClassName,leastBytes,nLine)
+
+#define _RIF_IMPLEMENT_DYNCREATE_PARENT_LEAST_LINE(idChunk,tokenClassName,idParent,parentClassName,leastBytes,nLine) \
+static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \
+	Chunk * const tooSmall = KeepIfItHoldsTooLittle(parent,data,leastBytes); \
+	if (tooSmall) return tooSmall; \
 	Chunk * pChunk = new tokenClassName((parentClassName*)parent,data+12,(*(int *) (data + 8))-12); \
 	return pChunk; \
 } \

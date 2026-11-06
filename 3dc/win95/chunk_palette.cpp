@@ -6,6 +6,9 @@
 //   a game mode, its header and its children are only made in their right places, and a game mode must have a header
 //   counted lists are measured against their chunks before they're made, and a lighting table's size can't wrap round
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
+//   a colour table is only read from a chunk that holds all of it
 
 #include "chunk_palette.hpp"
 #include "environment_chunk.hpp"
@@ -91,7 +94,7 @@ BOOL IsFixedPalette(Chunk_With_Children * parent)
 	return FALSE;
 }
 
-RIF_IMPLEMENT_DYNCREATE("ENVPALET",Environment_Palette_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVPALET",Environment_Palette_Chunk,8)
 
 Environment_Palette_Chunk::~Environment_Palette_Chunk ()
 {
@@ -216,7 +219,7 @@ void Preset_Palette::fill_data_block (char * data_start)
 	strcpy(data_start,name ? name : "unnamed");
 }
 
-RIF_IMPLEMENT_DYNCREATE("PRSETPAL",Preset_Palette_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PRSETPAL",Preset_Palette_Chunk,20)
 
 Preset_Palette_Chunk::Preset_Palette_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"PRSETPAL")
@@ -295,7 +298,7 @@ void Preset_Palette_Chunk::fill_data_block (char * data_start)
 // Class Environment_TLT_Chunk functions
 
 
-RIF_IMPLEMENT_DYNCREATE("ENVTXLIT",Environment_TLT_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENVTXLIT",Environment_TLT_Chunk,32)
 
 Environment_TLT_Chunk::Environment_TLT_Chunk (Chunk_With_Children * parent, const char * sdata, size_t ssize)
 : Chunk (parent, "ENVTXLIT"), width (*((int*)(sdata))),
@@ -582,7 +585,7 @@ Environment_Game_Mode_Chunk::Environment_Game_Mode_Chunk(Chunk_With_Children* co
 // header chunk
 // This constructor writes into its parent, so it can only be made under a game mode. Under anything else it's a chunk nothing reads.
 // All 14 of these in the game's own levels are inside a game mode.
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("GMODHEAD",Environment_Game_Mode_Header_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("GMODHEAD",Environment_Game_Mode_Header_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk,20)
 
 Environment_Game_Mode_Header_Chunk::Environment_Game_Mode_Header_Chunk(Chunk_With_Children * const parent, const char * pdata, size_t const chunk_bytes)
 : Chunk (parent, "GMODHEAD"), flags(0), rif_files()
@@ -685,7 +688,7 @@ size_t Environment_Game_Mode_Header_Chunk::size_chunk ()
 ////////////////////////////////////////
 
 // Class RIF_Child_Chunk - for RIFs in game modes containing graphics
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("RIFCHILD",RIF_Child_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("RIFCHILD",RIF_Child_Chunk,"GAMEMODE",Environment_Game_Mode_Chunk,12)
 
 RIF_Child_Chunk::~RIF_Child_Chunk()
 {
@@ -799,8 +802,7 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 	rifname = CopyNameFromChunk(start, ssize, sdata, &len);
 	sdata += len+4 &~3;
 
-	version_num = *(int *)sdata;
-	sdata += 4;
+	version_num = ReadFromChunk<int>(start, ssize, sdata);
 
 	filename = CopyNameFromChunk(start, ssize, sdata, &len);
 	sdata += len+4 &~3;
@@ -837,7 +839,7 @@ RIF_Child_Chunk::RIF_Child_Chunk (Chunk_With_Children * const parent, const char
 // ties in with RIF_Child_Chunk
 // the filenames (-dirname) should match
 
-RIF_IMPLEMENT_DYNCREATE("SETPALST",Preset_Palette_Store_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SETPALST",Preset_Palette_Store_Chunk,20)
 
 Preset_Palette_Store_Chunk::Preset_Palette_Store_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"SETPALST")
@@ -930,7 +932,7 @@ void Preset_Palette_Store_Chunk::fill_data_block (char * data_start)
 // polygons to the right palette colour on loading, with 15-bit definition
 
 
-RIF_IMPLEMENT_DYNCREATE("CLRLOOKP",Coloured_Polygons_Lookup_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("CLRLOOKP",Coloured_Polygons_Lookup_Chunk,32)
 
 Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Children * parent, const char * sdata, size_t const ssize)
 : Chunk (parent, "CLRLOOKP"), flags (*((int*)(sdata))),
@@ -945,6 +947,13 @@ Coloured_Polygons_Lookup_Chunk::Coloured_Polygons_Lookup_Chunk (Chunk_With_Child
 	}
 	else
 	{
+		// The table is always this big, and it comes after the 32 bytes of numbers, so only a chunk that holds all of it gets one.
+		if (ssize < 32 + (size_t)(1<<15))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
 		table = new unsigned char [1<<15];
 		unsigned char * tableptr = table;
 		unsigned char const * sdataptr = (unsigned char *)(sdata+32);

@@ -5,6 +5,8 @@
 //   counted lists are measured against their chunks before they're made
 //   an image's index is checked, because it's used as a place in a list
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -361,7 +363,7 @@ void Chunk_With_BMPs::RemoveMD5Val(char const * bname)
 /////////////////////////////////////
 // Global_BMP_Name_Chunk
 /////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("BMPNAMES",Global_BMP_Name_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPNAMES",Global_BMP_Name_Chunk,4)
 
 Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 {
@@ -383,7 +385,7 @@ Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 /////////////////////////////////////
 // Bitmap_List_Store_Chunk
 /////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("BMPLSTST",Bitmap_List_Store_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPLSTST",Bitmap_List_Store_Chunk,4)
 
 Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 {
@@ -417,7 +419,7 @@ Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 
 // Class BMP_Names_Version_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("BMNAMVER",BMP_Names_Version_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMNAMVER",BMP_Names_Version_Chunk,4)
 
 
 size_t BMP_Names_Version_Chunk::size_chunk ()
@@ -446,7 +448,7 @@ void BMP_Names_Version_Chunk::fill_data_block (char * data_start)
 
 // Class BMP_Names_ExtraData_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("BMNAMEXT",BMP_Names_ExtraData_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMNAMEXT",BMP_Names_ExtraData_Chunk,52)
 
 
 size_t BMP_Names_ExtraData_Chunk::size_chunk ()
@@ -476,7 +478,7 @@ void BMP_Names_ExtraData_Chunk::fill_data_block (char * data_start)
 ///////////////////////////////////////
 
 // Class External_Shape_BMPs_Store_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("SHBMPNAM",External_Shape_BMPs_Store_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHBMPNAM",External_Shape_BMPs_Store_Chunk,4)
 
 External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Children * parent, char const * rifn, char const * shapen)
 : Chunk_With_BMPs (parent, "SHBMPNAM"), rifname(0), shapename(0), version_num(0)
@@ -543,15 +545,13 @@ External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Chi
 
 	sdata += l1+l2 +3&~3;
 
-	flags = (GlobalBMPFlags)(*(int *)sdata & GBF_MASK);
-	sdata+=4;
+	flags = (GlobalBMPFlags)(ReadFromChunk<int>(chunk_start, ssize, sdata) & GBF_MASK);
 
-	version_num = *(int *)sdata;
-	sdata+=4;
+	version_num = ReadFromChunk<int>(chunk_start, ssize, sdata);
 
-	for (int i=0; i<12; ++i, sdata+=4)
+	for (int i=0; i<12; ++i)
 	{
-		reserved[i] = *(int *)sdata;
+		reserved[i] = ReadFromChunk<int>(chunk_start, ssize, sdata);
 	}
 }
 
@@ -791,7 +791,7 @@ void MatchingImages::WriteData(char * datablock) const
 
 // class Matching_Images_Chunk : public Chunk
 // ------------------------------------------
-RIF_IMPLEMENT_DYNCREATE("MATCHIMG",Matching_Images_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MATCHIMG",Matching_Images_Chunk,12)
 
 // I/O
 // A pair of images as a level file holds them: three numbers, then for each image four numbers and three names, padded to a multiple of 4 bytes. Do all six names end inside
@@ -901,7 +901,7 @@ ImageDescriptor const & Matching_Images_Chunk::GetLoadImage(ImageDescriptor cons
 }
 
 // Bitmap MD5 Chunk
-RIF_IMPLEMENT_DYNCREATE("BMPMD5ID",Bitmap_MD5_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPMD5ID",Bitmap_MD5_Chunk,28)
 
 Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t const chunk_bytes)
 : Chunk(parent,"BMPMD5ID"), spare(*(int *)datablock), flags((BMPMD5_Flags)(*(int *)(datablock+4) & BMD5F_MASK)), version_num(*(int *)(datablock+8))

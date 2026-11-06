@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the marine's shoulder lamp starts off
 /* KJL 16:23:20 10/25/96 - I'm moved all the weapon stuff to the newly created weapon.c,
 so player.c is looking a bit bare at the moment. */
 #include "3dc.h"
@@ -30,6 +32,7 @@ so player.c is looking a bit bare at the moment. */
 #include "pldghost.h"
 #include "showcmds.h"
 #include "bonusabilities.h"
+#include "shoulder_lamp.h"
 
 #define PLAYER_HMODEL 0
 
@@ -116,6 +119,9 @@ int PrintDebuggingText(const char* t, ...);
 
 void InitPlayer(STRATEGYBLOCK* sbPtr, int sb_type)
 {
+	// The shoulder lamp starts off, every time
+	ShoulderLamp_TurnOff();
+
 	/*KJL**************************************************************************************
 	* InitPlayer() was written by me. It attaches the extra player data to the strategy block *
 	* and fills in some initial values.                                                       *

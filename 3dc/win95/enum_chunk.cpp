@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "enum_chunk.hpp"
 //#include "enumsch.hpp"
@@ -57,7 +58,7 @@ void Enum_Chunk::post_input_processing()
 ///////////////////////////////////////
 
 // Class Enum_Header_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("ENUMHEAD",Enum_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ENUMHEAD",Enum_Header_Chunk,24)
 
 // from buffer
 Enum_Header_Chunk::Enum_Header_Chunk (Chunk_With_Children * parent, const char * hdata, size_t /*hsize*/)
