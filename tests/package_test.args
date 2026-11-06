@@ -1,0 +1,3 @@
+/std:c++17 /EHsc /MD /J /W3
+/DWIN32_LEAN_AND_MEAN /DNDEBUG
+tests/package_test.cpp
