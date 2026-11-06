@@ -359,8 +359,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\tENetAddress destAddress;",
-					"to": "OpenDiscoverySocket();\n\n\tENetAddress destAddress;"
+					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\t// A new search starts",
+					"to": "OpenDiscoverySocket();\n\n\t// A new search starts"
 				}
 			]
 		},
@@ -369,8 +369,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "Con_PrintError(\"Couldn't send broadcast packet\");\n\t\t\tNet_StopSearchingForSessions();",
-					"to": "Con_PrintError(\"Couldn't send broadcast packet\");"
+					"from": "if (!AskEveryoneAboutGames())\n\t{\n\t\tNet_StopSearchingForSessions();\n\t\treturn;\n\t}",
+					"to": "AskEveryoneAboutGames();"
 				}
 			]
 		},
@@ -489,8 +489,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (header.marker != kMarker)",
-					"to": "if (false)"
+					"from": "if (header.marker != kMarker)\n\t{\n\t\tLogDroppedMessage",
+					"to": "if (false)\n\t{\n\t\tLogDroppedMessage"
 				}
 			]
 		},
@@ -1009,8 +1009,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "enet_peer_disconnect_now(peer, 0);",
-					"to": ""
+					"from": "if (peer->state == ENET_PEER_STATE_CONNECTED)\n\t\t\t{\n\t\t\t\tenet_peer_disconnect_now(peer, 0);",
+					"to": "if (peer->state == ENET_PEER_STATE_CONNECTED)\n\t\t\t{\n\t\t\t\t"
 				}
 			]
 		},
@@ -1269,8 +1269,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "if (size < kMessageHeaderSize)\n\t{\n\t\treturn false;",
-					"to": "if (false)\n\t{\n\t\treturn false;"
+					"from": "if (size < kMessageHeaderSize)\n\t{\n\t\tNet_NoteRefused(",
+					"to": "if (false)\n\t{\n\t\tNet_NoteRefused("
 				}
 			]
 		},
@@ -1339,8 +1339,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false }",
-					"to": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), false, false }"
+					"from": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false, kMostHitsEachSecond }",
+					"to": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), false, false, kMostHitsEachSecond }"
 				}
 			]
 		},
@@ -1349,8 +1349,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "{ NetMT_ChatBroadcast, 2, true, false }",
-					"to": "{ NetMT_ChatBroadcast, 2, false, false }"
+					"from": "{ NetMT_ChatBroadcast, 2, true, false, kMostChatLinesEachSecond }",
+					"to": "{ NetMT_ChatBroadcast, 2, false, false, kMostChatLinesEachSecond }"
 				}
 			]
 		},

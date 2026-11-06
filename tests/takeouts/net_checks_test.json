@@ -280,8 +280,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (now - *secondStarted >= 1000)",
-					"to": "if (false)"
+					"from": "inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, int *used, int most)\n{\n\tif (now - *secondStarted >= 1000)",
+					"to": "inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, int *used, int most)\n{\n\tif (false)"
 				}
 			]
 		},
@@ -330,8 +330,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "at += length;",
-					"to": "return kNetPartsGood;"
+					"from": "at += length;\n\t}\n\n\treturn kNetPartsGood;",
+					"to": "return kNetPartsGood;\n\t}\n\n\treturn kNetPartsGood;"
 				}
 			]
 		},
@@ -340,8 +340,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "at += length;",
-					"to": ""
+					"from": "at += length;\n\t}\n\n\treturn kNetPartsGood;",
+					"to": "\n\t}\n\n\treturn kNetPartsGood;"
 				}
 			]
 		},
@@ -350,8 +350,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (kind >= ruleCount)",
-					"to": "if (kind > ruleCount)"
+					"from": "at++;\n\n\t\tif (kind >= ruleCount)",
+					"to": "at++;\n\n\t\tif (kind > ruleCount)"
 				}
 			]
 		},
@@ -390,8 +390,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (rule.lengthVaries)",
-					"to": "if (false)"
+					"from": "return kNetPartsTooShort;\n\t\t}\n\n\t\tif (rule.lengthVaries)",
+					"to": "return kNetPartsTooShort;\n\t\t}\n\n\t\tif (false)"
 				}
 			]
 		},
@@ -400,8 +400,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (length == 0 || length > bytesLeft)",
-					"to": "if (length > bytesLeft)"
+					"from": "if (length == 0 || length > bytesLeft)\n\t\t\t{\n\t\t\t\treturn kNetPartsTooShort;",
+					"to": "if (length > bytesLeft)\n\t\t\t{\n\t\t\t\treturn kNetPartsTooShort;"
 				}
 			]
 		},
@@ -410,8 +410,8 @@
 			"changes": [
 				{
 					"file": "3dc/net_checks.h",
-					"from": "if (length == 0 || length > bytesLeft)",
-					"to": "if (length == 0)"
+					"from": "if (length == 0 || length > bytesLeft)\n\t\t\t{\n\t\t\t\treturn kNetPartsTooShort;",
+					"to": "if (length == 0)\n\t\t\t{\n\t\t\t\treturn kNetPartsTooShort;"
 				}
 			]
 		},
