@@ -913,6 +913,9 @@ extern void AddNetMsg_RestartNetworkGame(int seed);
 
 // A message was refused, and why. It goes to the log, but only so often, because anyone can cause this as fast as they like.
 extern void Net_NoteRefused(const char *why);
+
+// Whether the level a host named is on the list for the game type it named. It says why in the log if not.
+extern bool Net_HostsLevelIsOnItsList();
 extern void AddNetMsg_FragmentalObjectsStatus(void);
 extern void AddNetMsg_StrategySynch(void);
 extern void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr);

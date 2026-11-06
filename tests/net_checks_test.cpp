@@ -295,6 +295,54 @@ static void TestTypedAddresses()
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
 }
 
+static void TestCountingRefusals()
+{
+	NetRefusalCounts counts;
+
+	memset(&counts, 0, sizeof(counts));
+
+	char const flood[] = "flood";
+	char const other[] = "other";
+	// The same words at another address: the game may hold one reason's text twice
+	char floodAgain[sizeof(flood)];
+
+	memcpy(floodAgain, flood, sizeof(flood));
+
+	Check(NetCountRefusal(counts, flood) == 1, "a reason's first refusal is number 1");
+	Check(NetCountRefusal(counts, floodAgain) == 2, "the same words count as the same reason");
+	Check(NetCountRefusal(counts, other) == 1, "another reason has its own count");
+
+	for (int i = 0; i < 1000; i++)
+	{
+		NetCountRefusal(counts, flood);
+	}
+
+	Check(NetCountRefusal(counts, other) == 2, "and a flood of the first doesn't touch it");
+
+	Check(NetLogThisRefusal(1) && NetLogThisRefusal(kRefusalsLoggedInFull), "the first ones all go in the log");
+	Check(!NetLogThisRefusal(kRefusalsLoggedInFull + 1), "then they stop");
+	Check(NetLogThisRefusal(64) && !NetLogThisRefusal(65), "except now and then");
+
+	NetRefusalCounts full;
+	char names[kMostRefusalReasons + 5][8];
+
+	memset(&full, 0, sizeof(full));
+
+	for (int i = 0; i < kMostRefusalReasons + 5; i++)
+	{
+		names[i][0] = (char)('A' + i / 26);
+		names[i][1] = (char)('A' + i % 26);
+		names[i][2] = 0;
+		NetCountRefusal(full, names[i]);
+	}
+
+	Check(full.counts[kMostRefusalReasons - 1] == 6, "more reasons than places share the last one, and nothing is written past the end");
+
+	Check(NetLevelIsOnItsList(0, 13) && NetLevelIsOnItsList(12, 13), "levels on the list are good");
+	Check(!NetLevelIsOnItsList(13, 13), "one past the end isn't");
+	Check(!NetLevelIsOnItsList(-1, 13), "and nor is one before the start");
+}
+
 static void TestWhatGoesOnTheScreen()
 {
 	char text[] = "one\ntwo\tthree\x7f four";
@@ -347,6 +395,7 @@ static void TestWhatGoesOnTheScreen()
 int main()
 {
 	TestWhatGoesOnTheScreen();
+	TestCountingRefusals();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();

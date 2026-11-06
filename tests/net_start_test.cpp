@@ -341,6 +341,37 @@ void enet_host_flush(ENetHost *)
 	flushes++;
 }
 
+// A header has a gap inside it that nothing fills, between isSystemMessage and messageType, and the whole of it goes on the wire. What was on this computer's stack mustn't go out in that gap.
+static int headersLookedAt = 0;
+static int headersWithSomethingInTheGap = 0;
+
+static void LookAtTheGapInAHeader(const void *data)
+{
+	unsigned char const *const bytes = (unsigned char const *)data;
+
+	headersLookedAt++;
+
+	for (size_t i = offsetof(MessageHeader, isSystemMessage) + 1; i < offsetof(MessageHeader, messageType); i++)
+	{
+		if (bytes[i] != 0)
+		{
+			headersWithSomethingInTheGap++;
+			return;
+		}
+	}
+}
+
+// Leaves a mark all over the part of the stack the next call will use, so a header nobody cleaned shows it
+static __declspec(noinline) void DirtyTheStack()
+{
+	volatile unsigned char dirt[16384];
+
+	for (size_t i = 0; i < sizeof(dirt); i++)
+	{
+		dirt[i] = 0xCC;
+	}
+}
+
 ENetPacket *enet_packet_create(const void *data, size_t dataLength, enet_uint32)
 {
 	if (packetCreateFails)
@@ -356,6 +387,7 @@ ENetPacket *enet_packet_create(const void *data, size_t dataLength, enet_uint32)
 
 		memcpy(&header, data, sizeof(header));
 		lastMessageSent = header.messageType;
+		LookAtTheGapInAHeader(data);
 	}
 
 	return MakePacket(data, dataLength);
@@ -500,11 +532,16 @@ int enet_socket_receive(ENetSocket, ENetAddress *, ENetBuffer *, size_t)
 	return 0;
 }
 
-int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *, size_t)
+int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *buffers, size_t)
 {
 	if (datagramSendFails)
 	{
 		return -1;
+	}
+
+	if (buffers && buffers->data && buffers->dataLength >= sizeof(MessageHeader))
+	{
+		LookAtTheGapInAHeader(buffers->data);
 	}
 
 	datagramsSent++;
@@ -635,6 +672,25 @@ static void TestDisconnectWithNoGame()
 	}
 
 	Check(hasTheCommand, "and it's there as a console command");
+}
+
+static void TestNothingOfTheStackGoesOut()
+{
+	// The gap has to exist for this test to mean anything
+	Check(offsetof(MessageHeader, messageType) > offsetof(MessageHeader, isSystemMessage) + 1, "a header has a gap in it");
+
+	int const before = headersLookedAt;
+	int const dirtyBefore = headersWithSomethingInTheGap;
+
+	// The search for games, to the whole network
+	DirtyTheStack();
+	Net_FindAvPSessions();
+	Check(headersLookedAt > before, "a search's question was looked at");
+	Check(headersWithSomethingInTheGap == dirtyBefore, "and has nothing in the gap");
+
+	int selection = 0;
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
 }
 
 static void TestLookingForGames()
@@ -1615,6 +1671,9 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tNet_NoteRefused("), "and one with no shape isn't made");
 	Check(CountOf(Between(makeGhost, "STRATEGYBLOCK *CreateNetGhost(", "int UseExtrapolation=1;"), "if (!root_section)") == 3, "a level without a disc's model can't crash on one");
 
+	// The check of a host's level is one function, and it's the one the menu asks
+	Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "if (!Net_HostsLevelIsOnItsList())"), "the menu asks whether a host's level is on its list");
+
 	// What goes on the screen
 	Check(Has(pldnet, "NetMakeNameUnique(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH,"), "a new player's name has to be free");
 	Check(Has(pldnet, "\"%.*s says: %s\""), "a chat line says someone is speaking");
@@ -1763,30 +1822,42 @@ static void TestTheGameUsesThis()
 	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 102;"), "and an older game can tell this one isn't what it speaks");
 }
 
+// Called last: every message from every test above has been looked at by now, and each of them had a stack under it
+static void TestNoHeaderLeftAnything()
+{
+	Check(headersLookedAt > 20, "the tests sent plenty of messages");
+	Check(headersWithSomethingInTheGap == 0, "and none had anything in the gap in its header");
+}
+
 int main()
 {
 	TestStartingTheGame();
 	TestNobodyToSendTo();
 	TestDisconnectWithNoGame();
 	TestLookingForGames();
+	TestNothingOfTheStackGoesOut();
 	TestWhenASocketCantBeHad();
 	TestHosting();
 	TestHostingWhenASocketCantBeHad();
 	TestHostingWhenItCantBeDone();
 	TestSkirmish();
+	DirtyTheStack();
 	TestJoining();
 	TestJoiningAgainWhenItCantBeDone();
 	TestJoinThatGetsNoAnswerThenHosting();
 	TestHostingWhileStillInAGame();
 	TestJoiningWhileAPageIsSearching();
+	DirtyTheStack();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
 	TestWhoDoesntGetIn();
 	TestTooManyMessages();
 	TestANameWithNoEnd();
+	DirtyTheStack();
 	TestPassingThingsOn();
 	TestNoRoom();
 	TestSomeoneGoing();
+	DirtyTheStack();
 	TestTheClientsSide();
 	TestWaitingToJoin();
 	TestLeavingClosesConnections();
@@ -1794,6 +1865,8 @@ int main()
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
+
+	TestNoHeaderLeftAnything();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 

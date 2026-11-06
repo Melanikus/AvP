@@ -6,6 +6,46 @@
 	],
 	"rows": [
 		{
+			"name": "all reasons share one count",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (i == kMostRefusalReasons - 1 || strcmp(all.reasons[i], why) == 0)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the last place isn't kept for everything past it",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (i == kMostRefusalReasons - 1 || strcmp(all.reasons[i], why) == 0)",
+					"to": "if (strcmp(all.reasons[i], why) == 0)"
+				}
+			]
+		},
+		{
+			"name": "a refusal log with no limit",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return count <= kRefusalsLoggedInFull || (count & (count - 1)) == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "one past the end of a level list is taken",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return level >= 0 && level < listLength;",
+					"to": "return level >= 0 && level <= listLength;"
+				}
+			]
+		},
+		{
 			"name": "control characters stay in text",
 			"changes": [
 				{

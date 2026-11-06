@@ -1122,12 +1122,29 @@ static size_t LengthOfANetPart(unsigned char kind, const unsigned char *part, si
 // Asked by networking.cpp about everything that arrives, before any of it reaches the game. See WHO IS WHO there.
 void Net_NoteRefused(const char *why)
 {
-	static unsigned long long refused = 0;
+	static NetRefusalCounts refused;
 
-	if (LogThisDrop(refused))
+	unsigned long long const count = NetCountRefusal(refused, why);
+
+	if (NetLogThisRefusal(count))
 	{
-		LogString(std::string("net: refused: ") + why);
+		LogString(std::string("net: refused: ") + why + " (number " + std::to_string(count) + " of these)");
 	}
+}
+
+// How long each list of levels is. The menus' own code fills these in.
+extern int NumMultiplayerLevels;
+extern int NumCoopLevels;
+
+bool Net_HostsLevelIsOnItsList()
+{
+	if (NetLevelIsOnItsList(netGameData.levelNumber, netGameData.gameType == NGT_Coop ? NumCoopLevels : NumMultiplayerLevels))
+	{
+		return true;
+	}
+
+	Net_NoteRefused("a host named a level that isn't on that game's list");
+	return false;
 }
 
 bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)

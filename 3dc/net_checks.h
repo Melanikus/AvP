@@ -19,6 +19,47 @@ inline bool NetNumberFitsTable(int number, int places)
 // power of two), so a flood adds a few dozen lines to avp_log.txt at most, each with the running total.
 static const unsigned long long kDropsLoggedInFull = 5;
 
+// HOW MANY TIMES EACH REASON HAS STOPPED A MESSAGE. Each reason counts by itself, so that a flood of one bad message can't use up the log and hide a different one. The reasons are fixed text inside this program, so the list can't grow without limit, and anything past its end shares the last place.
+static const int kMostRefusalReasons = 40;
+static const unsigned long long kRefusalsLoggedInFull = 20;
+
+struct NetRefusalCounts
+{
+	const char *reasons[kMostRefusalReasons];
+	unsigned long long counts[kMostRefusalReasons];
+};
+
+// Counts one more of this reason, and answers how many there have been
+inline unsigned long long NetCountRefusal(NetRefusalCounts &all, const char *why)
+{
+	for (int i = 0; i < kMostRefusalReasons; i++)
+	{
+		if (all.reasons[i] == 0)
+		{
+			all.reasons[i] = why;
+		}
+
+		if (i == kMostRefusalReasons - 1 || strcmp(all.reasons[i], why) == 0)
+		{
+			return ++all.counts[i];
+		}
+	}
+
+	return 0;
+}
+
+// The first few of a reason go in the log, then only the 32nd, the 64th and so on, because anyone can cause these as fast as they like
+inline bool NetLogThisRefusal(unsigned long long count)
+{
+	return count <= kRefusalsLoggedInFull || (count & (count - 1)) == 0;
+}
+
+// A level number the host gave, against the length of the list for the game type the host gave. They come in two different messages.
+inline bool NetLevelIsOnItsList(int level, int listLength)
+{
+	return level >= 0 && level < listLength;
+}
+
 inline bool LogThisDrop(unsigned long long &count)
 {
 	count++;

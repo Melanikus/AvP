@@ -5,6 +5,36 @@
 	],
 	"rows": [
 		{
+			"name": "a system message's header keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newMessageHeader, 0, sizeof(newMessageHeader));\n\tnewMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 1;",
+					"to": "newMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 1;"
+				}
+			]
+		},
+		{
+			"name": "a game message's header keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newMessageHeader, 0, sizeof(newMessageHeader));\n\tnewMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 0;",
+					"to": "newMessageHeader.marker = kMarker;\n\tnewMessageHeader.isSystemMessage = 0;"
+				}
+			]
+		},
+		{
+			"name": "a search's question keeps what was on the stack",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "memset(&newHeader, 0, sizeof(newHeader));\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a message with nobody to send it to is not stopped",
 			"changes": [
 				{

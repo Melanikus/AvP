@@ -2947,10 +2947,8 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
-				// The host says what its level number and game type are, in two different messages. Each list has its own length.
-				if (netGameData.levelNumber < 0 || netGameData.levelNumber >= (netGameData.gameType == NGT_Coop ? NumCoopLevels : NumMultiplayerLevels))
+				if (!Net_HostsLevelIsOnItsList())
 				{
-					Net_NoteRefused("a host named a level that isn't on that game's list");
 					break;
 				}
 
