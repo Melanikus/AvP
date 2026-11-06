@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <string>
 #include <windows.h>
 
 #include "chunk.hpp"
@@ -536,6 +537,8 @@ static bool MapBlockFindsItsInteriorType()
 	Map_Block_Chunk const * const block = new Map_Block_Chunk(file, bytes, sizeof(bytes));
 	bool const found = (block->map_data.MapInteriorType == interiorType);
 
+	// A chunk takes itself off its parent's list as it goes, so the file has nothing of it left to give back
+	delete block;
 	delete file;
 	Parent_File = 0;
 
@@ -658,6 +661,22 @@ static bool ReadingStaysInside()
 	return ok;
 }
 
+// Which number from 0 up to just below this limit the word is, or -1 if it's none of them. The word comes from the command
+// line, so it's compared with each number in turn. What comes back is always a number this program counted to itself, and
+// nothing later on is ever worked out from the word.
+static int NumberBelowLimit(char const * word, int limit)
+{
+	for (int number = 0; number < limit; number++)
+	{
+		if (std::to_string(number) == word)
+		{
+			return number;
+		}
+	}
+
+	return -1;
+}
+
 int main(int argc, char ** argv)
 {
 	// A stop being caught here shouldn't put a box on the screen.
@@ -670,10 +689,10 @@ int main(int argc, char ** argv)
 	// Given a number from the table and a number from the list of patterns, it tries only that. It's for finding every stop, and not just the first: run it once for each.
 	if (argc == 3)
 	{
-		int const kind = atoi(argv[1]);
-		int const pattern = atoi(argv[2]);
+		int const kind = NumberBelowLimit(argv[1], kindCount);
+		int const pattern = NumberBelowLimit(argv[2], HowManyPatterns);
 
-		if (kind < 0 || kind >= kindCount || pattern < 0 || pattern >= HowManyPatterns)
+		if (kind < 0 || pattern < 0)
 		{
 			puts("There's no such kind or pattern");
 			return 2;
