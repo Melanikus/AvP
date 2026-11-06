@@ -8,6 +8,7 @@
 //   leaving the page of games found closes what the search has open on the network
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
 //   a client whose host has gone goes back to the main menus
+//   a network game's loading screen has all five of its lines, where some could be left unset
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -4884,6 +4885,9 @@ static BOOL IsSmartgunInLevel(int level)
 
 static void SetBriefingTextForMultiplayer()
 {
+	// Every line starts blank, because below only some of them get set, and the loading screen reads all five. A line nothing set would crash it.
+	SetBriefingTextToBlank();
+
 	int level = NumberForCurrentLevel();
 
 	int num_not_available = 0;
