@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a ghost of a kind this game can't show, or with a shape it hasn't loaded, isn't made
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -609,8 +611,12 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				{
 
 				SECTION *root_section = GetNamedHierarchyFromLibrary("disk","Disk");
-	
-				GLOBALASSERT(root_section);
+
+				if (!root_section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
 
 				Create_HModel(&ghostData->HModelController,root_section);
 				InitHModelSequence(&ghostData->HModelController,HMSQT_MarineStand,MSSS_Minigun_Delta,ONE_FIXED);
@@ -624,8 +630,12 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				{
 
 				SECTION *root_section = GetNamedHierarchyFromLibrary("mdisk","Mdisk");
-	
-				GLOBALASSERT(root_section);
+
+				if (!root_section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
 
 				Create_HModel(&ghostData->HModelController,root_section);
 				InitHModelSequence(&ghostData->HModelController,HMSQT_MarineStand,MSSS_Minigun_Delta,(ONE_FIXED>>1));
@@ -668,12 +678,11 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 							sbPtr->shapeIndex=GetLoadedShapeMSL("sadar");
 							break;
 						default :
-							GLOBALASSERT(0=="Unexpected weapon type");
-							
-						
+							// The number came in a message, so it could be anything
+							sbPtr->shapeIndex = -1;
+							break;
 					}
 					sbPtr->DynPtr->IsPickupObject=1;
-					GLOBALASSERT(sbPtr->shapeIndex!=-1);
 
 				}
 				else
@@ -681,9 +690,11 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 					SECTION *disc_section;
 					SECTION *root_section = GetNamedHierarchyFromLibrary("disk","Disk");
 	
-					GLOBALASSERT(IOType==IOT_Ammo);
-					GLOBALASSERT(subtype==AMMO_PRED_DISC);
-					GLOBALASSERT(root_section);
+					if (!root_section)
+					{
+						sbPtr->shapeIndex = -1;
+						break;
+					}
 
 					#if 0
 					Create_HModel(&ghostData->HModelController,root_section);
@@ -695,9 +706,8 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 					#else
 					/* Now it's not hierarchical! */
 					disc_section=GetThisSection(root_section,"disk");
-					GLOBALASSERT(disc_section);
 
-					sbPtr->shapeIndex = disc_section->ShapeNum;
+					sbPtr->shapeIndex = disc_section ? disc_section->ShapeNum : -1;
 					#endif
 				}
 				break;
@@ -735,10 +745,17 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				
 				break;					
 			default:
+				// The kind came in a message, so it could be anything. This list is everything a ghost can be.
+				sbPtr->shapeIndex = -1;
 				break;
 		}
-		LOCALASSERT(sbPtr->shapeIndex!=-1);	
-		
+
+		// Nothing to draw it with: this level hasn't loaded that shape, or it isn't a kind of ghost at all. Better no ghost than one with no shape.
+		if (sbPtr->shapeIndex == -1)
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return NULL;
+		}
 	}
 
 	/* strategy block initialisation, after dynamics block creation */

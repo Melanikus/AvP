@@ -1527,6 +1527,14 @@ static void TestTheTableOfMessageParts()
 	Check(sameLength == 52, "and each has the length the code that reads it steps by:" + mismatched);
 	Check(CountOf(table, "{ NetMT_") == 52, "and there's nothing else in it");
 
+	// What a message can make. The kind and the weapon are its own numbers, and a shape this level didn't load comes back as -1.
+	std::string const makeGhost = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
+
+	Check(Has(makeGhost, "// The kind came in a message, so it could be anything. This list is everything a ghost can be.\n\t\t\t\tsbPtr->shapeIndex = -1;"), "a ghost of an unknown kind has no shape");
+	Check(Has(makeGhost, "// The number came in a message, so it could be anything\n\t\t\t\t\t\t\tsbPtr->shapeIndex = -1;"), "and so does a dropped weapon of an unknown kind");
+	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;"), "and one with no shape isn't made");
+	Check(CountOf(Between(makeGhost, "STRATEGYBLOCK *CreateNetGhost(", "int UseExtrapolation=1;"), "if (!root_section)") == 3, "a level without a disc's model can't crash on one");
+
 	// Who may say what. These are the ones whoever hears them just believes.
 	std::vector<std::string> const onlyTheHost = { "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores", "NetMT_SpotOtherSound" };
 	int rightOnes = 0;
