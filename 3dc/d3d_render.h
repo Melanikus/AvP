@@ -1,7 +1,7 @@
-// Modified 2026-11-06 by Melanikus for the AvP port:
-//   up to 20 steady and 12 brief lights can cast shadows, where it was 8 and 4
+// AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a polygon says which shape it came from, for -shadowshoot
+//   up to 20 steady and 12 brief lights can cast shadows, where it was 8 and 4
 // added the kinds of polygon the shadow toy keeps, and how many lights it handles.
 #ifndef _included_d3d_render_h_ /* Is this your first time? */
 #define _included_d3d_render_h_ 1

@@ -867,12 +867,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a word it doesn't know goes on anyway",
+			"name": "SOURCE: the word says nothing about a word it doesn't know",
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "SaySwitch(\"SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");\n\t\treturn;",
-					"to": "SaySwitch(\"SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");"
+					"from": "SaySwitch(\"SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");",
+					"to": "SaySwitch(\"NO\");"
 				}
 			]
 		},
@@ -881,7 +881,7 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);\n",
+					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, shadowEvenGapAsked);\n",
 					"to": "\n"
 				}
 			]
@@ -891,8 +891,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);\n\tShadowVolumes_Empty();",
-					"to": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);"
+					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, shadowEvenGapAsked);\n\t\tShadowVolumes_Empty();",
+					"to": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, shadowEvenGapAsked);"
 				}
 			]
 		},
@@ -903,6 +903,36 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");\n",
 					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the word switches it at once, whatever the frame is doing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked))",
+					"to": "ShadowsEvenGap = !ShadowsEvenGap;\n\tif (!SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the word empties the store at once",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked))",
+					"to": "ShadowVolumes_Empty();\n\tif (!SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what was asked is never let go of",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tshadowEvenGapAsked = kAskedNothing;\n",
+					"to": ""
 				}
 			]
 		},

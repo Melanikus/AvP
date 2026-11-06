@@ -318,13 +318,16 @@ static void CheckTheEvenGapWord()
 	std::string const word = Between(render, "void ShadowEvenGapCommand(char *words)", "void ReliefDepthCommand(char *words)");
 
 	Check(Has(commands, "ConsoleCommand::Make(\"SHADOWEVENGAP\""), "the console has the word");
-	Check(ComesBefore(word, "ReliefToolsCanAct(\"SHADOWEVENGAP\")", "ShadowsEvenGap ="), "it needs -dev and no network game before it changes anything");
-	Check(ComesBefore(word, "SwitchWords_ShadowAmbientAsk(words, &asked)", "ShadowsEvenGap ="), "a word it doesn't know changes nothing");
+	std::string const applying = Between(render, "if (shadowEvenGapAsked != kAskedNothing)", "if (lightingAsked != kAskedNothing)");
+
+	Check(ComesBefore(word, "ReliefToolsCanAct(\"SHADOWEVENGAP\")", "SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked)"), "it needs -dev and no network game before it notes anything");
+	Check(Has(word, "SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked)"), "it notes what it was asked for");
+	Check(!Has(word, "ShadowsEvenGap =") && !Has(word, "ShadowVolumes_Empty"), "and changes nothing itself, so no frame sees half of a change");
 	Check(Has(word, "SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT"), "and says what it takes");
-	Check(Has(Between(word, "SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT", "ShadowsEvenGap ="), "return;"), "and stops there, so the switch stays as it was");
-	Check(Has(word, "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);"), "alone it switches, and ON or OFF says which");
-	Check(Has(word, "ShadowVolumes_Empty();"), "kept prisms made the old way don't stay");
-	Check(Has(word, "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");"), "the screen says which it is now");
+	Check(Has(applying, "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, shadowEvenGapAsked);"), "between frames, alone it switches, and ON or OFF says which");
+	Check(Has(applying, "ShadowVolumes_Empty();"), "kept prisms made the old way don't stay");
+	Check(Has(applying, "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");"), "the screen says which it is now");
+	Check(Has(applying, "shadowEvenGapAsked = kAskedNothing;"), "and it's only done once");
 	Check(Has(render, "\"EVEN GAP %s, %sBIAS %d\", ShadowsEvenGap ? \"ON\" : \"OFF\""), "and the tag says so all the time");
 	Check(!Has(Between(render, "static void ShadowStatus_Draw()", "kToyViewNames[ToyShadowsMode]);"), "if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)"), "not only when it's on");
 	Check(Has(render, "{ &ShadowsEvenGap, ShadowsEvenGap },"), "a network game puts it back");

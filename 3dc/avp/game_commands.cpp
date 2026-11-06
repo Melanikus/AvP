@@ -1,6 +1,6 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS commands
-// Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
 //   the SHADOWEVENGAP command, which says whether a shadow starts the same distance behind every part of its polygon
 #include "3dc.h"

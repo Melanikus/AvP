@@ -769,6 +769,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// What the level before had on screen is no use for this one's lights
 		extern LightChoiceSamples lightChoiceSamples;
 		LightChoice_Forget(&lightChoiceSamples);
+
+		// after StartGame, because that's when every module that's controlled by something has been told so
 		StaticLevel_BuildThisLevel();
 
 		/* JH 28/5/97 */

@@ -6966,6 +6966,7 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 static int shadowsAsked = kAskedNothing;
 static int lightingAsked = kAskedNothing;
 static int shadowAmbientAsked = kAskedNothing;
+static int shadowEvenGapAsked = kAskedNothing;
 
 // Whether LIGHTING and SHADOWS were both off when last looked at, for G and for seeing when that changes
 static bool switchesWereAllOff = false;
@@ -7083,17 +7084,11 @@ void ShadowEvenGapCommand(char *words)
 		return;
 	}
 
-	int asked = kAskedNothing;
-
-	if (!SwitchWords_ShadowAmbientAsk(words, &asked))
+	// It only notes what it was asked for, as the other switches do: see view_switches.h. A frame's prisms are read while it's drawn, so the store can't be emptied at just any moment.
+	if (!SwitchWords_ShadowAmbientAsk(words, &shadowEvenGapAsked))
 	{
 		SaySwitch("SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
-		return;
 	}
-
-	ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);
-	ShadowVolumes_Empty();
-	SaySwitch(ShadowsEvenGap ? "SHADOWEVENGAP: ON" : "SHADOWEVENGAP: OFF");
 }
 
 void ReliefDepthCommand(char *words)
@@ -7245,6 +7240,14 @@ static void ViewSwitches_ApplyAsked()
 		ShadowAmbientOn = Shadows_AfterAsking(ShadowAmbientOn, shadowAmbientAsked);
 		SaySwitch(ShadowAmbientOn ? "SHADOWAMBIENT: ON" : "SHADOWAMBIENT: OFF");
 		shadowAmbientAsked = kAskedNothing;
+	}
+
+	if (shadowEvenGapAsked != kAskedNothing)
+	{
+		ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, shadowEvenGapAsked);
+		ShadowVolumes_Empty();
+		SaySwitch(ShadowsEvenGap ? "SHADOWEVENGAP: ON" : "SHADOWEVENGAP: OFF");
+		shadowEvenGapAsked = kAskedNothing;
 	}
 
 	if (lightingAsked != kAskedNothing)

@@ -5605,8 +5605,8 @@ void ToyShadows_NextCollectingFrame()
 	toyCollectingFrame++;
 }
 
-// A chosen light stays chosen until another is clearly nearer: a light picked last frame counts as this many quarters of
-// its real distance. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
+// While lights are gathered, and all the time when they go by distance (-shadownearest, or a frame with nothing to score them on, such as with shadows off), a light picked last frame counts
+// as this many quarters of its real distance. When they go by score, light_choice.h has a number of its own that does the same job. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
 // from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
 // been thrown away does no harm.
 static const int kToyStayQuarters = 3;
@@ -5789,7 +5789,7 @@ static LightsLookedAt lightsThisFrame;
 // A lamp that flickers goes dark for a moment and comes back. If that lost it its place, the next light in line would come in for that moment,
 // and move from the game's lighting to ours and straight back. So a dark lamp that has a place keeps it, and competes for it just as if it were
 // lit. A lamp that's been shot out is dark for good, and is treated the same way: it only gives up its place once enough other lights are
-// clearly nearer, or the camera leaves it behind.
+// clearly better, by score or by distance, or the camera leaves it behind.
 static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most, int *inReach)
 {
 	bool const hasAPlace = LightHasAPlace(light);
