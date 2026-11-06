@@ -1303,6 +1303,66 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: scores can name any place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change in scores can name any victim",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))",
+					"to": "if (!NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change in scores can name any killer",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))",
+					"to": "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead alien can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)",
+					"to": "killerIndex != NET_IDNOTINPLAYERLIST"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a game looks before the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {",
+					"to": "if (netGameData.playerData[myIndex].startFlag) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal can be any number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {",
+					"to": "if (false) {"
+				}
+			]
 		}
 	]
 }

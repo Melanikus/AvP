@@ -1541,6 +1541,12 @@ static void TestTheTableOfMessageParts()
 	Check(rightOnes == 19, "19 kinds can only come from the host");
 	Check(CountOf(table, ", true }") == 19, "and no others");
 
+	// Numbers in a message that are used as places in memory. Whichever machine sent them, they could be anything.
+	Check(Has(Between(pldnet, "static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)\n{", "static void ProcessNetMsg_ScoreChange("), "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))\n\t{\n\t\treturn;"), "a player's scores have to name a place in the list");
+	Check(Has(Between(pldnet, "static void ProcessNetMsg_ScoreChange(NETMESSAGE_SCORECHANGE *messagePtr)\n{", "static void ProcessNetMsg_SpeciesScores("), "if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))\n\t{\n\t\treturn;"), "and so does a change in them, with one past the end for a killer that's an alien the computer plays");
+	Check(Has(pldnet, "if (killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)) {"), "a dead alien has to be a kind there is");
+	Check(Has(pldnet, "if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {"), "and the end of a game doesn't look before the start of the list when this client isn't in it");
+	Check(Has(pldnet, "if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {\n\t\treturn;"), "a decal has to be one there is");
 	Check(Has(pldnet, "static uint8_t msg[kMostMessageBytes];"), "the buffer a message is read into has room for the most a message can be");
 	Check(CountOf(pldnet, "NetNumberFitsTable(") >= 3 && Has(pldnet, "!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES)"), "a damage message naming ammunition that isn't in the table is ignored");
 	Check(CountOf(pldnet, "if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))") == 2, "in the other two damage messages as well");

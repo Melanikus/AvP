@@ -6,6 +6,7 @@
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
 //   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
+//   numbers in messages that are places in the player list, the alien kinds or the decals are checked before they're used
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
@@ -6253,8 +6254,13 @@ static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)
 		return;
 	}
 
-	// find the player...
+	// find the player. This is a place in the list, whatever it's called, and it's whatever the message says.
 	int playerId = (int)messagePtr->playerId;
+
+	if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))
+	{
+		return;
+	}
 
 	// fill in the player's scores from the message
 	for (int i = 0; i < NET_MAXPLAYERS; i++) {
@@ -6284,6 +6290,12 @@ static void ProcessNetMsg_ScoreChange(NETMESSAGE_SCORECHANGE *messagePtr)
 
 	// only do this if we're playing
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// These are places in the list, and they're whatever the message says. The killer can also be one past the end, which means an alien the computer plays.
+	if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))
+	{
 		return;
 	}
 
@@ -6972,8 +6984,13 @@ static void ProcessNetMsg_EndGame(void)
 
 	/* only do this if we're playing or in startup */
 	/* check start flags on all players (including ourselves) */
-	if (netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].startFlag) {
-		netGameData.myGameState = NGS_Playing;
+	{
+		// A client that isn't in the list has no place in it to look at
+		int const myIndex = PlayerIdInPlayerList(AvPNetID);
+
+		if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {
+			netGameData.myGameState = NGS_Playing;
+		}
 	}
 
 	if ((netGameData.myGameState != NGS_Playing) && (netGameData.myGameState != NGS_StartUp) && (netGameData.myGameState != NGS_Joining)) {
@@ -7129,6 +7146,11 @@ static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *messagePtr, N
 static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
 {
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// The game uses this as a place in its table of decals
+	if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {
 		return;
 	}
 
@@ -7651,7 +7673,8 @@ static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, Ne
 	{
 		int killerIndex = PlayerIdInPlayerList(messagePtr->killerId);
 
-		if (killerIndex != NET_IDNOTINPLAYERLIST) {
+		// The message has room to say 3, and there are three kinds of alien, from 0
+		if (killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)) {
 			netGameData.playerData[killerIndex].aliensKilled[messagePtr->AlienType] = messagePtr->killCount;
 		}
 	}
