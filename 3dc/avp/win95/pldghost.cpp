@@ -759,6 +759,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 		// Nothing to draw it with: this level hasn't loaded that shape, or it isn't a kind of ghost at all. Better no ghost than one with no shape.
 		if (sbPtr->shapeIndex == -1)
 		{
+			Net_NoteRefused("a ghost with a model or shape this level hasn't loaded");
 			RemoveBehaviourStrategy(sbPtr);
 			return NULL;
 		}

@@ -76,7 +76,7 @@ static const size_t kMostTypedAddressLetters = 16;
 
 // When this search last asked. A broadcast can get lost on a real network, so it asks again each second.
 static unsigned int sessionLastAskedAt = 0;
-static void AskEveryoneAboutGames();
+static bool AskEveryoneAboutGames();
 
 // How many messages one client may send in a second. A game sends one a frame, and this is far above any frame rate that matters. Past it they're dropped, so a flood can't use the host to reach everyone else.
 static const int kMostMessagesEachSecond = 1000;
@@ -1056,6 +1056,7 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					if (AvP.Network == I_Host && (size_t)(eEvent.peer - host->peers) <= kMostClients)
 					{
 						connectionStartedAt[eEvent.peer - host->peers] = enet_time_get();
+						messagesUsed[eEvent.peer - host->peers] = 0;
 					}
 
 					char ipaddr[32];
@@ -1359,14 +1360,15 @@ static bool AskAboutGames(enet_uint32 host)
 	return enet_socket_send(broadcastSocket, &destAddress, &buf, 1) >= 0;
 }
 
-// Everyone on this network, and the address the player typed, if it's one.
-static void AskEveryoneAboutGames()
+// Everyone on this network, and the address the player typed, if it's one. False if the network can't be asked at all.
+static bool AskEveryoneAboutGames()
 {
 	extern char IPAddressString[];
 
 	if (!AskAboutGames(ENET_HOST_BROADCAST))
 	{
 		Con_PrintError("Couldn't send broadcast packet");
+		return false;
 	}
 
 	if (NetTypedAddressIsGood(IPAddressString, kMostTypedAddressLetters))
@@ -1378,6 +1380,8 @@ static void AskEveryoneAboutGames()
 			Con_PrintError("Couldn't ask the address that was typed");
 		}
 	}
+
+	return true;
 }
 
 void Net_FindAvPSessions()
@@ -1397,7 +1401,12 @@ void Net_FindAvPSessions()
 	// A new search starts with an empty list, or games long gone would stay on it, and it only holds so many
 	NumberOfSessionsFound = 0;
 	sessionLastAskedAt = timeGetTime();
-	AskEveryoneAboutGames();
+
+	if (!AskEveryoneAboutGames())
+	{
+		Net_StopSearchingForSessions();
+		return;
+	}
 
 	sessionCheckTimer = timeGetTime();
 }

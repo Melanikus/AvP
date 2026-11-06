@@ -1105,14 +1105,38 @@ static size_t LengthOfANetPart(unsigned char kind, const unsigned char *part, si
 }
 
 // Asked by networking.cpp about everything that arrives, before any of it reaches the game. See WHO IS WHO there.
+void Net_NoteRefused(const char *why)
+{
+	static unsigned long long refused = 0;
+
+	if (LogThisDrop(refused))
+	{
+		LogString(std::string("net: refused: ") + why);
+	}
+}
+
 bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)
 {
 	if (size < kMessageHeaderSize)
 	{
+		Net_NoteRefused("a message too short to have a header");
 		return false;
 	}
 
-	return NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart) == kNetPartsGood;
+	switch (NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))
+	{
+		case kNetPartsGood:
+			return true;
+		case kNetPartsOnlyFromTheHost:
+			Net_NoteRefused("a part only a host may send");
+			return false;
+		case kNetPartsUnknownKind:
+			Net_NoteRefused("a part of a kind that doesn't exist");
+			return false;
+		default:
+			Net_NoteRefused("a part that doesn't fit its message");
+			return false;
+	}
 }
 
 // How many new things other machines may make here in a second. Far more than a real battle, and small enough that the blocks they use can't run out before the first ones time out.
@@ -2120,6 +2144,7 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 
 	// A host decides the list, and this game's place in it is used below. Not on it means nothing to say.
 	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
+		Net_NoteRefused("this game isn't on the list the host sent");
 		return;
 	}
 
@@ -2592,6 +2617,7 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 	}
 
 	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
+		Net_NoteRefused("this game isn't on the list the host sent");
 		return;
 	}
 
@@ -6079,6 +6105,7 @@ static void ProcessNetMsg_PlayerState_Minimal(NETMESSAGE_PLAYERSTATE_MINIMAL *me
 
 	if (sbPtr && !IsAPlayersGhost(sbPtr))
 	{
+		Net_NoteRefused("a player message named a ghost that isn't a player");
 		return;
 	}
 
@@ -6454,8 +6481,15 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		type = (AVP_BEHAVIOUR_TYPE)messagePtr->type;
 
 		// Both numbers are the sender's word. -1 means a player's own body, which has its own message, and this is everything else a machine ever sends this way.
-		if (objectId == GHOST_PLAYEROBJECTID || !GhostKindCanBeMadeByMessage(type))
+		if (objectId == GHOST_PLAYEROBJECTID)
 		{
+			Net_NoteRefused("a ghost message used the number of a player's body");
+			return;
+		}
+
+		if (!GhostKindCanBeMadeByMessage(type))
+		{
+			Net_NoteRefused("a ghost message named a kind that isn't on the list");
 			return;
 		}
 
@@ -6464,6 +6498,7 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 
 		if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond[sender], &newGhostsUsed[sender], kMostNewGhostsEachSecond))
 		{
+			Net_NoteRefused("too many new ghosts from one player in a second");
 			return;
 		}
 
@@ -6759,6 +6794,7 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 
 			if (!NetDamageMultipleIsGood(multiple))
 			{
+				Net_NoteRefused("a damage message counted its hit a number of times it can't");
 				return;
 			}
 
@@ -7005,6 +7041,7 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 
 		if (!NetDamageMultipleIsGood(multiple))
 		{
+			Net_NoteRefused("a damage message counted its hit a number of times it can't");
 			return;
 		}
 
@@ -7053,6 +7090,7 @@ static void ProcessNetMsg_ObjectPickedUp(NETMESSAGE_OBJECTPICKEDUP *messagePtr)
 	// The name finds lights, switches and lifts as well as things that can be picked up. Treating one of those as a pick-up would write over its data.
 	if (objectPtr->I_SBtype != I_BehaviourInanimateObject)
 	{
+		Net_NoteRefused("a pick-up message named something that can't be picked up");
 		return;
 	}
 
@@ -7655,6 +7693,7 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 
 	if (sbPtr && !IsAnAlienGhost(sbPtr))
 	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
 		return;
 	}
 	position.vx = messagePtr->xPos;
@@ -7757,6 +7796,7 @@ static void ProcessNetMsg_AlienAISequenceChange(NETMESSAGE_ALIENSEQUENCECHANGE *
 
 	if (sbPtr && !IsAnAlienGhost(sbPtr))
 	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
 		return;
 	}
 
@@ -7813,6 +7853,7 @@ static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, Ne
 
 	if (sbPtr && !IsAnAlienGhost(sbPtr))
 	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
 		return;
 	}
 
@@ -8053,6 +8094,7 @@ static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId
 
 		if (!NetDamageMultipleIsGood(multiple))
 		{
+			Net_NoteRefused("a damage message counted its hit a number of times it can't");
 			return;
 		}
 
@@ -8178,6 +8220,7 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetI
 
 	if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond[sender], &droppedGunsUsed[sender], kMostDroppedGunsEachSecond))
 	{
+		Net_NoteRefused("too many dropped guns from one player in a second");
 		return;
 	}
 
@@ -8482,6 +8525,10 @@ static void UpdateNetworkGameScores(NetID playerKilledId, NetID killerId, NETGAM
 			if (NetNumberFitsTable(killerType, 3))
 			{
 				netGameData.teamScores[killerType] += scoreForKill;
+			}
+			else
+			{
+				Net_NoteRefused("a killer's kind has no species score");
 			}
 
 			AddNetMsg_SpeciesScores();

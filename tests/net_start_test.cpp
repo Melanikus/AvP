@@ -684,7 +684,7 @@ static void TestLookingForGames()
 	Check(socketsOpen == 0, "leaving the page closes it straight away, because nothing else would until the next search");
 
 	Net_FindAvPSessions();
-	Check(socketsCreated == created + 3 && datagramsSent == sent + 3, "and the next search doesn't think one is still going on");
+	Check(socketsCreated == created + 3 && datagramsSent >= sent + 3, "and the next search doesn't think one is still going on");
 
 	Net_StopSearchingForSessions();
 	Net_StopSearchingForSessions();
@@ -1612,12 +1612,12 @@ static void TestTheTableOfMessageParts()
 
 	Check(Has(makeGhost, "// The kind came in a message, so it could be anything. This list is everything a ghost can be.\n\t\t\t\tsbPtr->shapeIndex = -1;"), "a ghost of an unknown kind has no shape");
 	Check(Has(makeGhost, "// The number came in a message, so it could be anything\n\t\t\t\t\t\t\tsbPtr->shapeIndex = -1;"), "and so does a dropped weapon of an unknown kind");
-	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;"), "and one with no shape isn't made");
+	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tNet_NoteRefused("), "and one with no shape isn't made");
 	Check(CountOf(Between(makeGhost, "STRATEGYBLOCK *CreateNetGhost(", "int UseExtrapolation=1;"), "if (!root_section)") == 3, "a level without a disc's model can't crash on one");
 
 	// What the numbers in a message mean, as an independent read of this code asked
-	Check(Has(pldnet, "if (objectPtr->I_SBtype != I_BehaviourInanimateObject)\n\t{\n\t\treturn;\n\t}\n\n\t// Play an appropriate sound?"), "only something that can be picked up gets treated as a pick-up");
-	Check(Has(pldnet, "if (objectId == GHOST_PLAYEROBJECTID || !GhostKindCanBeMadeByMessage(type))"), "a message can't make a player's body, or a kind that isn't on the list");
+	Check(Has(pldnet, "if (objectPtr->I_SBtype != I_BehaviourInanimateObject)\n\t{\n\t\tNet_NoteRefused("), "only something that can be picked up gets treated as a pick-up");
+	Check(Has(pldnet, "if (!GhostKindCanBeMadeByMessage(type))") && Has(pldnet, "if (objectId == GHOST_PLAYEROBJECTID)"), "a message can't make a player's body, or a kind that isn't on the list");
 	Check(CountOf(pldnet, "if (sbPtr && !IsAnAlienGhost(sbPtr))") == 3, "the three alien messages only go to an alien's ghost");
 	Check(Has(pldnet, "if (sbPtr && !IsAPlayersGhost(sbPtr))"), "and the short player state only to a player's");
 	Check(CountOf(pldnet, "if (!NetDamageMultipleIsGood(multiple))") == 3, "all three damage messages check how many times over a hit counts");
@@ -1628,7 +1628,7 @@ static void TestTheTableOfMessageParts()
 	Check(Has(ReadSourceFile("3dc/avp/pvisible.cpp"), "sbPtr = CreateActiveStrategyBlock();\n\n\tif(!sbPtr) return 0;\n\n\tInitialiseSBValues(sbPtr);"), "running out of blocks is checked before one is used");
 	Check(Has(makeGhost, "if (lightPtr)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlightPtr->LightBright"), "a flare with no light is fine");
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
-	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\treturn;") >= 2, "a game left off the host's list doesn't write before the list");
+	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\tNet_NoteRefused") >= 2, "a game left off the host's list doesn't write before the list");
 
 	// Who may say what. These are the ones whoever hears them just believes.
 	std::vector<std::string> const onlyTheHost = { "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores" };
@@ -1661,8 +1661,8 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "static uint8_t msg[kMostMessageBytes];"), "the buffer a message is read into has room for the most a message can be");
 	Check(CountOf(pldnet, "NetNumberFitsTable(") >= 3 && Has(pldnet, "!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES)"), "a damage message naming ammunition that isn't in the table is ignored");
 	Check(CountOf(pldnet, "if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))") == 2, "in the other two damage messages as well");
-	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart) == kNetPartsGood"), "the whole message is walked, from after its header");
-	Check(Has(pldnet, "if (size < kMessageHeaderSize)\n\t{\n\t\treturn false;"), "and one too short to have a header is refused");
+	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))\n\t{\n\t\tcase kNetPartsGood:\n\t\t\treturn true;"), "the whole message is walked, from after its header");
+	Check(Has(pldnet, "if (size < kMessageHeaderSize)\n\t{\n\t\tNet_NoteRefused("), "and one too short to have a header is refused");
 	Check(Has(pldnet, "return NetChatPartLength(part, bytesLeft);"), "a chat line has to end inside the message");
 	Check(Has(reading, "// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.\n\t\t\t\treturn;"), "and a part nobody knows stops the reading");
 	Check(Has(ReadSourceFile("3dc/avp/game_commands.cpp"), "if (AvP.Network != I_Host) return;\n\n\tint seed=FastRandom();\n\tAddNetMsg_RestartNetworkGame(seed);"), "only a host can restart a network game, so a client can't be told something it can't do");

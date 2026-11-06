@@ -910,6 +910,9 @@ extern void AddNetMsg_MakePlasmaExplosion(VECTORCH *positionPtr, VECTORCH *fromP
 extern void AddNetMsg_PredatorLaserSights(VECTORCH *positionPtr, VECTORCH *normalPtr, DISPLAYBLOCK *dispPtr);
 extern void AddNetMsg_LocalObjectOnFire(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RestartNetworkGame(int seed);
+
+// A message was refused, and why. It goes to the log, but only so often, because anyone can cause this as fast as they like.
+extern void Net_NoteRefused(const char *why);
 extern void AddNetMsg_FragmentalObjectsStatus(void);
 extern void AddNetMsg_StrategySynch(void);
 extern void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr);
