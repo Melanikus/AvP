@@ -6,7 +6,6 @@
 //   byte
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   leaving the page of games found closes what the search has open on the network
-//   the address from the command line is copied with a size limit too
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
 //   the log says when a save slot is listed as empty because its numbers are wrong

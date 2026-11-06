@@ -3,7 +3,6 @@
 /* CDF 25/7/98 - A completely new file. */
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
-//   the gun's tilt is limited with min and max
 //   a sentry gun left without its animations by a save file is left out of the game
 //   the gun part is checked before use, because a save file can leave it out
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.

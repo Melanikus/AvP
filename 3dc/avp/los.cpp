@@ -6,7 +6,6 @@
 *************************KJL*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   picks a part of a vector with VectorAxis, not by walking a pointer along it
 //   the ray is kept as copies, and a hit always names the real object, never a temporary stand-in
 #include "3dc.h"
 #include "module.h"					  

@@ -5,8 +5,6 @@
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
 //   if-blocks in each #if branch, so code scanners can read it
-//   finds the data after a save block with DataAfterBlock, which says what it means
-//   a delta sequence's name is copied by the length measured for it
 //   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
 //   a save file can only change a model for a whole model from the same file
 //   looking for a part in a model that is not there now gives back nothing

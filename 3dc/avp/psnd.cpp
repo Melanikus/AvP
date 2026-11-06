@@ -2,8 +2,6 @@
   AvP sound management source
   ----------------------------------------------------------------------------*/
 // AvP port by Barry Duncan.
-// Modified 2026-11-03 by Melanikus for the AvP port:
-//   finds the data after a save block with DataAfterBlock, which says what it means
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved sound has to hold everything it says it holds, and its name has to end inside the block
 

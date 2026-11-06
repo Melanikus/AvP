@@ -17,6 +17,10 @@
 // program prints a line for each check, and gives back a non-zero result if any check failed.
 
 #include <stdio.h>
+#include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <string>
 #include <string.h>
 
 #include "3dc.h"
@@ -169,8 +173,55 @@ static void TestEveryRow()
 	Check(allPassed, "every row passes when whole, and names any part taken away");
 }
 
+// Reads a file of the game as text. /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it.
+static std::string ReadSourceFile(char const *name)
+{
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+
+	std::string text = all.str();
+	text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+	return text;
+}
+
+static bool Has(std::string const &text, char const *words)
+{
+	return text.find(words) != std::string::npos;
+}
+
+static int CountOf(std::string const &text, char const *words)
+{
+	int count = 0;
+
+	for (std::string::size_type at = text.find(words); at != std::string::npos; at = text.find(words, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
+// The game's loader brings most of the game with it, so this reads it as text
+static void TestTheLoaderAsks()
+{
+	std::string const loader = ReadSourceFile("3dc/avp/win95/projload.cpp");
+
+	Check(Has(loader, "Model_First_Missing_Part(hd->hierarchy_root, riffname, hd->hierarchy_name)"), "the game asks about each model as it's loaded");
+	Check(Has(loader, "Stop_On_Bad_Model(riffname, hd->hierarchy_name, missing_part);"), "and stops if a part is missing");
+}
+
 int main()
 {
+	TestTheLoaderAsks();
 	TestFindingParts();
 	TestOneRow();
 	TestEveryRow();

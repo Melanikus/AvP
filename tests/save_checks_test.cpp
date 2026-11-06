@@ -14,6 +14,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <string>
+
 #include "3dc.h"
 #include "dynblock.h"
 #include "gamedef.h"
@@ -377,6 +382,92 @@ static void TestCountingRefusals()
 	Save_StartCountingRefusals();
 }
 
+// Reads a file of the game as text. /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it.
+static std::string ReadSourceFile(char const *name)
+{
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+
+	std::string text = all.str();
+	text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+	return text;
+}
+
+static bool Has(std::string const &text, char const *words)
+{
+	return text.find(words) != std::string::npos;
+}
+
+static int CountOf(std::string const &text, char const *words)
+{
+	int count = 0;
+
+	for (std::string::size_type at = text.find(words); at != std::string::npos; at = text.find(words, at + 1))
+	{
+		count++;
+	}
+
+	return count;
+}
+
+// The loaders bring most of the game with them, so these read them as text. That shows each one asks. What happens in a real load needs a real save, and Hudson's saveat= and loadat= are for that.
+static void TestTheLoadersAsk()
+{
+	std::string const avp = "3dc/avp/";
+	char const *const usingDynamics[] = { "bh_agun", "bh_alien", "bh_corpse", "bh_debris", "bh_facehugger", "bh_marine", "bh_platform_lift", "bh_predator", "bh_queen", "bh_weapon", "bh_xeno", "bonusabilities", "player", "pvisible" };
+
+	for (char const *const name : usingDynamics)
+	{
+		std::string const text = ReadSourceFile((avp + name + ".cpp").c_str());
+
+		Check(Has(text, "Save_RestoreDynamics("), (std::string("a saved dynamics block goes through the check in ") + name).c_str());
+		Check(!Has(text, "*sbPtr->DynPtr = block->dynamics"), (std::string("and nothing copies one straight over in ") + name).c_str());
+	}
+
+	Check(CountOf(ReadSourceFile("3dc/avp/bh_weapon.cpp"), "Save_RestoreDynamics(") == 13, "every thrown weapon's loader asks");
+	Check(CountOf(ReadSourceFile("3dc/avp/bh_debris.cpp"), "Save_RestoreDynamics(") == 2, "and both of debris'");
+
+	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
+	Check(Has(menus, "if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))"), "a save slot's numbers are asked about when the menu lists it");
+
+	std::string const player = ReadSourceFile("3dc/avp/player.cpp");
+	Check(Has(player, "if(!Save_WeaponSlotIsValid(slot))"), "the player's weapon slot is asked about");
+	Check(Has(player, "if(Save_WeaponStateIsValid(block->WeaponSlot[i].CurrentState))"), "and each weapon's state");
+	Check(Has(player, "if(!Save_SwapFitsWeaponState(selectedWeapon->CurrentState,playerStatusPtr->SwapToWeaponSlot))"), "and whether it can go with the slot to swap to");
+	Check(Has(player, "if(Save_VisionModeIsValid(block->CurrentVisionMode))"), "and the vision mode");
+	Check(Has(player, "if(Save_AmmoIsValid(block->GrenadeLauncherData.SelectedAmmo))"), "and the grenade");
+
+	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;"), "a saved path has to be a real path");
+	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;"), "and a real step on it");
+	Check(Has(ReadSourceFile("3dc/avp/bh_corpse.cpp"), "Save_PlaceInListOrNone(block->hltable_index, numberOfTables)"), "a corpse's table has to be real");
+	Check(Has(ReadSourceFile("3dc/avp/decal.cpp"), "if(Save_PlaceInListOrNone(saved_decal->ModuleIndex, ModuleArraySize) < 0)"), "a decal's module has to be real");
+	Check(Has(ReadSourceFile("3dc/avp/bh_queen.cpp"), "Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects)"), "and what the Queen holds");
+	Check(Has(ReadSourceFile("3dc/avp/bh_generator.cpp"), "if(Save_NumberIsInRange(block->GenerationRate, 1, (60 * ONE_FIXED * 100) / 4))"), "a generator's rate has to be one it could reach");
+	Check(Has(ReadSourceFile("3dc/avp/bh_generator.cpp"), "if(Save_NumberIsInRange(block->generatorNPCsPerMinute, GENSPERMINUTE_MIN, GENSPERMINUTE_MAX))"), "and its NPCs a minute");
+	Check(Has(ReadSourceFile("3dc/avp/bh_predator.cpp"), "if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))"), "a predator's number has to pick one of its settings");
+	Check(Has(ReadSourceFile("3dc/avp/bh_binary_switch.cpp"), "if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))"), "a switch's sequence has to be its own");
+	Check(Has(ReadSourceFile("3dc/avp/bh_link_switch.cpp"), "if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))"), "and a linked switch's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_light.cpp"), "if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))"), "and a light's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_lift_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "a lift door's frame has to be real");
+	Check(Has(ReadSourceFile("3dc/avp/bh_switch_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a switch door's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_types.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a proximity door's");
+	Check(CountOf(ReadSourceFile("3dc/avp/psnd.cpp"), "if(!Save_NameFillsBlock(block->header.size, sizeof(*block), &block->fileNameLength, name)) return;") == 2, "a saved sound's name has to end inside its block, in both places a sound is loaded");
+
+	std::string const savegame = ReadSourceFile("3dc/avp/savegame.cpp");
+	Check(Has(savegame, "Save_StartCountingRefusals();"), "each load starts counting afresh");
+	Check(Has(savegame, "Save_DescribeRefusals(refusals, sizeof(refusals));"), "and says what it refused");
+	Check(Has(savegame, "if(sbPtr && sbPtr != Player->ObStrategyBlock)"), "a save can't take the player's block away");
+}
+
 int main()
 {
 	TestSlotNumbers();
@@ -389,6 +480,7 @@ int main()
 	TestRanges();
 	TestDynamics();
 	TestCountingRefusals();
+	TestTheLoadersAsk();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "all checks passed");
 	return checksFailed ? 1 : 0;

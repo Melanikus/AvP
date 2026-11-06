@@ -7,8 +7,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it;
 //   the number of decals (marks on walls) and their ids read from a save file are checked before use
-//   finds the data after a save block with DataAfterBlock, which says what it means
-//   a save block is asked for in two steps, the way the rest of the save code does it
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved decal in a module that does not exist is left out
 #include "3dc.h"

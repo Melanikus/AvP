@@ -5,7 +5,6 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
 //   compiled, so code scanners can read the file; the game runs the same code as before
-//   the arms' tilt is limited with min and max
 //   a Xenoborg placed outside every module is left out, instead of crashing
 //   a Xenoborg left without its animations by a save file is left out of the game
 //   the neck is checked before use, because a save file can leave it out
