@@ -51,7 +51,7 @@ inline bool LightChoice_MayCast(LightKindForShadows kind, bool ambientCasts)
 // it's judged by are only near enough, and that's why each sample also says how far it spreads.
 //
 // -shadownearest goes by distance instead, as the game used to. It needs -dev, and a network game puts it back. A lamp this calls "lighting nothing" then gets a place, so the same view drawn both ways says
-// whether that lamp really showed nothing: tools/hudson/compare-pictures.ps1 counts the pixels.
+// whether that lamp really showed nothing: take a picture of the view each way, and count the pixels that differ.
 //
 // None of this uses the game's random numbers or changes anything in the game: it only decides what this player's own screen draws, so it can't affect a network game.
 //
