@@ -981,6 +981,9 @@ static std::vector<uint8_t> AMessage(uint8_t system, uint32_t type, NetID from, 
 	return all;
 }
 
+// What a real client's code sends for a game message. AGameMessage changes only who it's from. See realClientsAsk just below for why.
+static std::vector<uint8_t> realGameMessage;
+
 // The bytes a real client's own code sends when it asks to join, taken from what it really sent. A test that fills in its own good message can't see the day the client stops sending one. That happened once: the host's version check refused every real client, and every test passed, because each one filled in the version by hand.
 static std::vector<uint8_t> realClientsAsk;
 
@@ -989,6 +992,30 @@ static void ListenToARealClient()
 	realClientsAsk.clear();
 	sentMessages.clear();
 	Check(JoinAGame() == NET_OK, "a real client joins, to hear what it says");
+
+	// A game message, the way the game sends every one
+	char words[] = "something for the game";
+
+	sentMessages.clear();
+	Check(Net_Send(NET_ID_ALLPLAYERS, 1, 0, (uint8_t *)words, sizeof(words)) == NET_OK, "it sends a game message");
+
+	for (size_t i = 0; i < sentMessages.size(); i++)
+	{
+		if (sentMessages[i].header.isSystemMessage == 0)
+		{
+			uint8_t const *const headerBytes = (uint8_t const *)&sentMessages[i].header;
+
+			realGameMessage.assign(headerBytes, headerBytes + sizeof(MessageHeader));
+			realGameMessage.insert(realGameMessage.end(), sentMessages[i].body.begin(), sentMessages[i].body.end());
+		}
+	}
+
+	Check(realGameMessage.size() == sizeof(MessageHeader) + sizeof(words), "and here it is");
+
+	// Back to the start, for what it says when it asks to join
+	EndTheGame();
+	sentMessages.clear();
+	Check(JoinAGame() == NET_OK, "it joins again");
 
 	for (size_t i = 0; i < sentMessages.size(); i++)
 	{
@@ -1024,9 +1051,14 @@ static std::vector<uint8_t> AskingToJoin(const char *name)
 
 static std::vector<uint8_t> AGameMessage(NetID from)
 {
-	char const words[] = "something for the game";
+	std::vector<uint8_t> message = realGameMessage;
 
-	return AMessage(0, NET_ID_ALLPLAYERS, from, words, sizeof(words));
+	if (message.size() >= sizeof(MessageHeader))
+	{
+		((MessageHeader *)message.data())->fromID = from;
+	}
+
+	return message;
 }
 
 // The game's buffer holds kMostMessageBytes. The rest is so that a test can see something too big without it doing any harm.
@@ -1875,6 +1907,7 @@ int main()
 {
 	TestStartingTheGame();
 	TestNobodyToSendTo();
+	ListenToARealClient();
 	TestDisconnectWithNoGame();
 	TestLookingForGames();
 	TestNothingOfTheStackGoesOut();
@@ -1890,7 +1923,6 @@ int main()
 	TestHostingWhileStillInAGame();
 	TestJoiningWhileAPageIsSearching();
 	DirtyTheStack();
-	ListenToARealClient();
 	TestARealClientGetsIn();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
