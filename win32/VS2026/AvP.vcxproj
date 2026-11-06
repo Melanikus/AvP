@@ -99,6 +99,8 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
       <SmallerTypeCheck>false</SmallerTypeCheck>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
@@ -138,9 +140,11 @@
       <HeapCommitSize>0</HeapCommitSize>
       <StackReserveSize>0</StackReserveSize>
       <StackCommitSize>0</StackCommitSize>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -174,6 +178,11 @@
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
+      <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
+           the Debug build uses Edit and Continue, which cannot be combined with it. -->
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -211,9 +220,11 @@
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>

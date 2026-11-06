@@ -1,6 +1,9 @@
 /* Patrick 4/7/97 ---------------------------------------------------
 Source file for predator AI
 ---------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -1006,7 +1009,7 @@ void PredatorBehaviour(STRATEGYBLOCK *sbPtr)
 {
         PREDATOR_STATUS_BLOCK *predatorStatusPointer;
         int predatorIsNear;
-        char *descriptor;
+        char *descriptor = "Unknown";
         PRED_RETURN_CONDITION state_result;
 
         LOCALASSERT(sbPtr);

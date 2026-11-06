@@ -1,10 +1,13 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a xenoborg that has just been killed no longer has its freed block read and written
 /* Patrick 4/7/97 ----------------------------------------------------
   Source file for Xenoborg AI behaviour functions....
   --------------------------------------------------------------------*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
-//   compiled, so code scanners can read the file; the game runs the same code as before
+//   compiled, so code scanners can read the file; the game runs the same code as before;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -1128,6 +1131,8 @@ void XenoborgIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
 		if (xenoStatusPointer->behaviourState!=XS_Dying) {
 			CurrentGameStats_CreatureKilled(sbPtr,NULL);
 			KillXeno(sbPtr,wounds,damage,multiple,incoming);
+			/* KillXeno can free this xenoborg's block, so nothing below may read it */
+			return;
 		}
 	}
 
@@ -4633,7 +4638,7 @@ int Xeno_Activation_Test(STRATEGYBLOCK *sbPtr) {
 void Xeno_MaintainLasers(STRATEGYBLOCK *sbPtr) {
 
 	XENO_STATUS_BLOCK *xenoStatusPointer;
-	SECTION_DATA *dum;
+	SECTION_DATA *dum = 0;
 	VECTORCH alpha;
 	VECTORCH beta;
 	int a,uselaser;

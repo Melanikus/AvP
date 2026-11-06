@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
-//   size limits, so no name, chat line or language-file text can run past the end of its buffer
+//   size limits, so no name, chat line or language-file text can run past the end of its buffer;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
@@ -9568,8 +9569,8 @@ void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startO
 #else
 void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame)
 {
-	int numStartPositions;
-	MULTIPLAYER_START *startPositions;
+	int numStartPositions = 0;
+	MULTIPLAYER_START *startPositions = 0;
 	int sbIndex = 0;
 	int start_index;
 	int numChecked = 0;

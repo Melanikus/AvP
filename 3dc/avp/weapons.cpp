@@ -3,7 +3,8 @@
 //   how many times a hit counts comes from another machine, so a number below nothing can't run away, and a spear with no dynamics block doesn't use one
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
-//   this file never declares, and a never-compiled #else branch
+//   this file never declares, and a never-compiled #else branch;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -6983,6 +6984,7 @@ HITLOCATIONTABLEENTRY *Get_Sublocation(STRATEGYBLOCK *sbPtr) {
 			break;
 		default:
 			GLOBALASSERT(0);
+			subtable=hltable->CentreLocs;
 			break;
 	}
 
@@ -7459,7 +7461,7 @@ void WristBlade_WindUpStrike(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) 
 			if (hits) {
 
 				STRATEGYBLOCK *Trophy;
-				SECTION_DATA *head_sec;
+				SECTION_DATA *head_sec = 0;
 				enum AMMO_ID AmmoID=TemplateWeapon[weaponPtr->WeaponIDNumber].SecondaryAmmoID;
 		
 
