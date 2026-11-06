@@ -5,12 +5,13 @@
 // developers' machines nobody would notice, because the old DirectX runtime put a copy in Windows' own folder. On a clean Windows, every
 // shader would fail and the game wouldn't start.
 //
-// So it isn't enough to ask whether a shader compiles. A machine's own copy could make that pass. This also asks Windows WHICH FILE it
-// gets for that name, and fails unless it's the one in the package. That means it can catch a missing file on any machine, even one that
-// has its own copy. This relies on D3DX asking for it by name like anything else, which comes from reading the DLL.
+// So it isn't enough to ask whether a shader compiles. A machine's own copy could make that pass. So first this tells Windows to stop looking
+// in its own folder, for this program only, and then has D3DX compile a shader. If the package has what D3DX needs, that works. If it
+// doesn't, that fails, on any machine, even one with its own copies. Last, it asks Windows which file it gets for that name, and fails
+// unless it's the one in the package, in case D3DX ever found a copy some other way.
 //
-// HOW TO USE IT: copy this program into the package's folder and run it from there with --here. It finds the libraries the same way the
-// game does, with Windows looking beside the program first. game-build.yml does this.
+// HOW TO USE IT: copy this program into the package's folder and run it from there with --here. tests/try-package.ps1 does this, and
+// shows that it fails when something is taken out.
 //
 // With no arguments, which is how tests.yml runs every test, it only checks its own rule on made-up paths.
 //
@@ -71,6 +72,10 @@ static int CheckTheRule()
 	Check(!FileIsDirectlyIn("C:\\package\\", "C:\\package"), "the folder itself isn't a file in it");
 	Check(!FileIsDirectlyIn("", "C:\\package"), "no path at all");
 	Check(!FileIsDirectlyIn("C:\\package\\x.dll", ""), "no folder at all");
+	Check(!FileIsDirectlyIn("\\x.dll", ""), "no folder at all, with a path that starts with a slash");
+	Check(!FileIsDirectlyIn("C:\\package.dll", "C:\\package"), "a file whose name only starts the same as the folder doesn't count");
+	Check(FileIsDirectlyIn("C:\\package/D3DCompiler_43.dll", "C:\\package"), "a slash leaning the other way is still a slash");
+	Check(!FileIsDirectlyIn("C:\\package\\inner/D3DCompiler_43.dll", "C:\\package"), "a folder inside it doesn't count, whichever way the slash leans");
 
 	if (checksFailed)
 	{
@@ -131,13 +136,21 @@ static int CheckThePackage()
 	*lastSlash = 0;
 	printf("Trying the package in %s\n", folder);
 
-	// by name alone, as the game does, so Windows looks where it would look for the game
+	// From here on, a library asked for by name is only looked for beside this program, so a copy that belongs to this machine can't stand in
+	// for one the package lacks. The game doesn't do this, and doesn't need to: Windows looks beside a program before it looks in its own
+	// folder. Windows still has the few libraries it always keeps ready, and those are all D3DX and the compiler link to.
+	if (!SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_APPLICATION_DIR))
+	{
+		puts("FAILED: this program couldn't tell Windows to stop looking in its own folder");
+		return 1;
+	}
+
 	HMODULE const d3dx = LoadLibraryA(D3DXLibrary);
 	char path[MAX_PATH];
 
 	if (!d3dx || !WhereLoadedFrom(D3DXLibrary, path, MAX_PATH))
 	{
-		printf("FAILED: %s couldn't be loaded from anywhere\n", D3DXLibrary);
+		printf("FAILED: %s isn't in the package, and the game links to it, so it wouldn't start\n", D3DXLibrary);
 		return 1;
 	}
 
@@ -146,23 +159,6 @@ static int CheckThePackage()
 	if (!FileIsDirectlyIn(path, folder))
 	{
 		printf("FAILED: %s isn't in the package. That copy belongs to this machine, and a clean Windows wouldn't have it\n", D3DXLibrary);
-		return 1;
-	}
-
-	// D3DX loads the compiler only while it's compiling, and lets go of it before it returns, so asking Windows afterwards finds nothing:
-	// a first version of this test did that, and saw it. So this asks for it first, by name, the same way D3DX does, which gets the file
-	// D3DX would get. It stays loaded while the shader compiles, so that shader goes through this very file.
-	if (!LoadLibraryA(CompilerLibrary) || !WhereLoadedFrom(CompilerLibrary, path, MAX_PATH))
-	{
-		printf("FAILED: %s couldn't be loaded from anywhere, so no shader can compile on this machine\n", CompilerLibrary);
-		return 1;
-	}
-
-	printf("  %s came from %s\n", CompilerLibrary, path);
-
-	if (!FileIsDirectlyIn(path, folder))
-	{
-		printf("FAILED: %s isn't in the package. That copy belongs to this machine, and on a clean Windows every shader would fail\n", CompilerLibrary);
 		return 1;
 	}
 
@@ -200,7 +196,23 @@ static int CheckThePackage()
 
 	if (!compiled)
 	{
-		printf("FAILED: the package's compiler didn't compile a small shader (its answer was 0x%08lX)\n", (unsigned long)result);
+		printf("FAILED: with only what's in the package, D3DX couldn't compile a small shader (its answer was 0x%08lX). It needs %s beside it\n", (unsigned long)result, CompilerLibrary);
+		return 1;
+	}
+
+	// D3DX loads the compiler only while it's compiling, and lets go of it before it returns, so asking Windows which file it used finds nothing
+	// afterwards: a first version of this test did that, and saw it. This asks for the same name instead, the way D3DX does.
+	if (!LoadLibraryA(CompilerLibrary) || !WhereLoadedFrom(CompilerLibrary, path, MAX_PATH))
+	{
+		printf("FAILED: D3DX compiled a shader, but %s isn't in the package. D3DX must have found this machine's copy some other way, and a clean Windows wouldn't have one\n", CompilerLibrary);
+		return 1;
+	}
+
+	printf("  %s came from %s\n", CompilerLibrary, path);
+
+	if (!FileIsDirectlyIn(path, folder))
+	{
+		printf("FAILED: %s came from somewhere else, and a clean Windows wouldn't have that copy\n", CompilerLibrary);
 		return 1;
 	}
 

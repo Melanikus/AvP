@@ -1,5 +1,6 @@
 <#
-Checks that a package has every library it needs, or that Windows or Microsoft's runtime will supply it. Goes online for nothing.
+Checks that a package has every library it needs, or that Windows or Microsoft's runtime will supply it, and that the two files we can't build
+from source are really Microsoft's. Goes online for nothing.
 
 A program can't start if a library it links to is missing, and the same goes for each library it brings along. A machine that has built the
 game before tends to have copies of everything, so a missing file wouldn't show there, and a tester would be the first to find out. So this
@@ -9,7 +10,8 @@ Each name has to be in the package, or on one of the two lists below. A new one 
 it to the package or to a list, on purpose. That's the point: a file from an old DirectX runtime, which a clean Windows doesn't have, can't
 slip through because a developer's machine happens to have it.
 
-WHAT IT CAN'T SEE: a library loaded by name while the program is running, such as D3DCompiler_43.dll. tests/package_test.cpp checks that one.
+WHAT IT CAN'T SEE: a library loaded by name while the program is running, such as D3DCompiler_43.dll. tests/package_test.cpp checks that one
+works, and this only checks that it's there and signed. tests/try-package.ps1 shows that each of these checks refuses when it should.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package
@@ -66,6 +68,19 @@ if ($files.Count -lt 2 -or $inPackage -notcontains 'avpx.exe' -or $namesRead -eq
 if ($missing.Count -gt 0) {
     $missing | ForEach-Object { "MISSING: $_" }
     throw "$($missing.Count) libraries aren't in the package, and Windows and Microsoft's runtime don't supply them. Add each to the package, or to a list in this script if it really is part of Windows."
+}
+
+# D3DX and its compiler only exist as finished files from Microsoft, so nothing here built them or can scan them. vcpkg checks the hash of the download they
+# came in, but a copy already saved on a machine isn't downloaded. Microsoft's signature covers every byte of the file itself, whichever way it got here.
+foreach ($name in 'D3DCompiler_43.dll', 'd3dx9_43.dll') {
+    $path = Join-Path $Package $name
+    if (-not (Test-Path -LiteralPath $path)) { throw "$name isn't in the package" }
+
+    $signature = Get-AuthenticodeSignature -LiteralPath $path
+    $signedBy = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'nobody' }
+    if ($signature.Status -ne 'Valid' -or $signedBy -notmatch '(^|, )O=Microsoft Corporation(,|$)') {
+        throw "$name doesn't carry Microsoft's signature: its signature is $($signature.Status), by $signedBy"
+    }
 }
 
 "Every library the package links to is accounted for: $($files.Count) files, $namesRead names read"

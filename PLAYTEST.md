@@ -56,7 +56,7 @@ from source.
   address.
 - Your antivirus may warn about the build: it's new and unsigned. Don't run a build your antivirus blocks, and don't turn your
   antivirus off. Matching hashes don't make a warning safe. Tell us instead.
-- The security scans have limits. Microsoft's D3DX library comes as a binary, so it can't be scanned. Four reports against
+- The security scans have limits. Microsoft's D3DX library and its shader compiler come as binaries, so they can't be scanned. Four reports against
   libvorbis are accepted until a set date: see `.github/snyk-accepted.json`.
 
 ## Turning on the new look
