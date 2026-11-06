@@ -386,6 +386,7 @@
     <ClCompile Include="..\..\3dc\frustum.cpp" />
     <ClCompile Include="..\..\3dc\IndexBuffer.cpp" />
     <ClCompile Include="..\..\3dc\kshape.cpp" />
+    <ClCompile Include="..\..\3dc\light_choice.cpp" />
     <ClCompile Include="..\..\3dc\logString.cpp" />
     <ClCompile Include="..\..\3dc\map.cpp" />
     <ClCompile Include="..\..\3dc\mathline.cpp" />
@@ -414,6 +415,7 @@
     <ClCompile Include="..\..\3dc\flicker_meter.cpp" />
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
+    <ClCompile Include="..\..\3dc\view_keys.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />

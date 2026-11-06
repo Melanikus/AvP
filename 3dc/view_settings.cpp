@@ -10,13 +10,25 @@
 //
 // ONE WAY IN: the menu doesn't change how anything is drawn. It asks, the same way the LIGHTING and SHADOWS commands do, and the change happens at the one safe moment in a frame:
 // see ViewSwitches_ApplyAsked in d3d_render.cpp. The commands only change this run. Only the menu saves.
+//
+// THE KEYS: three more lines say which key changes the lighting (L), the shadows (H) and the developers' views (J). They're kept in the same file, as numbers. The rules for which key a line may have
+// are in view_keys.h, and this is what joins them to the game. A key already in use is refused, and the line's help says why. A control that gets one of these keys afterwards wins, and both pages show it.
 
 #include "3dc.h"
+#include "module.h"
+#include "inline.h"
+#include "strategy_def.h"
+#include "gamedef.h"
+#include "input.h"
+#include "user_io.h"
 #include "ConfigFile.h"
 #include "logString.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+
+#include <string.h>
+#include <string>
 
 // In d3d_render.cpp, beside the rest of what happens to these two switches
 void ViewSwitches_AskLighting(int choice);
@@ -27,6 +39,7 @@ void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere, bool *marchTh
 int ViewSwitches_DrawnForTheMenu();
 bool ViewSwitches_ShadowsCanBeOn();
 void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead);   // menu_data.cpp
+void RenderingPage_SayWhatKeyLineDoes(int line, ViewKeyAnswer lastAnswer, bool heldByAControl);   // menu_data.cpp
 
 static const char kHeading[] = "[Video]";
 static const char kRendering[] = "Rendering";
@@ -41,6 +54,77 @@ int MenuAutoGenerate = 0;
 static int lastRendering = kLightingGouraud;
 static int lastShadows = 0;
 static int lastAutoGenerate = 0;
+
+// The three keys. Where each is kept in the settings file, and the one it has until the player says otherwise.
+static const char *const kKeySettings[kViewKeyLines] = { "RenderingKey", "ShadowsKey", "DevViewsKey" };
+static const int kUsualKeys[kViewKeyLines] = { KEY_L, KEY_H, KEY_J };
+
+// The keys the game reads for itself, whatever the controls say, so a line can't have one. Pressing one of these would do its own job as well.
+static const unsigned char kKeysTheGameKeeps[] =
+{
+	KEY_ESCAPE, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,   // the menu and the weapons: FixedInputConfig in user_io.cpp
+	KEY_GRAVE,                                                                          // the console, in user_io.cpp
+	KEY_JOYSTICK_BUTTON_9,                                                              // a game pad's menu button, in user_io.cpp
+	KEY_F5, KEY_F7, KEY_F8, KEY_F9, KEY_F10                                             // the developers' tools, in ViewSwitches_ApplyAsked in d3d_render.cpp
+};
+
+static int viewKeys[kViewKeyLines] = { KEY_L, KEY_H, KEY_J };
+
+// What became of the last key each line was asked to take, for the line's help to say
+static ViewKeyAnswer lastAnswer[kViewKeyLines] = { kViewKeyTaken, kViewKeyTaken, kViewKeyTaken };
+
+static ViewKeyRules TheRules(const unsigned char *controls, int controlsCount)
+{
+	ViewKeyRules rules;
+
+	rules.noKey = KEY_VOID;
+	rules.lastRealKey = KEY_DIACRITIC_UMLAUT;
+	rules.gameKeeps = kKeysTheGameKeeps;
+	rules.gameKeepsCount = sizeof(kKeysTheGameKeeps);
+	rules.controls = controls;
+	rules.controlsCount = controlsCount;
+
+	return rules;
+}
+
+// A set of controls is 32 keys, one byte each. The menus' controls pages treat it that way too: see CheckForKeysWithMultipleAssignments.
+static_assert(sizeof(PLAYER_INPUT_CONFIGURATION) == 32, "a set of controls is a list of 32 keys");
+
+static const int kControlsInASet = sizeof(PLAYER_INPUT_CONFIGURATION);
+
+// The controls of all three species, each with its two columns. A key chosen in the menu mustn't clash with whichever of them is played next.
+static void EveryControl(unsigned char controls[kControlsInASet * 6])
+{
+	memcpy(controls + kControlsInASet * 0, &MarineInputPrimaryConfig, kControlsInASet);
+	memcpy(controls + kControlsInASet * 1, &MarineInputSecondaryConfig, kControlsInASet);
+	memcpy(controls + kControlsInASet * 2, &PredatorInputPrimaryConfig, kControlsInASet);
+	memcpy(controls + kControlsInASet * 3, &PredatorInputSecondaryConfig, kControlsInASet);
+	memcpy(controls + kControlsInASet * 4, &AlienInputPrimaryConfig, kControlsInASet);
+	memcpy(controls + kControlsInASet * 5, &AlienInputSecondaryConfig, kControlsInASet);
+}
+
+// The controls of whoever is being played right now, the same two sets that user_io.cpp reads.
+static void TheControlsInUse(unsigned char controls[kControlsInASet * 2])
+{
+	switch (AvP.PlayerType)
+	{
+		case I_Predator:
+			memcpy(controls, &PredatorInputPrimaryConfig, kControlsInASet);
+			memcpy(controls + kControlsInASet, &PredatorInputSecondaryConfig, kControlsInASet);
+			break;
+
+		case I_Alien:
+			memcpy(controls, &AlienInputPrimaryConfig, kControlsInASet);
+			memcpy(controls + kControlsInASet, &AlienInputSecondaryConfig, kControlsInASet);
+			break;
+
+		case I_Marine:
+		default:
+			memcpy(controls, &MarineInputPrimaryConfig, kControlsInASet);
+			memcpy(controls + kControlsInASet, &MarineInputSecondaryConfig, kControlsInASet);
+			break;
+	}
+}
 
 void ViewSettings_Load()
 {
@@ -65,6 +149,29 @@ void ViewSettings_Load()
 	MenuRendering = lastRendering = choice;
 	MenuShadows = lastShadows = shadows ? 1 : 0;
 	MenuAutoGenerate = lastAutoGenerate = autoGenerate ? 1 : 0;
+
+	// The keys. The first read of a file from before these lines gets the usual ones, and gets the lines. They're read as words, because the file's own reader of numbers takes anything. No profile has
+	// been read yet, so the controls aren't known here. That's sorted out during a level, where a control wins.
+	std::string words[kViewKeyLines];
+	char const *wordsToRead[kViewKeyLines];
+	bool wasRefused[kViewKeyLines];
+
+	for (int line = 0; line < kViewKeyLines; line++)
+	{
+		words[line] = Config_GetString(kHeading, kKeySettings[line], std::to_string(kUsualKeys[line]));
+		wordsToRead[line] = words[line].c_str();
+	}
+
+	ViewKey_SettleSaved(wordsToRead, kUsualKeys, TheRules(0, 0), viewKeys, wasRefused);
+
+	for (int line = 0; line < kViewKeyLines; line++)
+	{
+		if (wasRefused[line])
+		{
+			LogErrorString(std::string("the settings file's ") + kKeySettings[line] + " line isn't a key that line can have, so it has gone back");
+			Config_SetString(kHeading, kKeySettings[line], std::to_string(viewKeys[line]));
+		}
+	}
 }
 
 void ViewSettings_MenuFrame()
@@ -123,6 +230,11 @@ void ViewSettings_MenuFrame()
 
 	RenderingPage_SayWhatLinesDo(ViewSwitches_ShadowsCanBeOn(), Lighting_UsesMaps(MenuRendering));
 
+	for (int line = 0; line < kViewKeyLines; line++)
+	{
+		RenderingPage_SayWhatKeyLineDoes(line, lastAnswer[line], ViewSettings_LineIsHeldByAControl(line));
+	}
+
 	// Turning it off takes effect at once, and on from the next level, because maps are only worked out while a level loads. TextureRelief knows that, and the page says so.
 	if (MenuAutoGenerate != lastAutoGenerate)
 	{
@@ -136,4 +248,72 @@ void ViewSettings_MenuFrame()
 	{
 		Config_Save();
 	}
+}
+
+int ViewSettings_KeyOnLine(int line)
+{
+	return (line < 0 || line >= kViewKeyLines) ? KEY_VOID : viewKeys[line];
+}
+
+void ViewSettings_ChoosingKey(int line)
+{
+	if (line >= 0 && line < kViewKeyLines)
+	{
+		lastAnswer[line] = kViewKeyTaken;
+	}
+}
+
+void ViewSettings_PressedKeyForLine(int line, int key)
+{
+	if (line < 0 || line >= kViewKeyLines)
+	{
+		return;
+	}
+
+	unsigned char controls[kControlsInASet * 6];
+
+	EveryControl(controls);
+	lastAnswer[line] = ViewKey_Judge(line, key, viewKeys, TheRules(controls, sizeof(controls)));
+
+	if (lastAnswer[line] == kViewKeyTaken)
+	{
+		viewKeys[line] = key;
+		Config_SetString(kHeading, kKeySettings[line], std::to_string(key));
+		Config_Save();
+	}
+}
+
+bool ViewSettings_LineIsHeldByAControl(int line)
+{
+	if (line < 0 || line >= kViewKeyLines || viewKeys[line] == KEY_VOID)
+	{
+		return false;
+	}
+
+	unsigned char controls[kControlsInASet * 6];
+
+	EveryControl(controls);
+
+	return ViewKey_IsInList(viewKeys[line], controls, sizeof(controls));
+}
+
+bool ViewSettings_KeyIsOnALine(int key)
+{
+	return key != KEY_VOID && (key == viewKeys[kViewKeyRendering] || key == viewKeys[kViewKeyShadows] || key == viewKeys[kViewKeyDevViews]);
+}
+
+bool ViewSettings_KeyPressed(int line)
+{
+	if (line < 0 || line >= kViewKeyLines)
+	{
+		return false;
+	}
+
+	// Every key here has been through the rules, so it's inside the game's table of keys
+	int const key = viewKeys[line];
+	unsigned char controls[kControlsInASet * 2];
+
+	TheControlsInUse(controls);
+
+	return ViewKey_Acts(key, DebouncedKeyboardInput[key] != 0, TheRules(controls, sizeof(controls)));
 }
