@@ -1029,9 +1029,12 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 		{
 			return NET_NO_MESSAGES;
 		}
+
+		return NET_OK;
 	}
 
-	return NET_OK;
+	// The callers go round until this says there's nothing more, and with no host there never will be. A level can still be running with no host: the console's disconnect command leaves it that way.
+	return NET_NO_MESSAGES;
 }
 
 // used to send a message to the server only
@@ -1212,18 +1215,12 @@ static bool Net_CreatePlayer(char *playerName)
 	return true;
 }
 
-// Only a host hands these out. It's a count, so that no two players ever have the same one, and 0 means nobody. Nothing relies on anyone being unable to guess one: everyone in the game can see them all, and the host goes by the connection.
+// Only a host hands these out. It's a count from 1, so that no two players ever have the same one, and 0 means nobody. Nothing relies on anyone being unable to guess one: everyone in the game can see them all, and the host goes by the connection.
 NetID Net_GetNextPlayerID()
 {
 	static NetID lastPlayerID = 0;
 
 	lastPlayerID++;
-
-	if (lastPlayerID == 0)
-	{
-		lastPlayerID = 1;
-	}
-
 	return lastPlayerID;
 }
 
