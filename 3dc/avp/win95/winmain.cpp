@@ -12,12 +12,14 @@
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   -shadowambient starts with the map's lights that show no corona casting shadows
+//   a new level starts with nothing noted about what was on screen
 //   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
 
 #include "3dc.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+#include "light_choice.h"
 #include "static_level.h"
 #include "module.h"
 #include "inline.h"
@@ -758,7 +760,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		AssignAllSBNames();
 		StartGame();
 
-		// after StartGame, because that's when every module that's controlled by something has been told so
+		// What the level before had on screen is no use for this one's lights
+		extern LightChoiceSamples lightChoiceSamples;
+		LightChoice_Forget(&lightChoiceSamples);
 		StaticLevel_BuildThisLevel();
 
 		/* JH 28/5/97 */

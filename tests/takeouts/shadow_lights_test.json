@@ -845,6 +845,16 @@
 					"to": "%d %d %s %d; "
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the report leaves out what lights nothing",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.dark, lightsThisFrame.lightNothing,",
+					"to": "lightsThisFrame.dark, 0,"
+				}
+			]
 		}
 	]
 }

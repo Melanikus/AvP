@@ -27,9 +27,8 @@
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
 //   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
 //   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
-
-// Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
+//   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -79,6 +78,7 @@
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
+#include "light_choice.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
 #if __has_include("build_commit.h")
@@ -3802,6 +3802,7 @@ int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from t
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 0;
 int ShadowAmbientOn = 0;       // SHADOWAMBIENT, -shadowambient: whether the map's lights with no corona can cast shadows. See light_choice.h
+LightChoiceSamples lightChoiceSamples;  // what's on screen, for choosing the lights that show the most
 int ToyShadowsMaxLights = kToyMostSteadyLights;  // -shadowlights=N, 1 to 20: how many steady lights
 int ToyShadowsMaxBrief = kToyMostBriefLights;    // -shadowbrief=N, 0 to 12: how many brief lights on top of those, such as muzzle flashes and explosions
 int ShadowsPretendNoFloatBlend = 0;              // -shadownofloatblend: what the game does on a card that can't add to a float picture, on any card, so it can be tried
@@ -4160,6 +4161,12 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		}
 
 		return;
+	}
+
+	// What's only there to cast isn't on screen. This comes after the limit above, so that the time this takes has a limit too.
+	if (kind != kToyCasterCastOnly)
+	{
+		LightChoice_AddPolygon(&lightChoiceSamples, pts, count, d3d.matProjection._11, d3d.matProjection._22);
 	}
 
 	int const firstPoint = toyNumCasterPoints;

@@ -1,0 +1,680 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "a polygon with too many corners is taken",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (count < 3 || count > kLightChoiceMostCorners)",
+					"to": "if (count < 3)"
+				}
+			]
+		},
+		{
+			"name": "a polygon wholly behind the camera counts",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (!anyInFront)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a corner behind the camera is divided the wrong way",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (z > kNearest)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a corner past the side of the screen is not held to it",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "*screenX = (sx > 1.0f) ? 1.0f : (sx < -1.0f) ? -1.0f : sx;",
+					"to": "*screenX = sx;"
+				}
+			]
+		},
+		{
+			"name": "a corner past the top of the screen is not held to it",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "*screenY = (sy > 1.0f) ? 1.0f : (sy < -1.0f) ? -1.0f : sy;",
+					"to": "*screenY = sy;"
+				}
+			]
+		},
+		{
+			"name": "corners the other way round come out below nothing",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "fabsf(twiceArea) * 0.125f",
+					"to": "twiceArea * 0.125f"
+				}
+			]
+		},
+		{
+			"name": "a polygon counts for the wrong share of the screen",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "fabsf(twiceArea) * 0.125f",
+					"to": "fabsf(twiceArea) * 0.25f"
+				}
+			]
+		},
+		{
+			"name": "nothing to go by still counts as a polygon",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (!(weight > 0.0f))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "what is on screen is not added up",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->totalWeight += weight;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a polygon too small to keep is kept",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (weight < samples->leastWorthKeeping)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a polygon with no way it faces is kept",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (!(length > 0.0f))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a polygon faces whichever way its corners say",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (nx * middleX + ny * middleY + nz * middleZ > 0.0f)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a polygon is judged by its own middle",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (along > kNearest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the list runs off its end",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (samples->count == kLightChoiceSamplesHeld)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "how far it spreads is not kept",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "sample.spread = sqrtf(furthest);",
+					"to": "sample.spread = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "the smallest are kept, not the largest",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "return a.weight > b.weight;",
+					"to": "return a.weight < b.weight;"
+				}
+			]
+		},
+		{
+			"name": "the list is not cut",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->count = kLightChoiceSamplesKept;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "what is too small is never worked out",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->leastWorthKeeping = samples->list[kLightChoiceSamplesKept - 1].weight;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "forgetting leaves the count",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->count = 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "forgetting leaves the total",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->totalWeight = 0.0f;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "forgetting leaves the least worth keeping",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "samples->leastWorthKeeping = 0.0f;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a big polygon is judged only by its spot",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "float const nearestOfIt = (howFar > sample.spread) ? howFar - sample.spread : 0.0f;",
+					"to": "float const nearestOfIt = howFar;"
+				}
+			]
+		},
+		{
+			"name": "a light on the spot divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "((howFar > 1.0f) ? howFar : 1.0f)",
+					"to": "howFar"
+				}
+			]
+		},
+		{
+			"name": "the baked shape ignores which way a surface faces",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "(float)cos(1.5707963f * reach) * Clamped01(turned)",
+					"to": "(float)cos(1.5707963f * reach)"
+				}
+			]
+		},
+		{
+			"name": "the live shape differs from the shader",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "(turned + 0.25f) * 0.5f",
+					"to": "turned"
+				}
+			]
+		},
+		{
+			"name": "the two shapes are swapped",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (baked)",
+					"to": "if (!baked)"
+				}
+			]
+		},
+		{
+			"name": "a range of nothing or less is scored",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "!(range > 0.0f) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a brightness of less than nothing is scored",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": " || !(brightness > 0.0f)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "range is not held to the most",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "float const most = (range < kLightChoiceMostRange) ? range : kLightChoiceMostRange;",
+					"to": "float const most = range;"
+				}
+			]
+		},
+		{
+			"name": "a score is not a share of what is on screen",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "sum * brightness / samples.totalWeight",
+					"to": "sum * brightness"
+				}
+			]
+		},
+		{
+			"name": "brightness earns nothing",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "sum * brightness / samples.totalWeight",
+					"to": "sum / samples.totalWeight"
+				}
+			]
+		},
+		{
+			"name": "how much of the screen a surface covers earns nothing",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "sum += samples.list[i].weight * LightChoice",
+					"to": "sum += LightChoice"
+				}
+			]
+		},
+		{
+			"name": "a score that is not a number gets out",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "return (score == score) ? score : 0.0f;",
+					"to": "return score;"
+				}
+			]
+		},
+		{
+			"name": "a flare or the player waits its turn",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (candidates[i].comesFirst)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a light with a place gets no help",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "return candidate.hasAPlace ? candidate.score * kLightChoiceStayScore : candidate.score;",
+					"to": "return candidate.score;"
+				}
+			]
+		},
+		{
+			"name": "a dark lamp loses its place",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "return ScoreToGoBy(candidate) < kLightChoiceShowsNothing && !candidate.keepsItsPlace;",
+					"to": "return ScoreToGoBy(candidate) < kLightChoiceShowsNothing;"
+				}
+			]
+		},
+		{
+			"name": "a light showing nothing takes a place",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "return ScoreToGoBy(candidate) < kLightChoiceShowsNothing && !candidate.keepsItsPlace;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "the worst light goes first",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "score > bestScore",
+					"to": "score < bestScore"
+				}
+			]
+		},
+		{
+			"name": "on a tie the last wins",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "score > bestScore",
+					"to": "score >= bestScore"
+				}
+			]
+		},
+		{
+			"name": "it looks past the end of the list",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "int const count = (howMany > kLightChoiceMostCandidates) ? kLightChoiceMostCandidates : howMany;",
+					"to": "int const count = howMany;"
+				}
+			]
+		},
+		{
+			"name": "lights showing nothing are not counted",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "numNothing++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a light passed over for want of a place counts as showing nothing",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (!taken[i] && ShowsNothing(candidates[i]))",
+					"to": "if (!taken[i])"
+				}
+			]
+		},
+		{
+			"name": "being told how many show nothing is not optional",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "if (showNothing)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "it picks one too many",
+			"changes": [
+				{
+					"file": "3dc/light_choice.cpp",
+					"from": "while (numPicked < most)",
+					"to": "while (numPicked <= most)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing is noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "LightChoice_AddPolygon(&lightChoiceSamples, pts, count, d3d.matProjection._11, d3d.matProjection._22);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a polygon only there to cast is noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (kind != kToyCasterCastOnly)\n\t{\n\t\tLightChoice_AddPolygon",
+					"to": "\tif (true)\n\t{\n\t\tLightChoice_AddPolygon"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the view of the samples is not kept",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "memcpy(samplesViewMatrix, toyViewMatrix, sizeof(samplesViewMatrix));",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light is looked at from the wrong view",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "TranslatePoint(source, view, samplesViewMatrix);",
+					"to": "TranslatePoint(source, view, toyViewMatrix);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light is looked at upside down",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "view[0], -view[1], view[2]",
+					"to": "view[0], view[1], view[2]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the steady lights are not scored",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "numSteady = ToyKeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the brief lights are not scored",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "numBrief = ToyKeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every sample is scored",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "LightChoice_KeepTheLargest(&lightChoiceSamples);\n\tnumSteady",
+					"to": "numSteady"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the samples build up from frame to frame",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t// What the coming frame draws is what the next one's lights are judged by\n\tLightChoice_Forget(&lightChoiceSamples);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: old samples can meet a newer view",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\tLightChoice_Forget(&lightChoiceSamples);\n\t\tToyHoldFlaresToTheirCap();",
+					"to": "\t\tToyHoldFlaresToTheirCap();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new level starts with the old one's samples",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\tLightChoice_Forget(&lightChoiceSamples);\n\t\tStaticLevel_BuildThisLevel();",
+					"to": "\t\tStaticLevel_BuildThisLevel();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with walls never noted, it scores anyway",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)",
+					"to": "if (!LightChoice_HasSamples(lightChoiceSamples))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with nothing to go by, it scores anyway",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)",
+					"to": "if (StaticSceneOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: going by nearest runs past the limit",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "return (numFound < most) ? numFound : most;",
+					"to": "return numFound;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flare or the player does not come first",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "candidates[i].comesFirst = found[i].comesFirst;",
+					"to": "candidates[i].comesFirst = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: flares do not count as first",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));",
+					"to": "found[place].comesFirst = block == Player;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player does not count as first",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));",
+					"to": "found[place].comesFirst = block && ToyBlockIsFlare(block);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dark lamp with a place is not told it keeps it",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "candidates[i].keepsItsPlace = hasAPlace && LightIsDarkForNow(light);",
+					"to": "candidates[i].keepsItsPlace = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dark lamp is judged by being dark",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "light->LightBright ? light->LightBright : light->LightBrightStore",
+					"to": "light->LightBright"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what lights nothing stays in the count of what found no place",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "(*inReach) -= showNothing;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what lights nothing is not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "lightsThisFrame.lightNothing += showNothing;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the candidate lists are too small",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "ToyFoundLight steady[kLightChoiceMostCandidates];",
+					"to": "ToyFoundLight steady[kToyMostSteadyLights];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game is not built with it",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "    <ClCompile Include=\"..\\..\\3dc\\light_choice.cpp\" />\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
