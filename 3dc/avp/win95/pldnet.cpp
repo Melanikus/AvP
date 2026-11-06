@@ -1031,7 +1031,7 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_LOSRequestBinarySwitch, sizeof(NETMESSAGE_LOSREQUESTBINARYSWITCH), false, false },
 	{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, true },
 	{ NetMT_RequestPlatformLiftActivate, sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE), false, false },
-	{ NetMT_PlayerAutoGunState, sizeof(NETMESSAGE_AGUNSTATE), false, false },
+	{ NetMT_PlayerAutoGunState, sizeof(NETMESSAGE_AGUNSTATE), false, true },
 	{ NetMT_MakeDecal, sizeof(NETMESSAGE_MAKEDECAL), false, false },
 	{ NetMT_ChatBroadcast, 2, true, false },
 	{ NetMT_MakeExplosion, sizeof(NETMESSAGE_MAKEEXPLOSION), false, false },
@@ -1041,11 +1041,11 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_LocalObjectOnFire, sizeof(NETMESSAGE_LOBONFIRE), false, false },
 	{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true },
 	{ NetMT_FragmentalObjectsStatus, sizeof(NETMESSAGE_FRAGMENTALOBJECTSSTATUS), false, true },
-	{ NetMT_AlienAIState, sizeof(NETMESSAGE_ALIENAISTATE), false, false },
-	{ NetMT_AlienAISequenceChange, sizeof(NETMESSAGE_ALIENSEQUENCECHANGE), false, false },
-	{ NetMT_AlienAIKilled, sizeof(NETMESSAGE_ALIENAIKILLED), false, false },
+	{ NetMT_AlienAIState, sizeof(NETMESSAGE_ALIENAISTATE), false, true },
+	{ NetMT_AlienAISequenceChange, sizeof(NETMESSAGE_ALIENSEQUENCECHANGE), false, true },
+	{ NetMT_AlienAIKilled, sizeof(NETMESSAGE_ALIENAIKILLED), false, true },
 	{ NetMT_GhostHierarchyDamaged, sizeof(NETMESSAGE_GHOSTHIERARCHYDAMAGED_HEADER), true, false },
-	{ NetMT_SpotAlienSound, sizeof(NETMESSAGE_SPOTALIENSOUND), false, false },
+	{ NetMT_SpotAlienSound, sizeof(NETMESSAGE_SPOTALIENSOUND), false, true },
 	{ NetMT_LocalObjectDestroyed_Request, sizeof(NETMESSAGE_LOBDESTROYED_REQUEST), false, false },
 	{ NetMT_LastManStanding_Restart, sizeof(NETMESSAGE_LMS_RESTART), false, true },
 	{ NetMT_LastManStanding_RestartInfo, sizeof(NETMESSAGE_PLAYERID), false, true },
@@ -1061,8 +1061,8 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true },
 	{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },
 	{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true },
-	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, false },
-	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, true }
+	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, true },
+	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, false }
 };
 
 static constexpr bool NetPartRulesAreInOrder()
@@ -1113,6 +1113,53 @@ bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost
 	}
 
 	return NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart) == kNetPartsGood;
+}
+
+// How many new things other machines may make here in a second. Far more than a real battle, and small enough that the blocks they use can't run out before the first ones time out.
+static const int kMostNewGhostsEachSecond = 60;
+static const int kMostDroppedGunsEachSecond = 16;
+static unsigned int newGhostsSecond = 0;
+static int newGhostsUsed = 0;
+static unsigned int droppedGunsSecond = 0;
+static int droppedGunsUsed = 0;
+
+static bool GhostKindCanBeMadeByMessage(AVP_BEHAVIOUR_TYPE type)
+{
+	switch (type)
+	{
+		case I_BehaviourRocket:
+		case I_BehaviourGrenade:
+		case I_BehaviourProximityGrenade:
+		case I_BehaviourPulseGrenade:
+		case I_BehaviourFragmentationGrenade:
+		case I_BehaviourClusterGrenade:
+		case I_BehaviourPredatorEnergyBolt:
+		case I_BehaviourFrisbeeEnergyBolt:
+		case I_BehaviourPPPlasmaBolt:
+		case I_BehaviourNPCPredatorDisc:
+		case I_BehaviourPredatorDisc_SeekTrack:
+		case I_BehaviourFrisbee:
+		case I_BehaviourAlienSpit:
+		case I_BehaviourSpeargunBolt:
+		case I_BehaviourFlareGrenade:
+		case I_BehaviourInanimateObject:
+			return true;
+		default:
+			return false;
+	}
+}
+
+// The alien messages find a ghost by its number, and any other kind has no alien's model to play
+static bool IsAnAlienGhost(STRATEGYBLOCK *sbPtr)
+{
+	return ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type == I_BehaviourAlien;
+}
+
+static bool IsAPlayersGhost(STRATEGYBLOCK *sbPtr)
+{
+	AVP_BEHAVIOUR_TYPE const type = ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type;
+
+	return type == I_BehaviourMarinePlayer || type == I_BehaviourAlienPlayer || type == I_BehaviourPredatorPlayer;
 }
 
 /*----------------------------------------------------------------------
@@ -2069,6 +2116,11 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 		return;
 	}
 
+	// A host decides the list, and this game's place in it is used below. Not on it means nothing to say.
+	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
+		return;
+	}
+
 #if EXTRAPOLATION_TEST
 
 	if (UseExtrapolation && netGameData.sendFrequency)
@@ -2534,6 +2586,10 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 	}
 
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
 		return;
 	}
 
@@ -5467,6 +5523,8 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 			if (netGameData.myGameState == NGS_Playing && playerChanged)
 			{
 				if (messagePtr->players[i].playerId == 0) {
+					// One that timed out never said goodbye, so its body is taken away here
+					RemovePlayersGhosts(netGameData.playerData[i].playerId);
 					Inform_PlayerHasLeft(netGameData.playerData[i].playerId);
 				}
 				else if (messagePtr->players[i].startFlag) {
@@ -6016,6 +6074,12 @@ static void ProcessNetMsg_PlayerState_Minimal(NETMESSAGE_PLAYERSTATE_MINIMAL *me
 	}
 
 	STRATEGYBLOCK *sbPtr = FindGhost(senderId, GHOST_PLAYEROBJECTID);
+
+	if (sbPtr && !IsAPlayersGhost(sbPtr))
+	{
+		return;
+	}
+
 	// record whether the player is in the land of the living
 	netGameData.playerData[playerIndex].playerAlive = messagePtr->IAmAlive;
 	netGameData.playerData[playerIndex].playerHasLives = messagePtr->IHaveLifeLeft;
@@ -6387,6 +6451,18 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
 		type = (AVP_BEHAVIOUR_TYPE)messagePtr->type;
 
+		// Both numbers are the sender's word. -1 means a player's own body, which has its own message, and this is everything else a machine ever sends this way.
+		if (objectId == GHOST_PLAYEROBJECTID || !GhostKindCanBeMadeByMessage(type))
+		{
+			return;
+		}
+
+		// A flood of these would use up the game's 1000 blocks, which everything in a level needs
+		if (!NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond, &newGhostsUsed, kMostNewGhostsEachSecond))
+		{
+			return;
+		}
+
 		if (type == I_BehaviourNetCorpse)
 		{
 			/* This *should* never happen... */
@@ -6677,6 +6753,11 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 				multiple = ONE_FIXED;
 			}
 
+			if (!NetDamageMultipleIsGood(multiple))
+			{
+				return;
+			}
+
 			section_data = NULL;
 			controller = NULL;
 
@@ -6918,6 +6999,11 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 			multiple = ONE_FIXED;
 		}
 
+		if (!NetDamageMultipleIsGood(multiple))
+		{
+			return;
+		}
+
 		CauseDamageToObject(sbPtr, (&damage), multiple, NULL);
 	}
 }
@@ -6960,7 +7046,12 @@ static void ProcessNetMsg_ObjectPickedUp(NETMESSAGE_OBJECTPICKEDUP *messagePtr)
 		return;    // couldn't find it
 	}
 
-	LOCALASSERT(objectPtr->I_SBtype == I_BehaviourInanimateObject);
+	// The name finds lights, switches and lifts as well as things that can be picked up. Treating one of those as a pick-up would write over its data.
+	if (objectPtr->I_SBtype != I_BehaviourInanimateObject)
+	{
+		return;
+	}
+
 	// Play an appropriate sound?
 	{
 		INANIMATEOBJECT_STATUSBLOCK *objStatPtr = static_cast<INANIMATEOBJECT_STATUSBLOCK *>(objectPtr->SBdataptr);
@@ -7557,6 +7648,11 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 	// get the object id from the message
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
+
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		return;
+	}
 	position.vx = messagePtr->xPos;
 	orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
 	position.vy = messagePtr->yPos;
@@ -7655,6 +7751,11 @@ static void ProcessNetMsg_AlienAISequenceChange(NETMESSAGE_ALIENSEQUENCECHANGE *
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
 
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		return;
+	}
+
 	if (!sbPtr)
 	{
 		// Gordon Bennet.  Return, then.
@@ -7705,6 +7806,11 @@ static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, Ne
 	// get the object id from the message
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
+
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		return;
+	}
 
 	if (!sbPtr)
 	{
@@ -7941,6 +8047,11 @@ static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId
 			multiple = ONE_FIXED;
 		}
 
+		if (!NetDamageMultipleIsGood(multiple))
+		{
+			return;
+		}
+
 		if (sbPtr->DynPtr && messageDirection)
 		{
 			if (messageDirection->direction_x ||
@@ -8055,6 +8166,12 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr)
 
 	// It becomes a pickup, and the game uses this number as a place in its table of weapons when someone walks over it
 	if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {
+		return;
+	}
+
+	// Each one lasts 20 seconds and uses one of the game's 1000 blocks
+	if (!NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond, &droppedGunsUsed, kMostDroppedGunsEachSecond))
+	{
 		return;
 	}
 
@@ -8355,7 +8472,12 @@ static void UpdateNetworkGameScores(NetID playerKilledId, NetID killerId, NETGAM
 		if (netGameData.gameType == NGT_CoopDeathmatch)
 		{
 			// need to adjust the species scores as well
-			netGameData.teamScores[killerType] += scoreForKill;
+			// The killer can be the computer's aliens, which are numbered past the three species
+			if (NetNumberFitsTable(killerType, 3))
+			{
+				netGameData.teamScores[killerType] += scoreForKill;
+			}
+
 			AddNetMsg_SpeciesScores();
 		}
 	}

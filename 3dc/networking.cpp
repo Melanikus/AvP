@@ -348,11 +348,17 @@ bool Net_UpdateSessionList(int &SelectedItem)
 
 				rs.GetBytes(&header, sizeof(header));
 
-				if (header.messageType == NETSYS_SESSION_INFO)
+				if (header.marker == kMarker && header.messageType == NETSYS_SESSION_INFO)
 				{
 					OutputDebugString("Net_AddSession called\n");
 					SessionDescription newSession;
 					rs.GetBytes(&newSession, sizeof(newSession));
+
+					// Anyone can send this, so it has to at least say it's this game
+					if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)
+					{
+						continue;
+					}
 
 					// FIXME? - server should set this from their side correctly?
 					newSession.host = address.host;
@@ -515,6 +521,9 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
+			// One address can only hold this many of the places
+			host->duplicatePeers = 2;
+
 			// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
 			host->maximumPacketSize = kMostMessageBytes;
 
@@ -670,7 +679,6 @@ static void Net_CheckForSessionRequest()
 
 			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
 			{
-				NewOnScreenMessage("Got asked for session information. sending...");
 				MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
 
 				header.marker = kMarker;
@@ -782,6 +790,9 @@ static NetResult SendSystemMessageTo(ENetPeer *peer, uint32_t messageType, NetID
 {
 	// create a new header and copy it into the packet buffer
 	MessageHeader newMessageHeader;
+
+	// It has gaps between its parts, and the whole of it goes out, so nothing left on the stack goes with it
+	memset(&newMessageHeader, 0, sizeof(newMessageHeader));
 	newMessageHeader.marker = kMarker;
 	newMessageHeader.isSystemMessage = 1;
 	newMessageHeader.messageType = messageType;
@@ -1134,6 +1145,9 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 	}
 
 	MessageHeader newMessageHeader;
+
+	// It has gaps between its parts, and the whole of it goes out, so nothing left on the stack goes with it
+	memset(&newMessageHeader, 0, sizeof(newMessageHeader));
 	newMessageHeader.marker = kMarker;
 	newMessageHeader.isSystemMessage = 0;
 	newMessageHeader.messageType = messageType;
@@ -1305,6 +1319,9 @@ void Net_FindAvPSessions()
 
 	// create broadcast header
 	MessageHeader newHeader;
+
+	// It has gaps between its parts, and the whole of it goes out, so nothing left on the stack goes with it
+	memset(&newHeader, 0, sizeof(newHeader));
 	newHeader.marker = kMarker;
 	newHeader.isSystemMessage = true;
 	newHeader.messageType = NETSYS_REQUEST_SESSION_INFO;

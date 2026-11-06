@@ -4049,7 +4049,7 @@ static void DamageDamageBlock(DAMAGEBLOCK *DBPtr, DAMAGE_PROFILE *damage, int mu
 	
 	/* Now, the integer. */
 	
-	while (Integer) {
+	while (Integer > 0) {
 	
 		ArmourDamage=0;
 		HealthDamage=0;

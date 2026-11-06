@@ -2255,8 +2255,9 @@ STRATEGYBLOCK* CreateMultiplayerWeaponPickup(VECTORCH* location,int type,char* n
 
 	sbPtr = CreateActiveStrategyBlock();
 
-	InitialiseSBValues(sbPtr);
 	if(!sbPtr) return 0;
+
+	InitialiseSBValues(sbPtr);
 
 	sbPtr->I_SBtype = I_BehaviourInanimateObject;
 	sbPtr->shapeIndex=toolsdata.shapeIndex;

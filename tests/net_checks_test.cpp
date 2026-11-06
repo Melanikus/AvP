@@ -264,8 +264,19 @@ static void TestAnswersInASecond()
 	Check(NetThisSecondHasRoom(1000u, &started, &used, 10), "and when they wrap round to the start");
 }
 
+static void TestDamageMultiples()
+{
+	Check(NetDamageMultipleIsGood(65536), "a hit counting once is good");
+	Check(NetDamageMultipleIsGood(0), "and so is none at all");
+	Check(NetDamageMultipleIsGood(kNetMostDamageMultiple), "and so is the most");
+	Check(!NetDamageMultipleIsGood(kNetMostDamageMultiple + 1), "but not more");
+	Check(!NetDamageMultipleIsGood(-1), "and no negative number, which would go round the damage loop about four billion times");
+	Check(!NetDamageMultipleIsGood(-2147483647 - 1), "however large");
+}
+
 int main()
 {
+	TestDamageMultiples();
 	TestAnswersInASecond();
 	TestAmmunitionNumbers();
 	TestTheLogCantBeFlooded();

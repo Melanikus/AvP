@@ -1585,8 +1585,23 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "if (sbPtr->shapeIndex == -1)\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;"), "and one with no shape isn't made");
 	Check(CountOf(Between(makeGhost, "STRATEGYBLOCK *CreateNetGhost(", "int UseExtrapolation=1;"), "if (!root_section)") == 3, "a level without a disc's model can't crash on one");
 
+	// What the numbers in a message mean, as an independent read of this code asked
+	Check(Has(pldnet, "if (objectPtr->I_SBtype != I_BehaviourInanimateObject)\n\t{\n\t\treturn;\n\t}\n\n\t// Play an appropriate sound?"), "only something that can be picked up gets treated as a pick-up");
+	Check(Has(pldnet, "if (objectId == GHOST_PLAYEROBJECTID || !GhostKindCanBeMadeByMessage(type))"), "a message can't make a player's body, or a kind that isn't on the list");
+	Check(CountOf(pldnet, "if (sbPtr && !IsAnAlienGhost(sbPtr))") == 3, "the three alien messages only go to an alien's ghost");
+	Check(Has(pldnet, "if (sbPtr && !IsAPlayersGhost(sbPtr))"), "and the short player state only to a player's");
+	Check(CountOf(pldnet, "if (!NetDamageMultipleIsGood(multiple))") == 3, "all three damage messages check how many times over a hit counts");
+	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "while (Integer > 0) {"), "and the loop can't run away anyway");
+	Check(Has(pldnet, "if (NetNumberFitsTable(killerType, 3))"), "the computer's aliens don't score past the three species");
+	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond, &newGhostsUsed, kMostNewGhostsEachSecond)"), "only so many new ghosts a second");
+	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond, &droppedGunsUsed, kMostDroppedGunsEachSecond)"), "and dropped guns");
+	Check(Has(ReadSourceFile("3dc/avp/pvisible.cpp"), "sbPtr = CreateActiveStrategyBlock();\n\n\tif(!sbPtr) return 0;\n\n\tInitialiseSBValues(sbPtr);"), "running out of blocks is checked before one is used");
+	Check(Has(makeGhost, "if (lightPtr)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlightPtr->LightBright"), "a flare with no light is fine");
+	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
+	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\treturn;") >= 2, "a game left off the host's list doesn't write before the list");
+
 	// Who may say what. These are the ones whoever hears them just believes.
-	std::vector<std::string> const onlyTheHost = { "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores", "NetMT_SpotOtherSound" };
+	std::vector<std::string> const onlyTheHost = { "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores" };
 	int rightOnes = 0;
 
 	for (std::string const &name : onlyTheHost)
@@ -1596,8 +1611,8 @@ static void TestTheTableOfMessageParts()
 		rightOnes += (at != std::string::npos && Has(table.substr(at, table.find('\n', at) - at), ", true }")) ? 1 : 0;
 	}
 
-	Check(rightOnes == 19, "19 kinds can only come from the host");
-	Check(CountOf(table, ", true }") == 19, "and no others");
+	Check(rightOnes == 24, "24 kinds can only come from the host");
+	Check(CountOf(table, ", true }") == 24, "and no others");
 
 	// Numbers in a message that are used as places in memory. Whichever machine sent them, they could be anything.
 	Check(Has(Between(pldnet, "static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)\n{", "static void ProcessNetMsg_ScoreChange("), "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))\n\t{\n\t\treturn;"), "a player's scores have to name a place in the list");

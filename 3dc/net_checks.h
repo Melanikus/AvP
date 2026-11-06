@@ -110,6 +110,14 @@ inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, 
 	return true;
 }
 
+// How many times over one hit may count, in the game's fixed point. The damage sums go round a loop this many times, and a negative number would go round about four billion. A real hit is well under this: 65536 is once.
+static const int kNetMostDamageMultiple = 65536 * 1000;
+
+inline bool NetDamageMultipleIsGood(int multiple)
+{
+	return multiple >= 0 && multiple <= kNetMostDamageMultiple;
+}
+
 // A chat line: a byte saying who it's for, then up to this many letters, then a zero. How long that is, or 0 if there's no zero in time. It has to end in the message, because the game reads along it until the zero.
 static const size_t kNetMostChatLetters = 254;
 

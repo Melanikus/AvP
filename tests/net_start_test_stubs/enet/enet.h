@@ -52,6 +52,7 @@ struct ENetPeer
 struct ENetHost
 {
 	size_t maximumPacketSize;
+	size_t duplicatePeers;
 	ENetPeer *peers;
 	size_t peerCount;
 };

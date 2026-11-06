@@ -574,7 +574,13 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 			case(I_BehaviourAlien):
 			{
 				CreateAlienHModel(ghostData,subtype);
-				
+
+				if (!ghostData->HModelController.Root_Section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
+
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
@@ -1077,6 +1083,11 @@ void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType)
 			break;
 	}
 
+	// A kind of alien this level didn't load has no model, and the kind came in a message
+	if (!root_section)
+	{
+		return;
+	}
 
 	Create_HModel(&ghostDataPtr->HModelController,root_section);
 	ghostDataPtr->currentAnimSequence = ASQ_Stand;
@@ -3698,13 +3709,16 @@ void MaintainGhosts(void)
 					if (sbPtr->SBdptr)
 					{
 						LIGHTBLOCK *lightPtr = sbPtr->SBdptr->ObLights[0];
-						LOCALASSERT(sbPtr->SBdptr->ObNumLights==1);
-						LOCALASSERT(lightPtr);
-						lightPtr->LightBright = 1+MUL_FIXED
+
+						// The game can run out of lights to give, and a flood of flares would make it
+						if (lightPtr)
+						{
+							lightPtr->LightBright = 1+MUL_FIXED
 												(
 													(ONE_FIXED*4-(FastRandom()&32767)),
 													ghostData->timer/FLARE_LIFETIME
 												);
+						}
 					}
 			   		ghostData->timer -= NormalFrameTime;
 					

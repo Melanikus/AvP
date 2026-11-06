@@ -6,6 +6,26 @@
 	],
 	"rows": [
 		{
+			"name": "a negative damage multiple is good",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return multiple >= 0 && multiple <= kNetMostDamageMultiple;",
+					"to": "return multiple <= kNetMostDamageMultiple;"
+				}
+			]
+		},
+		{
+			"name": "a huge damage multiple is good",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return multiple >= 0 && multiple <= kNetMostDamageMultiple;",
+					"to": "return multiple >= 0;"
+				}
+			]
+		},
+		{
 			"name": "any number of answers a second",
 			"changes": [
 				{
