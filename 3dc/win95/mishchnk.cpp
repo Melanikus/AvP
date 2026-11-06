@@ -98,7 +98,7 @@ Children for File_Chunk :
 */
 
 File_Chunk::File_Chunk(const char * file_name)
-: Chunk_With_Children (NULL, "REBINFF2")
+: Chunk_With_Children (NULL, "REBINFF2"), version_chunk (0)
 {
 // Load in whole chunk and traverse
 	char rifIsCompressed = FALSE;
@@ -249,7 +249,8 @@ File_Chunk::File_Chunk()
 : Chunk_With_Children (NULL, "REBINFF2")
 {
 // Empty File chunk
-	new RIF_Version_Num_Chunk (this);
+	// It joins this chunk's children as it's made, and ~Chunk_With_Children deletes it with the rest
+	version_chunk = new RIF_Version_Num_Chunk (this);
 	filename = 0;
 
 	object_array_size=0;
