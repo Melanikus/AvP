@@ -12,6 +12,7 @@
 //   a name is only read as far as the end of its chunk
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   a hierarchy the game couldn't build refuses the level
 
 #include <string>
 #include "chunk.hpp"
@@ -19,6 +20,7 @@
 #include "mishchnk.hpp"
 #include "chunk_shape.hpp"
 #include "chunk_object.hpp"
+#include "hierarchy_chunk.hpp"
 #include "huffman.hpp"
 #include "mbstring.h"
 
@@ -453,6 +455,22 @@ void File_Chunk::post_input_processing()
 	delete[] shape_array;
 
 	Chunk_With_Children::post_input_processing();
+
+	// Last, because this relies on what the chunks above have just checked for themselves
+	if (!error_code)
+	{
+		List<Chunk *> hierarchies;
+		lookup_child ("OBJCHIER",hierarchies);
+
+		for (LIF<Chunk *> hierarchy(&hierarchies); !hierarchy.done(); hierarchy.next())
+		{
+			if (!((Object_Hierarchy_Chunk *)hierarchy())->can_be_built())
+			{
+				error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				return;
+			}
+		}
+	}
 }
 
 
