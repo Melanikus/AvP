@@ -277,6 +277,25 @@ static void TestDamageMultiples()
 	Check(!NetDamageMultipleIsGood(-2147483647 - 1), "however large");
 }
 
+// Text that tells on anyone who looks past the end of its room. Looking too far gives the same answer as not looking, so these count the looks instead.
+struct TextThatCountsLooksPast
+{
+	const char *letters;
+	size_t room;
+	mutable int looksPast;
+
+	char operator[](size_t at) const
+	{
+		if (at >= room)
+		{
+			looksPast++;
+			return '\0';
+		}
+
+		return letters[at];
+	}
+};
+
 static void TestTypedAddresses()
 {
 	char const *const good[] = { "127.0.0.1", "192.168.1.20", "0.0.0.0", "255.255.255.255" };
@@ -297,8 +316,22 @@ static void TestTypedAddresses()
 	Check(!NetTypedAddressIsGood(noEnd, sizeof(noEnd)), "one that runs off the end of its room isn't read past it");
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
 
-	// What's past its room has to stay unread, even if it would make a good address
-	Check(!NetTypedAddressIsGood("1.2.3.4", 6), "and what lies past its room isn't read");
+	// What's past its room has to stay unread, even if it would make a good address. Each of these stops at the very end of its room in a different place, so each place the check looks from comes right up against the end.
+	char const *const fillTheirRoom[] = { "", "1", "1.", "1.2", "1.2.", "1.2.3", "1.2.3.", "1.2.3.4", "123.123.123.123" };
+
+	for (size_t i = 0; i < sizeof(fillTheirRoom) / sizeof(fillTheirRoom[0]); i++)
+	{
+		TextThatCountsLooksPast text = { fillTheirRoom[i], strlen(fillTheirRoom[i]), 0 };
+
+		Check(!NetTypedAddressIsGoodWithin(text, text.room), fillTheirRoom[i]);
+		Check(text.looksPast == 0, "and nothing past its room is looked at");
+	}
+
+	// And the same check still says yes to a good one, so the "no" answers above aren't only because it can't say yes
+	TextThatCountsLooksPast whole = { "1.2.3.4", 8, 0 };
+
+	Check(NetTypedAddressIsGoodWithin(whole, whole.room), "a good address with its end inside its room is good");
+	Check(whole.looksPast == 0, "and nothing past its room is looked at for that one either");
 }
 
 static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, size_t)
