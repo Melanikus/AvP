@@ -489,7 +489,7 @@ static void TheRealGame()
 	std::string const noLights = Between(render, "if (!report.lights)\n\t{", "float worldAxes[9];");
 	std::string const dimming = Between(render, "static void DimWorldWithNoLights()", "static void ToyShadows_Draw()");
 
-	Check(Has(noLights, "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorldWithNoLights();"), "a frame with no light chosen still has its world turned down");
+	Check(Has(noLights, "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tDimWorldWithNoLights();"), "a frame with no light chosen still has its world turned down");
 	Check(Has(render, "if (ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorld(device);"), "which is the same view as on a frame with lights");
 	Check(Has(dimming, "savedCardSettings->Capture()") && Has(dimming, "savedCardSettings->Apply();"), "and what it changes on the card is put back, because the game caches its render states");
 	Check(Has(dimming, "if (FAILED(savedCardSettings ? savedCardSettings->Capture()"), "and it changes nothing if it couldn't be saved");

@@ -721,7 +721,7 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "\t\t\tToyDimWorldWithNoLights();\n",
+					"from": "\t\t\tDimWorldWithNoLights();\n",
 					"to": "\t\t\t;\n"
 				}
 			]
