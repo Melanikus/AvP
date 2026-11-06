@@ -1550,6 +1550,10 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "(messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES))"), "an object that can be picked up as ammunition has to be ammunition there is");
 	Check(Has(pldnet, "(messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES))"), "and as a weapon, a weapon there is");
 	Check(Has(pldnet, "if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {\n\t\treturn;"), "and so does a weapon left behind");
+	Check(Has(pldnet, "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {\n\t\treturn;"), "a kill has to say a kind of player who died and a kind of killer that exist, because they're places in the score tables");
+	Check(Has(pldnet, "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))\n\t\t{\n\t\t\treturn;"), "a player describing themselves has to be a kind there is");
+	Check(Has(pldnet, "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))\n\t{\n\t\treturn;"), "and so does one saying where they are, now and next");
+	Check(Has(pldnet, "NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;"), "and in the game's description, one that isn't becomes a marine");
 	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "if (!retval) {\n\t\tretval=FirstDeath;\n\t}\n\n\treturn(retval);"), "a death code nobody knows still gives a death, because everyone who asks reads what they get");
 	Check(Has(pldnet, "static uint8_t msg[kMostMessageBytes];"), "the buffer a message is read into has room for the most a message can be");
 	Check(CountOf(pldnet, "NetNumberFitsTable(") >= 3 && Has(pldnet, "!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES)"), "a damage message naming ammunition that isn't in the table is ignored");

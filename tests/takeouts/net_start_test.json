@@ -1403,6 +1403,66 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the one who died can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {",
+					"to": "if (!NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the killer can be any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {",
+					"to": "if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien)) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can describe themselves as any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))\n\t\t{\n\t\t\treturn;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can be any kind now",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))",
+					"to": "if (!NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player can be any kind next",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))",
+					"to": "if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the description can say any kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;",
+					"to": "(NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;"
+				}
+			]
 		}
 	]
 }

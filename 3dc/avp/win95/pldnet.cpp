@@ -6,7 +6,7 @@
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
 //   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
-//   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition or the weapons are checked before they're used
+//   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition, the weapons or the score tables are checked before they're used
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
@@ -5481,7 +5481,8 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 			NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);
 
 			netGameData.playerData[i].playerId = messagePtr->players[i].playerId;
-			netGameData.playerData[i].characterType = (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;
+			// The message has room to say 3, which is no kind of player, and scores look things up by this
+			netGameData.playerData[i].characterType = NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;
 			netGameData.playerData[i].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType;
 			netGameData.playerData[i].startFlag = messagePtr->players[i].startFlag;
 		}
@@ -5626,6 +5627,12 @@ static void ProcessNetMsg_PlayerDescription(NETMESSAGE_PLAYERDESCRIPTION *messag
 			return;
 		}
 
+		// The message has room for more than there are kinds of player, and scores look things up by this
+		if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))
+		{
+			return;
+		}
+
 		netGameData.playerData[id].characterType = (NETGAME_CHARACTERTYPE)messagePtr->characterType;
 		netGameData.playerData[id].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType;
 
@@ -5702,6 +5709,12 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 
 	// KJL 14:47:22 06/04/98 - we don't seem to know about this person yet... ignore them
 	if (playerIndex == NET_IDNOTINPLAYERLIST) {
+		return;
+	}
+
+	// The message has room to say 3, which is no kind of player, and scores look things up by these
+	if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))
+	{
 		return;
 	}
 
@@ -6119,6 +6132,11 @@ static void ProcessNetMsg_PlayerKilled(NETMESSAGE_PLAYERKILLED *messagePtr, NetI
 {
 	// if we're not playing, ignore it
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// These go on to be places in the tables of scores and deaths. The one who died is a player, one of the kinds before the computer's aliens, and the killer can be any kind there is.
+	if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {
 		return;
 	}
 
