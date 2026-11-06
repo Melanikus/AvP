@@ -4,6 +4,7 @@
 //   counted lists are measured against their chunks before they're made
 //   a sequence checks that each of its frames has a place of its own
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -13,7 +14,7 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(animation_objects)
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFR",Object_Animation_Sequence_Frame_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFR",Object_Animation_Sequence_Frame_Chunk,40)
 
 void Object_Animation_Sequence_Frame_Chunk::fill_data_block (char *data_start)
 {
@@ -112,7 +113,7 @@ void Object_Animation_Sequence_Frame_Chunk::set_sound_index(int ind)
 	}
 }
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQHD",Object_Animation_Sequence_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQHD",Object_Animation_Sequence_Header_Chunk,12)
 
 void Object_Animation_Sequence_Header_Chunk::fill_data_block (char *data_start)
 {
@@ -342,7 +343,7 @@ Hierarchy_Bounding_Box_Chunk* Object_Animation_Sequence_Chunk::get_bounding_box(
 				** Object_Animation_Sequence_Time_Chunk **
 				**--------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQTM",Object_Animation_Sequence_Time_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQTM",Object_Animation_Sequence_Time_Chunk,4)
 
 Object_Animation_Sequence_Time_Chunk::Object_Animation_Sequence_Time_Chunk (Chunk_With_Children * parent,const char * data_start, size_t)
 : Chunk (parent, "OBASEQTM")
@@ -365,7 +366,7 @@ void Object_Animation_Sequence_Time_Chunk::fill_data_block(char* data_start)
 				** Object_Animation_Sequence_Speed_Chunk **
 				**---------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQSP",Object_Animation_Sequence_Speed_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQSP",Object_Animation_Sequence_Speed_Chunk,12)
 
 Object_Animation_Sequence_Speed_Chunk::Object_Animation_Sequence_Speed_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQSP")
@@ -389,7 +390,7 @@ void Object_Animation_Sequence_Speed_Chunk::fill_data_block(char* data)
 				**---------------------------------------*/
 
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFL",Object_Animation_Sequence_Flags_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFL",Object_Animation_Sequence_Flags_Chunk,4)
 
 Object_Animation_Sequence_Flags_Chunk::Object_Animation_Sequence_Flags_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQFL")

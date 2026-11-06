@@ -11,6 +11,7 @@
 //   shape that has more points than the game's list of points can hold
 //   a name is only read as far as the end of its chunk
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include <string>
 #include "chunk.hpp"
@@ -671,7 +672,7 @@ GodFather_Chunk::GodFather_Chunk(char * buffer, size_t size)
 
 // Class RIF_Version_Num_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("RIFVERIN",RIF_Version_Num_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("RIFVERIN",RIF_Version_Num_Chunk,4)
 
 void RIF_Version_Num_Chunk::fill_data_block(char * data_start)
 {

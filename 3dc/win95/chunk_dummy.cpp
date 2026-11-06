@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "chunk_dummy.hpp"
 
@@ -43,7 +44,7 @@ const char* Dummy_Object_Chunk::get_text()
 
 //////////////////////////////Dummy_Object_Data_Chunk////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("DUMOBJDT",Dummy_Object_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("DUMOBJDT",Dummy_Object_Data_Chunk,52)
 
 
 Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
