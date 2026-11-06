@@ -38,6 +38,7 @@
 // merged. It needs none of the game's files: those aren't in this repository, and it never opens a file.
 
 #include <algorithm>
+#include <malloc.h>
 #include <memory>
 #include <stddef.h>
 #include <stdio.h>
@@ -2191,6 +2192,22 @@ static void TestGeneratorSettings()
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
 		Check(settings->weights != 0 && settings->weights->data_size >= (int)sizeof(AVP_Generator_Weighting), "and it can still be read");
+		Parent_File = 0;
+	}
+
+	// A block longer than the game's own needs a longer list, or it would be written past the end of the one it has. Writing past the end of a list
+	// doesn't always show, because what's next to it may be nothing that matters today. So this asks how long the list really is, which has one answer.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const blockSize = 80;
+		alignas(int) char bytes[100] = { 0 };
+		memcpy(bytes + 20, &blockSize, sizeof(int));
+
+		std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settings(new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes)));
+
+		Check(_msize(settings->weights) >= (size_t)blockSize, "a longer block gets a list with room for all of it");
 		Parent_File = 0;
 	}
 

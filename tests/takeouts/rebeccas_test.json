@@ -54,6 +54,16 @@
 					"to": "data += (length+4)&~3; data += 4;"
 				}
 			]
+		},
+		{
+			"name": "WEIGHTS: a longer block is written into the short list it has",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "if ((size_t) weight_bytes > sizeof(AVP_Generator_Weighting))",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }
