@@ -78,6 +78,7 @@ ENetPacket *enet_packet_create(const void *data, size_t dataLength, enet_uint32 
 void enet_packet_destroy(ENetPacket *packet);
 int enet_peer_send(ENetPeer *peer, uint8_t channel, ENetPacket *packet);
 void enet_peer_disconnect(ENetPeer *peer, enet_uint32 data);
+enet_uint32 enet_time_get();
 void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32 data);
 
 int enet_address_get_host_ip(const ENetAddress *address, char *hostName, size_t nameLength);

@@ -28,6 +28,7 @@
 //   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
 //   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a connection that never says who it is is dropped, answers to anyone asking about a game are limited, a second game found in one look is read properly, and a joiner must speak this version
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
 //   the host answers each client itself and knows who sent what from the connection it came on, so a client can only speak for itself; it passes on what clients say to each other
@@ -69,6 +70,15 @@ static uint8_t packetBuffer[kPacketBufferSize];
 
 // A game has 8 players at most, and the host is one of them
 static const size_t kMostClients = 7;
+
+// How many times a second this game answers people looking for games. Far more than a real LAN needs.
+static const int kMostSessionAnswersEachSecond = 10;
+
+// How long a connection has to say who it is. ENet's own handshake has finished by then, so a real client only takes a moment. Without this, seven silent connections would fill the game for good.
+static const unsigned int kMostMillisecondsToBeLetIn = 15000;
+
+// When each of the host's connections was made
+static unsigned int connectionStartedAt[kMostClients + 1];
 
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
@@ -315,8 +325,6 @@ bool Net_UpdateSessionList(int &SelectedItem)
 
 		enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
 
-		MemoryReadStream rs(packetBuffer, kPacketBufferSize);
-
 		while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
 		{
 			ENetAddress address;
@@ -334,6 +342,9 @@ bool Net_UpdateSessionList(int &SelectedItem)
 			else if (len == sizeof(header) + sizeof(SessionDescription)) 
 			{
 				OutputDebugString("Got some session info\n");
+
+				// Every game that answers starts again at the start of the buffer
+				MemoryReadStream rs(packetBuffer, kPacketBufferSize);
 
 				rs.GetBytes(&header, sizeof(header));
 
@@ -550,6 +561,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		thisClientPlayer.name[kPlayerNameSize-1] = '\0';
 		thisClientPlayer.ID   = AvPNetID;
 		thisClientPlayer.type = 0; // ??
+		thisClientPlayer.version = kMultiplayerVersion;
 	}
 
 	InitAVPNetGameForHost(species, gameStyle, level);
@@ -647,7 +659,16 @@ static void Net_CheckForSessionRequest()
 			MessageHeader header;
 			memcpy(&header, packetBuffer, sizeof(MessageHeader));
 
-			if (NETSYS_REQUEST_SESSION_INFO == header.messageType)
+			// Anyone can send this, from an address that isn't theirs, and the answer is bigger than the question. So it has to look like ours, and this game only answers so many.
+			static unsigned int secondStarted = 0;
+			static int answersThisSecond = 0;
+
+			if (header.marker != kMarker)
+			{
+				continue;
+			}
+
+			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
 			{
 				NewOnScreenMessage("Got asked for session information. sending...");
 				MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
@@ -682,6 +703,35 @@ static void Net_CheckForSessionRequest()
 }
 
 // call once per frame
+// Anyone can cause this as fast as they like, so the log only says so now and then.
+static void LogDroppedMessage(const char *why)
+{
+	static unsigned long long droppedMessages = 0;
+
+	if (LogThisDrop(droppedMessages))
+	{
+		std::stringstream sstream;
+		sstream << "Net_Receive - dropped a message because " << why << " (" << droppedMessages << " so far)";
+		Con_PrintError(sstream.str());
+	}
+}
+
+static void ForgetConnectionsNotLetIn()
+{
+	unsigned int const now = enet_time_get();
+
+	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
+	{
+		ENetPeer *const peer = &host->peers[i];
+
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data == NULL && now - connectionStartedAt[i] >= kMostMillisecondsToBeLetIn)
+		{
+			LogDroppedMessage("a connection didn't say who it is in time");
+			enet_peer_disconnect_now(peer, 0);
+		}
+	}
+}
+
 void Net_ServiceNetwork()
 {
 	if (host)
@@ -691,6 +741,7 @@ void Net_ServiceNetwork()
 		// also check for session data requests
 		if (AvP.Network == I_Host) {
 			Net_CheckForSessionRequest();
+			ForgetConnectionsNotLetIn();
 		}
 	}
 }
@@ -706,18 +757,6 @@ static NetID IDOfConnection(const ENetPeer *peer)
 	return (NetID)(uintptr_t)peer->data;
 }
 
-// Anyone can cause this as fast as they like, so the log only says so now and then.
-static void LogDroppedMessage(const char *why)
-{
-	static unsigned long long droppedMessages = 0;
-
-	if (LogThisDrop(droppedMessages))
-	{
-		std::stringstream sstream;
-		sstream << "Net_Receive - dropped a message because " << why << " (" << droppedMessages << " so far)";
-		Con_PrintError(sstream.str());
-	}
-}
 
 // Does this look like one of this game's messages at all? Copies its header out if so.
 static bool ReadTheHeader(const uint8_t *data, size_t size, MessageHeader &header)
@@ -786,6 +825,14 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 
 	// Nothing says this name ends
 	player.name[kPlayerNameSize - 1] = '\0';
+
+	// A game that doesn't speak this version means different things by the same numbers
+	if (player.version != kMultiplayerVersion)
+	{
+		LogDroppedMessage("a client asked to join with another version of the game");
+		enet_peer_disconnect(peer, 0);
+		return;
+	}
 
 	NetID const id = Net_GetNextPlayerID();
 
@@ -960,6 +1007,11 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 			{
 				case ENET_EVENT_TYPE_CONNECT:
 				{
+					if (AvP.Network == I_Host && (size_t)(eEvent.peer - host->peers) <= kMostClients)
+					{
+						connectionStartedAt[eEvent.peer - host->peers] = enet_time_get();
+					}
+
 					char ipaddr[32];
 					enet_address_get_host_ip(&eEvent.peer->address, ipaddr, sizeof(ipaddr));
 

@@ -6,6 +6,26 @@
 	],
 	"rows": [
 		{
+			"name": "any number of answers a second",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (*used >= most)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a new second never starts",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (now - *secondStarted >= 1000)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
 			"name": "a number below the table fits",
 			"changes": [
 				{

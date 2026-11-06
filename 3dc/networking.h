@@ -156,6 +156,7 @@ struct PlayerDetails
 	NetID	ID;
 	uint8_t	type;
 	char	name[kPlayerNameSize];
+	int		version;   // kMultiplayerVersion: a host won't let in a game that doesn't speak what it speaks
 };
 
 #pragma pack()

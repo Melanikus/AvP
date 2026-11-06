@@ -92,6 +92,24 @@ inline NetPartsAnswer NetCheckParts(const unsigned char *parts, size_t size, con
 	return kNetPartsGood;
 }
 
+// For something anyone can make this game do for free, like answering a question from an address it has never heard of. At most this many in any one second. Not per address, because an address in a question can be made up.
+inline bool NetThisSecondHasRoom(unsigned int now, unsigned int *secondStarted, int *used, int most)
+{
+	if (now - *secondStarted >= 1000)
+	{
+		*secondStarted = now;
+		*used = 0;
+	}
+
+	if (*used >= most)
+	{
+		return false;
+	}
+
+	(*used)++;
+	return true;
+}
+
 // A chat line: a byte saying who it's for, then up to this many letters, then a zero. How long that is, or 0 if there's no zero in time. It has to end in the message, because the game reads along it until the zero.
 static const size_t kNetMostChatLetters = 254;
 

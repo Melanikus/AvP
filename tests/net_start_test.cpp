@@ -417,6 +417,13 @@ void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32)
 	peer->state = ENET_PEER_STATE_DISCONNECTED;
 }
 
+static enet_uint32 enetClock = 0;
+
+enet_uint32 enet_time_get()
+{
+	return enetClock;
+}
+
 int enet_address_get_host_ip(const ENetAddress *, char *hostName, size_t nameLength)
 {
 	if (nameLength > 0)
@@ -915,6 +922,7 @@ static std::vector<uint8_t> AskingToJoin(const char *name)
 	memset(&details, 0, sizeof(details));
 	strncpy(details.name, name, sizeof(details.name) - 1);
 	details.type = NET_PLAYERTYPE_PLAYER;
+	details.version = kMultiplayerVersion;
 
 	return AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details));
 }
@@ -1129,6 +1137,47 @@ static void TestWhatAClientCantSay()
 	EndTheGame();
 }
 
+// A game that says it's another version doesn't get in, and neither does a connection that never says anything
+static void TestWhoDoesntGetIn()
+{
+	HostWithClients(0);
+
+	PlayerDetails details;
+
+	memset(&details, 0, sizeof(details));
+	strcpy(details.name, "OLD");
+	details.version = kMultiplayerVersion - 1;
+	Connects(1);
+	TakeEverything();
+	Hears(1, AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details)));
+	Check(playersInGame.empty(), "a game of another version isn't let in");
+	Check(peers[1].state != ENET_PEER_STATE_CONNECTED || peers[1].data == NULL, "and has no player ID");
+	EndTheGame();
+
+	HostWithClients(0);
+	enetClock = 1000;
+	Connects(1);
+	TakeEverything();
+	enetClock += 14000;
+	Net_ServiceNetwork();
+	Check(peers[1].state == ENET_PEER_STATE_CONNECTED, "a connection that has said nothing yet stays for a while");
+	enetClock += 2000;
+	Net_ServiceNetwork();
+	Check(peers[1].state != ENET_PEER_STATE_CONNECTED, "and is dropped after that");
+	EndTheGame();
+
+	HostWithClients(0);
+	enetClock = 50000;
+	Connects(1);
+	TakeEverything();
+	Hears(1, AskingToJoin("FINE"));
+	Check(playersInGame.size() == 1, "someone who says who they are gets in");
+	enetClock += 100000;
+	Net_ServiceNetwork();
+	Check(peers[1].state == ENET_PEER_STATE_CONNECTED, "and stays however long they play");
+	EndTheGame();
+}
+
 static void TestANameWithNoEnd()
 {
 	HostWithClients(0);
@@ -1136,6 +1185,7 @@ static void TestANameWithNoEnd()
 	PlayerDetails details;
 
 	memset(&details, 'A', sizeof(details));
+	details.version = kMultiplayerVersion;
 	Connects(1);
 	TakeEverything();
 	Hears(1, AMessage(1, NET_CREATEPLAYERORGROUP, 0, &details, sizeof(details)));
@@ -1681,6 +1731,7 @@ int main()
 	TestJoiningWhileAPageIsSearching();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
+	TestWhoDoesntGetIn();
 	TestANameWithNoEnd();
 	TestPassingThingsOn();
 	TestNoRoom();

@@ -243,8 +243,30 @@ static void TestNames()
 	Check(memcmp(to, from, sizeof(to) - 1) == 0, "and keeps everything before it");
 }
 
+static void TestAnswersInASecond()
+{
+	unsigned int started = 0;
+	int used = 0;
+	int allowed = 0;
+
+	for (int i = 0; i < 25; i++)
+	{
+		allowed += NetThisSecondHasRoom(100, &started, &used, 10) ? 1 : 0;
+	}
+
+	Check(allowed == 10, "only so many answers in a second");
+	Check(!NetThisSecondHasRoom(999, &started, &used, 10), "and still none just before the second is up");
+	Check(NetThisSecondHasRoom(1100, &started, &used, 10), "and then there's room again");
+	Check(started == 1100 && used == 1, "from a new second");
+	started = 0xFFFFFFF0u;
+	used = 10;
+	Check(!NetThisSecondHasRoom(0xFFFFFFF8u, &started, &used, 10), "the clock's numbers near the top still work");
+	Check(NetThisSecondHasRoom(1000u, &started, &used, 10), "and when they wrap round to the start");
+}
+
 int main()
 {
+	TestAnswersInASecond();
 	TestAmmunitionNumbers();
 	TestTheLogCantBeFlooded();
 	TestMessageParts();
