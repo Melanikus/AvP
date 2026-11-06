@@ -4,9 +4,9 @@
 //   itself, and unused code for making new level files was removed;
 //   a placed hierarchy's name and lists are checked against the size of their chunk before they're read
 //   a placed hierarchy checks what kind of strategy it holds
+//   a placed hierarchy's name is copied by the length measured from the chunk, and the way of making one in code, which nothing used, is gone
 #include "hierplace.hpp"
 #include "strategy_chunk.hpp"
-#include "md5.h"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(hierplace)
@@ -92,8 +92,10 @@ Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* pa
 
 	if (length)
 	{
+		// NameLengthInChunk above found this name's end marker inside the chunk, so this many bytes are there to copy, and the new list has room for them
 		name = new char[length+1];
-		strcpy(name, data);
+		memcpy(name, data, length);
+		name[length] = 0;
 	}
 	else
 	{
@@ -129,31 +131,6 @@ Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* pa
 	{
 		extra_data = 0;
 	}
-}
-
-Placed_Hierarchy_Data_Chunk::Placed_Hierarchy_Data_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation)
-:Chunk(parent,"PLACHIDT")
-{
-	if(_name)
-	{
-		name=new char[strlen(_name)+1];
-		strcpy(name,_name);
-	}
-	else
-	{
-		name=0;
-	}
-	location=_location;
-	orientation=_orientation;
-	hierarchy_index=_hierarchy_index;
-
-	num_extra_data=0;
-	extra_data=0;
-
-	char buffer[16];
-	md5_buffer(name,strlen(name),&buffer[0]);
-	buffer[7]=0;
-	id = *(ObjectID*)&buffer[0];
 }
 
 Placed_Hierarchy_Data_Chunk::~Placed_Hierarchy_Data_Chunk()

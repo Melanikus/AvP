@@ -12,6 +12,7 @@
 //     if that picture is refused the polygon loses its texture and never animates. Only a crafted file can reach this: a polygon whose own
 //     picture is real, with another frame showing one that isn't.
 
+#include <memory>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -191,6 +192,9 @@ struct LevelFile
 	File_Chunk file;
 	_RifHandle handle;
 
+	// What this level is made of. They come after the file, so they go before it, each lifting itself out of the file as it does.
+	std::vector<std::unique_ptr<Chunk> > chunks;
+
 	LevelFile()
 	{
 		Parent_File = &file;
@@ -213,23 +217,39 @@ struct LevelFile
 		Bytes bytes;
 		AddNames(bytes, "BMPNAMES", howMany);
 
-		handle.envd = new Environment_Data_Chunk(&file, bytes.data(), bytes.size());
+		std::unique_ptr<Environment_Data_Chunk> environment(new Environment_Data_Chunk(&file, bytes.data(), bytes.size()));
+		handle.envd = environment.get();
+		chunks.push_back(std::move(environment));
 		load_rif_bitmaps(&handle, 0);
 	}
 
-	// An outside shape's own list of pictures, which is the other way a picture gets asked for. This hands back that shape's list of picture numbers.
-	int *LoadShapeNames(int howMany)
+	// An outside shape's own list of pictures, which is the other way a picture gets asked for. This hands back a copy of that shape's list of picture numbers.
+	std::vector<int> LoadShapeNames(int howMany)
 	{
 		Bytes bytes;
 		AddNames(bytes, "BMPLSTST", howMany);
 
 		Chunk_With_Children *const shape = &file;
-		new Shape_External_File_Chunk(shape, bytes.data(), bytes.size());
+		chunks.push_back(std::unique_ptr<Chunk>(new Shape_External_File_Chunk(shape, bytes.data(), bytes.size())));
 
 		int most = 0;
 		int *numbers = 0;
 		setup_tex_conv_array(most, numbers, &handle, shape);
-		return numbers;
+
+		std::vector<int> copy;
+
+		if (numbers)
+		{
+			copy.assign(numbers, numbers + most + 1);
+		}
+
+		// With no list of its own, a shape uses the level's, which isn't this one's to give back
+		if (numbers != handle.tex_index_nos)
+		{
+			delete[] numbers;
+		}
+
+		return copy;
 	}
 };
 
@@ -265,19 +285,17 @@ static void TestTheLimit()
 
 	{
 		LevelFile level;
-		int *const numbers = level.LoadShapeNames(4097);
+		std::vector<int> const numbers = level.LoadShapeNames(4097);
 		Check(picturesAskedFor == 4096, "an outside shape's list has the same limit");
-		Check(numbers[4095] != -1 && numbers[4096] == -1, "and the one past it is left as a picture that isn't there");
-		delete[] numbers;
+		Check(numbers.size() == 4097 && numbers[4095] != -1 && numbers[4096] == -1, "and the one past it is left as a picture that isn't there");
 	}
 
 	{
 		LevelFile level;
 		level.LoadLevelNames(4095);
-		int *const numbers = level.LoadShapeNames(2);
+		std::vector<int> const numbers = level.LoadShapeNames(2);
 		Check(picturesAskedFor == 4096, "all of a file's lists count together, so splitting them up gets no more");
-		Check(numbers[0] != -1 && numbers[1] == -1, "and the name that goes past the limit is the one left out");
-		delete[] numbers;
+		Check(numbers.size() == 2 && numbers[0] != -1 && numbers[1] == -1, "and the name that goes past the limit is the one left out");
 	}
 
 	{

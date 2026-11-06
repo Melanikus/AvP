@@ -1,0 +1,59 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "NAME: a name is copied one letter short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "memcpy(name, data, length);",
+					"to": "memcpy(name, data, length - 1);"
+				}
+			]
+		},
+		{
+			"name": "NAME: a name has no end marker of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "name[length] = 0;",
+					"to": "name[length] = 'x';"
+				}
+			]
+		},
+		{
+			"name": "NAME: a name with no end marker in its chunk is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "if (name_length < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NAME: what comes after the name isn't measured",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "if (chunk_bytes < name_bytes + numbers_bytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NAME: the numbers after a name are read from the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/hierplace.cpp",
+					"from": "data += (length+4)&~3;",
+					"to": "data += (length+4)&~3; data += 4;"
+				}
+			]
+		}
+	]
+}
