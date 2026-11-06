@@ -13,6 +13,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   -shadowambient starts with the map's lights that show no corona casting shadows
 //   a new level starts with nothing noted about what was on screen
+//   -shadownearest chooses lights by distance, as the game used to, to compare with what replaced it
 //   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
 
 #include "3dc.h"
@@ -319,6 +320,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (strstr(command_line, "-shadowambient"))
 		{
 			ShadowAmbientOn = 1;
+		}
+		extern int ShadowLightsByNearest;
+		if (devSwitch("-shadownearest"))
+		{
+			ShadowLightsByNearest = 1;
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))

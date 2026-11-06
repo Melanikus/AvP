@@ -50,6 +50,9 @@ inline bool LightChoice_MayCast(LightKindForShadows kind, bool ambientCasts)
 // of these gives a light more than it earned, which costs a place and not a shadow. One thing can give it less: a big polygon past the edge of the screen is held to the edge, so its weight and the spot
 // it's judged by are only near enough, and that's why each sample also says how far it spreads.
 //
+// -shadownearest goes by distance instead, as the game used to. It needs -dev, and a network game puts it back. A lamp this calls "lighting nothing" then gets a place, so the same view drawn both ways says
+// whether that lamp really showed nothing: tools/hudson/compare-pictures.ps1 counts the pixels.
+//
 // None of this uses the game's random numbers or changes anything in the game: it only decides what this player's own screen draws, so it can't affect a network game.
 //
 // THE COST, on any frame: at most kLightChoiceMostCandidates steady and the same again of brief lights, each summed over kLightChoiceSamplesKept surfaces, which is 32,768 sums, and noting at most the

@@ -3803,6 +3803,7 @@ int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from t
 int ShadowVolumesOn = 0;
 int ShadowAmbientOn = 0;       // SHADOWAMBIENT, -shadowambient: whether the map's lights with no corona can cast shadows. See light_choice.h
 LightChoiceSamples lightChoiceSamples;  // what's on screen, for choosing the lights that show the most
+int ShadowLightsByNearest = 0;  // -shadownearest: chooses lights by distance, as the game used to, so the two can be compared on one build
 int ToyShadowsMaxLights = kToyMostSteadyLights;  // -shadowlights=N, 1 to 20: how many steady lights
 int ToyShadowsMaxBrief = kToyMostBriefLights;    // -shadowbrief=N, 0 to 12: how many brief lights on top of those, such as muzzle flashes and explosions
 int ShadowsPretendNoFloatBlend = 0;              // -shadownofloatblend: what the game does on a card that can't add to a float picture, on any card, so it can be tried
@@ -6916,6 +6917,7 @@ static const ShadowTuningNumber shadowTuning[] =
 	{ &ToyShadowsFlareCap, ToyShadowsFlareCap },
 	{ &ToyShadowsWorld, ToyShadowsWorld },
 	{ &ToyShadowsTest, ToyShadowsTest },
+	{ &ShadowLightsByNearest, ShadowLightsByNearest },
 	{ &ToyShadowsMaxLights, ToyShadowsMaxLights },
 	{ &ToyShadowsMaxBrief, ToyShadowsMaxBrief },
 	{ &ShadowsPretendNoFloatBlend, ShadowsPretendNoFloatBlend },

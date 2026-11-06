@@ -5571,6 +5571,7 @@ static float toyViewMatrix[12];
 static float samplesViewMatrix[12];  // the view of the frame before, which is the one its polygons were seen from. See light_choice.h
 extern LightChoiceSamples lightChoiceSamples;
 extern int StaticSceneOn;
+extern int ShadowLightsByNearest;
 static float toyCameraPlace[3];   // where the camera was when toyViewMatrix was kept
 static VECTORCH toyCameraWorld;
 
@@ -5910,10 +5911,10 @@ static float ToyLightStrength(const LIGHTBLOCK *light)
 }
 
 // Cuts a list of the nearest lights down to the ones that put the most light on what was on screen last frame, best first, and gives back how many that is. See light_choice.h. With nothing to go by, as
-// on the first frame of a level, or with walls that were never noted, it goes by nearest, as the list already is. Only ever moves pointers around that it was given.
+// on the first frame of a level, or with walls that were never noted, or if -shadownearest asks, it goes by nearest, as the list already is. Only ever moves pointers around that it was given.
 static int ToyKeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int most, int *inReach)
 {
-	if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)
+	if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)
 	{
 		return (numFound < most) ? numFound : most;
 	}

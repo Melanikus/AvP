@@ -465,7 +465,10 @@ static void TheRealGame()
 
 	std::string const keeping = Between(shapes, "static int ToyKeepTheLightsThatShowMost(", "// The lights chosen for this frame");
 
-	Check(Has(keeping, "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)"), "with nothing to go by, or walls that were never noted, it goes by nearest");
+	Check(Has(keeping, "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)"), "with nothing to go by, or walls that were never noted, or if -shadownearest asks, it goes by nearest");
+	Check(Has(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "if (devSwitch(\"-shadownearest\"))\n\t\t{\n\t\t\tShadowLightsByNearest = 1;"), "-shadownearest needs -dev");
+	Check(Has(Between(render, "static const ShadowTuningNumber shadowTuning[] =", "static float const shadowSurfaceBiasAsBuilt"), "&ShadowLightsByNearest"), "and a network game puts it back");
+	Check(Has(render, "int ShadowLightsByNearest = 0;"), "and it starts off");
 	Check(Has(keeping, "return (numFound < most) ? numFound : most;"), "keeping the list as it came");
 	Check(Has(keeping, "TranslatePoint(source, view, samplesViewMatrix);"), "a light is looked at from where the samples were seen");
 	Check(Has(keeping, "-view[1]"), "with y the way up the samples have it");

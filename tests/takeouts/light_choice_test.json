@@ -561,8 +561,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)",
-					"to": "if (!LightChoice_HasSamples(lightChoiceSamples))"
+					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)",
+					"to": "if (!LightChoice_HasSamples(lightChoiceSamples) || ShadowLightsByNearest)"
 				}
 			]
 		},
@@ -571,8 +571,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn)",
-					"to": "if (StaticSceneOn)"
+					"from": "if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)",
+					"to": "if (StaticSceneOn || ShadowLightsByNearest)"
 				}
 			]
 		},
@@ -673,6 +673,46 @@
 					"file": "win32/VS2026/AvP.vcxproj",
 					"from": "    <ClCompile Include=\"..\\..\\3dc\\light_choice.cpp\" />\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -shadownearest does nothing",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "StaticSceneOn || ShadowLightsByNearest)",
+					"to": "StaticSceneOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -shadownearest works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devSwitch(\"-shadownearest\")",
+					"to": "strstr(command_line, \"-shadownearest\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -shadownearest stays on in a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &ShadowLightsByNearest, ShadowLightsByNearest },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game starts going by nearest",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int ShadowLightsByNearest = 0;",
+					"to": "int ShadowLightsByNearest = 1;"
 				}
 			]
 		}
