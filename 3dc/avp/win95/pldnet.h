@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the game description has the players' names, because a client has no other way to learn them
 /* Patrick 10/7/97------------------------------------------------------
   Header for Multi-Player game support header
   ----------------------------------------------------------------------*/
@@ -294,6 +296,7 @@ typedef struct gamedescription_playerdata
 	unsigned char characterType: 2;
 	unsigned char characterSubType: 6;
 	unsigned char startFlag;
+	char name[NET_PLAYERNAMELENGTH];
 } GAMEDESCRIPTION_PLAYERDATA;
 
 typedef struct netmessage_gamedescription
@@ -867,6 +870,9 @@ extern int PlayerIdInPlayerList(NetID Id);
 extern void RecordFinalNetGameScores(void);
 extern void DoNetScoresForHostDeath(NETGAME_CHARACTERTYPE myType,NETGAME_CHARACTERTYPE killerType);
 extern void RemovePlayerFromGame(NetID id);
+extern bool AddPlayerToGame(NetID id, const char *name);
+extern void Net_PlayerHasGone(NetID id);
+extern void Net_HostHasGone(void);
 extern int EmptySlotInPlayerList(void);
 extern void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame);
 extern int AddUpPlayerFrags(int playerId);

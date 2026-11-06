@@ -7,6 +7,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   leaving the page of games found closes what the search has open on the network
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
+//   a client whose host has gone goes back to the main menus
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -498,13 +499,11 @@ extern void AvP_UpdateMenus(void)
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 	{
 		MinimalNetCollectMessages();
-		if (AvP.Network == I_Host)
-		{	/*
-			We have become host while in the process of joining.
-			This is bad.
-			Best leave the game and return to the main menus.
-			*/
+		if (netGameData.myGameState == NGS_Error_HostLost)
+		{
+			// The host has gone, so there's no game to join. Back to the main menus.
 			Net_Disconnect();
+			AvP.Network = I_No_Network;
 			SetupNewMenu(AVPMENU_MAIN);
 			return;
 		}

@@ -26,6 +26,7 @@
 //   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the page of games found can stop the search, so that nothing stays open on the network
+//   a message's header says whether it's a system message in a byte, because any number can arrive from another machine
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -58,7 +59,7 @@ void      Net_StopSearchingForSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
-NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes
+NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes. Only game messages come out of this: see WHO IS WHO in networking.cpp
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();
@@ -74,7 +75,7 @@ static const int kMarker = 'xPvA'; // AvPx
 struct MessageHeader
 {
 	int marker;
-	bool isSystemMessage;
+	uint8_t isSystemMessage; // 1 for a system message. A byte rather than a bool, because any number can arrive here from another machine
 	uint32_t messageType;
 	NetID fromID;
 	NetID toID;
@@ -83,8 +84,9 @@ struct MessageHeader
 /*
 Version 0 - Original multiplayer + save patch
 Version 100 - Added pistol,skeeter (and new levels)
+Version 102 - A host answers each client itself, and the game description has the players' names
 */
-const int kMultiplayerVersion = 101; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 102; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -151,12 +153,6 @@ struct PlayerDetails
 	NetID	ID;
 	uint8_t	type;
 	char	name[kPlayerNameSize];
-};
-
-struct DestroyPlayerOrGroup
-{
-	NetID	ID;
-	uint8_t	type;
 };
 
 #pragma pack()

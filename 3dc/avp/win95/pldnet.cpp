@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -18,6 +20,7 @@
 #include "pvisible.h"
 #include "bh_platform_lift.h"
 #include "pldnet.h"
+#include "net_checks.h"
 #include "pldghost.h"
 #include "equipment.h"
 #include "weapons.h"
@@ -274,9 +277,7 @@ extern void PlayerGhostExtrapolation();
 /*----------------------------------------------------------------------
   Some protoypes for this file
   ----------------------------------------------------------------------*/
-static void ProcessSystemMessage(uint8_t *msgP, size_t msgSize);
 static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize);
-static void AddPlayerToGame(NetID id, char *name);
 static void AddPlayerAndObjectUpdateMessages(void);
 static void UpdateNetworkGameScores(NetID playerKilledId, NetID killerId, NETGAME_CHARACTERTYPE playerKilledType, NETGAME_CHARACTERTYPE killerType);
 static void InitFinalNetGameScores(void);
@@ -356,7 +357,6 @@ static void Inform_AiHasDied(NetID killer, ALIEN_TYPE type, char weaponIcon);
 static void Inform_PlayerHasLeft(NetID player);
 static void Inform_PlayerHasJoined(NetID player);
 static void Inform_PlayerHasConnected(NetID player);
-static void Inform_NewHost(void);
 
 static void WriteFragmentStatus(int fragmentNumber, int status);
 static int ReadFragmentStatus(int fragmentNumber);
@@ -646,13 +646,8 @@ void MinimalNetCollectMessages(void)
 					fromID = newHeader.fromID;
 					toID   = newHeader.toID;
 
-					// process last message, if there is one
-					if (newHeader.isSystemMessage) {
-						ProcessSystemMessage(msg, msgSize);
-					}
-					else {
-						ProcessGameMessage(fromID, msg, msgSize);
-					}
+					// Only game messages from someone who's been let in get this far. See WHO IS WHO in networking.cpp.
+					ProcessGameMessage(fromID, msg, msgSize);
 				}
 			}
 		}
@@ -702,13 +697,8 @@ void NetCollectMessages(void)
 					fromID = newHeader.fromID;
 					toID   = newHeader.toID;
 
-					// process last message, if there is one
-					if (newHeader.isSystemMessage) {
-						ProcessSystemMessage(msg, msgSize);
-					}
-					else {
-						ProcessGameMessage(fromID, msg, msgSize);
-					}
+					// Only game messages from someone who's been let in get this far. See WHO IS WHO in networking.cpp.
+					ProcessGameMessage(fromID, msg, msgSize);
 				}
 			}
 		}
@@ -896,173 +886,8 @@ void NetCollectMessages(void)
 	}
 }
 
-/*----------------------------------------------------------------------
-  Functions for processing system messages
-  ----------------------------------------------------------------------*/
-static void ProcessSystemMessage(uint8_t *msgP, size_t msgSize)
-{
-	NewOnScreenMessage("we're going to process a system message\n");
-
-	/* currently, only the host deals with system mesages */
-	/* check for invalid parameters */
-	if ((msgSize == 0) || (msgP == NULL)) {
-		NewOnScreenMessage("Invalid system message!");
-		return;
-	}
-
-	MemoryReadStream rs(msgP, msgSize);
-
-	MessageHeader newMessageHeader;
-	rs.GetBytes(&newMessageHeader, sizeof(MessageHeader));
-
-	switch (newMessageHeader.messageType)
-	{
-		case NET_ADDPLAYERTOGROUP:
-		{
-			break; // ignore
-		}
-
-		case NET_SETPLAYERID:
-		{
-			OutputDebugString("in NET_SETPLAYERID\n");
-			// FIXME
-			if ((AvP.Network != I_Host)) {
-				AvPNetID = rs.GetUint32LE();
-			}
-			break;
-		}
-
-		case NET_CREATEPLAYERORGROUP:
-		{
-			NewOnScreenMessage("in NET_CREATEPLAYERORGROUP");
-
-			/* only useful during startup: during main game, connecting player should
-			detect game state and exit immediately */
-			if ((AvP.Network == I_Host))
-			{
-				PlayerDetails newPlayer;
-
-				// copy message data to player struct
-				rs.GetBytes(&newPlayer, sizeof(PlayerDetails));
-
-				// give them their player ID
-				newPlayer.ID = Net_GetNextPlayerID();
-
-				AddPlayerToGame(newPlayer.ID, newPlayer.name);
-
-				// TODO - inform the player that they've joined
-				Net_SendSystemMessage(NET_SETPLAYERID, AvPNetID, 0, &newPlayer.ID, sizeof(newPlayer.ID));
-			}
-
-			LogNetInfo("system message:  NET_CREATEPLAYERORGROUP \n");
-			NewOnScreenMessage("A PLAYER HAS CONNECTED");
-			break;
-		}
-
-		case NET_DELETEPLAYERFROMGROUP:
-		{
-			NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-			/* ignore */
-			break;
-		}
-
-		case NET_DESTROYPLAYERORGROUP:
-		{
-			OutputDebugString("NET_DESTROYPLAYERORGROUP\n");
-
-			/* Aha. Either a player has left (should have sent a leaving message)
-			or s/he has exited abnormally. In either case, only need to act on
-			this during start-up. During the main game, the ghosts will time-out
-			anyway */
-
-			if ((AvP.Network == I_Host))
-			{
-				DestroyPlayerOrGroup destroyMessage;
-				rs.GetBytes(&destroyMessage, sizeof(DestroyPlayerOrGroup));
-
-				if (destroyMessage.type == NET_PLAYERTYPE_PLAYER)
-				{
-					OutputDebugString("going to drop a player as they disconnected\n");
-					RemovePlayerFromGame(destroyMessage.ID);
-					NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-				}
-			}
-
-			LogNetInfo("system message:  NET_DESTROYPLAYERORGROUP \n");
-			break;
-		}
-
-		case NET_HOST:
-		{
-			/* Aha... the host has died, then. This is a terminal game state,
-			as the host was managing the game. Thefore, temporarily adopt host
-			duties for the purpose of ending the game...
-			This is most important during the playing state, but also happens in
-			startup. In startup, peers keep a host timeout which should fire before
-			this message arrives anyway. */
-			LOCALASSERT(AvP.Network == I_Peer);
-
-			if ((netGameData.myGameState == NGS_StartUp) || (netGameData.myGameState == NGS_Playing) || (netGameData.myGameState == NGS_Joining) || (netGameData.myGameState == NGS_EndGameScreen))
-			{
-				AvP.Network = I_Host;
-				/* Eek, I guess the old AIs bite the dust? */
-				//but the new host can create some more
-				AvP.NetworkAIServer = (netGameData.gameType == NGT_Coop);
-				Inform_NewHost();
-				//              TransmitEndOfGameNetMsg();
-				//              netGameData.myGameState = NGS_EndGame;
-				//              AvP.MainLoopRunning = 0;
-
-				if (LobbiedGame)
-				{
-					// no longer a lowly client
-					LobbiedGame = LobbiedGame_Server;
-				}
-			}
-
-			LogNetInfo("system message:  NET_HOST \n");
-			break;
-		}
-
-		case NET_SESSIONLOST:
-		{
-			/* Aha. I have lost my connection. Time to exit the game gracefully.*/
-			NewOnScreenMessage("Session lost!!");
-			/*
-			if((netGameData.myGameState==NGS_StartUp)||(netGameData.myGameState==NGS_Joining)||(netGameData.myGameState==NGS_Playing))
-			{
-			    netGameData.myGameState = NGS_Error_HostLost;
-			}
-
-			LogNetInfo("system message:  NET_SESSIONLOST \n");
-			*/
-			break;
-		}
-/*
-		case NET_SETPLAYERORGROUPDATA:
-		{
-			// ignore
-			break;
-		}
-
-		case NET_SETPLAYERORGROUPNAME:
-		{
-			// ignore
-			break;
-		}
-*/
-		default:
-		{
-			char buf[100];
-			sprintf(buf, "invalid system message type: %u\n", newMessageHeader.messageType);
-			OutputDebugString(buf);
-			/* invalid system message type: ignore */
-			break;
-		}
-	}
-}
-
-static void AddPlayerToGame(NetID id, char *name)
+// A new player, once networking.cpp has let them in. False if there's no room for them.
+bool AddPlayerToGame(NetID id, const char *name)
 {
 	OutputDebugString("AddPlayerToGame() called\n");
 	LOCALASSERT(AvP.Network == I_Host);
@@ -1070,7 +895,7 @@ static void AddPlayerToGame(NetID id, char *name)
 	// find a free slot for the player
 	int freePlayerIndex = EmptySlotInPlayerList();
 	if (freePlayerIndex == NET_NOEMPTYSLOTINPLAYERLIST) {
-		return;
+		return false;
 	}
 
 	/* initialise the slot */
@@ -1100,6 +925,34 @@ static void AddPlayerToGame(NetID id, char *name)
 		netGameData.playerData[freePlayerIndex].lastKnownPosition.vz = 0;
 	}
 	Inform_PlayerHasConnected(id);
+	return true;
+}
+
+// A client's connection has closed, however that happened. If it said it was leaving first, it has already gone, and this changes nothing.
+void Net_PlayerHasGone(NetID id)
+{
+	if (PlayerIdInPlayerList(id) != NET_IDNOTINPLAYERLIST)
+	{
+		ProcessNetMsg_PlayerLeaving(id);
+	}
+}
+
+// A client's connection to its host has closed, so its game is over: clients can only talk to each other through the host. In the menus nothing is running, and the menus see this themselves.
+void Net_HostHasGone(void)
+{
+	if (netGameData.myGameState == NGS_Error_HostLost)
+	{
+		return;
+	}
+
+	bool const inTheMenus = netGameData.myGameState == NGS_Joining;
+
+	netGameData.myGameState = NGS_Error_HostLost;
+
+	if (!inTheMenus)
+	{
+		AvP.MainLoopRunning = 0;
+	}
 }
 
 void RemovePlayerFromGame(NetID id)
@@ -1155,7 +1008,6 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 	uint8_t *endOfMessage = NULL;
 	NETMESSAGEHEADER *headerPtr = NULL;
 	LogNetInfo("Processing a game message \n");
-	NewOnScreenMessage("Processing a game message");
 
 	// check for invalid parameters
 	if ((msgSize == 0) || (msgP == NULL)) {
@@ -1960,6 +1812,7 @@ void AddNetMsg_GameDescription(void)
 			messagePtr->players[i].characterType = (unsigned char)netGameData.playerData[i].characterType;
 			messagePtr->players[i].characterSubType = (unsigned char)netGameData.playerData[i].characterSubType;
 			messagePtr->players[i].startFlag = netGameData.playerData[i].startFlag;
+			NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);
 		}
 
 		messagePtr->gameType = (unsigned char)netGameData.gameType;
@@ -5509,48 +5362,8 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 				}
 			}
 
-			if (netGameData.playerData[i].playerId != messagePtr->players[i].playerId)
-			{
-				// bjd - FIXME
-				if (messagePtr->players[i].playerId)
-				{
-/*
-					Net_SendSystemMessage(AVP_REQUEST_PLAYER_NAME, AvPNetID, messagePtr->players[i].playerId, NULL, 0);
-					strncpy(netGameData.playerData[i].name, "APLAYER", NET_PLAYERNAMELENGTH - 1);
-					netGameData.playerData[i].name[NET_PLAYERNAMELENGTH - 1] = '\0';
-*/
-					//AddNetMsg_PlayerGetName(messagePtr->players[i].playerId); // pass request through internal message system?
-					//tempPlayerDetails.
-#if 0 // i'm thinking we should do this differently..pass request through games message queue
-					DWORD size = 0;
-					char *data;
-					HRESULT hr;
-					//need to find out this player's name
-					//first find the size of buffer required
-					hr = IDirectPlayX_GetPlayerName(glpDP, messagePtr->players[i].playerId, 0, &size);
-
-					if (hr == NET_OK || hr == DPERR_BUFFERTOOSMALL)
-					{
-						//allocate buffer to receive the name
-						data = AllocateMem(size);
-						*data = 0;
-						hr = IDirectPlayX_GetPlayerName(glpDP, messagePtr->players[i].playerId, data, &size);
-
-						if (hr == NET_OK)
-						{
-							strncpy(netGameData.playerData[i].name,/*((DPNAME*)data)->lpszShortNameA*/data, NET_PLAYERNAMELENGTH - 1);
-							netGameData.playerData[i].name[NET_PLAYERNAMELENGTH - 1] = '\0';
-						}
-
-						DeallocateMem(data);
-					}
-
-#endif
-				}
-				else {
-					netGameData.playerData[i].name[0] = '\0'; // set this for now
-				}
-			}
+			// This is how a client learns the other players' names
+			NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);
 
 			netGameData.playerData[i].playerId = messagePtr->players[i].playerId;
 			netGameData.playerData[i].characterType = (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;
@@ -10048,11 +9861,6 @@ static void Inform_PlayerHasConnected(NetID player)
 	}
 
 	NetworkGameConsoleMessage(TEXTSTRING_MULTIPLAYERCONSOLE_CONNECTGAME, netGameData.playerData[playerIndex].name, 0);
-}
-
-static void Inform_NewHost(void)
-{
-	NewOnScreenMessage(GetTextString(TEXTSTRING_MULTIPLAYERCONSOLE_NEWHOST));
 }
 
 static void WriteFragmentStatus(int fragmentNumber, int status)

@@ -30,6 +30,9 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
+//   the host answers each client itself and knows who sent what from the connection it came on, so a client can only speak for itself; it passes on what clients say to each other
+//   a client has no fixed port of its own, a join that fails lets go of what it opened, and leaving tells the other end straight away
+//   a player ID comes from a count, because two people can join within the same thousandth of a second
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -72,6 +75,9 @@ static bool LogThisDrop(unsigned long long &count)
 	return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);
 }
 
+// A game has 8 players at most, and the host is one of them
+static const size_t kMostClients = 7;
+
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
 
@@ -89,6 +95,9 @@ extern void InitAVPNetGameForHost(int species, int gamestyle, int level);
 extern void InitAVPNetGameForJoin(void);
 extern int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters);
 extern char *GetCustomMultiplayerLevelName(int index, int gameType);
+extern bool AddPlayerToGame(NetID id, const char *name);
+extern void Net_PlayerHasGone(NetID id);
+extern void Net_HostHasGone();
 extern unsigned char DebouncedKeyboardInput[];
 
 static bool Net_CreatePlayer(char *playerName);
@@ -434,16 +443,11 @@ void Net_Deinitialise()
 // Called in a loop while we wait for the server to send us the game details (not session description)
 int Net_ConnectingToSession()
 {
-	// see if the player has got bored of waiting
-	if (DebouncedKeyboardInput[KEY_ESCAPE])
+	// See if the player has got bored of waiting, or if the host has gone or turned them away
+	if (DebouncedKeyboardInput[KEY_ESCAPE] || !ServerPeer)
 	{
-		// abort attempt to join game
-		if (AvPNetID)
-		{
-//			IDirectPlayX_DestroyPlayer(glpDP, AvPNetID);
-			AvPNetID = 0;
-		}
-		//DPlayClose();
+		Net_Disconnect();
+		AvPNetID = 0;
 		AvP.Network = I_No_Network;
 		return NET_FAIL;
 	}
@@ -497,7 +501,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			ServerAddress.port = netPortNumber;
 
 			host = enet_host_create(&ServerAddress,      // the address to bind the server host to.
-								32,                      // allow up to 32 clients and/or outgoing connections.
+								kMostClients,            // the most clients it can have
 								0,                       // channel limit.
 								incomingBandwidth,       // assume any amount of incoming bandwidth.
 								outgoingBandwidth);      // assume any amount of outgoing bandwidth.
@@ -567,24 +571,21 @@ void Net_Disconnect()
 {
 	OutputDebugString("Net_Disconnect\n");
 
-	// need to let everyone know we're disconnecting
-	DestroyPlayerOrGroup destroyPlayer;
-	destroyPlayer.ID   = AvPNetID;
-	destroyPlayer.type = NET_PLAYERTYPE_PLAYER;
-
-	// Only a client has a server to tell, and this also runs from the console's disconnect command, in a game that isn't on any network
-	if (AvP.Network != I_Host && ServerPeer)
-	{
-		// TODO - from and to IDs
-		if (Net_SendSystemMessage(NET_DESTROYPLAYERORGROUP, 0, 0, &destroyPlayer, sizeof(DestroyPlayerOrGroup)) != NET_OK)
-		{
-			// Carry on: whether or not the server hears about it, this is still leaving
-			Con_PrintError("Net_Disconnect - Problem sending destroy player system message!");
-		}
-	}
-
+	// This also runs from the console's disconnect command, in a game that isn't on any network
 	if (host)
 	{
+		// What's been sent so far goes now, because closing the connections throws away anything still waiting
+		enet_host_flush(host);
+
+		// Tell whoever's at the other end straight away, instead of leaving them to work it out when nothing arrives for a while. Nobody has to believe a message saying who has left, because it's the connection itself that closes.
+		for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; ++peer)
+		{
+			if (peer->state == ENET_PEER_STATE_CONNECTED)
+			{
+				enet_peer_disconnect_now(peer, 0);
+			}
+		}
+
 		enet_host_destroy(host);
 		host = NULL;
 	}
@@ -702,9 +703,243 @@ void Net_ServiceNetwork()
 	}
 }
 
+// WHO IS WHO. A client only ever talks to the host, and the host passes on what's meant for the others. Anyone who can reach the host's port can connect and send anything at all, and a message can say it's from anyone. So the host doesn't go by that.
+// Each connection can be let in once, and gets one player ID, which is kept with the connection. After that, whatever arrives on the connection has to carry that ID. What arrives is checked here, before the rest of the game sees it, and the
+// only messages the rest of the game ever sees are game messages.
+static NetID IDOfConnection(const ENetPeer *peer)
+{
+	return (NetID)(uintptr_t)peer->data;
+}
+
+// Anyone can cause this as fast as they like, so the log only says so now and then.
+static void LogDroppedMessage(const char *why)
+{
+	static unsigned long long droppedMessages = 0;
+
+	if (LogThisDrop(droppedMessages))
+	{
+		std::stringstream sstream;
+		sstream << "Net_Receive - dropped a message because " << why << " (" << droppedMessages << " so far)";
+		Con_PrintError(sstream.str());
+	}
+}
+
+// Does this look like one of this game's messages at all? Copies its header out if so.
+static bool ReadTheHeader(const uint8_t *data, size_t size, MessageHeader &header)
+{
+	if (size < sizeof(MessageHeader))
+	{
+		LogDroppedMessage("it's too short to have a header");
+		return false;
+	}
+
+	memcpy(&header, data, sizeof(MessageHeader));
+
+	if (header.marker != kMarker)
+	{
+		LogDroppedMessage("it isn't marked as this game's");
+		return false;
+	}
+
+	return true;
+}
+
+static NetResult SendSystemMessageTo(ENetPeer *peer, uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize)
+{
+	// create a new header and copy it into the packet buffer
+	MessageHeader newMessageHeader;
+	newMessageHeader.marker = kMarker;
+	newMessageHeader.isSystemMessage = 1;
+	newMessageHeader.messageType = messageType;
+	newMessageHeader.fromID = fromID;
+	newMessageHeader.toID   = toID;
+
+	MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
+	ws.PutBytes(&newMessageHeader, sizeof(newMessageHeader));
+
+	// put data after header
+	if (dataSize && messageData) {
+		ws.PutBytes(messageData, dataSize);
+	}
+
+	// create ENet packet
+	ENetPacket *packet = enet_packet_create(packetBuffer, ws.GetBytesWritten(), ENET_PACKET_FLAG_RELIABLE);
+	if (packet == NULL)
+	{
+		Con_PrintError("SendSystemMessageTo - couldn't create packet");
+		return NET_FAIL;
+	}
+
+	if (enet_peer_send(peer, 0, packet) != 0)
+	{
+		Con_PrintError("SendSystemMessageTo - can't send peer packet");
+
+		// ENet frees a packet when it's been delivered, and this one won't be
+		enet_packet_destroy(packet);
+		return NET_FAIL;
+	}
+
+	return NET_OK;
+}
+
+// A client that has only just connected has asked to be let in. There's no answer when there's no room: the connection is closed, and the client sees that.
+static void LetClientIn(ENetPeer *peer, const uint8_t *details)
+{
+	PlayerDetails player;
+
+	memcpy(&player, details, sizeof(PlayerDetails));
+
+	// Nothing says this name ends
+	player.name[kPlayerNameSize - 1] = '\0';
+
+	NetID const id = Net_GetNextPlayerID();
+
+	if (netSession.nPlayers >= netSession.maxPlayers || !AddPlayerToGame(id, player.name))
+	{
+		enet_peer_disconnect(peer, 0);
+		return;
+	}
+
+	if (SendSystemMessageTo(peer, NET_SETPLAYERID, AvPNetID, id, &id, sizeof(id)) != NET_OK)
+	{
+		Net_PlayerHasGone(id);
+		enet_peer_disconnect(peer, 0);
+		return;
+	}
+
+	peer->data = (void *)(uintptr_t)id;
+	netSession.nPlayers++;
+}
+
+// To every client that's been let in, but not to one that has only connected, nor to the one given here. ENet frees a packet once everyone it was sent to has had it, so one that went to nobody has to be freed here.
+static void SendToClients(ENetPacket *packet, const ENetPeer *except)
+{
+	for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; ++peer)
+	{
+		if (peer != except && peer->state == ENET_PEER_STATE_CONNECTED && IDOfConnection(peer) != 0)
+		{
+			enet_peer_send(peer, 0, packet);
+		}
+	}
+
+	if (packet->referenceCount == 0)
+	{
+		enet_packet_destroy(packet);
+	}
+}
+
+// What a host does with something from a client. Gives back whether it's a game message for the game to read.
+static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size)
+{
+	MessageHeader header;
+
+	if (!ReadTheHeader(data, size, header))
+	{
+		return false;
+	}
+
+	NetID const id = IDOfConnection(from);
+
+	if (header.isSystemMessage)
+	{
+		// The only thing a client ever asks the host is to be let in
+		if (header.messageType != NET_CREATEPLAYERORGROUP)
+		{
+			LogDroppedMessage("a client can't send that system message");
+		}
+		else if (id != 0)
+		{
+			LogDroppedMessage("a client asked to be let in twice");
+		}
+		else if (size != sizeof(MessageHeader) + sizeof(PlayerDetails))
+		{
+			LogDroppedMessage("a client's details are the wrong size");
+		}
+		else
+		{
+			LetClientIn(from, data + sizeof(MessageHeader));
+		}
+
+		return false;
+	}
+
+	if (id == 0)
+	{
+		LogDroppedMessage("a client that hasn't been let in sent a game message");
+		return false;
+	}
+
+	if (header.fromID != id)
+	{
+		LogDroppedMessage("a client sent a game message saying it's from someone else");
+		return false;
+	}
+
+	// Clients can't reach each other, so the host passes this on to the rest
+	ENetPacket *packet = enet_packet_create(data, size, ENET_PACKET_FLAG_RELIABLE);
+
+	if (packet == NULL)
+	{
+		Con_PrintError("HostHearsFromClient - couldn't create packet");
+	}
+	else
+	{
+		SendToClients(packet, from);
+	}
+
+	return true;
+}
+
+// What a client does with something from its host. Gives back whether it's a game message for the game to read.
+static bool ClientHearsFromHost(const uint8_t *data, size_t size)
+{
+	MessageHeader header;
+
+	if (!ReadTheHeader(data, size, header))
+	{
+		return false;
+	}
+
+	if (!header.isSystemMessage)
+	{
+		return true;
+	}
+
+	NetID id = 0;
+
+	// The only system message a host ever sends is a client's ID, and only once
+	if (header.messageType != NET_SETPLAYERID)
+	{
+		LogDroppedMessage("a host can't send that system message");
+	}
+	else if (size != sizeof(MessageHeader) + sizeof(NetID))
+	{
+		LogDroppedMessage("a player ID is the wrong size");
+	}
+	else if (AvPNetID != 0)
+	{
+		LogDroppedMessage("this game has already been given its player ID");
+	}
+	else
+	{
+		memcpy(&id, data + sizeof(MessageHeader), sizeof(NetID));
+		AvPNetID = id;
+		thisClientPlayer.ID = id;
+	}
+
+	return false;
+}
+
 NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 {
 	dataSize = 0;
+
+	// A client has nobody else to talk to, so when it has lost its host the game is over. This is asked on every call, because a client can be loading a level when it happens.
+	if (host && AvP.Network == I_Peer && !ServerPeer)
+	{
+		Net_HostHasGone();
+		return NET_NO_MESSAGES;
+	}
 
 	// this function is called from a loop. only return something other than NET_OK when we've no more messages
 	if (host)
@@ -712,7 +947,6 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 		ENetEvent eEvent;
 		if (enet_host_check_events(host, &eEvent) > 0) // check server events
 		{
-			NewOnScreenMessage("got an enet message from enet_host_check_events in Net_Receive");
 			switch (eEvent.type)
 			{
 				case ENET_EVENT_TYPE_CONNECT:
@@ -723,12 +957,13 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					std::stringstream sstream;
 					sstream << "Enet got a connection from " << ipaddr << ":" << eEvent.peer->address.port;
 					NewOnScreenMessage((char*)sstream.str().c_str());
+
+					// A connection that has only just been made hasn't been let in yet, whoever had this place in ENet's list before
+					eEvent.peer->data = NULL;
 					break;
 				}
 				case ENET_EVENT_TYPE_RECEIVE:
 				{
-					NewOnScreenMessage("Enet received a packet!\n");
-
 					// the caller's buffer holds NET_MESSAGEBUFFERSIZE bytes (every message we send fits in it, see
 					// Net_Send). The hosts are created with maximumPacketSize = NET_MESSAGEBUFFERSIZE, so ENet should
 					// not hand us a larger packet; drop one anyway instead of overrunning the buffer.
@@ -749,14 +984,37 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 
 					// copy it in, header and all
 					memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);
-					dataSize = eEvent.packet->dataLength;
+
+					if (AvP.Network == I_Host ? HostHearsFromClient(eEvent.peer, messageData, eEvent.packet->dataLength) : ClientHearsFromHost(messageData, eEvent.packet->dataLength))
+					{
+						dataSize = eEvent.packet->dataLength;
+					}
+
 					enet_packet_destroy(eEvent.packet);
 					break;
 				}
 				case ENET_EVENT_TYPE_DISCONNECT:
 				{
 					NewOnScreenMessage("ENet got a disconnection\n");
+
+					NetID const id = IDOfConnection(eEvent.peer);
+
 					eEvent.peer->data = NULL;
+
+					if (AvP.Network == I_Host)
+					{
+						// However it went, that player has gone. One that said so first has already left the game, and this changes nothing for them.
+						if (id != 0)
+						{
+							netSession.nPlayers--;
+							Net_PlayerHasGone(id);
+						}
+					}
+					else if (eEvent.peer == ServerPeer)
+					{
+						ServerPeer = NULL;
+					}
+
 					break;
 				}
 				case ENET_EVENT_TYPE_NONE:
@@ -794,43 +1052,7 @@ NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, 
 		return NET_FAIL;
 	}
 
-	// create a new header and copy it into the packet buffer
-	MessageHeader newMessageHeader;
-	newMessageHeader.marker = kMarker;
-	newMessageHeader.isSystemMessage = true;
-	newMessageHeader.messageType = messageType;
-	newMessageHeader.fromID = fromID;
-	newMessageHeader.toID   = toID;
-
-	MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
-	ws.PutBytes(&newMessageHeader, sizeof(newMessageHeader));
-
-	// put data after header
-	if (dataSize && messageData) {
-		ws.PutBytes(messageData, dataSize);
-	}
-
-	// create ENet packet
-	ENetPacket *packet = enet_packet_create(packetBuffer, ws.GetBytesWritten(), ENET_PACKET_FLAG_RELIABLE);
-	if (packet == NULL)
-	{
-		Con_PrintError("Net_SendSystemMessage - couldn't create packet");
-		return NET_FAIL;
-	}
-
-	// let us know if we're not connected
-	if (ENET_PEER_STATE_CONNECTED != ServerPeer->state) {
-		Con_PrintError("Net_SendSystemMessage - not connected to server peer!");
-	}
-
-	// send the packet
-	if (enet_peer_send(ServerPeer, 0, packet) != 0) {
-		Con_PrintError("Net_SendSystemMessage - can't send peer packet");
-	}
-
-//	enet_host_flush(host);
-
-	return NET_OK;
+	return SendSystemMessageTo(ServerPeer, messageType, fromID, toID, messageData, dataSize);
 }
 
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize)
@@ -841,9 +1063,15 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 		return NET_FAIL;
 	}
 
+	// A game that has already left has nobody to send to
+	if (!host)
+	{
+		return NET_FAIL;
+	}
+
 	MessageHeader newMessageHeader;
 	newMessageHeader.marker = kMarker;
-	newMessageHeader.isSystemMessage = false;
+	newMessageHeader.isSystemMessage = 0;
 	newMessageHeader.messageType = messageType;
 	newMessageHeader.fromID = fromID;
 	newMessageHeader.toID   = toID;
@@ -861,21 +1089,15 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 		return NET_FAIL;
 	}
 
-	// send to all peers
-//	if (toID == NET_ID_ALLPLAYERS)
+	// A host sends to everyone it has let in, and a client's only connection is to its host, which passes it on
+	if (AvP.Network == I_Host)
+	{
+		SendToClients(packet, NULL);
+	}
+	else
 	{
 		enet_host_broadcast(host, 0, packet);
 	}
-//	else {
-//		assert(1==0); // not implemented yet
-//	}
-/*
-	else if (toID == NET_ID_SERVERPLAYER)
-	{
-		enet_host_broadcast(host, 0, packet);
-	}
-*/
-//	enet_host_flush(host);
 
 	return NET_OK;
 }
@@ -893,15 +1115,14 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	// The ENet host owned this, and has just freed it
 	ServerPeer = NULL;
 
+	// Whatever this was belonged to the last game. The host gives this game's.
+	AvPNetID = 0;
+
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
 
-	ENetAddress ourAddress;
-	ourAddress.host = ENET_HOST_ANY;
-	ourAddress.port = netPortNumber;
-
-	// create ENet client
-	host = enet_host_create(&ourAddress,       // create a client host
+	// create ENet client. It has no address of its own, because nobody needs to find it: it talks to its host, and gets whatever port is free. That also means two games on one machine don't fight over a port.
+	host = enet_host_create(NULL,
 				1,                      // only allow 1 outgoing connection
 				0,                      // channel limit
 				incomingBandwidth,      // 57600 / 8 : 56K modem with 56 Kbps downstream bandwidth
@@ -921,6 +1142,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	if (ServerPeer == NULL)
 	{
 		Con_PrintError("Net_ConnectToSession - Failed to connect to server host");
+		enet_host_destroy(host);
+		host = NULL;
 		return NET_FAIL;
 	}
 
@@ -935,6 +1158,11 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	else
 	{
 		Con_PrintError("Net_ConnectToSession - failed to connect to server!");
+
+		// There's no game, so nothing should stay open
+		enet_host_destroy(host);
+		host = NULL;
+		ServerPeer = NULL;
 		return NET_FAIL;
 	}
 
@@ -984,14 +1212,19 @@ static bool Net_CreatePlayer(char *playerName)
 	return true;
 }
 
-/*
-	just grab the value from timeGetTime as the player id
-	it's probably fairly safe to assume two players will never
-	get the same values for this...
-*/
+// Only a host hands these out. It's a count, so that no two players ever have the same one, and 0 means nobody. Nothing relies on anyone being unable to guess one: everyone in the game can see them all, and the host goes by the connection.
 NetID Net_GetNextPlayerID()
 {
-	return (NetID)timeGetTime();
+	static NetID lastPlayerID = 0;
+
+	lastPlayerID++;
+
+	if (lastPlayerID == 0)
+	{
+		lastPlayerID = 1;
+	}
+
+	return lastPlayerID;
 }
 
 void Net_FindAvPSessions()
