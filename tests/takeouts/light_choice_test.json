@@ -551,8 +551,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "\t\tLightChoice_Forget(&lightChoiceSamples);\n\t\tStaticLevel_BuildThisLevel();",
-					"to": "\t\tStaticLevel_BuildThisLevel();"
+					"from": "\t\tLightChoice_Forget(&lightChoiceSamples);\n\n\t\t// after StartGame, because that's when every module that's controlled by something has been told so\n\t\tStaticLevel_BuildThisLevel();",
+					"to": "\t\t// after StartGame, because that's when every module that's controlled by something has been told so\n\t\tStaticLevel_BuildThisLevel();"
 				}
 			]
 		},

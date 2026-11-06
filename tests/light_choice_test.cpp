@@ -461,7 +461,7 @@ static void TheRealGame()
 	Check(Has(choosing, "LightChoice_KeepTheLargest(&lightChoiceSamples);\n\tnumSteady = "), "only the largest samples are scored, which is what holds the cost down");
 	Check(Has(Between(choosing, "lightsThisFrame.briefChosen = numBrief;", "ToyFoundLight chosen[kToyMostLights];"), "LightChoice_Forget(&lightChoiceSamples);"), "and the samples start again for the frame about to be drawn");
 	Check(Has(Between(choosing, "if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)", "return;"), "LightChoice_Forget(&lightChoiceSamples);"), "and when nothing's chosen, so old ones can't meet a newer view");
-	Check(Has(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "LightChoice_Forget(&lightChoiceSamples);\n\t\tStaticLevel_BuildThisLevel();"), "a new level starts with nothing to go by");
+	Check(Has(ReadSourceFile("3dc/avp/win95/winmain.cpp"), "LightChoice_Forget(&lightChoiceSamples);\n\n\t\t// after StartGame, because that's when every module that's controlled by something has been told so\n\t\tStaticLevel_BuildThisLevel();"), "a new level starts with nothing to go by");
 
 	std::string const keeping = Between(shapes, "static int KeepTheLightsThatShowMost(", "// The lights chosen for this frame");
 
