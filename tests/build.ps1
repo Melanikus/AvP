@@ -11,10 +11,13 @@
 # lists that folder in its .args with /Itests/name_stubs, ahead of the game's folders.
 #
 # Run it from anywhere, in PowerShell:  tests/build.ps1
+# To build only one test:  tests/build.ps1 -Only name
 # The programs land in $env:RUNNER_TEMP\avp-tests. Outside the automatic checks, they land in a folder called
 # AvP-test-out next to the repository. Not the temp folder: antivirus programs distrust new programs that appear there.
 #
 # If anything fails, this script stops with a non-zero exit code, and the automatic check fails with it.
+
+param([string]$Only = '')
 
 $ErrorActionPreference = 'Stop'
 
@@ -34,7 +37,7 @@ $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.
 if (-not $visualStudio) { Write-Error 'Visual Studio with the C++ tools was not found' }
 $setupScript = Join-Path $visualStudio 'Common7\Tools\VsDevCmd.bat'
 
-$tests = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '*.args'))
+$tests = @(Get-ChildItem -Path (Join-Path $PSScriptRoot '*.args') | Where-Object { -not $Only -or $_.BaseName -ceq $Only })
 if ($tests.Count -eq 0) { Write-Error 'No tests found to build' }
 
 foreach ($test in $tests)

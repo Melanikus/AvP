@@ -729,4 +729,10 @@
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets')" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <!-- The game compiles its shaders every time it starts. D3DX does that with D3DCompiler_43.dll, which it loads by name while the
+       game is running. vcpkg only copies what AvPx.exe links to, so it leaves this one behind. This copy fails the build if the
+       file isn't there. -->
+  <Target Name="CopyShaderCompiler" AfterTargets="Build">
+    <Copy SourceFiles="$(VcpkgInstalledDir)$(VcpkgTriplet)\bin\D3DCompiler_43.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
