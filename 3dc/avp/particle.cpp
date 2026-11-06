@@ -3285,6 +3285,13 @@ void DoFlareCorona(DISPLAYBLOCK *objectPtr)
 	if (CameraCanSeeThisPosition_WithIgnore(objectPtr, &position))
 	{
 		LIGHTBLOCK *lPtr = objectPtr->ObLights[0];
+
+		// The game can run out of lights to give
+		if (!lPtr)
+		{
+			return;
+		}
+
 		int a = lPtr->LightBright>>8;
 		int colour;
 

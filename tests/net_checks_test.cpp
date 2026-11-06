@@ -301,6 +301,40 @@ static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, s
 	return 1 + (size_t)part[0];
 }
 
+static void TestWhoHasAskedLately()
+{
+	NetAddressCount table[3];
+
+	memset(table, 0, sizeof(table));
+
+	Check(NetAddressHasRoom(table, 3, 11, 1000, 2), "an address has room to ask");
+	Check(NetAddressHasRoom(table, 3, 11, 1100, 2), "up to its limit");
+	Check(!NetAddressHasRoom(table, 3, 11, 1200, 2), "and no more that second");
+	Check(NetAddressHasRoom(table, 3, 22, 1300, 2), "another address has its own count");
+	Check(NetAddressHasRoom(table, 3, 11, 2000, 2), "and the first has room again the next second");
+
+	// More addresses than places: the one heard from longest ago makes room, and nothing is written past the end
+	Check(NetAddressHasRoom(table, 3, 33, 2100, 2), "a third address fits");
+	Check(NetAddressHasRoom(table, 3, 44, 2200, 2), "and a fourth takes the oldest place");
+	Check(table[0].address != 0 && table[1].address != 0 && table[2].address != 0, "every place is in use");
+
+	bool fourthThere = false, secondGone = true;
+
+	for (int i = 0; i < 3; i++)
+	{
+		fourthThere = fourthThere || table[i].address == 44;
+		secondGone = secondGone && table[i].address != 22;
+	}
+
+	Check(fourthThere && secondGone, "it was the oldest that went");
+
+	// An address of 0 is real: only "used" says whether a place is empty
+	NetAddressCount zero[2];
+
+	memset(zero, 0, sizeof(zero));
+	Check(NetAddressHasRoom(zero, 2, 0, 5000, 1) && !NetAddressHasRoom(zero, 2, 0, 5100, 1), "an address that's all zeroes is counted like any other");
+}
+
 static void TestRoomForAmounts()
 {
 	unsigned int started = 1000;
@@ -479,6 +513,7 @@ int main()
 	TestSoundAddresses();
 	TestWhatAClientMaySpend();
 	TestRoomForAmounts();
+	TestWhoHasAskedLately();
 	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();

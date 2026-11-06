@@ -208,6 +208,12 @@ void CheckForVectorIntersectionWith3dObject(DISPLAYBLOCK *objectPtr, VECTORCH *v
 	ViewpointPositionPtr = viewVectorAlphaPtr;
 	ViewpointDirectionPtr = viewVectorBetaPtr;
 	    
+	// A room near a computer player that the game had no display block left for
+	if (!objectPtr)
+	{
+		return;
+	}
+
 	if (objectPtr->HModelControlBlock)
 	{
 		SECTION_DATA *firstSectionPtr;

@@ -6,6 +6,36 @@
 	],
 	"rows": [
 		{
+			"name": "an address has no limit",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (place->used >= most)\n\t{\n\t\treturn false;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an address never gets room back",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "place->address != address || now - place->secondStarted >= 1000",
+					"to": "place->address != address"
+				}
+			]
+		},
+		{
+			"name": "a new address never takes the oldest place",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "table[i].used == 0 || now - table[i].secondStarted > now - place->secondStarted",
+					"to": "table[i].used == 0"
+				}
+			]
+		},
+		{
 			"name": "an amount that doesn't fit is counted anyway",
 			"changes": [
 				{

@@ -86,7 +86,11 @@ static unsigned int messagesSecond[kMostClients + 1];
 static int messagesUsed[kMostClients + 1];
 
 // How many times a second this game answers people looking for games. Far more than a real LAN needs.
-static const int kMostSessionAnswersEachSecond = 10;
+static const int kMostSessionAnswersEachSecond = 30;
+
+// Anyone can send the question from an address that isn't theirs. This keeps one address from using up the answers meant for everyone.
+static const int kMostSessionAnswersToOneAddressEachSecond = 2;
+static NetAddressCount sessionAskers[32];
 
 // How long a connection has to say who it is. ENet's own handshake has finished by then, so a real client only takes a moment. Without this, seven silent connections would fill the game for good.
 static const unsigned int kMostMillisecondsToBeLetIn = 15000;
@@ -729,7 +733,7 @@ static void Net_CheckForSessionRequest()
 				continue;
 			}
 
-			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
+			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
 			{
 				MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
 

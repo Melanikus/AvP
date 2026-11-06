@@ -2729,7 +2729,10 @@ int Splice_HModels(HMODELCONTROLLER *new_controller, SECTION_DATA *top_section_d
 	GLOBALASSERT(new_top_section);
 	/* Now.  Copy the old top_section_data into the new top section. */
 	*new_top_section = *top_section_data;
+
+	// The new one owns these now. Left in the old one too, each would be freed twice.
 	top_section_data->tac_ptr = NULL;
+	top_section_data->sac_ptr = NULL;
 	/* Correct for new parentage. */
 	new_top_section->My_Parent = NULL;
 

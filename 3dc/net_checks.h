@@ -208,6 +208,48 @@ inline bool NetPoolIsShort(int inUse, int total, int keptBack)
 	return inUse >= total - keptBack;
 }
 
+// WHO HAS ASKED LATELY. For the question anyone can send: one address gets only so many answers a second, under the limit for everyone. The table is small, and the oldest place is taken for an address it hasn't heard of, so flooding from many addresses only pushes each other out.
+struct NetAddressCount
+{
+	unsigned int address;
+	unsigned int secondStarted;
+	int used;
+};
+
+inline bool NetAddressHasRoom(NetAddressCount *table, int tableSize, unsigned int address, unsigned int now, int most)
+{
+	NetAddressCount *place = &table[0];
+
+	for (int i = 0; i < tableSize; i++)
+	{
+		if (table[i].used != 0 && table[i].address == address)
+		{
+			place = &table[i];
+			break;
+		}
+
+		if (table[i].used == 0 || now - table[i].secondStarted > now - place->secondStarted)
+		{
+			place = &table[i];
+		}
+	}
+
+	if (place->used == 0 || place->address != address || now - place->secondStarted >= 1000)
+	{
+		place->address = address;
+		place->secondStarted = now;
+		place->used = 0;
+	}
+
+	if (place->used >= most)
+	{
+		return false;
+	}
+
+	place->used++;
+	return true;
+}
+
 // The same as NetThisSecondHasRoom below, for something counted in amounts, like bytes. What's refused isn't counted.
 inline bool NetThisSecondHasRoomFor(unsigned int now, unsigned int *secondStarted, int *used, int most, int amount)
 {

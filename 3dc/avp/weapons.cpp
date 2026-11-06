@@ -10674,7 +10674,11 @@ void CreateSpearPossiblyWithFragment(DISPLAYBLOCK *dispPtr, VECTORCH *spearPosit
 
 		/* setup dynamics block */
 		dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
-		dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+
+		if (dynPtr)
+		{
+			dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+		}
 		
 		if (!dynPtr) 
 		{

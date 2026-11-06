@@ -441,7 +441,7 @@ void XenoMorphRoomBehaviour (STRATEGYBLOCK * sbptr)
 		{
 			xmrd->timer += NormalFrameTime;
 
-			if (xmrd->timer > (ONE_FIXED << 2))
+			if (xmrd->timer > (ONE_FIXED << 2) && sbptr->SBdptr)
 			{
 				sbptr->SBdptr->ObShape = xmrd->MainShape;
 				sbptr->SBdptr->ObShapeData = GetShapeData(xmrd->MainShape);

@@ -1027,6 +1027,9 @@ static const unsigned short kMostKillsEachSecond = 2;
 static const unsigned short kMostChatLinesEachSecond = 4;
 static const unsigned short kMostExplosionsEachSecond = 24;
 static const unsigned short kMostGibbingsEachSecond = 16;
+static const unsigned short kMostThingsDestroyedEachSecond = 60;
+static const unsigned short kMostHitsEachSecond = 240; // the biggest shotgun fires 32 pellets, and a body can be hit by each
+static const unsigned short kMostLeavingsEachSecond = 2;
 
 static constexpr NetPartRule kNetPartRules[] =
 {
@@ -1037,13 +1040,13 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_PlayerState_Minimal, sizeof(NETMESSAGE_PLAYERSTATE_MINIMAL), false, false },
 	{ NetMT_PlayerState_Medium, sizeof(NETMESSAGE_PLAYERSTATE_MEDIUM), false, false },
 	{ NetMT_PlayerKilled, sizeof(NETMESSAGE_PLAYERKILLED), false, false, kMostKillsEachSecond },
-	{ NetMT_PlayerLeaving, 0, false, false },
+	{ NetMT_PlayerLeaving, 0, false, false, kMostLeavingsEachSecond },
 	{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true },
 	{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true },
 	{ NetMT_LocalRicochet, sizeof(NETMESSAGE_LOCALRICOCHET), false, false },
 	{ NetMT_LocalObjectState, sizeof(NETMESSAGE_LOBSTATE), false, false },
-	{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false },
-	{ NetMT_LocalObjectDestroyed, sizeof(NETMESSAGE_LOBDESTROYED), false, false },
+	{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false, kMostHitsEachSecond },
+	{ NetMT_LocalObjectDestroyed, sizeof(NETMESSAGE_LOBDESTROYED), false, false, kMostThingsDestroyedEachSecond },
 	{ NetMT_ObjectPickedUp, sizeof(NETMESSAGE_OBJECTPICKEDUP), false, false },
 	{ NetMT_InanimateObjectDamaged, sizeof(NETMESSAGE_INANIMATEDAMAGED_HEADER), true, false },
 	{ NetMT_InanimateObjectDestroyed, sizeof(NETMESSAGE_INANIMATEDESTROYED), false, true },
@@ -1063,7 +1066,7 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_AlienAIState, sizeof(NETMESSAGE_ALIENAISTATE), false, true },
 	{ NetMT_AlienAISequenceChange, sizeof(NETMESSAGE_ALIENSEQUENCECHANGE), false, true },
 	{ NetMT_AlienAIKilled, sizeof(NETMESSAGE_ALIENAIKILLED), false, true },
-	{ NetMT_GhostHierarchyDamaged, sizeof(NETMESSAGE_GHOSTHIERARCHYDAMAGED_HEADER), true, false },
+	{ NetMT_GhostHierarchyDamaged, sizeof(NETMESSAGE_GHOSTHIERARCHYDAMAGED_HEADER), true, false, kMostHitsEachSecond },
 	{ NetMT_SpotAlienSound, sizeof(NETMESSAGE_SPOTALIENSOUND), false, true },
 	{ NetMT_LocalObjectDestroyed_Request, sizeof(NETMESSAGE_LOBDESTROYED_REQUEST), false, false },
 	{ NetMT_LastManStanding_Restart, sizeof(NETMESSAGE_LMS_RESTART), false, true },
@@ -5509,12 +5512,17 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 				playerChanged = 1;
 			}
 
+			// One that timed out never said goodbye, so its body is taken away here, even if someone else has its place already
+			if (netGameData.myGameState == NGS_Playing && netGameData.playerData[i].playerId != 0 && netGameData.playerData[i].playerId != messagePtr->players[i].playerId)
+			{
+				RemovePlayersGhosts(netGameData.playerData[i].playerId);
+				Inform_PlayerHasLeft(netGameData.playerData[i].playerId);
+			}
+
 			if (netGameData.myGameState == NGS_Playing && playerChanged)
 			{
 				if (messagePtr->players[i].playerId == 0) {
-					// One that timed out never said goodbye, so its body is taken away here
-					RemovePlayersGhosts(netGameData.playerData[i].playerId);
-					Inform_PlayerHasLeft(netGameData.playerData[i].playerId);
+					// Taken care of above
 				}
 				else if (messagePtr->players[i].startFlag) {
 					Inform_PlayerHasJoined(messagePtr->players[i].playerId);
@@ -6426,6 +6434,14 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 
 	/* get the object id from the message */
 	int objectId = (int)messagePtr->objectId;
+
+	// -1 means a player's own body, which has its own message, and this one could move it, or make a thing with its number. Either way nothing honest sends it.
+	if (objectId == GHOST_PLAYEROBJECTID)
+	{
+		Net_NoteRefused("a ghost message used the number of a player's body");
+		return;
+	}
+
 	STRATEGYBLOCK *sbPtr = FindGhost(senderId, objectId);
 
 	if (!sbPtr)
@@ -6448,13 +6464,7 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
 		type = (AVP_BEHAVIOUR_TYPE)messagePtr->type;
 
-		// Both numbers are the sender's word. -1 means a player's own body, which has its own message, and this is everything else a machine ever sends this way.
-		if (objectId == GHOST_PLAYEROBJECTID)
-		{
-			Net_NoteRefused("a ghost message used the number of a player's body");
-			return;
-		}
-
+		// The kind is the sender's word
 		if (!GhostKindCanBeMadeByMessage(type))
 		{
 			Net_NoteRefused("a ghost message named a kind that isn't on the list");
@@ -7343,12 +7353,26 @@ static void ProcessNetMsg_MakeExplosion(NETMESSAGE_MAKEEXPLOSION *messagePtr)
 		return;
 	}
 
+	// Only these go on the network. Any other would make damaging fire here as if this machine had started it.
+	if (messagePtr->ExplosionID != EXPLOSION_SMALL_NOCOLLISIONS && messagePtr->ExplosionID != EXPLOSION_PREDATORPISTOL && messagePtr->ExplosionID != EXPLOSION_HUGE && messagePtr->ExplosionID != EXPLOSION_PULSEGRENADE)
+	{
+		Net_NoteRefused("an explosion message named a kind no game sends");
+		return;
+	}
+
 	MakeVolumetricExplosionAt(&(messagePtr->Position), messagePtr->ExplosionID);
 }
 
 static void ProcessNetMsg_MakeFlechetteExplosion(NETMESSAGE_MAKEFLECHETTEEXPLOSION *messagePtr)
 {
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// A seed of 0 is how the machine that fired asks for a new one, and tells everyone else
+	if (messagePtr->Seed == 0)
+	{
+		Net_NoteRefused("a flechette message had no seed");
 		return;
 	}
 

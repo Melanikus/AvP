@@ -394,6 +394,12 @@ void AddPreservedSBsToActiveList()
 		{
 			new_sbptr =	CreateActiveStrategyBlock();
 
+			// A level that has used nearly every block loses what was to be carried over, and goes on
+			if (!new_sbptr)
+			{
+				break;
+			}
+
 			*new_sbptr = SB_Preserved[i];
 
 			if(new_sbptr->I_SBtype == I_BehaviourMarinePlayer)

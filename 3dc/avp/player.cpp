@@ -1134,10 +1134,10 @@ static void PlayerIsDead(DAMAGE_PROFILE* damage,int multiplier,VECTORCH* incomin
 
 		/*Note that we need to apply the damage to the corpse before we can determine a
 		suitable death anim sequence*/
-		if(damage)
+		// A corpse with no display block has no model to tear apart, because the display blocks have run out
+		if(damage && playerStatusPtr->MyCorpse->SBdptr)
 		{
-			// A corpse with no display block has no model to tear apart: see below
-			HMODELCONTROLLER* hmodel=playerStatusPtr->MyCorpse->SBdptr ? playerStatusPtr->MyCorpse->SBdptr->HModelControlBlock : NULL;
+			HMODELCONTROLLER* hmodel=playerStatusPtr->MyCorpse->SBdptr->HModelControlBlock;
 			//was the player killed by a jaw attack?
 			if(damage->Id==AMMO_ALIEN_BITE_KILLSECTION && AvP.PlayerType!=I_Alien)
 			{

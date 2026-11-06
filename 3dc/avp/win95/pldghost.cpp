@@ -460,7 +460,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 		if(type==I_BehaviourMarinePlayer||type==I_BehaviourAlienPlayer||type==I_BehaviourPredatorPlayer || type==I_BehaviourAlien)
 		{
 			dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_MARINE_PLAYER);
-			if(type==I_BehaviourAlienPlayer || type==I_BehaviourAlien)
+			if(dynPtr && (type==I_BehaviourAlienPlayer || type==I_BehaviourAlien))
 			{
 				dynPtr->ToppleForce=TOPPLE_FORCE_ALIEN;	
 			}
@@ -1265,6 +1265,11 @@ void MakeGhostNear(STRATEGYBLOCK *sbPtr)
 	if(ghostData->onlyValidFar)
 	{
 		//Far alien ai , don't have enough information to make it near
+		if (sfxPtr)
+		{
+			DeallocateSfxBlock(sfxPtr);
+		}
+
 		return;
 	}
 
@@ -1280,7 +1285,16 @@ void MakeGhostNear(STRATEGYBLOCK *sbPtr)
 	tempModule.m_dptr = NULL; /* this is important */	
 	AllocateModuleObject(&tempModule); 
 	dPtr = tempModule.m_dptr;
-	if(dPtr==NULL) return; /* cannot create displayblock, so leave object "far" */
+	/* cannot create displayblock, so leave object "far" */
+	if(dPtr==NULL)
+	{
+		if (sfxPtr)
+		{
+			DeallocateSfxBlock(sfxPtr);
+		}
+
+		return;
+	}
 
 			
 	sbPtr->SBdptr = dPtr;
