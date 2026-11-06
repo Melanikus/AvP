@@ -22,9 +22,15 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   reading past the end of a file gives zero, not whatever was in memory
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a file inside a fastfile stops at the end of its own bytes, whoever reads it
+
 #include "FileStream.h"
 #include "FastFile.h"
 #include "utilities.h"
+#include <algorithm>
 
 template <class T>
 T swapBytes(T a) {
@@ -213,6 +219,11 @@ bool FileStream::Seek(int64_t offset, eSeek seekType)
 		return false;
 	}
 
+	// reading from a new place leaves a different amount of a fastfile's file to read
+	if (fromFastFile) {
+		memberBytesLeft = (uint32_t)BytesLeft();
+	}
+
 	return true;
 }
 
@@ -231,8 +242,17 @@ DWORD FileStream::ReadBytes(uint8_t *buffer, size_t nBytes)
 {
 	DWORD nBytesRead = 0;
 
+	// A file inside a fastfile ends where its own bytes end. What comes next is some other file, so reading there gives nothing, as it would at the end of any file.
+	if (fromFastFile) {
+		nBytes = (std::min)(nBytes, (size_t)memberBytesLeft);
+	}
+
 	if (::ReadFile(fileHandle, static_cast<LPVOID>(buffer), nBytes, &nBytesRead, NULL) == 0) {
 		return 0;
+	}
+
+	if (fromFastFile) {
+		memberBytesLeft -= nBytesRead;
 	}
 
 	return nBytesRead;
@@ -250,6 +270,16 @@ bool FileStream::WriteString(const char *theString)
 	return WriteBytes(reinterpret_cast<const uint8_t*>(theString), strlen(theString));
 }
 
+// How much of this file is left to read. A file inside a fastfile ends where it ends, not where the fastfile does.
+uint64_t FileStream::BytesLeft()
+{
+	int64_t const place = GetCurrentPos();
+	int64_t const start = fromFastFile ? (int64_t)fileOffset : 0;
+	int64_t const end = (fromFastFile ? (int64_t)fileOffset : 0) + (int64_t)GetFileSize();
+
+	return (place < start || place > end) ? 0 : (uint64_t)(end - place);
+}
+
 uint32_t FileStream::GetFileSize()
 {
 	if (fromFastFile) {
@@ -263,21 +293,21 @@ uint32_t FileStream::GetFileSize()
 // Read
 uint8_t FileStream::GetByte()
 {
-	uint8_t ret;
+	uint8_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(&ret, sizeof(ret));
 	return ret;
 }
 
 uint16_t FileStream::GetUint16LE()
 {
-	uint16_t ret;
+	uint16_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint16_t FileStream::GetUint16BE()
 {
-	uint16_t ret;
+	uint16_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 //	return _byteswap_ushort(ret);
 	return swapBytes<uint16_t>(ret);
@@ -285,21 +315,21 @@ uint16_t FileStream::GetUint16BE()
 
 int32_t FileStream::GetInt32LE()
 {
-	int32_t ret;
+	int32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint32_t FileStream::GetUint32LE()
 {
-	uint32_t ret;
+	uint32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 
 uint32_t FileStream::GetUint32BE()
 {
-	uint32_t ret;
+	uint32_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 //	return _byteswap_ulong(ret);
 	return swapBytes<uint32_t>(ret);
@@ -307,21 +337,21 @@ uint32_t FileStream::GetUint32BE()
 
 uint64_t FileStream::GetUint64LE()
 {
-	uint64_t ret;
+	uint64_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return ret;
 }
 /*
 uint64_t FileStream::GetUint64BE()
 {
-	uint64_t ret;
+	uint64_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(reinterpret_cast<uint8_t*>(&ret), sizeof(ret));
 	return _byteswap_uint64(ret);
 }
 */
 uint8_t FileStream::PeekByte()
 {
-	uint8_t ret;
+	uint8_t ret = 0; // stays zero if the file has nothing left to read
 	ReadBytes(&ret, sizeof(ret));
 	Seek(-1, SeekCurrent);
 	return ret;

@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a new buffer starts out holding no index numbers, instead of whatever number was in that memory
+
 #ifndef _indexBuffer_h_
 #define _indexBuffer_h_
 
@@ -42,7 +45,8 @@ class IndexBuffer
 			_capacity(0),
 			_sizeInBytes(0),
 			_usage(USAGE_DYNAMIC),
-			_isLocked(false)
+			_isLocked(false),
+			_nIndices(0)
 		{
 		}
 

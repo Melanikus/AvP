@@ -1,0 +1,85 @@
+// surface.psh, with two more things: each pixel's normal is tilted by the texture's relief picture, and, for the Relief map lighting, what's read comes from where the line of sight really lands.
+// Used when relief pictures are on. With them off the game uses surface.psh, which knows nothing of any of this. See texture_relief.cpp for where the relief picture comes from, and
+// reliefMarch.fxh for the walk.
+
+#include "reliefMarch.fxh"
+
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float3 ViewPosition : TEXCOORD0;
+    float3 Normal       : TEXCOORD1;
+    float2 Texture      : TEXCOORD2;
+    float3 Keep         : TEXCOORD3;
+    float4 Tangent      : TEXCOORD4;    // the polygon's way along the texture's U, in the world, and in w which way V runs. All zero if it has none
+};
+
+// Pixel shader output structure: one colour for each picture being drawn on
+struct PS_OUTPUT
+{
+    float4 Distance : COLOR0;    // how far away this pixel is
+    float4 Normal   : COLOR1;    // which way it faces, as colours from 0 to 1. Read it back with no normalising: it can be zero
+    float4 Colour   : COLOR2;    // the colour of its texture. An alpha of 1 means a surface is here, and 0 means nothing is
+};
+
+// Global variables
+sampler2D Tex0   : register(s0);
+sampler2D Relief : register(s1);          // the texture's relief picture, or one flat pixel if it has none
+
+
+// Tilts a normal by the relief picture. Everything here is in the world's directions, before the turn to the camera, because which way V runs was worked out
+// against the world's normals. The polygon's flat normal is only the start: on a curved polygon the normal changes from pixel to pixel.
+float3 Tilted(float3 normal, float4 tangent, float3 relief)
+{
+    float3 straightOut, alongU, alongV;
+
+    // A surface with no direction of its own stays that way, and so does a polygon with no tangent.
+    if (!PictureDirections(normal, tangent, straightOut, alongU, alongV))
+    {
+        return normal;
+    }
+
+    return alongU * relief.x + alongV * relief.y + straightOut * relief.z;
+}
+
+
+// Name: Surface pixel shader with relief
+// Type: Pixel shader
+// Desc: Writes down what every light needs to know about this pixel, once, so that no light has to draw the polygon again to find out.
+
+PS_OUTPUT ps_main(in PS_INPUT In)
+{
+    PS_OUTPUT Out;
+
+    // Where the line of sight really lands. With the depth at 0, which is every lighting but Relief map, this is the place it touched the polygon.
+    ReliefHit hit = ReliefMarch(In.Texture, In.ViewPosition, In.Normal, In.Tangent);
+
+    float4 texel = tex2Dgrad(Tex0, hit.place, hit.dx, hit.dy);
+
+    // Stored as 128 + 127 * a number from -1 to 1, so that a flat pixel's 128 comes back as exactly zero: see texture_relief.h.
+    float3 relief = (tex2Dgrad(Relief, hit.place, hit.dx, hit.dy).xyz * 255.0f - 128.0f) / 127.0f;
+
+    // The developers' switch that turns bumps into dents, to tell which a map really is: see view_switches.h.
+    relief.xy *= ReliefSettings.z;
+
+    // A polygon nobody wrote a normal for stays out of the pictures, and keeps the light the game gave it.
+    clip(In.Keep.x - 0.5f);
+
+    // A hole in a texture, such as the gaps in a grate. surface.psh says why this number is what it is.
+    clip(texel.a * In.Keep.y + In.Keep.z - 0.002f);
+
+    // From the spot really seen, so the lights agree with what's on the screen.
+    Out.Distance = float4(hit.viewPosition.z, 0.0f, 0.0f, 1.0f);
+    Out.Colour   = float4(texel.rgb, 1.0f);
+
+    float3 world = Tilted(In.Normal, In.Tangent, relief);
+
+    // The same turn to the camera's directions as surface.psh, and this is still the one place that happens. A zero normal stays zero.
+    float3 normal = world.x * WorldAxes[0].xyz + world.y * WorldAxes[1].xyz + world.z * WorldAxes[2].xyz;
+    float  size   = dot(normal, normal);
+    float3 facing = (size > 0.0f) ? normal / sqrt(size) : float3(0.0f, 0.0f, 0.0f);
+
+    Out.Normal = float4(facing * 0.5f + 0.5f, 1.0f);
+
+    return Out;
+}

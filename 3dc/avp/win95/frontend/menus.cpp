@@ -4,6 +4,8 @@
 //   custom level name) are copied or written with size limits; a save slot whose file path does not fit is
 //   refused; the credits roll stops at the end of credits.txt; a typed letter's width is looked up with an unsigned
 //   byte
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   leaving the page of games found closes what the search has open on the network
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -13,6 +15,7 @@
 #include "pldnet.h"
 #include "Input.h"
 #include "menus.h"
+#include "view_settings.h"
 #include "env_info.h"
 #include "io.h"
 #include "hud_Layout.h"
@@ -61,6 +64,7 @@ extern void AvP_UpdateMenus(void);
 extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
 extern bool Net_UpdateSessionList(int &SelectedItem);
+extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
 extern void DrawMainMenusBackdrop(void);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -344,6 +348,7 @@ int AvP_MainMenus(void)
 
 		SoundSys_Management();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		CheckForLoadGame();
 
@@ -474,6 +479,7 @@ extern int AvP_InGameMenus(void)
 		D3D_FadeDownScreen(ONE_FIXED/8,0);
 		AvP_UpdateMenus();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		return 1;
 	}
@@ -760,6 +766,12 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 {
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
 	AvPMenus.CurrentMenu = menuID;
+
+	// Leaving the page of games found. Nothing else would close what the search has open on the network until the next search.
+	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
+	{
+		Net_StopSearchingForSessions();
+	}
 
 	/* set pointer to the start of the menu's element data */
 	AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default

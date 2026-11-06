@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a heading cut short counts as read",
+			"changes": [
+				{
+					"file": "3dc/wav_chunks.h",
+					"from": "if (stream.ReadBytes(heading, sizeof(heading)) != sizeof(heading))",
+					"to": "if (stream.ReadBytes(heading, sizeof(heading)) == 0)"
+				}
+			]
+		},
+		{
+			"name": "the size is read the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/wav_chunks.h",
+					"from": "(uint32_t)heading[4] | ((uint32_t)heading[5] << 8)",
+					"to": "(uint32_t)heading[5] | ((uint32_t)heading[4] << 8)"
+				}
+			]
+		},
+		{
+			"name": "the data chunk is not recognised",
+			"changes": [
+				{
+					"file": "3dc/wav_chunks.h",
+					"from": "memcmp(heading, \"data\", 4) == 0",
+					"to": "memcmp(heading, \"dat_\", 4) == 0"
+				}
+			]
+		},
+		{
+			"name": "skipping does nothing",
+			"changes": [
+				{
+					"file": "3dc/wav_chunks.h",
+					"from": "if (!stream.SkipBytes(size))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a loader has its own search",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "if (!WavChunks_FindData(fStream, &nAudioBytes)) {",
+					"to": "if (subChunkID != 'data') {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a size too large stops the game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "new(std::nothrow) uint8_t[nAudioBytes]",
+					"to": "new uint8_t[nAudioBytes]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: reading past the end gives what was in memory",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "uint8_t ret = 0;",
+					"to": "uint8_t ret;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the bank goes on after a sound it cannot read",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "if (!ExtractWavFile(soundIndex, fStream))",
+					"to": "if (ExtractWavFile(soundIndex, fStream), false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the bank keeps the name of a sound it could not read",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "GameSounds[soundIndex].wavName.clear();",
+					"to": ""
+				}
+			]
+		}
+	]
+}

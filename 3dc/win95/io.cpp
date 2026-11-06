@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   the debug text shown on screen is written with a size limit, so it always fits
+//   the debug text shown on screen is written with a size limit, so it always fits;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
 
 #include "3dc.h"
 #include <sys\stat.h>
@@ -34,7 +35,7 @@ extern SHAPEHEADER **mainshapelist;
 extern SHAPEHEADER *testpaletteshapelist[];
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern int *Global_ShapeNormals;
-extern int *Global_ShapePoints;
+extern VECTORCH *Global_ShapePoints;
 extern int *ItemPointers[];
 extern int ItemData[];
 extern char projectsubdirectory[];

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a shape can hold a list of facts about its polygons, worked out once when it's loaded.
 #ifndef SHAPE_INCLUDED
 #define SHAPE_INCLUDED
 
@@ -211,6 +214,24 @@ typedef struct shapeheader
 	 and whose shape is this shapeheader*/
 	 /*the shapes are listed in ascending order of complexity*/
 	ADAPTIVE_DEGRADATION_DESC *shape_degradation_array;
+
+	/*one entry for each polygon, worked out once when the shape is loaded: see surface_normals.cpp.
+	 Empty for a model, and for any shape whose corners can change in play*/
+	struct SurfacePolygon *sh_surfacepolygons;
+
+	/*one entry for each polygon, worked out once when the shape is loaded: see surface_tangent.cpp.
+	 All zero for a polygon with no texture. Models have one too, because a model's body part doesn't change shape*/
+	struct SurfaceTangent *sh_surfacetangents;
+
+	/*a number no other list has, or 0 if this shape has no list: see SurfaceNormals_PrepareShape*/
+	unsigned int sh_surfacelistnumber;
+
+	/*how many lists sh_textures has, and how many corners each holds. Both are zero if this shape doesn't say: see static_level.cpp*/
+	int sh_numuvlists;
+	int *sh_uvlistlengths;
+
+	/*how many entries sh_extraitemdata holds, or 0 if this shape doesn't say: see static_level.cpp*/
+	int sh_numextraitems;
 
 } SHAPEHEADER;
 

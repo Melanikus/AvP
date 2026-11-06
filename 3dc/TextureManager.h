@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies
+
 #ifndef _TextureManager_h_
 #define _TextureManager_h_
 
@@ -52,7 +55,7 @@ struct Texture
 	uint16_t		width;
 	uint16_t		height;
 
-	// texture width and height, possible resized up to power-of-two dimension by graphics api (eg 1024x512)
+	// what the graphics card really made, which can be larger than was asked for (eg 1024x512), or smaller, if the card has a limit
 	uint16_t		realWidth;
 	uint16_t		realHeight;
 
@@ -76,6 +79,9 @@ struct Texture
 texID_t Tex_Create         (const std::string &textureName, uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usageType);
 texID_t Tex_AddTexture     (const std::string &textureName, r_Texture texture, uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usage);
 texID_t Tex_CreateFromRIM  (const std::string &fileName);
+texID_t Tex_CreateWithCopies (const std::string &textureName, uint32_t side, uint32_t levels);
+bool Tex_LockCopy   (texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch);
+bool Tex_UnlockCopy (texID_t textureID, uint32_t level);
 texID_t Tex_CreateFromFile (const std::string &filePath);
 texID_t Tex_CheckExists    (const std::string &textureName);
 
@@ -89,6 +95,7 @@ std::string& Tex_GetName	(texID_t textureID);
 const r_Texture& Tex_GetTexture	(texID_t textureID);
 void Tex_GetNamesVector		(std::vector<std::string> &namesArray);
 void Tex_GetDimensions		(texID_t textureID, uint32_t &width, uint32_t &height);
+bool Tex_GetRealSize		(texID_t textureID, uint32_t *width, uint32_t *height);
 
 bool Tex_Lock	(texID_t textureID, uint8_t **data, uint32_t *pitch, enum TextureLock lockType = TextureLock_Normal);
 bool Tex_Unlock	(texID_t textureID);

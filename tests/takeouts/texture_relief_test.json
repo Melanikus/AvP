@@ -1,0 +1,569 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "MAP: kept maps can go past their limit",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (handMadeBytesHeld >= mostHandMadeBytesHeld)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can try any number of files",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "else if (handMadeTries >= mostHandMadeTries)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can spend any number of bytes",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "else if (handMadeBytesTried >= (uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can only spend the limit once over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "(uint64_t)mostHandMadeBytesHeld * 1)"
+				}
+			]
+		},
+		{
+			"name": "MAP: a level can spend the limit thousands of times over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(uint64_t)mostHandMadeBytesHeld * 3)",
+					"to": "(uint64_t)mostHandMadeBytesHeld * 3000)"
+				}
+			]
+		},
+		{
+			"name": "MAP: nothing asks whether another map may be tried",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "!entry.lookedForFile && MayTryAnotherMap()",
+					"to": "!entry.lookedForFile"
+				}
+			]
+		},
+		{
+			"name": "MAP: a texture skipped is marked as looked at",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!entry.lookedForFile && MayTryAnotherMap())\n\t{\n\t\tentry.lookedForFile = true;\n\t\trelief = HandMadePictureFor(picture, kNormalMap);\n\t}",
+					"to": "bool const mayTry = !entry.lookedForFile && MayTryAnotherMap();\n\tentry.lookedForFile = true;\n\n\tif (mayTry)\n\t{\n\t\trelief = HandMadePictureFor(picture, kNormalMap);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "MAP: a try is not counted",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries++;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: reading a file costs nothing",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += fileBytes;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: unpacking a map costs nothing",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += allBytes;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: only a map that is used pays for unpacking",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesTried += allBytes;\n\n\tproblem = ReliefMap_DecodeRim(rim, pixels.get());\n\n\tif (problem != kMapFine)\n\t{\n\t\tLogString(notUsed + ReliefMap_ProblemWords(problem));\n\t\treturn MISSING_TEXTURE;\n\t}\n",
+					"to": "\tproblem = ReliefMap_DecodeRim(rim, pixels.get());\n\n\tif (problem != kMapFine)\n\t{\n\t\tLogString(notUsed + ReliefMap_ProblemWords(problem));\n\t\treturn MISSING_TEXTURE;\n\t}\n\n\thandMadeBytesTried += allBytes;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: a file too long to read is charged as if it was read",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries++;\n",
+					"to": "\thandMadeTries++;\n\thandMadeBytesTried += file.GetFileSize();\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: stopping is said every time",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!stoppedTryingWasLogged)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "MAP: stopping is never said",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!stoppedTryingWasLogged)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level starts with the tries used",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n",
+					"to": "// The next level has its own allowance\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level starts with the bytes spent",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n\t\thandMadeBytesTried = 0;\n",
+					"to": "// The next level has its own allowance\n\t\thandMadeTries = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: the next level can not say it stopped",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\thandMadeBytesTried = 0;\n\t\tstoppedTryingWasLogged = false;\n",
+					"to": "\t\thandMadeBytesTried = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back keeps the tries used",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeBytesHeld = 0;\n\thandMadeTries = 0;\n",
+					"to": "\thandMadeBytesHeld = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back keeps the bytes spent",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\thandMadeTries = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}"
+				}
+			]
+		},
+		{
+			"name": "MAP: giving everything back can not say it stopped",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\thandMadeTries = 0;\n\thandMadeBytesTried = 0;\n\tmapsNotThere = 0;\n}"
+				}
+			]
+		},
+		{
+			"name": "MAP: a map too big for the room left is kept",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (allBytes > mostHandMadeBytesHeld - handMadeBytesHeld)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MAP: too few tries for every picture the game has",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.h",
+					"from": "kMostHandMadeTriesPerLevel = 2048",
+					"to": "kMostHandMadeTriesPerLevel = 1000"
+				}
+			]
+		},
+		{
+			"name": "MAP: so many tries that trying them would take long",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.h",
+					"from": "kMostHandMadeTriesPerLevel = 2048",
+					"to": "kMostHandMadeTriesPerLevel = 8192"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: reads the relief map instead",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(kind == kDepthMap) ? \"_Depth.rim\" : \"_Normal.rim\"",
+					"to": "\"_Normal.rim\""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: the relief map reads the depth map",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "(kind == kDepthMap) ? \"_Depth.rim\" : \"_Normal.rim\"",
+					"to": "\"_Depth.rim\""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: pixels are not made into heights",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "ReliefMap_MakeHeightPixel(pixels.get() + i * 4);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: relief maps are made into heights too",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tsize_t const pixelCount",
+					"to": "\t{\n\t\tsize_t const pixelCount"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: only the top row of pixels is made into heights",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "size_t const pixelCount = (size_t)rim.side * rim.side;",
+					"to": "size_t const pixelCount = (size_t)rim.side;"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: smaller copies are worked out as arrows",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "ReliefMap_MakeSmallerHeightCopy(copy, levelSide, next);",
+					"to": "ReliefMap_MakeSmallerCopy(copy, levelSide, next);"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: relief maps get height copies",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tif (kind == kDepthMap)\n\t\t{\n\t\t\tReliefMap_MakeSmallerHeightCopy",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tReliefMap_MakeSmallerHeightCopy"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: looked for every time",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (entry.lookedForDepth || !MayTryAnotherMap())",
+					"to": "if (!MayTryAnotherMap())"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: never asks whether it may",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (entry.lookedForDepth || !MayTryAnotherMap())",
+					"to": "if (entry.lookedForDepth)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a skipped map shares the first look",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "entry.lookedForDepth = true;",
+					"to": "entry.lookedForDepth = entry.lookedForFile;"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: only read if the texture has no relief map",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tDepthPictureFor(picture, reliefOf[picture]);\n",
+					"to": "\tif (reliefOf[picture].relief == NO_TEXTURE)\n\t{\n\t\tDepthPictureFor(picture, reliefOf[picture]);\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: not read at all",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tDepthPictureFor(picture, reliefOf[picture]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not kept",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tentry.height = height;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not counted as held",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tentry.height = height;\n\t\tpicturesHeld++;\n",
+					"to": "\t\tentry.height = height;\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not handed over",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size() && reliefOf[picture].height != NO_TEXTURE)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: past the end of the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size() && reliefOf[picture].height != NO_TEXTURE)",
+					"to": "if (reliefOf[picture].height != NO_TEXTURE)"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not given back",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(reliefOf[i].height);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: is not counted in the log",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\t\t\t\tdepth++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "DEPTH: counted on a level that did not use it",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\t\tif (entry.levelCounted == levelNumber)\n\t\t\t{\n\t\t\t\tif (entry.height != NO_TEXTURE)\n\t\t\t\t{\n\t\t\t\t\tdepth++;\n\t\t\t\t}\n",
+					"to": "\t\t\tif (entry.height != NO_TEXTURE)\n\t\t\t{\n\t\t\t\tdepth++;\n\t\t\t}\n\n\t\t\tif (entry.levelCounted == levelNumber)\n\t\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a .dds depth map is said once per try, not only for depth",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tNoteDepthFile(pictureName);\n\t}\n",
+					"to": "\tNoteDepthFile(pictureName);\n"
+				}
+			]
+		},
+		{
+			"name": "DEPTH: a .dds depth map is not noticed",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tif (kind == kDepthMap)\n\t{\n\t\tNoteDepthFile(pictureName);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing map goes through an open, which writes an error",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (!FF_FileIsThere(mapName))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing .dds goes through an open, which writes an error",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": " && FF_FileIsThere(depthName))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "QUIET: a missing map is not counted",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tmapsNotThere++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "QUIET: a map that is there is counted as well",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tFileStream file;\n\tfile.Open(mapName, FileStream::FileRead);\n",
+					"to": "\tmapsNotThere++;\n\tFileStream file;\n\tfile.Open(mapName, FileStream::FileRead);\n"
+				}
+			]
+		},
+		{
+			"name": "QUIET: the next level keeps the count",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tstoppedTryingWasLogged = false;\n\t\tmapsNotThere = 0;\n",
+					"to": "\t\tstoppedTryingWasLogged = false;\n"
+				}
+			]
+		},
+		{
+			"name": "QUIET: giving everything back keeps the count",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\tstoppedTryingWasLogged = false;\n\tmapsNotThere = 0;\n}",
+					"to": "\tstoppedTryingWasLogged = false;\n}"
+				}
+			]
+		},
+		{
+			"name": "QUIET: the log line leaves the count out",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\" depth maps, and \"\n\t\t\t+ std::to_string(mapsNotThere) + \" map files it looked for aren't there\");",
+					"to": "\" depth maps\");"
+				}
+			]
+		},
+		{
+			"name": "FORGET: a number past the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size())\n\t{\n\t\tEntry const entry = reliefOf[picture];",
+					"to": "if (true)\n\t{\n\t\tEntry const entry = reliefOf[picture];"
+				}
+			]
+		},
+		{
+			"name": "FORGET: nothing is forgotten",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\treliefOf[picture] = none;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FORGET: the relief map stays",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(entry.relief);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FORGET: the depth map stays",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "\t\tTex_Release(entry.height);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: letting a texture go keeps its maps",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\t\ttextureRelief.ForgetPicture(textureID);\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

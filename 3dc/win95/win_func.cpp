@@ -1,4 +1,6 @@
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the game can be closed from the taskbar while it isn't the active window
 #ifdef _WIN32 // windows only
 /****
 
@@ -12,6 +14,7 @@ not project specific.
 // Externs
 
 extern bool bActive;
+extern bool bRunning;
 extern int16_t MouseWheelStatus;
 
 void CheckForWindowsMessages(void)
@@ -40,7 +43,7 @@ void CheckForWindowsMessages(void)
 			Sleep(0);
 		}
 	}
-	while (!bActive);
+	while (!bActive && bRunning);    // a player can close the game from the taskbar while it isn't active
 }
 
 #endif // ifdef _WIN32

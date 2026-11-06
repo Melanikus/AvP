@@ -1,0 +1,31 @@
+// pixel.psh, for Relief map only: the same sum, with the texture read at the place the march found. This is what lets a relief map show under the level's own baked light, which comes in
+// the Diffuse colour of each corner. Without this, only the lights added per pixel would see any depth. See DrawSolidsWithHeights in d3d_render.cpp.
+
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float4 Diffuse      : COLOR0;
+    float4 Specular     : COLOR1;
+    float2 Texture      : TEXCOORD0;
+    float3 ViewPosition : TEXCOORD1;
+    float3 Normal       : TEXCOORD2;
+    float4 Tangent      : TEXCOORD3;
+};
+
+// Global variables. reliefMarch.fxh holds the rest
+sampler2D Tex0 : register(s0);
+
+#include "reliefMarch.fxh"
+
+
+// Name: Relief map main pixel shader
+// Type: Pixel shader
+// Desc: Follows the eye's line down through the height picture, to find which part of the texture this pixel really shows, and then lights it just as pixel.psh does. A polygon with a
+// zero tangent, or a texture with no depth, stays where it is.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    ReliefHit hit = ReliefMarch(In.Texture, In.ViewPosition, In.Normal, In.Tangent);
+
+    return tex2Dgrad(Tex0, hit.place, hit.dx, hit.dy) * In.Diffuse + In.Specular;
+}

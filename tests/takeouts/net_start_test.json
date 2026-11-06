@@ -1,0 +1,308 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a message with nobody to send it to is not stopped",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!ServerPeer)\n\t{\n\t\tstatic unsigned long long nobodyToSendTo",
+					"to": "if (false)\n\t{\n\t\tstatic unsigned long long nobodyToSendTo"
+				}
+			]
+		},
+		{
+			"name": "the log says so every time",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (LogThisDrop(nobodyToSendTo))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "starting the game opens the socket",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Con_AddCommand(\"disconnect\", Net_Disconnect);",
+					"to": "Con_AddCommand(\"disconnect\", Net_Disconnect); OpenDiscoverySocket();"
+				}
+			]
+		},
+		{
+			"name": "an open socket is opened again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (ENET_SOCKET_NULL != broadcastSocket)\n\t{\n\t\treturn true;",
+					"to": "if (false)\n\t{\n\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a socket that cannot be made says nothing",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Con_PrintError(\"OpenDiscoverySocket - Couldn't create broadcast socket\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it listens on the wrong port",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "thisHost.port = broadcastPort;",
+					"to": "thisHost.port = 1;"
+				}
+			]
+		},
+		{
+			"name": "a socket that cannot listen says nothing",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Con_PrintError(\"OpenDiscoverySocket - Couldn't bind broadcast socket\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a socket that cannot listen stays open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t\treturn false;",
+					"to": "broadcastSocket = ENET_SOCKET_NULL;\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "closing forgets to say it is closed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t}\n}",
+					"to": "enet_socket_destroy(broadcastSocket);\n\t}\n}"
+				}
+			]
+		},
+		{
+			"name": "closing never closes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "enet_socket_destroy(broadcastSocket);\n\t\tbroadcastSocket = ENET_SOCKET_NULL;\n\t}\n}",
+					"to": "broadcastSocket = ENET_SOCKET_NULL;\n\t}\n}"
+				}
+			]
+		},
+		{
+			"name": "a search stopped still looks as if it is going on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "sessionCheckTimer = 0;\n\n\tif (AvP.Network != I_Host)",
+					"to": "if (AvP.Network != I_Host)"
+				}
+			]
+		},
+		{
+			"name": "a search stopping closes a host out of being found",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host)\n\t{\n\t\tCloseDiscoverySocket();",
+					"to": "if (true)\n\t{\n\t\tCloseDiscoverySocket();"
+				}
+			]
+		},
+		{
+			"name": "a search stopping leaves the socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host)\n\t{\n\t\tCloseDiscoverySocket();",
+					"to": "if (false)\n\t{\n\t\tCloseDiscoverySocket();"
+				}
+			]
+		},
+		{
+			"name": "a search with its time up leaves the socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Net_StopSearchingForSessions();\n\t\treturn false;",
+					"to": "sessionCheckTimer = 0;\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a search lasts longer than it should",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "timeGetTime() - sessionCheckTimer >= sessionCheckTimeout",
+					"to": "timeGetTime() - sessionCheckTimer > sessionCheckTimeout"
+				}
+			]
+		},
+		{
+			"name": "no search looks like a search just after the machine starts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (sessionCheckTimer == 0 || timeGetTime()",
+					"to": "if (timeGetTime()"
+				}
+			]
+		},
+		{
+			"name": "a search goes on without a socket",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!OpenDiscoverySocket())\n\t{\n\t\treturn;\n\t}\n\n\tENetAddress destAddress;",
+					"to": "OpenDiscoverySocket();\n\n\tENetAddress destAddress;"
+				}
+			]
+		},
+		{
+			"name": "a search that cannot ask stays open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Con_PrintError(\"Couldn't send broadcast packet\");\n\t\t\tNet_StopSearchingForSessions();",
+					"to": "Con_PrintError(\"Couldn't send broadcast packet\");"
+				}
+			]
+		},
+		{
+			"name": "a host with no socket looks at it anyway",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (ENET_SOCKET_NULL == broadcastSocket)\n\t{\n\t\treturn;\n\t}\n\n\tenet_uint32 events",
+					"to": "enet_uint32 events"
+				}
+			]
+		},
+		{
+			"name": "hosting loses the last ENet host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "so that's being closed first\");\n\t\tenet_host_destroy(host);",
+					"to": "so that's being closed first\");"
+				}
+			]
+		},
+		{
+			"name": "a host thinks it still has a server",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// A host has no server to send to. Whatever was here belonged to the last game.\n\tServerPeer = NULL;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a host cannot be found",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "OpenDiscoverySocket();\n\n\t\t\t// create session",
+					"to": "// create session"
+				}
+			]
+		},
+		{
+			"name": "leaving says nothing to the server",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && ServerPeer)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "leaving with no server is an error",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && ServerPeer)",
+					"to": "if (AvP.Network != I_Host)"
+				}
+			]
+		},
+		{
+			"name": "a goodbye that cannot be sent stops it leaving",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "Con_PrintError(\"Net_Disconnect - Problem sending destroy player system message!\");",
+					"to": "Con_PrintError(\"Net_Disconnect - Problem sending destroy player system message!\"); return;"
+				}
+			]
+		},
+		{
+			"name": "leaving does not forget the server",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// The ENet host owned this, and has just freed it\n\tServerPeer = NULL;\n\n\tsessionCheckTimer = 0;",
+					"to": "sessionCheckTimer = 0;"
+				}
+			]
+		},
+		{
+			"name": "leaving leaves a search going on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "sessionCheckTimer = 0;\n\tCloseDiscoverySocket();",
+					"to": "CloseDiscoverySocket();"
+				}
+			]
+		},
+		{
+			"name": "leaving leaves the socket open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "sessionCheckTimer = 0;\n\tCloseDiscoverySocket();",
+					"to": "sessionCheckTimer = 0;"
+				}
+			]
+		},
+		{
+			"name": "joining again does not forget the server",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// The ENet host owned this, and has just freed it\n\tServerPeer = NULL;\n\n\tServerAddress.host",
+					"to": "ServerAddress.host"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: leaving the page of games leaves the search going",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}

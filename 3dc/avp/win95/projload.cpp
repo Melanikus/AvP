@@ -7,6 +7,9 @@
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
 //   number is left out; when two sounds have the same number, the earlier one is given back
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   each of a level's own shapes gets its list of polygon facts once it's finished.
+//   a shape records how many baked colours it holds
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -32,6 +35,8 @@
 #include "chunk_sprites.hpp"
 #include <math.h>
 #include "chunk_waypoint.hpp"
+#include "texture_relief.h"
+#include "view_switches.h"
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
 #include "sequences.h"
@@ -57,6 +62,8 @@
 #include "TextureManager.h"
 #include "utilities.h"
 #include "logString.h"
+#include "surface_normals.h"
+#include "shadow_reach.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -1419,6 +1426,8 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 				return FALSE;
 			}
 
+			mainshapelist[osnp->sh_num]->sh_numextraitems = svic->num_vertices;
+
 			for (int vn = 0; vn < svic->num_vertices; vn++) 
 			{
 				//convert coloured light to a brightness value
@@ -1910,6 +1919,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 					int start_shape_no = list_pos;
 					#endif
 
+					// An imported shape, such as a crate or a console, gets its list of polygon facts too. Several objects can share the
+					// shape, at different angles, and that's fine: the list is in the shape's own numbers, and each object turns it.
+					if ((flags & CCF_ENVIRONMENT) && !rt_temp.mc)
+					{
+						SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+					}
+
 					int AnimationShape=-1;
 					if (shplif()->lookup_single_child("TEXTANIM"))
 					{
@@ -1947,6 +1963,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 						int start_shape_no = list_pos;
 						#endif
 
+						// A level's own shape gets its list of polygon facts here, now that it's finished. Models never come through here. A door
+						// that morphs doesn't get one, because its polygons are swapped for another shape's as it's made.
+						if ((flags & CCF_ENVIRONMENT) && !mc)
+						{
+							SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+						}
+
 						//see if object has prelighting data
 						Shape_Vertex_Intensities_Chunk * svic = 0;
 
@@ -1972,6 +1995,8 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 								memoryInitialisationFailure = 1;
 								return FALSE;
 							}
+
+							mainshapelist[list_pos]->sh_numextraitems = svic->num_vertices;
 
 							for (int vn = 0; vn < svic->num_vertices; vn++) 
 							{
@@ -2169,6 +2194,19 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 				mod->m_minx=world_min.vx - mod->m_world.vx;
 				mod->m_miny=world_min.vy - mod->m_world.vy;
 				mod->m_minz=world_min.vz - mod->m_world.vz;
+
+				// The shadow pass asks about this ball many times a frame, so it's worked out once, here. These numbers come from the level
+				// file, so they're made floats first: adding whole numbers that big can overflow.
+				float const smallest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_minx, (float)mod->m_world.vy + (float)mod->m_miny, (float)mod->m_world.vz + (float)mod->m_minz
+				};
+				float const largest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_maxx, (float)mod->m_world.vy + (float)mod->m_maxy, (float)mod->m_world.vz + (float)mod->m_maxz
+				};
+
+				ShadowReach_BallRoundBox(smallest, largest, mod->m_ball);
 			}
 
 			Chunk * pChunk = o_chunk_array[i]->lookup_single_child ("MODULEDT");
@@ -2705,11 +2743,25 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 		);
 */
 	ingameTextureList.push_back(textureID);
+
+	// A picture of the shape its painting shows, for the lights to use. A level loaded with a lighting that draws no maps reads no map, so a stranger's file stays unread, and the first run of the
+	// game is the old game. Switching to a lighting with maps mid-level draws flat until the next level. -dev reads them anyway, because a developer comparing lightings on one spot wants
+	// them all there on the first press. It's a choice made on the command line, and a player without it is unaffected.
+	extern int DevMode;
+	extern int LightingNow;
+
+	if (DevMode || Lighting_UsesMaps(LightingNow))
+	{
+		textureRelief.Build(textureID);
+	}
+
 	return textureID;
 }
 
 void release_rif_bitmaps()
 {
+	textureRelief.ReleaseAll();
+
 	for (size_t i = 0; i < ingameTextureList.size(); i++)
 	{
 		Tex_Release(ingameTextureList[i]);

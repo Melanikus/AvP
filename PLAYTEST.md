@@ -59,6 +59,14 @@ from source.
 - The security scans have limits. Microsoft's D3DX library comes as a binary, so it can't be scanned. Four reports against
   libvorbis are accepted until a set date: see `.github/snyk-accepted.json`.
 
+## Turning on the new look
+A new install looks the way the game always has: the new lighting and shadows are off until you choose them. They're under **Rendering options** in the audio and video options, in the main menus and while playing:
+- **Rendering:** Gouraud, Per-pixel (flat), Per-pixel + normals, or Relief map.
+- **Shadows:** yes or no.
+- **Auto-generate maps:** works out maps for textures that have none. Turning it on takes effect from the next level.
+
+What you choose is saved in `AliensVsPredator.cfg`. To put them on keys, type these in the console: `BIND <key> LIGHTING` moves on to the next rendering, and `BIND <key> SHADOWS` switches shadows. Those change the game until it closes, and only the menu saves.
+
 ## What may look different
 The game now refuses damaged or unexpected files instead of reading them, so you may meet these:
 - **A level that won't load, or loads with parts missing.** Every level from the game should load as it always did. If one
