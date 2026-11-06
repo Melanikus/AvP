@@ -297,6 +297,7 @@ static void CheckTheLog()
 	Check(Has(say, "lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen"), "passed over with no place left is what competed and didn't get one");
 	Check(Has(say, "%d in reach; chosen %d steady and %d brief, of %d and %d allowed"), "each report says how many were in reach and chosen");
 	Check(Has(say, "%d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark"), "and which were passed over and why");
+	Check(Has(say, "%d at the camera, %d dark, %d lighting nothing on screen;") && Has(say, "lightsThisFrame.dark, lightsThisFrame.lightNothing,"), "and how many light nothing that's on screen");
 	Check(Has(say, "held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach"), "and how many the rule held back");
 	Check(Has(say, "lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn ? \"ON\" : \"OFF\", lightsThisFrame.lampsInReach,"), "with the right numbers in the right places");
 	Check(Has(say, "%d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame"), "and what it cost");

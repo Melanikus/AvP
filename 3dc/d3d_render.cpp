@@ -27,10 +27,10 @@
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
 //   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
 //   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
-
-// Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
 //   the SHADOWEVENGAP console command switches -shadowevengap while the game runs, and the tag always says which it is
+//   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
+//   a frame with no light chosen has its world turned down like any other, so the screen doesn't jump brighter when the last light leaves the list
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -80,6 +80,7 @@
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
+#include "light_choice.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
 #if __has_include("build_commit.h")
@@ -3803,6 +3804,8 @@ int LightingNow = kLightingGouraud;   // ViewSettings_Load sets these two from t
 // blocked, so each light reaches everything in its range. The surface pictures, the chosen lights and the dimming of the world all go on as they do with it at 1.
 int ShadowVolumesOn = 0;
 int ShadowAmbientOn = 0;       // SHADOWAMBIENT, -shadowambient: whether the map's lights with no corona can cast shadows. See light_choice.h
+LightChoiceSamples lightChoiceSamples;  // what's on screen, for choosing the lights that show the most
+int ShadowLightsByNearest = 0;  // -shadownearest: chooses lights by distance, as the game used to, so the two can be compared on one build
 int ToyShadowsMaxLights = kToyMostSteadyLights;  // -shadowlights=N, 1 to 20: how many steady lights
 int ToyShadowsMaxBrief = kToyMostBriefLights;    // -shadowbrief=N, 0 to 12: how many brief lights on top of those, such as muzzle flashes and explosions
 int ShadowsPretendNoFloatBlend = 0;              // -shadownofloatblend: what the game does on a card that can't add to a float picture, on any card, so it can be tried
@@ -4161,6 +4164,12 @@ void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *own
 		}
 
 		return;
+	}
+
+	// What's only there to cast isn't on screen. This comes after the limit above, so that the time this takes has a limit too.
+	if (kind != kToyCasterCastOnly)
+	{
+		LightChoice_AddPolygon(&lightChoiceSamples, pts, count, d3d.matProjection._11, d3d.matProjection._22);
 	}
 
 	int const firstPoint = toyNumCasterPoints;
@@ -6908,6 +6917,7 @@ static const ShadowTuningNumber shadowTuning[] =
 	{ &ToyShadowsFlareCap, ToyShadowsFlareCap },
 	{ &ToyShadowsWorld, ToyShadowsWorld },
 	{ &ToyShadowsTest, ToyShadowsTest },
+	{ &ShadowLightsByNearest, ShadowLightsByNearest },
 	{ &ToyShadowsMaxLights, ToyShadowsMaxLights },
 	{ &ToyShadowsMaxBrief, ToyShadowsMaxBrief },
 	{ &ShadowsPretendNoFloatBlend, ShadowsPretendNoFloatBlend },
@@ -7287,6 +7297,21 @@ static void ViewSwitches_ApplyAsked()
 	}
 }
 
+// A frame with no light on the list has nothing for the shadow pass to do, but its world still gets turned down like any other frame's. Without this, the whole screen would jump brighter each time
+// the last light left the list, and back when one came. The game caches its render states, so nothing is changed here unless it can be put back: that one frame then stays bright.
+static void ToyDimWorldWithNoLights()
+{
+	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
+
+	if (FAILED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))
+	{
+		return;
+	}
+
+	ToyDimWorld(device);
+	savedCardSettings->Apply();
+}
+
 static void ToyShadows_Draw()
 {
 	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
@@ -7393,6 +7418,11 @@ static void ToyShadows_Draw()
 
 	if (!report.lights)
 	{
+		if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)
+		{
+			ToyDimWorldWithNoLights();
+		}
+
 		if (ShadowShootOn)
 		{
 			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, ToyWorldWasDrawn() ? "this frame has no lights chosen" : "nothing on this frame casts a shadow"));
