@@ -419,9 +419,19 @@ void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32)
 
 static enet_uint32 enetClock = 0;
 
+// What the address page holds. networking.cpp asks it on a search.
+char IPAddressString[16] = "";
+
 enet_uint32 enet_time_get()
 {
 	return enetClock;
+}
+
+int enet_address_set_host_ip(ENetAddress *address, const char *)
+{
+	address->host = 0x0100007F;
+
+	return 0;
 }
 
 int enet_address_get_host_ip(const ENetAddress *, char *hostName, size_t nameLength)
@@ -1178,6 +1188,26 @@ static void TestWhoDoesntGetIn()
 	EndTheGame();
 }
 
+// Nobody can use the host to reach everyone else as fast as they like
+static void TestTooManyMessages()
+{
+	HostWithClients(2);
+
+	NetID const one = IDOf(1);
+
+	enetClock = 200000;
+	TakeEverything();
+	sentMessages.clear();
+
+	for (int i = 0; i < 1500; i++)
+	{
+		Hears(1, AGameMessage(one));
+	}
+
+	Check(sentMessages.size() == 1000, "a client's messages are passed on up to the limit, and no further");
+	EndTheGame();
+}
+
 static void TestANameWithNoEnd()
 {
 	HostWithClients(0);
@@ -1593,8 +1623,8 @@ static void TestTheTableOfMessageParts()
 	Check(CountOf(pldnet, "if (!NetDamageMultipleIsGood(multiple))") == 3, "all three damage messages check how many times over a hit counts");
 	Check(Has(ReadSourceFile("3dc/avp/weapons.cpp"), "while (Integer > 0) {"), "and the loop can't run away anyway");
 	Check(Has(pldnet, "if (NetNumberFitsTable(killerType, 3))"), "the computer's aliens don't score past the three species");
-	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond, &newGhostsUsed, kMostNewGhostsEachSecond)"), "only so many new ghosts a second");
-	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond, &droppedGunsUsed, kMostDroppedGunsEachSecond)"), "and dropped guns");
+	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond[sender], &newGhostsUsed[sender], kMostNewGhostsEachSecond)"), "only so many new ghosts a second, for each player");
+	Check(Has(pldnet, "NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond[sender], &droppedGunsUsed[sender], kMostDroppedGunsEachSecond)"), "and dropped guns");
 	Check(Has(ReadSourceFile("3dc/avp/pvisible.cpp"), "sbPtr = CreateActiveStrategyBlock();\n\n\tif(!sbPtr) return 0;\n\n\tInitialiseSBValues(sbPtr);"), "running out of blocks is checked before one is used");
 	Check(Has(makeGhost, "if (lightPtr)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlightPtr->LightBright"), "a flare with no light is fine");
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
@@ -1747,6 +1777,7 @@ int main()
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();
 	TestWhoDoesntGetIn();
+	TestTooManyMessages();
 	TestANameWithNoEnd();
 	TestPassingThingsOn();
 	TestNoRoom();

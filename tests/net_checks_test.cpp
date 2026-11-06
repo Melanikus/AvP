@@ -274,8 +274,30 @@ static void TestDamageMultiples()
 	Check(!NetDamageMultipleIsGood(-2147483647 - 1), "however large");
 }
 
+static void TestTypedAddresses()
+{
+	char const *const good[] = { "127.0.0.1", "192.168.1.20", "0.0.0.0", "255.255.255.255" };
+	char const *const bad[] = { "", "localhost", "127.0.0", "127.0.0.1.5", "256.0.0.1", "1.2.3.4 ", " 1.2.3.4", "1..2.3", "1.2.3.", "1234.1.1.1", "0x7f.0.0.1", "1.2.3.4/8", "-1.2.3.4" };
+
+	for (char const *address : good)
+	{
+		Check(NetTypedAddressIsGood(address, 17), address);
+	}
+
+	for (char const *address : bad)
+	{
+		Check(!NetTypedAddressIsGood(address, 17), address);
+	}
+
+	char noEnd[4] = { '1', '.', '2', '.' };
+
+	Check(!NetTypedAddressIsGood(noEnd, sizeof(noEnd)), "one that runs off the end of its room isn't read past it");
+	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
+}
+
 int main()
 {
+	TestTypedAddresses();
 	TestDamageMultiples();
 	TestAnswersInASecond();
 	TestAmmunitionNumbers();

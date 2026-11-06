@@ -83,6 +83,7 @@ enet_uint32 enet_time_get();
 void enet_peer_disconnect_now(ENetPeer *peer, enet_uint32 data);
 
 int enet_address_get_host_ip(const ENetAddress *address, char *hostName, size_t nameLength);
+int enet_address_set_host_ip(ENetAddress *address, const char *hostName);
 
 ENetSocket enet_socket_create(int type);
 int enet_socket_set_option(ENetSocket socket, int option, int value);

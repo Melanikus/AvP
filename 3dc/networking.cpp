@@ -71,6 +71,18 @@ static uint8_t packetBuffer[kPacketBufferSize];
 // A game has 8 players at most, and the host is one of them
 static const size_t kMostClients = 7;
 
+// As many letters as the address page takes, with room for its end
+static const size_t kMostTypedAddressLetters = 16;
+
+// When this search last asked. A broadcast can get lost on a real network, so it asks again each second.
+static unsigned int sessionLastAskedAt = 0;
+static void AskEveryoneAboutGames();
+
+// How many messages one client may send in a second. A game sends one a frame, and this is far above any frame rate that matters. Past it they're dropped, so a flood can't use the host to reach everyone else.
+static const int kMostMessagesEachSecond = 1000;
+static unsigned int messagesSecond[kMostClients + 1];
+static int messagesUsed[kMostClients + 1];
+
 // How many times a second this game answers people looking for games. Far more than a real LAN needs.
 static const int kMostSessionAnswersEachSecond = 10;
 
@@ -200,6 +212,15 @@ static void Net_AddSession(SessionDescription &session)
 	session.levelName[kLevelNameSize - 1]     = '\0';
 	session.sessionName[kSessionNameSize - 1] = '\0';
 
+	// A game that answers twice is one game
+	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
+	{
+		if (memcmp(&SessionData[i].Guid, &session.guidInstance, sizeof(session.guidInstance)) == 0)
+		{
+			return;
+		}
+	}
+
 	char *name = SessionData[NumberOfSessionsFound].Name;
 	const size_t nameSize = sizeof(SessionData[NumberOfSessionsFound].Name);
 
@@ -305,6 +326,12 @@ bool Net_UpdateSessionList(int &SelectedItem)
 	{
 		Net_StopSearchingForSessions();
 		return false;
+	}
+
+	if (timeGetTime() - sessionLastAskedAt >= 1000)
+	{
+		sessionLastAskedAt = timeGetTime();
+		AskEveryoneAboutGames();
 	}
 
 	GUID OldSessionGuids[MAX_NO_OF_SESSIONS];
@@ -928,6 +955,14 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 		return false;
 	}
 
+	size_t const connection = (size_t)(from - host->peers);
+
+	if (connection <= kMostClients && !NetThisSecondHasRoom(enet_time_get(), &messagesSecond[connection], &messagesUsed[connection], kMostMessagesEachSecond))
+	{
+		LogDroppedMessage("a client sent more messages in a second than any game does");
+		return false;
+	}
+
 	// This comes before it's passed on, because everyone it reaches would believe it. No client speaks for the host.
 	if (!Net_GameMessageIsGood(data, size, false))
 	{
@@ -1299,22 +1334,11 @@ NetID Net_GetNextPlayerID()
 	return lastPlayerID;
 }
 
-void Net_FindAvPSessions()
+// Asks whoever is at this address about their game.
+static bool AskAboutGames(enet_uint32 host)
 {
-	// stop this function being called if we're already searching.
-	// this is a bit hacky but needs to be here for the moment due to
-	// the horrible menu system
-	if (sessionCheckTimer != 0) {
-		return;
-	}
-
-	if (!OpenDiscoverySocket())
-	{
-		return;
-	}
-
 	ENetAddress destAddress;
-	destAddress.host = ENET_HOST_BROADCAST;
+	destAddress.host = host;
 	destAddress.port = broadcastPort;
 
 	// create broadcast header
@@ -1332,23 +1356,48 @@ void Net_FindAvPSessions()
 	buf.data = &newHeader;
 	buf.dataLength = sizeof(MessageHeader);
 
-	for (int i = 0; i < 5; i++) 
+	return enet_socket_send(broadcastSocket, &destAddress, &buf, 1) >= 0;
+}
+
+// Everyone on this network, and the address the player typed, if it's one.
+static void AskEveryoneAboutGames()
+{
+	extern char IPAddressString[];
+
+	if (!AskAboutGames(ENET_HOST_BROADCAST))
 	{
-		int ret = enet_socket_send(broadcastSocket, &destAddress, &buf, 1);
-		if (0 == ret) {
-			// blocking - wait 1 second then try again (for a maximum of 5 seconds)
-			Sleep(1000);
-		}
-		else if (0 > ret) {
-			Con_PrintError("Couldn't send broadcast packet");
-			Net_StopSearchingForSessions();
-			return;
-		}
-		else {
-			Con_PrintDebugMessage("Sent broadcast packet");
-			break;
+		Con_PrintError("Couldn't send broadcast packet");
+	}
+
+	if (NetTypedAddressIsGood(IPAddressString, kMostTypedAddressLetters))
+	{
+		ENetAddress typed;
+
+		if (enet_address_set_host_ip(&typed, IPAddressString) == 0 && !AskAboutGames(typed.host))
+		{
+			Con_PrintError("Couldn't ask the address that was typed");
 		}
 	}
+}
+
+void Net_FindAvPSessions()
+{
+	// stop this function being called if we're already searching.
+	// this is a bit hacky but needs to be here for the moment due to
+	// the horrible menu system
+	if (sessionCheckTimer != 0) {
+		return;
+	}
+
+	if (!OpenDiscoverySocket())
+	{
+		return;
+	}
+
+	// A new search starts with an empty list, or games long gone would stay on it, and it only holds so many
+	NumberOfSessionsFound = 0;
+	sessionLastAskedAt = timeGetTime();
+	AskEveryoneAboutGames();
 
 	sessionCheckTimer = timeGetTime();
 }

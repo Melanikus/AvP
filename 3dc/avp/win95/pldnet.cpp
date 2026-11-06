@@ -325,7 +325,7 @@ static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messageP
 static void ProcessNetMsg_SpotAlienSound(NETMESSAGE_SPOTALIENSOUND *messagePtr, NetID senderId);
 static void ProcessNetMsg_LocalObjectDestroyed_Request(NETMESSAGE_LOBDESTROYED_REQUEST *messagePtr, NetID senderId);
 static void ProcessNetMsg_ScoreChange(NETMESSAGE_SCORECHANGE *messagePtr);
-static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr);
+static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetID senderId);
 static void ProcessNetMsg_Gibbing(NETMESSAGE_GIBBING *messagePtr, NetID senderId);
 static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId);
 static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr);
@@ -1118,10 +1118,12 @@ bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost
 // How many new things other machines may make here in a second. Far more than a real battle, and small enough that the blocks they use can't run out before the first ones time out.
 static const int kMostNewGhostsEachSecond = 60;
 static const int kMostDroppedGunsEachSecond = 16;
-static unsigned int newGhostsSecond = 0;
-static int newGhostsUsed = 0;
-static unsigned int droppedGunsSecond = 0;
-static int droppedGunsUsed = 0;
+
+// Each player has their own count, so one flooding can't stop anyone else's ghosts appearing
+static unsigned int newGhostsSecond[NET_MAXPLAYERS];
+static int newGhostsUsed[NET_MAXPLAYERS];
+static unsigned int droppedGunsSecond[NET_MAXPLAYERS];
+static int droppedGunsUsed[NET_MAXPLAYERS];
 
 static bool GhostKindCanBeMadeByMessage(AVP_BEHAVIOUR_TYPE type)
 {
@@ -1538,7 +1540,7 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			case (NetMT_CreateWeapon):
 			{
-				ProcessNetMsg_CreateWeapon((NETMESSAGE_CREATEWEAPON *)subMessagePtr);
+				ProcessNetMsg_CreateWeapon((NETMESSAGE_CREATEWEAPON *)subMessagePtr, senderId);
 				subMessagePtr += sizeof(NETMESSAGE_CREATEWEAPON);
 				break;
 			}
@@ -6458,7 +6460,9 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		}
 
 		// A flood of these would use up the game's 1000 blocks, which everything in a level needs
-		if (!NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond, &newGhostsUsed, kMostNewGhostsEachSecond))
+		int const sender = PlayerIdInPlayerList(senderId);
+
+		if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond[sender], &newGhostsUsed[sender], kMostNewGhostsEachSecond))
 		{
 			return;
 		}
@@ -8157,7 +8161,7 @@ static void ProcessNetMsg_SpotAlienSound(NETMESSAGE_SPOTALIENSOUND *messagePtr, 
 	PlayAlienSound((int)messagePtr->alienType, (int)messagePtr->soundCategory, messagePtr->pitch, NULL, &position);
 }
 
-static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr)
+static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetID senderId)
 {
 	// if we're not playing, ignore it
 	if (netGameData.myGameState != NGS_Playing) {
@@ -8170,7 +8174,9 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr)
 	}
 
 	// Each one lasts 20 seconds and uses one of the game's 1000 blocks
-	if (!NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond, &droppedGunsUsed, kMostDroppedGunsEachSecond))
+	int const sender = PlayerIdInPlayerList(senderId);
+
+	if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond[sender], &droppedGunsUsed[sender], kMostDroppedGunsEachSecond))
 	{
 		return;
 	}

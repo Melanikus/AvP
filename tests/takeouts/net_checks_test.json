@@ -6,6 +6,46 @@
 	],
 	"rows": [
 		{
+			"name": "a typed address part can be any size",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (digits > 3 || value > 255)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a typed address can read past its room",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "while (at < most && text[at] >= '0' && text[at] <= '9')",
+					"to": "while (text[at] >= '0' && text[at] <= '9')"
+				}
+			]
+		},
+		{
+			"name": "a typed address can have anything after it",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return at < most && text[at] == '\\0';",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a typed address can have an empty part",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (digits == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
 			"name": "a negative damage multiple is good",
 			"changes": [
 				{
