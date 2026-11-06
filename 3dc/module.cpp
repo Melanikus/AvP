@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an empty module is checked for before it is read
 /*
 	Modules - AvP is an entirely module-based engine. Modules are defined as regular orthogonal boxes within the
 	gameworld. Modules contain the polygons which make up the rooms & corridors - module size is defined by the
@@ -1026,10 +1028,11 @@ int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 	MODULE *mptr = 0;
 	int gotit;
 
+	if ((source==NULL)||(target==NULL)) return(0);
+
 	vptr=source->m_vmptr;
 	gotit=0;
 
-	if ((source==NULL)||(target==NULL)) return(0);
 	if (source==target) return(1);
 
 	while(! ((vptr->vmod_type == vmtype_term)||(gotit)) ) {
