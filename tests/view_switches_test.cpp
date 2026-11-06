@@ -13,6 +13,7 @@
 #include "shadow_tuning.h"
 
 #include "view_switches.h"
+#include "light_choice.h"
 
 // The switches themselves live in d3d_render.cpp. The header only has to know their names, and nothing here uses them.
 
@@ -75,6 +76,53 @@ static void WordsForShadows()
 
 	Check(ShadowsAskFor(0) == kNotUnderstood, "SHADOWS refuses no words at all");
 	Check(ShadowsAskFor(std::string(300, '1').c_str()) == kNotUnderstood, "and a batch file's longest line");
+}
+
+static int AmbientAskFor(char const *words)
+{
+	int asked = kWasNotedBefore;
+
+	if (!SwitchWords_ShadowAmbientAsk(words, &asked))
+	{
+		return (asked == kWasNotedBefore) ? kNotUnderstood : -999;
+	}
+
+	return asked;
+}
+
+static void WordsForAmbient()
+{
+	Check(AmbientAskFor("") == kAskedNext, "SHADOWAMBIENT alone switches it, so one key can flip it");
+	Check(AmbientAskFor("   ") == kAskedNext, "and so does SHADOWAMBIENT with only spaces after it");
+	Check(AmbientAskFor("0") == 0, "SHADOWAMBIENT 0 is off");
+	Check(AmbientAskFor("1") == 1, "SHADOWAMBIENT 1 is on");
+	Check(AmbientAskFor("OFF") == 0, "SHADOWAMBIENT OFF is off");
+	Check(AmbientAskFor("ON") == 1, "SHADOWAMBIENT ON is on");
+	Check(AmbientAskFor("off") == 0, "in small letters too");
+	Check(AmbientAskFor("On\r") == 1, "and in mixed letters, at the end of a line from a file");
+	Check(AmbientAskFor("  ON  ") == 1, "and with spaces around it");
+
+	char const *const refused[] = { "2", "-1", "01", "00", "10", "1 1", "1x", "x1", "O", "OF", "OFFF", "ONN", "ON OFF", "OFF ON", "ABC", "1.0", "0x1", "\xFF", "ON\xFF" };
+
+	for (char const *words : refused)
+	{
+		Check(AmbientAskFor(words) == kNotUnderstood, std::string("SHADOWAMBIENT refuses '") + words + "', and leaves what was noted alone");
+	}
+
+	Check(AmbientAskFor(0) == kNotUnderstood, "SHADOWAMBIENT refuses no words at all");
+	Check(AmbientAskFor(std::string(300, '1').c_str()) == kNotUnderstood, "and a batch file's longest line");
+}
+
+static void TheMapLightsRule()
+{
+	Check(!LightChoice_MayCast(kLightFromTheLevel, false), "with SHADOWAMBIENT off, a level light takes no place");
+	Check(!LightChoice_MayCast(kLampWithNoCorona, false), "and nor does a lamp with no corona");
+	Check(LightChoice_MayCast(kLampWithACorona, false), "a lamp with a corona does");
+	Check(LightChoice_MayCast(kLightOfAnyOtherKind, false), "and so does everything that isn't the map's own, corona or not");
+	Check(LightChoice_MayCast(kLightFromTheLevel, true), "with SHADOWAMBIENT on, a level light competes again");
+	Check(LightChoice_MayCast(kLampWithNoCorona, true), "and so does a lamp with no corona");
+	Check(LightChoice_MayCast(kLampWithACorona, true), "and a lamp with a corona stays in");
+	Check(LightChoice_MayCast(kLightOfAnyOtherKind, true), "and so does everything else");
 }
 
 static void WordsForLighting()
@@ -438,7 +486,7 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
 
 	for (char const *const name : devToggles)
@@ -457,7 +505,7 @@ static void TheRealGame()
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
 	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
-	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ToyShadowsCasters" };
+	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ShadowsPretendNoFloatBlend", "ToyShadowsCasters" };
 
 	for (char const *const name : tuned)
 	{
@@ -739,6 +787,73 @@ static void TheVolumesSwitch()
 	Check(Has(render, "float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;"), "the report doesn't divide by no passes");
 }
 
+// The rule in light_choice.h, as the game really uses it. These only read the source, so what they say on a graphics card needs a run of the game.
+static void TheMapLightsInTheGame()
+{
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const setup = ReadSourceFile("3dc/avp/win95/object_setup.cpp");
+	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
+	std::string const launch = ReadSourceFile("3dc/avp/win95/winmain.cpp");
+
+	// Which kind of light is which
+	// A light's kind comes from two real fields, and both start out in the level file: has_corona, which InitPlacedLight sets from the polygon flag iflag_light_corona, and LFlag_AbsPos, which
+	// setup_light_data gives a level light, on top of flags copied from the file. A crafted level can say anything in them, and all that can do is say yes or no to a shadow on one player's screen.
+	std::string const kinds = Between(shapes, "static LightKindForShadows KindOfLight(", "// What became of every light the choosing looked at");
+
+	Check(Has(kinds, "if (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;"), "a light with LFlag_AbsPos is a level light");
+	Check(Has(kinds, "owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr"), "only a placed light's data is read as a placed light's");
+	Check(Has(kinds, "has_corona ? kLampWithACorona : kLampWithNoCorona"), "and its corona says which kind of lamp it is");
+	Check(Has(kinds, "return kLightOfAnyOtherKind;"), "and anything else is left alone");
+
+	std::string::size_type const placedIsLookedFor = kinds.find("I_BehaviourPlacedLight");
+	std::string::size_type const flagIsLookedFor = kinds.find("LFlag_AbsPos");
+
+	Check(placedIsLookedFor != std::string::npos && flagIsLookedFor != std::string::npos && placedIsLookedFor < flagIsLookedFor, "a placed light is looked for first, so a flag crafted in the level file can't change what a lamp counts as");
+	Check(Has(kinds, "block ? block->ObStrategyBlock : 0"), "a light element, which is on no block, is safe to ask about");
+
+	std::string const levelLights = Between(setup, "void setup_light_data (LIGHTBLOCK * lPtr, Light_Chunk * lc)\n{", "void setup_placed_light_data");
+	std::string const placedLights = Between(setup, "void setup_placed_light_data (LIGHTBLOCK * lPtr, Placed_Object_Light_Chunk * lc)\n{", "void SetUpRunTimeLights ()");
+
+	Check(Has(levelLights, "LFlag_AbsPos"), "a level light does get LFlag_AbsPos");
+	Check(!Has(placedLights, "LFlag_AbsPos"), "and a placed light doesn't, so the flag tells them apart");
+
+	// Where it's asked
+	std::string const considering = Between(shapes, "static void ToyConsiderLight(", "int const distance = ToyDistanceToCamera(light);");
+
+	Check(Has(considering, "if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))"), "every light on its way to the list is asked about, with what SHADOWAMBIENT says");
+	Check(Has(considering, "LightKindForShadows const kind = KindOfLight(light, block);"), "by the block that carries it");
+
+	// How it's set
+	Check(Has(render, "int ShadowAmbientOn = 0;"), "SHADOWAMBIENT starts off");
+
+	std::string const ungated = Between(commands, "void CreateGameSpecificConsoleCommands(void)", "bool IsACheat");
+
+	Check(Has(ungated, "\"SHADOWAMBIENT\"") && Has(ungated, "ShadowAmbientCommand"), "the command is made ahead of everything that needs a cheat or -debug");
+
+	std::string const command = Between(render, "void ShadowAmbientCommand(char *words)", "// The menu asks the same way the commands do.");
+
+	Check(Has(command, "SwitchWords_ShadowAmbientAsk(words, &shadowAmbientAsked)"), "the command notes what it's asked for");
+	Check(Has(command, "SaySwitch(\"SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT\")"), "and says so if it doesn't know the words");
+
+	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
+	std::string const ambientPart = Between(applying, "if (shadowAmbientAsked != kAskedNothing)", "if (lightingAsked != kAskedNothing)");
+
+	Check(Has(ambientPart, "ShadowAmbientOn = Shadows_AfterAsking(ShadowAmbientOn, shadowAmbientAsked);"), "it only changes between frames, with the other switches");
+	Check(Has(ambientPart, "SaySwitch(ShadowAmbientOn ? \"SHADOWAMBIENT: ON\" : \"SHADOWAMBIENT: OFF\");"), "and the screen says which it is now");
+	Check(Has(ambientPart, "shadowAmbientAsked = kAskedNothing;"), "and one press only counts once");
+
+	std::string const atStart = Between(launch, "\"-shadowambient\"", "}");
+
+	Check(Has(launch, "strstr(command_line, \"-shadowambient\")"), "-shadowambient is there without -dev, because it only changes this player's own screen");
+	Check(Has(atStart, "ShadowAmbientOn = 1;"), "and it turns it on");
+
+	// A network game leaves it alone, because all it changes is what one player's own screen draws
+	std::string const tuningTable = Between(render, "static const ShadowTuningNumber shadowTuning[] =", "static float const shadowSurfaceBiasAsBuilt");
+
+	Check(!Has(tuningTable, "ShadowAmbientOn"), "a network game doesn't put it back");
+}
+
 static void PuttingTheTuningBack()
 {
 	int dark = 85;
@@ -755,6 +870,8 @@ int main()
 {
 	PuttingTheTuningBack();
 	WordsForShadows();
+	WordsForAmbient();
+	TheMapLightsRule();
 	WordsForLighting();
 	ShadowsAnswers();
 	TheCycle();
@@ -764,6 +881,7 @@ int main()
 	TheEightStates();
 	TheRealGame();
 	TheVolumesSwitch();
+	TheMapLightsInTheGame();
 
 	if (checksFailed)
 	{
