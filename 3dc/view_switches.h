@@ -45,6 +45,7 @@ void ShadowAmbientCommand(char *words);
 //   RELIEFDEPTH 0.08    how deep the depth map's deepest part is, as a fraction of a picture's width
 void ReliefFlipCommand();
 void TiltFlipCommand();
+void ShadowEvenGapCommand(char *words);
 void ReliefDepthCommand(char *words);
 
 extern bool ReliefHeightFlipped;

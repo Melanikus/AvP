@@ -309,6 +309,25 @@ static void CheckTheLog()
 	Check(Has(Between(render, "static void ToyLogFrame(", "static void ToySetVolumeState("), "ShadowLights_SayCounts(report.frame, report.passes, report.screensOfTotal, report.milliseconds, report.frameMilliseconds);"), "every report says them, even with no light chosen");
 }
 
+// The word only reads the source here: what it does on a card needs a run. The words it takes are tried in tests/view_switches_test.cpp, as SHADOWAMBIENT's.
+static void CheckTheEvenGapWord()
+{
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
+	std::string const word = Between(render, "void ShadowEvenGapCommand(char *words)", "void ReliefDepthCommand(char *words)");
+
+	Check(Has(commands, "ConsoleCommand::Make(\"SHADOWEVENGAP\""), "the console has the word");
+	Check(ComesBefore(word, "ReliefToolsCanAct(\"SHADOWEVENGAP\")", "ShadowsEvenGap ="), "it needs -dev and no network game before it changes anything");
+	Check(ComesBefore(word, "SwitchWords_ShadowAmbientAsk(words, &asked)", "ShadowsEvenGap ="), "a word it doesn't know changes nothing");
+	Check(Has(word, "SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT"), "and says what it takes");
+	Check(Has(word, "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);"), "alone it switches, and ON or OFF says which");
+	Check(Has(word, "ShadowVolumes_Empty();"), "kept prisms made the old way don't stay");
+	Check(Has(word, "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");"), "the screen says which it is now");
+	Check(Has(render, "\"EVEN GAP %s, %sBIAS %d\", ShadowsEvenGap ? \"ON\" : \"OFF\""), "and the tag says so all the time");
+	Check(!Has(Between(render, "static void ShadowStatus_Draw()", "kToyViewNames[ToyShadowsMode]);"), "if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)"), "not only when it's on");
+	Check(Has(render, "{ &ShadowsEvenGap, ShadowsEvenGap },"), "a network game puts it back");
+}
+
 int main()
 {
 	CheckTheBestPicture();
@@ -317,6 +336,7 @@ int main()
 	CheckTheTotalsPasses();
 	CheckTheCardThatCantAdd();
 	CheckTheLog();
+	CheckTheEvenGapWord();
 
 	printf("%s\n", checksFailed ? "FAILED" : "all passed");
 

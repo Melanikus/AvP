@@ -30,6 +30,7 @@
 
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
+//   the SHADOWEVENGAP console command switches -shadowevengap while the game runs, and the tag always says which it is
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -6690,10 +6691,8 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "LIGHTING %s, SHADOWS %s", Lighting_WordsOnScreen(LightingReallyDrawn(), mainDrawUsedHeights), ShadowVolumesOn ? "ON" : "OFF");
 	_snprintf(lines[numLines++], kLineLength - 1, "RELIEF DEPTH %.3f%s%s", ReliefDepthNow, ReliefHeightFlipped ? ", HEIGHT FLIP" : "", ReliefTiltFlipped ? ", TILT FLIP" : "");
 	_snprintf(lines[numLines++], kLineLength - 1, "STATIC %s", StaticSceneOn ? (StaticScene_TookAny() ? "SCENE" : "SCENE WAITING") : (StaticSurfaceOn || StaticSurfaceCompare) ? "SURFACE" : "OFF");
-	if (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)
-	{
-		_snprintf(lines[numLines++], kLineLength - 1, "%s%sBIAS %d", ShadowsDepthGap ? ((StaticSceneOn || !KeptPrismsOff) ? "DEPTH GAP PART " : "DEPTH GAP ") : "", ShadowsEvenGap ? "EVEN GAP " : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
-	}
+	// This line is always there, so that switching SHADOWEVENGAP shows, whichever way it went.
+	_snprintf(lines[numLines++], kLineLength - 1, "EVEN GAP %s, %sBIAS %d", ShadowsEvenGap ? "ON" : "OFF", ShadowsDepthGap ? ((StaticSceneOn || !KeptPrismsOff) ? "DEPTH GAP PART, " : "DEPTH GAP, ") : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
 
 	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
@@ -7063,6 +7062,28 @@ void TiltFlipCommand()
 		ReliefTiltFlipped = !ReliefTiltFlipped;
 		SaySwitch(ReliefTiltFlipped ? "NORMAL MAPS: TILT FLIPPED, BUMPS ARE DENTS" : "NORMAL MAPS: TILT AS IT IS IN THE FILE");
 	}
+}
+
+// SHADOWEVENGAP: see shadow_gap.h. The same words as SHADOWAMBIENT, and a developers' word like these others. Prisms made for one frame use the new way from the next frame, and that's all of them by
+// default. With -keptprismson, the store is emptied, or the prisms in it would stay the old way until it filled up.
+void ShadowEvenGapCommand(char *words)
+{
+	if (!ReliefToolsCanAct("SHADOWEVENGAP"))
+	{
+		return;
+	}
+
+	int asked = kAskedNothing;
+
+	if (!SwitchWords_ShadowAmbientAsk(words, &asked))
+	{
+		SaySwitch("SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
+		return;
+	}
+
+	ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);
+	ShadowVolumes_Empty();
+	SaySwitch(ShadowsEvenGap ? "SHADOWEVENGAP: ON" : "SHADOWEVENGAP: OFF");
 }
 
 void ReliefDepthCommand(char *words)

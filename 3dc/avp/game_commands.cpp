@@ -2,6 +2,7 @@
 //   the LIGHTING and SHADOWS commands
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
+//   the SHADOWEVENGAP command, which says whether a shadow starts the same distance behind every part of its polygon
 #include "3dc.h"
 #include "console_command.hpp"
 #include "strutil.h"
@@ -347,6 +348,7 @@ void CreateGameSpecificConsoleCommands(void)
 	// Only do anything with -dev, and they say so without it. See view_switches.h.
 	ConsoleCommand::Make("RELIEFFLIP", "SWAPS WHICH OF BLACK AND WHITE IS THE POLYGON'S LEVEL IN A DEPTH MAP, LIVE", ReliefFlipCommand);
 	ConsoleCommand::Make("TILTFLIP", "SWAPS BUMPS AND DENTS IN A NORMAL MAP, LIVE", TiltFlipCommand);
+	ConsoleCommand::Make("SHADOWEVENGAP", "WHETHER A SHADOW STARTS THE SAME DISTANCE BEHIND EVERY PART OF ITS POLYGON: ON OR OFF. ON ITS OWN, SWITCHES IT", ShadowEvenGapCommand);
 	ConsoleCommand::Make("RELIEFDEPTH", "HOW DEEP A DEPTH MAP GOES, AS A FRACTION OF A PICTURE'S WIDTH, FROM 0 TO 0.2", ReliefDepthCommand);
 
 	#ifndef AVP_DEBUG_VERSION 

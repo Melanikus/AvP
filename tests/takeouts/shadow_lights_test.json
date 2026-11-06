@@ -845,6 +845,96 @@
 					"to": "%d %d %s %d; "
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the console has no such word",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "ConsoleCommand::Make(\"SHADOWEVENGAP\", \"WHETHER A SHADOW STARTS THE SAME DISTANCE BEHIND EVERY PART OF ITS POLYGON: ON OR OFF. ON ITS OWN, SWITCHES IT\", ShadowEvenGapCommand);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the word works without -dev",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!ReliefToolsCanAct(\"SHADOWEVENGAP\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a word it doesn't know goes on anyway",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(\"SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");\n\t\treturn;",
+					"to": "SaySwitch(\"SHADOWEVENGAP TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the word changes nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: kept prisms stay the old way",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);\n\tShadowVolumes_Empty();",
+					"to": "ShadowsEvenGap = Shadows_AfterAsking(ShadowsEvenGap, asked);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen says nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(ShadowsEvenGap ? \"SHADOWEVENGAP: ON\" : \"SHADOWEVENGAP: OFF\");\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag doesn't say which",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\"EVEN GAP %s, %sBIAS %d\", ShadowsEvenGap ? \"ON\" : \"OFF\"",
+					"to": "\"EVEN GAP %s, %sBIAS %d\", \"ON\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag only says when it's on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t_snprintf(lines[numLines++], kLineLength - 1, \"EVEN GAP %s, %sBIAS %d\"",
+					"to": "\tif (ShadowsDepthGap || ShadowsEvenGap || ShadowBiasSteps)\n\t_snprintf(lines[numLines++], kLineLength - 1, \"EVEN GAP %s, %sBIAS %d\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the even gap",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &ShadowsEvenGap, ShadowsEvenGap },\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
