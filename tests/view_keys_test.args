@@ -1,0 +1,5 @@
+/std:c++17 /EHsc /MD /J /W3 /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/view_keys_test.cpp
+3dc/view_keys.cpp

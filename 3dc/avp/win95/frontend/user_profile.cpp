@@ -5,6 +5,8 @@
 //   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused;
 //   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file;
 //   a profile file whose inner name is not its own file name is skipped, so it cannot delete another profile
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a profile saved before the shoulder lamp gets its key without anything else changing
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -20,6 +22,7 @@
 #include "pldnet.h"
 #include <time.h>
 #include "utilities.h"
+#include "shoulder_lamp.h"
 #include "logString.h"
 
 static int LoadUserProfiles(void);
@@ -120,6 +123,22 @@ static BOOL UserProfileNameMatchesFile(const char *name, const char *fileName)
 	size_t const length = strlen(name);
 
 	return (_strnicmp(fileName, name, length) == 0) && (_stricmp(fileName + length, USER_PROFILES_SUFFIX) == 0);
+}
+
+// See ShoulderLamp_KeyFromProfile. The lamp's own byte is the last of the marine's, so the ones before it are all the others.
+static void SettleShoulderLampKeys(PLAYER_INPUT_CONFIGURATION *primary, PLAYER_INPUT_CONFIGURATION *secondary)
+{
+	unsigned char const *const primaryKeys = (unsigned char const *)primary;
+	unsigned char const *const secondaryKeys = (unsigned char const *)secondary;
+	bool defaultIsTaken = false;
+
+	for (int i = 0; i < NUMBER_OF_MARINE_INPUTS - 1; i++)
+	{
+		defaultIsTaken = defaultIsTaken || primaryKeys[i] == KEY_G || secondaryKeys[i] == KEY_G;
+	}
+
+	primary->Marine_ShoulderLamp = ShoulderLamp_KeyFromProfile(primary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, defaultIsTaken, KEY_VOID);
+	secondary->Marine_ShoulderLamp = ShoulderLamp_KeyFromProfile(secondary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_VOID, false, KEY_VOID);
 }
 
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
@@ -427,6 +446,7 @@ extern void GetSettingsFromUserProfile(void)
 
 	MarineInputPrimaryConfig      = UserProfilePtr->MarineInputPrimaryConfig;
 	MarineInputSecondaryConfig    = UserProfilePtr->MarineInputSecondaryConfig;
+	SettleShoulderLampKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);
 	PredatorInputPrimaryConfig    = UserProfilePtr->PredatorInputPrimaryConfig;
 	PredatorInputSecondaryConfig  = UserProfilePtr->PredatorInputSecondaryConfig;
 	AlienInputPrimaryConfig       = UserProfilePtr->AlienInputPrimaryConfig;

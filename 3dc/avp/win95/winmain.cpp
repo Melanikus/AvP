@@ -11,11 +11,17 @@
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
 //   from the command line is limited to its buffer; a plain new that fails now stops the game with a message
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   -shadowambient starts with the map's lights that show no corona casting shadows
+//   a new level starts with nothing noted about what was on screen
+//   -shadownearest chooses lights by distance, as the game used to, to compare with what replaced it
+//   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
 
 #include "3dc.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+#include "light_choice.h"
 #include "static_level.h"
 #include "module.h"
 #include "inline.h"
@@ -313,6 +319,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			ShadowVolumesOn = 0;
 			LightingNow = kLightingGouraud;
 		}
+		// Like SHADOWAMBIENT, this only changes what this player's own screen draws, so it needs no -dev. See light_choice.h.
+		if (strstr(command_line, "-shadowambient"))
+		{
+			ShadowAmbientOn = 1;
+		}
+		extern int ShadowLightsByNearest;
+		if (devSwitch("-shadownearest"))
+		{
+			ShadowLightsByNearest = 1;
+		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))
 		{
@@ -488,19 +504,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ToyShadowsTest = 1;
 		}
+		extern int ShadowsPretendNoFloatBlend;
+		if (devSwitch("-shadownofloatblend"))
+		{
+			ShadowsPretendNoFloatBlend = 1;
+		}
 		extern int ToyShadowsMaxLights;
 		char const *lightsSwitch = devNumber("-shadowlights=");
 		if (lightsSwitch)
 		{
 			int const asked = atoi(lightsSwitch + strlen("-shadowlights="));
-			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 8) ? 8 : asked;
+			ToyShadowsMaxLights = (asked < 1) ? 1 : (asked > 20) ? 20 : asked;
 		}
 		extern int ToyShadowsMaxBrief;
 		char const *briefSwitch = devNumber("-shadowbrief=");
 		if (briefSwitch)
 		{
 			int const asked = atoi(briefSwitch + strlen("-shadowbrief="));
-			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 4) ? 4 : asked;
+			ToyShadowsMaxBrief = (asked < 0) ? 0 : (asked > 12) ? 12 : asked;
 		}
 		extern int ToyShadowsCasters;
 		char const *castersSwitch = devNumber("-shadowcasters=");
@@ -747,6 +768,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		/*********** Process the data ************/
 		AssignAllSBNames();
 		StartGame();
+
+		// What the level before had on screen is no use for this one's lights
+		extern LightChoiceSamples lightChoiceSamples;
+		LightChoice_Forget(&lightChoiceSamples);
 
 		// after StartGame, because that's when every module that's controlled by something has been told so
 		StaticLevel_BuildThisLevel();
