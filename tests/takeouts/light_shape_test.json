@@ -1,0 +1,393 @@
+{
+	"copy": [
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "BOTH: a live lamp gives nothing past the edge, as it used to",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "(turned == 0.0f) ? 0.125f : pastTheEdge)",
+					"to": "(turned == 0.0f) ? 0.125f : 0.0f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "(turned == 0.0f) ? 0.125f : pastTheEdge)",
+					"to": "(turned == 0.0f) ? 0.125f : 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a flare gives nothing past the edge, as it used to",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned > 0.0f) ? slant : 0.0f);"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned > 0.0f) ? slant : 0.0f);"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a live lamp gives the eighth to everything, backs of walls too",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "(turned == 0.0f) ? 0.125f : pastTheEdge)",
+					"to": "(turned == 0.0f) ? 0.125f : 0.125f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "(turned == 0.0f) ? 0.125f : pastTheEdge)",
+					"to": "(turned == 0.0f) ? 0.125f : 0.125f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a flare gives the eighth to everything, backs of walls too",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned > 0.0f) ? slant : 0.125f);"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned > 0.0f) ? slant : 0.125f);"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the amount past the edge is a quarter, not an eighth",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "0.125f * saturate(",
+					"to": "0.25f * saturate("
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "0.125f * saturate(",
+					"to": "0.25f * saturate("
+				}
+			]
+		},
+		{
+			"name": "BOTH: the change from none to all is far too slow",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "lampsSide * 114.0f",
+					"to": "lampsSide * 1.0f"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "lampsSide * 114.0f",
+					"to": "lampsSide * 1.0f"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the change from none to all is a hard step",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "lampsSide * 114.0f",
+					"to": "lampsSide * 100000.0f"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "lampsSide * 114.0f",
+					"to": "lampsSide * 100000.0f"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a lamp in the surface's plane gets none, not half",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "saturate(0.5f + lampsSide",
+					"to": "saturate(lampsSide"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "saturate(0.5f + lampsSide",
+					"to": "saturate(lampsSide"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the amount past the edge has no limit",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "0.125f * saturate(0.5f + lampsSide * 114.0f)",
+					"to": "0.125f * (0.5f + lampsSide * 114.0f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "0.125f * saturate(0.5f + lampsSide * 114.0f)",
+					"to": "0.125f * (0.5f + lampsSide * 114.0f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the eye's side is ignored",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "eyesSide * dot(flat, toLight)",
+					"to": "dot(flat, toLight)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "eyesSide * dot(flat, toLight)",
+					"to": "dot(flat, toLight)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the eye's side is the wrong way round",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "? -1.0f : 1.0f;",
+					"to": "? 1.0f : -1.0f;"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "? -1.0f : 1.0f;",
+					"to": "? 1.0f : -1.0f;"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the eye's side is worked out from the lamp",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "dot(flat, position) > 0.0f",
+					"to": "dot(flat, toLight) > 0.0f"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "dot(flat, position) > 0.0f",
+					"to": "dot(flat, toLight) > 0.0f"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the lamp's side is worked out from the eye",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "eyesSide * dot(flat, toLight)",
+					"to": "eyesSide * dot(flat, position)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "eyesSide * dot(flat, toLight)",
+					"to": "eyesSide * dot(flat, position)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: steps of no length divide by nothing",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "(length(flat) * howFar)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "(length(flat) * howFar)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the surface's direction isn't made one long",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "max(howFar, 0.0001f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "max(howFar, 0.0001f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the way to the lamp isn't made one long",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "max(length(flat), 0.0001f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "max(length(flat) * howFar, 0.0001f)",
+					"to": "max(length(flat), 0.0001f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the surface comes from something other than the position",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "cross(ddx(position), ddy(position))",
+					"to": "cross(ddx(toLight), ddy(toLight))"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "cross(ddx(position), ddy(position))",
+					"to": "cross(ddx(toLight), ddy(toLight))"
+				}
+			]
+		},
+		{
+			"name": "BOTH: the slant is twice what it should be",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "(turned + 0.25f) * 0.5f",
+					"to": "(turned + 0.25f)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "(turned + 0.25f) * 0.5f",
+					"to": "(turned + 0.25f)"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a live lamp gives a surface with no direction nothing",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "(turned == 0.0f) ? 0.125f",
+					"to": "(turned == 0.0f) ? 0.0f"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "(turned == 0.0f) ? 0.125f",
+					"to": "(turned == 0.0f) ? 0.0f"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a flare treats a surface with no direction as facing it",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned >= 0.0f) ? slant : pastTheEdge);"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned >= 0.0f) ? slant : pastTheEdge);"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a live lamp fades like a flare",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "return (1.0f - reach) * ((turned",
+					"to": "return (1.0f - reach * reach) * ((turned"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "return (1.0f - reach) * ((turned",
+					"to": "return (1.0f - reach * reach) * ((turned"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a flare fades like a live lamp",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "return (1.0f - reach * reach) * ((turned",
+					"to": "return (1.0f - reach) * ((turned"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "return (1.0f - reach * reach) * ((turned",
+					"to": "return (1.0f - reach) * ((turned"
+				}
+			]
+		},
+		{
+			"name": "BOTH: a baked light gets the eighth too",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "cos(1.5707963f * reach) * saturate(turned)",
+					"to": "cos(1.5707963f * reach) * max(saturate(turned), pastTheEdge)"
+				},
+				{
+					"file": "tests/light_shape_test.cpp",
+					"from": "cos(1.5707963f * reach) * saturate(turned)",
+					"to": "cos(1.5707963f * reach) * max(saturate(turned), pastTheEdge)"
+				}
+			]
+		},
+		{
+			"name": "TEXT: the shader's amount changes and the test's doesn't",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "0.125f * saturate(",
+					"to": "0.25f * saturate("
+				}
+			]
+		},
+		{
+			"name": "TEXT: the shader's live sum changes and the test's doesn't",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "(turned == 0.0f) ? 0.125f : pastTheEdge)",
+					"to": "(turned == 0.0f) ? 0.125f : 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "TEXT: the shader's flare sum changes and the test's doesn't",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "((turned > 0.0f) ? slant : pastTheEdge);",
+					"to": "((turned > 0.0f) ? slant : 0.0f);"
+				}
+			]
+		},
+		{
+			"name": "TEXT: the shader stops asking how the position changes",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "cross(ddx(position), ddy(position))",
+					"to": "cross(ddx(toLight), ddy(toLight))"
+				}
+			]
+		}
+	]
+}

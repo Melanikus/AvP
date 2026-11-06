@@ -48,6 +48,17 @@ float LightShape(float4 light, float shape, float3 position, float3 normal)
     float  turned  = dot(normal, toLight / max(howFar, 1.0f));
     float  slant   = (turned + 0.25f) * 0.5f;
 
+    // PAST THE EDGE. A polygon's stored normals can lean, because a corner's normal is shared with the polygons that meet there. With a lamp hanging just under a flat
+    // ceiling, the true angle is so small that the lean outweighs it, and part of the ceiling looks turned away when it isn't. So "turned" can't say whether a surface
+    // really faces a light. The surface itself can: its true flat direction comes from how the distance changes from this pixel to the next. A lamp on the same side of
+    // that flat surface as the eye can reach it, and past the edge the surface gets an eighth, which is what the game gives (VertexIntensity_Standard_Opt in kshape.cpp),
+    // so there's no step where "turned" crosses zero. A lamp on the far side gets nothing, as before: that's the back of a wall, and its shadow doesn't cover it. The change
+    // from one to the other takes a quarter of a degree each way, so a lamp lying in the surface's own plane doesn't flip with the smallest rounding.
+    float3 flat        = cross(ddx(position), ddy(position));
+    float  eyesSide    = (dot(flat, position) > 0.0f) ? -1.0f : 1.0f;
+    float  lampsSide   = eyesSide * dot(flat, toLight) / max(length(flat) * howFar, 0.0001f);
+    float  pastTheEdge = 0.125f * saturate(0.5f + lampsSide * 114.0f);
+
     if (shape < 0.5f)
     {
         return cos(1.5707963f * reach) * saturate(turned);
@@ -55,11 +66,10 @@ float LightShape(float4 light, float shape, float3 position, float3 normal)
 
     if (shape < 1.5f)
     {
-        // The game gives a point turned away from a live light an eighth of that light anyway. Here that's only for a surface with no direction
-        // of its own, which NormalHere makes exactly zero. A surface really turned away gets nothing: it's the side of a wall the light can't
-        // reach, and that wall's shadow doesn't cover it any more (ToyAddPrism in d3d_render.cpp), so this is what keeps it dark.
-        return (1.0f - reach) * ((turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f : 0.0f);
+        // The game gives a point turned away from a live light an eighth of that light anyway. Here that's for a surface with no direction of its own, which NormalHere
+        // makes exactly zero, and for one whose true flat surface faces the light. See PAST THE EDGE above.
+        return (1.0f - reach) * ((turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f : pastTheEdge);
     }
 
-    return (1.0f - reach * reach) * ((turned > 0.0f) ? slant : 0.0f);
+    return (1.0f - reach * reach) * ((turned > 0.0f) ? slant : pastTheEdge);
 }
