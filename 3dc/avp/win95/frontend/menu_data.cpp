@@ -1,5 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page, and the way to it from both audio and video pages
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the rendering page's lines for choosing a key
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -228,6 +230,9 @@ static AVPMENU_ELEMENT AvPMenu_Rendering[] =
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_MODE},			{3},	{&MenuRendering},		{TEXTSTRING_RENDERING_GOURAUD},	TEXTSTRING_RENDERING_MODE_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_SHADOWS},			{1},	{&MenuShadows},			{TEXTSTRING_NO},				TEXTSTRING_RENDERING_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_AUTOGENERATE},	{1},	{&MenuAutoGenerate},	{TEXTSTRING_NO},				TEXTSTRING_RENDERING_AUTOGENERATE_HELP},
+	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_RENDERING},	{kViewKeyRendering},	{0},	{0},	TEXTSTRING_RENDERING_KEY_RENDERING_HELP},
+	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_SHADOWS},	{kViewKeyShadows},	{0},	{0},	TEXTSTRING_RENDERING_KEY_SHADOWS_HELP},
+	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_DEVVIEWS},	{kViewKeyDevViews},	{0},	{0},	TEXTSTRING_RENDERING_KEY_DEVVIEWS_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -236,6 +241,42 @@ void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead)
 {
 	AvPMenu_Rendering[1].HelpString = shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT;
 	AvPMenu_Rendering[2].HelpString = mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING;
+}
+
+// Where the key lines start in the table above
+static const int kFirstViewKeyElement = 3;
+
+// A key line says what became of the last key it was given, and otherwise what it's for, unless a control has its key too.
+void RenderingPage_SayWhatKeyLineDoes(int line, ViewKeyAnswer lastAnswer, bool heldByAControl)
+{
+	static const enum TEXTSTRING_ID usualHelp[kViewKeyLines] = { TEXTSTRING_RENDERING_KEY_RENDERING_HELP, TEXTSTRING_RENDERING_KEY_SHADOWS_HELP, TEXTSTRING_RENDERING_KEY_DEVVIEWS_HELP };
+
+	if (line < 0 || line >= kViewKeyLines)
+	{
+		return;
+	}
+
+	AVPMENU_ELEMENT &element = AvPMenu_Rendering[kFirstViewKeyElement + line];
+
+	switch (lastAnswer)
+	{
+	case kViewKeyTheGameKeepsIt:
+	case kViewKeyNotAKey:
+		element.HelpString = TEXTSTRING_RENDERING_KEY_REFUSED_GAME;
+		break;
+
+	case kViewKeyIsOnAnotherLine:
+		element.HelpString = TEXTSTRING_RENDERING_KEY_REFUSED_LINE;
+		break;
+
+	case kViewKeyIsAControl:
+		element.HelpString = TEXTSTRING_RENDERING_KEY_REFUSED_CONTROL;
+		break;
+
+	default:
+		element.HelpString = heldByAControl ? TEXTSTRING_RENDERING_KEY_HELD : usualHelp[line];
+		break;
+	}
 }
 
 static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] = 
