@@ -21,11 +21,13 @@ inline bool SaveFile_WriteOnePart(HANDLE file, const void *part, DWORD size)
 	return ::WriteFile(file, part, size, &written, NULL) != 0 && written == size;
 }
 
+static const int kSaveFileTries = 5;
+
 // Puts the new file in the old one's place, which Windows does in one step. A virus scanner often opens a new file just after it's closed, and while it has it open this fails with one of two errors.
-// So on those it tries a few more times, for half a second at most. That only happens on a save, and only when it's needed.
+// So on those it tries a few more times, waiting a tenth of a second between tries, which comes to under half a second. That only happens on a save, and only when it's needed.
 inline bool SaveFile_TakeThePlaceOf(const char *newFile, const char *path)
 {
-	for (int tries = 0; tries < 5; tries++)
+	for (int tries = 0; tries < kSaveFileTries; tries++)
 	{
 		if (::MoveFileExA(newFile, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
 		{
@@ -39,14 +41,19 @@ inline bool SaveFile_TakeThePlaceOf(const char *newFile, const char *path)
 			return false;
 		}
 
-		::Sleep(100);
+		// after the last try there's nothing to wait for
+		if (tries + 1 < kSaveFileTries)
+		{
+			::Sleep(100);
+		}
 	}
 
 	return false;
 }
 
 // Writes the two parts of a saved game to path, one after the other. It gives back true if the save is safely there. If it gives back
-// false, whatever was at path before is still there, and nothing else has been left behind.
+// false, whatever was at path before is still there. The new file is taken away as well, unless something such as a virus scanner still has it open. Then it stays beside
+// the old one until the next save writes over it. Nothing in the game reads a file with that name.
 inline bool SaveFile_WriteSafely(const char *path, const void *first, DWORD firstSize, const void *second, DWORD secondSize)
 {
 	if (!path)

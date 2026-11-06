@@ -515,17 +515,17 @@
 			]
 		},
 		{
-			"name": "SOURCE: it never tries again",
+			"name": "it never tries again",
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
-					"from": "tries < 5",
-					"to": "tries < 1"
+					"from": "static const int kSaveFileTries = 5;",
+					"to": "static const int kSaveFileTries = 1;"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: it tries again with no pause",
+			"name": "it tries again with no pause",
 			"changes": [
 				{
 					"file": "3dc/save_file_write.h",
@@ -541,6 +541,66 @@
 					"file": "3dc/save_folder.h",
 					"from": "path += \"/\";\n",
 					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "it gives up too soon",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "static const int kSaveFileTries = 5;",
+					"to": "static const int kSaveFileTries = 2;"
+				}
+			]
+		},
+		{
+			"name": "a file being shared is not tried again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED",
+					"to": "why != ERROR_ACCESS_DENIED"
+				}
+			]
+		},
+		{
+			"name": "a file that is denied is not tried again",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED",
+					"to": "why != ERROR_SHARING_VIOLATION"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it waits after the last try",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "if (tries + 1 < kSaveFileTries)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a new file left behind stops the next save",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
+					"to": "GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL"
+				}
+			]
+		},
+		{
+			"name": "a new file left behind adds to the next save",
+			"changes": [
+				{
+					"file": "3dc/save_file_write.h",
+					"from": "GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL",
+					"to": "GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL"
 				}
 			]
 		}

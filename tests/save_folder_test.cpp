@@ -17,6 +17,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 static int checksFailed = 0;
 
@@ -99,7 +100,8 @@ static void TakeAwayWhatWasMade(const std::string &base)
 static void TestMakingIt()
 {
 	char const *const outputFolder = getenv("RUNNER_TEMP");
-	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_folder_test_files";
+	// a folder of this run's own: something an earlier run left behind must not count against this one, and this only takes away what it knows it made
+	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_folder_test_files_" + std::to_string(::GetCurrentProcessId());
 
 	// The answer comes back with forward slashes, so that's what it's compared with
 	std::replace(base.begin(), base.end(), '\\', '/');
@@ -223,11 +225,114 @@ static bool FileIsThere(const std::string &name)
 	return ::GetFileAttributesA(name.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
+// Something has a file for a moment, the way a virus scanner would, and lets go of it about 150 ms after this starts. The tries come 100 ms apart, so the first has to fail and a later one
+// has to work. A machine under load could wake that thread too late for all of them, so this goes three times before calling it a failure. Never trying again fails all three.
+template <class StartHolding, class LetGo, class Try>
+static bool WorksOnceItsLetGo(StartHolding startHolding, LetGo letGo, Try tryIt)
+{
+	for (int attempt = 0; attempt < 3; attempt++)
+	{
+		startHolding();
+
+		std::thread scanner([&letGo]()
+		{
+			::Sleep(150);
+			letGo();
+		});
+
+		bool const worked = tryIt();
+
+		scanner.join();
+
+		if (worked)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Tries again when the file is only busy, on the two answers Windows gives. Each has to be what Windows really says, or this wouldn't be trying what it claims to.
+static void TestTryingAgain(std::string const &base, std::string const &slot, std::string const &newFile)
+{
+	std::string const made = base + "/made.new";
+	std::ofstream(made.c_str(), std::ios::binary) << "made";
+
+	// The new file being read, which is what a scanner does just after it's written
+	HANDLE scanning = ::CreateFileA(made.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	Check(scanning != INVALID_HANDLE_VALUE, "the test can hold the new file open");
+	Check(!::MoveFileExA(made.c_str(), slot.c_str(), MOVEFILE_REPLACE_EXISTING) && ::GetLastError() == ERROR_SHARING_VIOLATION, "Windows really does say it's being shared");
+	::CloseHandle(scanning);
+
+	bool const afterSharing = WorksOnceItsLetGo(
+		[&]() { scanning = ::CreateFileA(made.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL); },
+		[&]() { ::CloseHandle(scanning); },
+		[&]() { return SaveFile_TakeThePlaceOf(made.c_str(), slot.c_str()); });
+
+	Check(afterSharing, "and a new file that's let go of in time still takes the old one's place");
+	Check(ReadWholeFile(slot) == "made", "with what it holds");
+	Check(!FileIsThere(made), "and it's gone from where it was");
+
+	// The old file refusing, which Windows calls being denied
+	std::ofstream(made.c_str(), std::ios::binary) << "made again";
+	::SetFileAttributesA(slot.c_str(), FILE_ATTRIBUTE_READONLY);
+	Check(!::MoveFileExA(made.c_str(), slot.c_str(), MOVEFILE_REPLACE_EXISTING) && ::GetLastError() == ERROR_ACCESS_DENIED, "Windows really does say it's denied");
+
+	bool const afterDenied = WorksOnceItsLetGo(
+		[&]() { ::SetFileAttributesA(slot.c_str(), FILE_ATTRIBUTE_READONLY); },
+		[&]() { ::SetFileAttributesA(slot.c_str(), FILE_ATTRIBUTE_NORMAL); },
+		[&]() { return SaveFile_TakeThePlaceOf(made.c_str(), slot.c_str()); });
+
+	Check(afterDenied, "and a file that's let go of in time still takes the old one's place then too");
+	Check(ReadWholeFile(slot) == "made again", "with what it holds");
+
+	// The whole save, with something holding the old one
+	HANDLE holding = INVALID_HANDLE_VALUE;
+	bool const wholeSave = WorksOnceItsLetGo(
+		[&]() { holding = ::CreateFileA(slot.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL); },
+		[&]() { ::CloseHandle(holding); },
+		[&]() { return SaveFile_WriteSafely(slot.c_str(), "wo", 2, "rked", 4); });
+
+	Check(wholeSave, "a whole save goes through if the old one is let go of in time");
+	Check(ReadWholeFile(slot) == "worked", "and takes its place");
+	Check(!FileIsThere(newFile), "with nothing left beside it");
+
+	// Never let go of. It gives up, and it did try: four waits come to 400 ms, and the clock can run a little short.
+	holding = ::CreateFileA(slot.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	ULONGLONG const started = ::GetTickCount64();
+	bool const gaveUp = !SaveFile_WriteSafely(slot.c_str(), "no", 2, "pe", 2);
+	ULONGLONG const took = ::GetTickCount64() - started;
+
+	::CloseHandle(holding);
+	Check(gaveUp, "a file that's never let go of is a failed save");
+	Check(took >= 300, "after it's tried for a while");
+	Check(took < 5000, "and not for long");
+	Check(ReadWholeFile(slot) == "worked", "and the old save is just as it was");
+
+	// A new file left behind by an earlier save, because a scanner had it when that save tried to take it away
+	std::ofstream(newFile.c_str(), std::ios::binary) << "left over from before, and longer than the save";
+	Check(SaveFile_WriteSafely(slot.c_str(), "ne", 2, "xt", 2), "the next save writes over a new file left behind");
+	Check(ReadWholeFile(slot) == "next", "and none of what it held gets into the save");
+	Check(!FileIsThere(newFile), "and it's gone");
+
+	// And if something still has that one, there's nowhere to write
+	std::ofstream(newFile.c_str(), std::ios::binary) << "left over";
+	holding = ::CreateFileA(newFile.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	Check(!SaveFile_WriteSafely(slot.c_str(), "no", 2, "pe", 2), "a new file left behind that's still held is a failed save");
+	::CloseHandle(holding);
+	Check(ReadWholeFile(slot) == "next", "and the old save is just as it was");
+	Check(FileIsThere(newFile), "and what was held can't be taken away, which is why that comment says what it says");
+	::DeleteFileA(newFile.c_str());
+}
+
 // On real files, because what matters here is what's on the disk afterwards.
 static void TestWritingASave()
 {
 	char const *const outputFolder = getenv("RUNNER_TEMP");
-	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_write_test_files";
+	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_write_test_files_" + std::to_string(::GetCurrentProcessId());
 	std::string const slot = base + "/slot_1.sav";
 	std::string const newFile = slot + ".new";
 
@@ -275,7 +380,9 @@ static void TestWritingASave()
 	Check(Has(code, "::FlushFileBuffers(file) != 0;"), "and so does the disk refusing it when it's flushed");
 	Check(Has(code, "if (!::CloseHandle(file))"), "or when the file is closed");
 	Check(Has(code, "why != ERROR_SHARING_VIOLATION && why != ERROR_ACCESS_DENIED"), "taking the old one's place tries again only when something has the file open for a moment");
-	Check(Has(code, "tries < 5") && Has(code, "::Sleep(100);"), "and only for half a second");
+	Check(Has(code, "if (tries + 1 < kSaveFileTries)"), "and doesn't wait after the last try");
+
+	TestTryingAgain(base, slot, newFile);
 
 	::DeleteFileA(slot.c_str());
 	::RemoveDirectoryA(base.c_str());
