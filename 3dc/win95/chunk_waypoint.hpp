@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a module link starts with no name, so one a broken list never reached is safe to free
+
 #ifndef wpchunk_hpp
 #define wpchunk_hpp 1
 
@@ -13,6 +16,8 @@ struct WaypointLink
 
 struct ModuleLink
 {
+	// A file's list can stop early, and the links it didn't reach still get freed, so each starts with nothing to free.
+	ModuleLink() : module_name(0), flags(0) {}
 	~ModuleLink();
 
 	char*  module_name;

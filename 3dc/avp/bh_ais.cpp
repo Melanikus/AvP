@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a marine can ask whether a path can be followed before setting out on it
+
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
 #include "3dc.h"
@@ -2036,6 +2040,12 @@ AIMODULE *GetNextModuleForLink_Core(AIMODULE *source,AIMODULE *target, int max_d
     return(NULL);
 }
 
+
+// Can this path be followed? A switch in a level file can ask for any path number, and a path can end up with no modules in it.
+bool PathCanBeFollowed(int path)
+{
+	return PathArray && path >= 0 && path < PathArraySize && PathArray[path].path_length > 0;
+}
 
 int GetNextModuleInPath(int current_module, int path) {
 

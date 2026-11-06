@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "asking quietly writes an error after all",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "FF_Search(fileName, false)",
+					"to": "FF_Search(fileName, true)"
+				}
+			]
+		},
+		{
+			"name": "a loose file is not looked for",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "return DoesFileExist(fileName) || FF_Search(fileName, false) != NULL;",
+					"to": "return FF_Search(fileName, false) != NULL;"
+				}
+			]
+		},
+		{
+			"name": "a packed file is not looked for",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "return DoesFileExist(fileName) || FF_Search(fileName, false) != NULL;",
+					"to": "return DoesFileExist(fileName);"
+				}
+			]
+		},
+		{
+			"name": "FF_Find stops writing its error",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "return FF_Search(fileName, true);",
+					"to": "return FF_Search(fileName, false);"
+				}
+			]
+		},
+		{
+			"name": "the old wrong answer comes back",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "if (sayIfNotThere)\n\t{",
+					"to": "if (!sayIfNotThere) return &fastFileHandles[hash][0];\n\tif (sayIfNotThere)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "FF_Find hands back the old wrong answer",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "return FF_Search(fileName, true);",
+					"to": "FastFileHandle *h = FF_Search(fileName, true); if (!h && isInited) { for (auto &v : fastFileHandles) if (!v.empty()) return &v[0]; } return h;"
+				}
+			]
+		},
+		{
+			"name": "the plain merge of the two sides: comparing with the size after the limit",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "nBytesRead < nBytesAsked",
+					"to": "nBytesRead < nBytes"
+				}
+			]
+		},
+		{
+			"name": "running out is never noted",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "if (nBytesRead < nBytesAsked) {\n\t\tranOutOfData = true;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the limit to its own bytes is lost",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "nBytes = (std::min)(nBytes, (size_t)memberBytesLeft);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the count of its own bytes is not kept",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "\t\tmemberBytesLeft -= nBytesRead;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

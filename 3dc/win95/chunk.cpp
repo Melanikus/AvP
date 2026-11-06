@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   chunks can only sit so deep inside chunks, so a level file can't run the game off the end of its stack
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+
 #include <string.h>
 
 #include "chunk.hpp"
@@ -19,59 +24,6 @@ Chunk * Parent_File;
 
 // Non class functions ( only one as yet )
 
-void list_chunks_in_file(List<int> * pList, HANDLE hand, char const * chunk_id)
-{
-	unsigned long bytes_read;
-	BOOL ok = FALSE;
-	char buffer[8];
-	
-	while (pList->size())
-		pList->delete_first_entry();
-
-	// assuming we start at the front of a parent chunk, 
-	// containing the child chunk specified
-
-	int init_file_pos = SetFilePointer (hand,0,0,FILE_CURRENT);
-	int file_pos;
-	int file_length = GetFileSize(hand, 0);
-
-	::SetFilePointer (hand,8,0,FILE_CURRENT);
-
-	int chunk_length;
-	int sub_chunk_ln;
-
-	::ReadFile (hand, (long *) &chunk_length, 4, &bytes_read, 0);
-
-	if ((init_file_pos + chunk_length) > file_length) return;
-
-	while ((file_pos = SetFilePointer (hand,0,0,FILE_CURRENT))
-					< (init_file_pos + chunk_length)) 
-	{
-		ok = ::ReadFile (hand, (long *) buffer, 8, &bytes_read, 0);
-		if (!ok)
-			break;
-
-		if (strncmp(buffer, chunk_id, 8) == 0)
-			pList->add_entry(file_pos);
-
-		ok = ::ReadFile (hand, (long *) &sub_chunk_ln, 4, &bytes_read, 0);
-		if (!ok)
-			break;
-
-		::SetFilePointer (hand,sub_chunk_ln-12,0,FILE_CURRENT);
-	}
-}
-
-#ifndef RIFF_OPTIMIZE
-List<int> list_chunks_in_file (HANDLE & hand, const char * chunk_id)
-{
-	List<int> chunk_list;
-
-	list_chunks_in_file(&chunk_list, hand, chunk_id);
-
-	return chunk_list;
-}
-#endif
 
 //////////////////////////////////////////////
 
@@ -561,8 +513,21 @@ void Chunk::Register(const char* idChunk,const char* idParent, Chunk * (* pfnCre
 	reg.AddAsserted(entry);
 }
 
+// How deep chunks can sit inside chunks. A chunk's constructor makes its children, and theirs make theirs, so each level uses more of the
+// stack, and every chunk that holds chunks comes through here. A chunk needs only 12 bytes, so a file of a couple of megabytes could
+// nest deep enough to run off the end of the stack and crash the game. The deepest in the game's own levels is 15.
+static int const most_chunks_inside_chunks = 64;
+static int chunks_being_made = 0;
+
 Chunk* Chunk_With_Children::DynCreate(const char* data)
 {
+	// Past the limit this chunk is kept as plain bytes, so nothing goes any deeper, and the level is refused.
+	if (chunks_being_made >= most_chunks_inside_chunks)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return new Miscellaneous_Chunk(this,data,(data + 12), (*(int *) (data + 8))-12);
+	}
+
 	/*
 	Look in hash tables for a constructor for this block
 	If none exists , create a Miscellaneous_Chunk
@@ -579,7 +544,11 @@ Chunk* Chunk_With_Children::DynCreate(const char* data)
 		RifRegEntry const * pEntry = g_pRifRegister->Contains(test);
 		if (pEntry)
 		{
-			return pEntry->m_pfnCreate(this,data);
+			chunks_being_made++;
+			Chunk * const made = pEntry->m_pfnCreate(this,data);
+			chunks_being_made--;
+
+			return made;
 		}
 	}
 	return new Miscellaneous_Chunk(this,data,(data + 12), (*(int *) (data + 8))-12);

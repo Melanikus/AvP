@@ -4,7 +4,8 @@
 //
 // A texture's hand-made map is allowed not to be there, and most aren't. FF_Find writes an error when a file it's asked for isn't in a fast file but shares a place in its table with one that is, so looking for maps
 // used to fill the log with errors about nothing. FF_FileIsThere asks the same question and says nothing. This checks both of its answers, that it really does say nothing, that FF_Find still does, and that a name
-// sharing a place with another file never gets that other file back, which is what the game's fast file code once did.
+// sharing a place with another file never gets that other file back, which is what the game's fast file code once did. It also checks that a file inside a fast file runs out at the end of its own bytes, as a real file
+// runs out at the end of the file, because a damaged sound with no end of its own would otherwise search on for ever.
 //
 // HOW IT RUNS
 //
@@ -16,16 +17,22 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <chrono>
+#include <future>
 #include <string>
+#include <vector>
 
 #include "FastFile.h"
 #include "FileStream.h"
 #include "utilities.h"
 #include "console.h"
+#include "wav_chunks.h"
 
 static const char *const kFolder = "fast_file_test_files";
 static const char *const kPackedFile = "graphics/envrnmts/derelict/hive01.rim";
 static const char *const kLooseFile = "loose_map_Normal.rim";
+static const char *const kSoundWithNoData = "sounds/no_data.wav";    // comes right before the next one, whose data chunk it must not find
+static const char *const kSoundWithData = "sounds/has_data.wav";
 
 static int checksFailed = 0;
 static int errorsWritten = 0;
@@ -78,24 +85,46 @@ static void AddNumber(std::string &bytes, uint32_t number)
 	bytes.append(reinterpret_cast<const char *>(&number), 4);
 }
 
-// A fast file holding one file: the signature, its version, how many files, how long the list is, how much data, then the list, then the data.
+// A chunk of a WAV file: a four-letter name, a size, then the bytes.
+static std::string WavChunk(const char *chunkName, const std::string &chunkBytes)
+{
+	std::string chunk(chunkName, 4);
+
+	AddNumber(chunk, (uint32_t)chunkBytes.size());
+	return chunk + chunkBytes;
+}
+
+// A fast file: the signature, its version, how many files, how long the list is, how much data, then the list, then the data. The files are one after another, so each one's end is the start of the next.
 static void WriteTinyFastFile(const char *name)
 {
-	std::string entry;
+	struct Packed { const char *name; std::string bytes; };
 
-	AddNumber(entry, 0);                // where its data starts
-	AddNumber(entry, 4);                // how long its data is
-	entry += kPackedFile;
-	entry.append(((strlen(kPackedFile) + 4) & ~3) - strlen(kPackedFile), '\0');
+	std::vector<Packed> const files =
+	{
+		{ kPackedFile, "data" },
+		{ kSoundWithNoData, WavChunk("LIST", "abcd") },
+		{ kSoundWithData, WavChunk("data", "abcd") }
+	};
+
+	std::string list, data;
+
+	for (size_t i = 0; i < files.size(); i++)
+	{
+		AddNumber(list, (uint32_t)data.size());                // where its data starts
+		AddNumber(list, (uint32_t)files[i].bytes.size());      // how long its data is
+		list += files[i].name;
+		list.append(((strlen(files[i].name) + 4) & ~3) - strlen(files[i].name), '\0');
+		data += files[i].bytes;
+	}
 
 	std::string bytes = "RFFL";
 
 	AddNumber(bytes, 0);
-	AddNumber(bytes, 1);
-	AddNumber(bytes, (uint32_t)entry.size());
-	AddNumber(bytes, 4);
-	bytes += entry;
-	bytes += "data";
+	AddNumber(bytes, (uint32_t)files.size());
+	AddNumber(bytes, (uint32_t)list.size());
+	AddNumber(bytes, (uint32_t)data.size());
+	bytes += list;
+	bytes += data;
 
 	FILE *const file = fopen(name, "wb");
 
@@ -210,6 +239,49 @@ static void TestAskingQuietly()
 	Check(!stream.IsGood(), "so opening that name gets nothing, and a map reader can't be given some other file");
 }
 
+// Runs a job that goes round for ever if the code under test is wrong. If it takes too long, the test stops at once, because a job that is stuck can't be asked to finish.
+template <class JOB> static bool WithinTimeLimit(JOB job)
+{
+	std::future<bool> result = std::async(std::launch::async, job);
+
+	if (result.wait_for(std::chrono::seconds(20)) != std::future_status::ready)
+	{
+		puts("FAILED: a job did not finish in time. In the game, this would be a hang.");
+		_exit(1);
+	}
+
+	return result.get();
+}
+
+static void TestRunningOutInsideAFastFile()
+{
+	{
+		FileStream stream;
+
+		Check(stream.Open(kPackedFile, FileStream::FileRead), "a file in a fast file opens");
+		Check(stream.GetUint32BE() == 'data', "and reads as its own bytes");
+		Check(!stream.RanOutOfData(), "reading to its very end isn't running out");
+		Check(stream.PeekByte() == 0 && stream.RanOutOfData(), "looking past its end gives 0, and that is running out, though the fast file has more in it");
+		Check(stream.GetByte() == 0, "reading past its end gives 0, not the next file's first byte");
+	}
+
+	{
+		FileStream stream;
+
+		Check(stream.Open(kSoundWithData, FileStream::FileRead), "a sound in a fast file opens");
+		Check(WithinTimeLimit([&stream] { return FindWavDataChunk(stream); }), "and the search finds its sound");
+	}
+
+	{
+		// The next file in the fast file does have a sound. Without running out here, this search either finds that one, or goes round for ever reading nothing.
+		FileStream stream;
+
+		Check(stream.Open(kSoundWithNoData, FileStream::FileRead), "a sound with no data in it opens");
+		Check(!WithinTimeLimit([&stream] { return FindWavDataChunk(stream); }), "and the search stops at the end of its own bytes, and doesn't find the next file's");
+		Check(stream.RanOutOfData(), "because it ran out there");
+	}
+}
+
 int main()
 {
 	printf("Asking whether a file is there:\n");
@@ -223,6 +295,7 @@ int main()
 	Check(FF_Init(), "the test's own fast file is read");
 
 	TestAskingQuietly();
+	TestRunningOutInsideAFastFile();
 
 	TakeAwayTheTestsFiles();
 

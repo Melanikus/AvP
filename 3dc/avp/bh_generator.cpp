@@ -4,6 +4,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
+//   a generator copes with times of nothing and with being placed outside every module
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -177,6 +178,12 @@ void GeneratorBehaviour(STRATEGYBLOCK *sbPtr)
 	prevent this: eg if the module is visible, or there are too 
 	many generator npcs in the environment */
 	
+	/* a generator placed outside every module has nowhere to put what it makes */
+	if(!sbPtr->containingModule)
+	{
+		return;
+	}
+
 	/* if generator is visible, do not create a new NPC */
 	if(ModuleCurrVisArray[(sbPtr->containingModule->m_index)])
 	{	
@@ -622,8 +629,8 @@ static void ResetGeneratorTimer(GENERATOR_BLOCK *genBlock)
 
 	if(genBlock->use_own_rate_values)
 	{
-		LOCALASSERT(genBlock->GenerationRate);
-		genBlock->Timer	= (60 * ONE_FIXED *100)/genBlock->GenerationRate;
+		// the rate comes from the level file, and 0 would divide by nothing
+		genBlock->Timer	= (genBlock->GenerationRate > 0) ? (60 * ONE_FIXED *100)/genBlock->GenerationRate : GENERATORTIME_MAX;
 	}
 	else
 	{
@@ -632,12 +639,15 @@ static void ResetGeneratorTimer(GENERATOR_BLOCK *genBlock)
 		LOCALASSERT(NPCHive.generatorNPCsPerMinute>0);
 
 		/* set the timer */
-		genBlock->Timer	= (((60 * ONE_FIXED)/(NPCHive.generatorNPCsPerMinute))*NPCHive.numGenerators);
+		genBlock->Timer	= (((60 * ONE_FIXED)/max(NPCHive.generatorNPCsPerMinute,1))*NPCHive.numGenerators);
 	}
 	/* randomise +- an eighth */
 	{
 		int baseTime = genBlock->Timer;
-		genBlock->Timer = ((baseTime*7)/8) + (FastRandom()%(baseTime/4));
+		int spread = baseTime/4;
+
+		// a time this short has no eighth to spare, and the sum would divide by nothing
+		genBlock->Timer = ((baseTime*7)/8) + (spread ? FastRandom()%spread : 0);
 	}
 	/* clamp */
 	if(genBlock->Timer>GENERATORTIME_MAX) genBlock->Timer=GENERATORTIME_MAX;
@@ -654,7 +664,9 @@ static void ResetHiveStateTime(void)
 
 	/* set the timer, +- an eighth */
 	baseTime = LoadedHiveData.hiveStateBaseTime;
-	NPCHive.hiveStateTimer = ((baseTime*7)/8) + (FastRandom()%(baseTime/4));
+
+	// this time comes from the level file, and one too short has no eighth to spare
+	NPCHive.hiveStateTimer = ((baseTime*7)/8) + ((baseTime/4) ? FastRandom()%(baseTime/4) : 0);
 
 }
 

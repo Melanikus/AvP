@@ -282,9 +282,6 @@
     <ClCompile Include="..\..\3dc\win95\win_func.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\3dc\win95\zsp.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -885,9 +882,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\win95\shpanim.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\3dc\win95\zsp.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\include\3dc.h">

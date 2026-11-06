@@ -6,6 +6,7 @@
 //   deleted old alternative versions of seven if-statements that were switched off with #if 0 (or #if 1 / #else)
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
+//   a request can only send a marine along a path that exists
 #include "3dc.h"
 
 #include "inline.h"
@@ -17612,7 +17613,10 @@ void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data)
 				//need to cacluculate mission module from 'myspot' guard location
 				{
 					MODULE* module=ModuleFromPosition(&marineStatusPointer->my_spot,0);
-					GLOBALASSERT(module);
+
+					// a marine placed outside every module has nowhere to guard, so it carries on as it was
+					if(!module) return;
+
 					marineStatusPointer->missionmodule=module->m_aimodule;
 				}
 				break;
@@ -17628,6 +17632,10 @@ void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data)
 		{
 			//find the path and stepnumber
 			new_path=(extended_data>>15)&0xff;
+
+			// this number comes from a switch in the level file, so it may name no path at all, and then the marine carries on as it was
+			if(!PathCanBeFollowed(new_path)) return;
+
 			new_stepnumber=GetClosestStepInPath(new_path,sbPtr->containingModule);
 		}
 

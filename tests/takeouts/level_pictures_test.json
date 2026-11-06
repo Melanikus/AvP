@@ -1,0 +1,189 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "LIMIT: there is no limit",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: one too many is allowed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)",
+					"to": "if (h->pictures_asked_for > kMostPicturesOneFileCanAskFor)"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: one too few is allowed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)",
+					"to": "if (h->pictures_asked_for + 1 >= kMostPicturesOneFileCanAskFor)"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: twice as many are allowed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "kMostPicturesOneFileCanAskFor = 4096;",
+					"to": "kMostPicturesOneFileCanAskFor = 8192;"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: half as many are allowed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "kMostPicturesOneFileCanAskFor = 4096;",
+					"to": "kMostPicturesOneFileCanAskFor = 2048;"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: the count never goes up",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "h->pictures_asked_for++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIMIT: the level's own list is not counted",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "texID_t imgnum = LoadPictureItNames(h, bns().filename, bns().flags);",
+					"to": "texID_t imgnum = load_rif_bitmap(bns().filename, bns().flags);"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: an outside shape's list is not counted",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "texID_t imgnum = LoadPictureItNames(h, tex, bns().flags);",
+					"to": "texID_t imgnum = load_rif_bitmap(tex, bns().flags);"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: a name past the limit is still given a picture number",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "return GEI_NOTLOADED;\n\t}\n\n\th->pictures_asked_for++;",
+					"to": "return 1000;\n\t}\n\n\th->pictures_asked_for++;"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: the log is told for every name",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "h->said_too_many_pictures = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIMIT: the log is never told",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "LogErrorStringC(\"This level file names too many pictures, so the rest of them aren't loaded\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIMIT: a file starts with its count already used up",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.hpp",
+					"from": ", pictures_asked_for(0)",
+					"to": ", pictures_asked_for(4096)"
+				}
+			]
+		},
+		{
+			"name": "LIMIT: a file starts as if the log had been told",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.hpp",
+					"from": ", said_too_many_pictures(false)",
+					"to": ", said_too_many_pictures(true)"
+				}
+			]
+		},
+		{
+			"name": "FRAMES: a shape's animation frames are not checked at all",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "FRAMES: only the first polygon of a shape is checked",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "for (int i = 0; i < ac->NumPolys; i++)\n\t{\n\t\tif (!ac->AnimList[i]->ImagesAreKnown",
+					"to": "for (int i = 0; i < 1; i++)\n\t{\n\t\tif (!ac->AnimList[i]->ImagesAreKnown"
+				}
+			]
+		},
+		{
+			"name": "FRAMES: a refused picture counts as known",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_chunk.cpp",
+					"from": "if (texture < 0 || texture > max_index || image_numbers[texture] == -1)",
+					"to": "if (texture < 0 || texture > max_index)"
+				}
+			]
+		},
+		{
+			"name": "FRAMES: the shape is said to have animation even when it stays still",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))\n\t\t{\n\t\t\treturn;",
+					"to": "if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))\n\t\t{\n\t\t\tshp->shapeflags |= ShapeFlag_HasTextureAnimation;\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "LIST: a refused picture is given a place in the list",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "if (GEI_NOTLOADED != imgnum)\n\t\t\t\t{\n\t\t\t\t\th->tex_index_nos[bns().index] = imgnum;",
+					"to": "if (true)\n\t\t\t\t{\n\t\t\t\t\th->tex_index_nos[bns().index] = imgnum;"
+				}
+			]
+		}
+	]
+}
