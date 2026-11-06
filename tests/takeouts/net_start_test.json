@@ -715,7 +715,17 @@
 			]
 		},
 		{
-			"name": "a name with no end stays that way",
+			"name": "a player's name with no end stays that way",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "player.name[kPlayerNameSize - 1] = '\\0';",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a game's name with no end stays that way",
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
