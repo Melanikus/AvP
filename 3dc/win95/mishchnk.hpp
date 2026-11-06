@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an empty file chunk remembers its version chunk, so that who owns it is plain to read
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of code only the level editor used: the game itself never runs it
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
@@ -105,6 +107,10 @@ public:
 	// copy string when constructed
 	// to this variable
 	char * filename;
+
+	// A file chunk that starts empty starts with a version chunk, and this remembers it. A chunk joins its parent's list of children as it's made,
+	// and the parent's destructor deletes everything on that list (chunk.cpp), so this is not to be freed here. It's 0 in a file chunk read from a file.
+	Chunk * version_chunk;
 
 
 	// some easy access functions

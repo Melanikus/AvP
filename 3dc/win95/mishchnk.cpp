@@ -6,6 +6,8 @@
 //   a compressed level goes through the checked decoder, which knows the size of the file
 //   a module's points have to fit the box stored with its shape
 //   a level read from a file has zero bytes after it, so that no chunk's fixed reads or names can leave the buffer
+//   a child chunk whose size cannot be real is refused; the object list is asked for by count, so a number from
+//   a level file cannot make the size sum wrap round
 //   a level whose objects and shapes don't join up is refused, and a failed load stops before the steps that
 //   rely on a whole level; object numbers are limited to what the object list can hold; so is a level with a
 //   shape that has more points than the game's list of points can hold
@@ -96,7 +98,7 @@ Children for File_Chunk :
 */
 
 File_Chunk::File_Chunk(const char * file_name)
-: Chunk_With_Children (NULL, "REBINFF2")
+: Chunk_With_Children (NULL, "REBINFF2"), version_chunk (0)
 {
 // Load in whole chunk and traverse
 	char rifIsCompressed = FALSE;
@@ -247,7 +249,8 @@ File_Chunk::File_Chunk()
 : Chunk_With_Children (NULL, "REBINFF2")
 {
 // Empty File chunk
-	new RIF_Version_Num_Chunk (this);
+	// It joins this chunk's children as it's made, and ~Chunk_With_Children deletes it with the rest
+	version_chunk = new RIF_Version_Num_Chunk (this);
 	filename = 0;
 
 	object_array_size=0;
@@ -260,7 +263,7 @@ File_Chunk::~File_Chunk()
 	delete[] filename;
 
 	if (object_array)
-		free(object_array);
+		DeallocateMem(object_array);
 }
 
 #define SAVE_USING_COMPRESSION 1
@@ -586,7 +589,7 @@ void File_Chunk::build_object_array()
 
 	if (object_array)
 	{
-		free(object_array);
+		DeallocateMem(object_array);
 		object_array=0;
 	}
 	object_array_size=0;
@@ -605,7 +608,7 @@ void File_Chunk::build_object_array()
 
 	if (object_array_size<=0) return;
 
-	object_array = (Object_Chunk**) malloc(sizeof(Object_Chunk*)*object_array_size);
+	object_array = (Object_Chunk**) AllocArrayMem(object_array_size,sizeof(Object_Chunk*));
 	for(int i=0;i<object_array_size;i++)
 	{
 		object_array[i]=0;

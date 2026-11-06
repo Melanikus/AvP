@@ -95,6 +95,10 @@ void avp_exit(int code)
 	exit(code);
 }
 
+void LogErrorStringC(const char *)
+{
+}
+
 // Checks the compiler makes while building, before anything runs. If one of these fails, this file doesn't compile.
 static_assert(sizeof(ChunkObject::o_name) == 64, "the name space must hold 63 characters and a zero byte");
 static_assert(offsetof(ChunkObject, index_num) == offsetof(ChunkObject, o_name) + 64, "index_num must come right after the name");

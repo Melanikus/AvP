@@ -1,6 +1,9 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a chunk of texture animation has to fit its own size and the game's limits before any of it is believed, and an animation can
 //   say whether every picture it shows is a real one
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the polygon list is asked for by count, so a number from a level file cannot make the size sum wrap round
 #include "animation_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -114,7 +117,7 @@ Animation_Chunk::Animation_Chunk(Chunk_With_Children* parent,const char* data,si
 	data+=4;
 	if(NumPolys)
 	{
-		AnimList=(TEXANIM**)malloc(NumPolys*sizeof(TEXANIM*));
+		AnimList=(TEXANIM**)AllocArrayMem(NumPolys,sizeof(TEXANIM*));
 		for(int i=0;i<NumPolys;i++)
 		{
 			AnimList[i]=new TEXANIM;
@@ -177,7 +180,7 @@ Animation_Chunk::~Animation_Chunk()
 	{
 		delete AnimList[i];
 	}
-	free(AnimList);
+	if(AnimList) DeallocateMem(AnimList);
 }
 
 
