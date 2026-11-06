@@ -279,10 +279,10 @@ static void TheView()
 
 	comeBack = kFinal;
 	Check(View_AfterSwitches(kPolygons, kOff, false, false, &comeBack) == kPolygons && comeBack == kFinal, "not everything off, nothing moves");
-	Check(View_AfterSwitches(kOff, kOff, false, false, &comeBack) == kOff, "and G's own OFF stays, while the switches aren't all off");
+	Check(View_AfterSwitches(kOff, kOff, false, false, &comeBack) == kOff, "and J's own OFF stays, while the switches aren't all off");
 	Check(View_AfterSwitches(kOff, kOff, true, true, &comeBack) == kOff && comeBack == kFinal, "still all off, nothing moves");
-	Check(View_AfterSwitches(kEdges, kOff, true, true, &comeBack) == kEdges && comeBack == kFinal, "and G's view stays too, while they are");
-	Check(View_AfterSwitches(kEdges, kOff, true, false, &comeBack) == kEdges, "G moved it off OFF: turning a switch on leaves it where G put it");
+	Check(View_AfterSwitches(kEdges, kOff, true, true, &comeBack) == kEdges && comeBack == kFinal, "and J's view stays too, while they are");
+	Check(View_AfterSwitches(kEdges, kOff, true, false, &comeBack) == kEdges, "J moved it off OFF: turning a switch on leaves it where J put it");
 
 	// no stencil: the switches stay all off, so nothing ever brings the view back
 	comeBack = kFinal;
@@ -297,13 +297,13 @@ static void TheView()
 
 	Check(view == kOff && comeBack == kFinal, "a card with no stencil stays at OFF, frame after frame");
 
-	// the moves of G
-	Check(View_AfterG(kOff, kViewCount, kFinal, false) == kFinal, "G goes from OFF to FINAL");
-	Check(View_AfterG(kFinal, kViewCount, kFinal, false) == kEdges, "and on to the next");
-	Check(View_AfterG(kPolygons, kViewCount, kFinal, false) == kOff, "and round from the last to OFF");
-	Check(View_AfterG(kOff, kViewCount, kFinal, true) == kEdges, "with everything off, G goes past FINAL");
-	Check(View_AfterG(kEdges, kViewCount, kFinal, true) == kPolygons, "the other views are as they were");
-	Check(View_AfterG(kPolygons, kViewCount, kFinal, true) == kOff, "and it still comes round to OFF");
+	// the moves of J
+	Check(View_AfterViewKey(kOff, kViewCount, kFinal, false) == kFinal, "J goes from OFF to FINAL");
+	Check(View_AfterViewKey(kFinal, kViewCount, kFinal, false) == kEdges, "and on to the next");
+	Check(View_AfterViewKey(kPolygons, kViewCount, kFinal, false) == kOff, "and round from the last to OFF");
+	Check(View_AfterViewKey(kOff, kViewCount, kFinal, true) == kEdges, "with everything off, J goes past FINAL");
+	Check(View_AfterViewKey(kEdges, kViewCount, kFinal, true) == kPolygons, "the other views are as they were");
+	Check(View_AfterViewKey(kPolygons, kViewCount, kFinal, true) == kOff, "and it still comes round to OFF");
 }
 
 // Every one of the eight, on a card that has everything
@@ -423,12 +423,13 @@ static void TheRealGame()
 
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
 	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
-	std::string const keys = Between(applying, "if (DevKeysCanAct())", "bool const hasStencil");
+	std::string const keys = Between(applying, "if (PlayerKeysCanAct())", "bool const hasStencil");
 
 	Check(CountOf(render, "ViewSwitches_ApplyAsked();") == 2, "the switches change from one place, named once ahead and called once");
 	Check(Has(render, "ToyShadows_Draw();\n\t\tViewSwitches_ApplyAsked();"), "and that's straight after the frame's shadows");
 
 	std::string const canAct = Between(render, "static bool DevKeysCanAct()", "}");
+	std::string const playerCanAct = Between(render, "static bool PlayerKeysCanAct()", "}");
 
 	Check(Has(canAct, "DevMode"), "the keys need -dev");
 	Check(Has(canAct, "AvP.Network == I_No_Network"), "and do nothing in a network game, where they'd show what walls hide");
@@ -474,20 +475,22 @@ static void TheRealGame()
 	Check(Has(keepingOut, "ShadowShootOn = 0;") && Has(keepingOut, "ShadowFlickerOn = 0;") && Has(keepingOut, "ShadowsFullReport = 0;"), "and the tools that say the same in words go off");
 	Check(Has(keepingOut, "LogString("), "and the log says why");
 
-	std::string::size_type const gKey = render.find("if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])");
+	std::string::size_type const viewKey = render.find("if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))");
 	std::string::size_type const keptOut = render.find("KeepDeveloperToolsOutOfNetworkGames();");
 
-	Check(gKey != std::string::npos && keptOut != std::string::npos && gKey < keptOut && keptOut < render.find("bool const lightsOurs"), "that's asked every frame, after G and before anything is drawn");
-	Check(Has(canAct, "AvP.MainLoopRunning"), "and a level being played, so a letter typed into a main menu doesn't press them");
-	Check(Has(canAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
-	Check(Has(canAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
-	Check(Has(keys, "if (DevKeysCanAct())"), "L and H ask that");
-	Check(Has(render, "if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])"), "and so does G");
-	Check(Has(render, "Not while typing, like G.\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
-	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 1, "and nothing else in the drawing code reads those keys");
-	Check(Has(keys, "DebouncedKeyboardInput[KEY_L]") && Has(keys, "lightingAsked = kAskedNext"), "L is the next lighting, once a press");
-	Check(Has(keys, "DebouncedKeyboardInput[KEY_H]") && Has(keys, "shadowsAsked = kAskedNext"), "H switches the shadows, once a press");
-	Check(CountOf(render, "KEY_L]") == 1 && CountOf(render, "KEY_H]") == 1, "and nothing else in the drawing code reads those keys");
+	Check(viewKey != std::string::npos && keptOut != std::string::npos && viewKey < keptOut && keptOut < render.find("bool const lightsOurs"), "that's asked every frame, after G and before anything is drawn");
+	Check(Has(canAct, "PlayerKeysCanAct()"), "and everything a key that anyone may press needs");
+	Check(!Has(playerCanAct, "DevMode") && !Has(playerCanAct, "I_No_Network"), "which is neither of those two");
+	Check(Has(playerCanAct, "AvP.MainLoopRunning"), "but a level being played, so a letter typed into a main menu doesn't press them");
+	Check(Has(playerCanAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
+	Check(Has(playerCanAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
+	Check(Has(keys, "if (PlayerKeysCanAct())"), "the rendering and shadows keys ask that, so they work for everyone");
+	Check(Has(render, "if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))"), "and the dev views' key asks for -dev as well");
+	Check(Has(render, "Not while typing, like J.\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
+	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_J]") == 0 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 0, "and nothing else in the drawing code reads those keys, and G is the marine's now");
+	Check(Has(keys, "ViewSettings_KeyPressed(kViewKeyRendering)") && Has(keys, "lightingAsked = kAskedNext"), "the rendering key is the next lighting, once a press");
+	Check(Has(keys, "ViewSettings_KeyPressed(kViewKeyShadows)") && Has(keys, "shadowsAsked = kAskedNext"), "the shadows key switches the shadows, once a press");
+	Check(CountOf(render, "KEY_L]") == 0 && CountOf(render, "KEY_H]") == 0, "and the drawing code reads no fixed letter for them, because the player chooses: tests/view_keys_test.cpp");
 
 	std::string const shadowsCommand = Between(render, "void ShadowsCommand(char *words)", "void LightingCommand(char *words)");
 	std::string const lightingCommand = Between(render, "void LightingCommand(char *words)", "// The menu asks the same way the commands do");
@@ -498,7 +501,7 @@ static void TheRealGame()
 	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
 	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
 	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights())"), "the surface pass only asks for the maps when the choice reads them");
-	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
+	Check(Has(render, "ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "J goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
 

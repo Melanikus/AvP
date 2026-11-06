@@ -23,6 +23,8 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+//   the developers' view moves from G to J, which no default control set uses
+//   the keys for the lighting, the shadows and the developers' views can be changed on the rendering page. The first two now work for everyone, and a control with the same key wins
 
 #include "console.h"
 #include "OnScreenKeyboard.h"
@@ -38,6 +40,7 @@
 #include "VertexBuffer.h"
 #include "FmvCutscenes.h"
 #include "surface_normals.h"
+#include "view_settings.h"
 #include "surface_pictures.h"
 #include "shadow_gap.h"
 #include "static_scene.h"
@@ -295,7 +298,7 @@ static bool LockExecuteBuffer()
 	d3d.mainVB->Lock((void**)&mainVertex);
 
 	// Only the shadow pass reads the normals. With its view off, none are written, and this leaves the game's frame the way it always was. The view only changes at the very end of a
-	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by G collected no polygons, so its pass has nothing to do.
+	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by J collected no polygons, so its pass has nothing to do.
 	{
 		extern int ToyShadowsMode;
 
@@ -3759,7 +3762,7 @@ extern void RenderStringVertically(char *stringPtr, int centreX, int bottomY, in
 // the end of its range. The stencil counts which pixels are inside a prism, and those pixels are darkened.
 // Each prism is closed, so z-fail counts come out right with no edge data, and neighbours' shared sides cancel out.
 
-// What the shadows show. G steps through these while playing, so they can be compared live. view_switches.h says how this goes with LIGHTING and SHADOWS.
+// What the shadows show. J steps through these while playing, so they can be compared live. view_switches.h says how this goes with LIGHTING and SHADOWS.
 enum ToyShadowsView
 {
 	kToyViewOff,
@@ -3882,7 +3885,7 @@ static int captureCornersKept[kToyMostLights];
 static int keptGroupsMadeThisFrame = 0;
 
 int ShadowFlickerOn = 0;    // -shadowflicker: see shadow_debug.cpp
-int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and G, L, H, F7, F8 and the shoot tool's keys do nothing
+int DevMode = 0;            // -dev: the developer tools. Without it the tag doesn't show, and J, F7, F8 and the shoot tool's keys do nothing
 int ShadowStatusOn = 1;     // -statusoff, or F7: the tag on the top right of the screen
 
 static int keptCornersThisPass = 0;          // how many corners of kept prisms the pass being drawn uses
@@ -6694,8 +6697,18 @@ static void ShadowStatus_Draw()
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
-	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: G VIEW, F7 TAG, F8 CAPTURE");   // so that nobody has to remember them
-	_snprintf(lines[numLines++], kLineLength - 1, "KEYS: L LIGHTING, H SHADOWS");
+
+	// So that nobody has to remember them. These are the keys the player has now, because they can be changed on the rendering page. For some keys the name is written in the same place each time, so the first is kept while the second is asked for.
+	{
+		extern char *GetDescriptionOfKey(unsigned char key);
+
+		char lightingKey[kLineLength] = { 0 };
+
+		strncpy(lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyRendering))), sizeof(lightingKey) - 1);
+
+		_snprintf(lines[numLines++], kLineLength - 1, "KEYS: %s VIEW, F7 TAG, F8 CAPTURE", GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyDevViews))));
+		_snprintf(lines[numLines++], kLineLength - 1, "KEYS: %s LIGHTING, %s SHADOWS", lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyShadows))));
+	}
 
 	if (ShadowShootOn)
 	{
@@ -6866,13 +6879,19 @@ static bool ViewAddsLightsPerPixel()
 	return (ToyShadowsMode == kToyViewFinal && LightingNow != kLightingGouraud) || ToyShadowsMode == kToyViewMask || ToyShadowsMode == kViewNormals;
 }
 
-// Can a developer's key do anything right now? Only with -dev, only in a level being played, and not while typing. A menu reads what's typed into it from a queue of its
-// own, and it leaves the game's controls switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.
+// Can a key that anyone may press do anything right now? Only in a level being played, and not while typing. A menu reads what's typed into it from a queue of its own, and it leaves the game's controls
+// switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.
 extern int InGameMenusAreRunning(void);
 
+static bool PlayerKeysCanAct()
+{
+	return AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+}
+
+// And a developer's key? Only with -dev as well, and not in a network game.
 static bool DevKeysCanAct()
 {
-	return DevMode && AvP.Network == I_No_Network && AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));
+	return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();
 }
 
 // The developer tools show what walls hide. EDGES and RED VOLUMES draw the shadow of someone behind a wall straight through it, and the shoot tool and the reports say much the same in
@@ -6951,7 +6970,7 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 static int shadowsAsked = kAskedNothing;
 static int lightingAsked = kAskedNothing;
 
-// Whether LIGHTING and SHADOWS were both off when last looked at, for G and for seeing when that changes
+// Whether LIGHTING and SHADOWS were both off when last looked at, for J and for seeing when that changes
 static bool switchesWereAllOff = false;
 static int viewToComeBackTo = kToyViewFinal;
 
@@ -7150,15 +7169,16 @@ bool ViewSwitches_ShadowsCanBeOn()
 // Where LIGHTING and SHADOWS change. It runs after this frame's shadows, so everything the next frame reads, from its lights onwards, agrees.
 static void ViewSwitches_ApplyAsked()
 {
-	// Not while typing, or an L in the console or a chat message would change the lighting. Only with -dev, so that a player's own controls can't be taken by accident.
-	if (DevKeysCanAct())
+	// L and H, or whichever keys the player has chosen on the rendering page. These are for everyone, with or without -dev and in a network game too, like the page itself and the LIGHTING and SHADOWS
+	// commands. Not while typing, or an L in the console or a chat message would change the lighting. A control with the same key wins, so a player's own controls can't be taken by accident: see view_settings.cpp.
+	if (PlayerKeysCanAct())
 	{
-		if (DebouncedKeyboardInput[KEY_L])
+		if (ViewSettings_KeyPressed(kViewKeyRendering))
 		{
 			lightingAsked = kAskedNext;
 		}
 
-		if (DebouncedKeyboardInput[KEY_H])
+		if (ViewSettings_KeyPressed(kViewKeyShadows))
 		{
 			shadowsAsked = kAskedNext;
 		}
@@ -7246,7 +7266,7 @@ static void ViewSwitches_ApplyAsked()
 
 static void ToyShadows_Draw()
 {
-	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
+	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the J key, so nothing can turn
 	// them back on, and with ToyShadowsMode at 0 nothing collects polygons or chooses lights.
 	if (!ToyDepthBufferHasStencil())
 	{
@@ -7261,10 +7281,10 @@ static void ToyShadows_Draw()
 		return;
 	}
 
-	// G, which no default control set uses. Not while typing, or a G in the console or a chat message would change the view.
-	if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])
+	// J, which no default control set uses, or whichever key the player has chosen on the rendering page. Not while typing, or a J in the console or a chat message would change the view.
+	if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))
 	{
-		ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
+		ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
 
 		static char message[40];
 		_snprintf(message, sizeof(message) - 1, "VIEW: %s", kToyViewNames[ToyShadowsMode]);
@@ -7275,7 +7295,7 @@ static void ToyShadows_Draw()
 
 	KeepDeveloperToolsOutOfNetworkGames();
 
-	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like G.
+	// F8 saves the next frames as images, and F7 hides the tag on the screen. Neither is used by the game. Not while typing, like J.
 	if (DevKeysCanAct())
 	{
 		if (DebouncedKeyboardInput[KEY_F8])
@@ -7312,7 +7332,7 @@ static void ToyShadows_Draw()
 		}
 	}
 
-	// The G key above can change the view after the polygons were collected. That's safe both ways: going to a view with volumes, this frame's prisms come out empty, and
+	// The J key above can change the view after the polygons were collected. That's safe both ways: going to a view with volumes, this frame's prisms come out empty, and
 	// going to one without, the polygons on the list are just forgotten at the end.
 	bool const volumesThisFrame = ToyShadows_VolumesInThisView();
 

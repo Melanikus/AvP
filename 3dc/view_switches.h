@@ -1,7 +1,7 @@
 // The two things a player can change while playing: how the world is lit, and whether shadows are drawn. Written 2026-11-05 by Melanikus for the AvP port.
 //
 // LIGHTING has four choices, and SHADOWS is on or off. Either can be set whatever the other says, so there are eight ways the world can look.
-// Both are console commands, so they can go on any key: BIND L LIGHTING. With -dev they also have keys of their own, L and H.
+// Both are console commands, so they can go on any key: BIND L LIGHTING. They also have keys of their own, L and H unless the player chooses others on the rendering page: see view_keys.h.
 //
 // WHEN THEY CHANGE: the drawing code reads these many times a frame, and a command can arrive at any moment. So a command only notes what it was asked for, and the
 // change happens in one place, ViewSwitches_ApplyAsked in d3d_render.cpp, after one frame's shadows and before the next frame's lights. No frame sees half of a
@@ -10,8 +10,8 @@
 // EVERYTHING OFF: with Gouraud and no shadows, the view itself goes to OFF, which is exactly how the game has always drawn. Turning either back on returns to the
 // view it left, as long as nothing else has moved it. A new player starts here: see view_settings.cpp, which keeps what they choose.
 //
-// G, FOR DEVELOPERS: G picks what the shadow pass shows. LIGHTING and SHADOWS decide what its FINAL view draws, and the other views are for looking inside the pass, so
-// they show what they're named for. With everything off, FINAL and OFF would be the same thing, so G goes straight past FINAL.
+// J, FOR DEVELOPERS: J picks what the shadow pass shows. LIGHTING and SHADOWS decide what its FINAL view draws, and the other views are for looking inside the pass, so
+// they show what they're named for. With everything off, FINAL and OFF would be the same thing, so J goes straight past FINAL.
 //
 // This file holds only the decisions, with nothing of the game in it, so that tests/view_switches_test.cpp can run them.
 
@@ -333,8 +333,8 @@ inline char const *Lighting_WordsOnScreen(int choice, bool marching)
 	return (choice == kLightingRelief && !marching) ? "RELIEF, DRAWN AS NORMALS" : Lighting_Word(choice);
 }
 
-// What the view becomes after the switches have changed. It only moves when everything goes off, or stops being off. If G has moved it away from OFF in between, it stays
-// where G put it.
+// What the view becomes after the switches have changed. It only moves when everything goes off, or stops being off. If J has moved it away from OFF in between, it stays
+// where J put it.
 inline int View_AfterSwitches(int viewNow, int viewOff, bool wereAllOff, bool areAllOff, int *viewToComeBackTo)
 {
 	if (areAllOff && !wereAllOff)
@@ -355,8 +355,8 @@ inline int View_AfterSwitches(int viewNow, int viewOff, bool wereAllOff, bool ar
 	return viewNow;
 }
 
-// The view G moves on to. See the top of this file for why it can go past FINAL.
-inline int View_AfterG(int viewNow, int viewCount, int viewFinal, bool allOff)
+// The view J moves on to. See the top of this file for why it can go past FINAL.
+inline int View_AfterViewKey(int viewNow, int viewCount, int viewFinal, bool allOff)
 {
 	int const next = (viewNow + 1) % viewCount;
 
