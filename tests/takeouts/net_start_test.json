@@ -5,6 +5,56 @@
 	],
 	"rows": [
 		{
+			"name": "SOURCE: leaving waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the start of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_StartGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();",
+					"to": "// AddNetMsg_EndGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sending now still waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.sendTimer = 0;\n\tNetSendMessages();",
+					"to": "NetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corpse's honest message counts as a refusal",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (type == I_BehaviourNetCorpse)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "one address can fill the list of games",
 			"changes": [
 				{

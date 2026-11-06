@@ -667,7 +667,7 @@ static std::string Between(const std::string &text, const char *from, const char
 	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
 }
 
-static char playerName[] = "Hudson";
+static char playerName[] = "Ripley";
 static char sessionName[] = "A game";
 
 static NetResult HostAGame()
@@ -2059,6 +2059,15 @@ static void TestTheTableOfMessageParts()
 	Check(Has(makeGhost, "if (lightPtr)\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\tlightPtr->LightBright"), "a flare with no light is fine");
 	Check(Has(makeGhost, "// A kind of alien this level didn't load has no model, and the kind came in a message\n\tif (!root_section)"), "a kind of alien that isn't loaded makes no model");
 	Check(CountOf(pldnet, "if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {\n\t\tNet_NoteRefused") >= 2, "a game left off the host's list doesn't write before the list");
+
+	// What has to go out before a machine stops playing can't wait for the next turn of the send clock
+	Check(Has(pldnet, "static void NetSendMessagesNow(void)\n{\n\tnetGameData.sendTimer = 0;\n\tNetSendMessages();"), "something urgent doesn't wait for the turn of the clock");
+	Check(Has(pldnet, "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessagesNow();"), "someone saying he's leaving is one");
+	Check(Has(pldnet, "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();"), "and the start of a game");
+	Check(Has(pldnet, "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();"), "and the end of one");
+
+	// A corpse's message is honest, and isn't counted as a refusal
+	Check(Has(pldnet, "if (type == I_BehaviourNetCorpse)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n\t\t// The kind is the sender's word"), "a message about a corpse that's gone is simply ignored");
 
 	// How often a machine sends. A host and a joiner each set this, and left at nothing it would be every frame.
 	Check(CountOf(pldnet, "netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;") == 2, "both a host and a joiner send a fixed number of times a second");

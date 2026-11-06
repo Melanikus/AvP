@@ -1031,7 +1031,7 @@ static const unsigned short kMostChatLinesEachSecond = 4;
 static const unsigned short kMostExplosionsEachSecond = 24;
 static const unsigned short kMostGibbingsEachSecond = 16;
 static const unsigned short kMostThingsDestroyedEachSecond = 60;
-static const unsigned short kMostHitsEachSecond = 240; // the biggest shotgun fires 32 pellets, and a body can be hit by each
+static const unsigned short kMostHitsEachSecond = 240; // far more than any gun can land in a second
 static const unsigned short kMostLeavingsEachSecond = 2;
 
 static constexpr NetPartRule kNetPartRules[] =
@@ -1895,6 +1895,15 @@ void NetSendMessages(void)
 	}
 
 	LogNetInfo("...Finished sending net message \n");
+}
+
+// NetSendMessages sends only so many times a second, and between those times it keeps what it has for a later call.
+// Something that has to go out before this machine stops playing can't wait for that, because there may not be a later
+// call. This sends it now.
+static void NetSendMessagesNow(void)
+{
+	netGameData.sendTimer = 0;
+	NetSendMessages();
 }
 
 static void InitialiseSendMessageBuffer(void)
@@ -6467,6 +6476,12 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
 		type = (AVP_BEHAVIOUR_TYPE)messagePtr->type;
 
+		// A corpse says where it is, as everything does, and this machine doesn't make corpses from that. One can arrive here honestly just after a level restarts, when the corpse has gone, so it isn't worth a line in the log.
+		if (type == I_BehaviourNetCorpse)
+		{
+			return;
+		}
+
 		// The kind is the sender's word
 		if (!GhostKindCanBeMadeByMessage(type))
 		{
@@ -6504,13 +6519,6 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		if (liveThings >= kMostLiveThingsOfOnePlayer)
 		{
 			Net_NoteRefused("a player has as many things alive as one player may");
-			return;
-		}
-
-		if (type == I_BehaviourNetCorpse)
-		{
-			/* This *should* never happen... */
-			textprint("IGNORED A CREATE CORPSE COMMAND.\n");
 			return;
 		}
 
@@ -9386,7 +9394,7 @@ void TransmitEndOfGameNetMsg(void)
 	{
 		AddNetMsg_AllGameScores();
 		// AddNetMsg_EndGame();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 
 	netGameData.stateCheckTimeDelay = 3 * ONE_FIXED;
@@ -9401,7 +9409,7 @@ void TransmitPlayerLeavingNetMsg(void)
 	for (int i = 0; i < NET_MESSAGEITERATIONS; i++)
 	{
 		AddNetMsg_PlayerLeaving();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 }
 
@@ -9414,7 +9422,7 @@ void TransmitStartGameNetMsg(void)
 	for (int i = 0; i < NET_MESSAGEITERATIONS; i++)
 	{
 		AddNetMsg_StartGame();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 }
 
