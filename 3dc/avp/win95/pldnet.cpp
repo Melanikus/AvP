@@ -4,6 +4,7 @@
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
+//   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -21,6 +22,7 @@
 #include "bh_platform_lift.h"
 #include "pldnet.h"
 #include "net_checks.h"
+#include "logString.h"
 #include "pldghost.h"
 #include "equipment.h"
 #include "weapons.h"
@@ -6363,6 +6365,23 @@ static int GetSizeOfLocalObjectDamagedMessage(char *messagePtr)
 	return size;
 }
 
+// A damage message says which ammunition did the damage, in a number that can be anything from -1024 to 1023, because another player's machine wrote it. If
+// the message leaves out its damage figures, they come from that number's place in the ammunition table, so a number with no place in the table would read
+// whatever is in memory there. A real game can't send one: for any number outside the table, the sender includes the figures. So a message like this didn't
+// come from a real game, and it's ignored. Anyone can send these as fast as they like, so the log only gets a few of them.
+static void LogIgnoredDamageMessage(int ammoNumber)
+{
+	static unsigned long long ignored = 0;
+
+	if (LogThisDrop(ignored))
+	{
+		char line[128];
+		_snprintf(line, sizeof(line) - 1, "network: ignored a damage message naming ammunition %d, which isn't in the table (%llu so far)", ammoNumber, ignored);
+		line[sizeof(line) - 1] = 0;
+		LogErrorStringC(line);
+	}
+}
+
 static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 {
 	NETMESSAGE_LOBDAMAGED_HEADER *messageHeader = 0;
@@ -6431,6 +6450,13 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 		return;
 	}
 
+	// This comes before anything is changed, so that a message that's ignored can't be blamed for a kill. This ammunition has its figures in a place of its own.
+	if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))
+	{
+		LogIgnoredDamageMessage(messageHeader->ammo_id);
+		return;
+	}
+
 	// next we have to find this object in our strategyblock list
 	{
 		int objectId;
@@ -6491,7 +6517,7 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 				}
 				else
 				{
-					GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+					// the number has been checked above
 					damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 				}
 			}
@@ -6727,7 +6753,12 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 		}
 		else
 		{
-			GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+			if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))
+			{
+				LogIgnoredDamageMessage(damage.Id);
+				return;
+			}
+
 			damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 		}
 
@@ -7735,7 +7766,12 @@ static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId
 		}
 		else
 		{
-			GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+			if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))
+			{
+				LogIgnoredDamageMessage(damage.Id);
+				return;
+			}
+
 			damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 		}
 

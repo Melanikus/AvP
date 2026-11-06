@@ -33,6 +33,7 @@
 //   the host answers each client itself and knows who sent what from the connection it came on, so a client can only speak for itself; it passes on what clients say to each other
 //   a client has no fixed port of its own, a join that fails lets go of what it opened, and leaving tells the other end straight away
 //   a player ID comes from a count, because two people can join within the same thousandth of a second
+//   LogThisDrop moved to net_checks.h, so that a test can run it, and so can the code that reads the game's messages
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -42,6 +43,7 @@
 #include "menus.h"
 #include "mp_config.h"
 #include "networking.h"
+#include "net_checks.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -63,17 +65,6 @@ PlayerDetails thisClientPlayer;
 // used to hold message data
 const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;
 static uint8_t packetBuffer[kPacketBufferSize];
-
-// For a log line that any peer or LAN machine can cause once per packet or datagram: counts the event in count and
-// says whether to log this one. The first kDropsLoggedInFull are logged, then only the 8th, 16th, 32nd, ... (each
-// power of two), so a flood adds a few dozen lines to avp_log.txt at most, each with the running total.
-static const unsigned long long kDropsLoggedInFull = 5;
-
-static bool LogThisDrop(unsigned long long &count)
-{
-	count++;
-	return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);
-}
 
 // A game has 8 players at most, and the host is one of them
 static const size_t kMostClients = 7;
