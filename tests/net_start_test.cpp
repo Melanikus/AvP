@@ -130,6 +130,18 @@ void Net_HostHasGone()
 	hostHasGoneCalls++;
 }
 
+// Whether a message is made up properly is pldnet.cpp's to say, and that's tested in net_checks_test and in TestTheTableOfMessageParts below. Here it's only what networking.cpp does with the answer.
+static bool gameMessagesAreGood = true;
+static bool lastAskedFromTheHost = false;
+static size_t lastAskedSize = 0;
+
+bool Net_GameMessageIsGood(const uint8_t *, size_t size, bool fromTheHost)
+{
+	lastAskedFromTheHost = fromTheHost;
+	lastAskedSize = size;
+	return gameMessagesAreGood;
+}
+
 int DetermineAvailableCharacterTypes(bool)
 {
 	return 4;
@@ -914,8 +926,8 @@ static std::vector<uint8_t> AGameMessage(NetID from)
 	return AMessage(0, NET_ID_ALLPLAYERS, from, words, sizeof(words));
 }
 
-// The game's buffer holds NET_MESSAGEBUFFERSIZE. The rest is so that a test can see something too big without it doing any harm.
-static uint8_t received[NET_MESSAGEBUFFERSIZE + 64];
+// The game's buffer holds kMostMessageBytes. The rest is so that a test can see something too big without it doing any harm.
+static uint8_t received[kMostMessageBytes + 64];
 
 static void Connects(int n)
 {
@@ -1078,8 +1090,15 @@ static void TestWhatAClientCantSay()
 
 	std::vector<uint8_t> tooBig = AGameMessage(one);
 
-	tooBig.resize(NET_MESSAGEBUFFERSIZE + 1);
+	tooBig.resize(kMostMessageBytes + 1);
 	refused(1, tooBig, "a message too big for the game's buffer is no message");
+
+	std::vector<uint8_t> asBigAsItGets = AGameMessage(one);
+
+	asBigAsItGets.resize(kMostMessageBytes);
+	Check(Hears(1, asBigAsItGets) == kMostMessageBytes, "and one that's exactly the most there can be goes through whole");
+	EverythingArrives();
+	sentMessages.clear();
 
 	refused(1, wrongMarker, "a message that isn't marked as this game's goes no further");
 	refused(3, wrongMarkerAsk, "and nor does a request to join");
@@ -1185,6 +1204,16 @@ static void TestPassingThingsOn()
 	EndTheGame();
 
 	Check(Net_Send(NET_ID_ALLPLAYERS, 1, 0, words, sizeof(words)) == NET_FAIL, "a game that has left has nobody to send to, and doesn't try");
+
+	// The game can fill its whole buffer, and the header goes in front
+	HostWithClients(1);
+
+	std::vector<uint8_t> full(NET_MESSAGEBUFFERSIZE, 7);
+
+	Check(Net_Send(NET_ID_ALLPLAYERS, AvPNetID, 0, full.data(), full.size()) == NET_OK, "a full buffer can be sent");
+	Check(sentMessages.size() == 1 && sentMessages[0].body.size() == full.size(), "and all of it goes, because the check at the other end would refuse a message with its end cut off");
+	EverythingArrives();
+	EndTheGame();
 }
 
 static void TestNoRoom()
@@ -1413,6 +1442,168 @@ static void TestPlayerIDs()
 	Check(sorted.front() != 0, "and none of them is 0, which means nobody");
 }
 
+// The game's table of what a message can hold has to agree with the code that reads messages, and that code is too tied to the rest of the game to run here. So this reads both, and compares them for every kind there is.
+static void TestTheTableOfMessageParts()
+{
+	std::string const pldnet = ReadSourceFile("3dc/avp/win95/pldnet.cpp");
+	std::string const header = ReadSourceFile("3dc/avp/win95/pldnet.h");
+	std::string const table = Between(pldnet, "static constexpr NetPartRule kNetPartRules[] =", "static constexpr bool NetPartRulesAreInOrder()");
+	std::string const reading = Between(pldnet, "static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)\n{", "/* if we have read the message correctly");
+	std::string const kinds = Between(header, "typedef enum netmessagetype", "} NETMESSAGETYPE;");
+
+	// Every kind there is, in the order the game numbers them
+	std::vector<std::string> names;
+	std::stringstream lines(kinds);
+	std::string line;
+
+	while (std::getline(lines, line))
+	{
+		std::string::size_type const at = line.find("NetMT_");
+		std::string::size_type const comma = line.find(',', at);
+
+		if (at != std::string::npos && line.find("//") > at)
+		{
+			names.push_back(line.substr(at, (comma == std::string::npos ? line.find_last_not_of(" \t") + 1 : comma) - at));
+		}
+	}
+
+	Check(names.size() == 52, "there are 52 kinds of part: " + std::to_string(names.size()));
+
+	int inTheTable = 0, sameLength = 0, inOrder = 0;
+	std::string::size_type place = 0;
+	std::string mismatched;
+
+	for (std::string const &name : names)
+	{
+		std::string const entry = "{ " + name + ", ";
+		std::string::size_type const at = table.find(entry);
+
+		if (at == std::string::npos)
+		{
+			mismatched += " " + name;
+			continue;
+		}
+
+		inTheTable++;
+		inOrder += (at >= place) ? 1 : 0;
+		place = at;
+
+		std::string const rule = table.substr(at + entry.size(), table.find('\n', at) - at - entry.size());
+		std::string::size_type const start = reading.find("case (" + name + "):");
+		std::string::size_type const next = reading.find("case (", start + 1);
+		std::string const reader = (start == std::string::npos) ? std::string() : reading.substr(start, next == std::string::npos ? std::string::npos : next - start);
+		std::string::size_type const steps = reader.find("subMessagePtr += sizeof(");
+		std::string const steppedBy = (steps == std::string::npos) ? std::string() : reader.substr(steps + 17, reader.find(';', steps) - steps - 17);
+
+		bool agrees;
+
+		if (Has(reader, "subMessagePtr += GetSizeOf"))
+		{
+			agrees = Has(rule, "_HEADER), true, ");
+		}
+		else if (Has(reader, "ProcessNetMsg_ChatBroadcast"))
+		{
+			agrees = rule.compare(0, 9, "2, true, ") == 0;
+		}
+		else if (steppedBy.empty())
+		{
+			agrees = !reader.empty() && rule.compare(0, 10, "0, false, ") == 0;
+		}
+		else
+		{
+			agrees = rule.compare(0, steppedBy.size() + 9, steppedBy + ", false, ") == 0;
+		}
+
+		sameLength += agrees ? 1 : 0;
+
+		if (!agrees)
+		{
+			mismatched += " " + name;
+		}
+	}
+
+	Check(inTheTable == 52, "every one of them is in the table");
+	Check(inOrder == 52, "in the game's order");
+	Check(sameLength == 52, "and each has the length the code that reads it steps by:" + mismatched);
+	Check(CountOf(table, "{ NetMT_") == 52, "and there's nothing else in it");
+
+	// Who may say what. These are the ones whoever hears them just believes.
+	std::vector<std::string> const onlyTheHost = { "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores", "NetMT_SpotOtherSound" };
+	int rightOnes = 0;
+
+	for (std::string const &name : onlyTheHost)
+	{
+		std::string::size_type const at = table.find("{ " + name + ", ");
+
+		rightOnes += (at != std::string::npos && Has(table.substr(at, table.find('\n', at) - at), ", true }")) ? 1 : 0;
+	}
+
+	Check(rightOnes == 19, "19 kinds can only come from the host");
+	Check(CountOf(table, ", true }") == 19, "and no others");
+
+	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart) == kNetPartsGood"), "the whole message is walked, from after its header");
+	Check(Has(pldnet, "if (size < kMessageHeaderSize)\n\t{\n\t\treturn false;"), "and one too short to have a header is refused");
+	Check(Has(pldnet, "return NetChatPartLength(part, bytesLeft);"), "a chat line has to end inside the message");
+	Check(Has(reading, "// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.\n\t\t\t\treturn;"), "and a part nobody knows stops the reading");
+	Check(Has(ReadSourceFile("3dc/avp/game_commands.cpp"), "if (AvP.Network != I_Host) return;\n\n\tint seed=FastRandom();\n\tAddNetMsg_RestartNetworkGame(seed);"), "only a host can restart a network game, so a client can't be told something it can't do");
+}
+
+static void TestTheMessageCheck()
+{
+	// A host: nothing from a client is the host's word
+	HostWithClients(2);
+
+	NetID const one = IDOf(1);
+	std::vector<uint8_t> const message = AGameMessage(one);
+
+	sentMessages.clear();
+	lastAskedFromTheHost = true;
+	Check(Hears(1, message) == message.size() && !lastAskedFromTheHost, "a host asks about a client's message as not being the host's word");
+	Check(lastAskedSize == message.size(), "with the whole message");
+	Check(sentMessages.size() == 1, "and a good one goes on to the others");
+
+	gameMessagesAreGood = false;
+	sentMessages.clear();
+	Check(Hears(1, message) == 0, "a bad one doesn't go to the game");
+	Check(sentMessages.empty(), "and isn't passed on either, because everyone else would have to believe it");
+	gameMessagesAreGood = true;
+	EverythingArrives();
+	EndTheGame();
+
+	// A client: the host is whoever gave it its ID
+	Check(JoinAGame() == NET_OK, "someone joins");
+
+	NetID const given = 4242;
+	NetID const theHost = 77;
+	NetID const someoneElse = 78;
+
+	lastAskedFromTheHost = true;
+	Hears(0, AGameMessage(theHost));
+	Check(!lastAskedFromTheHost, "before it has been given an ID, it knows nobody's the host");
+
+	Hears(0, AMessage(1, NET_SETPLAYERID, theHost, &given, sizeof(given)));
+
+	lastAskedFromTheHost = false;
+	Hears(0, AGameMessage(theHost));
+	Check(lastAskedFromTheHost, "after that the host is whoever gave it the ID");
+
+	lastAskedFromTheHost = true;
+	Hears(0, AGameMessage(someoneElse));
+	Check(!lastAskedFromTheHost, "and anyone else isn't");
+
+	gameMessagesAreGood = false;
+	Check(Hears(0, AGameMessage(theHost)) == 0, "a client doesn't read a bad message from its host either");
+	gameMessagesAreGood = true;
+
+	// The next game starts again
+	EndTheGame();
+	Check(JoinAGame() == NET_OK, "someone joins another game");
+	lastAskedFromTheHost = true;
+	Hears(0, AGameMessage(theHost));
+	Check(!lastAskedFromTheHost, "and the last game's host means nothing in this one");
+	EndTheGame();
+}
+
 static void TestTheGameUsesThis()
 {
 	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
@@ -1473,6 +1664,8 @@ int main()
 	TestWaitingToJoin();
 	TestLeavingClosesConnections();
 	TestPlayerIDs();
+	TestTheMessageCheck();
+	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");

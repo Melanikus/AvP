@@ -33,6 +33,7 @@
 //   the host answers each client itself and knows who sent what from the connection it came on, so a client can only speak for itself; it passes on what clients say to each other
 //   a client has no fixed port of its own, a join that fails lets go of what it opened, and leaving tells the other end straight away
 //   a player ID comes from a count, because two people can join within the same thousandth of a second
+//   a game message has to pass Net_GameMessageIsGood before anyone reads it or it's passed on, and a client takes the host's word only from whoever gave it its ID
 //   LogThisDrop moved to net_checks.h, so that a test can run it, and so can the code that reads the game's messages
 
 #include "3dc.h"
@@ -63,7 +64,7 @@ NetID AvPNetID = 0; // rename this
 PlayerDetails thisClientPlayer;
 
 // used to hold message data
-const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;
+const int kPacketBufferSize = kMostMessageBytes;
 static uint8_t packetBuffer[kPacketBufferSize];
 
 // A game has 8 players at most, and the host is one of them
@@ -89,6 +90,7 @@ extern char *GetCustomMultiplayerLevelName(int index, int gameType);
 extern bool AddPlayerToGame(NetID id, const char *name);
 extern void Net_PlayerHasGone(NetID id);
 extern void Net_HostHasGone();
+extern bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost);
 extern unsigned char DebouncedKeyboardInput[];
 
 static bool Net_CreatePlayer(char *playerName);
@@ -502,9 +504,8 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 				return NET_FAIL;
 			}
 
-			// no packet the game sends is larger than its message buffer (Net_Send builds each one in
-			// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
-			host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
+			// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
+			host->maximumPacketSize = kMostMessageBytes;
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
 			OpenDiscoverySocket();
@@ -696,7 +697,10 @@ void Net_ServiceNetwork()
 
 // WHO IS WHO. A client only ever talks to the host, and the host passes on what's meant for the others. Anyone who can reach the host's port can connect and send anything at all, and a message can say it's from anyone. So the host doesn't go by that.
 // Each connection can be let in once, and gets one player ID, which is kept with the connection. After that, whatever arrives on the connection has to carry that ID. What arrives is checked here, before the rest of the game sees it, and the
-// only messages the rest of the game ever sees are game messages.
+// only messages the rest of the game ever sees are game messages, whole ones.
+// On a client, who the host is: whoever gave it its ID. A host passes on what the others say, each saying who it's from, and only the host's own word counts as the host's.
+static NetID hostPlayerID = 0;
+
 static NetID IDOfConnection(const ENetPeer *peer)
 {
 	return (NetID)(uintptr_t)peer->data;
@@ -866,6 +870,13 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 		return false;
 	}
 
+	// This comes before it's passed on, because everyone it reaches would believe it. No client speaks for the host.
+	if (!Net_GameMessageIsGood(data, size, false))
+	{
+		LogDroppedMessage("a client's game message isn't made up properly, or says what only a host can");
+		return false;
+	}
+
 	// Clients can't reach each other, so the host passes this on to the rest
 	ENetPacket *packet = enet_packet_create(data, size, ENET_PACKET_FLAG_RELIABLE);
 
@@ -893,6 +904,12 @@ static bool ClientHearsFromHost(const uint8_t *data, size_t size)
 
 	if (!header.isSystemMessage)
 	{
+		if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))
+		{
+			LogDroppedMessage("a game message isn't made up properly, or says what only a host can and isn't from the host");
+			return false;
+		}
+
 		return true;
 	}
 
@@ -916,6 +933,7 @@ static bool ClientHearsFromHost(const uint8_t *data, size_t size)
 		memcpy(&id, data + sizeof(MessageHeader), sizeof(NetID));
 		AvPNetID = id;
 		thisClientPlayer.ID = id;
+		hostPlayerID = header.fromID;
 	}
 
 	return false;
@@ -955,17 +973,17 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				}
 				case ENET_EVENT_TYPE_RECEIVE:
 				{
-					// the caller's buffer holds NET_MESSAGEBUFFERSIZE bytes (every message we send fits in it, see
-					// Net_Send). The hosts are created with maximumPacketSize = NET_MESSAGEBUFFERSIZE, so ENet should
+					// the caller's buffer holds kMostMessageBytes bytes (every message we send fits in it, see
+					// Net_Send). The hosts are created with maximumPacketSize the same, so ENet should
 					// not hand us a larger packet; drop one anyway instead of overrunning the buffer.
-					if (eEvent.packet->dataLength > (size_t)NET_MESSAGEBUFFERSIZE)
+					if (eEvent.packet->dataLength > kMostMessageBytes)
 					{
 						static unsigned long long droppedPackets = 0;
 						if (LogThisDrop(droppedPackets))
 						{
 							std::stringstream sstream;
 							sstream << "Net_Receive - dropped a packet of " << eEvent.packet->dataLength
-							        << " bytes (larger than the " << NET_MESSAGEBUFFERSIZE << " byte message buffer; "
+							        << " bytes (larger than the " << kMostMessageBytes << " byte message buffer; "
 							        << droppedPackets << " so far)";
 							Con_PrintError(sstream.str());
 						}
@@ -1111,6 +1129,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 
 	// Whatever this was belonged to the last game. The host gives this game's.
 	AvPNetID = 0;
+	hostPlayerID = 0;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -1128,9 +1147,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
-	// no packet the game sends is larger than its message buffer (Net_Send builds each one in
-	// packetBuffer[NET_MESSAGEBUFFERSIZE]): let ENet refuse larger ones before it reassembles them
-	host->maximumPacketSize = NET_MESSAGEBUFFERSIZE;
+	// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
+	host->maximumPacketSize = kMostMessageBytes;
 
 	ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);
 	if (ServerPeer == NULL)

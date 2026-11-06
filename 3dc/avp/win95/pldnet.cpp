@@ -4,6 +4,8 @@
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
+//   the buffer that receives a message has room for its header as well as what the game can send
+//   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
@@ -616,7 +618,7 @@ void InitAVPNetGameForJoin(void)
 	netGameData.joiningGameStatus = JOINNETGAME_WAITFORSTART;
 }
 
-static uint8_t msg[NET_MESSAGEBUFFERSIZE];
+static uint8_t msg[kMostMessageBytes];
 
 /*----------------------------------------------------------------------
   Core message collection function
@@ -999,6 +1001,117 @@ void RemovePlayerFromGame(NetID id)
 		netGameData.playerData[playerIndex].lastKnownPosition.vy = 100000000;
 		netGameData.playerData[playerIndex].lastKnownPosition.vz = 0;
 	}
+}
+
+/*----------------------------------------------------------------------
+  What a game message is allowed to be. See WHAT A GAME MESSAGE IS MADE OF in net_checks.h
+  ----------------------------------------------------------------------*/
+
+// In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
+static constexpr NetPartRule kNetPartRules[] =
+{
+	{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true },
+	{ NetMT_PlayerDescription, sizeof(NETMESSAGE_PLAYERDESCRIPTION), false, false },
+	{ NetMT_StartGame, 0, false, true },
+	{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, false },
+	{ NetMT_PlayerState_Minimal, sizeof(NETMESSAGE_PLAYERSTATE_MINIMAL), false, false },
+	{ NetMT_PlayerState_Medium, sizeof(NETMESSAGE_PLAYERSTATE_MEDIUM), false, false },
+	{ NetMT_PlayerKilled, sizeof(NETMESSAGE_PLAYERKILLED), false, false },
+	{ NetMT_PlayerLeaving, 0, false, false },
+	{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true },
+	{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true },
+	{ NetMT_LocalRicochet, sizeof(NETMESSAGE_LOCALRICOCHET), false, false },
+	{ NetMT_LocalObjectState, sizeof(NETMESSAGE_LOBSTATE), false, false },
+	{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false },
+	{ NetMT_LocalObjectDestroyed, sizeof(NETMESSAGE_LOBDESTROYED), false, false },
+	{ NetMT_ObjectPickedUp, sizeof(NETMESSAGE_OBJECTPICKEDUP), false, false },
+	{ NetMT_InanimateObjectDamaged, sizeof(NETMESSAGE_INANIMATEDAMAGED_HEADER), true, false },
+	{ NetMT_InanimateObjectDestroyed, sizeof(NETMESSAGE_INANIMATEDESTROYED), false, true },
+	{ NetMT_LOSRequestBinarySwitch, sizeof(NETMESSAGE_LOSREQUESTBINARYSWITCH), false, false },
+	{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, true },
+	{ NetMT_RequestPlatformLiftActivate, sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE), false, false },
+	{ NetMT_PlayerAutoGunState, sizeof(NETMESSAGE_AGUNSTATE), false, false },
+	{ NetMT_MakeDecal, sizeof(NETMESSAGE_MAKEDECAL), false, false },
+	{ NetMT_ChatBroadcast, 2, true, false },
+	{ NetMT_MakeExplosion, sizeof(NETMESSAGE_MAKEEXPLOSION), false, false },
+	{ NetMT_MakeFlechetteExplosion, sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION), false, false },
+	{ NetMT_MakePlasmaExplosion, sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION), false, false },
+	{ NetMT_PredatorSights, sizeof(NETMESSAGE_PREDATORSIGHTS), false, false },
+	{ NetMT_LocalObjectOnFire, sizeof(NETMESSAGE_LOBONFIRE), false, false },
+	{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true },
+	{ NetMT_FragmentalObjectsStatus, sizeof(NETMESSAGE_FRAGMENTALOBJECTSSTATUS), false, true },
+	{ NetMT_AlienAIState, sizeof(NETMESSAGE_ALIENAISTATE), false, false },
+	{ NetMT_AlienAISequenceChange, sizeof(NETMESSAGE_ALIENSEQUENCECHANGE), false, false },
+	{ NetMT_AlienAIKilled, sizeof(NETMESSAGE_ALIENAIKILLED), false, false },
+	{ NetMT_GhostHierarchyDamaged, sizeof(NETMESSAGE_GHOSTHIERARCHYDAMAGED_HEADER), true, false },
+	{ NetMT_SpotAlienSound, sizeof(NETMESSAGE_SPOTALIENSOUND), false, false },
+	{ NetMT_LocalObjectDestroyed_Request, sizeof(NETMESSAGE_LOBDESTROYED_REQUEST), false, false },
+	{ NetMT_LastManStanding_Restart, sizeof(NETMESSAGE_LMS_RESTART), false, true },
+	{ NetMT_LastManStanding_RestartInfo, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_LastManStanding_RestartCountDown, sizeof(NETMESSAGE_LMS_RESTARTTIMER), false, true },
+	{ NetMT_LastManStanding_LastMan, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_PredatorTag_NewPredator, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_EndGame, 0, false, true },
+	{ NetMT_CreateWeapon, sizeof(NETMESSAGE_CREATEWEAPON), false, false },
+	{ NetMT_RespawnPickups, 0, false, true },
+	{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true },
+	{ NetMT_Gibbing, sizeof(NETMESSAGE_GIBBING), false, false },
+	{ NetMT_CorpseDeathAnim, sizeof(NETMESSAGE_CORPSEDEATHANIM), false, false },
+	{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true },
+	{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },
+	{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true },
+	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, false },
+	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, true }
+};
+
+static constexpr bool NetPartRulesAreInOrder()
+{
+	for (size_t i = 0; i < sizeof(kNetPartRules) / sizeof(kNetPartRules[0]); i++)
+	{
+		if (kNetPartRules[i].kind != i)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static_assert(NetPartRulesAreInOrder(), "the table has to be in the same order as NETMESSAGETYPE, because a kind is looked up by its place");
+
+// How long a part whose length varies really is. The damage messages say with their flags what else they carry, and the rule has already made sure the flags are there.
+static size_t LengthOfANetPart(unsigned char kind, const unsigned char *part, size_t bytesLeft)
+{
+	char *const asRead = (char *)part;
+
+	switch (kind)
+	{
+		case NetMT_LocalObjectDamaged:
+			return (size_t)GetSizeOfLocalObjectDamagedMessage(asRead);
+
+		case NetMT_InanimateObjectDamaged:
+			return (size_t)GetSizeOfInanimateDamagedMessage(asRead);
+
+		case NetMT_GhostHierarchyDamaged:
+			return (size_t)GetSizeOfGhostHierarchyDamagedMessage(asRead);
+
+		case NetMT_ChatBroadcast:
+			return NetChatPartLength(part, bytesLeft);
+
+		default:
+			return 0;
+	}
+}
+
+// Asked by networking.cpp about everything that arrives, before any of it reaches the game. See WHO IS WHO there.
+bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)
+{
+	if (size < kMessageHeaderSize)
+	{
+		return false;
+	}
+
+	return NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart) == kNetPartsGood;
 }
 
 /*----------------------------------------------------------------------
@@ -1409,9 +1522,8 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			default:
 			{
-				OutputDebugString("default case hit in ProcessGameMessage\n");
-				LOCALASSERT(1 == 0);
-				break;
+				// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.
+				return;
 			}
 		}
 	}

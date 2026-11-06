@@ -319,7 +319,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (eEvent.packet->dataLength > (size_t)NET_MESSAGEBUFFERSIZE)",
+					"from": "if (eEvent.packet->dataLength > kMostMessageBytes)",
 					"to": "if (false)"
 				}
 			]
@@ -549,8 +549,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "if (!header.isSystemMessage)\n\t{\n\t\treturn true;",
-					"to": "if (!header.isSystemMessage)\n\t{\n\t\treturn false;"
+					"from": "and isn't from the host\");\n\t\t\treturn false;\n\t\t}\n\n\t\treturn true;",
+					"to": "and isn't from the host\");\n\t\t\treturn false;\n\t\t}\n\n\t\treturn false;"
 				}
 			]
 		},
@@ -981,6 +981,316 @@
 					"file": "3dc/networking.cpp",
 					"from": "if (AvP.Network == I_Peer && !ServerPeer)",
 					"to": "if (AvP.Network != I_Host && !ServerPeer)"
+				}
+			]
+		},
+		{
+			"name": "a host passes on what it has not checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, false))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a client can speak for the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, false))",
+					"to": "if (!Net_GameMessageIsGood(data, size, true))"
+				}
+			]
+		},
+		{
+			"name": "a client reads what it has not checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a client takes anyone as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (!Net_GameMessageIsGood(data, size, true))"
+				}
+			]
+		},
+		{
+			"name": "a client takes nobody as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (!Net_GameMessageIsGood(data, size, hostPlayerID != 0 && header.fromID == hostPlayerID))",
+					"to": "if (!Net_GameMessageIsGood(data, size, false))"
+				}
+			]
+		},
+		{
+			"name": "a client with no ID yet takes a sender with no ID as the host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "hostPlayerID != 0 && header.fromID == hostPlayerID",
+					"to": "header.fromID == hostPlayerID || header.fromID == 77"
+				}
+			]
+		},
+		{
+			"name": "a client does not remember who the host is",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "hostPlayerID = header.fromID;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the last game's host still counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "AvPNetID = 0;\n\thostPlayerID = 0;",
+					"to": "AvPNetID = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk starts in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize,",
+					"to": "NetCheckParts(message, size,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a message with no header is walked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (size < kMessageHeaderSize)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chat line need not end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "return NetChatPartLength(part, bytesLeft);",
+					"to": "return 2;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part nobody knows carries on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "If it ever did, nothing after it could be read.\n\t\t\t\treturn;",
+					"to": "If it ever did, nothing after it could be read.\n\t\t\t\tbreak;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client can restart a game for everyone",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "if (AvP.Network != I_Host) return;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part has the wrong length in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true }",
+					"to": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_RESTARTGAME), false, true }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part with nothing after it has a length",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_EndGame, 0, false, true }",
+					"to": "{ NetMT_EndGame, 1, false, true }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part is missing from the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a kind whose length varies is fixed in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false }",
+					"to": "{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a chat line is fixed in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ChatBroadcast, 2, true, false }",
+					"to": "{ NetMT_ChatBroadcast, 2, false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say GameDescription",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true }",
+					"to": "{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say AllGameScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true }",
+					"to": "{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say PlayerScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true }",
+					"to": "{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say ScoreChange",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true }",
+					"to": "{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say SpeciesScores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true }",
+					"to": "{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say EndGame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_EndGame, 0, false, true }",
+					"to": "{ NetMT_EndGame, 0, false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say RestartNetworkGame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true }",
+					"to": "{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say StrategySynch",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true }",
+					"to": "{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say PlatformLiftState",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, true }",
+					"to": "{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a client cannot say where it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, false }",
+					"to": "{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, true }"
+				}
+			]
+		},
+		{
+			"name": "a message as big as it gets is refused",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (eEvent.packet->dataLength > kMostMessageBytes)",
+					"to": "if (eEvent.packet->dataLength >= kMostMessageBytes)"
+				}
+			]
+		},
+		{
+			"name": "a full buffer loses the end of its message",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "const int kPacketBufferSize = kMostMessageBytes;",
+					"to": "const int kPacketBufferSize = NET_MESSAGEBUFFERSIZE;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's buffer has no room for the header",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static uint8_t msg[kMostMessageBytes];",
+					"to": "static uint8_t msg[NET_MESSAGEBUFFERSIZE];"
 				}
 			]
 		}

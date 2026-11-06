@@ -59,7 +59,7 @@ void      Net_StopSearchingForSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
-NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes. Only game messages come out of this: see WHO IS WHO in networking.cpp
+NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold kMostMessageBytes bytes. Only game messages come out of this: see WHO IS WHO in networking.cpp
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();
@@ -90,6 +90,9 @@ const int kMultiplayerVersion = 102; // bjd - my version, not directplay compati
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
+
+// The game fills a buffer of NET_MESSAGEBUFFERSIZE, and the header goes in front of that, so this is the most a message can be.
+const size_t kMostMessageBytes = NET_MESSAGEBUFFERSIZE + sizeof(MessageHeader);
 
 enum NetMessageTypes
 {

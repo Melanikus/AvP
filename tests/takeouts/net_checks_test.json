@@ -1,0 +1,179 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a number below the table fits",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return number >= 0 && number < places;",
+					"to": "return number < places;"
+				}
+			]
+		},
+		{
+			"name": "a number past the table fits",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return number >= 0 && number < places;",
+					"to": "return number >= 0;"
+				}
+			]
+		},
+		{
+			"name": "the log gets every drop",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a name has no end",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "to[size - 1] = '\\0';",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the walk stops after one part",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "at += length;",
+					"to": "return kNetPartsGood;"
+				}
+			]
+		},
+		{
+			"name": "the walk never moves",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "at += length;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind past the table is read",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (kind >= ruleCount)",
+					"to": "if (kind > ruleCount)"
+				}
+			]
+		},
+		{
+			"name": "the host-only check is missing",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (rule.onlyFromTheHost && !fromTheHost)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the host is refused too",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (rule.onlyFromTheHost && !fromTheHost)",
+					"to": "if (rule.onlyFromTheHost)"
+				}
+			]
+		},
+		{
+			"name": "a short part is read",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (length > bytesLeft)\n\t\t{\n\t\t\treturn kNetPartsTooShort;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn kNetPartsTooShort;"
+				}
+			]
+		},
+		{
+			"name": "a part whose length varies is taken as the least",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (rule.lengthVaries)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a length of 0 goes round for ever",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (length == 0 || length > bytesLeft)",
+					"to": "if (length > bytesLeft)"
+				}
+			]
+		},
+		{
+			"name": "a part can claim more than there is",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (length == 0 || length > bytesLeft)",
+					"to": "if (length == 0)"
+				}
+			]
+		},
+		{
+			"name": "a chat line reads past the message",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "for (size_t i = 1; i < bytesLeft && i <= kNetMostChatLetters + 1; i++)",
+					"to": "for (size_t i = 1; i <= kNetMostChatLetters + 1; i++)"
+				}
+			]
+		},
+		{
+			"name": "a chat line can be any length",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "for (size_t i = 1; i < bytesLeft && i <= kNetMostChatLetters + 1; i++)",
+					"to": "for (size_t i = 1; i < bytesLeft; i++)"
+				}
+			]
+		},
+		{
+			"name": "a chat line is one too short",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return i + 1;",
+					"to": "return i;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a damage message with no place in the table is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}

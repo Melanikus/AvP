@@ -12,6 +12,7 @@
 // handlers ask it. For those, there's only the game building, and reading the code.
 
 #include <stdio.h>
+#include <string.h>
 
 #include "3dc.h"
 #include "equipment.h"
@@ -116,10 +117,131 @@ static void TestTheLogCantBeFlooded()
 	Check(logged > 5 && logged < 30, "ten million of them add only a few lines");
 }
 
+// A small made-up table, so that these say something about the walking and nothing about the game's own messages. tests/net_start_test.cpp checks the game's table against its source.
+enum { kPartFixed, kPartEmpty, kPartHosts, kPartVaries, kPartBig, kPartKinds };
+
+static const NetPartRule kTestRules[kPartKinds] =
+{
+	{ kPartFixed, 3, false, false },
+	{ kPartEmpty, 0, false, false },
+	{ kPartHosts, 2, false, true },
+	{ kPartVaries, 1, true, false },
+	{ kPartBig, 60000, false, false }
+};
+
+// A part whose length varies says so in its first byte. 0 means it doesn't fit, as for the real ones.
+static size_t TestLength(unsigned char, const unsigned char *part, size_t)
+{
+	return part[0];
+}
+
+static NetPartsAnswer Walk(const unsigned char *parts, size_t size, bool fromTheHost = false)
+{
+	return NetCheckParts(parts, size, kTestRules, kPartKinds, fromTheHost, TestLength);
+}
+
+static void TestMessageParts()
+{
+	puts("the parts of a message");
+
+	unsigned char const fixedOnly[] = { kPartFixed, 1, 2, 3 };
+
+	Check(Walk(fixedOnly, 0) == kNetPartsGood, "nothing at all is fine: a message can have no parts");
+	Check(Walk(fixedOnly, sizeof(fixedOnly)) == kNetPartsGood, "a part with all its bytes is good");
+	Check(Walk(fixedOnly, sizeof(fixedOnly) - 1) == kNetPartsTooShort, "one byte short is too short");
+	Check(Walk(fixedOnly, 1) == kNetPartsTooShort, "and so is the first byte alone");
+
+	unsigned char const twoParts[] = { kPartFixed, 1, 2, 3, kPartEmpty, kPartFixed, 4, 5, 6 };
+
+	Check(Walk(twoParts, sizeof(twoParts)) == kNetPartsGood, "several parts are walked one after another");
+	Check(Walk(twoParts, sizeof(twoParts) - 1) == kNetPartsTooShort, "and a short one at the end is found");
+
+	unsigned char const unknownNext[] = { kPartEmpty, kPartKinds };
+	unsigned char const unknownFar[] = { 255 };
+
+	Check(Walk(unknownNext, sizeof(unknownNext)) == kNetPartsUnknownKind, "the first kind past the table is unknown");
+	Check(Walk(unknownFar, sizeof(unknownFar)) == kNetPartsUnknownKind, "and so is the last a byte can say");
+
+	unsigned char const lastKind[] = { kPartBig };
+
+	Check(Walk(lastKind, sizeof(lastKind)) == kNetPartsTooShort, "the last kind in the table is known");
+
+	unsigned char const fromHost[] = { kPartHosts, 1, 2 };
+
+	Check(Walk(fromHost, sizeof(fromHost), true) == kNetPartsGood, "only the host may say this, and the host can");
+	Check(Walk(fromHost, sizeof(fromHost), false) == kNetPartsOnlyFromTheHost, "and nobody else");
+
+	unsigned char const hiddenAfterOthers[] = { kPartFixed, 1, 2, 3, kPartHosts, 1, 2 };
+
+	Check(Walk(hiddenAfterOthers, sizeof(hiddenAfterOthers)) == kNetPartsOnlyFromTheHost, "and it's no better hidden behind something else");
+
+	unsigned char const variesFits[] = { kPartVaries, 3, 9, 9 };
+
+	Check(Walk(variesFits, sizeof(variesFits)) == kNetPartsGood, "a part whose length varies is as long as it says");
+	Check(Walk(variesFits, sizeof(variesFits) - 1) == kNetPartsTooShort, "and has to fit");
+
+	unsigned char const variesThenMore[] = { kPartVaries, 2, 9, kPartEmpty };
+
+	Check(Walk(variesThenMore, sizeof(variesThenMore)) == kNetPartsGood, "and the next part starts where it ends");
+
+	unsigned char const variesNothing[] = { kPartVaries, 0 };
+	unsigned char const variesMissing[] = { kPartVaries };
+	unsigned char const variesFar[] = { kPartVaries, 200, 1 };
+
+	Check(Walk(variesNothing, sizeof(variesNothing)) == kNetPartsTooShort, "saying it doesn't fit is taken at its word, or a message could go round for ever");
+	Check(Walk(variesMissing, sizeof(variesMissing)) == kNetPartsTooShort, "with no bytes at all it isn't even asked");
+	Check(Walk(variesFar, sizeof(variesFar)) == kNetPartsTooShort, "and it can't claim more than there is");
+}
+
+static void TestChatLines()
+{
+	puts("chat lines");
+
+	unsigned char line[kNetMostChatLetters + 8];
+
+	memset(line, 'x', sizeof(line));
+	line[3] = 0;
+	Check(NetChatPartLength(line, sizeof(line)) == 4, "a chat line is as long as its first zero");
+
+	line[1] = 0;
+	Check(NetChatPartLength(line, sizeof(line)) == 2, "an empty one has the byte saying who it's for, and the zero");
+
+	line[1] = 'x';
+	line[3] = 'x';
+	Check(NetChatPartLength(line, kNetMostChatLetters) == 0, "with no zero in what's there, it doesn't fit, however long it could have been");
+
+	line[kNetMostChatLetters + 1] = 0;
+	Check(NetChatPartLength(line, sizeof(line)) == kNetMostChatLetters + 2, "the longest there can be ends at the end of its letters");
+
+	line[kNetMostChatLetters + 1] = 'x';
+	line[kNetMostChatLetters + 2] = 0;
+	Check(NetChatPartLength(line, sizeof(line)) == 0, "and one letter more doesn't fit");
+
+	line[0] = 0;
+	Check(NetChatPartLength(line, 1) == 0, "and a line that stops after the first byte has no zero to find");
+}
+
+static void TestNames()
+{
+	puts("player names");
+
+	char from[13];
+	char to[13];
+
+	memset(from, 'n', sizeof(from));
+	memset(to, 0, sizeof(to));
+	NetCopyPlayerName(to, from, sizeof(to));
+	Check(to[sizeof(to) - 1] == 0, "a name that never ends gets an end");
+	Check(memcmp(to, from, sizeof(to) - 1) == 0, "and keeps everything before it");
+}
+
 int main()
 {
 	TestAmmunitionNumbers();
 	TestTheLogCantBeFlooded();
+	TestMessageParts();
+	TestChatLines();
+	TestNames();
 
 	if (checksFailed)
 	{
