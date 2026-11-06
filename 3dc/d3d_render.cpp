@@ -29,6 +29,7 @@
 //   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
 //   the SHADOWAMBIENT console command, which says whether the map's lights that show no corona cast shadows. See light_choice.h
 //   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
+//   a frame with no light chosen has its world turned down like any other, so the screen doesn't jump brighter when the last light leaves the list
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -7275,6 +7276,21 @@ static void ViewSwitches_ApplyAsked()
 	}
 }
 
+// A frame with no light on the list has nothing for the shadow pass to do, but its world still gets turned down like any other frame's. Without this, the whole screen would jump brighter each time
+// the last light left the list, and back when one came. The game caches its render states, so nothing is changed here unless it can be put back: that one frame then stays bright.
+static void ToyDimWorldWithNoLights()
+{
+	LPDIRECT3DDEVICE9 device = d3d.lpD3DDevice;
+
+	if (FAILED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))
+	{
+		return;
+	}
+
+	ToyDimWorld(device);
+	savedCardSettings->Apply();
+}
+
 static void ToyShadows_Draw()
 {
 	// With no stencil bits, shadows turn off and the game runs as it always has. This comes before the G key, so nothing can turn
@@ -7381,6 +7397,11 @@ static void ToyShadows_Draw()
 
 	if (!report.lights)
 	{
+		if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)
+		{
+			ToyDimWorldWithNoLights();
+		}
+
 		if (ShadowShootOn)
 		{
 			ShootSayWords(ShadowShoot_DropAskedShot(toyFrame, ToyWorldWasDrawn() ? "this frame has no lights chosen" : "nothing on this frame casts a shadow"));

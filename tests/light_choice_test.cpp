@@ -485,6 +485,15 @@ static void TheRealGame()
 
 	Check(Has(strength, "light->LightBright ? light->LightBright : light->LightBrightStore"), "a dark lamp is judged by how bright it'll be when it comes back");
 
+	// With no light on the list, the screen stays as bright as it was with one
+	std::string const noLights = Between(render, "if (!report.lights)\n\t{", "float worldAxes[9];");
+	std::string const dimming = Between(render, "static void ToyDimWorldWithNoLights()", "static void ToyShadows_Draw()");
+
+	Check(Has(noLights, "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorldWithNoLights();"), "a frame with no light chosen still has its world turned down");
+	Check(Has(render, "if (ToyShadowsMode == kToyViewFinal)\n\t\t{\n\t\t\tToyDimWorld(device);"), "which is the same view as on a frame with lights");
+	Check(Has(dimming, "savedCardSettings->Capture()") && Has(dimming, "savedCardSettings->Apply();"), "and what it changes on the card is put back, because the game caches its render states");
+	Check(Has(dimming, "if (FAILED(savedCardSettings ? savedCardSettings->Capture()"), "and it changes nothing if it couldn't be saved");
+
 	// The game is built with it
 	Check(Has(project, "..\\..\\3dc\\light_choice.cpp"), "the game is built with it");
 }

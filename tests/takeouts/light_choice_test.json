@@ -715,6 +715,56 @@
 					"to": "int ShadowLightsByNearest = 1;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: with no light chosen the world is not turned down",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tToyDimWorldWithNoLights();\n",
+					"to": "\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with no light chosen a menu gets turned down",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)",
+					"to": "if (ToyShadowsMode == kToyViewFinal)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with no light chosen a developer view gets turned down",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (ToyWorldWasDrawn() && ToyShadowsMode == kToyViewFinal)",
+					"to": "if (ToyWorldWasDrawn())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the dimming changes on the card stays changed",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tToyDimWorld(device);\n\tsavedCardSettings->Apply();\n",
+					"to": "\tToyDimWorld(device);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dimming goes ahead when the settings could not be saved",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (FAILED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))\n\t{\n\t\treturn;\n\t}\n\n\tToyDimWorld(device);",
+					"to": "\tsavedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings);\n\n\tToyDimWorld(device);"
+				}
+			]
 		}
 	]
 }
