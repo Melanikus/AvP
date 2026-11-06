@@ -6,6 +6,16 @@
 	],
 	"rows": [
 		{
+			"name": "an address before the start counts as inside",
+			"changes": [
+				{
+					"file": "3dc/avp/sound_address.h",
+					"from": "return (size_t)(place - first) < bytes;",
+					"to": "return (int)(place - first) < (int)bytes;"
+				}
+			]
+		},
+		{
 			"name": "an address has no limit",
 			"changes": [
 				{
@@ -120,18 +130,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/sound_address.h",
-					"from": "(size_t)(place - first) < bytes",
-					"to": "(size_t)(place - first) <= bytes"
-				}
-			]
-		},
-		{
-			"name": "an address before the start counts as inside",
-			"changes": [
-				{
-					"file": "3dc/avp/sound_address.h",
-					"from": "place >= first && ",
-					"to": ""
+					"from": "return (size_t)(place - first) < bytes;",
+					"to": "return (size_t)(place - first) <= bytes;"
 				}
 			]
 		},

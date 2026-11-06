@@ -294,6 +294,9 @@ static void TestTypedAddresses()
 
 	Check(!NetTypedAddressIsGood(noEnd, sizeof(noEnd)), "one that runs off the end of its room isn't read past it");
 	Check(!NetTypedAddressIsGood("1.2.3.4", 7), "and one that fills its room with no end isn't either");
+
+	// What's past its room has to stay unread, even if it would make a good address
+	Check(!NetTypedAddressIsGood("1.2.3.4", 6), "and what lies past its room isn't read");
 }
 
 static size_t LengthForTheBudgetTest(unsigned char, const unsigned char *part, size_t)

@@ -15,6 +15,6 @@ inline bool SoundAddressIsInside(const int *address, const void *start, size_t b
 	char const *const place = (char const *)address;
 	char const *const first = (char const *)start;
 
-	// Numbers rather than the end's address, so that a block at the very top of memory can't wrap round
-	return place >= first && (size_t)(place - first) < bytes;
+	// How far past the start it is. One before the start comes out as a huge number, so this one question covers both, and a block at the very top of memory can't wrap round.
+	return (size_t)(place - first) < bytes;
 }

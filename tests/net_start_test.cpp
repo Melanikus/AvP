@@ -549,6 +549,18 @@ void enet_socket_destroy(ENetSocket socket)
 	}
 }
 
+// What's arrived at the socket for finding games, for the game to read
+struct WaitingDatagram
+{
+	std::vector<uint8_t> bytes;
+	ENetAddress from;
+};
+
+static std::deque<WaitingDatagram> datagramsWaiting;
+
+// The last thing the game sent from that socket, byte for byte
+static std::vector<uint8_t> lastDatagramSent;
+
 int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32)
 {
 	if (socket == ENET_SOCKET_NULL)
@@ -558,13 +570,23 @@ int enet_socket_wait(ENetSocket socket, enet_uint32 *condition, enet_uint32)
 	}
 
 	waitsOnASocket++;
-	*condition = 0;
+	*condition = datagramsWaiting.empty() ? 0 : ENET_SOCKET_WAIT_RECEIVE;
 	return 0;
 }
 
-int enet_socket_receive(ENetSocket, ENetAddress *, ENetBuffer *, size_t)
+int enet_socket_receive(ENetSocket, ENetAddress *address, ENetBuffer *buffers, size_t)
 {
-	return 0;
+	if (datagramsWaiting.empty())
+	{
+		return 0;
+	}
+
+	WaitingDatagram const waiting = datagramsWaiting.front();
+
+	datagramsWaiting.pop_front();
+	*address = waiting.from;
+	memcpy(buffers->data, waiting.bytes.data(), waiting.bytes.size());
+	return (int)waiting.bytes.size();
 }
 
 int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *buffers, size_t)
@@ -577,6 +599,13 @@ int enet_socket_send(ENetSocket, const ENetAddress *address, const ENetBuffer *b
 	if (buffers && buffers->data && buffers->dataLength >= sizeof(MessageHeader))
 	{
 		LookAtTheGapInAHeader(buffers->data);
+	}
+
+	if (buffers && buffers->data)
+	{
+		uint8_t const *const bytes = (uint8_t const *)buffers->data;
+
+		lastDatagramSent.assign(bytes, bytes + buffers->dataLength);
 	}
 
 	datagramsSent++;
@@ -707,6 +736,130 @@ static void TestDisconnectWithNoGame()
 	}
 
 	Check(hasTheCommand, "and it's there as a console command");
+}
+
+// The whole of a search, with real bytes: what a real search asks, and what a real host answers. Then the same answer changed, as anyone on the network could change it.
+static void Arrives(std::vector<uint8_t> const &bytes, enet_uint32 fromHost)
+{
+	WaitingDatagram waiting;
+
+	waiting.bytes = bytes;
+	waiting.from.host = fromHost;
+	waiting.from.port = 23514;
+	datagramsWaiting.push_back(waiting);
+}
+
+static void TestASearchAndItsAnswers()
+{
+	int selection = 0;
+
+	Net_FindAvPSessions();
+
+	std::vector<uint8_t> const question = lastDatagramSent;
+
+	Check(question.size() == sizeof(MessageHeader), "a search asks with a header and nothing else");
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
+
+	Check(HostAGame() == NET_OK, "a real host");
+	Arrives(question, 0x0200007F);
+	Net_ServiceNetwork();
+
+	std::vector<uint8_t> const answer = lastDatagramSent;
+
+	Check(answer.size() == sizeof(MessageHeader) + sizeof(SessionDescription), "answers it");
+	Check(datagramsSentTo.back().host == 0x0200007F, "to whoever asked");
+	EndTheGame();
+
+	Net_FindAvPSessions();
+	Arrives(answer, 0x0300007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 1, "a search takes a real host's answer");
+	Check(NumberOfSessionsFound == 1 && SessionData[0].host == 0x0300007F, "and goes by the address it really came from, whatever the answer says");
+
+	Arrives(answer, 0x0300007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 1, "a game that answers twice is one game");
+
+	// Starting again each time, because a new search starts with an empty list
+	auto const freshSearch = [&selection]()
+	{
+		fakeTime += 5000;
+		Net_UpdateSessionList(selection);
+		Net_FindAvPSessions();
+	};
+
+	freshSearch();
+
+	std::vector<uint8_t> notThisGame = answer;
+
+	((MessageHeader *)notThisGame.data())->marker ^= 1;
+	Arrives(notThisGame, 0x0400007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "an answer not marked as this game's is ignored");
+
+	std::vector<uint8_t> anotherGame = answer;
+
+	((SessionDescription *)(anotherGame.data() + sizeof(MessageHeader)))->guidApplication.Data1 ^= 1;
+	Arrives(anotherGame, 0x0400007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "and one saying it's some other program");
+
+	std::vector<uint8_t> tooLong = answer;
+
+	tooLong.push_back(0);
+	Arrives(tooLong, 0x0400007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "and one that's too long");
+
+	std::vector<uint8_t> tooShort = answer;
+
+	tooShort.pop_back();
+	Arrives(tooShort, 0x0400007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "and one that's too short");
+
+	// Names that never end
+	std::vector<uint8_t> noEnds = answer;
+	SessionDescription *const described = (SessionDescription *)(noEnds.data() + sizeof(MessageHeader));
+
+	memset(described->sessionName, 'A', sizeof(described->sessionName));
+	memset(described->levelName, 'B', sizeof(described->levelName));
+	Arrives(noEnds, 0x0500007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 1 && strnlen(SessionData[0].Name, sizeof(SessionData[0].Name)) < sizeof(SessionData[0].Name), "names with no end still make a name that ends");
+
+	// One address and many games. Each has its own number, so they're all different games.
+	freshSearch();
+
+	for (int i = 0; i < 5; i++)
+	{
+		std::vector<uint8_t> another = answer;
+
+		((SessionDescription *)(another.data() + sizeof(MessageHeader)))->guidInstance.Data1 += i + 1;
+		Arrives(another, 0x0600007F);
+	}
+
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 2, "one address can't fill the list");
+
+	// Many addresses and many games
+	freshSearch();
+
+	for (int i = 0; i < MAX_NO_OF_SESSIONS + 5; i++)
+	{
+		std::vector<uint8_t> another = answer;
+
+		((SessionDescription *)(another.data() + sizeof(MessageHeader)))->guidInstance.Data1 += i + 1;
+		Arrives(another, 0x0700007F + ((enet_uint32)i << 24));
+	}
+
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == MAX_NO_OF_SESSIONS, "and a full list stays within its room");
+
+	fakeTime += 5000;
+	Net_UpdateSessionList(selection);
+	datagramsWaiting.clear();
 }
 
 static void TestNothingOfTheStackGoesOut()
@@ -2060,6 +2213,7 @@ int main()
 	TestDisconnectWithNoGame();
 	TestLookingForGames();
 	TestNothingOfTheStackGoesOut();
+	TestASearchAndItsAnswers();
 	TestWhenASocketCantBeHad();
 	TestHosting();
 	TestHostingWhenASocketCantBeHad();

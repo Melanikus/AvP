@@ -215,6 +215,9 @@ const char* Net_MessageTypeToString(uint32_t messageType)
 	}
 }
 
+static void LogDroppedMessage(const char *why);
+static const int kMostGamesFromOneAddress = 2;
+
 static void Net_AddSession(SessionDescription &session)
 {
 	uint16_t gameStyle = session.gameStyle;
@@ -237,6 +240,20 @@ static void Net_AddSession(SessionDescription &session)
 	// the host sends both names NUL-terminated (Net_CreateSession); make sure of it
 	session.levelName[kLevelNameSize - 1]     = '\0';
 	session.sessionName[kSessionNameSize - 1] = '\0';
+
+	// Anyone can answer a search. One address can't fill the list and push real games off it.
+	int gamesFromThisAddress = 0;
+
+	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)
+	{
+		gamesFromThisAddress += SessionData[i].host == session.host ? 1 : 0;
+	}
+
+	if (gamesFromThisAddress >= kMostGamesFromOneAddress)
+	{
+		LogDroppedMessage("one address answered a search with more games than a machine runs");
+		return;
+	}
 
 	// A game that answers twice is one game
 	for (uint32_t i = 0; i < NumberOfSessionsFound; i++)

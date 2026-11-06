@@ -5,6 +5,46 @@
 	],
 	"rows": [
 		{
+			"name": "one address can fill the list of games",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (gamesFromThisAddress >= kMostGamesFromOneAddress)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an answer from some other program is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (memcmp(&newSession.guidApplication, &AvPGuid, sizeof(AvPGuid)) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an answer not marked as the game's is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (header.marker == kMarker && header.messageType == NETSYS_SESSION_INFO)",
+					"to": "if (header.messageType == NETSYS_SESSION_INFO)"
+				}
+			]
+		},
+		{
+			"name": "an answer says where it's from, and is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "newSession.host = address.host;\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "SOURCE: a machine sends every frame",
 			"changes": [
 				{
@@ -549,7 +589,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "player.name[kPlayerNameSize - 1] = '\\0';",
+					"from": "session.sessionName[kSessionNameSize - 1] = '\\0';\n",
 					"to": ""
 				}
 			]
