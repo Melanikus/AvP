@@ -6,10 +6,13 @@
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
-//   number is left out; when two sounds have the same number, the earlier one is given back
+//   number is left out; when two sounds have the same number, the earlier one is given back; a shape's list of
+//   baked colours has a place for every point, even if the file has fewer colours
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   each of a level's own shapes gets its list of polygon facts once it's finished.
 //   a shape records how many baked colours it holds
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -64,6 +67,7 @@
 #include "logString.h"
 #include "surface_normals.h"
 #include "shadow_reach.h"
+#include "level_file_name.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -1341,6 +1345,42 @@ int Global_Hierarchy_Store::get_time_from_sequence_id(int id)
 }
 
 
+// Gives a shape its baked colours, the lighting worked out when the level was made. The game looks up a colour for each
+// point of the shape, so the list has a place for every point, even if the level file has fewer colours than that. The
+// list starts empty, so a point with no colour reads as unlit, not as whatever was in that memory before.
+static BOOL set_up_baked_colours(SHAPEHEADER * shape, Shape_Vertex_Intensities_Chunk * svic)
+{
+	size_t const list_bytes = svic->colour_places_for_shape(shape->numpoints) * sizeof(EXTRAITEMDATA);
+
+	shape->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(list_bytes);
+	if (!shape->sh_extraitemdata)
+	{
+		memoryInitialisationFailure = 1;
+		return FALSE;
+	}
+
+	memset(shape->sh_extraitemdata, 0, list_bytes);
+
+	// How many colours the level really gave. The list can be longer, with the rest unlit, and a shape short of colours
+	// stays off the fixed buffer, because StaticLevel_Shape compares this with how many points it has.
+	shape->sh_numextraitems = svic->num_vertices;
+
+	for (int vn = 0; vn < svic->num_vertices; vn++)
+	{
+		//convert coloured light to a brightness value
+		int ir = svic->intensity_array[vn]>>16;
+		int ig = svic->intensity_array[vn]>>8 &0xff;
+		int ib = svic->intensity_array[vn] &0xff;
+		int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
+
+		shape->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
+	}
+
+	shape->shapeflags |= ShapeFlag_PreLit;
+
+	return TRUE;
+}
+
 static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_start,int progress_interval)
 {
  //////////////////////////
@@ -1417,28 +1457,9 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 			}
 		}
 
-		if (svic)
+		if (svic && !set_up_baked_colours(mainshapelist[osnp->sh_num], svic))
 		{
-			mainshapelist[osnp->sh_num]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-			if (!mainshapelist[osnp->sh_num]->sh_extraitemdata)
-			{
-				memoryInitialisationFailure = 1;
-				return FALSE;
-			}
-
-			mainshapelist[osnp->sh_num]->sh_numextraitems = svic->num_vertices;
-
-			for (int vn = 0; vn < svic->num_vertices; vn++) 
-			{
-				//convert coloured light to a brightness value
-				int ir = svic->intensity_array[vn]>>16;
-				int ig = svic->intensity_array[vn]>>8 &0xff;
-				int ib = svic->intensity_array[vn] &0xff;
-				int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-				mainshapelist[osnp->sh_num]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-			}
-			mainshapelist[osnp->sh_num]->shapeflags |= ShapeFlag_PreLit;
+			return FALSE;
 		}
 	}
 	/*-----------------------------**
@@ -1986,30 +2007,10 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 							}
 						}
 
-						if (svic)
+						//if this object has prelighting , set up extra item data
+						if (svic && !set_up_baked_colours(mainshapelist[list_pos], svic))
 						{
-							//this object has prelighting , so set up extra item data
-							mainshapelist[list_pos]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-							if (!mainshapelist[list_pos]->sh_extraitemdata)
-							{
-								memoryInitialisationFailure = 1;
-								return FALSE;
-							}
-
-							mainshapelist[list_pos]->sh_numextraitems = svic->num_vertices;
-
-							for (int vn = 0; vn < svic->num_vertices; vn++) 
-							{
-								//convert coloured light to a brightness value
-								int ir=svic->intensity_array[vn]>>16;
-								int ig=svic->intensity_array[vn]>>8 &0xff;
-								int ib=svic->intensity_array[vn] &0xff;
-								int mag =(int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-								mainshapelist[list_pos]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-							}
-
-							mainshapelist[list_pos]->shapeflags |= ShapeFlag_PreLit;
+							return FALSE;
 						}
 
 						int AnimationShape=-1;
@@ -2723,11 +2724,22 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 // hook to load a bitmap - so you can load them from test directories, etc. should return tex index
 texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 {
-	std::string fileName = fname;
+	// The name comes from the level file, which can come from anyone. A refused one goes on as a texture that isn't there, which the game already copes with.
+	char const *const whyRefused = LevelFileName_WhyRefused(fname);
+
+	if (whyRefused)
+	{
+		char safeName[64];
+
+		LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));
+		LogErrorString(std::string("level file names a texture the game won't open: ") + whyRefused + ": " + safeName);
+	}
+
+	std::string fileName = whyRefused ? "" : fname;
 
 	Util::ChangeSlashes(fileName);
 
-	texID_t textureID = Tex_CreateFromRIM("graphics/" + fileName);
+	texID_t textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
 /*
 		CL_LoadImageOnce
 		(

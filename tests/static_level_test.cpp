@@ -12,7 +12,10 @@
 #include "surface_tangent.h"
 
 #include <float.h>
+#include <fstream>
 #include <limits>
+#include <sstream>
+#include <string>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -453,6 +456,20 @@ static void CheckBakedColours()
 	MadeUpShape unbaked;
 	unbaked.AddQuad(kTextureA);
 	unbaked.Finish();
+	// That check needs the level loader to say how many colours a shape has. Without it every baked shape would look short of colours, and silently stay off the fixed buffer. /FC in this test's settings makes __FILE__ the
+	// whole path of this file, which is how the source is found.
+	std::string source = __FILE__;
+	std::string::size_type const testsFolder = source.rfind("tests");
+	std::ifstream loaderFile(((testsFolder == std::string::npos) ? std::string() : source.substr(0, testsFolder)) + "3dc/avp/win95/projload.cpp", std::ios::binary);
+	std::stringstream loaderText;
+	loaderText << loaderFile.rdbuf();
+	std::string const loader = loaderText.str();
+	std::string::size_type const settingUp = loader.find("static BOOL set_up_baked_colours(");
+	std::string::size_type const says = loader.find("shape->sh_numextraitems = svic->num_vertices;");
+	std::string::size_type const nextFunction = (settingUp == std::string::npos) ? std::string::npos : loader.find("\n}", settingUp);
+
+	Check(settingUp != std::string::npos && says != std::string::npos && settingUp < says && says < nextFunction, "the level loader says how many colours the level gave, where it sets them up");
+
 	Check(StaticLevel_ShapeHasItsColours((const shapeheader *)&unbaked.header), "a shape that isn't baked needs none");
 }
 

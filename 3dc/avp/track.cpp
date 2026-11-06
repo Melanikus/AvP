@@ -1,3 +1,6 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   stopping a sound that isn't there does nothing
+
 #define DB_LEVEL 1
 #include "3dc.h"
 #include "inline.h"
@@ -163,7 +166,11 @@ void Start_Track_Sound(TRACK_SOUND* ts,VECTORCH * location)
 
 void Stop_Track_Sound(TRACK_SOUND* ts)
 {
-	GLOBALASSERT(ts);
+	// a level file can give a track a start sound and no middle sound
+	if(!ts)
+	{
+		return;
+	}
 
 	ts->playing=0;
 	if (ts->activ_no!=SOUND_NOACTIVEINDEX)

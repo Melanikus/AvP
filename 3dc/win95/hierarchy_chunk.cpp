@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   text is copied using its exact measured length, so it always fits
+//   text is copied using its exact measured length, so it always fits; a level with a hierarchy section that
+//   has no name is refused
+//   counted lists are measured against their chunks before they're made
+//   a name is only read as far as the end of its chunk
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -136,11 +139,11 @@ void Object_Hierarchy_Data_Chunk::fill_data_block (char *data_start)
 	}
 }
 
-Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * parent, const char * data_start, size_t /*ssize*/)
+Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * parent, const char * data_start, size_t size)
 : Chunk (parent, "OBJHIERD"), object(0), ob_name (0)
 {
-	num_extra_data=*(int*)data_start;
-	data_start+=4;
+	char const * const start = data_start;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 
 	if (num_extra_data)
 		extra_data = new int[num_extra_data];
@@ -153,11 +156,7 @@ Object_Hierarchy_Data_Chunk::Object_Hierarchy_Data_Chunk (Chunk_With_Children * 
 		data_start += 4;
 	}
 	
-	if (strlen(data_start))
-	{
-		ob_name = new char [strlen(data_start) + 1];
-		strcpy (ob_name, data_start);
-	}
+	ob_name = CopyOptionalNameFromChunk(start, size, data_start);
 }
 
 void Object_Hierarchy_Data_Chunk::post_input_processing ()
@@ -168,16 +167,26 @@ void Object_Hierarchy_Data_Chunk::post_input_processing ()
 void Object_Hierarchy_Data_Chunk::find_object_for_this_section ()
 {
 	*((Object_Chunk **)&object) = NULL;
-	
+
 	Chunk_With_Children * root = GetRootChunk();
-	
+
+	// A level file can leave a section's name blank, and the chunk then holds no name at all. This search needs the name,
+	// and so does the code that later builds the section, which uses it with no check, so skipping the search would only
+	// move the crash. The level is refused instead: load_rif sees error_code and stops with its error message. All 2006
+	// sections in the game's own files have a name.
+	if (!ob_name)
+	{
+		root->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	List<Chunk *> oblist;
 	root->lookup_child ("RBOBJECT",oblist);
-	
+
 	for (LIF<Chunk *> oli(&oblist); !oli.done(); oli.next())
 	{
 		Object_Chunk * ob = (Object_Chunk *)oli();
-		
+
 		if (!strcmp (ob->object_data.o_name, ob_name))
 		{
 			*((Object_Chunk **)&object) = ob;
@@ -223,11 +232,10 @@ void Object_Hierarchy_Name_Chunk::fill_data_block (char *data_start)
 	
 }
 
-Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * parent, const char * data, size_t /*ssize*/)
+Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "OBHIERNM")
 {
-	hierarchy_name = new char [strlen(data)+1];
-	strcpy (hierarchy_name, data);
+	hierarchy_name = CopyNameFromChunk(data, chunk_bytes, data);
 }
 
 
@@ -274,34 +282,38 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 
 }
 
-Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"OBHALTSH")
 {
+	char const * const start = data;
 		
 	Shape_Set_Num=*(int*)data;
 	data+=4;
 	
-	int name_length=strlen(data)+1;
-	Shape_Set_Name=new char[name_length];
-	strcpy(Shape_Set_Name,data);
-	data+=(name_length+3)&~3;
+	size_t name_length=0;
+	Shape_Set_Name=CopyNameFromChunk(start,size,data,&name_length);
+	data+=(name_length+4)&~3;
 
-	int num_shapes=*(int*)data;
-	data+=4;
+	// two names, which take at least 4 bytes each
+	size_t const smallest_entry=8;
+	int num_shapes=ReadListCount(start,data,size,smallest_entry);
 
 	for(int i=0;i<num_shapes;i++)
 	{
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if((size_t)(data - start) + smallest_entry > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
-		name_length=strlen(data)+1;
-		rsd->old_object_name=new char[name_length];
-		strcpy(rsd->old_object_name,data);
-		data+=(name_length+3)&~3;
+		rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);
+		data+=(name_length+4)&~3;
 
-		name_length=strlen(data)+1;
-		rsd->new_object_name=new char[name_length];
-		strcpy(rsd->new_object_name,data);
-		data+=(name_length+3)&~3;
+		rsd->new_object_name=CopyNameFromChunk(start,size,data,&name_length);
+		data+=(name_length+4)&~3;
 
 		Replaced_Shape_List.add_entry(rsd);	
 	}
@@ -395,20 +407,19 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 }
 
 
-Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"HSETCOLL")
 {
+	char const * const start = data;
 		
 	Set_Collection_Num=*(int*)data;
 	data+=4;
 	
-	int name_length=strlen(data)+1;
-	Set_Collection_Name=new char[name_length];
-	strcpy(Set_Collection_Name,data);
-	data+=(name_length+3)&~3;
+	size_t name_length=0;
+	Set_Collection_Name=CopyNameFromChunk(start,size,data,&name_length);
+	data+=(name_length+4)&~3;
 
-	int list_length=*(int*)data;
-	data+=4;
+	int list_length=ReadListCount(start,data,size,sizeof(int));
 
 	for(int i=0;i<list_length;i++)
 	{
@@ -492,11 +503,11 @@ Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk
 
 }
 
-Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Hierarchy_Degradation_Distance_Chunk::Hierarchy_Degradation_Distance_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"HIDEGDIS")
 {
-	num_detail_levels=*(int*)data;
-	data+=sizeof(int);
+	char const * const start = data;
+	num_detail_levels=ReadListCount(start,data,size,sizeof(int));
 	
 	if(num_detail_levels)
 	{

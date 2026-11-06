@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a power cable placed outside every module does nothing
+
 
 #include "3dc.h"
 #include "inline.h"
@@ -62,8 +66,7 @@ void PowerCableBehaveFun(STRATEGYBLOCK* sbptr)
 	if (AvP.PlayerType==I_Alien)
 	{
 		//the cable needs to be in a near module
-		GLOBALASSERT(sbptr->containingModule);
-		if (ModuleCurrVisArray[(sbptr->containingModule->m_index)])
+		if (sbptr->containingModule && ModuleCurrVisArray[(sbptr->containingModule->m_index)])
 		{
 			//is player close enough
 			int distance=VectorDistance(&Player->ObWorld,&pc_bhv->position);

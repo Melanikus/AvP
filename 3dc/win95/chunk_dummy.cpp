@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
+//   a name is only read as far as the end of its chunk
 
 #include "chunk_dummy.hpp"
 
@@ -45,14 +46,15 @@ const char* Dummy_Object_Chunk::get_text()
 RIF_IMPLEMENT_DYNCREATE("DUMOBJDT",Dummy_Object_Data_Chunk)
 
 
-Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Dummy_Object_Data_Chunk::Dummy_Object_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"DUMOBJDT")
 {
+	char const * const chunk_start = data;
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(min_extents,ChunkVectorInt)
 	CHUNK_EXTRACT(max_extents,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkQuat)
-	CHUNK_EXTRACT_STRING(name)
+	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes)
 }
 
 
@@ -87,10 +89,10 @@ size_t Dummy_Object_Data_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("DUMOBJTX",Dummy_Object_Text_Chunk)
 
-Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Dummy_Object_Text_Chunk::Dummy_Object_Text_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"DUMOBJTX")
 {
-	CHUNK_EXTRACT_STRING(text)
+	CHUNK_EXTRACT_STRING(text,data,chunk_bytes)
 }
 
 

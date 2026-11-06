@@ -24,7 +24,7 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every packed file's name is checked when a file is looked up, so a damaged archive cannot hand back the
-//   wrong file
+//   wrong file; reading the list of packed files stops at the end of the archive, whatever count it claims
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   FF_FileIsThere asks whether a file is there and writes nothing, for a file that's allowed not to be
 
@@ -192,7 +192,9 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 
 	std::string requestedFile;
 
-	for (uint32_t i = 0; i < nFiles; i++)
+	// nFiles comes from the file, so a damaged archive can claim billions of files. Stop when the file runs out, or
+	// this would go on adding empty entries long after there was anything left to read.
+	for (uint32_t i = 0; i < nFiles && !file.RanOutOfData(); i++)
 	{
 		// read file header
 		uint32_t dataOffset = file.GetUint32LE();

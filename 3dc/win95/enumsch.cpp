@@ -1,3 +1,7 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a list of enums is measured against its chunk before it's read
+//   a name is only read as far as the end of its chunk
+
 #include <string.h>
 
 #include "enumsch.hpp"
@@ -90,25 +94,36 @@ void Enum_Constant::fill_data_block (char * data_start)
 ///////
 RIF_IMPLEMENT_DYNCREATE("BMPENUMS",BMP_Enums_Chunk)
 
-BMP_Enums_Chunk::BMP_Enums_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const /*ssize*/)
+BMP_Enums_Chunk::BMP_Enums_Chunk(Chunk_With_Children * const parent, char const * sdata, size_t const ssize)
 : Chunk(parent,"BMPENUMS"), ctype(0), reserved1(*(int *)sdata), reserved2(*(int *)(sdata+4))
 {
+	char const * const start = sdata;
+	size_t const smallest_enum = 12;   // two numbers and a name
+
 	sdata+=8;
-	const size_t len = strlen(sdata)+1;
+	size_t len = 0;
+	ctype = CopyOptionalNameFromChunk(start, ssize, sdata, &len);
 
-	if (len>1)
+	sdata += len + 4 &~3;
+
+	int const enlistsize = ReadListCount(start, sdata, ssize, smallest_enum);
+
+	for (int i = enlistsize; i; --i)
 	{
-		ctype = new char[len];
-		strcpy(ctype,sdata);
-	}
+		// names can be longer than the smallest, so they can use up the room that the count was measured against
+		if ((size_t)(sdata - start) + smallest_enum > ssize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
 
-	sdata += len + 3 &~3;
+		// An enum measures its name by looking for its end, 8 bytes in, so that has to be inside the chunk
+		if (NameLengthInChunk(sdata + 8, ssize - ((size_t)(sdata - start) + 8)) < 0)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
 
-	unsigned int const enlistsize = *(int *)sdata;
-	sdata += 4;
-
-	for (unsigned int i = enlistsize; i; --i)
-	{
 		Enum_Constant current(sdata);
 		sdata += current.size_chunk();
 		enums.add_entry(current);
