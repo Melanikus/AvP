@@ -563,6 +563,7 @@ static void EndTheGame()
 
 static void TestStartingTheGame()
 {
+	Check(Net_GetNextPlayerID() != 0, "the first player ID there is isn't 0, which means nobody");
 	Check(Net_Initialise() == NET_OK, "starting the game's networking works");
 	Check(socketsCreated == 0, "and it makes no socket, because there's nobody to talk to yet");
 	Check(socketsBoundTo.empty(), "and it listens on nothing");
@@ -841,6 +842,20 @@ static void TestJoinThatGetsNoAnswerThenHosting()
 	EndTheGame();
 }
 
+static void TestHostingWhileStillInAGame()
+{
+	Check(JoinAGame() == NET_OK, "someone is in a game");
+
+	int const destroyed = hostsDestroyed;
+	int const id = 1;
+	int const sent = packetsToAPeer;
+
+	Check(HostAGame() == NET_OK, "and starts hosting");
+	Check(hostsDestroyed == destroyed + 1, "which lets go of the old connection, rather than losing it");
+	Check(Net_SendSystemMessage(NET_SETPLAYERID, 1, 0, &id, sizeof(id)) == NET_FAIL && packetsToAPeer == sent, "and doesn't think the old server is still there");
+	EndTheGame();
+}
+
 static void TestJoiningWhileAPageIsSearching()
 {
 	Net_FindAvPSessions();
@@ -984,6 +999,11 @@ static void TestLettingPeopleIn()
 	Check(HostAGame() == NET_OK, "someone hosts");
 	Check(connectionsAllowed == 7, "with room for the other seven players, and no more");
 	Check(netSession.nPlayers == 1, "and the game says it has one player");
+
+	int const hostGoneBefore = hostHasGoneCalls;
+	size_t nothing = 0;
+
+	Check(Net_Receive(received, nothing) == NET_NO_MESSAGES && hostHasGoneCalls == hostGoneBefore, "a host has no server, and that doesn't mean it has lost one");
 
 	NetID const hostID = AvPNetID;
 
@@ -1322,8 +1342,13 @@ static void TestWaitingToJoin()
 	Check(Net_Receive(received, size) == NET_NO_MESSAGES, "a game with no host has nothing to read, or the game's loop would go round for ever");
 	Check(hostHasGoneCalls == goneNow, "and a game that has left asks nothing more about its host");
 
-	// The player gets bored
+	// The player gets bored, after the host has given them an ID
 	Check(JoinAGame() == NET_OK, "someone is joining again");
+
+	NetID const given = 31;
+
+	Hears(0, AMessage(1, NET_SETPLAYERID, 1, &given, sizeof(given)));
+	Check(AvPNetID == given, "and has an ID");
 
 	int const destroyedNext = hostsDestroyed;
 
@@ -1331,6 +1356,16 @@ static void TestWaitingToJoin()
 	Check(Net_ConnectingToSession() == NET_FAIL, "Escape stops the wait");
 	DebouncedKeyboardInput[KEY_ESCAPE] = 0;
 	Check(AvP.Network == I_No_Network && hostsDestroyed == destroyedNext + 1, "and that lets go of the connection as well");
+	Check(AvPNetID == 0, "and the ID, which was for that game");
+
+	// The console's disconnect command, in the middle of a game
+	Check(JoinAGame() == NET_OK, "someone is in a game again");
+
+	int const goneBefore = hostHasGoneCalls;
+
+	Net_Disconnect();
+	Check(Net_Receive(received, size) == NET_NO_MESSAGES && hostHasGoneCalls == goneBefore + 1, "a client whose connection the console closed has lost its game too");
+	AvP.Network = I_No_Network;
 }
 
 static void TestLeavingClosesConnections()
@@ -1426,6 +1461,7 @@ int main()
 	TestJoining();
 	TestJoiningAgainWhenItCantBeDone();
 	TestJoinThatGetsNoAnswerThenHosting();
+	TestHostingWhileStillInAGame();
 	TestJoiningWhileAPageIsSearching();
 	TestLettingPeopleIn();
 	TestWhatAClientCantSay();

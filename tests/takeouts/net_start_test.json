@@ -725,16 +725,6 @@
 			]
 		},
 		{
-			"name": "a game that has left still asks after its host",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "if (host && AvP.Network == I_Peer && !ServerPeer)",
-					"to": "if (AvP.Network == I_Peer && !ServerPeer)"
-				}
-			]
-		},
-		{
 			"name": "a connection closing keeps its ID",
 			"changes": [
 				{
@@ -971,6 +961,26 @@
 					"file": "3dc/networking.h",
 					"from": "const int kMultiplayerVersion = 102;",
 					"to": "const int kMultiplayerVersion = 101;"
+				}
+			]
+		},
+		{
+			"name": "a host thinks it has lost its host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Peer && !ServerPeer)",
+					"to": "if (!ServerPeer && host)"
+				}
+			]
+		},
+		{
+			"name": "a game on no network thinks it has lost its host",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network == I_Peer && !ServerPeer)",
+					"to": "if (AvP.Network != I_Host && !ServerPeer)"
 				}
 			]
 		}

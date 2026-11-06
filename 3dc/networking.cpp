@@ -934,8 +934,8 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 {
 	dataSize = 0;
 
-	// A client has nobody else to talk to, so when it has lost its host the game is over. This is asked on every call, because a client can be loading a level when it happens.
-	if (host && AvP.Network == I_Peer && !ServerPeer)
+	// A client has nobody else to talk to, so when it has lost its host the game is over, whether the host went or the console's disconnect command closed the connection. This is asked on every call, because a client can be loading a level when it happens.
+	if (AvP.Network == I_Peer && !ServerPeer)
 	{
 		Net_HostHasGone();
 		return NET_NO_MESSAGES;
