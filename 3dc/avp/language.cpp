@@ -8,6 +8,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's text comes from here. A stock language.txt has no such strings, and a player's file stays as it is
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the name of the marine's shoulder lamp key comes from here too
 //   the text of the rendering page's lines for choosing a key
 #include "3dc.h"
 #include "inline.h"
@@ -50,6 +51,7 @@ static char OurTextStrings[][200] =
 	"Auto-generate maps",
 	"Works out maps for textures that have none. Turning it on takes effect from the next level.",
 	"This does nothing with Gouraud or Per-pixel (flat): only Per-pixel + normals and Relief map read maps.",
+	"Shoulder lamp",
 	"Rendering key",
 	"Changes how the world is lit. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
 	"Shadows key",

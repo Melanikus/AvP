@@ -1,0 +1,3 @@
+/std:c++17 /EHsc /MD /J /W3 /FC /we4996
+/DNDEBUG
+tests/light_shape_test.cpp

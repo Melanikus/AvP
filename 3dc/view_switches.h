@@ -39,6 +39,13 @@ void ShadowsCommand(char *words);
 void LightingCommand(char *words);
 void ShadowAmbientCommand(char *words);
 
+// How long the shoulder lamp takes to catch up with the view, for this run of the game. See shoulder_lamp.h.
+void LampFollowCommand(char *words);
+
+// How big and how strong its spot is, for this run of the game, playing alone. A network game keeps them as built. See shoulder_lamp.h.
+void LampSpotSizeCommand(char *words);
+void LampIntensityCommand(char *words);
+
 // For developers, to judge a depth map or a normal map on the spot: which way round is it, and how deep should it be? They do nothing without -dev, or in a network game, and the tag shows them.
 //   RELIEFFLIP          swaps which of black and white is the polygon's level, in the depth map
 //   TILTFLIP            swaps bumps and dents, in the normal map

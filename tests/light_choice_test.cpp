@@ -440,7 +440,9 @@ static void TheRealGame()
 
 	// If the shader's sums change, the score has to change with them
 	Check(Has(shader, "return cos(1.5707963f * reach) * saturate(turned);"), "the shader still has the baked sum that LightChoice_LightOnOneSurface copies");
-	Check(Has(shader, "return (1.0f - reach) * ((turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f : 0.0f);"), "and the live one");
+	// The shader gives a surface an eighth past the edge if its true plane faces the light, because a stored normal can lean. A sample's direction comes from its polygon's own corners, turned
+	// towards the camera, so it's that true plane already. Past the edge, a sample really is turned away, and the nothing the score gives it is the shader's answer too.
+	Check(Has(shader, "return (1.0f - reach) * ((turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f : pastTheEdge);"), "and the live one");
 	Check(Has(shader, "float  slant   = (turned + 0.25f) * 0.5f;"), "and its slant");
 	Check(Has(limits, "kToyMostRange = 100000"), "the most a light can reach is still what kLightChoiceMostRange says");
 	Check(Has(render, "kToyMostPolyPoints  = 16;"), "and the most corners on a polygon");

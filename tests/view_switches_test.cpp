@@ -612,7 +612,7 @@ static void TheRealGame()
 	Check(settingsRead != std::string::npos && settingsRead < launch.find("\"-reliefoff\"") && settingsRead < launch.find("\"-shadowsoff\""), "the settings are read straight after the file, ahead of the switches that change them for one run");
 
 	// a new player's game: nothing written for what's off
-	Check(Has(render, "if (ToyShadowsMode)\n\t\t{\n\t\t\tSurfaceNormals_Lock();"), "with the view off, the normals aren't opened, so none are written");
+	Check(Has(render, "if (ToyShadowsMode || ShoulderLamp_CouldBeDrawn())\n\t\t{\n\t\t\tSurfaceNormals_Lock();"), "with the view off and the shoulder lamp off, the normals aren't opened, so none are written");
 	Check(CountOf(render, "SurfaceNormals_Lock();") == 1, "and that's the only place they're opened");
 
 	std::string const saying = Between(render, "static void SaySwitch(const char *words)", "// A reason is worth hearing once");
