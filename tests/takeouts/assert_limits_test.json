@@ -1,0 +1,149 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "GAME: a new assert on a limit, which nobody has read",
+			"changes": [
+				{
+					"file": "3dc/avp/decal.cpp",
+					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);",
+					"to": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);\n\tLOCALASSERT(newThing < MAX_NEW_THINGS);"
+				}
+			]
+		},
+		{
+			"name": "GAME: a new one in a header",
+			"changes": [
+				{
+					"file": "3dc/avp/dynblock.h",
+					"from": "extern DYNAMICSBLOCK* AllocateDynamicsBlock(",
+					"to": "assert(w < MAX_W);\nextern DYNAMICSBLOCK* AllocateDynamicsBlock("
+				}
+			]
+		},
+		{
+			"name": "GAME: a known assert is changed",
+			"changes": [
+				{
+					"file": "3dc/avp/decal.cpp",
+					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);",
+					"to": "LOCALASSERT(sectionDataPtr->NumberOfDecals < MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);"
+				}
+			]
+		},
+		{
+			"name": "GAME: a known assert is taken out, and its row stays",
+			"changes": [
+				{
+					"file": "3dc/avp/decal.cpp",
+					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIST: a row goes missing",
+			"changes": [
+				{
+					"file": "tests/assert_limits_allowed.txt",
+					"from": "3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LIST: a row has no reason",
+			"changes": [
+				{
+					"file": "tests/assert_limits_allowed.txt",
+					"from": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them\n",
+					"to": "LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | \n"
+				}
+			]
+		},
+		{
+			"name": "LIST: a row is for a thing that was never there",
+			"changes": [
+				{
+					"file": "tests/assert_limits_allowed.txt",
+					"from": "3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);",
+					"to": "3dc/avp/decal.cpp | LOCALASSERT(nothing < MAX_NOTHING); | no reason at all\n3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION);"
+				}
+			]
+		},
+		{
+			"name": "TEST: it reads nothing, and finds nothing wrong",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "Check(filesRead > 300,",
+					"to": "filesRead = 0; rows.clear(); Check(filesRead > 300,"
+				}
+			]
+		},
+		{
+			"name": "TEST: only part of the game is read",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "\tReadFolder(top, \"win32\", rows, &filesRead);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FINDER: anything counts as a limit",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "&& LooksLikeALimit(condition))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "FINDER: an arrow counts as a comparison",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "withoutArrows.replace(arrow, 2, \"..\");",
+					"to": "withoutArrows.replace(arrow, 2, \"<<\");"
+				}
+			]
+		},
+		{
+			"name": "FINDER: one in a comment counts",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": " && (comment == std::string::npos || comment > at))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "FINDER: part of another word counts",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "bool const wordStarts = (at == 0) || !(isalnum((unsigned char)line[at - 1]) || line[at - 1] == '_');",
+					"to": "bool const wordStarts = true;"
+				}
+			]
+		},
+		{
+			"name": "FINDER: being equal counts as going past",
+			"changes": [
+				{
+					"file": "tests/assert_limits_test.cpp",
+					"from": "(withoutArrows.find('<') != std::string::npos || withoutArrows.find('>') != std::string::npos) && ",
+					"to": ""
+				}
+			]
+		}
+	]
+}
