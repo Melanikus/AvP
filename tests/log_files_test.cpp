@@ -80,10 +80,11 @@ static bool ComesBefore(const std::string &text, const char *first, const char *
 	return a != std::string::npos && text.find(second, a) != std::string::npos;
 }
 
+// This run's own folder for the files it makes, inside the folder the test runs in, named by nothing but this program's number: no
+// setting from outside can point it anywhere else
 static std::string TestFolder()
 {
-	char const *const outputFolder = getenv("RUNNER_TEMP");
-	return std::string(outputFolder ? outputFolder : ".") + "/log_files_test_" + std::to_string(::GetCurrentProcessId());
+	return "log_files_test_" + std::to_string(::GetCurrentProcessId());
 }
 
 // ---- Names ---------------------------------------------------------------------------------------------------------------------------
