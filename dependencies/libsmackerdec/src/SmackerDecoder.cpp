@@ -59,6 +59,10 @@
  *   SM-P13: check the handle in every export, and the audio track index
  *   SM-P14: audio early returns skip their chunk; decode SMKA tracks only; check tree results
  *   SM-P15: no memset over HuffContext objects (they hold std::vector members)
+ *   SM-P19: LogError no longer writes one string from every film's thread (see LogError.cpp)
+ *   SM-P18: a film's list of decoders has a fixed place for each, so one being opened can't move the list under another's thread, and a closed one's place is
+ *           used again; the number of sound tracks says how many there are, and a track that isn't there holds zeros; a decoder that finds the list full
+ *           is deleted and its pointer cleared, as one that fails to open is, so nothing can delete it a second time
  *   SM-P17: catch only std::bad_alloc at the DLL boundary; fail Open on a failed frame-0 probe
  */
 
@@ -68,12 +72,15 @@
 #include <assert.h>
 #include <new>
 
-std::vector<class SmackerDecoder*> classInstances;
+// Each film plays on its own thread and looks its decoder up here on every frame, while the main thread can be opening another. A list that could grow would move in memory
+// under that thread, so this one has a fixed size. The game's own levels use two at most, a film on a screen and the menu music. A crafted level can use a few more, and this has room for them. If it were ever full, a film just wouldn't open.
+static const int kMostOpenDecoders = 32;
+static class SmackerDecoder *classInstances[kMostOpenDecoders];
 
 // the decoder behind a handle, or 0 if the handle is invalid, out of range or closed
 static SmackerDecoder *GetDecoder(const SmackerHandle &handle)
 {
-	if (handle.instanceIndex < 0 || (size_t)handle.instanceIndex >= classInstances.size())
+	if (handle.instanceIndex < 0 || handle.instanceIndex >= kMostOpenDecoders)
 		return 0;
 
 	return classInstances[handle.instanceIndex];
@@ -98,17 +105,29 @@ SmackerHandle Smacker_Open(const char* fileName)
 			return newHandle;
 		}
 
-		// add instance to global instance vector
-		classInstances.push_back(newDecoder);
+		// find it a place in the list. It only goes in once it's ready, so a thread can't find a decoder that's half made
+		int place = 0;
+
+		while (place < kMostOpenDecoders && classInstances[place])
+		{
+			place++;
+		}
+
+		if (place == kMostOpenDecoders)
+		{
+			delete newDecoder;
+			newDecoder = 0;
+			return newHandle;
+		}
+
+		classInstances[place] = newDecoder;
+		newHandle.instanceIndex = place;
 	}
 	catch (const std::bad_alloc&)
 	{
 		delete newDecoder;
 		return newHandle;
 	}
-
-	// get a handle ID
-	newHandle.instanceIndex = classInstances.size() - 1;
 
 	// loaded ok, make handle valid
 	newHandle.isValid = true;
@@ -134,8 +153,11 @@ void Smacker_Close(SmackerHandle &handle)
 
 uint32_t Smacker_GetNumAudioTracks(SmackerHandle &handle)
 {
-	// TODO: fixme
-	return 1;
+	SmackerDecoder *decoder = GetDecoder(handle);
+	if (!decoder)
+		return 0;
+
+	return decoder->GetNumAudioTracks();
 }
 
 SmackerAudioInfo Smacker_GetAudioTrackDetails(SmackerHandle &handle, uint32_t trackIndex)
@@ -251,9 +273,18 @@ SmackerDecoder::SmackerDecoder()
 	picture = 0;
 	nextPos = 0;
 
+	// A track the file doesn't have is never filled in, so it has to start as nothing
 	for (int i = 0; i < kMaxAudioTracks; i++)
 	{
+		audioTracks[i].sizeInBytes = 0;
+		audioTracks[i].flags = 0;
+		audioTracks[i].sampleRate = 0;
+		audioTracks[i].nChannels = 0;
+		audioTracks[i].bitsPerSample = 0;
+		audioTracks[i].compressionType = 0;
 		audioTracks[i].buffer = 0;
+		audioTracks[i].bufferSize = 0;
+		audioTracks[i].bytesReadThisFrame = 0;
 	}
 
 	// start with the 2-entry "skipped" tables, so DecodeFrame never sees an empty table
@@ -1380,6 +1411,12 @@ SmackerAudioInfo SmackerDecoder::GetAudioTrackDetails(uint32_t trackIndex)
 	info.idealBufferSize = track->bufferSize;
 
 	return info;
+}
+
+// How many sound tracks can be played. Only the first is ever asked for, and all the stock films have sound there and nowhere else, so a film without it counts as having none.
+uint32_t SmackerDecoder::GetNumAudioTracks() const
+{
+	return (audioTracks[0].buffer && audioTracks[0].bufferSize && audioTracks[0].sampleRate && audioTracks[0].nChannels && audioTracks[0].bitsPerSample) ? 1 : 0;
 }
 
 uint32_t SmackerDecoder::GetAudioData(uint32_t trackIndex, int16_t *audioBuffer)

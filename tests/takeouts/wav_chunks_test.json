@@ -194,6 +194,36 @@
 					"to": "PoolAllocateMem(num_voice_types * sizeof(ScreamVoiceType))"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a sound the bank can't read counts as loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "if (!ExtractWavFile(soundIndex, fStream))",
+					"to": "ExtractWavFile(soundIndex, fStream);\n\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its name is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "\t\t\tGameSounds[soundIndex].wavName.clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the bank goes round on the same sound",
+			"changes": [
+				{
+					"file": "3dc/avp/psndproj.cpp",
+					"from": "\t\t\tGameSounds[soundIndex].wavName.clear();\n\t\t\tsoundIndex = fStream.GetByte();\n\t\t\tpitch      = fStream.GetByte();\n\t\t\tcontinue;",
+					"to": "\t\t\tGameSounds[soundIndex].wavName.clear();\n\t\t\tcontinue;"
+				}
+			]
 		}
 	]
 }

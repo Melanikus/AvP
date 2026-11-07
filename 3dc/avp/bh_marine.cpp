@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a marine's weapon named by a level or save file is checked: a level's gets the ordinary marine's, a save's part is left out
 /*------------------------Patrick 2/7/97-----------------------------
   Source file for Marine and Seal AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -49,6 +51,8 @@
 #include "scream.h"
 #include "tables.h"
 #include "dxlog.h"
+#include "logString.h"
+#include "npc_file_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "sequences.h"
@@ -1174,6 +1178,13 @@ void Console_ZoneAlert(int input)
 
 /* Interface function - 15/12/97 */
 
+// A level or save file named something no NPC can have. What happens instead is in the words, and the log keeps them, so a
+// damaged or hostile file can be found.
+static void NoteRefusedFromAFile(char const *why)
+{
+	LogString(std::string("npc: refused: ") + why);
+}
+
 MARINE_WEAPON_DATA *GetThisNPCMarineWeapon(MARINE_NPC_WEAPONS this_id)
 {
 	int a;
@@ -1736,6 +1747,14 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		#else
 		marineStatus->My_Weapon=GetThisNPCMarineWeapon(toolsData->marine_type);
 		#endif
+
+		// The kind of marine comes from the level file, or from a save (LoadStrategy_Marine), and a number that isn't on the
+		// list finds nothing. Everything below reads his weapon, so he gets the ordinary marine's instead.
+		if (!marineStatus->My_Weapon)
+		{
+			NoteRefusedFromAFile("a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle");
+			marineStatus->My_Weapon=GetThisNPCMarineWeapon(MNPCW_PulseRifle);
+		}
 
 		/* Initialise marine's stats */
 		{
@@ -18116,6 +18135,14 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//check the size of the save block
 	if(header->size!=sizeof(*block)) return;
+
+	// His weapon decides his model, and everything below reads it, so a number that isn't on the list refuses his part of the
+	// save before anything is changed. He stays as the level made him, or isn't made, as when the block is the wrong size.
+	if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))
+	{
+		NoteRefusedFromAFile("a save named a marine weapon that isn't on the list, so that marine's part of the save is left out");
+		return;
+	}
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);
