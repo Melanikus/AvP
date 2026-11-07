@@ -88,7 +88,7 @@ static std::map<texID_t, int> releases;
 
 texID_t Tex_CreateFromRIM(const std::string &name)
 {
-	std::map<std::string, Picture>::const_iterator const found = pictures.find(name);
+	std::map<std::string, Picture>::const_iterator found = pictures.find(name);
 
 	return found == pictures.end() ? MISSING_TEXTURE : found->second.id;
 }
@@ -110,6 +110,17 @@ void Tex_GetDimensions(texID_t id, uint32_t &width, uint32_t &height)
 void Tex_Release(texID_t id)
 {
 	releases[id]++;
+}
+
+// Puts a picture where the stand-in picture reader will find it, by name
+static void AddPicture(const std::string &name, texID_t id, uint32_t width, uint32_t height)
+{
+	Picture picture;
+
+	picture.id = id;
+	picture.width = width;
+	picture.height = height;
+	pictures[name] = picture;
 }
 
 // ---- Making the folder
@@ -300,8 +311,8 @@ static void TestPictures()
 {
 	puts("A map's own picture:");
 
-	pictures["avp_rifs/Custom/Ab.rim"] = { 11, 200, 100 };
-	pictures["graphics/Menus/A_b_briefing.rim"] = { 12, 201, 100 };
+	AddPicture("avp_rifs/Custom/Ab.rim", 11, 200, 100);
+	AddPicture("graphics/Menus/A_b_briefing.rim", 12, 201, 100);
 
 	CustomMaps_Find();
 
@@ -315,8 +326,10 @@ static void TestPictures()
 	Check(releases[11] == 1 && releases[12] == 1, "forgetting the pictures lets go of each shown one, once");
 }
 
-int main(int, char **argv)
+int main(int argc, char **argv)
 {
+	(void)argc;
+
 	MakeTheFolder(argv[0]);
 
 	TestTheList();
