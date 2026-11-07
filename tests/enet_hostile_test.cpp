@@ -693,9 +693,10 @@ static ENetSocket SocketHere(const char *what)
 }
 
 // Sends a CONNECT built the way enet_host_connect builds one, alone in a packet, as ENet sends it. cookie is the token, or
-// NULL for none. With older set, it's the CONNECT of an ENet without the token: that many bytes shorter. Gives back the
+// NULL for none. With older set, it's the CONNECT of an ENet without the token: that many bytes shorter. With copies more
+// than 1, the packet holds that many CONNECTs, each with the next connection number, as a flood might send. Gives back the
 // packet's size.
-static size_t SendConnect(ENetSocket socket, const ENetAddress &to, enet_uint32 connectID, const uint8_t *cookie, bool older)
+static size_t SendConnect(ENetSocket socket, const ENetAddress &to, enet_uint32 connectID, const uint8_t *cookie, bool older, int copies = 1)
 {
 	ENetProtocolConnect command;
 
@@ -732,7 +733,12 @@ static size_t SendConnect(ENetSocket socket, const ENetAddress &to, enet_uint32 
 	size_t const checksumAt = packet.size();
 
 	Append(packet, &none, sizeof(none));
-	Append(packet, &command, older ? sizeof(command) - ENET_PROTOCOL_COOKIE_SIZE : sizeof(command));
+
+	for (int copy = 0; copy < copies; copy++)
+	{
+		command.connectID = connectID + (enet_uint32)copy;
+		Append(packet, &command, older ? sizeof(command) - ENET_PROTOCOL_COOKIE_SIZE : sizeof(command));
+	}
 
 	ENetBuffer buffer;
 
@@ -929,8 +935,9 @@ static void TestTheTokenForAConnect()
 	enet_uint32 const refusedBefore = host->olderConnectsRefused;
 	int const placesBefore = PlacesTaken(host);
 	bool toldNo = false;
+	size_t refusedWith = 0;
 
-	SendConnect(stranger, hostAddress, connectID + 3, NULL, true);
+	size_t const olderAsked = SendConnect(stranger, hostAddress, connectID + 3, NULL, true);
 	LetItRead(host, 100);
 
 	for (const Answer &answer : ReadAnswers(stranger, 200))
@@ -940,12 +947,37 @@ static void TestTheTokenForAConnect()
 		if (answer.kind == ENET_PROTOCOL_COMMAND_DISCONNECT && answer.command.size() == sizeof(refusal))
 		{
 			memcpy(&refusal, answer.command.data(), sizeof(refusal));
-			toldNo = toldNo || (ENET_NET_TO_HOST_32(refusal.data) == ENET_PROTOCOL_REFUSED_OLDER_VERSION && answer.sentTo == 0);
+			if (ENET_NET_TO_HOST_32(refusal.data) == ENET_PROTOCOL_REFUSED_OLDER_VERSION && answer.sentTo == 0)
+			{
+				toldNo = true;
+				refusedWith = answer.packetSize;
+			}
 		}
 	}
 
 	Check(PlacesTaken(host) == placesBefore && toldNo, "an older ENet's CONNECT takes no place, and is told no at once, with the reason");
 	Check(host->olderConnectsRefused == refusedBefore + 1, "and the host counts it, for the game's log");
+	Check(refusedWith > 0 && refusedWith < olderAsked, "and the refusal is smaller than the CONNECT it answers: " + std::to_string(refusedWith) + " bytes against " + std::to_string(olderAsked));
+
+	// A packet holding two CONNECTs, as a flood might send. ENet stops reading a packet at the first CONNECT that takes no place,
+	// so it sends one token back, not one for each: a made-up address can't use the host to send more packets than it was sent.
+	ReadAnswers(stranger, 50);
+
+	int const placesBeforeTwo = PlacesTaken(host);
+	int tokens = 0;
+
+	SendConnect(stranger, hostAddress, connectID + 4, NULL, false, 2);
+	LetItRead(host, 100);
+
+	for (const Answer &answer : ReadAnswers(stranger, 200))
+	{
+		if (answer.kind == ENET_PROTOCOL_COMMAND_COOKIE)
+		{
+			tokens++;
+		}
+	}
+
+	Check(tokens == 1 && PlacesTaken(host) == placesBeforeTwo, "a packet with two CONNECTs gets one token back, not two, and takes no place: " + std::to_string(tokens) + " token(s)");
 
 	enet_socket_destroy(stranger);
 	enet_socket_destroy(other);
