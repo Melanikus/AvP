@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -126,6 +127,17 @@ alignas(int) static char objectBytes[512];
 static int checksFailed = 0;
 
 static void Check(bool passed, char const * what)
+{
+	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
+	if (!passed)
+	{
+		checksFailed++;
+	}
+}
+
+// The check for the hierarchy rows (38), with a name of its own, so a reader of the code can't take it for another test's
+// Check. Its words come from a list of literals, never from the bytes a row builds.
+static void CheckRow(bool passed, char const * what)
 {
 	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
 	if (!passed)
@@ -492,17 +504,20 @@ static void TestObjectsAndShapes()
 	Parent_File = 0;
 }
 
-// The bytes of a hierarchy section: an OBJHIERD chunk with a count of extra numbers, here 0, and then its name.
-static char sectionBytes[ChunkHeaderBytes + 4 + 8];
+// The bytes of a hierarchy's one section, as its outermost chunk holds it: an OBJCHIER chunk holding an OBJHIERD chunk with a count of extra numbers, here 0, and then its name.
+static char sectionBytes[ChunkHeaderBytes + ChunkHeaderBytes + 4 + 8];
 
 static void BuildSection(char const * name, size_t nameBytes)
 {
-	int const chunkBytes = (int)sizeof(sectionBytes);
+	int const sectionChunkBytes = (int)sizeof(sectionBytes);
+	int const nameChunkBytes = sectionChunkBytes - (int)ChunkHeaderBytes;
 
 	memset(sectionBytes, 0, sizeof(sectionBytes));
-	memcpy(sectionBytes, "OBJHIERD", 8);
-	memcpy(sectionBytes + 8, &chunkBytes, sizeof(chunkBytes));
-	memcpy(sectionBytes + ChunkHeaderBytes + 4, name, nameBytes);
+	memcpy(sectionBytes, "OBJCHIER", 8);
+	memcpy(sectionBytes + 8, &sectionChunkBytes, sizeof(sectionChunkBytes));
+	memcpy(sectionBytes + ChunkHeaderBytes, "OBJHIERD", 8);
+	memcpy(sectionBytes + ChunkHeaderBytes + 8, &nameChunkBytes, sizeof(nameChunkBytes));
+	memcpy(sectionBytes + ChunkHeaderBytes + ChunkHeaderBytes + 4, name, nameBytes);
 }
 
 // 8. A hierarchy section finds its object by name, so a section with a blank name has to refuse the level.
@@ -525,7 +540,7 @@ static void TestHierarchySections()
 		file.post_input_processing();
 
 		Check(file.error_code == 0, "a section with a name is accepted");
-		Check(hierarchy->get_data()->object == object, "and it finds the object with that name");
+		Check(hierarchy->list_h_children().first_entry()->get_data()->object == object, "and it finds the object with that name");
 	}
 
 	{
@@ -3858,6 +3873,243 @@ static void TestNamesStayInTheirChunks()
 	}
 }
 
+// 38. A hierarchy's animations. The game builds these from the one section inside a hierarchy's outermost chunk, with no checks of its own, so a level whose animations it couldn't play has
+// to be refused while the file is read. Each row below changes one thing about a real shape of hierarchy, built here from bytes, the same as a file's.
+static char hierarchyBytes[8192];
+
+// Each hierarchy is built from a clean start: every byte 0, so nothing an earlier one wrote is still there to be read
+static char * StartHierarchy()
+{
+	memset(hierarchyBytes, 0, sizeof(hierarchyBytes));
+
+	return hierarchyBytes;
+}
+
+// Starts a chunk whose size isn't known yet. The chunk's contents go after what this gives back.
+static char * OpenChunk(char * where, char const * name)
+{
+	memset(where, 0, ChunkHeaderBytes);
+	memcpy(where, name, 8);
+
+	return where + ChunkHeaderBytes;
+}
+
+// Ends a chunk started at chunk, now that its contents have come to end
+static char * CloseChunk(char * chunk, char * end)
+{
+	int const bytes = (int)(end - chunk);
+
+	memcpy(chunk + 8, &bytes, sizeof(bytes));
+
+	return end;
+}
+
+// The chunk with a section's name in it: a count of extra numbers, here 0, and then the name. The game reads the name
+// as text, up to a 0 byte, so the name's letters are copied and then its 0 is written, on a line of its own.
+static char * PutSectionName(char * where)
+{
+	static char const name[] = "section";
+	size_t const letters = sizeof(name) - 1;
+	char * const data = PutChunk(where, "OBJHIERD", 4 + letters + 1);
+
+	memcpy(data + 4, name, letters);
+	data[4 + letters] = '\0';
+
+	return data + 4 + letters + 1;
+}
+
+// A compact list with one sequence. Each frame is 36 bytes, with its start at 28.
+static char * PutCompactSequence(char * where, int frames, int const * starts)
+{
+	size_t const sequenceBytes = 4 * sizeof(int);
+	size_t const frameBytes = 36;
+	char * at = OpenChunk(where, "OBANALLS");
+
+	memset(at, 0, sizeof(int) + sequenceBytes + frames * frameBytes);
+	PutNumber(at, 0, 1);
+	PutNumber(at, sizeof(int), frames);
+	at += sizeof(int) + sequenceBytes;
+
+	for (int i = 0; i < frames; i++)
+	{
+		PutNumber(at, 28, starts[i]);
+		at += frameBytes;
+	}
+
+	return CloseChunk(where, at);
+}
+
+// A compact list with no sequences in it at all
+static char * PutEmptyCompactList(char * where)
+{
+	return PutChunk(where, "OBANALLS", sizeof(int)) + sizeof(int);
+}
+
+// The long list, with one sequence. Each frame is its own chunk, with its start at 28 and the place it takes in the sequence at 32.
+struct LongFrame { int start; int place; };
+
+static char * PutLongSequence(char * where, bool hasHeader, int frames, LongFrame const * list)
+{
+	char * const sequence = OpenChunk(where, "OBANSEQS");
+	char * at = OpenChunk(sequence, "OBANSEQC");
+
+	if (hasHeader)
+	{
+		at = PutChunk(at, "OBASEQHD", 4 * sizeof(int)) + 4 * sizeof(int);
+	}
+
+	for (int i = 0; i < frames; i++)
+	{
+		size_t const frameBytes = 44;
+		char * const data = PutChunk(at, "OBASEQFR", frameBytes);
+
+		PutNumber(data, 28, list[i].start);
+		PutNumber(data, 32, list[i].place);
+		at = data + frameBytes;
+	}
+
+	CloseChunk(sequence, at);
+
+	return CloseChunk(where, at);
+}
+
+// A section, holding whatever fill puts in it
+typedef char * (*FillsSection)(char * where);
+
+static char * PutSection(char * where, FillsSection fill)
+{
+	return CloseChunk(where, fill(OpenChunk(where, "OBJCHIER")));
+}
+
+// Gives a level one hierarchy, whose outermost chunk holds the bytes up to end, and says whether the level would be accepted
+static bool HierarchyAccepted(char const * end)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Object_Hierarchy_Chunk> const made(new Object_Hierarchy_Chunk(&file, hierarchyBytes, (size_t)(end - hierarchyBytes)));
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// A section that's fine by itself, for putting bad sections inside
+static char * PutGoodCompact(char * at)
+{
+	int const starts[] = { 0, 30000 };
+
+	return PutCompactSequence(PutSectionName(at), 2, starts);
+}
+
+static void TestHierarchyAnimations()
+{
+	puts("38. hierarchy animations");
+
+	// What each row should give. Its words are in a list of their own below, apart from the fills that write the bytes,
+	// so nothing a fill wrote can be taken for them.
+	struct SectionRow { FillsSection fill; bool good; };
+	SectionRow const rows[] =
+	{
+		// What real files hold
+		{ PutGoodCompact, true },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 }, { 30000, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 30000, 1 }, { 0, 0 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { int const starts[] = { 65535 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 65535, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, true },
+		{ [](char * at) { int const starts[] = { 100, 200 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, true },
+
+		// One thing wrong, in the compact list. The first frame starting at 65536 is the one that hangs the game: the only frame, and it comes to a length of 0.
+		{ [](char * at) { int const starts[] = { 0 }; return PutCompactSequence(at, 1, starts); }, false },
+		{ [](char * at) { return PutEmptyCompactList(PutSectionName(at)); }, false },
+		{ [](char * at) { return PutCompactSequence(PutSectionName(at), 0, 0); }, false },
+		{ [](char * at) { int const starts[] = { 65536 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, false },
+		{ [](char * at) { int const starts[] = { 0, 65536 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { -1, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 50 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+
+		// The same in the long list, and what only it can get wrong
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(at, true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutSectionName(at), false, 1, frames); }, false },
+		{ [](char * at) { return PutLongSequence(PutSectionName(at), true, 0, 0); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 65536, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { -1, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 50, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+
+		// A frame's place far outside its sequence. The chunk's own check refuses this, and the rule on starts mustn't go ahead and use the place anyway.
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0x10000000 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
+
+		// A section inside the first section is held to the same, and it's refused for having no sequences, which only the first section can get away with
+		{ [](char * at) { return PutSection(PutGoodCompact(at), PutGoodCompact); }, true },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { return PutSectionName(inside); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 0 }; return PutCompactSequence(inside, 1, starts); }); }, false },
+
+		// The game leaves a hierarchy out altogether if its first section has no sequences, so nothing in that one is built, and it can't refuse the level. Two of the game's own are like this.
+		{ [](char * at) { return PutSectionName(at); }, true },
+		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true },
+	};
+
+	// What each row above checks, in the same order
+	char const * const rowWords[] =
+	{
+		"a compact sequence whose frames go up is accepted",
+		"a long sequence whose frames go up is accepted",
+		"a long sequence's frames go by their places, not by where they are in the file",
+		"a compact sequence can start its last frame as late as 65535",
+		"and so can a long one",
+		"a sequence doesn't have to start at 0",
+		"a section with a compact list and no name chunk is refused",
+		"a compact list with no sequences is refused",
+		"a compact sequence with no frames is refused",
+		"a compact sequence's only frame starting at 65536 is refused",
+		"a compact sequence's last frame starting at 65536 is refused",
+		"a compact sequence starting below 0 is refused",
+		"two compact frames starting together are refused",
+		"a compact frame starting before the one ahead of it is refused",
+		"a section with a long list and no name chunk is refused",
+		"a long sequence with no header is refused",
+		"a long sequence with no frames is refused",
+		"a long sequence's only frame starting at 65536 is refused",
+		"a long sequence starting below 0 is refused",
+		"two long frames starting together are refused",
+		"a long frame starting before the one ahead of it is refused",
+		"a frame's place far outside its sequence is refused, and goes no further",
+		"a good section inside a good section is accepted",
+		"a section inside with no sequences is refused",
+		"a section inside with bad frames is refused",
+		"a section inside with no name chunk is refused",
+		"a first section with no sequences at all is left alone",
+		"and so is whatever's inside it",
+	};
+
+	static_assert(sizeof(rowWords) / sizeof(rowWords[0]) == sizeof(rows) / sizeof(rows[0]), "every row has its words");
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		CheckRow(HierarchyAccepted(PutSection(StartHierarchy(), rows[i].fill)) == rows[i].good, rowWords[i]);
+	}
+
+	// How many sections the outermost chunk holds. The game reads the first with no check that there is one, and only ever builds that one.
+	Check(!HierarchyAccepted(PutSectionName(StartHierarchy())), "a hierarchy with no section inside is refused");
+	Check(!HierarchyAccepted(PutSection(PutSection(StartHierarchy(), PutGoodCompact), PutGoodCompact)), "a hierarchy with two sections inside is refused");
+
+	// The outermost chunk's own sequences are only names, in 61 of the game's own hierarchies, and the game never builds them
+	{
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
+		Check(HierarchyAccepted(PutCompactSequence(after, 0, 0)), "an outermost chunk's sequence with no frames is left alone");
+	}
+	{
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
+		Check(HierarchyAccepted(PutLongSequence(after, false, 0, 0)), "and so is one with no header");
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -3894,6 +4146,7 @@ int main()
 	TestChunksTheGameDoesNotRead();
 	TestCountedLists();
 	TestNumbersUsedAsPlaces();
+	TestHierarchyAnimations();
 
 	if (checksFailed)
 	{

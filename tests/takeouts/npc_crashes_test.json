@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/module.cpp",
-					"from": "\tMODULE *mptr;\n\tint gotit;\n\n\tif ((source==NULL)",
-					"to": "\tMODULE *mptr;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
+					"from": "\tMODULE *mptr = 0;\n\tint gotit;\n\n\tif ((source==NULL)",
+					"to": "\tMODULE *mptr = 0;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
 				}
 			]
 		},
@@ -322,6 +322,95 @@
 					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(",
 					"to": "if (!GetThisNPCPredatorWeapon("
 				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's glow runs on into the stand-in's part",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "what it read was meaningless.\n\t\t\t\t\tbreak;\n",
+					"to": "what it read was meaningless.\n"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a marine the level places is made without his model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a marine a generator makes is made without his model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a placed marine taken out leaves his model's parts as they were",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"",
+					"to": "\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a generated marine taken out leaves his model's parts as they were",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"",
+					"to": "\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a placed marine refused is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\"a marine the level places\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;",
+					"to": "\"a marine the level places\"))\n\t\t{\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a generated marine refused is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\"a marine a generator makes\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;",
+					"to": "\"a marine a generator makes\"))\n\t\t{\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a missing model passes the check",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (root)\n\t{\n\t\treturn true;\n\t}",
+					"to": "{\n\t\treturn true;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: the log doesn't say which model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\" needs the model \" + model + \" from \" + file + \", which",
+					"to": "\" needs a model, which"				}
 			]
 		}
 	]
