@@ -13,7 +13,12 @@ vcpkg_from_github(OUT_SOURCE_PATH SOURCE_PATH
         004-refuse-what-this-game-never-sends.patch
         # From our review of ENet as a reader of hostile packets: limits on what one peer can make it hold or do. tests/enet_hostile_test.cpp has a row for each.
         005-limits-on-what-a-peer-can-make-enet-hold.patch
+        # A host keeps no place for a CONNECT until the sender brings back a token, so made-up sender addresses take no place.
+        006-a-token-before-a-place.patch
 )
+
+# The reference SipHash, for patch 006's tokens, copied in as it is. siphash/README.md says where it came from.
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/siphash/siphash.c" "${CMAKE_CURRENT_LIST_DIR}/siphash/siphash.h" DESTINATION "${SOURCE_PATH}")
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"

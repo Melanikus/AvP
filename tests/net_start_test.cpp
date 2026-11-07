@@ -272,6 +272,7 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	theHost.maximumPacketSize = 32 * 1024 * 1024;
 	theHost.maximumWaitingData = 32 * 1024 * 1024;
 	theHost.checksum = NULL;
+	theHost.olderConnectsRefused = 0;
 
 	if (address)
 	{
@@ -1405,6 +1406,17 @@ static void TestConnectionsThatHoldAPlace()
 	enetClock += 1;
 	Net_ServiceNetwork();
 	Check(peersReset == resetBefore + 1 && peers[2].state == ENET_PEER_STATE_DISCONNECTED, "and loses it if it never finishes");
+
+	// An older version of the game, which our ENet (patch 006) told no without a place, and counted
+	int const linesBefore = errorLines;
+
+	theHost.olderConnectsRefused = 2;
+	Net_ServiceNetwork();
+
+	int const linesAfter = errorLines;
+
+	Net_ServiceNetwork();
+	Check(linesAfter > linesBefore && errorLines == linesAfter && theHost.olderConnectsRefused == 0, "an older version of the game that ENet told no is in the host's log, and only once");
 
 	// One that was let in, and went quiet
 	int const askedBefore = closedGently;

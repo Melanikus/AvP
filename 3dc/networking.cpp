@@ -44,6 +44,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   every ENet host is made by Net_MakeENetHost (net_host.cpp) with the game's limits, and a connection gets the one channel the game uses
 //   a message too short to have a header is refused before it's copied
+//   the log says when our ENet has told an older version of the game no
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -788,6 +789,27 @@ static void LogDroppedMessage(const char *why)
 	}
 }
 
+// Our ENet (patch 006) tells an older version of the game no as soon as it asks to join, without a place or an event, and
+// counts it. This puts that in the log, so a host can see why that player never got in.
+static void LogOlderVersionsToldNo()
+{
+	static unsigned long long toldNo = 0;
+
+	if (host->olderConnectsRefused == 0)
+	{
+		return;
+	}
+
+	host->olderConnectsRefused = 0;
+
+	if (LogThisDrop(toldNo))
+	{
+		std::stringstream sstream;
+		sstream << "Net - a player with an older version of the game tried to join, and was told no (" << toldNo << " so far)";
+		Con_PrintError(sstream.str());
+	}
+}
+
 static void ForgetConnectionsNotLetIn()
 {
 	unsigned int const now = enet_time_get();
@@ -886,6 +908,7 @@ void Net_ServiceNetwork()
 		if (AvP.Network == I_Host) {
 			Net_CheckForSessionRequest();
 			ForgetConnectionsNotLetIn();
+			LogOlderVersionsToldNo();
 		}
 	}
 }

@@ -55,6 +55,7 @@ struct ENetHost
 	size_t maximumWaitingData;
 	enet_uint32 (*checksum)(const ENetBuffer *buffers, size_t bufferCount);
 	size_t duplicatePeers;
+	enet_uint32 olderConnectsRefused;   // our ENet patch 006: CONNECTs from an older version, told no
 	ENetPeer *peers;
 	size_t peerCount;
 };

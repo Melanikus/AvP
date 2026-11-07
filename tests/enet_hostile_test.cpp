@@ -13,6 +13,10 @@
 // - a message in pieces that cover only part of it comes out with the rest cleared, not with leftover memory (patch 005)
 // - a packet of 40 commands that each ask for an answer gets 32 answers, the most an honest ENet puts in a packet (patch 005)
 // - a packet shorter than its own header changes nothing, even when leftover bytes would match its checksum (patch 005)
+// - a CONNECT takes no place until it brings back the token the host sent to its address (patch 006): one with no token,
+//   a made-up one, one for another connection number, one sent from another port, or one kept 30 s takes no place, the
+//   right one does, and an older ENet without the token is told no at once, with the reason. The token is SipHash, the
+//   reference code kept as it is, and it gives all 64 answers its authors published.
 // And honest messages still work: a 3,000-byte message, which ENet sends in pieces, arrives whole, 500 small ones arrive in
 // order, and once the host has read them all, nothing is counted as waiting.
 //
@@ -35,6 +39,16 @@
 #include <string.h>
 #include <string>
 #include <vector>
+
+// The reference SipHash our ENet is built with (vcpkg-overlay-ports/enet/siphash), and the answers its authors published for
+// it. ENet is C, so its SipHash is declared that way here.
+#include <inttypes.h>
+#include <stdint.h>
+extern "C"
+{
+#include "siphash.h"
+}
+#include "vectors.h"
 
 static int checksFailed = 0;
 
@@ -625,6 +639,318 @@ static void TestHonestMessages()
 	EndPair(pair);
 }
 
+// THE TOKEN FOR A CONNECT (patch 006). A host keeps no place for a CONNECT until the sender shows it is really at the address
+// the CONNECT came from, by bringing back the token the host sent there. These CONNECTs are built by hand, the way
+// enet_host_connect builds one, and sent from plain sockets, so each test can choose what the token is.
+
+// The places a host has taken: any that isn't free
+static int PlacesTaken(ENetHost *host)
+{
+	int taken = 0;
+
+	for (size_t i = 0; i < host->peerCount; i++)
+	{
+		taken += host->peers[i].state != ENET_PEER_STATE_DISCONNECTED ? 1 : 0;
+	}
+
+	return taken;
+}
+
+// Gives a host up to the time asked to read what's come and answer it
+static void LetItRead(ENetHost *host, DWORD milliseconds)
+{
+	DWORD const startedAt = GetTickCount();
+
+	do
+	{
+		ENetEvent event;
+
+		while (enet_host_service(host, &event, 1) > 0)
+		{
+			if (event.type == ENET_EVENT_TYPE_RECEIVE)
+			{
+				enet_packet_destroy(event.packet);
+			}
+		}
+	}
+	while (GetTickCount() - startedAt < milliseconds);
+}
+
+// A plain socket on this machine's own address, which never waits when there's nothing to read
+static ENetSocket SocketHere(const char *what)
+{
+	ENetSocket const socket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+	ENetAddress here = ThisMachine();
+	bool const good = socket != ENET_SOCKET_NULL && enet_socket_bind(socket, &here) == 0 && SocketIsOnThisMachine(socket, what);
+
+	if (good)
+	{
+		enet_socket_set_option(socket, ENET_SOCKOPT_NONBLOCK, 1);
+	}
+
+	return good ? socket : ENET_SOCKET_NULL;
+}
+
+// Sends a CONNECT built the way enet_host_connect builds one, alone in a packet, as ENet sends it. cookie is the token, or
+// NULL for none. With older set, it's the CONNECT of an ENet without the token: that many bytes shorter. Gives back the
+// packet's size.
+static size_t SendConnect(ENetSocket socket, const ENetAddress &to, enet_uint32 connectID, const uint8_t *cookie, bool older)
+{
+	ENetProtocolConnect command;
+
+	memset(&command, 0, sizeof(command));
+	command.header.command = (enet_uint8)(ENET_PROTOCOL_COMMAND_CONNECT | ENET_PROTOCOL_COMMAND_FLAG_ACKNOWLEDGE);
+	command.header.channelID = 0xFF;
+	command.header.reliableSequenceNumber = ENET_HOST_TO_NET_16(1);
+	command.outgoingPeerID = ENET_HOST_TO_NET_16(0);
+	command.incomingSessionID = 0xFF;
+	command.outgoingSessionID = 0xFF;
+	command.mtu = ENET_HOST_TO_NET_32(ENET_HOST_DEFAULT_MTU);
+	command.windowSize = ENET_HOST_TO_NET_32(ENET_PROTOCOL_MAXIMUM_WINDOW_SIZE);
+	command.channelCount = ENET_HOST_TO_NET_32(1);
+	command.packetThrottleInterval = ENET_HOST_TO_NET_32(ENET_PEER_PACKET_THROTTLE_INTERVAL);
+	command.packetThrottleAcceleration = ENET_HOST_TO_NET_32(ENET_PEER_PACKET_THROTTLE_ACCELERATION);
+	command.packetThrottleDeceleration = ENET_HOST_TO_NET_32(ENET_PEER_PACKET_THROTTLE_DECELERATION);
+	command.connectID = connectID;
+
+	if (cookie)
+	{
+		memcpy(command.cookie, cookie, ENET_PROTOCOL_COOKIE_SIZE);
+	}
+
+	// No connection yet: the connection number "none", a flag saying a time follows, the time, then the checksum, worked out
+	// with 0 in its place
+	std::vector<uint8_t> packet;
+	enet_uint16 const peerID = ENET_HOST_TO_NET_16((enet_uint16)(ENET_PROTOCOL_MAXIMUM_PEER_ID | ENET_PROTOCOL_HEADER_FLAG_SENT_TIME));
+	enet_uint16 const sentTime = ENET_HOST_TO_NET_16((enet_uint16)(enet_time_get() & 0xFFFF));
+	enet_uint32 const none = 0;
+
+	Append(packet, &peerID, sizeof(peerID));
+	Append(packet, &sentTime, sizeof(sentTime));
+
+	size_t const checksumAt = packet.size();
+
+	Append(packet, &none, sizeof(none));
+	Append(packet, &command, older ? sizeof(command) - ENET_PROTOCOL_COOKIE_SIZE : sizeof(command));
+
+	ENetBuffer buffer;
+
+	buffer.data = packet.data();
+	buffer.dataLength = packet.size();
+
+	enet_uint32 const checksum = enet_crc32(&buffer, 1);
+
+	memcpy(&packet[checksumAt], &checksum, sizeof(checksum));
+	SendBytes(socket, to, packet);
+
+	return packet.size();
+}
+
+// One command that came back to a plain socket, with the connection number its packet was sent to and the packet's size
+struct Answer
+{
+	int kind;
+	std::vector<uint8_t> command;
+	enet_uint16 sentTo;
+	size_t packetSize;
+};
+
+// Everything that comes back to a plain socket in the time asked, command by command
+static std::vector<Answer> ReadAnswers(ENetSocket socket, DWORD milliseconds)
+{
+	std::vector<Answer> answers;
+	DWORD const startedAt = GetTickCount();
+
+	while (socket != ENET_SOCKET_NULL && GetTickCount() - startedAt < milliseconds)
+	{
+		uint8_t bytes[4096];
+		ENetBuffer buffer;
+		ENetAddress from;
+
+		buffer.data = bytes;
+		buffer.dataLength = sizeof(bytes);
+
+		int const length = enet_socket_receive(socket, &from, &buffer, 1);
+
+		if (length <= 0)
+		{
+			Sleep(1);
+			continue;
+		}
+
+		enet_uint16 peerID = 0;
+
+		memcpy(&peerID, bytes, sizeof(peerID));
+		peerID = ENET_NET_TO_HOST_16(peerID);
+
+		size_t at = sizeof(enet_uint16) + ((peerID & ENET_PROTOCOL_HEADER_FLAG_SENT_TIME) ? sizeof(enet_uint16) : 0) + sizeof(enet_uint32);
+
+		while (at + sizeof(ENetProtocolCommandHeader) <= (size_t)length)
+		{
+			size_t const size = enet_protocol_command_size(bytes[at]);
+
+			if (size == 0 || at + size > (size_t)length)
+			{
+				break;
+			}
+
+			Answer answer;
+
+			answer.kind = bytes[at] & ENET_PROTOCOL_COMMAND_MASK;
+			answer.command.assign(bytes + at, bytes + at + size);
+			answer.sentTo = (enet_uint16)(peerID & ENET_PROTOCOL_MAXIMUM_PEER_ID);
+			answer.packetSize = (size_t)length;
+			answers.push_back(answer);
+			at += size;
+		}
+	}
+
+	return answers;
+}
+
+// The token in the answers for this connection number, if there is one. Gives back the answer's packet size, or 0 for none.
+static size_t TokenIn(const std::vector<Answer> &answers, enet_uint32 connectID, uint8_t *token)
+{
+	for (const Answer &answer : answers)
+	{
+		ENetProtocolCookie cookie;
+
+		if (answer.kind != ENET_PROTOCOL_COMMAND_COOKIE || answer.command.size() != sizeof(cookie))
+		{
+			continue;
+		}
+
+		memcpy(&cookie, answer.command.data(), sizeof(cookie));
+
+		if (cookie.connectID == connectID)
+		{
+			memcpy(token, cookie.cookie, ENET_PROTOCOL_COOKIE_SIZE);
+			return answer.packetSize;
+		}
+	}
+
+	return 0;
+}
+
+static void TestTheTokensHash()
+{
+	uint8_t key[16], in[64], out[8];
+	int matching = 0;
+
+	for (int i = 0; i < 16; i++)
+	{
+		key[i] = (uint8_t)i;
+	}
+
+	// The same as the reference's own test.c: the key 0 to 15, and messages 0, 0 1, 0 1 2, and so on, up to 63 bytes
+	for (int i = 0; i < 64; i++)
+	{
+		in[i] = (uint8_t)i;
+		siphash(in, (size_t)i, key, out, sizeof(out));
+		matching += memcmp(out, vectors_sip64[i], sizeof(out)) == 0 ? 1 : 0;
+	}
+
+	Check(matching == 64, "the SipHash our ENet is built with gives all 64 answers its authors published: " + std::to_string(matching));
+}
+
+static void TestTheTokenForAConnect()
+{
+	ENetAddress here = ThisMachine();
+	ENetHost *const host = Net_MakeENetHost(&here, 7, kLargestMessage, 0, 0);
+	ENetAddress hostAddress;
+	bool const hostIsHere = host != NULL && enet_socket_get_address(host->socket, &hostAddress) == 0 && IsOnThisMachine(hostAddress, "the host's socket is on");
+	ENetSocket const stranger = SocketHere("a stranger's socket is on");
+	ENetSocket const other = SocketHere("another socket is on");
+
+	Check(hostIsHere && stranger != ENET_SOCKET_NULL && other != ENET_SOCKET_NULL, "a host made the game's way, and two plain sockets, all on 127.0.0.1 only");
+
+	if (!hostIsHere || stranger == ENET_SOCKET_NULL || other == ENET_SOCKET_NULL)
+	{
+		return;
+	}
+
+	enet_address_set_host_ip(&hostAddress, "127.0.0.1");
+
+	enet_uint32 const connectID = 0x1234ABCD;
+	uint8_t token[ENET_PROTOCOL_COOKIE_SIZE] = {};
+	size_t const asked = SendConnect(stranger, hostAddress, connectID, NULL, false);
+
+	LetItRead(host, 100);
+	Check(PlacesTaken(host) == 0, "a CONNECT with no token takes none of the host's places");
+
+	size_t const answered = TokenIn(ReadAnswers(stranger, 200), connectID, token);
+
+	Check(answered > 0, "and gets a token back instead");
+	Check(answered > 0 && answered < asked, "which is smaller than the CONNECT, so made-up CONNECTs can't use the host to flood someone else: " + std::to_string(answered) + " bytes against " + std::to_string(asked));
+
+	SendConnect(other, hostAddress, connectID, token, false);
+	LetItRead(host, 100);
+	Check(PlacesTaken(host) == 0, "the same token sent from another port takes no place");
+
+	uint8_t const madeUp[ENET_PROTOCOL_COOKIE_SIZE] = { 0x5A, 0xA5, 0x3C, 0xC3, 0x0F, 0xF0, 0x69, 0x96 };
+
+	SendConnect(stranger, hostAddress, connectID, madeUp, false);
+	LetItRead(host, 100);
+	Check(PlacesTaken(host) == 0, "a made-up token takes no place");
+
+	SendConnect(stranger, hostAddress, connectID + 1, token, false);
+	LetItRead(host, 100);
+	Check(PlacesTaken(host) == 0, "a token given for another connection number takes no place");
+
+	SendConnect(stranger, hostAddress, connectID, token, false);
+	LetItRead(host, 100);
+	Check(PlacesTaken(host) == 1, "and the CONNECT that brings its own token back takes a place");
+
+	for (size_t i = 0; i < host->peerCount; i++)
+	{
+		enet_peer_reset(&host->peers[i]);
+	}
+
+	// A token kept and used later. ENet's clock is moved on 30 s, and then back.
+	ReadAnswers(stranger, 50);
+
+	uint8_t kept[ENET_PROTOCOL_COOKIE_SIZE] = {};
+
+	SendConnect(stranger, hostAddress, connectID + 2, NULL, false);
+	LetItRead(host, 100);
+
+	bool const gotOne = TokenIn(ReadAnswers(stranger, 200), connectID + 2, kept) > 0;
+
+	enet_time_set(enet_time_get() + 30000);
+	SendConnect(stranger, hostAddress, connectID + 2, kept, false);
+	LetItRead(host, 100);
+	Check(gotOne && PlacesTaken(host) == 0, "a token kept 30 s takes no place: one is only good for 10 to 20 s");
+	enet_time_set(enet_time_get() - 30000);
+
+	// The CONNECT of an ENet without the token
+	ReadAnswers(stranger, 50);
+
+	enet_uint32 const refusedBefore = host->olderConnectsRefused;
+	int const placesBefore = PlacesTaken(host);
+	bool toldNo = false;
+
+	SendConnect(stranger, hostAddress, connectID + 3, NULL, true);
+	LetItRead(host, 100);
+
+	for (const Answer &answer : ReadAnswers(stranger, 200))
+	{
+		ENetProtocolDisconnect refusal;
+
+		if (answer.kind == ENET_PROTOCOL_COMMAND_DISCONNECT && answer.command.size() == sizeof(refusal))
+		{
+			memcpy(&refusal, answer.command.data(), sizeof(refusal));
+			toldNo = toldNo || (ENET_NET_TO_HOST_32(refusal.data) == ENET_PROTOCOL_REFUSED_OLDER_VERSION && answer.sentTo == 0);
+		}
+	}
+
+	Check(PlacesTaken(host) == placesBefore && toldNo, "an older ENet's CONNECT takes no place, and is told no at once, with the reason");
+	Check(host->olderConnectsRefused == refusedBefore + 1, "and the host counts it, for the game's log");
+
+	enet_socket_destroy(stranger);
+	enet_socket_destroy(other);
+	enet_host_destroy(host);
+}
+
 int main()
 {
 	ENetCallbacks callbacks = { FilledMalloc, PlainFree, OutOfMemory };
@@ -641,6 +967,9 @@ int main()
 	TestTooManyCommandsInAPacket();
 	TestAPacketShorterThanItsHeader();
 	TestHonestMessages();
+	TestTheTokensHash();
+	// Last, because it moves ENet's clock on and back
+	TestTheTokenForAConnect();
 
 	enet_deinitialize();
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "The hostile ENet test passed");
