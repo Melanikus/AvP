@@ -35,6 +35,7 @@
 //   --seconds   it stops after this long, and writes its summary. It also stops when its input closes, or on Ctrl+C.
 //   --listen    the address the joiner is given (127.0.0.2), --to the host's (127.0.0.1), --ports the ports (23513,23514)
 //   --summary   a file to write the summary to as well
+//   --stop-file  it stops, and writes its summary, as soon as this file exists
 
 const dgram = require('dgram');
 const fs = require('fs');
@@ -62,7 +63,7 @@ const kCounts = ['drop-first'];
 
 function ReadSettings(words)
 {
-	const settings = { listen: '127.0.0.2', to: '127.0.0.1', ports: [23513, 23514], seconds: 0, seed: 1, summary: '', up: {}, down: {} };
+	const settings = { listen: '127.0.0.2', to: '127.0.0.1', ports: [23513, 23514], seconds: 0, seed: 1, summary: '', stopFile: '', up: {}, down: {} };
 
 	for (const direction of kDirections)
 	{
@@ -133,9 +134,9 @@ function ReadSettings(words)
 
 			settings[name] = Number(value);
 		}
-		else if (name === 'summary')
+		else if (name === 'summary' || name === 'stop-file')
 		{
-			settings.summary = value;
+			settings[name === 'summary' ? 'summary' : 'stopFile'] = value;
 		}
 		else
 		{
@@ -425,6 +426,17 @@ for (const port of settings.ports)
 if (settings.seconds > 0)
 {
 	setTimeout(() => Finish(`${settings.seconds} seconds were up`), settings.seconds * 1000);
+}
+
+// Another program can't always send Ctrl+C on Windows, so a run that started this one can stop it by making a file
+if (settings.stopFile)
+{
+	setInterval(() => {
+		if (fs.existsSync(settings.stopFile))
+		{
+			Finish('the stop file appeared');
+		}
+	}, 500);
 }
 
 process.on('SIGINT', () => Finish('Ctrl+C'));
