@@ -22,31 +22,48 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $visualStudio) { throw 'Visual Studio with the C++ tools was not found' }
-$setupScript = Join-Path $visualStudio 'Common7\Tools\VsDevCmd.bat'
 
-$batchFile = Join-Path $out 'run.cmd'
-@(
-    '@echo off',
-    "set `"PATH=$(Split-Path -Parent $vswhere);%PATH%`"",
-    "call `"$setupScript`" -arch=x86 -host_arch=amd64 -no_logo",
-    'if errorlevel 1 exit /b 1',
-    "cd /d `"$repository`"",
-    "cl /nologo @tests\$Test.args /Zi /fsanitize=address /Fe:`"$out\t.exe`" /Fo:`"$out\\`" /Fd:`"$out\\`" > `"$out\build.txt`" 2>&1",
-    'if errorlevel 1 exit /b 3',
-    # the sanitizer's own library has to be beside the program, or on the path
-    "for /f `"delims=`" %%D in ('where clang_rt.asan_dynamic-i386.dll') do copy /y `"%%D`" `"$out`" >nul",
-    "`"$out\t.exe`" > `"$out\said.txt`" 2>&1",
-    'exit /b %errorlevel%'
-) | Set-Content -Encoding Ascii -Path $batchFile
+# Visual Studio's own PowerShell module sets the compiler up in this window, the way its setup batch file does in a command window, so nothing has to be written to disk to run it.
+# The antivirus distrusts a script that writes another to run, and took one of ours. The setup looks for vswhere on the path, so that goes on first. -arch=x86 builds 32-bit programs,
+# the same as the game.
+$env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
+Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
 
-& cmd.exe /c $batchFile
-$result = $LASTEXITCODE
+# Runs one of the compiler's programs in a folder and gives back its exit code. What it says goes in a file, and anything it says as an error in that file's .errors. It's started this way,
+# and not by its name on its own, because Windows PowerShell takes anything a program writes as an error as the script failing.
+function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [string]$saysTo)
+{
+    $found = (Get-Command $program -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $process = Start-Process -FilePath $found -ArgumentList $arguments -WorkingDirectory $folder -NoNewWindow -PassThru -RedirectStandardOutput $saysTo -RedirectStandardError "$saysTo.errors"
+    $handle = $process.Handle    # without asking for this, Windows PowerShell can't read the exit code afterwards
+    $process.WaitForExit()
+    return $process.ExitCode
+}
 
-if ($result -eq 3) {
+# The address sanitizer's own library has to be beside the program, and it's on the path once Visual Studio is set up
+function Copy-SanitizerLibrary([string]$to)
+{
+    $library = @($env:PATH -split ';' | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'clang_rt.asan_dynamic-i386.dll' } | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1
+
+    if (-not $library) { throw "The address sanitizer's library wasn't found on the path" }
+
+    Copy-Item -LiteralPath $library -Destination $to -Force
+}
+
+$built = Invoke-Tool 'cl.exe' "/nologo @tests\$Test.args /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`"" $repository (Join-Path $out 'build.txt')
+
+if ($built -ne 0) {
     Write-Host "$Test didn't build:"
     Get-Content (Join-Path $out 'build.txt') -TotalCount 10
     exit 1
 }
+
+Copy-SanitizerLibrary $out
+
+# The sanitizer writes what it found to the program's error stream, so both streams are read
+$result = Invoke-Tool (Join-Path $out 't.exe') '' $repository (Join-Path $out 'said.txt')
+Get-Content -LiteralPath (Join-Path $out 'said.txt.errors') | Add-Content -LiteralPath (Join-Path $out 'said.txt')
 
 $stopped = @(Select-String -Path (Join-Path $out 'said.txt') -Pattern 'ERROR: AddressSanitizer' -SimpleMatch)
 if ($stopped.Count) {

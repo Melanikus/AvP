@@ -44,23 +44,29 @@ $global:LASTEXITCODE = 0
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $visualStudio) { throw 'Visual Studio with the C++ tools was not found' }
-$setupScript = Join-Path $visualStudio 'Common7\Tools\VsDevCmd.bat'
 
-$batchFile = Join-Path $base "$Test\build.cmd"
-@(
-    '@echo off',
-    "set `"PATH=$(Split-Path -Parent $vswhere);%PATH%`"",
-    "call `"$setupScript`" -arch=x86 -host_arch=amd64 -no_logo",
-    'if errorlevel 1 exit /b 1',
-    "cd /d `"$tree`"",
-    "cl /nologo @tests\$Test.args /Fe:`"$out\t.exe`" /Fo:`"$out\\`" > `"$out\build.txt`" 2>&1",
-    'exit /b %errorlevel%'
-) | Set-Content -Encoding Ascii -Path $batchFile
+# Visual Studio's own PowerShell module sets the compiler up in this window, the way its setup batch file does in a command window, so nothing has to be written to disk to run it.
+# The antivirus distrusts a script that writes another to run, and took one of ours. The setup looks for vswhere on the path, so that goes on first. -arch=x86 builds 32-bit programs,
+# the same as the game.
+$env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
+Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+
+# Runs one of the compiler's programs in a folder and gives back its exit code. What it says goes in a file, and anything it says as an error in that file's .errors. It's started this way,
+# and not by its name on its own, because Windows PowerShell takes anything a program writes as an error as the script failing.
+function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [string]$saysTo)
+{
+    $found = (Get-Command $program -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $process = Start-Process -FilePath $found -ArgumentList $arguments -WorkingDirectory $folder -NoNewWindow -PassThru -RedirectStandardOutput $saysTo -RedirectStandardError "$saysTo.errors"
+    $handle = $process.Handle    # without asking for this, Windows PowerShell can't read the exit code afterwards
+    $process.WaitForExit()
+    return $process.ExitCode
+}
 
 function Build-And-Run {
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }
     New-Item -ItemType Directory -Force $out | Out-Null
-    & cmd.exe /c $batchFile | Out-Null
+    Invoke-Tool 'cl.exe' "/nologo @tests\$Test.args `"/Fe:$out\t.exe`" `"/Fo:$out/`"" $tree (Join-Path $out 'build.txt') | Out-Null
     $built = Test-Path (Join-Path $out 't.exe')
     if (-not $built) { return @{ Built = $false; Exit = -1; Words = (Get-Content (Join-Path $out 'build.txt') -TotalCount 3) -join ' ' } }
 
