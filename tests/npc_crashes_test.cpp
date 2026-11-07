@@ -248,7 +248,7 @@ static void TestTheMarineSeenByAnAlien()
 {
 	puts("A marine's glow when you play the alien:");
 
-	std::string const glow = Between(ReadSourceFile("3dc/kshape.cpp"), "void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)", "case I_BehaviourNetCorpse: {");
+	std::string const glow = Between(ReadSourceFile("3dc/kshape.cpp"), "void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)\n{", "case I_BehaviourNetCorpse: {");
 	std::string const marine = Between(glow, "case I_BehaviourSeal: {", "case I_BehaviourNetGhost: {");
 	std::string const colour = "colour = MARINES_LIFEFORCE_GLOW_COLOUR;";
 	std::string::size_type const colourAt = marine.find(colour);
