@@ -137,5 +137,9 @@ jobs:
         run: |
           echo "Choosing the lists: $CHOSE. Running them: $RAN."
           if [ "$CHOSE" != "success" ]; then echo "The lists couldn't be chosen"; exit 1; fi
-          if [ "$RAN" != "success" ] && [ "$RAN" != "skipped" ]; then echo "At least one list has a row its test didn't notice, or couldn't run"; exit 1; fi
+          if [ "$RAN" != "success" ] && [ "$RAN" != "skipped" ]; then
+            echo "At least one list has a row its test didn't notice, or couldn't run. The failed list's own job says which row, and why."
+            echo "tests/takeouts/README.md, under \"When the Take-outs check fails\", says what to do."
+            exit 1
+          fi
           echo "Every list that ran is noticed, row by row"
