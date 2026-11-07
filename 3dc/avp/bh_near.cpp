@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of one if-statement in the alien's jump code, which was never
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
-//   the same code as before
+//   the same code as before;
+//   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -153,7 +154,7 @@ void Alien_ElectToPounce(STRATEGYBLOCK *sbPtr) {
 void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)
 {
 	ALIEN_STATUS_BLOCK *alienStatusPointer;
-	char *descriptor;
+	char *descriptor = "Unknown";
 
 	LOCALASSERT(sbPtr);
 	alienStatusPointer = (ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);

@@ -121,6 +121,7 @@ class SmackerDecoder
 		void GetFrame(uint8_t *frame);
 
 		SmackerAudioInfo GetAudioTrackDetails(uint32_t trackIndex);
+		uint32_t GetNumAudioTracks() const;
 		uint32_t GetAudioData(uint32_t trackIndex, int16_t *audioBuffer);
 		uint32_t GetNumFrames();
 		uint32_t GetCurrentFrameNum();

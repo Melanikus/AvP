@@ -353,6 +353,9 @@ static void TestTheGamesLoops()
 
 	Check(ComesBefore(bank, "if (!fStream.IsGood())", "soundIndex = fStream.GetByte();"), "a sound bank that can't be opened is refused before anything is read from it");
 	Check(Has(bank, "while (((soundIndex != 0xff) || (pitch != -1)) && !fStream.RanOutOfData())"), "and its loop stops at the end of the file, end mark or not");
+	Check(ComesBefore(bank, "if (!ExtractWavFile(soundIndex, fStream))", "GameSounds[soundIndex].loaded = 1;"), "a sound the bank can't read isn't counted as loaded");
+	Check(Has(bank, "GameSounds[soundIndex].wavName.clear();"), "and its name is forgotten, because a name left there would make it look loaded, and it would stay silent instead of trying its own WAV");
+	Check(Has(bank, "wavName.clear();\n\t\t\tsoundIndex = fStream.GetByte();\n\t\t\tpitch      = fStream.GetByte();\n\t\t\tcontinue;"), "and the bank goes on to its next sound");
 
 	Check(Has(ReadSourceFile("3dc/FastFile.cpp"), "for (uint32_t i = 0; i < nFiles && !file.RanOutOfData(); i++)"), "an archive's list of files stops at the end of the file, whatever count it claims");
 }
