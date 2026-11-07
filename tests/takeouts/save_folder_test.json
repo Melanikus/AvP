@@ -495,12 +495,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: compressing writes through nothing",
+			"name": "SOURCE: compressing takes memory that can be nothing",
 			"changes": [
 				{
 					"file": "3dc/win95/huffman.cpp",
-					"from": "\tif (!outpackage)\n\t{\n\t\treturn 0;\n\t}\n",
-					"to": ""
+					"from": "outpackage = (HuffmanPackage*)AllocMem(sizeof(HuffmanPackage) + mostBytes);",
+					"to": "outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage) + mostBytes);"
 				}
 			]
 		},

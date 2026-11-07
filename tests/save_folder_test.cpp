@@ -205,7 +205,8 @@ static void TestWhatTheyAreTold()
 	Check(!Has(saving, "avp_CreateFile") && !Has(saving, "WriteFile(file"), "the save game doesn't open the slot's file itself, because that empties it");
 	Check(Has(saving, "packagePtr && SaveFile_WriteSafely(filename, SaveInfo.BufferStart, headerLength, packagePtr, packagePtr->CompressedDataSize + sizeof(HuffmanPackage));"), "it goes through the safe way, with both parts, and only if it could compress them");
 	Check(Has(saving, "DeallocateMem(packagePtr);"), "and lets go of the compressed copy");
-	Check(ComesBefore(ReadSourceFile("3dc/win95/huffman.cpp"), "if (!outpackage)", "strncpy(outpackage->Identifier"), "compressing with no memory gives back nothing, and doesn't write through nothing");
+	// Compressing never gives back nothing for want of memory: AllocMem stops the game with a message instead, so it can't write through nothing
+	Check(Has(ReadSourceFile("3dc/win95/huffman.cpp"), "outpackage = (HuffmanPackage*)AllocMem(sizeof(HuffmanPackage) + mostBytes);"), "compressing takes its memory from AllocMem, which stops the game rather than give back nothing");
 	Check(Has(cantWrite, "NewOnScreenMessage(\"GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN\");"), "a save that can't be written tells the player");
 	Check(ComesBefore(cantWrite, "NewOnScreenMessage", "return;"), "before it gives up");
 	Check(Has(cantWrite, "if (!unlimitedSaves)") && Has(cantWrite, "NumberOfSavesLeft++;"), "and they get back the save it took off them");
