@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/module.cpp",
-					"from": "\tMODULE *mptr;\n\tint gotit;\n\n\tif ((source==NULL)",
-					"to": "\tMODULE *mptr;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
+					"from": "\tMODULE *mptr = 0;\n\tint gotit;\n\n\tif ((source==NULL)",
+					"to": "\tMODULE *mptr = 0;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
 				}
 			]
 		},
@@ -321,6 +321,16 @@
 					"file": "3dc/avp/bh_predator.cpp",
 					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(",
 					"to": "if (!GetThisNPCPredatorWeapon("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's glow runs on into the stand-in's part",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "what it read was meaningless.\n\t\t\t\t\tbreak;\n",
+					"to": "what it read was meaningless.\n"
 				}
 			]
 		}
