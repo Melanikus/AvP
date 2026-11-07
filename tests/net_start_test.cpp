@@ -251,7 +251,8 @@ static ENetPacket *MakePacket(const void *data, size_t dataLength)
 
 void enet_packet_destroy(ENetPacket *packet)
 {
-	std::map<ENetPacket *, std::unique_ptr<StandInPacket>>::iterator const held = packetsHeld.find(packet);
+	// Written "const auto", not "iterator const": Snyk Code can't read a file with a type from inside a template followed by const
+	const auto held = packetsHeld.find(packet);
 
 	if (held == packetsHeld.end())
 	{
