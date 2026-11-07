@@ -1,6 +1,11 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a predator's weapon named by a level or save file is checked: a level's gets his wristblade, a save's part is left out
 /* Patrick 4/7/97 ---------------------------------------------------
 Source file for predator AI
 ---------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -29,6 +34,8 @@ Source file for predator AI
 #include "ai_sight.h"
 #include "targeting.h"
 #include "dxlog.h"
+#include "logString.h"
+#include "npc_file_checks.h"
 #include "showcmds.h"
 #include "huddefs.h"
 #include "pldghost.h"
@@ -298,7 +305,14 @@ PREDATOR_WEAPON_DATA NPC_Predator_Weapons[] = {
         },
 };
 
-PREDATOR_WEAPON_DATA *GetThisNPCPredatorWeapon(PREDATOR_NPC_WEAPONS this_id) 
+// A level or save file named something no NPC can have. What happens instead is in the words, and the log keeps them, so a
+// damaged or hostile file can be found.
+static void NoteRefusedFromAFile(char const *why)
+{
+	LogString(std::string("npc: refused: ") + why);
+}
+
+PREDATOR_WEAPON_DATA *GetThisNPCPredatorWeapon(PREDATOR_NPC_WEAPONS this_id)
 {
 	int a = 0;
 
@@ -807,6 +821,16 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
                 predatorStatus->ChangeToWeapon=PNPCW_End;
                 predatorStatus->Selected_Weapon=GetThisNPCPredatorWeapon(predatorStatus->PrimaryWeapon);
 
+                // His weapons come from the level file, and a number that isn't on the list finds nothing. Everything below reads the
+                // first, so he gets his wristblade instead. The second is only looked up when he changes to it, and if that finds
+                // nothing he keeps the one he has ("We're screwed. Stay with the old one!", further down).
+                if (!predatorStatus->Selected_Weapon)
+                {
+                        NoteRefusedFromAFile("a level named a predator weapon that isn't on the list, so he has his wristblade");
+                        predatorStatus->PrimaryWeapon=PNPCW_Wristblade;
+                        predatorStatus->Selected_Weapon=GetThisNPCPredatorWeapon(PNPCW_Wristblade);
+                }
+
                 predatorStatus->obstruction.environment=0;
                 predatorStatus->obstruction.destructableObject=0;
                 predatorStatus->obstruction.otherCharacter=0;
@@ -1006,7 +1030,7 @@ void PredatorBehaviour(STRATEGYBLOCK *sbPtr)
 {
         PREDATOR_STATUS_BLOCK *predatorStatusPointer;
         int predatorIsNear;
-        char *descriptor;
+        char *descriptor = "Unknown";
         PRED_RETURN_CONDITION state_result;
 
         LOCALASSERT(sbPtr);
@@ -7040,6 +7064,14 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//check the size of the save block
 	if(header->size!=sizeof(*block)) return;
+
+	// His weapon decides which parts of his model are looked up below, so a number that isn't on the list refuses his part of
+	// the save before anything is changed. He stays as the level made him, as when the block is the wrong size.
+	if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))
+	{
+		NoteRefusedFromAFile("a save named a predator weapon that isn't on the list, so that predator's part of the save is left out");
+		return;
+	}
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);

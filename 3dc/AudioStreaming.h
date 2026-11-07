@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a stream remembers what it got as far as making, so that one that failed to start can be let go of
+
 #ifndef _AudioStreaming_h_
 #define _AudioStreaming_h_
 
@@ -155,6 +158,10 @@ class AudioStream
 		uint32_t GetBytesWritten();
 		uint32_t GetBufferSize();
 		void WaitForFreeBuffer();
+
+		// what Init got as far as making, so that letting go of a stream only lets go of what there is
+		bool _threadStarted;
+		bool _mutexMade;
 
 		uint32_t	_bufferCount;
 		sndSource	*_source;

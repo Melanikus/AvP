@@ -10,6 +10,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   -reliefoff and -shadowsoff also say where the LIGHTING and SHADOWS commands start from
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
+//   from the command line is limited to its buffer; a plain new that fails now stops the game with a message
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   -shadowambient starts with the map's lights that show no corona casting shadows
 //   a new level starts with nothing noted about what was on screen
@@ -173,6 +174,8 @@ static void CloseDebugConsole(void)
 // entry point
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
+	StopGameIfNewFails();
+
 	SetWindowTitle();
 	ClearLog();
 	LogString(GetWindowTitle());

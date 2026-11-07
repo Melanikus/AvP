@@ -2,6 +2,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -3108,7 +3110,13 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 			{
 				ALIEN_STATUS_BLOCK *asb;
 				asb=(ALIEN_STATUS_BLOCK *)(sbptr->SBdataptr);
-				Dispel_HModel(&asb->HModelController);
+
+				// Making an alien can stop before its block exists, when there's no room left for its movement, and then it's
+				// cleaned up here with nothing to read
+				if (asb)
+				{
+					Dispel_HModel(&asb->HModelController);
+				}
 			}
 			break;
 		case I_BehaviourGenerator:
@@ -3188,11 +3196,12 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 		{
 			FACEHUGGER_STATUS_BLOCK *fhugStatusPointer;
 			fhugStatusPointer = (FACEHUGGER_STATUS_BLOCK *)(sbptr->SBdataptr);
+			// Its block may not exist yet, if making it stopped early, so everything that reads it is inside this test
 			if(fhugStatusPointer)
 			{
 				if(fhugStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(fhugStatusPointer->soundHandle);
+				Dispel_HModel(&fhugStatusPointer->HModelController);
 			}
-			Dispel_HModel(&fhugStatusPointer->HModelController);
 			break;
 		}
 
@@ -3232,12 +3241,14 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 		{
 			QUEEN_STATUS_BLOCK *queenStatusPointer;
 			queenStatusPointer = (QUEEN_STATUS_BLOCK *)(sbptr->SBdataptr);
+			// Her block may not exist yet, if making her stopped early, so everything that reads it is inside this test
 			if(queenStatusPointer)
 			{
 				Dispel_HModel(&queenStatusPointer->HModelController);
+
+				//stop any sound the queen is making
+				if(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);
 			}
-			//stop any sound the queen is making
-			if(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);
 
 			break;
 		}

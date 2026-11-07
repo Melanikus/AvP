@@ -99,6 +99,8 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
       <SmallerTypeCheck>false</SmallerTypeCheck>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
@@ -138,9 +140,11 @@
       <HeapCommitSize>0</HeapCommitSize>
       <StackReserveSize>0</StackReserveSize>
       <StackCommitSize>0</StackCommitSize>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -174,6 +178,11 @@
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
+      <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
+           the Debug build uses Edit and Continue, which cannot be combined with it. -->
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -188,8 +197,8 @@
       <ProgramDataBaseFileName>$(IntDir)vc90.pdb</ProgramDataBaseFileName>
       <WarningLevel>Level3</WarningLevel>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <DebugInformationFormat>
-      </DebugInformationFormat>
+      <!-- /Zi: the compiler writes what the .pdb needs, in a file of its own. It changes nothing in the code it makes. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
       <DisableSpecificWarnings>4018;4013;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
@@ -203,17 +212,27 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <!-- Symbols: a .pdb and a .map beside the program, so the place of a crash can be named. They stay with the build and are
+           never in the package: tools/build-and-package.ps1 copies only what a player needs, and tools/check-release-package.ps1
+           refuses them. /PDBALTPATH has the program record only the .pdb's name, not the folder it was built in. /DEBUG would
+           turn off ICF (folding identical functions), so ICF and REF are set here, and the program's code is the same as without
+           symbols. -->
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AssemblyDebug>false</AssemblyDebug>
-      <ProgramDatabaseFile>$(Platform)\$(Configuration)\$(Platform)\$(Configuration)\$(TargetName).pdb</ProgramDatabaseFile>
-      <GenerateMapFile>false</GenerateMapFile>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapFileName>$(OutDir)$(TargetName).map</MapFileName>
       <MapExports>false</MapExports>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>

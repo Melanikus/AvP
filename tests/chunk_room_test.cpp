@@ -53,6 +53,10 @@ void avp_exit(int code)
 	exit(code);
 }
 
+void LogErrorStringC(const char *)
+{
+}
+
 // Big enough for the largest fixed set of fields any kind reads (204 bytes, in a map block), with room to spare for a list after them.
 static size_t const LargestSizeTried = 320;
 

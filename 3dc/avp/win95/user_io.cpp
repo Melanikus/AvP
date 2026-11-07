@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the mouse, pad and trackerball speeds read from a saved profile are kept within their menu sliders'
-//   range right where they are used, so a broken profile cannot make the look or turn amounts overflow
+//   range right where they are used, so a broken profile cannot make the look or turn amounts overflow;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the marine's shoulder lamp key, G by default
 /*------------------------------- Patrick 21/10/96 ------------------------------
@@ -1089,8 +1090,9 @@ void InitPlayerGameInput(STRATEGYBLOCK* sbPtr)
    NB Currently, only keyboard input is supported. */
 void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 {
-	PLAYER_INPUT_CONFIGURATION *primaryInput;
-	PLAYER_INPUT_CONFIGURATION *secondaryInput;
+	// The switch below covers every player type the game can set. Starting here means no path uses an unset pointer.
+	PLAYER_INPUT_CONFIGURATION *primaryInput = &MarineInputPrimaryConfig;
+	PLAYER_INPUT_CONFIGURATION *secondaryInput = &MarineInputSecondaryConfig;
 	PLAYER_STATUS *playerStatusPtr;
 
 	/* get the player status block ... */

@@ -27,6 +27,21 @@
 
 static int checksFailed = 0;
 
+// The compressor asks for its memory through AllocMem, the game's own request, which stops the game with a message when none is left.
+// The real one brings most of the game with it, so this plain stand-in takes its place here, and it stops the test instead.
+extern "C" void *AllocMem(size_t size)
+{
+	void *memory = malloc(size);
+
+	if (!memory)
+	{
+		printf("  FAILED  the test ran out of memory\n");
+		exit(1);
+	}
+
+	return memory;
+}
+
 static void Check(bool passed, char const * what)
 {
 	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
