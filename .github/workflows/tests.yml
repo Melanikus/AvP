@@ -76,7 +76,8 @@ jobs:
 
   # A release's first job runs on this machine, not on the Windows one above, so pull requests try its checks here too. Otherwise their first real run here
   # would be the day of a release. tools/check-new-functions.ps1 reads the real code as well and says what it found, but only the test's own rows can fail
-  # this: a function can land in one pull request and its caller in the next.
+  # this: a function can land in one pull request and its caller in the next. The job's last step is a quick look at the code for the one form Snyk Code
+  # can't read, which needs nothing more than this machine either.
   release-checks-on-ubuntu:
     name: Release checks on Ubuntu
     runs-on: ubuntu-24.04   # pinned: the same machine as the first job in release.yml
@@ -95,3 +96,48 @@ jobs:
       - name: Test the new-function check
         shell: pwsh
         run: ./tests/release-test.ps1 -OnlyNewFunctions
+
+      # CODING-STANDARD.md, rule 1: write "const WEAPON_SLOT slot", not "enum WEAPON_SLOT const slot". Snyk Code can't read a file with the second
+      # form, and skips all of it. The count in snyk.yml then fails, but it can't say which file, so this names the file and the line. Added
+      # 2026-11-07 by Melanikus for the AvP port.
+      #
+      # It reads every C and C++ file git has, of the kinds that count looks at, one line at a time. So a comment written that way is refused too
+      # (say it another way), and a declaration split over two lines isn't seen here; the count in snyk.yml still catches that file.
+      - name: Refuse "enum TYPE const name" (CODING-STANDARD.md, rule 1)
+        shell: bash
+        env:
+          LC_ALL: C   # read files byte by byte: some of the 1999 files aren't UTF-8, and grep would call them binary and show nothing
+        run: |
+          # The same kinds of file as the count in snyk.yml
+          types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
+          # "enum", then a type's name, then "const", each a whole word
+          form='(^|[^A-Za-z0-9_])enum[[:space:]]+[A-Za-z_][A-Za-z0-9_:]*[[:space:]]+const([^A-Za-z0-9_]|$)'
+          looked=0
+          found=0
+
+          # git gives the names with a zero byte after each, so a name with a space or a line end in it stays whole
+          while IFS= read -r -d '' file; do
+            looked=$((looked + 1))
+
+            # grep gives back 0 when it found the form, 1 when it didn't, and more when it couldn't read the file
+            said=0
+            lines=$(grep -naE -- "$form" "$file") || said=$?
+            if [ "$said" -gt 1 ]; then echo "::error::Couldn't read a C or C++ file to look in it"; exit 1; fi
+            if [ "$said" -eq 1 ]; then continue; fi
+
+            # A file's name can come from anyone's pull request. In a note, GitHub reads some characters in it as part of the note, so those
+            # are written the way GitHub asks. A log line starts with our own words, because GitHub reads a line starting with :: as an order.
+            note=${file//%/%25}; note=${note//$'\r'/%0D}; note=${note//$'\n'/%0A}; note=${note//:/%3A}; note=${note//,/%2C}
+            while IFS= read -r hit; do
+              found=$((found + 1))
+              number=${hit%%:*}
+              text=${hit#*:}
+              echo "Found in ${file//[$'\r\n']/ }, line $number: ${text//$'\r'/}"
+              echo "::error file=$note,line=$number,title=CODING-STANDARD.md rule 1::Write const TYPE name, not enum TYPE const name. Snyk Code can't read a file with this form, and skips all of it."
+            done <<< "$lines"
+          done < <(git ls-files -z | grep -ziE "$types")
+
+          # Nothing to look in would mean this looked at nothing, not that all is well
+          if [ "$looked" -eq 0 ]; then echo "::error::No C or C++ files were found to look in"; exit 1; fi
+          echo "Looked in $looked C and C++ files, and found the form $found times"
+          if [ "$found" -gt 0 ]; then echo "CODING-STANDARD.md, rule 1, says why, and how to write it instead"; exit 1; fi
