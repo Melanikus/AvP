@@ -15,6 +15,10 @@
 //   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
 //   baked colours has a place for every point, even if the file has fewer colours; the list of shapes grows through
 //   ReallocMem
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a placed decal's texture offset is turned from the level file's 16.16 into pixels as it's read, and back as the
+//   debug decal save writes it, and a decal whose offset isn't one of its kind's pictures is left out (decal_offset.h).
+//   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -60,6 +64,7 @@
 #include "jsndsup.h"
 #include "d3d_hud.h"
 #include "decal.h"
+#include "decal_offset.h"
 #include "mempool.h"
 #include "pldnet.h"
 #include "inventory.h"
@@ -3217,6 +3222,7 @@ void setup_preplaced_decals(File_Chunk* fc,Environment_Data_Chunk* edc)
 	if (!decal_chunk->decals) return;
 
 	NumFixedDecals=0;
+	int offsetsRefused = 0;
 
 	for (int i = 0;i < decal_chunk->num_decals; i++)
 	{
@@ -3228,6 +3234,16 @@ void setup_preplaced_decals(File_Chunk* fc,Environment_Data_Chunk* edc)
 
 		//the decal's kind picks its entry in the DecalDescription table: skip a kind that is not in the table
 		if (ad->DecalID < 0 || ad->DecalID >= MAX_NO_OF_DECAL_IDS) continue;
+
+		//the offset says which of the kind's pictures to draw, and the file keeps it as 16.16, so it's turned into
+		//pixels here. A decal whose offset isn't one of its kind's pictures is skipped (decal_offset.h)
+		DECAL_DESC const &kind = DecalDescription[ad->DecalID];
+		int offsetInPixels = 0;
+		if (!DecalOffset_FromLevelFile(ad->UOffset, kind.UOffsetForSubclass, kind.MaxSubclassNumber, &offsetInPixels))
+		{
+			offsetsRefused++;
+			continue;
+		}
 
 		//find the decal's module
 		Object_Chunk* module=fc->get_object_by_index(ad->object_index);
@@ -3242,10 +3258,15 @@ void setup_preplaced_decals(File_Chunk* fc,Environment_Data_Chunk* edc)
 			fd->Vertices[j].vz=ad->Vertices[j].z;
 		}
 
-		fd->UOffset=ad->UOffset;
+		fd->UOffset=offsetInPixels;
 		fd->ModuleIndex=module->program_object_index+2;
 
 		NumFixedDecals++;
+	}
+
+	if (offsetsRefused)
+	{
+		LogErrorString("level file: " + Util::IntToString(offsetsRefused) + " placed decals left out, as their texture offset isn't one of their kind's pictures");
 	}
 
 	CurrentFixedDecalIndex=NumFixedDecals;
@@ -3341,7 +3362,12 @@ static void Fill_Decal_Data(AVP_Decal* decals, List<Object_Chunk*>& ob_list)
 			ad->Vertices[j].z=fd->Vertices[j].vz;
 		}
 
-		ad->UOffset=fd->UOffset;
+		//the game keeps the offset in pixels and a level file keeps it as 16.16, so it's turned back here, the way the
+		//loader reads it (decal_offset.h). A kind not in the table, which the loader would skip anyway, gets 0
+		int const kindNumber = (int)fd->DecalID;
+		ad->UOffset = (kindNumber >= 0 && kindNumber < MAX_NO_OF_DECAL_IDS)
+			? DecalOffset_ToLevelFile(fd->UOffset, DecalDescription[kindNumber].UOffsetForSubclass, DecalDescription[kindNumber].MaxSubclassNumber)
+			: 0;
 
 		ad->object_index=get_object_index_from_module_index(ob_list,fd->ModuleIndex-2);
 	}
