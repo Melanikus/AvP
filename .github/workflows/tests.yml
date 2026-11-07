@@ -105,8 +105,11 @@ jobs:
       # (say it another way), and a declaration split over two lines isn't seen here; the count in snyk.yml still catches that file.
       - name: Refuse "enum TYPE const name" (CODING-STANDARD.md, rule 1)
         shell: bash
+        # Every C and C++ file here is plain ASCII today, but one in a pull request may not be. In a UTF-8 setting, a byte that isn't
+        # UTF-8 makes grep call the whole file binary, and say only that it matched, with no line. So files are read byte by byte (LC_ALL=C),
+        # and every one as text (grep -a).
         env:
-          LC_ALL: C   # read files byte by byte: some of the 1999 files aren't UTF-8, and grep would call them binary and show nothing
+          LC_ALL: C
         run: |
           # The same kinds of file as the count in snyk.yml
           types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
