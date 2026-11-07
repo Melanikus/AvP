@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the setting stops walking from slowing anyone down",
+			"changes": [
+				{
+					"file": "3dc/avp/pmove.cpp",
+					"from": "\t\t\tWalkSpeeds_Halve(forwardSpeed, strafeSpeed, turnSpeed, bTurnSpeedAdjust);",
+					"to": "\t\t\tif (!!bTurnSpeedAdjust) WalkSpeeds_Halve(forwardSpeed, strafeSpeed, turnSpeed, true);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walking halves turning whatever the setting says",
+			"changes": [
+				{
+					"file": "3dc/avp/pmove.cpp",
+					"from": "WalkSpeeds_Halve(forwardSpeed, strafeSpeed, turnSpeed, bTurnSpeedAdjust);",
+					"to": "WalkSpeeds_Halve(forwardSpeed, strafeSpeed, turnSpeed, true);"
+				}
+			]
+		},
+		{
+			"name": "walking doesn't slow you going forwards",
+			"changes": [
+				{
+					"file": "3dc/avp/walk_speeds.h",
+					"from": "\tforwardSpeed = forwardSpeed / 2;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "walking doesn't slow you going sideways",
+			"changes": [
+				{
+					"file": "3dc/avp/walk_speeds.h",
+					"from": "\tstrafeSpeed = strafeSpeed / 2;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "turning always slows down, whatever the setting says",
+			"changes": [
+				{
+					"file": "3dc/avp/walk_speeds.h",
+					"from": "\tif (turningSlowsToo)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "turning never slows down",
+			"changes": [
+				{
+					"file": "3dc/avp/walk_speeds.h",
+					"from": "\t\tturnSpeed = turnSpeed / 2;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the setting is off unless a player turns it on",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "Config_GetBool(\"[Gameplay]\", \"TurnSpeedAdjust\", true)",
+					"to": "Config_GetBool(\"[Gameplay]\", \"TurnSpeedAdjust\", false)"
+				}
+			]
+		}
+	]
+}

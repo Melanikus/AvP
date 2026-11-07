@@ -1,6 +1,6 @@
 # Makes a release of the game, only when the owner asks for it ("Run workflow", on avpx_main, with a version number).
 #
-# It stops before building anything unless this exact commit may be released: tools/check-release.ps1 is the list of what it
+# It stops before building anything unless this exact commit may be released: the first job's steps are the list of what it
 # checks, and RELEASE-BLOCKERS.md says what's still in the way. Nothing is released while we know about an open hole (AvP Tao #1),
 # and this is a machine holding us to that.
 #
@@ -45,6 +45,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0   # tools/check-new-functions.ps1 compares with an older commit, so this job needs the history
 
       # The version comes in through a setting and not written into the command, because it's typed by a person, and written into
       # the command it would be run as part of it.
@@ -54,6 +55,16 @@ jobs:
           VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: ./tools/check-release.ps1 -Version $env:VERSION
+
+      # Hudson is the team's private test bot, and its code never ships. Every pull request has already run this: this is the last look.
+      - name: Refuse any of Hudson
+        shell: pwsh
+        run: ./tools/check-no-hudson.ps1
+
+      # A function added to the game that the game never uses is dead code left behind. It reads the code, so it needs nothing from GitHub.
+      - name: Refuse a new function the game does not use
+        shell: pwsh
+        run: ./tools/check-new-functions.ps1
 
   build:
     name: Build the package

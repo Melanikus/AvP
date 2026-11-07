@@ -1,0 +1,189 @@
+Stop rescanning when searching back for a page, and limit false pages per open.
+
+Our own patch (AvP). Upstream's main has the same code. A file of one short link
+followed by false pages, each of which looks like a page and fails its checksum, was
+very slow to open: 4 MB of them took 129 seconds, and the time grew with the square of
+their size.
+
+Searching back for the last page steps back 64 KB at a time, and each pass went on to
+the end of what it was searching, over everything the passes before it had already
+searched. A pass now stops where the last one started, until it finds a page. From
+there it goes on to the end as before, so the search finds the same pages.
+
+That leaves one checksum each time a false page is met, about 1 second per MB. So an
+open may meet false pages at most 1,024 times, over the whole file. A search that passes
+one twice counts it twice, so fewer than 1,024 of them can be enough to refuse a file.
+Real files have none. Reading audio after the file is open is not limited.
+
+--- a/lib/codec_internal.h
++++ b/lib/codec_internal.h
+@@ -90,6 +90,13 @@ typedef struct private_state {
+ *********************************************************************/
+ 
+ #include "highlevel.h"
++/* The most times one open may meet a false page, over the whole file. A false
++   page looks like a page but fails its checksum. A search that passes one twice
++   counts it twice, so fewer false pages than this can be enough to refuse a
++   file. Real files have none: 0 in 30,458 pages of 289 files measured. See
++   _too_many_false_pages in vorbisfile.c. */
++#define VORBIS_MAX_FALSE_PAGES 1024
++
+ typedef struct codec_setup_info {
+ 
+   /* Vorbis supports only short and long blocks, but allows the
+@@ -129,6 +136,10 @@ typedef struct codec_setup_info {
+   int         halfrate_flag; /* painless downsample for decode */
+   long        book_memory_left; /* what this file may still ask for, in bytes:
+                                    see VORBIS_BOOK_MEMORY_LIMIT */
++  long        false_pages_left; /* how many more times this open may meet a
++                                   false page:
++                                   see VORBIS_MAX_FALSE_PAGES. -1 means the file
++                                   is open, so they are no longer counted */
+ } codec_setup_info;
+ 
+ extern vorbis_look_psy_global *_vp_global_look(vorbis_info *vi);
+--- a/lib/info.c
++++ b/lib/info.c
+@@ -154,7 +154,10 @@ void vorbis_info_init(vorbis_info *vi){
+   codec_setup_info *ci;
+   memset(vi,0,sizeof(*vi));
+   vi->codec_setup=ci=_ogg_calloc(1,sizeof(codec_setup_info));
+-  if(ci)ci->book_memory_left=VORBIS_BOOK_MEMORY_LIMIT;
++  if(ci){
++    ci->book_memory_left=VORBIS_BOOK_MEMORY_LIMIT;
++    ci->false_pages_left=VORBIS_MAX_FALSE_PAGES;
++  }
+ }
+ 
+ void vorbis_info_clear(vorbis_info *vi){
+--- a/lib/vorbisfile.c
++++ b/lib/vorbisfile.c
+@@ -112,6 +112,30 @@ static int _seek_helper(OggVorbis_File *vf,ogg_int64_t offset){
+    return:   <0) did not find a page (OV_FALSE, OV_EOF, OV_EREAD)
+               n) found a page at absolute offset n */
+ 
++/* While a file is being opened, says whether it has had too many false pages.
++   skipped is the negative number ogg_sync_pageseek returned. A skip that starts
++   with "OggS" was a false page: it looked real, so all of it, up to about 64 KB,
++   was checksummed before it was thrown away. A crafted file can have one every
++   few bytes, and that is what makes such a file slow to open. Any other skip
++   costs almost nothing, so it is not counted. The count is in the first link's
++   setup because that lasts for the whole open. Once the limit is reached this
++   keeps saying yes, because not every caller stops at the first error. */
++static int _too_many_false_pages(OggVorbis_File *vf,long skipped){
++  codec_setup_info *ci=(vf->vi?vf->vi->codec_setup:NULL);
++
++  if(ci==NULL || ci->false_pages_left<0)return(0);
++  if(memcmp(vf->oy.data+vf->oy.returned+skipped,"OggS",4))return(0);
++  if(ci->false_pages_left==0)return(1);
++  ci->false_pages_left--;
++  return(0);
++}
++
++/* The file is open, or a new link of a stream has been read: stop counting. */
++static void _stop_counting_false_pages(OggVorbis_File *vf){
++  codec_setup_info *ci=(vf->vi?vf->vi->codec_setup:NULL);
++  if(ci)ci->false_pages_left=-1;
++}
++
+ static ogg_int64_t _get_next_page(OggVorbis_File *vf,ogg_page *og,
+                                   ogg_int64_t boundary){
+   if(boundary>0)boundary+=vf->offset;
+@@ -124,6 +148,7 @@ static ogg_int64_t _get_next_page(OggVorbis_File *vf,ogg_page *og,
+     if(more<0){
+       /* skipped n bytes */
+       vf->offset-=more;
++      if(_too_many_false_pages(vf,more))return(OV_EREAD);
+     }else{
+       if(more==0){
+         /* send more paramedics */
+@@ -151,6 +176,7 @@ static ogg_int64_t _get_next_page(OggVorbis_File *vf,ogg_page *og,
+ /* returns offset or OV_EREAD, OV_FAULT */
+ static ogg_int64_t _get_prev_page(OggVorbis_File *vf,ogg_int64_t begin,ogg_page *og){
+   ogg_int64_t end = begin;
++  ogg_int64_t searched = begin; /* no page starts between here and end */
+   ogg_int64_t ret;
+   ogg_int64_t offset=-1;
+ 
+@@ -162,9 +188,14 @@ static ogg_int64_t _get_prev_page(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
+     ret=_seek_helper(vf,begin);
+     if(ret)return(ret);
+ 
+-    while(vf->offset<end){
++    /* Each pass starts further back. Until it finds a page it only needs to
++       reach what the last pass already searched: going on to the end every
++       time would make the work grow with the square of the distance. Once it
++       has a page it goes on to the end, because a later page may have been
++       hidden from the passes before. */
++    while(vf->offset<(offset==-1?searched:end)){
+       memset(og,0,sizeof(*og));
+-      ret=_get_next_page(vf,og,end-vf->offset);
++      ret=_get_next_page(vf,og,(offset==-1?searched:end)-vf->offset);
+       if(ret==OV_EREAD)return(OV_EREAD);
+       if(ret<0){
+         break;
+@@ -172,6 +203,10 @@ static ogg_int64_t _get_prev_page(OggVorbis_File *vf,ogg_int64_t begin,ogg_page
+         offset=ret;
+       }
+     }
++    searched=begin;
++
++    /* searched all the way back to the start and found nothing */
++    if(!begin&&offset==-1)return(OV_EBADLINK);
+   }
+ 
+   /* In a fully compliant, non-multiplexed stream, we'll still be
+@@ -246,6 +281,7 @@ static ogg_int64_t _get_prev_page_serial(OggVorbis_File *vf, ogg_int64_t begin,
+                                          int *serialno, ogg_int64_t *granpos){
+   ogg_page og;
+   ogg_int64_t end=begin;
++  ogg_int64_t searched=begin; /* no page starts between here and end */
+   ogg_int64_t ret;
+ 
+   ogg_int64_t prefoffset=-1;
+@@ -261,8 +297,9 @@ static ogg_int64_t _get_prev_page_serial(OggVorbis_File *vf, ogg_int64_t begin,
+     ret=_seek_helper(vf,begin);
+     if(ret)return(ret);
+ 
+-    while(vf->offset<end){
+-      ret=_get_next_page(vf,&og,end-vf->offset);
++    /* see the same loop in _get_prev_page */
++    while(vf->offset<(offset==-1?searched:end)){
++      ret=_get_next_page(vf,&og,(offset==-1?searched:end)-vf->offset);
+       if(ret==OV_EREAD)return(OV_EREAD);
+       if(ret<0){
+         break;
+@@ -288,7 +325,8 @@ static ogg_int64_t _get_prev_page_serial(OggVorbis_File *vf, ogg_int64_t begin,
+     /*We started from the beginning of the stream and found nothing.
+       This should be impossible unless the contents of the stream changed out
+       from under us after we read from it.*/
+-    if(!begin&&vf->offset<0)return OV_EBADLINK;
++    if(!begin&&(vf->offset<0||offset==-1))return OV_EBADLINK;
++    searched=begin;
+   }
+ 
+   /* we're not interested in the page... just the serialno and granpos. */
+@@ -914,6 +952,7 @@ static int _fetch_and_process_packet(OggVorbis_File *vf,
+ 
+           int ret=_fetch_headers(vf,vf->vi,vf->vc,NULL,NULL,&og,NULL);
+           if(ret)return(ret);
++          _stop_counting_false_pages(vf);
+           vf->current_serialno=vf->os.serialno;
+           vf->current_link++;
+           link=0;
+@@ -1003,10 +1042,13 @@ static int _ov_open2(OggVorbis_File *vf){
+     if(ret){
+       vf->datasource=NULL;
+       ov_clear(vf);
+-    }
++    }else
++      _stop_counting_false_pages(vf);
+     return(ret);
+-  }else
++  }else{
+     vf->ready_state=STREAMSET;
++    _stop_counting_false_pages(vf);
++  }
+ 
+   return 0;
+ }
