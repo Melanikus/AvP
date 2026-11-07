@@ -4,6 +4,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an alien type the game does not know would play as a standard alien, so no path uses a pointer that was never set
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   an alien whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
+//   avp-forever, commit 207704e); the two copies of "which model for which kind" are one function, AlienModel
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -382,6 +385,27 @@ void CreateAlienBot(VECTORCH *Position,int type)
 }
 
 
+// Which model an alien of each kind uses: its file and its name. No caller gives another kind today; if one ever did,
+// it would play as a standard alien, as before.
+static void AlienModel(ALIEN_TYPE type, char const **file, char const **name)
+{
+	switch (type) {
+		case AT_Predalien:
+			*file = "hnpcpred_alien";
+			*name = "TEMPLATE";
+			return;
+		case AT_Praetorian:
+			*file = "hnpcpretorian";
+			*name = "Template";
+			return;
+		default:
+			GLOBALASSERT(type == AT_Standard);
+			*file = "hnpcalien";
+			*name = "alien";
+			return;
+	}
+}
+
 /*----------------------Patrick 15/11/96-----------------------------
 This function is called by the alien generators, to dynamically
 create a new alien, during the game.  The alien is initialised
@@ -531,19 +555,21 @@ void CreateAlienDynamic(STRATEGYBLOCK *Generator, ALIEN_TYPE type_of_alien)
 		//note the generator that produced this alien
 		alienStatus->generator_sbptr=Generator;
 
-		switch (alienStatus->Type) {
-			default:
-				// no caller gives another type today; if one ever did, it would play as a standard alien
-				GLOBALASSERT(0);
-			case AT_Standard:
-				root_section=GetNamedHierarchyFromLibrary("hnpcalien","alien");
-				break;
-			case AT_Predalien:
-				root_section=GetNamedHierarchyFromLibrary("hnpcpred_alien","TEMPLATE");
-				break;
-			case AT_Praetorian:
-				root_section=GetNamedHierarchyFromLibrary("hnpcpretorian","Template");
-				break;
+		// Nothing of its model is made yet, so if it's taken out below, there's none of it to free
+		alienStatus->HModelController.section_data=NULL;
+		alienStatus->HModelController.Deltas=NULL;
+
+		{
+			char const *modelFile;
+			char const *modelName;
+			AlienModel(alienStatus->Type, &modelFile, &modelName);
+			root_section=GetNamedHierarchyFromLibrary(modelFile,modelName);
+
+			if (!NpcModelIsLoaded(root_section, "an alien a generator makes", modelFile, modelName))
+			{
+				RemoveBehaviourStrategy(sbPtr);
+				return;
+			}
 		}
 
 		Create_HModel(&alienStatus->HModelController,root_section);
@@ -742,20 +768,21 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		//this alien wasn't produced by a generator
 		alienStatus->generator_sbptr=0;
 
+		// Nothing of its model is made yet, so if it's taken out below, there's none of it to free
+		alienStatus->HModelController.section_data=NULL;
+		alienStatus->HModelController.Deltas=NULL;
 
-		switch (alienStatus->Type) {
-			default:
-				// no caller gives another type today; if one ever did, it would play as a standard alien
-				GLOBALASSERT(0);
-			case AT_Standard:
-				root_section=GetNamedHierarchyFromLibrary("hnpcalien","alien");
-				break;
-			case AT_Predalien:
-				root_section=GetNamedHierarchyFromLibrary("hnpcpred_alien","TEMPLATE");
-				break;
-			case AT_Praetorian:
-				root_section=GetNamedHierarchyFromLibrary("hnpcpretorian","Template");
-				break;
+		{
+			char const *modelFile;
+			char const *modelName;
+			AlienModel(alienStatus->Type, &modelFile, &modelName);
+			root_section=GetNamedHierarchyFromLibrary(modelFile,modelName);
+
+			if (!NpcModelIsLoaded(root_section, "an alien the level places", modelFile, modelName))
+			{
+				RemoveBehaviourStrategy(sbPtr);
+				return;
+			}
 		}
 
 		Create_HModel(&alienStatus->HModelController,root_section);
