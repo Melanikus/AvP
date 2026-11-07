@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
+
 #if 0
 
 #include "TheoraPlayback.h"
@@ -755,9 +758,6 @@ unsigned int __stdcall TheoraDecodeThread(void *args)
 
 unsigned int __stdcall TheoraAudioThread(void *args)
 {
-	#ifdef USE_XAUDIO2
-		CoInitializeEx(NULL, COINIT_MULTITHREADED);
-	#endif
 
 	TheoraPlayback *fmv = static_cast<TheoraPlayback*>(args);
 

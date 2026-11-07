@@ -26,6 +26,7 @@
 //   a Smacker video with a frame rate below 1, no sound track or an odd sound buffer size can no longer crash
 //   the game or write past its sound buffers
 // Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
 //   the ring of sound is big enough for a film with very little of it; running out of memory for a sound stream is noticed
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a video bigger than the picture it plays on only fills that picture, instead of writing past the end of it;
@@ -351,9 +352,6 @@ void *SmackerDecodeThread(void *args)
 
 void *SmackerAudioThread(void *args)
 {
-	#ifdef USE_XAUDIO2
-		::CoInitializeEx(NULL, COINIT_MULTITHREADED);
-	#endif
 
 	SmackerPlayback *fmv = static_cast<SmackerPlayback*>(args);
 	
