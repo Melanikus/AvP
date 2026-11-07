@@ -21,7 +21,8 @@
 // tests/build.ps1 compiles this with tests/custom_maps_test.args, and the program gives back a non-zero result if any check
 // failed. It needs no game files: it makes its own. tests/takeouts/custom_maps_test.json proves each check can fail.
 
-#include <windows.h>
+#include <direct.h>
+#include <corecrt_io.h> // the C library's file listing. Its usual name, io.h, is also the name of a game header, which comes first
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -50,7 +51,7 @@ char LevelName[MAX_PATH] = "unchanged";
 texID_t MISSING_TEXTURE = 0;
 
 static std::vector<std::string> logLines;
-static std::string folder; // where the test's own game folder is, ending in a backslash
+static std::string folder; // the test's own game folder, beside the program, ending in a backslash. The test works from inside it.
 
 void LogString(const std::string &line)
 {
@@ -70,14 +71,10 @@ extern "C" void *AllocMem(size_t size)
 	return memory;
 }
 
-HANDLE avp_CreateFile(LPCTSTR name, DWORD access, DWORD share, LPSECURITY_ATTRIBUTES security, DWORD how, DWORD flags, HANDLE model)
+// The game opens its files by a path from its own folder. The test works from inside its own folder, so this is the plain fopen.
+FILE *avp_fopen(const char *name, const char *mode)
 {
-	return CreateFileA((folder + name).c_str(), access, share, security, how, flags, model);
-}
-
-HANDLE avp_FindFirstFile(LPCTSTR pattern, LPWIN32_FIND_DATA found)
-{
-	return FindFirstFileA((folder + pattern).c_str(), found);
+	return fopen(name, mode);
 }
 
 struct Picture
@@ -156,7 +153,7 @@ static Bytes Level(bool multiplayerStart)
 
 static void Write(const std::string &name, const void *data, size_t size)
 {
-	FILE *file = fopen((folder + name).c_str(), "wb");
+	FILE *file = fopen(name.c_str(), "wb");
 
 	if (!file)
 	{
@@ -188,29 +185,30 @@ static Bytes Packed(const Bytes &level)
 
 static const char *const kFiles[] = { "Ab.rif", "A_b.rif", "Gamma.rif", "Delta.rif", "Short.rif", "Huge.rif", "Bigpack.rif", "a.b.rif" };
 
-static void MakeTheFolder()
+// The folder is made beside the program, wherever that is (the program's own path is the first thing it's given), and the test
+// works from inside it, as the game works from inside its own folder.
+static void MakeTheFolder(const char *program)
 {
-	char self[MAX_PATH];
-	DWORD const length = GetModuleFileNameA(NULL, self, sizeof(self));
+	std::string here = program ? program : "";
+	size_t const slash = here.find_last_of("\\/");
+	here = (slash == std::string::npos ? std::string(".\\") : here.substr(0, slash + 1)) + "custom_maps_test_files\\";
+	folder = here;
 
-	if (length == 0 || length >= sizeof(self))
+	_mkdir(folder.c_str());
+
+	if (_chdir(folder.c_str()) != 0)
 	{
-		printf("  FAILED  the test can't find where it is\n");
+		printf("  FAILED  the test can't work from its own folder %s\n", folder.c_str());
 		exit(1);
 	}
 
-	std::string here(self, length);
-	here = here.substr(0, here.find_last_of('\\') + 1) + "custom_maps_test_files\\";
-	folder = here;
-
-	CreateDirectoryA(folder.c_str(), 0);
-	CreateDirectoryA((folder + "avp_rifs").c_str(), 0);
-	CreateDirectoryA((folder + "avp_rifs\\Custom").c_str(), 0);
-	CreateDirectoryA((folder + "avp_rifs\\Custom\\Dir.rif").c_str(), 0);
+	_mkdir("avp_rifs");
+	_mkdir("avp_rifs\\Custom");
+	_mkdir("avp_rifs\\Custom\\Dir.rif");
 
 	for (size_t i = 0; i < sizeof(kFiles) / sizeof(kFiles[0]); i++)
 	{
-		DeleteFileA((folder + "avp_rifs\\Custom\\" + kFiles[i]).c_str());
+		remove((std::string("avp_rifs\\Custom\\") + kFiles[i]).c_str());
 	}
 
 	std::string const custom = "avp_rifs\\Custom\\";
@@ -227,13 +225,16 @@ static void MakeTheFolder()
 	((HuffmanPackage *)bigPack.data())->UncompressedDataSize = 100 << 20;
 	Write(custom + "Bigpack.rif", bigPack);
 
-	// A file one byte past the 32 MB a level may be, all zeros, made without writing them all out
-	HANDLE const huge = CreateFileA((folder + custom + "Huge.rif").c_str(), GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
-	LARGE_INTEGER size;
-	size.QuadPart = (32LL << 20) + 1;
-	SetFilePointerEx(huge, size, 0, FILE_BEGIN);
-	SetEndOfFile(huge);
-	CloseHandle(huge);
+	// A file one byte past the 32 MB a level may be, all zeros: an empty file, made that long
+	FILE *const huge = fopen((custom + "Huge.rif").c_str(), "wb");
+
+	if (!huge || _chsize_s(_fileno(huge), (32LL << 20) + 1) != 0)
+	{
+		printf("  FAILED  the test couldn't make its large file\n");
+		exit(1);
+	}
+
+	fclose(huge);
 }
 
 static bool LogSays(const std::string &what, const std::string &words)
@@ -314,9 +315,9 @@ static void TestPictures()
 	Check(releases[11] == 1 && releases[12] == 1, "forgetting the pictures lets go of each shown one, once");
 }
 
-int main()
+int main(int, char **argv)
 {
-	MakeTheFolder();
+	MakeTheFolder(argv[0]);
 
 	TestTheList();
 	TestNamesAndLoading();
@@ -329,7 +330,7 @@ int main()
 	// The large file is 32 MB, so nothing is left behind
 	for (size_t i = 0; i < sizeof(kFiles) / sizeof(kFiles[0]); i++)
 	{
-		DeleteFileA((folder + "avp_rifs\\Custom\\" + kFiles[i]).c_str());
+		remove((std::string("avp_rifs\\Custom\\") + kFiles[i]).c_str());
 	}
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");

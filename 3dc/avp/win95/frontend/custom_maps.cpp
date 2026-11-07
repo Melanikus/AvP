@@ -9,6 +9,9 @@
 #include "utilities.h"
 #include "logString.h"
 
+#include <corecrt_io.h> // the C library's file listing. Its usual name, io.h, is also the name of a game header, which comes first
+#include <stdio.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -18,7 +21,7 @@ extern texID_t MISSING_TEXTURE;
 
 // The largest custom level file that's read, and the largest it may unpack to. The largest stock level is 2.6 MB packed and 5.1 MB
 // unpacked (Vaults, measured 2026-11-07), so these leave plenty of room for a real map and none for a file made to fill memory.
-static const DWORD kCustomMapMostFileBytes = 32u << 20;
+static const long long kCustomMapMostFileBytes = 32LL << 20;
 static const int kCustomMapMostLevelBytes = 64 << 20;
 
 // The largest picture shown with a map. It goes between the page's title and its rows, which leaves room for this much
@@ -68,30 +71,34 @@ static const char *RefusalWords(LevelKindRefusal why)
 // Reads the whole level file at path into level, unpacked. why is told what's wrong when it gives back false.
 static bool ReadLevel(const std::string &path, std::vector<unsigned char> &level, const char **why)
 {
-	HANDLE const file = avp_CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+	FILE *const file = avp_fopen(path.c_str(), "rb");
 
-	if (file == INVALID_HANDLE_VALUE)
+	if (!file)
 	{
 		*why = "it can't be opened";
 		return false;
 	}
 
-	LARGE_INTEGER size;
-	bool const sized = GetFileSizeEx(file, &size) != 0;
+	// Its size, from the end. A size the C library can't give is -1, which is refused with the files too small.
+	long long size = -1;
 
-	if (!sized || size.QuadPart < 12 || size.QuadPart > (LONGLONG)kCustomMapMostFileBytes)
+	if (_fseeki64(file, 0, SEEK_END) == 0)
 	{
-		CloseHandle(file);
-		*why = sized && size.QuadPart >= 12 ? "it's larger than any level the game can use" : "it's too small to be a level";
+		size = _ftelli64(file);
+	}
+
+	if (size < 12 || size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)
+	{
+		fclose(file);
+		*why = size > kCustomMapMostFileBytes ? "it's larger than any level the game can use" : "it's too small to be a level";
 		return false;
 	}
 
 	// Zeros after what's read, as the game's own level loader has (huffman.hpp)
-	std::vector<unsigned char> bytes((size_t)size.QuadPart + HUFFMAN_SPARE_BYTES, 0);
-	DWORD read = 0;
-	bool const good = ReadFile(file, bytes.data(), (DWORD)size.QuadPart, &read, 0) && read == (DWORD)size.QuadPart;
+	std::vector<unsigned char> bytes((size_t)size + HUFFMAN_SPARE_BYTES, 0);
+	bool const good = fread(bytes.data(), 1, (size_t)size, file) == (size_t)size;
 
-	CloseHandle(file);
+	fclose(file);
 
 	if (!good)
 	{
@@ -99,7 +106,7 @@ static bool ReadLevel(const std::string &path, std::vector<unsigned char> &level
 		return false;
 	}
 
-	int const fileBytes = (int)size.QuadPart;
+	int const fileBytes = (int)size;
 
 	if (memcmp(bytes.data(), COMPRESSED_RIF_IDENTIFIER, 8) == 0)
 	{
@@ -148,28 +155,28 @@ void CustomMaps_Find(void)
 	CustomMaps_ForgetPictures();
 	customMaps.clear();
 
-	WIN32_FIND_DATA found;
-	HANDLE const search = avp_FindFirstFile("avp_rifs/Custom/*.rif", &found);
+	struct __finddata64_t found;
+	intptr_t const search = _findfirst64("avp_rifs/Custom/*.rif", &found);
 
-	if (search == INVALID_HANDLE_VALUE)
+	if (search == -1)
 	{
 		return;
 	}
 
 	do
 	{
-		if (found.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))
+		if (found.attrib & (_A_SUBDIR | _A_SYSTEM | _A_HIDDEN))
 		{
 			continue;
 		}
 
 		CustomMapEntry entry;
 
-		// The file name ends within its own room in the found data, as Windows promises, and is checked against the rule anyway
-		if (!CustomMapName_FromFileName(found.cFileName, sizeof(found.cFileName), entry.name, sizeof(entry.name)))
+		// The file name ends within its own room in the found data, as the C library promises, and is checked against the rule anyway
+		if (!CustomMapName_FromFileName(found.name, sizeof(found.name), entry.name, sizeof(entry.name)))
 		{
-			found.cFileName[sizeof(found.cFileName) - 1] = 0;
-			SayLeftOut(found.cFileName, "its name breaks the rule for a map's name (see custom_map_name.h)");
+			found.name[sizeof(found.name) - 1] = 0;
+			SayLeftOut(found.name, "its name breaks the rule for a map's name (see custom_map_name.h)");
 			continue;
 		}
 
@@ -200,9 +207,9 @@ void CustomMaps_Find(void)
 		entry.pictureTried = false;
 		customMaps.push_back(entry);
 	}
-	while (FindNextFile(search, &found));
+	while (_findnext64(search, &found) == 0);
 
-	FindClose(search);
+	_findclose(search);
 
 	std::sort(customMaps.begin(), customMaps.end(), ByName);
 }

@@ -9,8 +9,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
-					"from": "size.QuadPart < 12 || size.QuadPart > (LONGLONG)kCustomMapMostFileBytes",
-					"to": "size.QuadPart < 12"
+					"from": "if (size < 12 || size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)",
+					"to": "if (size < 12 || _fseeki64(file, 0, SEEK_SET) != 0)"
 				}
 			]
 		},
@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
-					"from": "size.QuadPart < 12 || size.QuadPart > (LONGLONG)kCustomMapMostFileBytes",
-					"to": "size.QuadPart > (LONGLONG)kCustomMapMostFileBytes"
+					"from": "if (size < 12 || size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)",
+					"to": "if (size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)"
 				}
 			]
 		},
@@ -39,7 +39,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
-					"from": "SayLeftOut(found.cFileName, \"its name breaks the rule for a map's name (see custom_map_name.h)\");\n",
+					"from": "SayLeftOut(found.name, \"its name breaks the rule for a map's name (see custom_map_name.h)\");\n",
 					"to": ""
 				}
 			]
@@ -49,8 +49,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
-					"from": "if (found.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))",
-					"to": "if (found.dwFileAttributes & (FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))"
+					"from": "if (found.attrib & (_A_SUBDIR | _A_SYSTEM | _A_HIDDEN))",
+					"to": "if (found.attrib & (_A_SYSTEM | _A_HIDDEN))"
 				}
 			]
 		},
