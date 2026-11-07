@@ -56,6 +56,17 @@ struct Seen
 	bool messageCameFirst;
 };
 
+// Whether an address is this machine's own loopback address, 127.0.0.1, which never leaves the machine. Says it as well.
+static bool IsOnThisMachine(ENetAddress const &address, const char *what)
+{
+	char name[64] = "";
+
+	enet_address_get_host_ip(&address, name, sizeof(name));
+	printf("        %s: %s port %u\n", what, name, (unsigned)address.port);
+
+	return strcmp(name, "127.0.0.1") == 0;
+}
+
 static ENetHost *MakeHostOnThisMachine()
 {
 	ENetAddress here;
@@ -63,7 +74,21 @@ static ENetHost *MakeHostOnThisMachine()
 	enet_address_set_host_ip(&here, "127.0.0.1");
 	here.port = 0;   // any port the system has free
 
-	return enet_host_create(&here, 1, 1, 0, 0);
+	ENetHost *const host = enet_host_create(&here, 1, 1, 0, 0);
+
+	// What the system really gave the socket, read back, not what was asked for
+	ENetAddress bound;
+
+	if (host && enet_socket_get_address(host->socket, &bound) == 0)
+	{
+		Check(IsOnThisMachine(bound, "a host's socket is on"), "the socket is on 127.0.0.1 only");
+	}
+	else
+	{
+		Check(false, "the socket's own address can be read back");
+	}
+
+	return host;
 }
 
 // Two hosts, and a connection from the leaver to the other end, both sides seeing it open. False if that couldn't be done in 3 s.
@@ -92,6 +117,8 @@ static bool MakePair(Pair *pair)
 	{
 		return false;
 	}
+
+	Check(IsOnThisMachine(pair->leaversConnection->address, "the connection goes to"), "and the connection goes to 127.0.0.1 only");
 
 	DWORD const startedAt = GetTickCount();
 	bool otherHasIt = false;
