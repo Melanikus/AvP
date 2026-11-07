@@ -4,6 +4,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a sound bank that cannot be opened, or that has no end mark, no longer makes the game hang
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a sound in the bank that can't be read isn't counted as loaded, so the game tries that sound's own WAV file
 #include "3dc.h"
 #include "logString.h"
 #include "module.h"
@@ -619,7 +621,15 @@ void LoadSounds(char *soundDirectory)
 			LOCALASSERT("Duplicate game sound loaded"==0);
 		}
 
-		ExtractWavFile(soundIndex, fStream);
+		// A sound that can't be read isn't loaded. It had already read this sound's name, and a name left here would make GetSound take this for a loaded sound, and it would stay silent
+		// instead of trying the WAV on its own. The loop's own test ends a bank that's cut short.
+		if (!ExtractWavFile(soundIndex, fStream))
+		{
+			GameSounds[soundIndex].wavName.clear();
+			soundIndex = fStream.GetByte();
+			pitch      = fStream.GetByte();
+			continue;
+		}
 
 		GameSounds[soundIndex].loaded = 1;
 		GameSounds[soundIndex].activeInstances = 0;

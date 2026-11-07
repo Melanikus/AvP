@@ -37,6 +37,14 @@ foreach ($needed in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.t
     }
 }
 
+# A build's symbols and map (.pdb, .map) name the place of a crash. They stay with the build, and a player never needs them.
+$symbols = @(Get-ChildItem -LiteralPath $Package -Recurse -File | Where-Object { $_.Extension -eq '.pdb' -or $_.Extension -eq '.map' })
+
+if ($symbols.Count -gt 0)
+{
+    Stop-Release "$($symbols[0].Name) is in the package, and a build's symbols stay with the build"
+}
+
 $programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { $_.Name -ne 'AvPx.exe' })
 
 if ($programs.Count -gt 0)

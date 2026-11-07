@@ -19,6 +19,8 @@
 #include <sstream>
 #include <string>
 
+#include "npc_file_checks.h"
+
 static int checksFailed = 0;
 
 static void Check(bool good, const std::string &what)
@@ -104,6 +106,102 @@ static void TestTheXenoborg()
 	Check(Has(after, "return;"), "and stops straight after, so nothing reads the memory KillXeno has freed");
 }
 
+// A level's switch can wake a xenoborg through RequestState (bh_types.cpp), and a test can make one and wake it at once.
+// Either can come before the xenoborg's first turn, which is where the pointers to its moving parts used to be set.
+static void TestTheXenoborgJustMade()
+{
+	puts("A xenoborg that has just been made:");
+
+	std::string const xeno = ReadSourceFile("3dc/avp/bh_xeno.cpp");
+	std::string const ways[2][2] = {
+		{ "made during play", Between(xeno, "void CreateXenoborg(VECTORCH *Position,int type)\n{", "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr) {") },
+		{ "made when a level loads", Between(xeno, "void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)", "void XenoborgBehaviour(STRATEGYBLOCK *sbPtr)") },
+	};
+
+	Check(Has(xeno, "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);"), "the code that finds its moving parts can be used before it's written out");
+
+	for (auto const &way : ways)
+	{
+		std::string const &made = way[1];
+		std::string const name = way[0];
+
+		Check(ComesBefore(made, "memset(xenoStatus, 0, sizeof(*xenoStatus));", "NPC_InitMovementData(&(xenoStatus->moveData));"), name + ": its block starts cleared, before anything in it is set");
+		Check(Has(made, "VerifyDeltaControllers(sbPtr);") && ComesBefore(made, "\"TorsoTwist\"", "VerifyDeltaControllers(sbPtr);"), name + ": the pointers to its moving parts are set once the parts exist, not on its first turn");
+	}
+}
+
+// A sentry gun's pan and tilt pointers used to be set on its first turn, so anything that asked where it pointed before then read
+// whatever the memory last held
+static void TestTheSentryGunJustMade()
+{
+	puts("A sentry gun that has just been made:");
+
+	std::string const gun = ReadSourceFile("3dc/avp/bh_agun.cpp");
+	std::string const ways[2][2] = {
+		{ "made during play", Between(gun, "void CreateSentrygun(VECTORCH *Position,int type)\n{", "void MakeSentrygunNear(STRATEGYBLOCK *sbPtr)") },
+		{ "made when a level loads", Between(gun, "void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {", "void MakeSentrygunFar(STRATEGYBLOCK *sbPtr)") },
+	};
+
+	Check(Has(gun, "static void Autogun_VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);"), "the code that finds its pan and tilt can be used before it's written out");
+
+	for (auto const &way : ways)
+	{
+		std::string const &made = way[1];
+		std::string const name = way[0];
+
+		Check(ComesBefore(made, "memset(agunStatus, 0, sizeof(*agunStatus));", "/* Initialise xenoborg's stats */"), name + ": its block starts cleared, before anything in it is set");
+		Check(Has(made, "Autogun_VerifyDeltaControllers(sbPtr);") && ComesBefore(made, "\"GunPan\"", "Autogun_VerifyDeltaControllers(sbPtr);"), name + ": the pointers to its pan and tilt are set once they exist, not on its first turn");
+	}
+}
+
+// Making an alien, facehugger or queen can stop before its block exists (no room left for its movement, or bad level data), and
+// RemoveBehaviourStrategy then cleans it up. Reading the missing block there would crash.
+static void TestTheHalfMadeNpc()
+{
+	puts("An NPC whose making stopped before its block existed:");
+
+	std::string const cleanup = Between(ReadSourceFile("3dc/avp/bh_types.cpp"), "void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)", "case I_BehaviourNetGhost:");
+
+	Check(Has(cleanup, "\t\t\t\tif (asb)\n\t\t\t\t{\n\t\t\t\t\tDispel_HModel(&asb->HModelController);"), "an alien's cleanup only reads its block if there is one");
+	Check(Has(cleanup, "\t\t\t\tif(fhugStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(fhugStatusPointer->soundHandle);\n\t\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n\t\t\t}"), "and a facehugger's");
+	Check(Has(cleanup, "\t\t\t\t//stop any sound the queen is making\n\t\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n\t\t\t}"), "and a queen's");
+}
+
+// NPC-WEAPON-NULL-1: a level or save file names an NPC's weapon by number, and a number that isn't on the list found nothing,
+// which the code then read through. A file is hostile input, so each place now checks, and says in the log what it did instead.
+static void TestTheWeaponFromAFile()
+{
+	puts("A marine's or predator's weapon named by a level or save file:");
+
+	// The check itself, with a list of ten weapons numbered 0 to 9, as a save could give them
+	Check(!NpcFile_WeaponNumberIsOnList(-1, 10), "a weapon number below the list is refused");
+	Check(!NpcFile_WeaponNumberIsOnList(10, 10), "and the list's end mark itself");
+	Check(!NpcFile_WeaponNumberIsOnList(2147483647, 10), "and the largest number a save can hold");
+	Check(!NpcFile_WeaponNumberIsOnList(-2147483647 - 1, 10), "and the smallest");
+	Check(NpcFile_WeaponNumberIsOnList(0, 10) && NpcFile_WeaponNumberIsOnList(9, 10), "but the first and the last weapon on it are kept");
+
+	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+	std::string const predator = ReadSourceFile("3dc/avp/bh_predator.cpp");
+	std::string const marineMade = Between(marine, "void InitMarineBehaviour(", "#if 0");
+	std::string const marineLoaded = Between(marine, "void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)", "void SaveStrategy_Marine(");
+	std::string const predatorMade = Between(predator, "void InitPredatorBehaviour(", "void InitDormantPredatorBehaviour(");
+	std::string const predatorLoaded = Between(predator, "void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)", "void SaveStrategy_Predator(");
+
+	Check(Has(marine, "LogString(std::string(\"npc: refused: \") + why);") && Has(predator, "LogString(std::string(\"npc: refused: \") + why);"), "a refusal is written in the log, with npc: refused: in front");
+
+	Check(ComesBefore(marineMade, "if (!marineStatus->My_Weapon)", "marineStatus->My_Weapon->Android"), "a level's marine with a kind that isn't on the list is caught before his weapon is read");
+	Check(Has(marineMade, "NoteRefusedFromAFile(\"a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle\");\n\t\t\tmarineStatus->My_Weapon=GetThisNPCMarineWeapon(MNPCW_PulseRifle);"), "and he's an ordinary marine, and the log says so in those words");
+
+	Check(ComesBefore(marineLoaded, "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's marine with a weapon that isn't on the list is refused before anything is changed");
+	Check(Has(marineLoaded, "NoteRefusedFromAFile(\"a save named a marine weapon that isn't on the list, so that marine's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
+
+	Check(ComesBefore(predatorMade, "if (!predatorStatus->Selected_Weapon)", "predatorStatus->Selected_Weapon->Riffname"), "a level's predator with a weapon that isn't on the list is caught before it's read");
+	Check(Has(predatorMade, "NoteRefusedFromAFile(\"a level named a predator weapon that isn't on the list, so he has his wristblade\");"), "and he has his wristblade, and the log says so in those words");
+
+	Check(ComesBefore(predatorLoaded, "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's predator with a weapon that isn't on the list is refused before anything is changed");
+	Check(Has(predatorLoaded, "NoteRefusedFromAFile(\"a save named a predator weapon that isn't on the list, so that predator's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -143,6 +241,10 @@ static void TestTheQueenWithNoRoomToBeDrawn()
 int main()
 {
 	TestTheXenoborg();
+	TestTheXenoborgJustMade();
+	TestTheSentryGunJustMade();
+	TestTheHalfMadeNpc();
+	TestTheWeaponFromAFile();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();

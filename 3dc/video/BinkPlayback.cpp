@@ -22,6 +22,12 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the sound thread sleeps between its turns, as Smacker's does, and doesn't keep one core busy for as long as a film plays;
+//   running out of memory is noticed; a thread that can't start counts as an error, and the decoding thread is noted as soon as it starts;
+//   the decoder is closed once its threads have finished; the ring of sound is big enough for a film with very little of it
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   closing a video can't be held up by what's left of its sound
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a Bink video with a frame rate below 1, no sound track or an odd sound buffer size can no longer crash
 //   the game or write past its sound buffers
@@ -92,8 +98,8 @@ int BinkPlayback::Open(const std::string &fileName, bool isLooped)
 		uint32_t idealBufferSize = _audioTrackInfos[_audioTrackIndex].idealBufferSize;
 
 		// create AudioStream (just for 1 track for now)
-		_audioStream = new AudioStream();
-		if (!_audioStream->Init(_audioTrackInfos[_audioTrackIndex].nChannels, _audioTrackInfos[_audioTrackIndex].sampleRate, 16, kAudioBufferSize, kAudioBufferCount))
+		_audioStream = new(std::nothrow) AudioStream();
+		if (!_audioStream || !_audioStream->Init(_audioTrackInfos[_audioTrackIndex].nChannels, _audioTrackInfos[_audioTrackIndex].sampleRate, 16, kAudioBufferSize, kAudioBufferCount))
 		{
 			Con_PrintError("Failed to create _audioStream for Bink playback");
 			return FMV_ERROR;
@@ -113,13 +119,18 @@ int BinkPlayback::Open(const std::string &fileName, bool isLooped)
 		}
 
 		_ringBuffer = new(std::nothrow) RingBuffer();
-		if (!_ringBuffer->Init(idealBufferSize * kAudioBufferCount))
+		if (!_ringBuffer || !_ringBuffer->Init(FmvPlayback_RingSize(idealBufferSize, _audioStream->GetBufferSize(), kAudioBufferCount)))
 		{
 			Con_PrintError("Failed to create _ringBuffer for Bink playback");
 			return FMV_ERROR;
 		}
 
 		_audioDataBuffer = new(std::nothrow) uint8_t[idealBufferSize];
+		if (_audioDataBuffer == NULL)
+		{
+			Con_PrintError("Failed to create _audioDataBuffer for Bink playback");
+			return FMV_ERROR;
+		}
 		_audioDataBufferSize = idealBufferSize;
 	}
 
@@ -168,24 +179,28 @@ int BinkPlayback::Open(const std::string &fileName, bool isLooped)
 	_frameReady   = false;
 	_texturesReady = false;
 
+	// These used to return false, which is the same number as FMV_OK, so a film with no threads counted as playing. The decoding thread was also only noted at the very end,
+	// so if the sound thread then couldn't start, nothing waited for the decoding thread to finish, and it went on using memory that had been let go of.
 	if (pthread_mutex_init(&_frameCriticalSection, NULL) != 0) {
-		return false;
+		_fmvPlaying = false;
+		return FMV_ERROR;
 	}
 	_frameCriticalSectionInited = true;
 
 	// now start the threads
 	if (pthread_create(&_decodeThreadHandle, NULL, BinkDecodeThread, static_cast<void*>(this)) != 0) {
-		return false;
+		_fmvPlaying = false;
+		return FMV_ERROR;
 	}
+	_decodeThreadInited = true;
 
 	if (_nAudioTracks) {
 		if (pthread_create(&_audioThreadHandle, NULL, BinkAudioThread, static_cast<void*>(this)) != 0) {
-			return false;
+			_fmvPlaying = false;
+			return FMV_ERROR;
 		}
 		_audioThreadInited  = true;
 	}
-
-	_decodeThreadInited = true;
 
 	return FMV_OK;
 }
@@ -193,6 +208,12 @@ int BinkPlayback::Open(const std::string &fileName, bool isLooped)
 BinkPlayback::~BinkPlayback()
 {
 	_fmvPlaying = false;
+
+	// The decoding thread can be waiting for the sound to use up what it has, so the sound stops first
+	if (_audioStream)
+	{
+		_audioStream->Stop();
+	}
 
 	if (_decodeThreadInited) {
 		pthread_join(_decodeThreadHandle, NULL);
@@ -218,6 +239,9 @@ BinkPlayback::~BinkPlayback()
 	for (uint32_t i = 0; i < _frameTextureIDs.size(); i++) {
 		Tex_Release(_frameTextureIDs[i]);
 	}
+
+	// nothing is using the decoder now that the threads have finished
+	Bink_Close(_handle);
 }
 
 void BinkPlayback::Close()
@@ -435,6 +459,8 @@ void *BinkAudioThread(void *args)
 		if (timetoSleep < 0 || timetoSleep > kQuantum) {
 			timetoSleep = 1;
 		}
+
+		::Sleep(timetoSleep);
 	}
 
 	return 0;
