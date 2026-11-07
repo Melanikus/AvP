@@ -30,6 +30,8 @@ Set-Location $repository
 
 # --- vcpkg, at the manifest's baseline. bootstrap-vcpkg checks the signature of the vcpkg program it downloads.
 $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+# It goes to git, so it has to be a commit's full hash first: a value starting with a dash would be read by git as an option (BASELINE-1, added 2026-11-07)
+if ("$baseline" -cnotmatch '^[0-9a-f]{40}$') { throw "vcpkg.json's builtin-baseline isn't a commit's full hash: $baseline" }
 $temporary = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
 $vcpkgRoot = if ($UseVcpkgAt) { $UseVcpkgAt } else { Join-Path $temporary 'vcpkg' }
 
@@ -37,7 +39,7 @@ if (-not $UseVcpkgAt) {
     git init -q $vcpkgRoot
     git -C $vcpkgRoot fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
     git -C $vcpkgRoot checkout -q FETCH_HEAD
-    if ((git -C $vcpkgRoot rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+    if ((git -C $vcpkgRoot rev-parse HEAD) -cne $baseline) { throw 'vcpkg is not at the manifest baseline' }
 
     # The likeliest step to fail on a machine that guards its network, so it says what happened in plain words. Older PowerShell treats
     # the error text bootstrap prints as a failure of its own, which is why this asks both ways.
