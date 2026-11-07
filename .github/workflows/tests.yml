@@ -74,3 +74,25 @@ jobs:
       - name: Test the release checks
         shell: pwsh
         run: ./tests/release-test.ps1
+
+  # A release's first job runs on this machine, not on the Windows one above, so pull requests try its checks here too. Otherwise their first real run here
+  # would be the day of a release. tools/check-new-functions.ps1 reads the real code as well and says what it found, but only the test's own rows can fail
+  # this: a function can land in one pull request and its caller in the next.
+  release-checks-on-ubuntu:
+    name: Release checks on Ubuntu
+    runs-on: ubuntu-24.04   # pinned: the same machine as the first job in release.yml
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # the check compares with an older commit
+          persist-credentials: false
+
+      - name: Refuse any of Hudson
+        shell: pwsh
+        run: ./tools/check-no-hudson.ps1
+
+      - name: Test the new-function check
+        shell: pwsh
+        run: ./tests/release-test.ps1 -OnlyNewFunctions
