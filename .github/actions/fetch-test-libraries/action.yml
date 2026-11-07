@@ -1,0 +1,50 @@
+# Fetches some of the game's own libraries for the tests, without building the game. Written 2026-11-07 by Melanikus for the AvP port.
+#
+# A few tests use one of the game's libraries: the shader test compiles with the game's shader compiler (the port dxsdk-d3dx), and the
+# network tests link the game's ENet (the port enet). They're made here the way a real build makes them: vcpkg at the commit vcpkg.json
+# names as its builtin-baseline, with our own patched ports in vcpkg-overlay-ports wherever we have one. They land in vcpkg_installed,
+# where a test's settings (tests/<test>.args) look for them.
+#
+# tests.yml uses this before it builds every test. takeouts.yml uses it before a list whose test names vcpkg_installed in its settings,
+# because the take-out runner copies those files into its copy of the code.
+
+name: Fetch the libraries the tests use
+description: Builds the named vcpkg ports for x86-windows into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports
+
+inputs:
+  ports:
+    description: 'The ports to fetch, separated by spaces, such as "dxsdk-d3dx enet"'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The names come in through the environment, never pasted into the script. Each one has to be a port's name, and the baseline has to
+    # be a commit's full hash: a value starting with a dash would otherwise be read by git or vcpkg as an option.
+    - name: Fetch the libraries
+      shell: pwsh
+      env:
+        PORTS: ${{ inputs.ports }}
+      run: |
+        $ports = @("$env:PORTS" -split '\s+' | Where-Object { $_ })
+        if ($ports.Count -eq 0) { throw 'No ports were named' }
+        foreach ($port in $ports) {
+          if ($port -cnotmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { throw "This isn't the name of a port: $port" }
+        }
+
+        $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+        if ("$baseline" -cnotmatch '^[0-9a-f]{40}$') { throw "vcpkg.json's builtin-baseline isn't a commit's full hash: $baseline" }
+
+        $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
+        git init -q $root
+        git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+        git -C $root checkout -q FETCH_HEAD
+        if ((git -C $root rev-parse HEAD) -cne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+
+        # bootstrap-vcpkg checks the signature of the vcpkg program it downloads
+        & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        $wanted = @($ports | ForEach-Object { "$($_):x86-windows" })
+        & (Join-Path $root 'vcpkg.exe') install @wanted --classic --overlay-ports=vcpkg-overlay-ports --x-install-root=vcpkg_installed
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
