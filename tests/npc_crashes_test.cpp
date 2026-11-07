@@ -128,6 +128,29 @@ static void TestTheXenoborgJustMade()
 	}
 }
 
+// A sentry gun's state is read for the network as soon as it exists, and its pan and tilt pointers used to be set on its first turn
+static void TestTheSentryGunJustMade()
+{
+	puts("A sentry gun that has just been made:");
+
+	std::string const gun = ReadSourceFile("3dc/avp/bh_agun.cpp");
+	std::string const ways[2][2] = {
+		{ "made during play", Between(gun, "void CreateSentrygun(VECTORCH *Position,int type)\n{", "void MakeSentrygunNear(STRATEGYBLOCK *sbPtr)") },
+		{ "made when a level loads", Between(gun, "void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {", "void MakeSentrygunFar(STRATEGYBLOCK *sbPtr)") },
+	};
+
+	Check(Has(gun, "static void Autogun_VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);"), "the code that finds its pan and tilt can be used before it's written out");
+
+	for (auto const &way : ways)
+	{
+		std::string const &made = way[1];
+		std::string const name = way[0];
+
+		Check(ComesBefore(made, "memset(agunStatus, 0, sizeof(*agunStatus));", "/* Initialise xenoborg's stats */"), name + ": its block starts cleared, before anything in it is set");
+		Check(ComesBefore(made, "\"GunPan\"", "Autogun_VerifyDeltaControllers(sbPtr);"), name + ": the pointers to its pan and tilt are set once they exist, not on its first turn");
+	}
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -168,6 +191,7 @@ int main()
 {
 	TestTheXenoborg();
 	TestTheXenoborgJustMade();
+	TestTheSentryGunJustMade();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
