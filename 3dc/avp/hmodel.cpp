@@ -5,6 +5,7 @@
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
 //   if-blocks in each #if branch, so code scanners can read it
+//   an animation a part of the model doesn't have is skipped, where only an assert stood before
 
 #include "3dc.h"
 #include "io.h"
@@ -1843,15 +1844,21 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 			InitShapeAnimationControlData(&sacd);
 			/* Compute rate. */
 			sequence_pointer = this_section_data->sac_ptr->anim_header->anim_sequences;
-			GLOBALASSERT(sequence < this_section_data->sac_ptr->anim_header->num_sequences);
-			num_frames = sequence_pointer[sequence].num_frames;
-			sacd.seconds_per_frame = seconds_for_sequence / num_frames;
-			/* Okay. */
-			sacd.sequence_no = sequence;
-			sacd.default_start_and_end_frames = 1;
-			sacd.reversed = 0;
-			sacd.stop_at_end = 0;
-			SetOrphanedShapeAnimationSequence(this_section_data->sac_ptr, &sacd);
+
+			// The model says which animation to play, and this part of it may not have one by that number, or may have one
+			// with no frames to divide the time between. Then this part of the model just doesn't animate.
+			if (sequence >= 0 && sequence < this_section_data->sac_ptr->anim_header->num_sequences
+				&& sequence_pointer[sequence].num_frames != 0)
+			{
+				num_frames = sequence_pointer[sequence].num_frames;
+				sacd.seconds_per_frame = seconds_for_sequence / num_frames;
+				/* Okay. */
+				sacd.sequence_no = sequence;
+				sacd.default_start_and_end_frames = 1;
+				sacd.reversed = 0;
+				sacd.stop_at_end = 0;
+				SetOrphanedShapeAnimationSequence(this_section_data->sac_ptr, &sacd);
+			}
 		}
 
 		/* Recurse. */

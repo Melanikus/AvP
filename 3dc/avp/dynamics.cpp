@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the collision list leaves out what doesn't fit, where only an assert stood before
+
 /* KJL 12:42:43 29/12/98 - this is effectively Dynamics V4.0. If you think this code looks bad,
 you should have seen the previous versions. */
 
@@ -30,6 +34,7 @@ you should have seen the previous versions. */
 #include "tables.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
+#include "logString.h"
 
 #define TELEPORT_IF_OUTSIDE_ENV 1	   
 #define MINIMUM_BOUNDINGBOX_EXTENT 25
@@ -2303,6 +2308,29 @@ static void FindLandscapePolygonsInObjectsPath(STRATEGYBLOCK *sbPtr)
 	    }
   	}
 }   
+// The collision list has a fixed size, and a level decides how many polygons are near a moving object. The functions below
+// write each polygon straight into the next place in the list, before they know if they'll keep it, and one that can be
+// hit from both sides takes a second place for its other side. So they ask this first, and it wants room for two. When
+// there's no room, the other polygons are left out for now. Something could then pass through one of them, which is much
+// better than writing past the end of the list.
+static bool CollisionListIsFull()
+{
+	if (NumberOfCollisionPolys <= MAXIMUM_NUMBER_OF_COLLISIONPOLYS - 2)
+	{
+		return false;
+	}
+
+	static bool logged = false;
+
+	if (!logged)
+	{
+		logged = true;
+		LogString("The list of polygons to test for collisions is full, so some are being left out. This isn't logged again.");
+	}
+
+	return true;
+}
+
 static void FindObjectPolygonsInObjectsPath(STRATEGYBLOCK *sbPtr)
 {
 	DYNAMICSBLOCK *dynPtr=sbPtr->DynPtr;
@@ -2454,6 +2482,11 @@ static void FindObjectPolygonsInObjectsPath(STRATEGYBLOCK *sbPtr)
 							}
 						}
 						#endif
+						if (CollisionListIsFull())
+						{
+							return;
+						}
+
 						*CollisionPolysPtr = poly;
 
 						CollisionPolysPtr++;
@@ -2680,6 +2713,11 @@ static void TestShapeWithDynamicBoundingBox(DISPLAYBLOCK *objectPtr, DYNAMICSBLO
     /* go through polys looking for those which intersect with the bounding box */
   	while(numberOfItems--)
 	{
+		if (CollisionListIsFull())
+		{
+			return;
+		}
+
 		AccessNextPolygon();
 
 		if (mainDynPtr->IgnoresNotVisPolys && (PolygonFlag & iflag_notvis) && !(PolygonFlag & iflag_mirror)) continue;
@@ -2802,8 +2840,6 @@ static void TestShapeWithDynamicBoundingBox(DISPLAYBLOCK *objectPtr, DYNAMICSBLO
 
     	CollisionPolysPtr++;
     	NumberOfCollisionPolys++;
-		/* ran out of space? */
-		LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
         
         if (PolygonFlag & iflag_no_bfc)
         {
@@ -2829,8 +2865,6 @@ static void TestShapeWithDynamicBoundingBox(DISPLAYBLOCK *objectPtr, DYNAMICSBLO
 
 			CollisionPolysPtr++;
 	    	NumberOfCollisionPolys++;
-			/* ran out of space? */
-			LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
         }        
 	}
     					       
@@ -2863,6 +2897,11 @@ static void TestShapeWithParticlesDynamicBoundingBox(DISPLAYBLOCK *objectPtr)
     /* go through polys looking for those which intersect with the bounding box */
   	while(numberOfItems--)
 	{
+		if (CollisionListIsFull())
+		{
+			return;
+		}
+
 		AccessNextPolygon();
 
         if (PolygonFlag & iflag_notvis) continue;
@@ -2983,8 +3022,6 @@ static void TestShapeWithParticlesDynamicBoundingBox(DISPLAYBLOCK *objectPtr)
 
     	CollisionPolysPtr++;
     	NumberOfCollisionPolys++;
-		/* ran out of space? */
-		LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
         
         if (PolygonFlag & iflag_no_bfc)
         {
@@ -3010,8 +3047,6 @@ static void TestShapeWithParticlesDynamicBoundingBox(DISPLAYBLOCK *objectPtr)
 
 			CollisionPolysPtr++;
 	    	NumberOfCollisionPolys++;
-			/* ran out of space? */
-			LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
         }        
 	}
     					       
@@ -3044,6 +3079,11 @@ static void TestShapeWithStaticBoundingBox(DISPLAYBLOCK *objectPtr)
     /* go through polys looking for those which intersect with the bounding box */
   	while(numberOfItems--)
 	{
+		if (CollisionListIsFull())
+		{
+			return;
+		}
+
 		AccessNextPolygon();
         
   //      if (PolygonFlag & iflag_notvis) continue;
@@ -3090,8 +3130,6 @@ static void TestShapeWithStaticBoundingBox(DISPLAYBLOCK *objectPtr)
         	CollisionPolysPtr++;
         	NumberOfCollisionPolys++;
 
-			/* ran out of space? */
-			LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
 	        if (PolygonFlag & iflag_no_bfc)
 	        {
 		    	CollisionPolysPtr->NumberOfVertices = (CollisionPolysPtr-1)->NumberOfVertices;
@@ -3115,8 +3153,6 @@ static void TestShapeWithStaticBoundingBox(DISPLAYBLOCK *objectPtr)
 
 				CollisionPolysPtr++;
 		    	NumberOfCollisionPolys++;
-				/* ran out of space? */
-				LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
 	        }        
         }
         
@@ -3144,6 +3180,11 @@ static void TestObjectWithStaticBoundingBox(DISPLAYBLOCK *objectPtr)
 		
 		do
 		{
+			if (CollisionListIsFull())
+			{
+				return;
+			}
+
 			CollisionPolysPtr->NumberOfVertices = 4;
 			CollisionPolysPtr->PolyPoint[0]=objectVerticesPtr[*vertexIndexPtr++];
 			CollisionPolysPtr->PolyPoint[1]=objectVerticesPtr[*vertexIndexPtr++];
@@ -3251,8 +3292,6 @@ static void TestObjectWithStaticBoundingBox(DISPLAYBLOCK *objectPtr)
 	        	CollisionPolysPtr++;
 	        	NumberOfCollisionPolys++;
 
-				/* ran out of space? */
-				LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
 			}
 		}
 		while(--face);
@@ -6134,7 +6173,6 @@ static void FindLandscapePolygonsInParticlesPath(PARTICLE *particlePtr, VECTORCH
 					}
 
 				}
-				LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
 				
 				/* if the bounding box intersects with the object, investigate */
 			   	if (( (DBBMaxX >= objectPtr->ObMinX) && (DBBMinX <= objectPtr->ObMaxX) )
@@ -6182,7 +6220,6 @@ static void FindLandscapePolygonsInParticlesPath(PARTICLE *particlePtr, VECTORCH
 					}
 
 				}
-				LOCALASSERT(NumberOfCollisionPolys < MAXIMUM_NUMBER_OF_COLLISIONPOLYS);
 				
 				/* if the bounding box intersects with the object, investigate */
 			   	if (( (DBBMaxX >= -objectPtr->ObRadius) && (DBBMinX <= objectPtr->ObRadius) )

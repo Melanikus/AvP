@@ -7,6 +7,9 @@
 //   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
 //   a shape stays still if a frame of its texture animation names a picture that isn't real
 //   the list of a level's image numbers is freed the way it was made
+//   a level file can only ask for so many pictures
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a shape records how long each of its texture coordinate lists is
 
 #include <stdlib.h>
 #include <string>
@@ -30,6 +33,8 @@
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
 #include "mempool.h"
+#include "logstring.h"
+#include "surface_tangent.h"
 #include <math.h>
 // for log file
 void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
@@ -714,7 +719,33 @@ void close_rif_handle(RIFFHANDLE h)
 
 //////////////////////////////////////////////////////////
 
-static void setup_tex_conv_array(
+// The most pictures one level file can ask for. Each one costs a search through all the textures the game has so far, then a try at opening a file,
+// and it costs that even when there's no such file. A file can hold a list of names for each of its outside shapes, with up to 65,535 names in each,
+// so without a limit a small file could keep the game busy for as long as it liked, and fill the log, before the level even starts. All of a file's
+// lists count together. The most any of the game's 86 files holds is 439, in all its lists, so this leaves plenty of room for a real level.
+static int const kMostPicturesOneFileCanAskFor = 4096;
+
+// Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
+// because any picture can turn out to be missing.
+static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags flags)
+{
+	if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)
+	{
+		if (!h->said_too_many_pictures)
+		{
+			LogErrorStringC("This level file names too many pictures, so the rest of them aren't loaded");
+			h->said_too_many_pictures = true;
+		}
+
+		return GEI_NOTLOADED;
+	}
+
+	h->pictures_asked_for++;
+	return load_rif_bitmap(name, flags);
+}
+
+// Not static, only so that tests/level_pictures_test.cpp can reach it
+void setup_tex_conv_array(
     int &max_indices,
     int *&conv_array,
     RIFFHANDLE h,
@@ -790,7 +821,7 @@ static void setup_tex_conv_array(
 					tex += bns().filename;
 				}
 
-				texID_t imgnum = load_rif_bitmap(tex, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, tex, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{
@@ -1232,7 +1263,7 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 			if (!(bns().flags & ChunkBMPFlag_NotInPC))
 			{
 				// JH 17-2-97 -- image loaders have changed to avoid loading the same image twice
-				texID_t imgnum = load_rif_bitmap(bns().filename, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, bns().filename, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{
@@ -2442,6 +2473,66 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 }
 
 
+// How big a triangle is, as the square of twice its area, which is all a comparison needs. a, b and c have been checked by the caller.
+static double TriangleSize(const int *points, int a, int b, int c)
+{
+	double const ax = (double)points[b * 3 + 0] - points[a * 3 + 0], ay = (double)points[b * 3 + 1] - points[a * 3 + 1], az = (double)points[b * 3 + 2] - points[a * 3 + 2];
+	double const bx = (double)points[c * 3 + 0] - points[a * 3 + 0], by = (double)points[c * 3 + 1] - points[a * 3 + 1], bz = (double)points[c * 3 + 2] - points[a * 3 + 2];
+	double const x = ay * bz - az * by, y = az * bx - ax * bz, z = ax * by - ay * bx;
+
+	return x * x + y * y + z * z;
+}
+
+// Works out which way this polygon's texture runs across it, for relief pictures. These numbers all come from the level file, so each is checked
+// first: a polygon that fails keeps an empty entry, and nothing bends its normal.
+static void work_out_polygon_tangent(SHAPEHEADER *shphd, const ChunkShape *cshp_ptr, int polygon, int UVIndex)
+{
+	ChunkPoly const &poly = cshp_ptr->poly_list[polygon];
+
+	if (!shphd->sh_surfacetangents || UVIndex < 0 || UVIndex >= cshp_ptr->num_uvs || poly.num_verts < 3 || cshp_ptr->uv_list[UVIndex].num_verts < 3)
+	{
+		return;
+	}
+
+	// A polygon's first three corners can lie almost in a line, and then they say very little about how the texture lies on it. So a four-cornered
+	// polygon uses whichever of its two triangles is bigger.
+	int const *points = *shphd->points;
+	int which[3] = { 0, 1, 2 };
+
+	for (int corner = 0; corner < poly.num_verts; corner++)
+	{
+		int const point = poly.vert_ind[corner];
+
+		if (corner >= 4 || point < 0 || point >= shphd->numpoints)
+		{
+			return;
+		}
+	}
+
+	if (poly.num_verts == 4 && cshp_ptr->uv_list[UVIndex].num_verts >= 4
+		&& TriangleSize(points, poly.vert_ind[0], poly.vert_ind[2], poly.vert_ind[3]) > TriangleSize(points, poly.vert_ind[0], poly.vert_ind[1], poly.vert_ind[2]))
+	{
+		which[1] = 2;
+		which[2] = 3;
+	}
+
+	float corners[9], coordinates[6];
+
+	for (int i = 0; i < 3; i++)
+	{
+		int const corner = which[i];
+		int const point = poly.vert_ind[corner];
+
+		corners[i * 3 + 0] = (float)points[point * 3 + 0];
+		corners[i * 3 + 1] = (float)points[point * 3 + 1];
+		corners[i * 3 + 2] = (float)points[point * 3 + 2];
+		coordinates[i * 2 + 0] = cshp_ptr->uv_list[UVIndex].vert[corner].u;
+		coordinates[i * 2 + 1] = cshp_ptr->uv_list[UVIndex].vert[corner].v;
+	}
+
+	SurfaceTangent_Work(corners, coordinates, &shphd->sh_surfacetangents[polygon]);
+}
+
 BOOL copy_to_shapeheader(
     RIFFHANDLE h,
     ChunkShape const &cshp,
@@ -2581,6 +2672,22 @@ BOOL copy_to_shapeheader(
 			uv_imnums[i] = -1;
 			shphd->sh_textures[i] = 0;
 		}
+
+		// nothing else remembers how long these lists are once the shape is built
+		shphd->sh_uvlistlengths = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->num_uvs);
+
+		if (shphd->sh_uvlistlengths)
+		{
+			memset(shphd->sh_uvlistlengths, 0, sizeof(int) * cshp_ptr->num_uvs);
+			shphd->sh_numuvlists = cshp_ptr->num_uvs;
+		}
+	}
+
+	shphd->sh_surfacetangents = (SurfaceTangent *) PoolAllocateMem(sizeof(SurfaceTangent) * shphd->numitems);
+
+	if (shphd->sh_surfacetangents)
+	{
+		memset(shphd->sh_surfacetangents, 0, sizeof(SurfaceTangent) * shphd->numitems);
 	}
 
 	for (i = 0; i < shphd->numitems; i++)
@@ -2604,11 +2711,18 @@ BOOL copy_to_shapeheader(
 				item_list[i * 9 + 3] += local_tex_index_nos[texno];
 				shphd->sh_textures[UVIndex] = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->uv_list[UVIndex].num_verts * 2);
 
+				if (shphd->sh_uvlistlengths)
+				{
+					shphd->sh_uvlistlengths[UVIndex] = cshp_ptr->uv_list[UVIndex].num_verts;
+				}
+
 				for (j = 0; j < cshp_ptr->uv_list[UVIndex].num_verts; j++)
 				{
 					(shphd->sh_textures[UVIndex])[(j * 2)] = (int)cshp_ptr->uv_list[UVIndex].vert[j].u; //ProcessUVCoord(h, UVC_POLY_U, (int)cshp_ptr->uv_list[UVIndex].vert[j].u, uv_imnums[UVIndex]);
 					(shphd->sh_textures[UVIndex])[(j * 2) + 1] = (int)cshp_ptr->uv_list[UVIndex].vert[j].v; //ProcessUVCoord(h, UVC_POLY_V, (int)cshp_ptr->uv_list[UVIndex].vert[j].v, uv_imnums[UVIndex]);
 				}
+
+				work_out_polygon_tangent(shphd, cshp_ptr, i, UVIndex);
 			}
 			else
 			{

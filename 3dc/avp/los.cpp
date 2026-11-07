@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   it notes which polygon of its shape a ray hit, for -shadowshoot
 /*KJL*************************
 * los.c - Line of sight code *
 *************************KJL*/
@@ -29,6 +32,8 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr);
 * 										D E F I N E S 										*
 ****************************************************************************************KJL*/
 #define POLY_REJECT_RANGE 500
+
+int LOS_PolygonNumber = -1;
 
 extern MORPHDISPLAY MorphDisplay;
 extern VECTORCH MorphedPts[];
@@ -510,6 +515,7 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr)
 	}
 
 	numberOfItems = SetupPolygonAccess(dPtr);
+	int const polygonsInShape = numberOfItems;
 	if (!dPtr->ObShape)
 	{
 //		PrintDebuggingText("polys %d\n",numberOfItems);
@@ -670,6 +676,7 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr)
 				pointOnPlane.vz += position.vz;
 
 				LOS_Point=pointOnPlane;
+				LOS_PolygonNumber = polygonsInShape - 1 - numberOfItems;   /* the loop has already counted this one off */
 				LOS_ObjectHitPtr = dPtr;
 				LOS_Lambda=lambda;
 				LOS_HModel_Section = 0;

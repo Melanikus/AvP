@@ -3,6 +3,9 @@
 //   removed code only the level editor used: the game itself never runs it
 //   counted lists are measured against their chunks before they're made
 //   a sequence checks that each of its frames has a place of its own
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   a sequence the game couldn't play refuses the level: see StartTimeFits
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -12,7 +15,7 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(animation_objects)
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFR",Object_Animation_Sequence_Frame_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFR",Object_Animation_Sequence_Frame_Chunk,40)
 
 void Object_Animation_Sequence_Frame_Chunk::fill_data_block (char *data_start)
 {
@@ -111,7 +114,7 @@ void Object_Animation_Sequence_Frame_Chunk::set_sound_index(int ind)
 	}
 }
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQHD",Object_Animation_Sequence_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQHD",Object_Animation_Sequence_Header_Chunk,12)
 
 void Object_Animation_Sequence_Header_Chunk::fill_data_block (char *data_start)
 {
@@ -186,11 +189,7 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 		data_start += 4;
 	}
 
-	if (strlen(data_start))
-	{
-		sequence_name = new char [strlen(data_start) + 1];
-		strcpy (sequence_name, data_start);
-	}
+	sequence_name = CopyOptionalNameFromChunk(start, size, data_start);
 }
 
 Object_Animation_Sequence_Header_Chunk * Object_Animation_Sequence_Chunk::get_header()
@@ -224,6 +223,63 @@ void Object_Animation_Sequence_Chunk::post_input_processing()
 	delete[] place_taken;
 
 	Chunk_With_Children::post_input_processing();
+}
+
+// Each frame of a sequence says when it starts, from 0 to 65535. The game turns that into how long the frame lasts: the time until the next one starts, or until 65536 for the last. The
+// code that plays a sequence divides by that length, and goes round a loop taking lengths away from the time until it finds the right frame, so a length of 0 can stop the game or
+// hang it for good, and a negative one comes out as a very long one. So each start has to come after the one before it. This takes the starts in order. earliest is the first time this
+// one can start, and it moves on past it. All 304,817 frames in the game's own files keep to this, and start from 0.
+static bool StartTimeFits(signed long start, signed long & earliest)
+{
+	signed long const latest_start = 65535;
+
+	if (start < earliest || start > latest_start)
+	{
+		return false;
+	}
+
+	earliest = start + 1;
+	return true;
+}
+
+// Three things the code that builds a sequence uses with no check: its header, at least one frame, and each frame's start. An outermost hierarchy chunk's sequences have no frames, because
+// they're only names, so this is only asked about the sections the game really builds, and not where the chunks are read.
+bool Object_Animation_Sequence_Chunk::can_be_played()
+{
+	if (!get_header())
+	{
+		return false;
+	}
+
+	List <Object_Animation_Sequence_Frame_Chunk *> frames;
+	get_frames(&frames);
+
+	int const num_frames = frames.size();
+
+	if (num_frames == 0)
+	{
+		return false;
+	}
+
+	// The file can hold them in any order, and each says which place it takes
+	signed long * const starts = new signed long [num_frames];
+
+	for (LIF<Object_Animation_Sequence_Frame_Chunk *> frame(&frames); !frame.done(); frame.next())
+	{
+		starts[frame()->frame_ref_no] = frame()->at_frame_no;
+	}
+
+	bool good = true;
+	signed long earliest = 0;
+
+	for (int i = 0; i < num_frames && good; i++)
+	{
+		good = StartTimeFits(starts[i], earliest);
+	}
+
+	delete[] starts;
+
+	return good;
 }
 
 void Object_Animation_Sequence_Chunk::get_frames(List <Object_Animation_Sequence_Frame_Chunk*> *pList)
@@ -345,7 +401,7 @@ Hierarchy_Bounding_Box_Chunk* Object_Animation_Sequence_Chunk::get_bounding_box(
 				** Object_Animation_Sequence_Time_Chunk **
 				**--------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQTM",Object_Animation_Sequence_Time_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQTM",Object_Animation_Sequence_Time_Chunk,4)
 
 Object_Animation_Sequence_Time_Chunk::Object_Animation_Sequence_Time_Chunk (Chunk_With_Children * parent,const char * data_start, size_t)
 : Chunk (parent, "OBASEQTM")
@@ -368,7 +424,7 @@ void Object_Animation_Sequence_Time_Chunk::fill_data_block(char* data_start)
 				** Object_Animation_Sequence_Speed_Chunk **
 				**---------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQSP",Object_Animation_Sequence_Speed_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQSP",Object_Animation_Sequence_Speed_Chunk,12)
 
 Object_Animation_Sequence_Speed_Chunk::Object_Animation_Sequence_Speed_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQSP")
@@ -392,7 +448,7 @@ void Object_Animation_Sequence_Speed_Chunk::fill_data_block(char* data)
 				**---------------------------------------*/
 
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFL",Object_Animation_Sequence_Flags_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFL",Object_Animation_Sequence_Flags_Chunk,4)
 
 Object_Animation_Sequence_Flags_Chunk::Object_Animation_Sequence_Flags_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQFL")
@@ -464,6 +520,37 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 			data+=sizeof(Object_Animation_Frame);
 		}
 	}
+}
+
+// The same for the compact list: at least one sequence, because the game looks one up in every section it animates, and in each, at least one frame, with their starts in order
+bool Object_Animation_All_Sequence_Chunk::sequences_can_be_played()
+{
+	if (num_sequences == 0)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < num_sequences; i++)
+	{
+		Object_Animation_Sequence const & sequence = sequences[i];
+
+		if (sequence.num_frames == 0)
+		{
+			return false;
+		}
+
+		signed long earliest = 0;
+
+		for (unsigned long frame = 0; frame < sequence.num_frames; frame++)
+		{
+			if (!StartTimeFits(sequence.frames[frame].at_frame_no, earliest))
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 void Object_Animation_All_Sequence_Chunk::fill_data_block(char* data)

@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a text number from outside the table gets the empty string, where only an assert stood before
+
 /*******************************************************************
  *
  *    DESCRIPTION: 	strtab.cpp
@@ -45,14 +49,15 @@
 	enum TEXTSTRING_ID stringID
 )
 {
-	/* PRECONDITION */
-	{
-		GLOBALASSERT( stringID < MAX_NO_OF_TEXTSTRINGS );
-		GLOBALASSERT( pSCString[ stringID ] );
-	}
-
 	/* CODE */
 	{
+		// The number can come from a level's mission data. One from outside the table gets the first entry, which is the
+		// empty string, the same as GetTextString does.
+		if ( (int)stringID < 0 || (int)stringID >= (int)NumStrings )
+		{
+			stringID = (enum TEXTSTRING_ID)0;
+		}
+
 		pSCString[ stringID ] -> R_AddRef();
 		return *( pSCString[ stringID ] );
 	}

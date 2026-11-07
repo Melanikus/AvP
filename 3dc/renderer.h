@@ -22,6 +22,8 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the line that pulled in the Xbox header, because the Xbox port's folder was deleted
 
@@ -58,8 +60,12 @@ bool R_EndScene();
 // texture functions
 bool R_SetTexture            (uint32_t stage, texID_t textureID);
 void R_UnsetTexture          (texID_t textureID);
+void R_ForgetTexture         (uint32_t stage);
 bool R_LockTexture           (Texture &texture, uint8_t **data, uint32_t *pitch, enum TextureLock lockType);
 bool R_UnlockTexture         (Texture &texture);
+bool R_CreateTextureWithCopies (uint32_t side, uint32_t levels, Texture &texture);
+bool R_LockTextureCopy       (Texture &texture, uint32_t level, uint8_t **data, uint32_t *pitch);
+bool R_UnlockTextureCopy     (Texture &texture, uint32_t level);
 bool R_CreateTexture         (uint32_t width, uint32_t height, uint32_t bitsPerPixel, enum TextureUsage usageType, Texture &texture);
 void R_ReleaseTexture        (Texture &texture);
 bool R_CreateTextureFromFile (const std::string &fileName, Texture &texture);

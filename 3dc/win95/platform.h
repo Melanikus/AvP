@@ -1,6 +1,9 @@
 #ifndef PLATFORM_INCLUDED
 #define PLATFORM_INCLUDED
 
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   GetSin and GetCos come from circle_tables.h, so no step number can read past the end of a table
+
 /*
 
  Platform Specific Header Include
@@ -43,8 +46,7 @@ typedef struct LONGLONGCH {
 
 */
 
-#define GetSin(a) sine[a]
-#define GetCos(a) cosine[a]
+#include "circle_tables.h"
 
 /*
 	#defines, structures etc for

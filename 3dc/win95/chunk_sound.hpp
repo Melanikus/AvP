@@ -2,6 +2,7 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of code only the level editor used: the game itself never runs it; added a
 //   check on the sound numbers a level file gives
+//   a chunk for collections of sounds, which was only ever a comment, is gone
 
 #ifndef _sndchunk_hpp
 #define _sndchunk_hpp 1
@@ -128,38 +129,5 @@ public :
 	static const int Max_Sound_Number = 4095;
 	bool index_is_valid() const { return index >= 0 && index <= Max_Sound_Number; }
 };
-
-
-
-/*
-struct ChunkSoundWeighting
-{
-	int index;
-	int weighting;
-};
-
-//a collection of indeces of possible sounds to play
-class Sound_Collection_Chunk : public Chunk
-{
-public :
-
-	Sound_Collection_Chunk(Chunk_With_Children* parent,const char*,const size_t);
-	Sound_Collection_Chunk(Chunk_With_Children* parent);
-	~Sound_Collection_Chunk();
-
-	size_t size_chunk();
-	void fill_data_block(char*);
-
-	int index;
-	
-	int num_sounds;
-	ChunkSoundWeighting* sounds;
-
-	int spare;
-
-	
-};
-*/
-
 
 #endif

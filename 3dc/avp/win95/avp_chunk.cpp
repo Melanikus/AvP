@@ -7,6 +7,8 @@
 //   a generator's weights have to fit their chunk, and are freed the same way they were made
 //   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
 //   a level's generators have to make aliens or marines
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -17,7 +19,7 @@ FORCE_CHUNK_INCLUDE_IMPLEMENT(avp_chunk)
 
 // This one looks two levels up for the level's name, so it can only be made where that's safe. All 1480 in the game's own levels are
 // in the special objects chunk.
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AVPGENER",AVP_Generator_Chunk,"SPECLOBJ",Special_Objects_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("AVPGENER",AVP_Generator_Chunk,"SPECLOBJ",Special_Objects_Chunk,28)
 
 void AVP_Generator_Chunk::fill_data_block (char * data_start)
 {
@@ -64,9 +66,10 @@ size_t AVP_Generator_Chunk::size_chunk ()
 	return(chunk_size);
 }
 
-AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "AVPGENER")
 {
+	char const * const chunk_start = data;
 	location = *((ChunkVectorInt*) data);
 	data += sizeof(ChunkVectorInt);
 		
@@ -91,8 +94,7 @@ AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const ch
 	extra2 = *(unsigned char*)(data);
 	data ++;
 	
-	name = new char [strlen(data) + 1];
-	strcpy (name, data);
+	name = CopyNameFromChunk(chunk_start, chunk_bytes, data);
 }
 
 
@@ -206,12 +208,10 @@ AVP_Generator_Chunk* AVP_Generator_Extra_Data_Chunk::get_generator_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("AVPGENNM",AVP_Generator_Extra_Name_Chunk)
 
-AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 :Chunk(parent,"AVPGENNM")
 {
-	int length=strlen(data);
-	name=new char[length+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * _name)
@@ -340,7 +340,7 @@ size_t AVP_Generator_Extended_Settings_Chunk::size_chunk ()
 
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("GLOGENDC",Global_Generator_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("GLOGENDC",Global_Generator_Data_Chunk,28)
 
 Global_Generator_Data_Chunk::Global_Generator_Data_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"GLOGENDC")
@@ -413,7 +413,7 @@ size_t Global_Generator_Data_Chunk::size_chunk ()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("AVPSTART",AVP_Player_Start_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AVPSTART",AVP_Player_Start_Chunk,56)
 
 AVP_Player_Start_Chunk::AVP_Player_Start_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"AVPSTART")
@@ -451,11 +451,12 @@ size_t AVP_Player_Start_Chunk::size_chunk ()
 	return(chunk_size);
 }
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("AVPCABLE",AVP_Power_Cable_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AVPCABLE",AVP_Power_Cable_Chunk,48)
 
-AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk (parent,"AVPCABLE")
 {
+	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 
@@ -480,16 +481,7 @@ AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const c
 		data+=4;
 	}
 
-	int length=strlen(data);
-	if(length)
-	{
-		name=new char[length+1];
-		strcpy(name,data);	
-	}
-	else
-	{
-		name=0;
-	}
+	name=CopyOptionalNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* _name,ObjectID _id)
@@ -766,7 +758,7 @@ Indexed_Sound_Chunk* AVP_Particle_Generator_Chunk::get_sound_chunk()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("PARGENDA",AVP_Particle_Generator_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PARGENDA",AVP_Particle_Generator_Data_Chunk,68)
 
 AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* _name,ObjectID & _id)
 :Chunk(parent,"PARGENDA")
@@ -781,9 +773,10 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 }
 
 
-AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t)
+AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t const chunk_bytes)
 :Chunk(parent,"PARGENDA")
 {
+	char const * const chunk_start = data;
 	
 	CHUNK_EXTRACT(type,int)
 	CHUNK_EXTRACT(flags,int)
@@ -797,7 +790,7 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(parent_id,ObjectID)
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkQuat)
-	CHUNK_EXTRACT_STRING(name);
+	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }
 
 AVP_Particle_Generator_Data_Chunk::~AVP_Particle_Generator_Data_Chunk()

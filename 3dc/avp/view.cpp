@@ -1,7 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles from a save file are kept between 0 and 4095 before a sine or cosine lookup, and an object's light
-//   list has room for every light
+//   list has room for every light;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   says when the weapon goes without a flare's light, now that LIGHTING can keep lights in the game's own sum
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -12,6 +15,7 @@
 #include "view.h"
 #include "io.h"
 #include "kshape.h"
+#include "pixel_lights.h"
 #include "kzsort.h"
 #include "frustum.h"
 #include "vision.h"
@@ -73,10 +77,12 @@ int GlobalAmbience;
 int LightScale = ONE_FIXED;
 int DrawingAReflection;
 
-int *Global_ShapePoints = 0;
+// The shape being drawn. These two are lists of VECTORCH, one entry for each point in the shape. The shape's own data
+// keeps them as int **, so they are turned into what they really are once, where they are set, in kshape.cpp.
+VECTORCH *Global_ShapePoints = 0;
 int **Global_ShapeItems = 0;
 int *Global_ShapeNormals = 0;
-int *Global_ShapeVNormals = 0;
+VECTORCH *Global_ShapeVNormals = 0;
 int **Global_ShapeTextures = 0;
 VIEWDESCRIPTORBLOCK *Global_VDB_Ptr = 0;
 DISPLAYBLOCK *Global_ODB_Ptr = 0;
@@ -127,6 +133,95 @@ void UpdateRunTimeLights(void)
 	HandleLightElementSystem();
 }
 
+extern int ToyShadowsLightsByPixel;
+extern int ToyShadowsInMirror;
+extern bool gunLayer;
+bool ToyBlockIsFlare(const DISPLAYBLOCK *block);
+bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light);
+void ToyShadows_ChooseLights();
+
+// Is this chosen light added per pixel on what's being drawn now, instead of here? The surface pictures come from the main list, so
+// that's what has to leave the light out, or it would be lit twice. The player's weapon isn't in those pictures, and keeps its light. Nor
+// is a reflection, which keeps it too. There are two kinds, and neither is in a picture. For a piece of the level or an object,
+// DrawingAReflection is set, and the code below works out the light's place on the far side of the mirror. For a body part only
+// ToyShadowsInMirror is set, and the game lights it from the light's real place, as it always has (kzsort.cpp).
+static bool ToyLightIsAddedLater(const LIGHTBLOCK *light)
+{
+	return !gunLayer && !DrawingAReflection && !ToyShadowsInMirror && ToyShadows_LightIsByPixel(light);
+}
+
+// One live light for the table surfaceScene.vsh reads. It leaves out the same lights LightSourcesInRangeOfObject leaves out of a wall: one with no light in it, one
+// that's added per pixel, and one of the level's own, which is already baked into a wall. The second line of numbers is the light's brightness and colour
+// together, already taken down to what 1 means in the shader: the game multiplies these by 65536 twice over, and then divides by 256 and by 255.
+static bool AddLightToWallTable(const LIGHTBLOCK *light, float *table, int place, int mostLights)
+{
+	if (place >= mostLights || !light->LightBright || !(light->RedScale || light->GreenScale || light->BlueScale))
+	{
+		return false;
+	}
+
+	if ((light->LightFlags & LFlag_PreLitSource) || ToyShadows_LightIsByPixel(light))
+	{
+		return false;
+	}
+
+	float const scale = (float)light->BrightnessOverRange / 65536.0f / 65536.0f / (256.0f * 255.0f);
+	float *numbers = table + place * 8;
+
+	numbers[0] = (float)light->LightWorld.vx;
+	numbers[1] = (float)light->LightWorld.vy;
+	numbers[2] = (float)light->LightWorld.vz;
+	numbers[3] = (float)light->LightRange;
+	numbers[4] = (float)light->RedScale * scale;
+	numbers[5] = (float)light->GreenScale * scale;
+	numbers[6] = (float)light->BlueScale * scale;
+	numbers[7] = (light->LightFlags & LFlag_NoSpecular) ? 0.0f : 1.0f;
+
+	return true;
+}
+
+// Fills the table, eight numbers for each light, and gives back how many there are. Past the limit the rest go without, and passedLimit says so. Light elements
+// go first, because they're what the player's own actions make, like a muzzle flash, and they're the ones that would be missed.
+int StaticScene_GatherLights(float *table, int mostLights, bool *passedLimit)
+{
+	int count = 0;
+	int wanted = 0;
+
+	for (int i = 0; i < NumActiveLightElements; i++)
+	{
+		LIGHTBLOCK const *light = &LightElementStorage[i].LightBlock;
+
+		if (AddLightToWallTable(light, table, count, mostLights))
+		{
+			count++;
+		}
+		else if (count == mostLights)
+		{
+			wanted++;
+		}
+	}
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK const *block = ActiveBlockList[i];
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			if (AddLightToWallTable(block->ObLights[j], table, count, mostLights))
+			{
+				count++;
+			}
+			else if (count == mostLights)
+			{
+				wanted++;
+			}
+		}
+	}
+
+	*passedLimit = wanted > 0;
+	return count;
+}
+
 void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 {
 	DISPLAYBLOCK **aptr;
@@ -138,6 +233,7 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	aptr = ActiveBlockList;
 
 	NumLightSourcesForObject = 0;
+	PixelLights_ForgetLeftOut();
 
 	/*
 
@@ -148,6 +244,14 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 	for(i = NumActiveBlocks; i!=0 && NumLightSourcesForObject < MaxLightsPerObject; i--)
 	{
 		dptr2 = *aptr++;
+
+		// While lights are added per pixel, the weapon gets no flare light at all: the shadow pass doesn't draw it, and the game's flare is a
+		// bright white, not the dim red the user chose. Everything else goes on below. A chosen flare leaves there, like any light
+		// added per pixel, and one that wasn't chosen stays, held to that dim red by ToyShadows_ChooseLights.
+		if (ToyShadowsLightsByPixel && gunLayer && ToyBlockIsFlare(dptr2))
+		{
+			continue;
+		}
 
 		if (dptr2->ObNumLights)
 		{
@@ -186,9 +290,15 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 
 						if (distanceToLight < (lptr->LightRange + dptr->ObRadius))
 						{
-
-							LightSourcesForObject[NumLightSourcesForObject] = lptr;
-							NumLightSourcesForObject++;
+							if (ToyLightIsAddedLater(lptr))
+							{
+								PixelLights_NoteLeftOut(lptr);
+							}
+							else
+							{
+								LightSourcesForObject[NumLightSourcesForObject] = lptr;
+								NumLightSourcesForObject++;
+							}
 
 							/* Transform the light position to local space */
 							llocal = vertexToLight;
@@ -218,11 +328,17 @@ void LightSourcesInRangeOfObject(DISPLAYBLOCK *dptr)
 
 			distanceToLight = Approximate3dMagnitude(&vertexToLight);
 
-			if (distanceToLight < (lptr->LightRange + dptr->ObRadius) )
+			if (distanceToLight < (lptr->LightRange + dptr->ObRadius))
 			{
-
-				LightSourcesForObject[NumLightSourcesForObject] = lptr;
-				NumLightSourcesForObject++;
+				if (ToyLightIsAddedLater(lptr))
+				{
+					PixelLights_NoteLeftOut(lptr);
+				}
+				else
+				{
+					LightSourcesForObject[NumLightSourcesForObject] = lptr;
+					NumLightSourcesForObject++;
+				}
 
 				/* Transform the light position to local space */
 				llocal = vertexToLight;
@@ -640,6 +756,9 @@ void AvpShowViews(void)
 
 	/* lights associated with the player may have changed */
 	UpdateObjectLights(Player);
+
+	// every light is in place now, and nothing has been lit yet
+	ToyShadows_ChooseLights();
 
 	if (NumOnScreenBlocks)
 	{

@@ -24,6 +24,8 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the page of games found can stop the search, so that nothing stays open on the network
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -52,6 +54,7 @@ void      Net_Deinitialise();
 void      Net_Disconnect();
 void      Net_ConnectToAddress();
 void      Net_FindAvPSessions();
+void      Net_StopSearchingForSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);

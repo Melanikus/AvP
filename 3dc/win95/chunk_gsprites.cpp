@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "chunk_gsprites.hpp"
 
@@ -22,25 +24,14 @@ Children for AllSprites_Chunk :
 
 
 
-BOOL AllSprites_Chunk::file_equals (HANDLE & /*rif_file*/)
-{
-	return(TRUE);
-}	
+	
 
 AllSprites_Header_Chunk * AllSprites_Chunk::get_header()
 {
 	return (AllSprites_Header_Chunk *) this->lookup_single_child ("ASPRHEAD");
 }	
 
-const char * AllSprites_Chunk::get_head_id()
-{
-	AllSprites_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
 	
-}	
 
 void AllSprites_Chunk::set_lock_user (char * user)
 {
@@ -66,7 +57,7 @@ void AllSprites_Chunk::post_input_processing()
 ///////////////////////////////////////
 
 // Class AllSprites_Header_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("ASPRHEAD",AllSprites_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ASPRHEAD",AllSprites_Header_Chunk,24)
 
 // from buffer
 AllSprites_Header_Chunk::AllSprites_Header_Chunk (Chunk_With_Children * parent, const char * hdata, size_t /*hsize*/)

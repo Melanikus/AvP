@@ -15,6 +15,7 @@
 #include "ourasert.h"
 #include "user_profile.h"
 #include "vdb.h"
+#include "static_scene.h"
 
 extern int *ItemPointers[maxpolyptrs];
 extern int ItemCount;
@@ -22,6 +23,7 @@ extern int NumOnScreenBlocks;
 extern int NumVertices;
 extern int WireFrameMode;
 extern int DrawingAReflection;
+extern int ToyShadowsInMirror;
 extern DISPLAYBLOCK *OnScreenBlockList[];
 extern DISPLAYBLOCK *Player;
 
@@ -399,6 +401,17 @@ void KRenderItems(VIEWDESCRIPTORBLOCK *VDBPtr)
 #endif
 	}
 	DrawingAReflection=0;
+
+	// A module slipped inside another is drawn with the objects, so it's never offered, and it stays on the old route.
+	StaticScene_StartChoosing();
+
+	for (int offered = 0; offered < numVisMods; offered++)
+	{
+		StaticScene_OfferModule(SortedModules[offered].DispPtr);
+	}
+
+	StaticScene_FinishChoosing();
+
 	{
 		int numMods = numVisMods;
 		{
@@ -624,7 +637,11 @@ void RenderThisHierarchicalDisplayblock(DISPLAYBLOCK *dbPtr)
 		MakeVector(&dbPtr->ObWorld, &VDBPtr->VDB_World, &dbPtr->ObView);
 		RotateVector(&dbPtr->ObView, &VDBPtr->VDB_Mat);
 
+		// A reflection casts no shadow. DrawingAReflection can't say so here, because it also moves the lights it finds for
+		// whatever is drawn, which would change how reflected bodies are lit.
+		ToyShadowsInMirror = 1;
 		AddHierarchicalShape(dbPtr, VDBPtr);
+		ToyShadowsInMirror = 0;
 		ReflectObject(dbPtr);
 	}
 	#endif

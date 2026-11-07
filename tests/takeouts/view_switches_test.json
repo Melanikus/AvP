@@ -1,0 +1,410 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: the static route can be switched on without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devSwitch(\"-staticscene\")",
+					"to": "strstr(command_line, \"-staticscene\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a number for how shadows look works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "devNumber(\"-shadowworld=\")",
+					"to": "strstr(command_line, \"-shadowworld=\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every number gets past the check for -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "return devSwitch(name) ? strstr(command_line, name) : 0;",
+					"to": "return strstr(command_line, name);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: asking without -dev doesn't say why it's off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: turning the new look off now needs -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "strstr(command_line, \"-shadowsoff\")",
+					"to": "devSwitch(\"-shadowsoff\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps a brighter world",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &ToyShadowsWorld, ToyShadowsWorld },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the static route",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t{ &StaticSceneOn, StaticSceneOn },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game puts nothing back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "bool const tuningWasChanged = ShadowTuning_PutBack(shadowTuning, (int)(sizeof(shadowTuning) / sizeof(shadowTuning[0])));",
+					"to": "bool const tuningWasChanged = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps the margin that isn't a whole number",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tShadowSurfaceBias = shadowSurfaceBiasAsBuilt;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a changed number isn't put back",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "*numbers[i].value = numbers[i].asBuilt;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a change isn't reported, so the log never says it",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "anyChanged = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "nothing is ever looked at",
+			"changes": [
+				{
+					"file": "3dc/shadow_tuning.h",
+					"from": "if (*numbers[i].value != numbers[i].asBuilt)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a level light casts with SHADOWAMBIENT off",
+			"changes": [
+				{
+					"file": "3dc/light_choice.h",
+					"from": "if (kind == kLightFromTheLevel || kind == kLampWithNoCorona)",
+					"to": "if (kind == kLampWithNoCorona)"
+				}
+			]
+		},
+		{
+			"name": "a lamp with no corona casts with SHADOWAMBIENT off",
+			"changes": [
+				{
+					"file": "3dc/light_choice.h",
+					"from": "if (kind == kLightFromTheLevel || kind == kLampWithNoCorona)",
+					"to": "if (kind == kLightFromTheLevel)"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT ON does not bring them back",
+			"changes": [
+				{
+					"file": "3dc/light_choice.h",
+					"from": "return ambientCasts;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT is the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/light_choice.h",
+					"from": "return ambientCasts;",
+					"to": "return !ambientCasts;"
+				}
+			]
+		},
+		{
+			"name": "a lamp with a corona, and everything else, goes with the map lights",
+			"changes": [
+				{
+					"file": "3dc/light_choice.h",
+					"from": "\t}\n\n\treturn true;\n}\n\n// THE SCORE:",
+					"to": "\t}\n\n\treturn ambientCasts;\n}\n\n// THE SCORE:"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rule is not asked",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rule ignores SHADOWAMBIENT",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))",
+					"to": "if (!LightChoice_MayCast(kind, false))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every light counts as a level light",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;",
+					"to": "if (light->LightFlags & LFlag_CosAtten)\n\t{\n\t\treturn kLightFromTheLevel;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: corona the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "has_corona ? kLampWithACorona : kLampWithNoCorona",
+					"to": "has_corona ? kLampWithNoCorona : kLampWithACorona"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything is read as a placed light",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr",
+					"to": "owner->SBdataptr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light element is read through nothing",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "block ? block->ObStrategyBlock : 0",
+					"to": "block->ObStrategyBlock"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everything else counts as a lamp with no corona",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "return kLightOfAnyOtherKind;",
+					"to": "return kLampWithNoCorona;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a placed light looks like a level light",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "lPtr->LightFlags = lc->light.engine_light_flags | LFlag_WasNotAllocated ",
+					"to": "lPtr->LightFlags = lc->light.engine_light_flags | LFlag_AbsPos | LFlag_WasNotAllocated "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level light no longer looks like one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "| LFlag_AbsPos | LFlag_WasNotAllocated ",
+					"to": "| LFlag_WasNotAllocated "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: SHADOWAMBIENT starts on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int ShadowAmbientOn = 0;",
+					"to": "int ShadowAmbientOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command has another name",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\"SHADOWAMBIENT\",",
+					"to": "\"SHADOWAMBIENTS\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the command says nothing about words it does not know",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(\"SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what was asked is never applied",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ShadowAmbientOn = Shadows_AfterAsking(ShadowAmbientOn, shadowAmbientAsked);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen does not say which it is",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(ShadowAmbientOn ? \"SHADOWAMBIENT: ON\" : \"SHADOWAMBIENT: OFF\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one press goes on counting",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tshadowAmbientAsked = kAskedNothing;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch needs -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "strstr(command_line, \"-shadowambient\")",
+					"to": "devSwitch(\"-shadowambient\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the switch turns it off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "ShadowAmbientOn = 1;",
+					"to": "ShadowAmbientOn = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game puts it back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "{ &ToyShadowsMaxLights, ToyShadowsMaxLights },",
+					"to": "{ &ShadowAmbientOn, ShadowAmbientOn },\n\t{ &ToyShadowsMaxLights, ToyShadowsMaxLights },"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT alone does not switch it",
+			"changes": [
+				{
+					"file": "3dc/view_switches.h",
+					"from": "if (length == 0)\n\t{\n\t\t*asked = kAskedNext;\n\t}\n\telse if (SwitchWords_Are(start, length, \"0\") || SwitchWords_Are(start, length, \"OFF\"))",
+					"to": "if (length == 0)\n\t{\n\t\t*asked = 1;\n\t}\n\telse if (SwitchWords_Are(start, length, \"0\") || SwitchWords_Are(start, length, \"OFF\"))"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT does not know OFF",
+			"changes": [
+				{
+					"file": "3dc/view_switches.h",
+					"from": "SwitchWords_Are(start, length, \"0\") || SwitchWords_Are(start, length, \"OFF\")",
+					"to": "SwitchWords_Are(start, length, \"0\")"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT does not know ON",
+			"changes": [
+				{
+					"file": "3dc/view_switches.h",
+					"from": "SwitchWords_Are(start, length, \"1\") || SwitchWords_Are(start, length, \"ON\")",
+					"to": "SwitchWords_Are(start, length, \"1\")"
+				}
+			]
+		},
+		{
+			"name": "SHADOWAMBIENT takes no words at all badly",
+			"changes": [
+				{
+					"file": "3dc/view_switches.h",
+					"from": "inline bool SwitchWords_ShadowAmbientAsk(char const *words, int *asked)\n{\n\tif (!words)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": "inline bool SwitchWords_ShadowAmbientAsk(char const *words, int *asked)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flag crafted in the level file can make a lamp a level light",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tSTRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;\n\n\tif (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)",
+					"to": "\tSTRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;\n\n\tif (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;\n\t}\n\n\tif (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)"
+				}
+			]
+		}
+	]
+}

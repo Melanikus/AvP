@@ -26,8 +26,30 @@
 //   the debug text that prints a matrix is written with a size limit, so it always fits;
 //   DirectX error codes are turned into text by our own DxErrorToString (the DirectX SDK library is gone);
 //   the menu font's letters are limited to what its texture can hold
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies, for a hand-made relief map, which asks the card first and looks at what it made
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   makes the list and the shader for shadow prisms kept between frames
+//   waiting for the graphics card to come back asks it again each time round, so it can't wait forever, and the wait ends if
+//   the player closes the game. A buffer that couldn't be made can't be locked
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a texture smaller than a picture or film needs is refused, because writing the picture into it ran past its end
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the settings file can't say where shaders come from
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine's shoulder lamp has a shader of its own, and a way of blending that brightens what's already there
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
 #include "d3_func.h"
+#include "surface_normals.h"
+#include "shadow_volumes_card.h"
+#include "frame_timing.h"
+#include "shadow_debug.h"
+#include "surface_pictures.h"
+#include "texture_relief.h"
+#include "shader_model.h"
 #include "fmvCutscenes.h"
 #include "chunk_load.hpp" // c++ header which ignores class definitions/member functions if __cplusplus is not defined ?
 #include "logString.h"
@@ -36,6 +58,11 @@
 #include <XInput.h> // XInput API
 #include "user_profile.h"
 #include "console.h"
+#include "texture_size_check.h"
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "win32/d3_func.cpp";
 
 extern void RenderListInit();
 extern void RenderListDeInit();
@@ -71,12 +98,15 @@ int	NumAvailableVideoModes;
 D3DINFO d3d;
 bool usingStencil = false;
 
-std::string shaderPath;
+// Always this folder beside the game. It used to come from the settings file, and a file someone shared could point it at another computer, so that the game fetched
+// shaders from there and ran them. tests/settings_file_test.cpp keeps it out.
+static const std::string shaderPath = "shaders/";
 std::string videoModeDescription;
 
 bool CreateVolatileResources();
 bool ReleaseVolatileResources();
 bool SetRenderStateDefaults();
+extern bool bRunning;
 void ToggleWireframe();
 
 const int kMaxTextureStages = 8;
@@ -123,13 +153,14 @@ const D3DFORMAT DisplayFormats32[] =
 	D3DFMT_A8R8G8B8
 };
 
-// list of allowed depth buffer formats
+// list of allowed depth buffer formats, best first. The first two have the stencil bits that shadows need. With any of the others
+// shadows turn themselves off, and the game runs as it always has.
 const D3DFORMAT DepthFormats[] =
 {
-	D3DFMT_D32,
 	D3DFMT_D24S8,
-	D3DFMT_D24X8,
 	D3DFMT_D24FS8,
+	D3DFMT_D32,
+	D3DFMT_D24X8,
 	D3DFMT_D16
 };
 
@@ -185,9 +216,16 @@ uint32_t R_GetScreenWidth()
 
 bool ReleaseVolatileResources()
 {
+	FrameTiming_Release();
+	ShadowCapture_GiveUp();
+	extern void ToyShadows_ReleaseTargets();
+	ToyShadows_ReleaseTargets();
+
 	Tex_ReleaseDynamicTextures();
 
 	SAFE_DELETE(d3d.mainVB);
+	SurfaceNormals_Release();
+	ShadowVolumesCard_Release();
 	SAFE_DELETE(d3d.mainIB);
 
 	SAFE_DELETE(d3d.orthoVB);
@@ -285,6 +323,8 @@ void BuildFrustum()
 
 bool R_BeginScene()
 {
+	ProcessorStageClock clock(kProcessorBeginScene);
+
 	// check for lost device
 	LastError = d3d.lpD3DDevice->TestCooperativeLevel();
 	if (FAILED(LastError))
@@ -295,57 +335,123 @@ bool R_BeginScene()
 		// disable XInput
 		XInputEnable(false);
 
+		// these are so that a long wait says each thing once, and doesn't fill the log 20 times a second
+		bool saidLost = false;
+		bool saidResetting = false;
+		bool saidCantReset = false;
+
 		while (1)
 		{
 			CheckForWindowsMessages();
 
-			if (D3DERR_DEVICENOTRESET == LastError)
+			// The player closed the game while waiting. The frame doesn't start, and the game's main loop ends.
+			if (!bRunning)
 			{
-				LogDebugString("Releasing resources for a device reset...");
+				return false;
+			}
+
+			// The answer changes as the wait goes on, so it has to be asked again each time round
+			LastError = d3d.lpD3DDevice->TestCooperativeLevel();
+
+			if (SUCCEEDED(LastError))
+			{
+				// It came back by itself, and only needs what was let go of above. That's done below.
+				break;
+			}
+			else if (D3DERR_DEVICENOTRESET == LastError)
+			{
+				if (!saidResetting)
+				{
+					LogDebugString("Releasing resources for a device reset...");
+					saidResetting = true;
+				}
 
 				if (FAILED(d3d.lpD3DDevice->Reset(&d3d.d3dpp)))
 				{
-					LogDebugString("Couldn't reset device");
+					if (!saidCantReset)
+					{
+						LogDebugString("Couldn't reset device");
+						saidCantReset = true;
+					}
 				}
 				else
 				{
 					LogDebugString("We have reset the device. recreating resources...");
-					CreateVolatileResources();
-
-					SetTransforms();
-
-					// re-enable XInput
-					XInputEnable(true);
 					break;
 				}
 			}
 			else if (D3DERR_DEVICELOST == LastError)
 			{
-				LogDebugString("D3D device lost");
+				if (!saidLost)
+				{
+					LogDebugString("D3D device lost");
+					saidLost = true;
+				}
 			}
-			else if (D3DERR_DRIVERINTERNALERROR == LastError)
+			else
 			{
-				// handle this a lot better (exit the game etc)
-				Con_PrintError("need to close avp as a display adapter error occured");
+				// Microsoft's advice for this is to shut down, so the game is asked to close. This frame doesn't start.
+				static bool saidCantGoOn = false;
+
+				if (!saidCantGoOn)
+				{
+					Con_PrintError("need to close avp as a display adapter error occured");
+					saidCantGoOn = true;
+				}
+
+				bRunning = false;
 				return false;
 			}
 			Sleep(50);
 		}
 	}
 
+	// What was let go of has to be made again before a frame can start. That's the wait above. A failed change of resolution also leaves the buffers gone.
+	if (!d3d.mainVB)
+	{
+		CreateVolatileResources();
+
+		SetTransforms();
+
+		// re-enable XInput
+		XInputEnable(true);
+	}
+
+	// A frame that can't start usually goes on not starting, so each of these says so once, until a frame gets through. Otherwise the log would gain a line every frame for as
+	// long as that lasted.
+	static bool saidBeginFailed = false;
+	static bool saidClearFailed = false;
+
 	LastError = d3d.lpD3DDevice->BeginScene();
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		if (!saidBeginFailed)
+		{
+			LogDxError(LastError, __LINE__, kThisFile);
+			saidBeginFailed = true;
+		}
+
 		return false;
 	}
+
+	saidBeginFailed = false;
 
 	LastError = d3d.lpD3DDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_XRGB(0,0,0), 1.0f, 0);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		if (!saidClearFailed)
+		{
+			LogDxError(LastError, __LINE__, kThisFile);
+			saidClearFailed = true;
+		}
+
+		// This frame stops here, so nothing else will close the scene opened just above. The card refuses to open a scene while one
+		// is open, so if this one stayed open, no frame could ever start again.
+		R_EndScene();
 		return false;
 	}
+
+	saidClearFailed = false;
 
 	nDrawIndexedPrimCalls = 0;
 
@@ -357,7 +463,7 @@ bool R_EndScene()
 	LastError = d3d.lpD3DDevice->EndScene();
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 /*
@@ -394,7 +500,7 @@ bool R_CreateVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't create vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -438,7 +544,7 @@ bool R_CreateIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't create index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -510,6 +616,17 @@ void R_SetCurrentVideoMode()
 	R_ChangeResolution(currentWidth, currentHeight);
 }
 
+// For the stall list: the first time a texture is used is when the card gets its copy of it. RenderList.cpp binds relief pictures directly, so it calls this too.
+void NoteTextureUse(texID_t textureID)
+{
+	if (FrameTiming_TextureIsNew(textureID))
+	{
+		uint32_t width = 0, height = 0;
+		Tex_GetDimensions(textureID, width, height);
+		FrameTiming_NoteNewTexture(Tex_GetName(textureID).c_str(), width * height * 4);
+	}
+}
+
 bool R_SetTexture(uint32_t stage, texID_t textureID)
 {
 	// check that the stage value is within range
@@ -526,6 +643,8 @@ bool R_SetTexture(uint32_t stage, texID_t textureID)
 		return true;
 	}
 
+	NoteTextureUse(textureID);
+
 	// we need to set it
 	LastError = d3d.lpD3DDevice->SetTexture(stage, Tex_GetTexture(textureID));
 	if (FAILED(LastError))
@@ -540,6 +659,15 @@ bool R_SetTexture(uint32_t stage, texID_t textureID)
 	}
 
 	return true;
+}
+
+// For a stage that other code draws with directly, past R_SetTexture, so what R_SetTexture remembers about it can't be trusted.
+void R_ForgetTexture(uint32_t stage)
+{
+	if (stage < kMaxTextureStages)
+	{
+		setTextureArray[stage] = NO_TEXTURE;
+	}
 }
 
 void R_UnsetTexture(texID_t textureID)
@@ -558,7 +686,7 @@ bool R_DrawPrimitive(uint32_t numPrimitives)
 	LastError = d3d.lpD3DDevice->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, numPrimitives);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -573,6 +701,11 @@ bool R_LockVertexBuffer(class VertexBuffer &vertexBuffer, uint32_t offsetToLock,
 		return false;
 	}
 
+	// if making the buffer failed, there's nothing to lock. The failure was logged when it happened
+	if (!vertexBuffer._vertexBuffer.vertexBuffer) {
+		return false;
+	}
+
 	DWORD vbFlags = 0;
 	if (usage == USAGE_DYNAMIC) {
 		vbFlags = D3DLOCK_DISCARD;
@@ -582,7 +715,7 @@ bool R_LockVertexBuffer(class VertexBuffer &vertexBuffer, uint32_t offsetToLock,
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't lock vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -603,11 +736,12 @@ bool R_DrawIndexedPrimitive(uint32_t baseVertexIndex, uint32_t minIndex, uint32_
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't draw indexed primitive");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
 	nDrawIndexedPrimCalls++;
+	FrameTiming_CountDraw();
 
 	return true;
 }
@@ -620,6 +754,11 @@ bool R_LockIndexBuffer(class IndexBuffer &indexBuffer, uint32_t offsetToLock, ui
 		return false;
 	}
 
+	// if making the buffer failed, there's nothing to lock. The failure was logged when it happened
+	if (!indexBuffer._indexBuffer.indexBuffer) {
+		return false;
+	}
+
 	DWORD ibFlags = 0;
 	if (usage == USAGE_DYNAMIC) {
 		ibFlags = D3DLOCK_DISCARD;
@@ -629,7 +768,7 @@ bool R_LockIndexBuffer(class IndexBuffer &indexBuffer, uint32_t offsetToLock, ui
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't lock index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -644,7 +783,7 @@ bool R_SetVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -657,7 +796,7 @@ bool R_SetIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -674,7 +813,7 @@ bool R_UnlockVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't unlock vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -693,7 +832,7 @@ bool R_UnlockIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't unlock index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -709,6 +848,24 @@ bool CreateVolatileResources()
 	// main
 	d3d.mainVB = new VertexBuffer;
 	d3d.mainVB->Create(kMaxVertices*5, sizeof(D3DLVERTEX), USAGE_DYNAMIC);
+
+	// This list is filled and emptied every frame, and only the surface pictures read it, so a card that can't draw them skips it.
+	if (SurfacePictures_CardCanDrawThem(d3d.lpD3DDevice))
+	{
+		SurfaceNormals_Create(kMaxVertices*5);
+		// off means off: nothing is made on the card
+		extern int KeptPrismsOff;
+
+		if (!KeptPrismsOff)
+		{
+			ShadowVolumesCard_Create();
+		}
+	}
+	else
+	{
+		// relief pictures are only ever read by the surface pictures, so this card would make them for nothing
+		textureRelief.TurnOff();
+	}
 
 	d3d.mainIB = new IndexBuffer;
 	d3d.mainIB->Create((kMaxIndices*5) * 3, USAGE_DYNAMIC);
@@ -912,7 +1069,7 @@ void CreateScreenShotImage()
 	// create surface to copy screen to
 	if (FAILED(d3d.lpD3DDevice->CreateOffscreenPlainSurface(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &frontBuffer, NULL)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Couldn't create screenshot surface");
 		return;
 	}
@@ -920,7 +1077,7 @@ void CreateScreenShotImage()
 	// copy front buffer screen to surface
 	if (FAILED(d3d.lpD3DDevice->GetFrontBufferData(0, frontBuffer)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Couldn't get a copy of the front buffer");
 		SAFE_RELEASE(frontBuffer);
 		return;
@@ -929,7 +1086,7 @@ void CreateScreenShotImage()
 	// save surface to image file
 	if (FAILED(D3DXSaveSurfaceToFile(fileName.str().c_str(), D3DXIFF_JPG, frontBuffer, NULL, NULL)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Save Surface to file failed");
 	}
 
@@ -1019,7 +1176,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	LastError = d3d.lpD3DDevice->CreateTexture(padWidth, padHeight, 1, textureUsage, colourFormat, texturePool, &texture.texture, NULL);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1029,7 +1186,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	if (FAILED(LastError))
 	{
 		texture.texture->Release();
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1086,7 +1243,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	LastError = texture.texture->UnlockRect(0);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	
@@ -1218,7 +1375,7 @@ bool R_CreateVertexDeclaration(class VertexDeclaration *vertexDeclaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not create vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1230,7 +1387,7 @@ bool R_SetVertexDeclaration(class VertexDeclaration &declaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not set vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1242,7 +1399,7 @@ bool R_ReleaseVertexDeclaration(class VertexDeclaration &declaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not release vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1258,7 +1415,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
 	if (!fileOpenTest.good())
 	{
-		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 	// close the file
@@ -1269,7 +1426,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 						NULL,            // macro's
 						NULL,            // includes
 						"vs_main",       // main function
-						"vs_2_0",        // shader profile
+						ShaderNeedsModel3(fileName) ? "vs_3_0" : "vs_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -1277,13 +1434,13 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 
 	if (FAILED(LastError))
 	{
-		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, kThisFile);
 		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
 			// shader didn't compile for some reason
-			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, __FILE__);
+			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, kThisFile);
 			LogErrorString(std::string((const char*)pErrors->GetBufferPointer()));
 
 			pErrors->Release();
@@ -1295,7 +1452,12 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LastError = d3d.lpD3DDevice->CreateVertexShader((DWORD*)pCode->GetBufferPointer(), &vertexShader.shader);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreateVertexShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreateVertexShader failed for '" + actualPath + "'", __LINE__, kThisFile);
+
+		// A card with no shader model 3 ends up here, once for each shader that needs it, so these two are given back.
+		pCode->Release();
+		vertexShader.constantTable->Release();
+		vertexShader.constantTable = 0;
 		return false;
 	}
 
@@ -1307,7 +1469,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LastError = vertexShader.constantTable->GetDesc(&constantTableDesc);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreateVertexShader failed getting constant table description for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreateVertexShader failed getting constant table description for '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1350,7 +1512,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
 	if (!fileOpenTest.good())
 	{
-		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 	// close the file
@@ -1361,7 +1523,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 						NULL,            // macro's
 						NULL,            // includes
 						"ps_main",       // main function
-						"ps_2_0",        // shader profile
+						ShaderNeedsModel3(fileName) ? "ps_3_0" : "ps_2_0",        // shader profile
 						0,               // flags
 						&pCode,          // compiled operations
 						&pErrors,        // errors
@@ -1369,13 +1531,13 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 
 	if (FAILED(LastError))
 	{
-		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, kThisFile);
 		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
 			// shader didn't compile for some reason
-			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, __FILE__);
+			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, kThisFile);
 			LogErrorString(std::string((const char*)pErrors->GetBufferPointer()));
 
 			pErrors->Release();
@@ -1387,7 +1549,12 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	LastError = d3d.lpD3DDevice->CreatePixelShader((DWORD*)pCode->GetBufferPointer(), &pixelShader.shader);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreatePixelShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreatePixelShader failed for '" + actualPath + "'", __LINE__, kThisFile);
+
+		// the same as for a vertex shader, above
+		pCode->Release();
+		pixelShader.constantTable->Release();
+		pixelShader.constantTable = 0;
 		return false;
 	}
 
@@ -1399,7 +1566,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	pixelShader.constantTable->GetDesc(&constantTableDesc);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreatePixelShader failed getting constant table description for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreatePixelShader failed getting constant table description for '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1438,7 +1605,7 @@ bool R_SetVertexShader(r_VertexShader &vertexShader)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex shader " + vertexShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1451,7 +1618,7 @@ bool R_UnsetVertexShader()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex shader to NULL");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1496,7 +1663,7 @@ bool R_SetPixelShaderConstant(r_PixelShader &pixelShader, uint32_t registerIndex
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't SetValue for pixel shader " + pixelShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1541,7 +1708,7 @@ bool R_SetVertexShaderConstant(r_VertexShader &vertexShader, uint32_t registerIn
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't SetValue for vertex shader " + vertexShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1554,7 +1721,7 @@ bool R_SetPixelShader(r_PixelShader &pixelShader)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set pixel shader " + pixelShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1567,7 +1734,7 @@ bool R_UnsetPixelShader()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set pixel shader to NULL");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1608,6 +1775,76 @@ void DeRedTexture(Texture &texture)
 	R_UnlockTexture(texture);
 }
 
+// A square picture with all its smaller copies, at four bytes a pixel, for a hand-made relief map. The size comes from a stranger's file, so this asks the card first, and then looks at what
+// it really made. A map that comes out any other size is given back: unlike a picture of the game's own, nothing here can make do with a different size.
+bool R_CreateTextureWithCopies(uint32_t side, uint32_t levels, Texture &texture)
+{
+	texture.texture = NULL;
+
+	D3DCAPS9 caps;
+
+	if (FAILED(d3d.lpD3DDevice->GetDeviceCaps(&caps)) || side > caps.MaxTextureWidth || side > caps.MaxTextureHeight || !(caps.TextureCaps & D3DPTEXTURECAPS_MIPMAP))
+	{
+		return false;
+	}
+
+	LPDIRECT3DTEXTURE9 made = NULL;
+
+	LastError = d3d.lpD3DDevice->CreateTexture(side, side, levels, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &made, NULL);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, kThisFile);
+		return false;
+	}
+
+	D3DSURFACE_DESC description;
+
+	if (made->GetLevelCount() != levels || FAILED(made->GetLevelDesc(0, &description)) || description.Width != side || description.Height != side)
+	{
+		made->Release();
+		return false;
+	}
+
+	texture.bitsPerPixel = 32;
+	texture.width  = side;
+	texture.height = side;
+	texture.realWidth  = side;
+	texture.realHeight = side;
+	texture.usage   = TextureUsage_Normal;
+	texture.texture = made;
+	texture.isValid = true;
+
+	return true;
+}
+
+bool R_LockTextureCopy(Texture &texture, uint32_t level, uint8_t **data, uint32_t *pitch)
+{
+	D3DLOCKED_RECT lock;
+
+	LastError = texture.texture->LockRect(level, &lock, NULL, 0);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, kThisFile);
+		return false;
+	}
+
+	*data = static_cast<uint8_t*>(lock.pBits);
+	*pitch = lock.Pitch;
+	return true;
+}
+
+bool R_UnlockTextureCopy(Texture &texture, uint32_t level)
+{
+	LastError = texture.texture->UnlockRect(level);
+	if (FAILED(LastError))
+	{
+		LogDxError(LastError, __LINE__, kThisFile);
+		return false;
+	}
+
+	return true;
+}
+
 bool R_CreateTextureFromFile(const std::string &fileName, Texture &texture)
 {
 	D3DXIMAGE_INFO imageInfo;
@@ -1633,7 +1870,7 @@ bool R_CreateTextureFromFile(const std::string &fileName, Texture &texture)
 
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		texture.texture = NULL;
 		return false;
 	}
@@ -1736,7 +1973,7 @@ bool R_CreateTextureFromAvPTexture(AVPTEXTURE &AvPTexture, enum TextureUsage usa
 		0,
 		&d3dTexture)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		delete[] buffer;
 		texture.texture = NULL;
 		return false;
@@ -1838,11 +2075,18 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 
 	D3DXCheckTextureRequirements(d3d.lpD3DDevice, &realWidth, &realHeight, NULL, textureUsage, &textureFormat, texturePool);
 
+	// That can answer with less than was asked for, and whoever asked is going to write the size they asked for. See texture_size_check.h
+	if (!TextureSize_IsEnough(width, height, bitsPerPixel, realWidth, realHeight, TextureSize_BitsPerPixel(textureFormat)))
+	{
+		Con_PrintError("This graphics card can't hold texture " + texture.name + " at " + std::to_string(width) + " x " + std::to_string(height) + ", so it's left out");
+		return false;
+	}
+
 	// create the d3d9 texture
 	LastError = d3d.lpD3DDevice->CreateTexture(realWidth, realHeight, 1, textureUsage, textureFormat, texturePool, &d3dTexture, NULL);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1931,12 +2175,12 @@ bool R_ChangeResolution(uint32_t width, uint32_t height)
 			// try reset again, if it doesnt work, bail out
 			LastError = d3d.lpD3DDevice->Reset(&d3d.d3dpp);
 			if (FAILED(LastError)) {
-				LogDxError(LastError, __LINE__, __FILE__);
+				LogDxError(LastError, __LINE__, kThisFile);
 				return false;
 			}
 		}
 		else {
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 	}
@@ -1949,7 +2193,7 @@ bool R_ChangeResolution(uint32_t width, uint32_t height)
 
 	LastError = d3d.lpD3DDevice->SetViewport(&d3d.D3DViewport);
 	if (FAILED(LastError)) {
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 
 	ScreenDescriptorBlock.SDB_Width     = width;
@@ -1994,7 +2238,6 @@ bool InitialiseDirect3D()
 //	uint32_t colourDepth = Config_GetInt("[VideoMode]", "ColourDepth", 32);
 	bool useTripleBuffering = Config_GetBool("[VideoMode]", "UseTripleBuffering", false);
 	bool useVSync = Config_GetBool("[VideoMode]", "UseVSync", true);
-	shaderPath = Config_GetString("[VideoMode]", "ShaderPath", "shaders/");
 
 	// set some defaults
 	uint32_t defaultDevice = D3DADAPTER_DEFAULT;
@@ -2029,7 +2272,7 @@ bool InitialiseDirect3D()
 		LastError = d3d.lpD3D->GetAdapterIdentifier(driverIndex, /*D3DENUM_WHQL_LEVEL*/0, &d3d.Driver[driverIndex].AdapterInfo);
 		if (FAILED(LastError))
 		{
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 	}
@@ -2044,7 +2287,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("GetAdapterDisplayMode call failed");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 		else
@@ -2274,15 +2517,10 @@ bool InitialiseDirect3D()
 		D3DCREATE_SOFTWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 #else
 
-	// create D3DCREATE_PUREDEVICE
+	// Not a pure device (D3DCREATE_PUREDEVICE), which can't be relied on to give a state block, and the shadow pass needs one each frame.
 	LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
-		D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_PUREDEVICE, &d3dpp, &d3d.lpD3DDevice);
+		D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
 
-	if (FAILED(LastError))
-	{
-		LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
-			D3DCREATE_HARDWARE_VERTEXPROCESSING, &d3dpp, &d3d.lpD3DDevice);
-	}
 	if (FAILED(LastError))
 	{
 		LastError = d3d.lpD3D->CreateDevice(defaultDevice, D3DDEVTYPE_HAL, hWndMain,
@@ -2297,7 +2535,7 @@ bool InitialiseDirect3D()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not create Direct3D device");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -2392,7 +2630,7 @@ bool InitialiseDirect3D()
 			Con_PrintMessage("\t Depth Format set: 24bit and 0bit stencil - D3DFMT_D24X8");
 			break;
 		case D3DFMT_D24FS8:
-			Con_PrintMessage("\t Depth Format set: 24bit and 8bit stencil - D3DFMT_D32");
+			Con_PrintMessage("\t Depth Format set: 24bit and 8bit stencil - D3DFMT_D24FS8");
 			break;
 		case D3DFMT_D32:
 			Con_PrintMessage("\t Depth Format set: 32bit and 0bit stencil - D3DFMT_D32");
@@ -2414,7 +2652,7 @@ bool InitialiseDirect3D()
 	LastError = d3d.lpD3DDevice->SetViewport(&d3d.D3DViewport);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 
 	ScreenDescriptorBlock.SDB_Width     = width;
@@ -2468,6 +2706,52 @@ bool InitialiseDirect3D()
 	d3d.mainDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
 	d3d.mainDecl->Create();
 
+	// the game's vertices, plus the normal that goes with each, from a second list. Only the surface pass uses this.
+	d3d.surfaceDecl = new VertexDeclaration;
+	d3d.surfaceDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+	d3d.surfaceDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    1);
+	d3d.surfaceDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceDecl->Create();
+
+	d3d.surfaceStaticDecl = new VertexDeclaration;
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceStaticDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+	d3d.surfaceStaticDecl->Create();
+
+	d3d.surfaceSceneDecl = new VertexDeclaration;
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+	d3d.surfaceSceneDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+	d3d.surfaceSceneDecl->Add(1, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+	d3d.surfaceSceneDecl->Create();
+
+	d3d.surfaceReliefDecl = 0;
+
+	if (textureRelief.IsOn())
+	{
+		d3d.surfaceReliefDecl = new VertexDeclaration;
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    1);
+		d3d.surfaceReliefDecl->Add(0, VDTYPE_FLOAT2, VDMETHOD_DEFAULT, VDUSAGE_TEXCOORD, 0);
+		d3d.surfaceReliefDecl->Add(1, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_NORMAL,   0);
+		d3d.surfaceReliefDecl->Add(2, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_TANGENT,  0);
+		d3d.surfaceReliefDecl->Create();
+	}
+
+	d3d.volumeDecl = new VertexDeclaration;
+	d3d.volumeDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.volumeDecl->Create();
+
+	d3d.volumeCutDecl = new VertexDeclaration;
+	d3d.volumeCutDecl->Add(0, VDTYPE_FLOAT4, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
+	d3d.volumeCutDecl->Create();
+
 	d3d.orthoDecl = new VertexDeclaration;
 	d3d.orthoDecl->Add(0, VDTYPE_FLOAT3, VDMETHOD_DEFAULT, VDUSAGE_POSITION, 0);
 	d3d.orthoDecl->Add(0, VDTYPE_COLOR,  VDMETHOD_DEFAULT, VDUSAGE_COLOR,    0);
@@ -2516,7 +2800,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not create missing texture signifying texture");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 
 		D3DLOCKED_RECT lock;
@@ -2524,7 +2808,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not lock missing texture signifying texture");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 		else
 		{
@@ -2545,7 +2829,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not create white texture for shader sampling");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 
 		D3DLOCKED_RECT lock;
@@ -2553,7 +2837,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not lock white texture for shader sampling");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 		else
 		{
@@ -2573,11 +2857,38 @@ bool InitialiseDirect3D()
 
 	d3d.mainEffect  = d3d.effectSystem->Add("main", "vertex.vsh", "pixel.psh", d3d.mainDecl);
 	d3d.orthoEffect = d3d.effectSystem->Add("ortho", "orthoVertex.vsh", "orthoPixel.psh", d3d.orthoDecl);
+	d3d.shoulderLampEffect = d3d.effectSystem->Add("shoulderLamp", "orthoVertex.vsh", "shoulderLamp.psh", d3d.orthoDecl);
 	d3d.decalEffect = d3d.effectSystem->Add("decal", "decal.vsh", "decal.psh", d3d.decalDecl);
 	d3d.fmvEffect   = d3d.effectSystem->Add("fmv", "fmvVertex.vsh", "fmvPixel.psh", d3d.fmvDecl);
 	d3d.rhwEffect   = d3d.effectSystem->Add("rhw", "rhw.vsh", "rhw.psh", d3d.rhwDecl);
 	d3d.tallTextEffect = d3d.effectSystem->Add("tallText", "tallText.vsh", "tallText.psh", d3d.tallTextDecl);
 	d3d.particleEffect = d3d.effectSystem->Add("particle", "particle.vsh", "particle.psh", d3d.particleDecl);
+
+	d3d.surfaceEffect = d3d.effectSystem->Add("surface", "surface.vsh", "surface.psh", d3d.surfaceDecl);
+	d3d.surfaceReliefEffect = kNullEffectID;
+	d3d.reliefMainEffect = kNullEffectID;
+	d3d.surfaceStaticEffect = d3d.effectSystem->Add("surfaceStatic", "surfaceStatic.vsh", "surface.psh", d3d.surfaceStaticDecl);
+	d3d.surfaceSceneEffect = d3d.effectSystem->Add("surfaceScene", "surfaceScene.vsh", "surfaceScene.psh", d3d.surfaceSceneDecl);
+	d3d.surfaceSceneCompareEffect = d3d.effectSystem->Add("surfaceSceneCompare", "surfaceScene.vsh", "surfaceSceneCompare.psh", d3d.surfaceSceneDecl);
+	d3d.surfaceSceneReplayEffect = d3d.effectSystem->Add("surfaceSceneReplay", "surfaceSceneReplay.vsh", "surfaceSceneCompare.psh", d3d.surfaceDecl);
+	d3d.surfaceStaticReliefEffect = kNullEffectID;
+
+	if (d3d.surfaceReliefDecl)
+	{
+		d3d.surfaceReliefEffect = d3d.effectSystem->Add("surfaceRelief", "surfaceRelief.vsh", "surfaceRelief.psh", d3d.surfaceReliefDecl);
+		d3d.reliefMainEffect = d3d.effectSystem->Add("reliefMain", "reliefMain.vsh", "reliefMain.psh", d3d.surfaceReliefDecl);
+		d3d.surfaceStaticReliefEffect = d3d.effectSystem->Add("surfaceStaticRelief", "surfaceStatic.vsh", "surfaceRelief.psh", d3d.surfaceStaticDecl);
+	}
+
+	// the pixel shader is never used: a prism only marks the stencil, so this runs with none, as the ordinary prisms do
+	d3d.volumeEffect = d3d.effectSystem->Add("volume", "volume.vsh", "pixel.psh", d3d.volumeDecl);
+	d3d.volumeCutEffect = d3d.effectSystem->Add("volumeCut", "volumeCut.vsh", "pixel.psh", d3d.volumeCutDecl);
+
+	// These draw one rectangle over the screen, and read the pictures the surface pass made.
+	d3d.lightTotalEffect = d3d.effectSystem->Add("lightTotal", "shadowBlur.vsh", "lightTotal.psh", d3d.mainDecl);
+	d3d.lightShareEffect = d3d.effectSystem->Add("lightShare", "shadowBlur.vsh", "lightShare.psh", d3d.mainDecl);
+	d3d.lightOneEffect = d3d.effectSystem->Add("lightOne", "shadowBlur.vsh", "lightOne.psh", d3d.mainDecl);
+	d3d.shadowBlurEffect = d3d.effectSystem->Add("shadowBlur", "shadowBlur.vsh", "shadowBlur.psh", d3d.mainDecl);
 
 	// we should bail out if the shaders can't be loaded
 	if ((d3d.mainEffect  == kNullShaderID)    ||
@@ -2632,11 +2943,18 @@ void SetTransforms()
 
 void FlipBuffers()
 {
-	LastError = d3d.lpD3DDevice->Present(NULL, NULL, NULL, NULL);
+	{
+		ProcessorStageClock clock(kProcessorPresent);
+
+		LastError = d3d.lpD3DDevice->Present(NULL, NULL, NULL, NULL);
+	}
+
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
+
+	FrameTiming_FrameShown();
 }
 
 void ReleaseDirect3D()
@@ -2650,6 +2968,13 @@ void ReleaseDirect3D()
 
 	// release vertex declarations
 	delete d3d.mainDecl;
+	delete d3d.surfaceDecl;
+	delete d3d.surfaceReliefDecl;
+	delete d3d.surfaceStaticDecl;
+	delete d3d.surfaceSceneDecl;
+
+	delete d3d.volumeDecl;
+	delete d3d.volumeCutDecl;
 	delete d3d.orthoDecl;
 	delete d3d.decalDecl;
 	delete d3d.fmvDecl;
@@ -2797,6 +3122,26 @@ void ChangeTranslucencyMode(enum TRANSLUCENCY_TYPE translucencyRequired)
 			{
 				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 				D3DSrcBlend = D3DBLEND_SRCALPHA;
+			}
+			if (D3DDestBlend != D3DBLEND_ONE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+				D3DDestBlend = D3DBLEND_ONE;
+			}
+			break;
+		}
+		// The picture's own colour times what's drawn, added to the picture, so it can make something up to twice as bright, and black stays black
+		case TRANSLUCENCY_BRIGHTEN:
+		{
+			if (D3DAlphaBlendEnable != TRUE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				D3DAlphaBlendEnable = TRUE;
+			}
+			if (D3DSrcBlend != D3DBLEND_DESTCOLOR)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+				D3DSrcBlend = D3DBLEND_DESTCOLOR;
 			}
 			if (D3DDestBlend != D3DBLEND_ONE)
 			{

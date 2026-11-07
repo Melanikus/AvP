@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   removed the code that read a shape stored in a level as a raw copy of memory
+//   a level file can only ask for so many pictures, so its handle keeps count
 
 #ifndef _chnkload_hpp
 #define _chnkload_hpp 1
@@ -67,6 +68,8 @@ struct _RifHandle : Project_RifHandle
 	List<int> shape_nums;
 	int max_index;
 	int * tex_index_nos;
+	int pictures_asked_for;       // how many pictures this file has asked for so far: see LoadPictureItNames in chunk_load.cpp
+	bool said_too_many_pictures;  // so that the log says so once, not once for every name
 
 	~_RifHandle()
 		{}
@@ -76,6 +79,8 @@ struct _RifHandle : Project_RifHandle
 		, palparent(0)
 		, max_index(0)
 		, tex_index_nos(0)
+		, pictures_asked_for(0)
+		, said_too_many_pictures(false)
 		{}
 };
 

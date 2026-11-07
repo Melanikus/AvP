@@ -27,6 +27,10 @@
 //   the game or write past its sound buffers
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
+//   the ring of sound is big enough for a film with very little of it; running out of memory for a sound stream is noticed
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a video bigger than the picture it plays on only fills that picture, instead of writing past the end of it;
+//   closing a video lets go of its decoder, and can't be held up by what's left of its sound; failing to start a thread counts as failing to open
 
 #include "SmackerPlayback.h"
 #include "FmvPlayback.h"
@@ -44,6 +48,12 @@ void *SmackerAudioThread(void *args);
 SmackerPlayback::~SmackerPlayback()
 {
 	_fmvPlaying = false;
+
+	// The decoding thread can be waiting for the sound to use up what it has. A film can set its sound to play slowly enough for that to take over an hour, so the sound stops first.
+	if (_audioStream)
+	{
+		_audioStream->Stop();
+	}
 
 	// wait for threads to finish
 	if (_decodeThreadInited) {
@@ -66,6 +76,9 @@ SmackerPlayback::~SmackerPlayback()
 		delete[] _audioDataBuffer;
 		delete _ringBuffer;
 	}
+
+	// nothing is using the decoder now that the threads have finished
+	Smacker_Close(_handle);
 }
 
 int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
@@ -104,11 +117,11 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 
 		_sampleRate = info.sampleRate;
 
-		_audioStream = new AudioStream();
+		_audioStream = new(std::nothrow) AudioStream();
 
 		assert(info.bitsPerSample != 0);
 
-		if (!_audioStream->Init(info.nChannels, info.sampleRate, info.bitsPerSample, kAudioBufferSize, kAudioBufferCount))
+		if (!_audioStream || !_audioStream->Init(info.nChannels, info.sampleRate, info.bitsPerSample, kAudioBufferSize, kAudioBufferCount))
 		{
 			Con_PrintError("Failed to create _audioStream for Smacker playback");
 			return FMV_ERROR;
@@ -128,13 +141,18 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 		}
 
 		_ringBuffer = new(std::nothrow) RingBuffer();
-		if (!_ringBuffer->Init(info.idealBufferSize * kAudioBufferCount))
+		if (!_ringBuffer || !_ringBuffer->Init(FmvPlayback_RingSize(info.idealBufferSize, _audioStream->GetBufferSize(), kAudioBufferCount)))
 		{
 			Con_PrintError("Failed to create _ringBuffer for Smacker playback");
 			return FMV_ERROR;
 		}
 
 		_audioDataBuffer = new(std::nothrow) uint8_t[info.idealBufferSize];
+		if (_audioDataBuffer == NULL)
+		{
+			Con_PrintError("Failed to create _audioDataBuffer for Smacker playback");
+			return FMV_ERROR;
+		}
 		_audioDataBufferSize = info.idealBufferSize;
 	}
 
@@ -146,20 +164,24 @@ int SmackerPlayback::Open(const std::string &fileName, bool isLooped)
 	_fmvPlaying = true;
 	_audioStarted = false;
 
+	// These used to return false, which is the same number as FMV_OK, so a film with no threads counted as playing.
 	if (pthread_mutex_init(&_frameCriticalSection, NULL) != 0) {
-		return false;
+		_fmvPlaying = false;
+		return FMV_ERROR;
 	}
 	_frameCriticalSectionInited = true;
 
 	// now start the threads
 	if (pthread_create(&_decodeThreadHandle, NULL, SmackerDecodeThread, static_cast<void*>(this)) != 0) {
-		return false;
+		_fmvPlaying = false;
+		return FMV_ERROR;
 	}
 	_decodeThreadInited = true;
 
 	if (_nAudioTracks) {
 		if (pthread_create(&_audioThreadHandle, NULL, SmackerAudioThread, static_cast<void*>(this)) != 0) {
-			return false;
+			_fmvPlaying = false;
+			return FMV_ERROR;
 		}
 		_audioThreadInited = true;
 	}
@@ -195,13 +217,17 @@ bool SmackerPlayback::ConvertFrame(uint32_t width, uint32_t height, uint8_t *buf
 	Smacker_GetPalette(_handle, _palette);
 	Smacker_GetFrame(_handle, _frame);
 
-	uint32_t index = 0;
+	// The video says what size it is, in its own file, and the caller says what size the picture is. They needn't match: the game's
+	// message videos are 128 x 96 on a picture 128 x 128. So this fills only what both of them have. What's left of the video is skipped.
+	uint32_t const rows    = (_frameHeight < height) ? _frameHeight : height;
+	uint32_t const columns = (_frameWidth < width) ? _frameWidth : width;
 
-	for (uint32_t y = 0; y < _frameHeight; y++)
+	for (uint32_t y = 0; y < rows; y++)
 	{
 		uint8_t *destPtr = bufferPtr + y * pitch;
+		uint32_t index = y * _frameWidth;
 
-		for (uint32_t x = 0; x < _frameWidth; x++)
+		for (uint32_t x = 0; x < columns; x++)
 		{
 			*destPtr++ = _palette[(_frame[index] * 3) + 2];
 			*destPtr++ = _palette[(_frame[index] * 3) + 1];

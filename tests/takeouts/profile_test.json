@@ -1,0 +1,438 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "OLD: too large a difficulty goes straight to the menu",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "(value > kProfileHardest) ? kProfileHardest : value",
+					"to": "value"
+				}
+			]
+		},
+		{
+			"name": "OLD: no difficulty means no rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "(value < 1) ? 1 : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the limit is one too high",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "const unsigned char kProfileHardest = 3;",
+					"to": "const unsigned char kProfileHardest = 4;"
+				}
+			]
+		},
+		{
+			"name": "the loader limit misses a species",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "for (int species = 0; species < 3; species++)",
+					"to": "for (int species = 0; species < 2; species++)"
+				}
+			]
+		},
+		{
+			"name": "the loader limit misses a level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "for (int level = 0; level < 16; level++)",
+					"to": "for (int level = 0; level < 15; level++)"
+				}
+			]
+		},
+		{
+			"name": "the loader limit changes what is right",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "> kProfileHardest)\n\t\t\t{",
+					"to": ">= 1)\n\t\t\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menu takes the number as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "return ProfileChecks_DifficultiesAllowed(UserProfilePtr->LevelCompleted[playerID][level-1]);",
+					"to": "return UserProfilePtr->LevelCompleted[playerID][level-1];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader does not limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "ProfileChecks_LimitLevels(profilePtr->LevelCompleted);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the multiplayer name has no end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "profilePtr->MultiplayerCallsign[sizeof(profilePtr->MultiplayerCallsign) - 1] = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the time is told it has the whole box",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "&when, timeFormat, time, 99)",
+					"to": "&when, timeFormat, time, 100)"
+				}
+			]
+		},
+		{
+			"name": "the search goes round once too often",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "tried < howMany; tried++",
+					"to": "tried < howMany + 1; tried++"
+				}
+			]
+		},
+		{
+			"name": "the search stops one short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "tried < howMany; tried++",
+					"to": "tried < howMany - 1; tried++"
+				}
+			]
+		},
+		{
+			"name": "the search goes the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "if (searchForward)",
+					"to": "if (!searchForward)"
+				}
+			]
+		},
+		{
+			"name": "going forward runs off the end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "if (*value >= howMany)",
+					"to": "if (*value > howMany)"
+				}
+			]
+		},
+		{
+			"name": "going back starts one short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\t\t\t*value = howMany;\n",
+					"to": "\t\t\t\t*value = howMany - 1;\n"
+				}
+			]
+		},
+		{
+			"name": "going back does not move",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\t\t(*value)--;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "going forward does not move",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\t\t(*value)++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a slider has its own search",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "ProfileChecks_StepToAllowed(cheatModePtr, MAX_NUMBER_OF_CHEATMODES, searchForward,",
+					"to": "while(!UserProfilePtr->CheatMode[*cheatModePtr]) { } auto unused = ("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start goes whatever the sliders say",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && CheatMode_SelectionIsAllowed())",
+					"to": "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start does not ask if the cheat is on",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "return UserProfilePtr->CheatMode[CheatMode_Active]\n\t\t&& CheatModeDesc",
+					"to": "return CheatModeDesc"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start does not ask about the species",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "\t\t&& CheatModeDesc[CheatMode_Active].PlayableForSpecies[CheatMode_Species]\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start does not ask about the place",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "\t\t&& CheatModeDesc[CheatMode_Active].PlayableForEnvironment[CheatMode_Environment]\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Start does not ask if the place was finished",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "\n\t\t&& EnvironmentPlayableBySpecies(CheatMode_Environment);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a species off the end is looked up",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "\t\t|| CheatMode_Species < 0 || CheatMode_Species >= NUMBER_OF_SPECIES\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a place off the end is looked up",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "\t\t|| CheatMode_Environment < 0 || CheatMode_Environment >= NUMBER_OF_ENVIRONMENTS)",
+					"to": "\t\t)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a cheat off the end is looked up",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "if (CheatMode_Active < 0 || CheatMode_Active >= MAX_NUMBER_OF_CHEATMODES\n\t\t|| ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the species slider has its own search",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "ProfileChecks_StepToAllowed(speciesPtr, NUMBER_OF_SPECIES, searchForward,",
+					"to": "ProfileChecks_StepToAllowed(speciesPtr, 1, searchForward,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the place slider has its own search",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "ProfileChecks_StepToAllowed(environmentPtr, NUMBER_OF_ENVIRONMENTS, searchForward,",
+					"to": "ProfileChecks_StepToAllowed(environmentPtr, 1, searchForward,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cheat slider has its own search",
+			"changes": [
+				{
+					"file": "3dc/avp/cheatmodes.cpp",
+					"from": "ProfileChecks_StepToAllowed(cheatModePtr, MAX_NUMBER_OF_CHEATMODES, searchForward,",
+					"to": "ProfileChecks_StepToAllowed(cheatModePtr, 1, searchForward,"
+				}
+			]
+		},
+		{
+			"name": "OLD: a date that Windows refuses keeps whatever was there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tchar date[100] = { 0 };\n",
+					"to": "\tchar date[100];\n\tmemset(date, 'x', sizeof(date));\n\tdate[99] = 0;\n"
+				},
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\tdate[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a time that Windows refuses keeps whatever was there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tchar time[100] = { 0 };\n",
+					"to": "\tchar time[100];\n\tmemset(time, 'x', sizeof(time));\n\ttime[99] = 0;\n"
+				},
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\ttime[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused date is not forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\tdate[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused time is not forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\ttime[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: the two parts run past the box",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "_snprintf(text, size - 1, \"%s  %s\", time, date);",
+					"to": "_snprintf(text, 1000, \"%s  %s\", time, date);"
+				}
+			]
+		},
+		{
+			"name": "the end of the text is not written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\ttext[size - 1] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a box of nothing gets written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tif (size == 0)\n\t{\n\t\treturn;\n\t}\n\n\tchar date[100]",
+					"to": "\tchar date[100]"
+				}
+			]
+		},
+		{
+			"name": "the date is told it has room for more",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "&when, dateFormat, date, 80)",
+					"to": "&when, dateFormat, date, 100)"
+				}
+			]
+		},
+		{
+			"name": "a format and a kind of date go together",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "dateFormat ? 0 : dateKind",
+					"to": "dateKind"
+				}
+			]
+		},
+		{
+			"name": "the two parts go the other way round",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\"%s  %s\", time, date);",
+					"to": "\"%s  %s\", date, time);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus use a format of their own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "ProfileChecks_MakeTimeText(when, dateKind, NULL, NULL, text, size);",
+					"to": "ProfileChecks_MakeTimeText(when, dateKind, \"yyyy\", \"HH\", text, size);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fading row reads the list itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tb=BrightnessOfRow(i);\n\t\t\tRenderMenuText_Clipped(textPtr",
+					"to": "\t\t\tb=Brightness[i];\n\t\t\tRenderMenuText_Clipped(textPtr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rows 16 apart do not share a number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "return Brightness[row & 15];",
+					"to": "return Brightness[row];"
+				}
+			]
+		}
+	]
+}

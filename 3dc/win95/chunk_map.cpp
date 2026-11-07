@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   a map block's interior type is read from where the code that writes one puts it
+
 #include "oechunk.h"
 #include "chunk.hpp"
 
@@ -6,7 +11,7 @@ FORCE_CHUNK_INCLUDE_IMPLEMENT(chunk_map)
 
 extern Chunk *Parent_File;
 
-RIF_IMPLEMENT_DYNCREATE("MAPBLOCK",Map_Block_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MAPBLOCK",Map_Block_Chunk,204)
 
 Map_Block_Chunk::Map_Block_Chunk(Chunk_With_Children * parent,const char* data,size_t)
 	:Chunk(parent,"MAPBLOCK")
@@ -22,7 +27,7 @@ Map_Block_Chunk::Map_Block_Chunk(Chunk_With_Children * parent,const char* data,s
 	map_data.MapCGameType=*((int*)(data+144));
 	map_data.MapCStrategyS=*((int*)(data+148));
 	map_data.MapCStrategyL=*((int*)(data+152));
-	map_data.MapInteriorType=*((int*)(data+126));
+	map_data.MapInteriorType=*((int*)(data+156));
 	map_data.MapLightType=*((int*)(data+160));
 	map_data.MapMass=*((int*)(data+164));
 	map_data.MapNewtonV.vx=*((int*)(data+168));
@@ -36,7 +41,7 @@ Map_Block_Chunk::Map_Block_Chunk(Chunk_With_Children * parent,const char* data,s
 	map_data.SimShapeList=*((int*)(data+200));
 }
 
-RIF_IMPLEMENT_DYNCREATE("STRATEGY",Strategy_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("STRATEGY",Strategy_Chunk,124)
 
 Strategy_Chunk::Strategy_Chunk(Chunk_With_Children * parent,const char * data,size_t)
 	:Chunk(parent,"STRATEGY")

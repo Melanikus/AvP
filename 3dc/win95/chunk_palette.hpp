@@ -3,6 +3,7 @@
 //   text is copied using its exact measured length, level file names are kept in a list that grows as
 //   needed, and the declarations of code only the level editor used were removed
 //   a palette's count of colours is measured against its chunk before it's made
+//   a name is only read as far as the end of its chunk
 
 #ifndef _included_chunkpal_hpp_
 #define _included_chunkpal_hpp_
@@ -132,9 +133,9 @@ private:
 		, startpos (*(int *)(sdata+16))
 		, pixel_data (grab_pixel_data(size,(unsigned char *)(sdata+20)))
 		{
+			char const * const start = sdata;
 			sdata += 20+size*3;
-			name = new char[strlen(sdata)+1];
-			strcpy(name,sdata);
+			name = CopyNameFromChunk(start, bytes_left, sdata);
 		}
 };
 

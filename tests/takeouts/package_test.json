@@ -1,0 +1,77 @@
+{
+	"copy": [
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a folder whose name only starts the same counts",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "if (*rest != '\\\\' && *rest != '/')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a slash leaning the other way does not end the folder",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "if (*rest != '\\\\' && *rest != '/')",
+					"to": "if (*rest != '\\\\')"
+				}
+			]
+		},
+		{
+			"name": "a folder inside it counts",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "return *rest != 0 && !strchr(rest, '\\\\') && !strchr(rest, '/');",
+					"to": "return *rest != 0;"
+				}
+			]
+		},
+		{
+			"name": "the folder itself counts as a file in it",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "return *rest != 0 && !strchr(rest, '\\\\') && !strchr(rest, '/');",
+					"to": "return !strchr(rest, '\\\\') && !strchr(rest, '/');"
+				}
+			]
+		},
+		{
+			"name": "a slash the other way counts as staying in the folder",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "!strchr(rest, '\\\\') && !strchr(rest, '/');",
+					"to": "!strchr(rest, '\\\\');"
+				}
+			]
+		},
+		{
+			"name": "no folder at all counts as any folder",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "folderLength == 0 || _strnicmp",
+					"to": "_strnicmp"
+				}
+			]
+		},
+		{
+			"name": "capital letters matter",
+			"changes": [
+				{
+					"file": "tests/package_test.cpp",
+					"from": "_strnicmp(path, folder, folderLength)",
+					"to": "strncmp(path, folder, folderLength)"
+				}
+			]
+		}
+	]
+}

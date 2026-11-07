@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a square picture with all its smaller copies, for a hand-made relief map
+//   a level past its limit for pictures gets one line in the log, not one for every picture it names
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a texture's size can be asked for with a number that isn't trusted
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -22,11 +28,20 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   releasing the textures is safe if the game stops before Direct3D has started
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a picture whose texture can't be locked lets go of the texture
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a picture that ends before it should isn't kept, and one that's refused says why;
+//   letting a texture go also lets go of its relief pictures, so a number used again doesn't bring them with it
+
 #include <sstream>
 #include "renderer.h"
 #include "console.h"
 #include <assert.h>
 #include "RimLoader.h"
+#include "texture_relief.h"
 
 std::vector<Texture> textureList;
 std::vector<Texture>::iterator texIt;
@@ -189,6 +204,48 @@ texID_t Tex_CreateTallFontTexture(const std::string &textureName, AVPTEXTURE &Av
 	return textureID;
 }
 
+// A square picture with all its smaller copies. See R_CreateTextureWithCopies.
+texID_t Tex_CreateWithCopies(const std::string &textureName, uint32_t side, uint32_t levels)
+{
+	Texture newTexture;
+	newTexture.name = textureName;
+
+	if (!R_CreateTextureWithCopies(side, levels, newTexture))
+	{
+		return MISSING_TEXTURE;
+	}
+
+	texID_t textureID = Tex_GetFreeID();
+
+	if (textureID < textureList.size()) // we're reusing a slot in this case
+	{
+		textureList[textureID] = newTexture;
+	}
+	else
+	{
+		textureList.push_back(newTexture);
+	}
+
+	Tex_CheckMemoryUsage();
+
+	return textureID;
+}
+
+bool Tex_LockCopy(texID_t textureID, uint32_t level, uint8_t **data, uint32_t *pitch)
+{
+	if (!textureList[textureID].isValid || !textureList[textureID].texture)
+	{
+		return false;
+	}
+
+	return R_LockTextureCopy(textureList[textureID], level, data, pitch);
+}
+
+bool Tex_UnlockCopy(texID_t textureID, uint32_t level)
+{
+	return R_UnlockTextureCopy(textureList[textureID], level);
+}
+
 texID_t Tex_CreateFromRIM(const std::string &fileName)
 {
 	texID_t textureID;
@@ -209,6 +266,12 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 
 	if (!newRim.Open(fileName))
 	{
+		// A file that isn't there is nothing new. One that is, and can't be used, was made for a reason, and whoever made it needs to know what's wrong with it.
+		if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))
+		{
+			Con_PrintError("The picture " + fileName + " isn't used, because " + RimLoader_ProblemWords(newRim.Problem()));
+		}
+
 		return MISSING_TEXTURE;
 	}
 
@@ -235,12 +298,21 @@ texID_t Tex_CreateFromRIM(const std::string &fileName)
 	if (!R_LockTexture(newTexture, &dest, &pitch, TextureLock_Normal))
 	{
 		// log error
+		R_ReleaseTexture(newTexture);
 		return MISSING_TEXTURE;
 	}
 
-	newRim.Decode(dest, pitch);
+	bool const decoded = newRim.Decode(dest, pitch);
 
 	R_UnlockTexture(newTexture);
+
+	// A file can say it's larger than what it holds, and that only shows when it's unpacked.
+	if (!decoded)
+	{
+		Con_PrintError("The picture " + fileName + " isn't used, because " + RimLoader_ProblemWords(newRim.Problem()));
+		R_ReleaseTexture(newTexture);
+		return MISSING_TEXTURE;
+	}
 
 	// get the next available ID
 	textureID = Tex_GetFreeID();
@@ -433,6 +505,20 @@ void Tex_GetDimensions(texID_t textureID, uint32_t &width, uint32_t &height)
 	height = textureList[textureID].height;
 }
 
+// Tex_GetDimensions trusts the number it's given. This one is for a number that came from a level file: false means there's no such texture.
+bool Tex_GetRealSize(texID_t textureID, uint32_t *width, uint32_t *height)
+{
+	if (textureID >= textureList.size() || !textureList[textureID].isValid)
+	{
+		return false;
+	}
+
+	*width  = textureList[textureID].width;
+	*height = textureList[textureID].height;
+
+	return true;
+}
+
 void Tex_ListTextures()
 {
 	std::stringstream ss;
@@ -500,6 +586,8 @@ void Tex_Release(texID_t textureID)
 		textureList[textureID].isValid = false;
 		textureList[textureID].name.clear();
 
+		textureRelief.ForgetPicture(textureID);
+
 //		Tex_CheckMemoryUsage();
 	}
 }
@@ -512,10 +600,17 @@ void Tex_DeInit()
 		textureList[i].isValid = false;
 	}
 
-	// special case releases
-	R_ReleaseTexture(textureList[MISSING_TEXTURE]);
-	R_UnsetTexture(MISSING_TEXTURE);
+	// Special case releases. If the game stops before Direct3D has started (it ran out of memory very early, say), these
+	// two have not been made yet, so there is nothing to release, and the list has no places for them.
+	if (MISSING_TEXTURE < textureList.size())
+	{
+		R_ReleaseTexture(textureList[MISSING_TEXTURE]);
+		R_UnsetTexture(MISSING_TEXTURE);
+	}
 
-	R_ReleaseTexture(textureList[NO_TEXTURE]);
-	R_UnsetTexture(NO_TEXTURE);
+	if (NO_TEXTURE < textureList.size())
+	{
+		R_ReleaseTexture(textureList[NO_TEXTURE]);
+		R_UnsetTexture(NO_TEXTURE);
+	}
 }

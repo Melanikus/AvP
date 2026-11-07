@@ -90,6 +90,9 @@
     <ClCompile Include="..\..\3dc\kshape.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\light_choice.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\logString.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -124,6 +127,66 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\RenderList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shoulder_lamp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_normals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_pictures.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_static.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\static_scene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\texture_relief.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\pixel_lights.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_reach.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\static_level.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\static_level_card.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\frame_timing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\flicker_meter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\view_settings.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\view_keys.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_shoot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\static_frame.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_volumes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\shadow_volumes_card.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\surface_tangent.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\RimLoader.cpp">
@@ -223,9 +286,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\win95\win_func.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\win95\zsp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp">
@@ -827,9 +887,6 @@
     <ClInclude Include="..\..\3dc\win95\shpanim.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\3dc\win95\zsp.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\3dc\include\3dc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1352,6 +1409,9 @@
     <ClInclude Include="..\d3_func.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\shader_model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1377,6 +1437,9 @@
     <None Include="..\..\shaders\orthoPixel.psh">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="..\..\shaders\shoulderLamp.psh">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="..\..\shaders\orthoVertex.vsh">
       <Filter>Shaders</Filter>
     </None>
@@ -1395,6 +1458,51 @@
     <None Include="..\..\shaders\rhw.vsh">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="..\..\shaders\shadowBlur.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\shadowBlur.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightOne.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightShapes.fxh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightShare.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\lightTotal.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surface.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surface.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceRelief.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceRelief.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceStatic.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceScene.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceScene.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceSceneCompare.psh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\surfaceSceneReplay.vsh">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="..\..\shaders\tallText.psh">
       <Filter>Shaders</Filter>
     </None>
@@ -1402,6 +1510,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\shaders\vertex.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\volume.vsh">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\volumeCut.vsh">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

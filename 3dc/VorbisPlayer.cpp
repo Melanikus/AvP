@@ -24,10 +24,16 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open;
-//   a file that cannot be decoded, or that holds no audio, is refused instead of being read again
+//   a file that cannot be decoded, or that holds no audio, is refused instead of being read again; no memory for
+//   the audio stream counts as a stream that cannot start
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a music thread that can't start is noticed, and not waited for later
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
 #include <stdio.h>
 #include "VorbisPlayer.h"
 #include <vector>
@@ -37,6 +43,10 @@
 #include "logstring.h"
 #include "console.h"
 #include <new>
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "3dc/VorbisPlayer.cpp";
 
 #ifdef _XBOX
 	#define _fseeki64 fseek // ensure libvorbis uses fseek and not _fseeki64 for xbox
@@ -85,7 +95,7 @@ bool VorbisPlayback::Open(const std::string &fileName)
 
 	// create the streaming audio buffer
 	_audioStream = new(std::nothrow) AudioStream;
-	if (!_audioStream->Init(_vorbisInfo->channels, _vorbisInfo->rate, 16, kBufferSize, kBufferCount)) {
+	if (!_audioStream || !_audioStream->Init(_vorbisInfo->channels, _vorbisInfo->rate, 16, kBufferSize, kBufferCount)) {
 		Con_PrintError("Couldn't initialise audio stream for Vorbis playback");
 		return false;
 	}
@@ -111,8 +121,16 @@ bool VorbisPlayback::Open(const std::string &fileName)
 	if (_audioStream->Play() == AUDIOSTREAM_OK) {
 		_isPlaying = true;
 		_audioStream->SetVolume(musicVolume);
-		int rc = pthread_create(&_playbackThread, NULL, VorbisUpdateThread, static_cast<void*>(this));
-		_decodeThreadInited = true;
+
+		// Only a thread that really started can be waited for later. Without one, the music just doesn't play.
+		if (pthread_create(&_playbackThread, NULL, VorbisUpdateThread, static_cast<void*>(this)) == 0) {
+			_decodeThreadInited = true;
+		}
+		else {
+			LogErrorString("couldn't start the thread for ogg vorbis playback\n");
+			_audioStream->Stop();
+			_isPlaying = false;
+		}
 	}
 	else {
 		LogErrorString("couldn't play ogg vorbis buffer\n");
@@ -154,14 +172,14 @@ uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 		// a gap in the data: the decoder carries on after it, so this is not the end of the file
 		if (bytesReadPerLoop == OV_HOLE)
 		{
-			LogErrorString("OV_HOLE", __LINE__, __FILE__);
+			LogErrorString("OV_HOLE", __LINE__, kThisFile);
 		}
 		// any other negative number is an error, not a count of bytes, so it never goes into the total. The file can't
 		// be decoded, and asking again is not safe: the decoder can then carry on with half-built tables, which crashes
 		// or hangs the game. So we remember it, and nothing reads this file again.
 		else if (bytesReadPerLoop < 0)
 		{
-			LogErrorString("ov_read encountered an error", __LINE__, __FILE__);
+			LogErrorString("ov_read encountered an error", __LINE__, kThisFile);
 			_readFailed = true;
 			break;
 		}
@@ -171,7 +189,7 @@ uint32_t VorbisPlayback::GetVorbisData(uint32_t sizeToRead)
 		{
 			if (!gotAudioThisPass)
 			{
-				LogErrorString("ogg vorbis file holds no audio", __LINE__, __FILE__);
+				LogErrorString("ogg vorbis file holds no audio", __LINE__, kThisFile);
 				_readFailed = true;
 				break;
 			}

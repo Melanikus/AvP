@@ -4,6 +4,9 @@
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
 //   an image's index is checked, because it's used as a place in a list
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include <string.h>
 #include "bitmap_names.hpp"
@@ -156,6 +159,13 @@ Chunk_With_BMPs::Chunk_With_BMPs (Chunk_With_Children * parent, const char * con
 		d3 = *((int *)bdata);
 		bdata += 4;
 	
+		// BMP_Name measures its name by looking for its end, so that has to be inside the chunk
+		if (NameLengthInChunk(bdata, bsize - (size_t)(bdata - start)) < 0)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		BMP_Name bn (bdata);
 
 		size_t filename_length = strlen(bn.filename);
@@ -353,7 +363,7 @@ void Chunk_With_BMPs::RemoveMD5Val(char const * bname)
 /////////////////////////////////////
 // Global_BMP_Name_Chunk
 /////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("BMPNAMES",Global_BMP_Name_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPNAMES",Global_BMP_Name_Chunk,4)
 
 Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 {
@@ -375,7 +385,7 @@ Bitmap_MD5_Chunk * Global_BMP_Name_Chunk::GetMD5Chunk(char const * bname)
 /////////////////////////////////////
 // Bitmap_List_Store_Chunk
 /////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("BMPLSTST",Bitmap_List_Store_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPLSTST",Bitmap_List_Store_Chunk,4)
 
 Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 {
@@ -409,7 +419,7 @@ Bitmap_MD5_Chunk * Bitmap_List_Store_Chunk::GetMD5Chunk(char const * bname)
 
 // Class BMP_Names_Version_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("BMNAMVER",BMP_Names_Version_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMNAMVER",BMP_Names_Version_Chunk,4)
 
 
 size_t BMP_Names_Version_Chunk::size_chunk ()
@@ -438,7 +448,7 @@ void BMP_Names_Version_Chunk::fill_data_block (char * data_start)
 
 // Class BMP_Names_ExtraData_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("BMNAMEXT",BMP_Names_ExtraData_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMNAMEXT",BMP_Names_ExtraData_Chunk,52)
 
 
 size_t BMP_Names_ExtraData_Chunk::size_chunk ()
@@ -468,7 +478,7 @@ void BMP_Names_ExtraData_Chunk::fill_data_block (char * data_start)
 ///////////////////////////////////////
 
 // Class External_Shape_BMPs_Store_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("SHBMPNAM",External_Shape_BMPs_Store_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHBMPNAM",External_Shape_BMPs_Store_Chunk,4)
 
 External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Children * parent, char const * rifn, char const * shapen)
 : Chunk_With_BMPs (parent, "SHBMPNAM"), rifname(0), shapename(0), version_num(0)
@@ -525,25 +535,23 @@ void External_Shape_BMPs_Store_Chunk::fill_data_block(char * data_start)
 External_Shape_BMPs_Store_Chunk::External_Shape_BMPs_Store_Chunk (Chunk_With_Children * parent, const char * sdata, size_t ssize)
 : Chunk_With_BMPs (parent, "SHBMPNAM", sdata, ssize)
 {
+	char const * const chunk_start = sdata;
 	sdata += Chunk_With_BMPs::size_chunk() -12;
-	unsigned int const l1 = strlen(sdata)+1;
-	rifname = new char [l1];
-	memcpy(rifname,sdata,l1);
-	unsigned int const l2 = strlen(sdata+l1)+1;
-	shapename = new char [l2];
-	memcpy(shapename,sdata+l1,l2);
+	size_t l1 = 0, l2 = 0;
+	rifname = CopyNameFromChunk(chunk_start, ssize, sdata, &l1);
+	l1++;
+	shapename = CopyNameFromChunk(chunk_start, ssize, sdata+l1, &l2);
+	l2++;
 
 	sdata += l1+l2 +3&~3;
 
-	flags = (GlobalBMPFlags)(*(int *)sdata & GBF_MASK);
-	sdata+=4;
+	flags = (GlobalBMPFlags)(ReadFromChunk<int>(chunk_start, ssize, sdata) & GBF_MASK);
 
-	version_num = *(int *)sdata;
-	sdata+=4;
+	version_num = ReadFromChunk<int>(chunk_start, ssize, sdata);
 
-	for (int i=0; i<12; ++i, sdata+=4)
+	for (int i=0; i<12; ++i)
 	{
-		reserved[i] = *(int *)sdata;
+		reserved[i] = ReadFromChunk<int>(chunk_start, ssize, sdata);
 	}
 }
 
@@ -783,9 +791,38 @@ void MatchingImages::WriteData(char * datablock) const
 
 // class Matching_Images_Chunk : public Chunk
 // ------------------------------------------
-RIF_IMPLEMENT_DYNCREATE("MATCHIMG",Matching_Images_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MATCHIMG",Matching_Images_Chunk,12)
 
 // I/O
+// A pair of images as a level file holds them: three numbers, then for each image four numbers and three names, padded to a multiple of 4 bytes. Do all six names end inside
+// the bytes that are left of the chunk? The images measure their own names by looking for their ends, so this has to be asked first.
+static bool MatchingImagesEndInChunk(char const * datablock, size_t bytes_left)
+{
+	size_t used = 12;
+
+	for (int image = 0; image < 2; image++)
+	{
+		size_t const image_starts = used;
+		used += 16;
+
+		for (int name = 0; name < 3; name++)
+		{
+			int const length = (used < bytes_left) ? NameLengthInChunk(datablock + used, bytes_left - used) : -1;
+
+			if (length < 0)
+			{
+				return false;
+			}
+
+			used += (size_t)length + 1;
+		}
+
+		used = image_starts + ((used - image_starts + 3) & ~(size_t)3);
+	}
+
+	return true;
+}
+
 Matching_Images_Chunk::Matching_Images_Chunk(Chunk_With_Children * parent, char const * datablock, size_t size)
 : Chunk(parent,"MATCHIMG")
 , flags ((MICFlags)(*(int *)(datablock+8) & MICF_MASK))
@@ -804,6 +841,12 @@ Matching_Images_Chunk::Matching_Images_Chunk(Chunk_With_Children * parent, char 
 	{
 		// names can be longer than the smallest, so they can use up the room that the count was measured against
 		if ((size_t)(datablock - datastart) + smallest_match > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		if (!MatchingImagesEndInChunk(datablock, size - (size_t)(datablock - datastart)))
 		{
 			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			break;
@@ -858,27 +901,23 @@ ImageDescriptor const & Matching_Images_Chunk::GetLoadImage(ImageDescriptor cons
 }
 
 // Bitmap MD5 Chunk
-RIF_IMPLEMENT_DYNCREATE("BMPMD5ID",Bitmap_MD5_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("BMPMD5ID",Bitmap_MD5_Chunk,28)
 
-Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t)
+Bitmap_MD5_Chunk::Bitmap_MD5_Chunk(Chunk_With_Children * parent, char const * datablock, size_t const chunk_bytes)
 : Chunk(parent,"BMPMD5ID"), spare(*(int *)datablock), flags((BMPMD5_Flags)(*(int *)(datablock+4) & BMD5F_MASK)), version_num(*(int *)(datablock+8))
 {
+	char const * const chunk_start = datablock;
 	memcpy(md5_val, datablock+12, 16);
 	datablock += 28;
 
-	unsigned int const blen = strlen(datablock)+1;
-	bmpname = new char [blen];
-	strcpy(bmpname, datablock);
-	datablock += blen;
+	size_t length = 0;
+	bmpname = CopyNameFromChunk(chunk_start, chunk_bytes, datablock, &length);
+	datablock += length + 1;
 
-	unsigned int const rlen = strlen(datablock)+1;
-	rifname = new char [rlen];
-	strcpy(rifname, datablock);
-	datablock += rlen;
+	rifname = CopyNameFromChunk(chunk_start, chunk_bytes, datablock, &length);
+	datablock += length + 1;
 
-	unsigned int const slen = strlen(datablock)+1;
-	shapename = new char [slen];
-	strcpy(shapename, datablock);
+	shapename = CopyNameFromChunk(chunk_start, chunk_bytes, datablock);
 }
 
 Bitmap_MD5_Chunk::~Bitmap_MD5_Chunk()

@@ -1,9 +1,17 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the cheat menu's Start only starts what its sliders are allowed to say
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   menu texts (the multiplayer setup, a menu number, the load-game list, the joined LAN game's name and the
 //   custom level name) are copied or written with size limits; a save slot whose file path does not fit is
 //   refused; the credits roll stops at the end of credits.txt; a typed letter's width is looked up with an unsigned
 //   byte
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   leaving the page of games found closes what the search has open on the network
+//   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
+//   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -13,6 +21,7 @@
 #include "pldnet.h"
 #include "Input.h"
 #include "menus.h"
+#include "view_settings.h"
 #include "env_info.h"
 #include "io.h"
 #include "hud_Layout.h"
@@ -36,6 +45,7 @@
 #include "d3d_render.h"
 #include "OnScreenKeyboard.h"
 #include "logString.h"
+#include "profile_checks.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -61,12 +71,14 @@ extern void AvP_UpdateMenus(void);
 extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
 extern bool Net_UpdateSessionList(int &SelectedItem);
+extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
 extern void DrawMainMenusBackdrop(void);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
 extern void EndMenuBackgroundFmv(void);
 extern void D3D_DrawColourBar(int yTop, int yBottom, int rScale, int gScale, int bScale);
 extern int AnyCheatModesAllowed(void);
+extern int CheatMode_SelectionIsAllowed(void);
 extern void MakeConnectionSelectMenu();
 extern void RenderHighlightRectangle(int x1, int y1, int x2, int y2, int r, int g, int b);
 extern void CheatMode_GetNextAllowedSpecies(int *speciesPtr, int searchForward);
@@ -214,11 +226,27 @@ static int EpisodeSelectScrollOffset;
 static int MaximumSelectableLevel;
 static int KeyConfigSelectionColumn;
 
+#ifdef _WIN32
+// When a profile was last used or a game saved, written the way the player's own settings write dates and times: see ProfileChecks_MakeTimeText.
+static void MakeTimeText(const SYSTEMTIME &when, DWORD dateKind, char *text, size_t size)
+{
+	ProfileChecks_MakeTimeText(when, dateKind, NULL, NULL, text, size);
+}
+#endif
+
+// How bright each row of a scrolling menu is, as it fades up or down. Only about four rows are on the screen at once, and a row only
+// fades while it's on the screen, so two rows 16 apart can share a number and nobody can see it. That way any number of rows fits, and a
+// player can have as many profiles as they like.
 static int Brightness[16];
+
+static int &BrightnessOfRow(int row)
+{
+	return Brightness[row & 15];
+}
 
 static unsigned char MultipleAssignments[2][32];
 
-static char *GetDescriptionOfKey(unsigned char key);
+char *GetDescriptionOfKey(unsigned char key);
 static int OkayToPlayNextEpisode(void);
 static PLAYER_INPUT_CONFIGURATION PlayerInputPrimaryConfig;
 static PLAYER_INPUT_CONFIGURATION PlayerInputSecondaryConfig;
@@ -344,6 +372,7 @@ int AvP_MainMenus(void)
 
 		SoundSys_Management();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		CheckForLoadGame();
 
@@ -474,6 +503,7 @@ extern int AvP_InGameMenus(void)
 		D3D_FadeDownScreen(ONE_FIXED/8,0);
 		AvP_UpdateMenus();
 		UpdateGammaSettings();
+		ViewSettings_MenuFrame();
 
 		return 1;
 	}
@@ -632,16 +662,9 @@ extern void AvP_UpdateMenus(void)
 			RenderMenuText(profilePtr->Name,MENU_CENTREX,MENU_CENTREY-100,ONE_FIXED,AVPMENUFORMAT_CENTREJUSTIFIED);
 			{
 				char buffer2[100];
-				int nLen = 80;
 
 #ifdef _WIN32
-				char buffer[100];
-
-				nLen = GetDateFormat(GetThreadLocale(), DATE_LONGDATE, &profilePtr->TimeLastUpdated, NULL, buffer, nLen);
-				nLen = GetTimeFormat(GetThreadLocale(), 0, &profilePtr->TimeLastUpdated, NULL, buffer2, 100);
-
-				strcat(buffer2, "  ");
-				strcat(buffer2, buffer);
+				MakeTimeText(profilePtr->TimeLastUpdated, DATE_LONGDATE, buffer2, sizeof(buffer2));
 #endif
 #ifdef _XBOX
 				// manually format the string as we don't have either GetDateFormat or GetTimeFormat
@@ -761,6 +784,12 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
 	AvPMenus.CurrentMenu = menuID;
 
+	// Leaving the page of games found. Nothing else would close what the search has open on the network until the next search.
+	if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)
+	{
+		Net_StopSearchingForSessions();
+	}
+
 	/* set pointer to the start of the menu's element data */
 	AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default
 
@@ -769,6 +798,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	AvPMenus.UserEnteringText = 0;
 	AvPMenus.UserEnteringNumber = 0;
 	AvPMenus.UserChangingKeyConfig = 0;
+	AvPMenus.UserChangingViewKey = 0;
 	AvPMenus.PositionInTextField = 0;
 	AvPMenus.WidthLeftForText = 0;
 
@@ -1323,24 +1353,24 @@ static void RenderEpisodeSelectMenu(void)
 				targetBrightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
 			}
 
-			if (targetBrightness > Brightness[i])
+			if (targetBrightness > BrightnessOfRow(i))
 			{
-				Brightness[i] += BRIGHTNESS_CHANGE_SPEED;
-				if (Brightness[i] > targetBrightness)
+				BrightnessOfRow(i) += BRIGHTNESS_CHANGE_SPEED;
+				if (BrightnessOfRow(i) > targetBrightness)
 				{
-					Brightness[i] = targetBrightness;
+					BrightnessOfRow(i) = targetBrightness;
 				}
 			}
 			else
 			{
-				Brightness[i] -= BRIGHTNESS_CHANGE_SPEED;
-				if (Brightness[i] < targetBrightness)
+				BrightnessOfRow(i) -= BRIGHTNESS_CHANGE_SPEED;
+				if (BrightnessOfRow(i) < targetBrightness)
 				{
-					Brightness[i] = targetBrightness;
+					BrightnessOfRow(i) = targetBrightness;
 				}
 			}
 
-			b=Brightness[i];
+			b=BrightnessOfRow(i);
 			{
 				int yCoord = MENU_CENTREY+y-60;
 
@@ -1689,38 +1719,30 @@ static void RenderUserProfileSelectMenu(void)
 				targetBrightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
 			}
 
-			if (targetBrightness > Brightness[i])
+			if (targetBrightness > BrightnessOfRow(i))
 			{
-				Brightness[i]+=BRIGHTNESS_CHANGE_SPEED;
-				if(Brightness[i]>targetBrightness)
+				BrightnessOfRow(i)+=BRIGHTNESS_CHANGE_SPEED;
+				if(BrightnessOfRow(i)>targetBrightness)
 				{
-					Brightness[i] = targetBrightness;
+					BrightnessOfRow(i) = targetBrightness;
 				}
 			}
 			else
 			{
-				Brightness[i]-=BRIGHTNESS_CHANGE_SPEED;
-				if(Brightness[i]<targetBrightness)
+				BrightnessOfRow(i)-=BRIGHTNESS_CHANGE_SPEED;
+				if(BrightnessOfRow(i)<targetBrightness)
 				{
-					Brightness[i] = targetBrightness;
+					BrightnessOfRow(i) = targetBrightness;
 				}
 			}
-			b=Brightness[i];
+			b=BrightnessOfRow(i);
 			RenderMenuText_Clipped(textPtr,MENU_CENTREX,MENU_CENTREY+y-60,b,AVPMENUFORMAT_CENTREJUSTIFIED,MENU_CENTREY-60-100,MENU_CENTREY-30+150);
 			{
 				char buffer[100];
 				char buffer2[100];
-				int nLen = 80;
 
 #ifdef _WIN32
-				nLen = GetDateFormat(GetThreadLocale(), DATE_LONGDATE, &profilePtr->TimeLastUpdated,
-				NULL,buffer,
-				nLen);
-				nLen = GetTimeFormat(GetThreadLocale(), 0, &profilePtr->TimeLastUpdated,
-				NULL,buffer2,
-				100);
-				strcat(buffer2,"  ");
-				strcat(buffer2,buffer);
+				MakeTimeText(profilePtr->TimeLastUpdated, DATE_LONGDATE, buffer2, sizeof(buffer2));
 #endif
 #ifdef _XBOX
 				// manually format the string as we don't have either GetDateFormat or GetTimeFormat
@@ -1878,14 +1900,9 @@ static void RenderLoadGameMenu(void)
 
 			{
 				char buffer2[100];
-				int nLen = 80;
 
 #ifdef _WIN32
-				nLen = GetDateFormat(GetThreadLocale(), DATE_SHORTDATE, &slotPtr->TimeStamp ,NULL, buffer, nLen);
-				nLen = GetTimeFormat(GetThreadLocale(), 0, &slotPtr->TimeStamp, NULL, buffer2, 100);
-	
-				strcat(buffer2,"  ");
-				strcat(buffer2,buffer);
+				MakeTimeText(slotPtr->TimeStamp, DATE_SHORTDATE, buffer2, sizeof(buffer2));
 #endif
 #ifdef _XBOX
 				// manually format the string as we don't have either GetDateFormat or GetTimeFormat
@@ -2115,6 +2132,26 @@ static void ActUponUsersInput(void)
 			}
 		}
 		KeyboardEntryQueue_Clear();
+	}
+	// A key on the rendering page. This asks view_settings.cpp rather than writing the key itself, because it can be refused, and the line's help then says why. Even a digit is passed on, for that reason.
+	else if (AvPMenus.UserChangingViewKey)
+	{
+		if (DebouncedKeyboardInput[KEY_ESCAPE])
+		{
+			AvPMenus.UserChangingViewKey = 0;
+		}
+		else
+		{
+			for (int key = 0; key < KEY_VOID; key++)
+			{
+				if (DebouncedKeyboardInput[key])
+				{
+					ViewSettings_PressedKeyForLine(AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].MaxValue, key);
+					AvPMenus.UserChangingViewKey = 0;
+					break;
+				}
+			}
+		}
 	}
 	// bjd - key config
 	else if (AvPMenus.UserChangingKeyConfig)
@@ -2356,6 +2393,11 @@ static void ActUponUsersInput(void)
 					{
 						*(((unsigned char*)&PlayerInputSecondaryConfig)+AvPMenus.CurrentlySelectedElement-2) = KEY_VOID;
 					}
+					break;
+				}
+				case AVPMENU_ELEMENT_VIEWKEY:
+				{
+					ViewSettings_PressedKeyForLine(AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].MaxValue, KEY_VOID);
 					break;
 				}
 				case AVPMENU_ELEMENT_USERPROFILE:
@@ -2865,7 +2907,7 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		}
 		case AVPMENU_ELEMENT_STARTLEVELWITHCHEAT:
 		{
-			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && CheatMode_SelectionIsAllowed())
 			{
 				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 				AvP.PlayerType = static_cast<I_PLAYER_TYPE>(CheatMode_Species);
@@ -3032,6 +3074,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			break;
 		}
 
+		case AVPMENU_ELEMENT_VIEWKEY:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				ViewSettings_ChoosingKey(elementPtr->MaxValue);
+				AvPMenus.UserChangingViewKey = 1;
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_KEYCONFIG:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -3645,6 +3696,35 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			);
 			break;
 		}
+		case AVPMENU_ELEMENT_VIEWKEY:
+		{
+			int const line = elementPtr->MaxValue;
+			char *const keyName = GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(line)));
+
+			RenderText
+			(
+				GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->TextDescription)),
+				MENU_CENTREX-MENU_ELEMENT_SPACING,
+				y,
+				elementPtr->Brightness,
+				AVPMENUFORMAT_RIGHTJUSTIFIED
+			);
+
+			if (AvPMenus.UserChangingViewKey && e==AvPMenus.CurrentlySelectedElement)
+			{
+				int b = GetSin(CloakingPhase&4095);
+				RenderText("_",MENU_CENTREX+MENU_ELEMENT_SPACING,y,MUL_FIXED(b,b),AVPMENUFORMAT_LEFTJUSTIFIED);
+			}
+			else if (ViewSettings_LineIsHeldByAControl(line))
+			{
+				RenderText_Coloured(keyName,MENU_CENTREX+MENU_ELEMENT_SPACING,y,ONE_FIXED,AVPMENUFORMAT_LEFTJUSTIFIED,ONE_FIXED,ONE_FIXED,0);
+			}
+			else
+			{
+				RenderText(keyName,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_KEYCONFIG:
 		{
 			unsigned char *primaryKey = ((unsigned char*)&PlayerInputPrimaryConfig)+e-2;
@@ -3816,7 +3896,7 @@ static int HeightOfMenuElement(AVPMENU_ELEMENT *elementPtr)
 	return h;
 }
 
-static char *GetDescriptionOfKey(unsigned char key)
+char *GetDescriptionOfKey(unsigned char key)
 {
 	static char KeyDescBuffer[2];
 	KeyDescBuffer[0] = '\0';
@@ -4359,7 +4439,8 @@ int MaxDifficultyLevelAllowed(I_PLAYER_TYPE playerID, int level)
 	}
 	else
 	{
-		return UserProfilePtr->LevelCompleted[playerID][level-1];
+		// This becomes the number of rows in the difficulty menu, and it comes from a file
+		return ProfileChecks_DifficultiesAllowed(UserProfilePtr->LevelCompleted[playerID][level-1]);
 	}
 }
 
@@ -4985,6 +5066,12 @@ void CheckForKeysWithMultipleAssignments(void)
 				{
 					MultipleAssignments[column][row] = 1;
 				}
+			}
+
+			// A key on the rendering page counts as well. The control wins, so this is where the player gets to see it.
+			if (ViewSettings_KeyIsOnALine((configPtr[column])[row]))
+			{
+				MultipleAssignments[column][row] = 1;
 			}
 		}
 	}

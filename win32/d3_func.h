@@ -1,6 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   no longer includes the DirectX SDK's error-text header (our own DxErrorToString replaces it)
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   holds the shader for shadow prisms kept between frames
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   holds the shader for the shoulder lamp
 #ifdef _WIN32
 
 #ifndef _included_d3_func_h_
@@ -215,6 +219,25 @@ typedef struct D3DInfo
 
 	// vertex and index buffers
 	class VertexBuffer		*mainVB;
+	class VertexDeclaration	*surfaceDecl;
+	effectID_t				surfaceEffect;
+	class VertexDeclaration	*surfaceReliefDecl;     // these two stay empty with relief pictures off
+	effectID_t				surfaceReliefEffect;
+	effectID_t				reliefMainEffect;       // the main draw for Relief map. Stays empty if it couldn't be made, and then nothing uses it
+	class VertexDeclaration	*surfaceStaticDecl;     // the level's fixed buffer: see surface_static.cpp
+	effectID_t				surfaceStaticEffect;
+	effectID_t				surfaceStaticReliefEffect;
+	class VertexDeclaration	*surfaceSceneDecl;      // the same buffer with its baked colours: see static_scene.cpp
+	effectID_t				surfaceSceneEffect;
+	effectID_t				surfaceSceneCompareEffect;
+	effectID_t				surfaceSceneReplayEffect;
+	class VertexDeclaration	*volumeDecl;      // shadow prisms kept between frames: see shadow_volumes.cpp
+	effectID_t				volumeEffect;
+	class VertexDeclaration	*volumeCutDecl;   // the same, finished each frame from the same cut corners as the walls
+	effectID_t				volumeCutEffect;
+	effectID_t				lightTotalEffect;
+	effectID_t				lightShareEffect;
+	effectID_t				lightOneEffect;
 	class IndexBuffer		*mainIB;
 
 	class VertexBuffer		*orthoVB;
@@ -231,8 +254,10 @@ typedef struct D3DInfo
 
 	// shader IDs
 	effectID_t				mainEffect;
+	effectID_t				shadowBlurEffect;
 	effectID_t				decalEffect;
 	effectID_t				orthoEffect;
+	effectID_t				shoulderLampEffect;
 	effectID_t				tallTextEffect;
 	effectID_t				fmvEffect;
 	effectID_t				particleEffect;

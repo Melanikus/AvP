@@ -4,6 +4,7 @@
 //   check on the shape numbers a level file gives, and on the numbers that give a shape's size
 //   removed the class that read a shape stored in a level as a raw copy of memory
 //   removed the shapes made for the PlayStation and Saturn
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -83,8 +84,6 @@ public:
 
 	// functions for the locking functionality
 
-	BOOL file_equals (HANDLE &);
-	const char * get_head_id();
 	void set_lock_user(char *);
 
 	virtual void post_input_processing();

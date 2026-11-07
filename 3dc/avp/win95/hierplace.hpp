@@ -32,7 +32,6 @@ class  Placed_Hierarchy_Data_Chunk : public Chunk
 {
 public :	
 	Placed_Hierarchy_Data_Chunk(Chunk_With_Children* parent,const char* , const size_t);
-	Placed_Hierarchy_Data_Chunk(Chunk_With_Children* parent,const char* _name,int _hierarchy_index,ChunkVectorInt& _location,ChunkQuat& _orientation);
 	~Placed_Hierarchy_Data_Chunk();
 
 	void fill_data_block(char*);

@@ -73,6 +73,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>../../include</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -90,9 +91,20 @@
       <StringPooling>true</StringPooling>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions</EnableEnhancedInstructionSet>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <!-- /Zi: the compiler writes what the .pdb needs. It changes nothing in the code it makes. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <!-- Symbols: a .pdb and a .map beside the library, so the place of a crash can be named. They stay with the build and are
+           never in the package: tools/build-and-package.ps1 copies only what a player needs, and tools/check-release-package.ps1
+           refuses them. /PDBALTPATH has the library record only the .pdb's name, not the folder it was built in. /DEBUG would
+           turn off ICF (folding identical functions), so ICF and REF are set here, and the library's code is the same as without
+           symbols. -->
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+      <GenerateMapFile>true</GenerateMapFile>
+      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>../smackerdec.def</ModuleDefinitionFile>

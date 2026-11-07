@@ -38,10 +38,13 @@
 // merged. It needs none of the game's files: those aren't in this repository, and it never opens a file.
 
 #include <algorithm>
+#include <malloc.h>
+#include <memory>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -66,6 +69,8 @@
 #include "chunk_sprites.hpp"
 #include "chunk_waypoint.hpp"
 #include "path_chunk.hpp"
+#include "chunk_dummy.hpp"
+#include "chunk_fragments.hpp"
 #include <new>
 
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
@@ -89,6 +94,10 @@ void avp_MessageBox(const char * message, int)
 void avp_exit(int code)
 {
 	exit(code);
+}
+
+void LogErrorStringC(const char *)
+{
 }
 
 // Checks the compiler makes while building, before anything runs. If one of these fails, this file doesn't compile.
@@ -118,6 +127,17 @@ alignas(int) static char objectBytes[512];
 static int checksFailed = 0;
 
 static void Check(bool passed, char const * what)
+{
+	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
+	if (!passed)
+	{
+		checksFailed++;
+	}
+}
+
+// The check for the hierarchy rows (38), with a name of its own, so a reader of the code can't take it for another test's
+// Check. Its words come from a list of literals, never from the bytes a row builds.
+static void CheckRow(bool passed, char const * what)
 {
 	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
 	if (!passed)
@@ -170,10 +190,13 @@ static size_t BuildObjectHeader(char const * name, size_t nameBytes)
 	return chunkBytes;
 }
 
+// Each chunk a test makes has an owner, which gives it back at the end of the block and lifts it out of its parent as it goes. The parent would free it
+// anyway, but this way it's plain to see that nothing is left behind.
+
 // Hands the bytes to the game's real constructor, which walks the child chunks and makes the real Object_Header_Chunk.
-static Object_Chunk * LoadObject(TestFile & file, size_t bytes)
+static std::unique_ptr<Object_Chunk> LoadObject(TestFile & file, size_t bytes)
 {
-	return new Object_Chunk(&file, objectBytes, bytes);
+	return std::unique_ptr<Object_Chunk>(new Object_Chunk(&file, objectBytes, bytes));
 }
 
 // How long the object's name is. It stops at the end of the space, so a name with no zero byte can't send it wandering.
@@ -202,7 +225,8 @@ static void TestStockName()
 	memcpy(name + OrdinaryCharactersInStockName, endOfName, sizeof(endOfName));
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, BuildObjectHeader(name, sizeof(name)));
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, BuildObjectHeader(name, sizeof(name)));
+	Object_Chunk * object = objectOwner.get();
 
 	Check(object->get_header() != 0, "the header chunk was loaded");
 	Check(NameLength(object) == 53, "the name is 53 long");
@@ -216,7 +240,8 @@ static void TestLongestName()
 	puts("2. the longest name that fits, 63 characters");
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, BuildObjectHeader(LongestName, sizeof(LongestName)));
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, BuildObjectHeader(LongestName, sizeof(LongestName)));
+	Object_Chunk * object = objectOwner.get();
 
 	Check(NameLength(object) == 63, "the name is 63 long");
 	Check(memcmp(object->object_data.o_name, LongestName, sizeof(LongestName)) == 0, "every character is there");
@@ -234,7 +259,8 @@ static void TestOneCharacterTooMany()
 	name[64] = '\0';
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, BuildObjectHeader(name, sizeof(name)));
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, BuildObjectHeader(name, sizeof(name)));
+	Object_Chunk * object = objectOwner.get();
 
 	Check(NameLength(object) == 63, "the name is cut at 63");
 	Check(memcmp(object->object_data.o_name, LongestName, 63) == 0, "the 63 characters are the right ones");
@@ -251,7 +277,8 @@ static void TestNoEndMarker()
 	objectBytes[bytes + 20] = '\0';
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, bytes);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+	Object_Chunk * object = objectOwner.get();
 
 	Check(NameLength(object) == 10, "the name stops at the end of the chunk");
 	Check(memcmp(object->object_data.o_name, LongestName, 10) == 0, "the 10 characters are the right ones");
@@ -273,7 +300,8 @@ static void TestChunkTooShort()
 		objectBytes[ChunkHeaderBytes + FixedDataBytes + 20] = '\0';
 
 		TestFile file;
-		Object_Chunk * object = LoadObject(file, ChunkHeaderBytes + tooShort[i]);
+		std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, ChunkHeaderBytes + tooShort[i]);
+		Object_Chunk * object = objectOwner.get();
 
 		Check(object->get_header() != 0, "the header chunk was loaded");
 		Check(NameLength(object) == 0, "the name is empty");
@@ -283,7 +311,8 @@ static void TestChunkTooShort()
 	objectBytes[bytes + 20] = '\0';
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, bytes);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, bytes);
+	Object_Chunk * object = objectOwner.get();
 
 	Check(NameLength(object) == 1, "61 bytes of data leave room for one character");
 }
@@ -309,7 +338,8 @@ static void TestImpossibleChildSize()
 		PutChunkHeader(objectBytes, badSizes[i].size);
 
 		TestFile file;
-		Object_Chunk * object = LoadObject(file, parentBytes);
+		std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, parentBytes);
+		Object_Chunk * object = objectOwner.get();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, badSizes[i].what);
 		Check(object->get_header() == 0, "no child was made");
@@ -320,7 +350,8 @@ static void TestImpossibleChildSize()
 	size_t const goodBytes = BuildObjectHeader(LongestName, sizeof(LongestName));
 
 	TestFile file;
-	Object_Chunk * object = LoadObject(file, goodBytes + 8);
+	std::unique_ptr<Object_Chunk> const objectOwner = LoadObject(file, goodBytes + 8);
+	Object_Chunk * object = objectOwner.get();
 
 	Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "leftover bytes too few for a header are refused");
 	Check(object->get_header() != 0, "the good child before them was kept");
@@ -368,9 +399,11 @@ static void TestObjectsAndShapes()
 		Parent_File = &file;
 
 		BuildShape(7);
-		Shape_Chunk * shape = new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
+		Shape_Chunk * shape = shapeOwner.get();
 		size_t const bytes = BuildObject(5, 7);
-		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		std::unique_ptr<Object_Chunk> const objectOwner(new Object_Chunk(&file, objectBytes, bytes));
+		Object_Chunk * object = objectOwner.get();
 		file.post_input_processing();
 
 		Check(file.error_code == 0, "a level whose numbers join up is accepted");
@@ -385,9 +418,11 @@ static void TestObjectsAndShapes()
 		Parent_File = &file;
 
 		BuildShape(7);
-		Shape_Chunk * shape = new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
+		Shape_Chunk * shape = shapeOwner.get();
 		size_t const bytes = BuildObject(-1, 7);
-		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		std::unique_ptr<Object_Chunk> const objectOwner(new Object_Chunk(&file, objectBytes, bytes));
+		Object_Chunk * object = objectOwner.get();
 		file.post_input_processing();
 
 		Check(file.error_code == 0, "an object numbered -1 is accepted");
@@ -413,9 +448,9 @@ static void TestObjectsAndShapes()
 		Parent_File = &file;
 
 		BuildShape(badLevels[i].shapeNumber);
-		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
 		size_t const bytes = BuildObject(badLevels[i].objectNumber, badLevels[i].shapeItNames);
-		new Object_Chunk(&file, objectBytes, bytes);
+		std::unique_ptr<Object_Chunk> const made2(new Object_Chunk(&file, objectBytes, bytes));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, badLevels[i].what);
@@ -427,8 +462,8 @@ static void TestObjectsAndShapes()
 		Parent_File = &file;
 
 		BuildShape(7);
-		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
-		new Object_Chunk(&file, objectBytes, 0);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
+		std::unique_ptr<Object_Chunk> const made2(new Object_Chunk(&file, objectBytes, 0));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "an object with no header is refused");
@@ -438,7 +473,7 @@ static void TestObjectsAndShapes()
 		File_Chunk file;
 		Parent_File = &file;
 
-		new Shape_Chunk(&file, shapeBytes, 0);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, 0));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with no header is refused");
@@ -460,7 +495,7 @@ static void TestObjectsAndShapes()
 
 		BuildShape(7);
 		memcpy(shapeBytes + ChunkHeaderBytes + 24, &pointCounts[i].points, sizeof(pointCounts[i].points));
-		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == pointCounts[i].accepted, pointCounts[i].what);
@@ -469,17 +504,20 @@ static void TestObjectsAndShapes()
 	Parent_File = 0;
 }
 
-// The bytes of a hierarchy section: an OBJHIERD chunk with a count of extra numbers, here 0, and then its name.
-static char sectionBytes[ChunkHeaderBytes + 4 + 8];
+// The bytes of a hierarchy's one section, as its outermost chunk holds it: an OBJCHIER chunk holding an OBJHIERD chunk with a count of extra numbers, here 0, and then its name.
+static char sectionBytes[ChunkHeaderBytes + ChunkHeaderBytes + 4 + 8];
 
 static void BuildSection(char const * name, size_t nameBytes)
 {
-	int const chunkBytes = (int)sizeof(sectionBytes);
+	int const sectionChunkBytes = (int)sizeof(sectionBytes);
+	int const nameChunkBytes = sectionChunkBytes - (int)ChunkHeaderBytes;
 
 	memset(sectionBytes, 0, sizeof(sectionBytes));
-	memcpy(sectionBytes, "OBJHIERD", 8);
-	memcpy(sectionBytes + 8, &chunkBytes, sizeof(chunkBytes));
-	memcpy(sectionBytes + ChunkHeaderBytes + 4, name, nameBytes);
+	memcpy(sectionBytes, "OBJCHIER", 8);
+	memcpy(sectionBytes + 8, &sectionChunkBytes, sizeof(sectionChunkBytes));
+	memcpy(sectionBytes + ChunkHeaderBytes, "OBJHIERD", 8);
+	memcpy(sectionBytes + ChunkHeaderBytes + 8, &nameChunkBytes, sizeof(nameChunkBytes));
+	memcpy(sectionBytes + ChunkHeaderBytes + ChunkHeaderBytes + 4, name, nameBytes);
 }
 
 // 8. A hierarchy section finds its object by name, so a section with a blank name has to refuse the level.
@@ -492,15 +530,17 @@ static void TestHierarchySections()
 		Parent_File = &file;
 
 		BuildShape(7);
-		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
 		size_t const bytes = BuildObject(5, 7);
-		Object_Chunk * object = new Object_Chunk(&file, objectBytes, bytes);
+		std::unique_ptr<Object_Chunk> const objectOwner(new Object_Chunk(&file, objectBytes, bytes));
+		Object_Chunk * object = objectOwner.get();
 		BuildSection("object", 7);
-		Object_Hierarchy_Chunk * hierarchy = new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes));
+		std::unique_ptr<Object_Hierarchy_Chunk> const hierarchyOwner(new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes)));
+		Object_Hierarchy_Chunk * hierarchy = hierarchyOwner.get();
 		file.post_input_processing();
 
 		Check(file.error_code == 0, "a section with a name is accepted");
-		Check(hierarchy->get_data()->object == object, "and it finds the object with that name");
+		Check(hierarchy->list_h_children().first_entry()->get_data()->object == object, "and it finds the object with that name");
 	}
 
 	{
@@ -508,11 +548,11 @@ static void TestHierarchySections()
 		Parent_File = &file;
 
 		BuildShape(7);
-		new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes));
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, shapeBytes, sizeof(shapeBytes)));
 		size_t const bytes = BuildObject(5, 7);
-		new Object_Chunk(&file, objectBytes, bytes);
+		std::unique_ptr<Object_Chunk> const made2(new Object_Chunk(&file, objectBytes, bytes));
 		BuildSection("", 1);
-		new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes));
+		std::unique_ptr<Object_Hierarchy_Chunk> const made3(new Object_Hierarchy_Chunk(&file, sectionBytes, sizeof(sectionBytes)));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a section with a blank name is refused");
@@ -548,7 +588,8 @@ static void TestBakedColours()
 		alignas(int) char bytes[32] = { 'N', 'O', 'R', 'M', 'A', 'L', 'L', 'T' };
 		memcpy(bytes + 12, &colourChunks[i].count, sizeof(colourChunks[i].count));
 
-		Shape_Vertex_Intensities_Chunk * colours = new Shape_Vertex_Intensities_Chunk(&file, bytes, colourChunks[i].bytes);
+		std::unique_ptr<Shape_Vertex_Intensities_Chunk> const coloursOwner(new Shape_Vertex_Intensities_Chunk(&file, bytes, colourChunks[i].bytes));
+		Shape_Vertex_Intensities_Chunk * colours = coloursOwner.get();
 
 		int const expected = colourChunks[i].accepted ? colourChunks[i].count : 0;
 
@@ -567,7 +608,8 @@ static void TestBakedColours()
 
 		memcpy(bigChunk + 12, &counts[i][0], sizeof(counts[i][0]));
 
-		Shape_Vertex_Intensities_Chunk * colours = new Shape_Vertex_Intensities_Chunk(&file, bigChunk, sizeof(bigChunk));
+		std::unique_ptr<Shape_Vertex_Intensities_Chunk> const coloursOwner(new Shape_Vertex_Intensities_Chunk(&file, bigChunk, sizeof(bigChunk)));
+		Shape_Vertex_Intensities_Chunk * colours = coloursOwner.get();
 
 		Check(colours->colour_places_for_shape(counts[i][1]) == counts[i][2], "the list has a place for every point and colour");
 	}
@@ -677,7 +719,7 @@ static void TestPolygons()
 		Parent_File = &file;
 
 		size_t const bytes = BuildShapeData(wholeShape, false, 4, rows[i].corners);
-		new Shape_Chunk(&file, wholeShape, bytes);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, bytes));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
@@ -712,7 +754,7 @@ static void TestPolygons()
 		size_t const bytes = PutNormals(normals, countRows[i].points, 1) - wholeShape;
 		std::rotate(wholeShape, wholeShape + headerChunkBytes, wholeShape + bytes); // moves the header to the end
 
-		new Shape_Chunk(&file, wholeShape, bytes);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, bytes));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == countRows[i].accepted, countRows[i].what);
@@ -727,7 +769,7 @@ static void TestPolygons()
 		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
 		memcpy(wholeShape + headerChunkBytes, "NOPOINTS", 8);
 
-		new Shape_Chunk(&file, wholeShape, bytes);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, bytes));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a shape with polygons and no points is refused");
@@ -760,7 +802,7 @@ static void TestSubShapes()
 		Parent_File = &file;
 
 		size_t const bytes = BuildShapeData(wholeShape, true, rows[i].points, rows[i].corners);
-		new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
@@ -790,7 +832,7 @@ static void TestSubShapes()
 		char * subShape = PutChunk(morph, "SUBSHAPE", frameBytes);
 		memcpy(subShape, frame, frameBytes);
 
-		new Shape_Chunk(&file, wholeShape, mainBytes + 2 * ChunkHeaderBytes + frameBytes);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, mainBytes + 2 * ChunkHeaderBytes + frameBytes));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == morphRows[i].accepted, morphRows[i].what);
@@ -826,7 +868,8 @@ static void TestRawMemoryShape()
 		char * rawCopy = PutChunk(wholeShape + mainBytes, "SHPPRPRO", rawBytes);
 		memcpy(rawCopy, &rows[i].size, sizeof(rows[i].size));
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + rawBytes);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + rawBytes));
+		Shape_Chunk * shape = shapeOwner.get();
 		file.post_input_processing();
 
 		Chunk * rawChunk = shape->lookup_single_child("SHPPRPRO");
@@ -872,7 +915,7 @@ static bool ShapeIsAccepted(char const * end)
 	File_Chunk file;
 	Parent_File = &file;
 
-	new Shape_Chunk(&file, wholeShape, end - wholeShape);
+	std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, end - wholeShape));
 	file.post_input_processing();
 
 	bool const accepted = (file.error_code == 0);
@@ -1089,7 +1132,8 @@ static void TestAnimatedShapes()
 		Parent_File = &file;
 
 		char * end = PutAnimation(wholeShape + bytes, 0, true, negativeFrames[i], 4, 1, 0);
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, end - wholeShape));
+		Shape_Chunk * shape = shapeOwner.get();
 
 		Check(shape->count_children("ANIMSEQU") == 0, "a sequence with a negative frame number is thrown away");
 	}
@@ -1103,7 +1147,8 @@ static void TestAnimatedShapes()
 		size_t const subBytes = BuildShapeData(wholeShape, true, 4, badCorner);
 		char * end = PutAnimation(wholeShape + subBytes, 0, true, 0, 4, 1, 0);
 
-		Shape_Sub_Shape_Chunk * subShape = new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const subShapeOwner(new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape));
+		Shape_Sub_Shape_Chunk * subShape = subShapeOwner.get();
 		file.post_input_processing();
 
 		Anim_Shape_Sequence_Chunk * animation = (Anim_Shape_Sequence_Chunk *) subShape->lookup_single_child("ANIMSEQU");
@@ -1201,7 +1246,7 @@ static void TestTextureCoordinates()
 		size_t const bytes = BuildShapeData(wholeShape, true, 4, triangle);
 		char * end = PutUVLists(wholeShape + bytes, 1, 5);
 
-		new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape));
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a sub-shape's list with 5 corners is refused");
 		Parent_File = 0;
@@ -1217,7 +1262,8 @@ static void TestTextureCoordinates()
 		float const lastNumber = 7.5f;
 		memcpy(end - sizeof(float), &lastNumber, sizeof(lastNumber));
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, end - wholeShape));
+		Shape_Chunk * shape = shapeOwner.get();
 
 		Check(shape->shape_data.num_uvs == 2 && shape->shape_data.uv_list[1].num_verts == 3
 			&& shape->shape_data.uv_list[1].vert[2].v == lastNumber, "the lists and their numbers are all read");
@@ -1397,7 +1443,7 @@ static void TestNormals()
 		Check(memcmp(wholeShape + pointNormalsAt, "SHPVNORM", 8) == 0, "the test found the sub-shape's normals");
 		memcpy(wholeShape + pointNormalsAt, "NOTNORMS", 8);
 
-		new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, bytes));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a sub-shape with no normals for its points is refused");
@@ -1508,7 +1554,7 @@ static void TestMorphFrames()
 		char * atTheWall = MemoryEndingAtAWall(allBytes);
 		memcpy(atTheWall, wholeShape, allBytes);
 
-		new Shape_Chunk(&file, atTheWall, allBytes);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, atTheWall, allBytes));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a chunk with no room for its numbers doesn't read past its end");
@@ -1526,7 +1572,8 @@ static void TestMorphFrames()
 		char * frames = PutChunk(morph, "FRMMORPH", sizeof(numbers));
 		memcpy(frames, numbers, sizeof(numbers));
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, (frames + sizeof(numbers)) - wholeShape);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, (frames + sizeof(numbers)) - wholeShape));
+		Shape_Chunk * shape = shapeOwner.get();
 		file.post_input_processing();
 
 		Chunk_With_Children * morphChunk = (Chunk_With_Children *)shape->lookup_single_child("SHPMORPH");
@@ -1568,7 +1615,8 @@ static void TestChunksInTheWrongPlace()
 		size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
 		PutChunk(wholeShape + bytes, rows[i].id, wrongPlaceBytes);
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + wrongPlaceBytes);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + wrongPlaceBytes));
+		Shape_Chunk * shape = shapeOwner.get();
 		Chunk * placed = shape->lookup_single_child(rows[i].id);
 
 		Check(placed && placed->r_u_miscellaneous(), rows[i].what);
@@ -1585,7 +1633,8 @@ static void TestChunksInTheWrongPlace()
 		char * morph = PutChunk(wholeShape + bytes, "SHPMORPH", ChunkHeaderBytes + 16);
 		PutChunk(morph, "SHPCENTR", 16);
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + 2 * ChunkHeaderBytes + 16);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, bytes + 2 * ChunkHeaderBytes + 16));
+		Shape_Chunk * shape = shapeOwner.get();
 		Chunk_With_Children * morphChunk = (Chunk_With_Children *)shape->lookup_single_child("SHPMORPH");
 		Chunk * centre = morphChunk->lookup_single_child("SHPCENTR");
 
@@ -1606,7 +1655,8 @@ static void TestChunksInTheWrongPlace()
 		memcpy(centre, centreNumbers, sizeof(centreNumbers));
 		memcpy(centre + sizeof(centreNumbers), &radius, sizeof(radius));
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + 16);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, bytes + ChunkHeaderBytes + 16));
+		Shape_Chunk * shape = shapeOwner.get();
 
 		Check(shape->shape_data.centre.y == 8 && shape->shape_data.radius_about_centre == radius, "a shape's centre inside a shape is read");
 		Parent_File = 0;
@@ -1635,7 +1685,7 @@ static void TestChunksInTheWrongPlace()
 			PutChunk(mode, "GMODHEAD", headerBytes);
 		}
 
-		new Environment_Data_Chunk(&file, wholeShape, ChunkHeaderBytes + modeBytes);
+		std::unique_ptr<Environment_Data_Chunk> const made(new Environment_Data_Chunk(&file, wholeShape, ChunkHeaderBytes + modeBytes));
 
 		Check((file.error_code == 0) == modeRows[i].accepted, modeRows[i].what);
 		Parent_File = 0;
@@ -1678,7 +1728,7 @@ static void TestNesting()
 			memcpy(nested + level * ChunkHeaderBytes + 8, &chunkBytes, sizeof(chunkBytes));
 		}
 
-		new Special_Objects_Chunk(&file, nested, rows[i].levels * ChunkHeaderBytes);
+		std::unique_ptr<Special_Objects_Chunk> const made(new Special_Objects_Chunk(&file, nested, rows[i].levels * ChunkHeaderBytes));
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
 		Parent_File = 0;
@@ -1780,7 +1830,8 @@ static char * PutAnimation(char * where, int polygon, int frames)
 }
 
 // Loads a shape from memory that ends right after it, so that a read past the end of its last chunk crashes the test, every time.
-static bool ShapeIsAcceptedAtTheWall(char const * end)
+// objectNamesKept, if it's asked for, gets how many names the shape's header ended up holding in its list of objects.
+static bool ShapeIsAcceptedAtTheWall(char const * end, int * objectNamesKept = 0)
 {
 	size_t const allBytes = end - wholeShape;
 	char * atTheWall = MemoryEndingAtAWall(allBytes);
@@ -1790,10 +1841,15 @@ static bool ShapeIsAcceptedAtTheWall(char const * end)
 	File_Chunk file;
 	Parent_File = &file;
 
-	new Shape_Chunk(&file, atTheWall, allBytes);
+	std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, atTheWall, allBytes));
 	file.post_input_processing();
 
 	bool const accepted = (file.error_code == 0);
+
+	if (objectNamesKept)
+	{
+		*objectNamesKept = made->get_header()->object_names_store.size();
+	}
 
 	Parent_File = 0;
 	return accepted;
@@ -1914,7 +1970,7 @@ static void TestTextureAnimation()
 
 			size_t const bytes = PutAnimatedPolygon((char *)bigChunk + sizeof(polygons), 0, 1, 3, frames, 0) - (char *)bigChunk;
 
-			new Animation_Chunk(&file, (char *)bigChunk, bytes);
+			std::unique_ptr<Animation_Chunk> const made(new Animation_Chunk(&file, (char *)bigChunk, bytes));
 
 			Check((file.error_code == 0) == (frames == most), frames == most ? "the most frames the game can count are accepted" : "one frame more is refused");
 			Parent_File = 0;
@@ -1932,7 +1988,8 @@ static void TestTextureAnimation()
 		numbers[12] = 9;
 		numbers[18] = 11;
 
-		Animation_Chunk * chunk = new Animation_Chunk(&file, (char *)numbers, sizeof(numbers));
+		std::unique_ptr<Animation_Chunk> const chunkOwner(new Animation_Chunk(&file, (char *)numbers, sizeof(numbers)));
+		Animation_Chunk * chunk = chunkOwner.get();
 
 		Check(file.error_code == 0 && chunk->NumPolys == 1, "a real chunk is accepted");
 		Check(chunk->AnimList[0]->poly == 7, "its polygon's number was read");
@@ -1982,7 +2039,8 @@ static void TestTextureAnimation()
 			size_t const bytes = BuildShapeData(wholeShape, false, 4, triangle);
 			char * end = PutAnimation(wholeShape + bytes, neighbourRows[i].polygon, 1);
 
-			Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, end - wholeShape);
+			std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, end - wholeShape));
+			Shape_Chunk * shape = shapeOwner.get();
 
 			ChunkPoly threeTriangles[3];
 
@@ -2080,7 +2138,7 @@ static void TestTextureAnimation()
 		size_t const bytes = BuildShapeData(wholeShape, true, 4, triangle);
 		char * end = PutAnimation(wholeShape + bytes, 0, 1);
 
-		new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape);
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, wholeShape, end - wholeShape));
 		file.post_input_processing();
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "texture animation in a sub-shape is refused");
@@ -2115,7 +2173,8 @@ static void TestTextureAnimation()
 			numbers[12] = pictureRows[i].first;
 			numbers[13] = pictureRows[i].second;
 
-			Animation_Chunk * chunk = new Animation_Chunk(&file, (char *)numbers, sizeof(numbers));
+			std::unique_ptr<Animation_Chunk> const chunkOwner(new Animation_Chunk(&file, (char *)numbers, sizeof(numbers)));
+			Animation_Chunk * chunk = chunkOwner.get();
 
 			Check(chunk->AnimList[0]->ImagesAreKnown(2, pictureRows[i].list) == pictureRows[i].known, pictureRows[i].what);
 			Parent_File = 0;
@@ -2155,10 +2214,27 @@ static void TestGeneratorSettings()
 			memcpy(atTheWall + 20, &rows[i].blockSize, sizeof(int));
 		}
 
-		AVP_Generator_Extended_Settings_Chunk * settings = new AVP_Generator_Extended_Settings_Chunk(&file, atTheWall, rows[i].bytes);
+		std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settingsOwner(new AVP_Generator_Extended_Settings_Chunk(&file, atTheWall, rows[i].bytes));
+		AVP_Generator_Extended_Settings_Chunk * settings = settingsOwner.get();
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
 		Check(settings->weights != 0 && settings->weights->data_size >= (int)sizeof(AVP_Generator_Weighting), "and it can still be read");
+		Parent_File = 0;
+	}
+
+	// A block longer than the game's own needs a longer list, or it would be written past the end of the one it has. Writing past the end of a list
+	// doesn't always show, because what's next to it may be nothing that matters today. So this asks how long the list really is, which has one answer.
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		int const blockSize = 80;
+		alignas(int) char bytes[100] = { 0 };
+		memcpy(bytes + 20, &blockSize, sizeof(int));
+
+		std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settings(new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes)));
+
+		Check(_msize(settings->weights) >= (size_t)blockSize, "a longer block gets a list with room for all of it");
 		Parent_File = 0;
 	}
 
@@ -2173,7 +2249,8 @@ static void TestGeneratorSettings()
 		memcpy(bytes + 20, &blockSize, sizeof(int));
 		memcpy(bytes + 20 + 8, &flameMarines, sizeof(int));
 
-		AVP_Generator_Extended_Settings_Chunk * settings = new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes));
+		std::unique_ptr<AVP_Generator_Extended_Settings_Chunk> const settingsOwner(new AVP_Generator_Extended_Settings_Chunk(&file, bytes, sizeof(bytes)));
+		AVP_Generator_Extended_Settings_Chunk * settings = settingsOwner.get();
 
 		Check(settings->weights->FlameMarine_Wt == flameMarines, "a weight arrives where it should");
 		Parent_File = 0;
@@ -2191,15 +2268,15 @@ static bool ConstructedAtTheWall(char const * bytes, size_t size, int kind)
 
 	if (kind == 0)
 	{
-		new Placed_Hierarchy_Data_Chunk(&file, atTheWall, size);
+		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const made(new Placed_Hierarchy_Data_Chunk(&file, atTheWall, size));
 	}
 	else if (kind == 1)
 	{
-		new Placed_Hierarchy_Sequence_Chunk(&file, atTheWall, size);
+		std::unique_ptr<Placed_Hierarchy_Sequence_Chunk> const made(new Placed_Hierarchy_Sequence_Chunk(&file, atTheWall, size));
 	}
 	else
 	{
-		new Rainbow6_Generator_Extra_Data_Chunk(&file, atTheWall, size);
+		std::unique_ptr<Rainbow6_Generator_Extra_Data_Chunk> const made(new Rainbow6_Generator_Extra_Data_Chunk(&file, atTheWall, size));
 	}
 
 	bool const accepted = (file.error_code == 0);
@@ -2247,6 +2324,45 @@ static void TestPlacedHierarchies()
 	memset(bytes, 'x', sizeof(bytes));
 	Check(!ConstructedAtTheWall(bytes, 60, 0), "a name with no end is refused");
 
+	// The name's own end marker is the very last byte of the chunk, so there's no room for the numbers that have to come after it
+	memset(bytes, 'x', sizeof(bytes));
+	bytes[59] = 0;
+	Check(!ConstructedAtTheWall(bytes, 60, 0), "a name that fills its chunk, with no room for the numbers after it, is refused");
+
+	// A name is copied up to its end marker and no further, and the numbers after it are read from the right place. The chunk is at the wall, and
+	// what follows the end marker isn't a name, so a copy that went on past it would show.
+	{
+		TestFile file;
+
+		size_t const size = 8 + numbersBytes + 4;
+		char * atTheWall = MemoryEndingAtAWall(size);
+		memset(atTheWall, 0, size);
+		memcpy(atTheWall, "abcdefg", 8);
+
+		int const hierarchyIndex = 1234;
+		memcpy(atTheWall + 8, &hierarchyIndex, sizeof(int));
+
+		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const chunk(new Placed_Hierarchy_Data_Chunk(&file, atTheWall, size));
+
+		Check(file.error_code == 0, "a placed hierarchy with a 7 letter name is accepted");
+		Check(chunk->name != 0 && memcmp(chunk->name, "abcdefg", 8) == 0, "and its name is copied whole");
+		Check(chunk->hierarchy_index == hierarchyIndex, "and what comes after the name is read from the right place");
+	}
+
+	// Stops at the first end marker, whatever comes after it
+	{
+		TestFile file;
+
+		size_t const size = 8 + numbersBytes + 4;
+		char * atTheWall = MemoryEndingAtAWall(size);
+		memset(atTheWall, 0, size);
+		memcpy(atTheWall, "ab\0defg", 8);
+
+		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const chunk(new Placed_Hierarchy_Data_Chunk(&file, atTheWall, 4 + numbersBytes + 4));
+
+		Check(chunk->name != 0 && memcmp(chunk->name, "ab", 3) == 0, "a name stops at its first end marker");
+	}
+
 	// That chunk would be refused anyway, because its count can't be right. The one way past that takes a count with no zero byte in it, and a
 	// chunk big enough to hold that many numbers, so this one is 67 MB of 1s. Only the check on the name can refuse it.
 	{
@@ -2257,7 +2373,7 @@ static void TestPlacedHierarchies()
 		char * huge = (char *)malloc(hugeBytes);
 		memset(huge, 1, hugeBytes);
 
-		new Placed_Hierarchy_Data_Chunk(&file, huge, hugeBytes);
+		std::unique_ptr<Placed_Hierarchy_Data_Chunk> const made(new Placed_Hierarchy_Data_Chunk(&file, huge, hugeBytes));
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a huge chunk with no zero byte at all is refused");
 		free(huge);
@@ -2353,7 +2469,7 @@ static void TestModuleBoxes()
 		memcpy(wholeShape + ChunkHeaderBytes + ShapeNumberAt, &shapeNumber, sizeof(shapeNumber));
 		memcpy(wholeShape + ChunkHeaderBytes + ShapeHeaderDataBytes + ChunkHeaderBytes, &rows[i].pointX, sizeof(int));
 
-		new Shape_Chunk(&file, wholeShape, shapeBytesUsed);
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, wholeShape, shapeBytesUsed));
 
 		size_t objectBytesUsed = BuildObject(5, shapeNumber);
 
@@ -2363,7 +2479,7 @@ static void TestModuleBoxes()
 			objectBytesUsed += ChunkHeaderBytes;
 		}
 
-		new Object_Chunk(&file, objectBytes, objectBytesUsed);
+		std::unique_ptr<Object_Chunk> const made2(new Object_Chunk(&file, objectBytes, objectBytesUsed));
 		file.post_input_processing();
 
 		Check((file.error_code == 0) == rows[i].accepted, rows[i].what);
@@ -2386,7 +2502,7 @@ static bool StrategyAccepted(char const * strategy, size_t strategyBytes)
 	memset(atTheWall, 0, StrategyNumbersBytes);
 	memcpy(atTheWall + StrategyNumbersBytes, strategy, strategyBytes);
 
-	new AVP_Strategy_Chunk(&file, atTheWall, bytes);
+	std::unique_ptr<AVP_Strategy_Chunk> const made(new AVP_Strategy_Chunk(&file, atTheWall, bytes));
 
 	bool const accepted = (file.error_code == 0);
 
@@ -2405,7 +2521,8 @@ static size_t StrategySizeOfKind(int kind)
 	memset(bytes, 0, sizeof(bytes));
 	memcpy(bytes + StrategyNumbersBytes, &kind, sizeof(kind));
 
-	AVP_Strategy_Chunk * chunk = new AVP_Strategy_Chunk(&file, bytes, sizeof(bytes));
+	std::unique_ptr<AVP_Strategy_Chunk> const chunkOwner(new AVP_Strategy_Chunk(&file, bytes, sizeof(bytes)));
+	AVP_Strategy_Chunk * chunk = chunkOwner.get();
 	size_t const size = chunk->Strategy->GetStrategySize();
 
 	Parent_File = 0;
@@ -2435,7 +2552,8 @@ static void TestChunksTheGameDoesNotRead()
 		PutChunk(inside, "CONSTYPE", sizeof(int));
 		PutChunk(inside + typeBytes, "SHPPOLYS", 36);
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + consoleBytes);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + consoleBytes));
+		Shape_Chunk * shape = shapeOwner.get();
 		Chunk * console = shape->lookup_single_child("CONSHAPE");
 
 		Check(console && console->r_u_miscellaneous(), "a console shape holding children that fit is kept as plain bytes, and the loader goes on");
@@ -2455,7 +2573,8 @@ static void TestChunksTheGameDoesNotRead()
 		int const tooBig = 0x7fffffff;
 		memcpy(inside + 8, &tooBig, sizeof(tooBig));
 
-		Shape_Chunk * shape = new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + ChunkHeaderBytes);
+		std::unique_ptr<Shape_Chunk> const shapeOwner(new Shape_Chunk(&file, wholeShape, mainBytes + ChunkHeaderBytes + ChunkHeaderBytes));
+		Shape_Chunk * shape = shapeOwner.get();
 		Chunk * console = shape->lookup_single_child("CONSHAPE");
 
 		Check(console && console->r_u_miscellaneous() && file.error_code == 0, "a console shape whose child says it's huge is the same, because nothing looks inside");
@@ -2470,7 +2589,8 @@ static void TestChunksTheGameDoesNotRead()
 		char * atTheWall = MemoryEndingAtAWall(ChunkHeaderBytes);
 		PutChunk(atTheWall, "CONSTYPE", 0);
 
-		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes);
+		std::unique_ptr<Environment_Data_Chunk> const levelOwner(new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes));
+		Environment_Data_Chunk * level = levelOwner.get();
 		Chunk * type = level->lookup_single_child("CONSTYPE");
 
 		Check(type && type->r_u_miscellaneous() && file.error_code == 0, "a console type with nothing in it is kept as plain bytes, with nothing read past it");
@@ -2485,7 +2605,8 @@ static void TestChunksTheGameDoesNotRead()
 		char * atTheWall = MemoryEndingAtAWall(ChunkHeaderBytes);
 		PutChunk(atTheWall, "AVPEXSTR", 0);
 
-		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes);
+		std::unique_ptr<Environment_Data_Chunk> const levelOwner(new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes));
+		Environment_Data_Chunk * level = levelOwner.get();
 		Chunk * external = level->lookup_single_child("AVPEXSTR");
 
 		Check(external && external->r_u_miscellaneous() && file.error_code == 0, "an external strategy with nothing in it is kept as plain bytes, with nothing read past it");
@@ -2502,7 +2623,8 @@ static void TestChunksTheGameDoesNotRead()
 		int const kind = StratLift;
 		memcpy(data + 20, &kind, sizeof(kind));
 
-		Environment_Data_Chunk * level = new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes + dataBytes);
+		std::unique_ptr<Environment_Data_Chunk> const levelOwner(new Environment_Data_Chunk(&file, atTheWall, ChunkHeaderBytes + dataBytes));
+		Environment_Data_Chunk * level = levelOwner.get();
 		Chunk * external = level->lookup_single_child("AVPEXSTR");
 
 		Check(external && external->r_u_miscellaneous() && file.error_code == 0, "one saying it's a lift, with no lift in it, is the same");
@@ -2542,7 +2664,7 @@ static void TestStrategies()
 		char * atTheWall = MemoryEndingAtAWall(StrategyNumbersBytes + 3);
 		memset(atTheWall, 0, StrategyNumbersBytes + 3);
 
-		new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + 3);
+		std::unique_ptr<AVP_Strategy_Chunk> const made(new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + 3));
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a chunk with no room for its kind is refused");
 		Parent_File = 0;
@@ -2563,7 +2685,7 @@ static void TestStrategies()
 			memset(atTheWall, 0, StrategyNumbersBytes);
 			memcpy(atTheWall + StrategyNumbersBytes, strategy, bytes);
 
-			new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + bytes);
+			std::unique_ptr<AVP_Strategy_Chunk> const made(new AVP_Strategy_Chunk(&file, atTheWall, StrategyNumbersBytes + bytes));
 
 			Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, (std::string("an unknown kind with ") + std::to_string(bytes) + " bytes, too few for its three numbers, is refused").c_str());
 			Parent_File = 0;
@@ -2655,7 +2777,7 @@ static void TestStrategies()
 		memset(atTheWall, 0, room + 8);
 		memcpy(atTheWall, strategy, room);
 
-		new TrackStrategy(atTheWall, room);
+		std::unique_ptr<TrackStrategy> const made(new TrackStrategy(atTheWall, room));
 
 		Check(file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "effects that run out of room are refused");
 		Parent_File = 0;
@@ -2672,7 +2794,7 @@ typedef void (*MakesChunk)(Chunk_With_Children * parent, char const * data, size
 template <class Kind>
 static void MakeChunk(Chunk_With_Children * parent, char const * data, size_t size)
 {
-	new Kind(parent, data, size);
+	std::unique_ptr<Chunk> const made(new Kind(parent, data, size));
 }
 
 static bool ChunkAccepted(MakesChunk make, char const * bytes, size_t size)
@@ -2736,11 +2858,13 @@ static bool TextureNamesAccepted(bool subShape, int count, char const * names, s
 
 	if (subShape)
 	{
-		textureNamesCounted = (new Shape_Sub_Shape_Chunk(&file, atTheWall, allBytes))->shape_data.num_texfiles;
+		std::unique_ptr<Shape_Sub_Shape_Chunk> const made(new Shape_Sub_Shape_Chunk(&file, atTheWall, allBytes));
+		textureNamesCounted = made->shape_data.num_texfiles;
 	}
 	else
 	{
-		textureNamesCounted = (new Shape_Chunk(&file, atTheWall, allBytes))->shape_data.num_texfiles;
+		std::unique_ptr<Shape_Chunk> const made(new Shape_Chunk(&file, atTheWall, allBytes));
+		textureNamesCounted = made->shape_data.num_texfiles;
 	}
 
 	bool const accepted = (file.error_code == 0);
@@ -2757,7 +2881,8 @@ static void TestCountedLists()
 	alignas(int) static char bytes[4096];
 
 	// where each count is, with any name before it empty, and what each item takes at the least
-	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; };
+	// bytesAfter is what the kind holds after its list. A whole chunk has it, and the bad counts are tried without it, so that only the check on the count can refuse them.
+	struct CountedRow { MakesChunk make; size_t countAt; size_t itemBytes; char const * good; size_t bytesAfter; };
 	CountedRow const rows[] =
 	{
 		{ MakeChunk<AVP_Path_Chunk>,                          16, sizeof(ChunkPathPoint),       "a path with points is accepted" },
@@ -2768,13 +2893,13 @@ static void TestCountedLists()
 		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,  12, sizeof(int),                  "a sequence header's extra numbers are accepted" },
 		{ MakeChunk<Object_Animation_All_Sequence_Chunk>,     0,  4 * sizeof(int),              "a list of sequences is accepted" },
 		{ MakeChunk<Object_Hierarchy_Data_Chunk>,             0,  sizeof(int),                  "a hierarchy's extra numbers are accepted" },
-		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, 8, 8,                          "a set of alternate shapes is accepted" },
-		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,    8,  sizeof(int),                  "a collection of shape sets is accepted" },
+		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, 8, 8,                          "a set of alternate shapes is accepted", 16 },
+		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,    8,  sizeof(int),                  "a collection of shape sets is accepted", 8 },
 		{ MakeChunk<Hierarchy_Degradation_Distance_Chunk>,    0,  sizeof(int),                  "a list of detail levels is accepted" },
 		{ MakeChunk<Sprite_Bitmap_Scale_Chunk>,               0,  sizeof(float),                "a sprite's scales are accepted" },
-		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted" },
+		{ MakeChunk<Sprite_Bitmap_Centre_Chunk>,              0,  4 * sizeof(int),              "a sprite's centres are accepted", 4 },
 		{ MakeChunk<Indexed_Sound_Chunk>,                     28, sizeof(int),                  "a sound's extra numbers are accepted" },
-		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                 4,  sizeof(int),                  "a list of random textures is accepted", 8 },
 		{ MakeChunk<Placed_Object_Light_Chunk>,               sizeof(Placed_Object_Light_Data), sizeof(int), "a light's extra numbers are accepted" },
 		{ MakeChunk<Module_Waypoint_Chunk>,                   0,  3 * sizeof(ChunkVectorInt) + 4 * sizeof(int), "a list of waypoints is accepted" },
 		{ MakeChunk<Preset_Palette_Chunk>,                    20, 24,                           "a list of palettes is accepted" },
@@ -2792,7 +2917,7 @@ static void TestCountedLists()
 
 		memset(bytes, 0, sizeof(bytes));
 		PutNumber(bytes, row.countAt, 2);
-		Check(ChunkAccepted(row.make, bytes, size), row.good);
+		Check(ChunkAccepted(row.make, bytes, size + row.bytesAfter), row.good);
 
 		TestBadCounts(row.make, bytes, size, row.countAt, row.itemBytes);
 
@@ -2981,7 +3106,8 @@ static void TestCountedLists()
 			memcpy(atTheWall, &tables[i].width, sizeof(int));
 			memcpy(atTheWall + 4, &tables[i].levels, sizeof(int));
 
-			Environment_TLT_Chunk const * table = new Environment_TLT_Chunk(&file, atTheWall, size);
+			std::unique_ptr<Environment_TLT_Chunk const> const tableOwner(new Environment_TLT_Chunk(&file, atTheWall, size));
+			Environment_TLT_Chunk const * table = tableOwner.get();
 
 			Check((table->table != 0) == tables[i].kept, tables[i].says);
 			Parent_File = 0;
@@ -3030,6 +3156,68 @@ static void TestCountedLists()
 		Check(!ChunkAccepted(MakeChunk<Matching_Images_Chunk>, bytes, firstMatchAt + 2 * 52), "matching images that run out of room are refused");
 	}
 
+	// The rows above use up a list's room with a long name. A name can't be read past the end of its chunk any more, so reading the name would refuse those files by itself,
+	// and they can't show that a list's own check is there at all. In these rows every name does end inside the chunk, and nothing else is wrong. The last entry just has less
+	// room than any entry takes. Where a list has a check of its own, it's the only thing that can refuse these. Without it, the rest of the entry would be read from past the chunk's end.
+	{
+		// Each entry here is two names. The first takes 12 bytes, which leaves 5 of the 17 for the second. Its two empty names start 4 bytes apart, so they fit in those 5, and
+		// the smallest entry takes 8. This list has no check of its own: the numbers read after it are what refuse this.
+		size_t const firstNameAt = 12;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 8, 2);
+		memset(bytes + firstNameAt, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, bytes, firstNameAt + 17), "a shape set's last entry with too little room is refused");
+
+		// One waypoint with two modules, each a name and a number. The first takes 12 bytes, which leaves 4 of the 16 for the second: enough for its name, and none for its number.
+		// This list has no check of its own either: reading that number is what refuses this.
+		size_t const modulesAt = sizeof(int) + 44 + sizeof(int);
+		size_t const firstModuleAt = modulesAt + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 0, 1);
+		PutNumber(bytes, modulesAt, 2);
+		memset(bytes + firstModuleAt, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<Module_Waypoint_Chunk>, bytes, firstModuleAt + 16), "a waypoint's last module with too little room is refused");
+
+		// Each image is two numbers and a name. The first takes 16 bytes, which leaves 9 of the 25 for the second: its numbers and an empty name, in less than the smallest 12.
+		size_t const firstImageAt = 24 + sizeof(int);
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 24, 2);
+		memset(bytes + firstImageAt + 8, 'x', 7);
+		Check(!ChunkAccepted(MakeChunk<RIF_Child_Chunk>, bytes, firstImageAt + 25), "a child file's last image with too little room is refused");
+
+		// A pair of images takes at least 52 bytes, because each image is padded to a multiple of 4. A name of 2 letters makes the first pair 56, which leaves 51 of the 107 for
+		// the second. All its names end in those 51, and only its padding is missing.
+		size_t const firstMatchAt = 16;
+		size_t const firstFileNameAt = firstMatchAt + 12 + 16;
+
+		memset(bytes, 0, sizeof(bytes));
+		PutNumber(bytes, 12, 2);
+		memset(bytes + firstFileNameAt, 'x', 2);
+		Check(!ChunkAccepted(MakeChunk<Matching_Images_Chunk>, bytes, firstMatchAt + 107), "the last pair of matching images with too little room is refused");
+
+		// A palette is five numbers, then its colours and name padded to a multiple of 4. Four colours make the first one 36 bytes, which leaves 21 of the 57 for the second: its
+		// numbers and an empty name, in less than the smallest 24.
+		struct PaletteRow { MakesChunk make; size_t countAt; char const * says; };
+		PaletteRow const palettes[] =
+		{
+			{ MakeChunk<Preset_Palette_Chunk>,       20, "a list of palettes' last one with too little room is refused" },
+			{ MakeChunk<Preset_Palette_Store_Chunk>, 24, "a store of palettes' last one with too little room is refused" },
+		};
+
+		for (size_t i = 0; i < sizeof(palettes) / sizeof(palettes[0]); i++)
+		{
+			size_t const firstAt = palettes[i].countAt + sizeof(int);
+
+			memset(bytes, 0, sizeof(bytes));
+			PutNumber(bytes, palettes[i].countAt, 2);
+			PutNumber(bytes, firstAt, 4);
+			Check(!ChunkAccepted(palettes[i].make, bytes, firstAt + 57), palettes[i].says);
+		}
+	}
+
 	// A shape's list of texture names, in a whole shape and in a sub-shape. Each name ends with a zero, with nothing after it, so one byte is the least a name takes.
 	{
 		for (int subShape = 0; subShape < 2; subShape++)
@@ -3067,6 +3255,18 @@ static void TestCountedLists()
 
 			char const * end = data + ShapeHeaderDataBytes + nameRows[i].bytes;
 			Check(ShapeIsAcceptedAtTheWall(end) == nameRows[i].good, nameRows[i].says);
+		}
+
+		// The list stops as soon as its room has gone. Two objects are counted here, and the first one's name takes all the room, so there's nothing to keep for the second.
+		// Reading a name with no room left refuses the file by itself, so being refused can't show this: only how many names were kept can.
+		{
+			int const twoObjects = 2;
+			char * data = PutChunk(wholeShape, "SHPHEAD1", ShapeHeaderDataBytes + 3);
+			memcpy(data + ShapeHeaderDataBytes - sizeof(int), &twoObjects, sizeof(int));
+			memcpy(data + ShapeHeaderDataBytes, "xy", 3);
+
+			int kept = 0;
+			Check(!ShapeIsAcceptedAtTheWall(data + ShapeHeaderDataBytes + 3, &kept) && kept == 1, "a shape's list of objects stops when its room runs out");
 		}
 
 		// A header that ends partway through its count, at the wall, so that reading the count at all would stop the test.
@@ -3167,7 +3367,7 @@ static bool FramePlacesAccepted(int const * places, int frames)
 	File_Chunk file;
 	Parent_File = &file;
 
-	new Object_Animation_Sequence_Chunk(&file, wholeShape, end - wholeShape);
+	std::unique_ptr<Object_Animation_Sequence_Chunk> const made(new Object_Animation_Sequence_Chunk(&file, wholeShape, end - wholeShape));
 	file.post_input_processing();
 
 	bool const accepted = (file.error_code == 0);
@@ -3187,7 +3387,7 @@ static bool PlacedStrategyAccepted(int kind)
 	File_Chunk file;
 	Parent_File = &file;
 
-	new Placed_Hierarchy_Chunk(&file, wholeShape, ChunkHeaderBytes + StrategyNumbersBytes + strategyBytes);
+	std::unique_ptr<Placed_Hierarchy_Chunk> const made(new Placed_Hierarchy_Chunk(&file, wholeShape, ChunkHeaderBytes + StrategyNumbersBytes + strategyBytes));
 	file.post_input_processing();
 
 	bool const accepted = (file.error_code == 0);
@@ -3238,14 +3438,15 @@ static bool TwoPathsAccepted(int first, int second)
 	File_Chunk file;
 	Parent_File = &file;
 
-	Special_Objects_Chunk * paths = new Special_Objects_Chunk(&file);
+	std::unique_ptr<Special_Objects_Chunk> const pathsOwner(new Special_Objects_Chunk(&file));
+	Special_Objects_Chunk * paths = pathsOwner.get();
 
 	memset(bytes, 0, sizeof(bytes));
 	PutNumber(bytes, 4, first);
-	new AVP_Path_Chunk(paths, bytes, 20);
+	std::unique_ptr<AVP_Path_Chunk> const made(new AVP_Path_Chunk(paths, bytes, 20));
 
 	PutNumber(bytes, 4, second);
-	new AVP_Path_Chunk(paths, bytes, 20);
+	std::unique_ptr<AVP_Path_Chunk> const made2(new AVP_Path_Chunk(paths, bytes, 20));
 
 	file.post_input_processing();
 
@@ -3437,6 +3638,478 @@ static void TestNumbersUsedAsPlaces()
 	Check(!FramePlacesAccepted(farBelow, 2), "a frame far below the start of its sequence is refused");
 }
 
+// 33b. A name in a level file ends at a zero byte, and the search for it must stop at the end of its chunk. Here there's no zero byte in the chunk or in anything after
+// it, right up to the wall, so a search that doesn't stop runs into the wall and ends the test. flagsAt is where to put a 1, for a chunk that only has a name if a flag says so.
+static bool AcceptedWithNoZeroAnywhere(MakesChunk make, size_t size, int flagsAt)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+	memset(atTheWall, 'x', size + SpareAfterChunk);
+
+	if (flagsAt >= 0)
+	{
+		PutNumber(atTheWall, flagsAt, 1);
+	}
+
+	make(&file, atTheWall, size);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// A chunk with a list, where the name is only reached by way of a count: the numbers before it are given here, and the name after them never ends
+static bool AcceptedWithNumbersThenNoEnd(MakesChunk make, int const * numbers, size_t numbersCount, size_t size)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	char * atTheWall = MemoryEndingAtAWall(size + SpareAfterChunk);
+	memset(atTheWall, 'x', size + SpareAfterChunk);
+	memcpy(atTheWall, numbers, numbersCount * sizeof(int));
+
+	make(&file, atTheWall, size);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// The same, for a chunk that only exists inside other chunks: kinds are the chunks from the outside in, numbers are what the innermost one starts with, and lastBytes is how
+// much it holds in all. Everything after the numbers is letters, right up to the wall.
+static bool AcceptedInsideOtherChunks(MakesChunk make, char const * const * kinds, size_t kindCount, int const * numbers, size_t numbersCount, size_t lastBytes)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	size_t const whole = kindCount * ChunkHeaderBytes + lastBytes;
+	char * atTheWall = MemoryEndingAtAWall(whole + SpareAfterChunk);
+	memset(atTheWall, 'x', whole + SpareAfterChunk);
+
+	char * at = atTheWall;
+
+	for (size_t i = 0; i < kindCount; i++)
+	{
+		int const chunkBytes = (int)(whole - i * ChunkHeaderBytes);
+		memcpy(at, kinds[i], 8);
+		memcpy(at + 8, &chunkBytes, sizeof(chunkBytes));
+		at += ChunkHeaderBytes;
+	}
+
+	if (numbersCount)
+	{
+		memcpy(at, numbers, numbersCount * sizeof(int));
+	}
+
+	make(&file, atTheWall, whole);
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+static void TestNamesStayInTheirChunks()
+{
+	puts("33b. names stay in their chunks");
+
+	// the two helpers themselves
+	{
+		File_Chunk file;
+		Parent_File = &file;
+
+		char const bytes[] = "abc\0xyz";
+		size_t length = 99;
+		std::unique_ptr<char[]> const name(CopyNameFromChunk(bytes, sizeof(bytes), bytes, &length));
+		Check(length == 3 && memcmp(name.get(), "abc", 4) == 0 && file.error_code == 0, "a name is copied up to its zero byte");
+
+		std::unique_ptr<char[]> const onTheLastByte(CopyNameFromChunk(bytes, 4, bytes, &length));
+		Check(length == 3 && memcmp(onTheLastByte.get(), "abc", 4) == 0 && file.error_code == 0, "a zero byte on the chunk's very last byte counts");
+
+		std::unique_ptr<char[]> const oneShort(CopyNameFromChunk(bytes, 3, bytes, &length));
+		Check(oneShort[0] == 0 && length == 0 && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "one past the chunk doesn't, and the file is refused, with an empty name");
+
+		file.error_code = 0;
+		std::unique_ptr<char[]> const nothingLeft(CopyNameFromChunk(bytes, 4, bytes + 4, &length));
+		Check(nothingLeft[0] == 0 && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "a name that has to be there, with no room left for it, is refused");
+
+		file.error_code = 0;
+		std::unique_ptr<char[]> const leftOut(CopyOptionalNameFromChunk(bytes, 4, bytes + 4, &length));
+		Check(!leftOut && length == 0 && file.error_code == 0, "one that can be left out, with no room left for it, is just not there");
+
+		std::unique_ptr<char[]> const empty(CopyOptionalNameFromChunk(bytes + 3, 4, bytes + 3, &length));
+		Check(!empty && length == 0 && file.error_code == 0, "and neither is an empty one");
+
+		std::unique_ptr<char[]> const optional(CopyOptionalNameFromChunk(bytes, 4, bytes, &length));
+		Check(optional && length == 3 && memcmp(optional.get(), "abc", 4) == 0, "and one that's there is copied");
+
+		std::unique_ptr<char[]> const noEnd(CopyOptionalNameFromChunk(bytes, 3, bytes, &length));
+		Check(!noEnd && file.error_code == CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED, "but letters with no end are still refused");
+		Parent_File = 0;
+	}
+
+	struct NameRow { MakesChunk make; int flagsAt; char const * what; };
+	NameRow const rows[] =
+	{
+		{ MakeChunk<AVP_Generator_Chunk>,                         -1, "a generator's name with no end is refused" },
+		{ MakeChunk<AVP_Generator_Extra_Name_Chunk>,              -1, "a generator's other name" },
+		{ MakeChunk<AVP_Power_Cable_Chunk>,                       -1, "a power cable's name" },
+		{ MakeChunk<AVP_Particle_Generator_Data_Chunk>,           -1, "a particle generator's name" },
+		{ MakeChunk<AVP_Path_Chunk>,                              -1, "a path's name" },
+		{ MakeChunk<Virtual_Object_Properties_Chunk>,             -1, "a virtual object's name" },
+		{ MakeChunk<Object_Animation_Sequence_Header_Chunk>,      -1, "an animation sequence's name" },
+		{ MakeChunk<External_Shape_BMPs_Store_Chunk>,             -1, "an outside shape's list of bitmaps" },
+		{ MakeChunk<Bitmap_MD5_Chunk>,                            -1, "a bitmap's check sum names" },
+		{ MakeChunk<Fragment_Type_Data_Chunk>,                    -1, "a fragment type's name" },
+		{ MakeChunk<Fragment_Type_Shape_Chunk>,                   -1, "a fragment shape's name" },
+		{ MakeChunk<Fragment_Type_Sound_Chunk>,                   -1, "a fragment sound's name" },
+		{ MakeChunk<Object_Track_Sound_Chunk>,                    -1, "a track sound's name" },
+		{ MakeChunk<Environment_TLT_Chunk>,                       28, "a lighting table's outside file" },
+		{ MakeChunk<Coloured_Polygons_Lookup_Chunk>,               0, "a colour table's outside file" },
+		{ MakeChunk<RIF_Child_Chunk>,                             -1, "a child file's name" },
+		{ MakeChunk<Preset_Palette_Store_Chunk>,                  -1, "a palette store's file name" },
+		{ MakeChunk<Shape_External_Filename_Chunk>,               -1, "an outside shape's file name" },
+		{ MakeChunk<Shape_External_Object_Name_Chunk>,            -1, "an outside shape's object name" },
+		{ MakeChunk<Shape_Name_Chunk>,                            -1, "a shape's name" },
+		{ MakeChunk<Shape_Fragment_Type_Chunk>,                   -1, "a shape's fragment type" },
+		{ MakeChunk<Sound_Object_Chunk>,                          -1, "a sound's name" },
+		{ MakeChunk<Sound_Object_Extra_Name_Chunk>,               -1, "a sound's other name" },
+		{ MakeChunk<Indexed_Sound_Chunk>,                         -1, "an indexed sound's file name" },
+		{ MakeChunk<BMP_Enums_Chunk>,                             -1, "a list of enums' type name" },
+		{ MakeChunk<Sound_Directory_Chunk>,                       -1, "a sound folder's name" },
+		{ MakeChunk<Random_Texture_ID_Chunk>,                     -1, "a random texture's name" },
+		{ MakeChunk<Object_Hierarchy_Data_Chunk>,                 -1, "a hierarchy section's object name" },
+		{ MakeChunk<Object_Hierarchy_Name_Chunk>,                 -1, "a hierarchy's name" },
+		{ MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>,  -1, "an alternate shape set's name" },
+		{ MakeChunk<Hierarchy_Shape_Set_Collection_Chunk>,        -1, "a shape set collection's name" },
+		{ MakeChunk<RIF_Name_Chunk>,                              -1, "a level's name" },
+		{ MakeChunk<Dummy_Object_Data_Chunk>,                     -1, "a dummy object's name" },
+		{ MakeChunk<Dummy_Object_Text_Chunk>,                     -1, "a dummy object's text" },
+	};
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		Check(!AcceptedWithNoZeroAnywhere(rows[i].make, 120, rows[i].flagsAt), rows[i].what);
+	}
+
+	// A list of bitmap names: how many, then four numbers and the name's place in the list, then the name
+	{
+		int const numbers[] = { 1, 0, 0, 0, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Global_BMP_Name_Chunk>, numbers, 6, 40), "a name in a list of bitmaps");
+	}
+
+	// Enums: two numbers, an empty type name, how many, then each one's two numbers and its name
+	{
+		int const numbers[] = { 0, 0, 0, 1, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<BMP_Enums_Chunk>, numbers, 6, 40), "a name in a list of enums");
+	}
+
+	// Matching images: three numbers, how many, then three numbers and an image's four numbers, then its names
+	{
+		int const numbers[] = { 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Matching_Images_Chunk>, numbers, 11, 100), "a name in a list of matching images");
+	}
+
+	// A child file: two numbers and flags, an empty name, a version, an empty file name, how many images, then each one's two numbers and its name
+	{
+		int const numbers[] = { 0, 0, 0, 0, 0, 0, 1, 0, 0 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<RIF_Child_Chunk>, numbers, 9, 52), "a name in a child file's list of images");
+	}
+
+	// A waypoint: how many waypoints, three corners, flags and a spare, no links to other waypoints, one link to a module, then that module's name
+	{
+		int const numbers[] = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Module_Waypoint_Chunk>, numbers, 14, 72), "a module's name in a waypoint");
+	}
+
+	// An alternate shape set: its number, an empty name, how many shapes, then each one's old name and new name. 0x00636261 is "abc" and its zero byte.
+	{
+		int const oldName[] = { 0, 0, 1 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, oldName, 3, 28), "a shape's old name in an alternate shape set");
+
+		int const newName[] = { 0, 0, 1, 0x00636261 };
+		Check(!AcceptedWithNumbersThenNoEnd(MakeChunk<Object_Hierarchy_Alternate_Shape_Set_Chunk>, newName, 4, 32), "and its new name");
+	}
+
+	// A game mode's header: flags, three spares and a version, its name, then a list of file names that ends at an empty one
+	{
+		char const * const kinds[] = { "GMODHEAD" };
+
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, 0, 0, 60), "a game mode's name");
+
+		int const nameThenList[] = { 0, 0, 0, 0, 0, 0x00636261 };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, nameThenList, 6, 60), "a name in a game mode's list of files");
+
+		// "abc", then "de" and its zero byte, which is the last byte of the chunk: the list stops at the chunk's end, with nothing wrong with it.
+		// The top byte of the last number, 0x78, is the letter x, and it's the first byte past the chunk. It has to be a letter: a zero there would also stop a list
+		// that never looked for the chunk's end, and this row couldn't tell the two apart.
+		int const allThere[] = { 0, 0, 0, 0, 0, 0x00636261, 0x78006564 };
+		Check(AcceptedInsideOtherChunks(MakeChunk<Environment_Game_Mode_Chunk>, kinds, 1, allThere, 7, 27), "a game mode whose list reaches the end of its chunk is accepted");
+	}
+
+	// A shape's header: its numbers, how many objects use it, then their names. The count is the last of the 68 bytes every header has.
+	{
+		char const * const kinds[] = { "SHPHEAD1" };
+		int numbers[ShapeHeaderDataBytes / sizeof(int)] = { 0 };
+		numbers[ShapeHeaderDataBytes / sizeof(int) - 1] = 1;
+
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, kinds, 1, numbers, ShapeHeaderDataBytes / sizeof(int), ShapeHeaderDataBytes + 16), "an object's name in a shape's header");
+	}
+
+	// A morphing shape's parts, which are only made inside the chunk they belong to. A sequence that isn't valid frees itself, so it's made as a level makes it, inside a shape.
+	{
+		char const * const sequence[] = { "ANIMSEQU", "ANISEQDT" };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, sequence, 2, 0, 0, 80), "a morph sequence's name");
+
+		char const * const frame[] = { "ANIMSEQU", "ANIMFRAM", "ANIFRADT" };
+		Check(!AcceptedInsideOtherChunks(MakeChunk<Shape_Chunk>, frame, 3, 0, 0, 80), "a morph frame's name");
+	}
+}
+
+// 38. A hierarchy's animations. The game builds these from the one section inside a hierarchy's outermost chunk, with no checks of its own, so a level whose animations it couldn't play has
+// to be refused while the file is read. Each row below changes one thing about a real shape of hierarchy, built here from bytes, the same as a file's.
+static char hierarchyBytes[8192];
+
+// Each hierarchy is built from a clean start: every byte 0, so nothing an earlier one wrote is still there to be read
+static char * StartHierarchy()
+{
+	memset(hierarchyBytes, 0, sizeof(hierarchyBytes));
+
+	return hierarchyBytes;
+}
+
+// Starts a chunk whose size isn't known yet. The chunk's contents go after what this gives back.
+static char * OpenChunk(char * where, char const * name)
+{
+	memset(where, 0, ChunkHeaderBytes);
+	memcpy(where, name, 8);
+
+	return where + ChunkHeaderBytes;
+}
+
+// Ends a chunk started at chunk, now that its contents have come to end
+static char * CloseChunk(char * chunk, char * end)
+{
+	int const bytes = (int)(end - chunk);
+
+	memcpy(chunk + 8, &bytes, sizeof(bytes));
+
+	return end;
+}
+
+// The chunk with a section's name in it: a count of extra numbers, here 0, and then the name. The game reads the name
+// as text, up to a 0 byte, so the name's letters are copied and then its 0 is written, on a line of its own.
+static char * PutSectionName(char * where)
+{
+	static char const name[] = "section";
+	size_t const letters = sizeof(name) - 1;
+	char * const data = PutChunk(where, "OBJHIERD", 4 + letters + 1);
+
+	memcpy(data + 4, name, letters);
+	data[4 + letters] = '\0';
+
+	return data + 4 + letters + 1;
+}
+
+// A compact list with one sequence. Each frame is 36 bytes, with its start at 28.
+static char * PutCompactSequence(char * where, int frames, int const * starts)
+{
+	size_t const sequenceBytes = 4 * sizeof(int);
+	size_t const frameBytes = 36;
+	char * at = OpenChunk(where, "OBANALLS");
+
+	memset(at, 0, sizeof(int) + sequenceBytes + frames * frameBytes);
+	PutNumber(at, 0, 1);
+	PutNumber(at, sizeof(int), frames);
+	at += sizeof(int) + sequenceBytes;
+
+	for (int i = 0; i < frames; i++)
+	{
+		PutNumber(at, 28, starts[i]);
+		at += frameBytes;
+	}
+
+	return CloseChunk(where, at);
+}
+
+// A compact list with no sequences in it at all
+static char * PutEmptyCompactList(char * where)
+{
+	return PutChunk(where, "OBANALLS", sizeof(int)) + sizeof(int);
+}
+
+// The long list, with one sequence. Each frame is its own chunk, with its start at 28 and the place it takes in the sequence at 32.
+struct LongFrame { int start; int place; };
+
+static char * PutLongSequence(char * where, bool hasHeader, int frames, LongFrame const * list)
+{
+	char * const sequence = OpenChunk(where, "OBANSEQS");
+	char * at = OpenChunk(sequence, "OBANSEQC");
+
+	if (hasHeader)
+	{
+		at = PutChunk(at, "OBASEQHD", 4 * sizeof(int)) + 4 * sizeof(int);
+	}
+
+	for (int i = 0; i < frames; i++)
+	{
+		size_t const frameBytes = 44;
+		char * const data = PutChunk(at, "OBASEQFR", frameBytes);
+
+		PutNumber(data, 28, list[i].start);
+		PutNumber(data, 32, list[i].place);
+		at = data + frameBytes;
+	}
+
+	CloseChunk(sequence, at);
+
+	return CloseChunk(where, at);
+}
+
+// A section, holding whatever fill puts in it
+typedef char * (*FillsSection)(char * where);
+
+static char * PutSection(char * where, FillsSection fill)
+{
+	return CloseChunk(where, fill(OpenChunk(where, "OBJCHIER")));
+}
+
+// Gives a level one hierarchy, whose outermost chunk holds the bytes up to end, and says whether the level would be accepted
+static bool HierarchyAccepted(char const * end)
+{
+	File_Chunk file;
+	Parent_File = &file;
+
+	std::unique_ptr<Object_Hierarchy_Chunk> const made(new Object_Hierarchy_Chunk(&file, hierarchyBytes, (size_t)(end - hierarchyBytes)));
+	file.post_input_processing();
+
+	bool const accepted = (file.error_code == 0);
+
+	Parent_File = 0;
+
+	return accepted;
+}
+
+// A section that's fine by itself, for putting bad sections inside
+static char * PutGoodCompact(char * at)
+{
+	int const starts[] = { 0, 30000 };
+
+	return PutCompactSequence(PutSectionName(at), 2, starts);
+}
+
+static void TestHierarchyAnimations()
+{
+	puts("38. hierarchy animations");
+
+	// What each row should give. Its words are in a list of their own below, apart from the fills that write the bytes,
+	// so nothing a fill wrote can be taken for them.
+	struct SectionRow { FillsSection fill; bool good; };
+	SectionRow const rows[] =
+	{
+		// What real files hold
+		{ PutGoodCompact, true },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 }, { 30000, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 30000, 1 }, { 0, 0 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { int const starts[] = { 65535 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 65535, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, true },
+		{ [](char * at) { int const starts[] = { 100, 200 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, true },
+
+		// One thing wrong, in the compact list. The first frame starting at 65536 is the one that hangs the game: the only frame, and it comes to a length of 0.
+		{ [](char * at) { int const starts[] = { 0 }; return PutCompactSequence(at, 1, starts); }, false },
+		{ [](char * at) { return PutEmptyCompactList(PutSectionName(at)); }, false },
+		{ [](char * at) { return PutCompactSequence(PutSectionName(at), 0, 0); }, false },
+		{ [](char * at) { int const starts[] = { 65536 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, false },
+		{ [](char * at) { int const starts[] = { 0, 65536 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { -1, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 50 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+
+		// The same in the long list, and what only it can get wrong
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(at, true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutSectionName(at), false, 1, frames); }, false },
+		{ [](char * at) { return PutLongSequence(PutSectionName(at), true, 0, 0); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 65536, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { -1, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 50, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+
+		// A frame's place far outside its sequence. The chunk's own check refuses this, and the rule on starts mustn't go ahead and use the place anyway.
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0x10000000 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
+
+		// A section inside the first section is held to the same, and it's refused for having no sequences, which only the first section can get away with
+		{ [](char * at) { return PutSection(PutGoodCompact(at), PutGoodCompact); }, true },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { return PutSectionName(inside); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 0 }; return PutCompactSequence(inside, 1, starts); }); }, false },
+
+		// The game leaves a hierarchy out altogether if its first section has no sequences, so nothing in that one is built, and it can't refuse the level. Two of the game's own are like this.
+		{ [](char * at) { return PutSectionName(at); }, true },
+		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true },
+	};
+
+	// What each row above checks, in the same order
+	char const * const rowWords[] =
+	{
+		"a compact sequence whose frames go up is accepted",
+		"a long sequence whose frames go up is accepted",
+		"a long sequence's frames go by their places, not by where they are in the file",
+		"a compact sequence can start its last frame as late as 65535",
+		"and so can a long one",
+		"a sequence doesn't have to start at 0",
+		"a section with a compact list and no name chunk is refused",
+		"a compact list with no sequences is refused",
+		"a compact sequence with no frames is refused",
+		"a compact sequence's only frame starting at 65536 is refused",
+		"a compact sequence's last frame starting at 65536 is refused",
+		"a compact sequence starting below 0 is refused",
+		"two compact frames starting together are refused",
+		"a compact frame starting before the one ahead of it is refused",
+		"a section with a long list and no name chunk is refused",
+		"a long sequence with no header is refused",
+		"a long sequence with no frames is refused",
+		"a long sequence's only frame starting at 65536 is refused",
+		"a long sequence starting below 0 is refused",
+		"two long frames starting together are refused",
+		"a long frame starting before the one ahead of it is refused",
+		"a frame's place far outside its sequence is refused, and goes no further",
+		"a good section inside a good section is accepted",
+		"a section inside with no sequences is refused",
+		"a section inside with bad frames is refused",
+		"a section inside with no name chunk is refused",
+		"a first section with no sequences at all is left alone",
+		"and so is whatever's inside it",
+	};
+
+	static_assert(sizeof(rowWords) / sizeof(rowWords[0]) == sizeof(rows) / sizeof(rows[0]), "every row has its words");
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		CheckRow(HierarchyAccepted(PutSection(StartHierarchy(), rows[i].fill)) == rows[i].good, rowWords[i]);
+	}
+
+	// How many sections the outermost chunk holds. The game reads the first with no check that there is one, and only ever builds that one.
+	Check(!HierarchyAccepted(PutSectionName(StartHierarchy())), "a hierarchy with no section inside is refused");
+	Check(!HierarchyAccepted(PutSection(PutSection(StartHierarchy(), PutGoodCompact), PutGoodCompact)), "a hierarchy with two sections inside is refused");
+
+	// The outermost chunk's own sequences are only names, in 61 of the game's own hierarchies, and the game never builds them
+	{
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
+		Check(HierarchyAccepted(PutCompactSequence(after, 0, 0)), "an outermost chunk's sequence with no frames is left alone");
+	}
+	{
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
+		Check(HierarchyAccepted(PutLongSequence(after, false, 0, 0)), "and so is one with no header");
+	}
+}
+
 int main()
 {
 	// Print each line straight away. If the code under test crashes, the lines so far still show how far it got.
@@ -3467,11 +4140,13 @@ int main()
 	TestTextureAnimation();
 	TestGeneratorSettings();
 	TestPlacedHierarchies();
+	TestNamesStayInTheirChunks();
 	TestModuleBoxes();
 	TestStrategies();
 	TestChunksTheGameDoesNotRead();
 	TestCountedLists();
 	TestNumbersUsedAsPlaces();
+	TestHierarchyAnimations();
 
 	if (checksFailed)
 	{

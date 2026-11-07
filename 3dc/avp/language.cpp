@@ -5,6 +5,11 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the language file is read only up to its end, an unknown text id gives empty text, and the error
 //   message about a bad language file has a size limit
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the rendering page's text comes from here. A stock language.txt has no such strings, and a player's file stays as it is
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the name of the marine's shoulder lamp key comes from here too
+//   the text of the rendering page's lines for choosing a key
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -27,6 +32,39 @@ static char EmptyString[]="";
 
 static char *TextStringPtr[MAX_NO_OF_TEXTSTRINGS]={EmptyString};
 static char *TextBufferPtr;
+
+// Text that isn't in anyone's language.txt. That file belongs to the player's copy of the game, and it's packed, so it isn't ours to change, and these are in English whatever the language.
+// They come after everything the file holds, in the order of the enum in langenum.h.
+static char OurTextStrings[][200] =
+{
+	"Rendering options",
+	"How the world is lit, and whether things cast shadows.",
+	"Rendering",
+	"How the world is lit. A choice this card can't draw is skipped. Maps are read when a level loads, so changing to a choice that uses them shows them from the next level.",
+	"Gouraud",
+	"Per-pixel (flat)",
+	"Per-pixel + normals",
+	"Relief map",
+	"Shadows",
+	"Whether lights cast shadows.",
+	"This does nothing here: this card can't draw shadows.",
+	"Auto-generate maps",
+	"Works out maps for textures that have none. Turning it on takes effect from the next level.",
+	"This does nothing with Gouraud or Per-pixel (flat): only Per-pixel + normals and Relief map read maps.",
+	"Shoulder lamp",
+	"Rendering key",
+	"Changes how the world is lit. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"Shadows key",
+	"Turns shadows on and off. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"Dev views key",
+	"It only works when the game was started with -dev, and never in a network game. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"That key can't be used: the game keeps it for itself. This line still has its old key.",
+	"That key can't be used: another line here has it. This line still has its old key.",
+	"That key can't be used: it's one of your controls. This line still has its old key.",
+	"One of your controls has this key too. The control wins, so this line does nothing for that species. Choose another key here, or change the control.",
+};
+
+static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");
 
 // moved here from langplat.c
 char *LanguageFilename[] = 
@@ -127,7 +165,7 @@ void InitTextStrings(void)
 	// both scans stop at textEnd (the 0 byte after the data): a truncated file used to run them past the buffer
 	// and write the terminator there. Ids for which the file has no (complete) string get EmptyString, like id 0.
 	bool truncated = false;
-	for (int i = 1; i < MAX_NO_OF_TEXTSTRINGS; i++)
+	for (int i = 1; i < TEXTSTRING_RENDERING_TITLE; i++)
 	{
 		// scan for a quote mark
 		while ((textPtr < textEnd) && (*textPtr != '"'))
@@ -165,6 +203,12 @@ void InitTextStrings(void)
 			truncated = true;
 		}
 
+		AddToTable(TextStringPtr[i]);
+	}
+
+	for (int i = TEXTSTRING_RENDERING_TITLE; i < MAX_NO_OF_TEXTSTRINGS; i++)
+	{
+		TextStringPtr[i] = OurTextStrings[i - TEXTSTRING_RENDERING_TITLE];
 		AddToTable(TextStringPtr[i]);
 	}
 

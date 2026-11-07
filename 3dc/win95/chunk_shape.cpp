@@ -21,6 +21,10 @@
 //   a shape's lists of names and polygon changes are measured against their chunks before they're made
 //   a polygon can't bring the flag that says its texture list is a table of pointers
 //   removed the shapes made for the PlayStation and Saturn: nothing made or read one, and a console type read past the end of its chunk
+//   a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include <math.h>
 #include <vector>
@@ -651,38 +655,6 @@ void Shape_Chunk::destroy_auxiliary_chunks()
 	}
 }
 
-BOOL Shape_Chunk::file_equals(HANDLE &rif_file)
-{
-	unsigned long bytes_read;
-	int id;
-	Shape_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (FALSE);
-
-	// get header list
-	List<int> obhead;
-	list_chunks_in_file (&obhead, rif_file, "SHPHEAD1");
-
-	if (obhead.size() != 1) return FALSE;
-
-	// get object identifier
-	SetFilePointer(rif_file,obhead.first_entry() + 32,0,FILE_BEGIN);
-	ReadFile (rif_file, (long *) &(id), 4, &bytes_read, 0);
-
-	if (hdptr->file_id_num == id) return TRUE;
-
-	return (FALSE);
-}
-
-const char * Shape_Chunk::get_head_id()
-{
-	Shape_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
-}
-
 void Shape_Chunk::set_lock_user (char * user)
 {
 	Shape_Header_Chunk * hdptr = get_header();
@@ -1144,8 +1116,8 @@ void Shape_Polygon_Chunk::fill_data_block(char * data_start)
 //Class Shape_Centre_Chunk :
 
 // This constructor writes into its parent's shape, so it can only be made under a shape. All 28193 of these in the game's own levels are.
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPCENTR",Shape_Centre_Chunk,"REBSHAPE",Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPCENTR",Shape_Centre_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPCENTR",Shape_Centre_Chunk,"REBSHAPE",Shape_Chunk,16)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPCENTR",Shape_Centre_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,16)
 
 Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* data, size_t datasize)
 :Chunk (parent,"SHPCENTR")
@@ -1364,8 +1336,8 @@ size_t Shape_UV_Coord_Chunk::size_chunk ()
 // These can only be children of Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"REBSHAPE",Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPTEXFN",Shape_Texture_Filenames_Chunk,"REBSHAPE",Shape_Chunk,4)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPTEXFN",Shape_Texture_Filenames_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,4)
 // from buffer
 Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Chunk * parent, const char * tfndata, size_t tfnsize)
 : Chunk (parent, "SHPTEXFN"),
@@ -1393,9 +1365,9 @@ tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (t
 			break;
 		}
 
-		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
-		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
-		tfndata += (strlen(tfndata)+1);
+		size_t length = 0;
+		parent->shape_data_store->texture_fns[i] = CopyNameFromChunk(start, tfnsize, tfndata, &length);
+		tfndata += length + 1;
 	}
 }
 
@@ -1425,9 +1397,9 @@ tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (t
 			break;
 		}
 
-		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
-		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
-		tfndata += (strlen(tfndata)+1);
+		size_t length = 0;
+		parent->shape_data_store->texture_fns[i] = CopyNameFromChunk(start, tfnsize, tfndata, &length);
+		tfndata += length + 1;
 	}
 }
 
@@ -1488,7 +1460,7 @@ size_t Shape_Texture_Filenames_Chunk::size_chunk()
 
 // These can only be children of Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPHEAD1",Shape_Header_Chunk,"REBSHAPE",Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPHEAD1",Shape_Header_Chunk,"REBSHAPE",Shape_Chunk,64)
 
 
 Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata, size_t hsize)
@@ -1546,10 +1518,10 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 			break;
 		}
 
-		obj_store = new char [strlen (hdata) +1];
-		strcpy (obj_store, (hdata));
+		size_t length = 0;
+		obj_store = CopyNameFromChunk(start, hsize, hdata, &length);
 		object_names_store.add_entry(obj_store);
-		hdata += (strlen (hdata)+1);
+		hdata += length + 1;
 	}
 }
 
@@ -1792,17 +1764,17 @@ const char* Shape_External_File_Chunk::get_shape_name()
 }
 
 /////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SHPEXTFN",Shape_External_Filename_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHPEXTFN",Shape_External_Filename_Chunk,12)
 
-Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t /*fsize*/)
+Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t const chunk_bytes)
 : Chunk (parent, "SHPEXTFN")
 {
+	char const * const chunk_start = fdata;
 	rescale = *((double *) fdata);
 	fdata += 8;
 	version_no = *((int *) fdata);
 	fdata += 4;
-	file_name = new char [strlen(fdata)+1];
-	strcpy (file_name, fdata);
+	file_name = CopyNameFromChunk(chunk_start, chunk_bytes, fdata);
 }
 
 Shape_External_Filename_Chunk::~Shape_External_Filename_Chunk()
@@ -1832,7 +1804,7 @@ void Shape_External_Filename_Chunk::fill_data_block (char *data_start)
 }
 
 ///////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("EXTOBJNM",Shape_External_Object_Name_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("EXTOBJNM",Shape_External_Object_Name_Chunk,4)
 
 Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk(Chunk_With_Children * parent, const char * oname)
 : Chunk (parent, "EXTOBJNM")
@@ -1855,13 +1827,13 @@ Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk(Chunk_With_Ch
 	}
 }
 
-Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk (Chunk_With_Children * parent, const char *data, size_t /*fsize*/)
+Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk (Chunk_With_Children * parent, const char *data, size_t const chunk_bytes)
 : Chunk (parent, "EXTOBJNM")
 {
+	char const * const chunk_start = data;
 	pad=*(int*)data;
 	data+=4;
-	object_name = new char [strlen(data)+1];
-	strcpy (object_name, data);
+	object_name = CopyNameFromChunk(chunk_start, chunk_bytes, data);
 	shape_name=0;
 }
 
@@ -2284,7 +2256,7 @@ const char * Shape_Sub_Shape_Chunk::get_shape_name()
 
 // Class Shape_Sub_Shape_Header_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SUBSHPHD",Shape_Sub_Shape_Header_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SUBSHPHD",Shape_Sub_Shape_Header_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,44)
 
 // These can only be children of Shape_Sub_Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
@@ -2375,7 +2347,7 @@ void Shape_Sub_Shape_Header_Chunk::fill_data_block(char * data_start)
 
 // Class Shape_Poly_Change_Info_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("SHPPCINF",Shape_Poly_Change_Info_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHPPCINF",Shape_Poly_Change_Info_Chunk,4)
 
 void Shape_Poly_Change_Info_Chunk::fill_data_block(char * data_start)
 {
@@ -2451,11 +2423,10 @@ Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * s
 	strcpy (shape_name, sname);
 }
 
-Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * sndata, size_t /*rsize*/)
+Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * sndata, size_t const chunk_bytes)
 : Chunk (parent, "SHPFNAME")
 {
-	shape_name = new char [strlen(sndata)+1];
-	strcpy (shape_name, sndata);
+	shape_name = CopyNameFromChunk(sndata, chunk_bytes, sndata);
 }
 
 Shape_Name_Chunk::~Shape_Name_Chunk ()
@@ -2495,7 +2466,7 @@ Children for Shape_Fragments_Chunk :
 /////////////////////////////////////////
 
 // Class Shape_Fragments_Data_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("FRAGDATA",Shape_Fragments_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("FRAGDATA",Shape_Fragments_Data_Chunk,16)
 
 void Shape_Fragments_Data_Chunk::fill_data_block (char * data_start)
 {
@@ -2546,7 +2517,7 @@ Shape_Fragments_Data_Chunk::Shape_Fragments_Data_Chunk (Chunk_With_Children * pa
 /////////////////////////////////////////
 
 // Class Shape_Fragments_Location_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("FRAGLOCN",Shape_Fragment_Location_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("FRAGLOCN",Shape_Fragment_Location_Chunk,28)
 
 void Shape_Fragment_Location_Chunk::fill_data_block (char * data_start)
 {
@@ -2611,18 +2582,16 @@ Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* parent
 	pad1=pad2-0;
 }
 
-Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t const )
+Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"SHPFRGTP")
 {
-	int length=strlen(data)+1;
-	frag_type_name=new char[length];
-	strcpy(frag_type_name,data);
-	data+=(length+3)&~3;
+	char const * const start=data;
+	size_t length=0;
+	frag_type_name=CopyNameFromChunk(start,chunk_bytes,data,&length);
+	data+=(length+4)&~3;
 
-	pad1=*(int*)data;
-	data+=4;
-	pad2=*(int*)data;
-	data+=4;
+	pad1=ReadFromChunk<int>(start,chunk_bytes,data);
+	pad2=ReadFromChunk<int>(start,chunk_bytes,data);
 }
 
 Shape_Fragment_Type_Chunk::~Shape_Fragment_Type_Chunk()
@@ -2831,11 +2800,12 @@ Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk *const 
 
 // Class Anim_Shape_Sequence_Data_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("ANISEQDT",Anim_Shape_Sequence_Data_Chunk,"ANIMSEQU",Anim_Shape_Sequence_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("ANISEQDT",Anim_Shape_Sequence_Data_Chunk,"ANIMSEQU",Anim_Shape_Sequence_Chunk,20)
 
-Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char* data,size_t const/*datasize*/)
+Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char* data,size_t const chunk_bytes)
 : Chunk(parent, "ANISEQDT")
 {
+	char const * const chunk_start = data;
 	SequenceNum=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
@@ -2846,8 +2816,7 @@ Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequen
 	data+=4;
 	pad4=*(int*)data;
 	data+=4;
-	name=new char[strlen(data)+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 void Anim_Shape_Sequence_Data_Chunk::fill_data_block(char* datastart)
@@ -2882,11 +2851,12 @@ size_t Anim_Shape_Sequence_Data_Chunk::size_chunk()
 /////////////////////////////////////////
 
 // Class Anim_Shape_Frame_Data_Chunk functions
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("ANIFRADT",Anim_Shape_Frame_Data_Chunk,"ANIMFRAM",Anim_Shape_Frame_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("ANIFRADT",Anim_Shape_Frame_Data_Chunk,"ANIMFRAM",Anim_Shape_Frame_Chunk,20)
 
-Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,const char* data,size_t const /*datasize*/)
+Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,const char* data,size_t const chunk_bytes)
 : Chunk(parent, "ANIFRADT")
 {
+	char const * const chunk_start = data;
 	FrameNum=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
@@ -2897,8 +2867,7 @@ Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk*
 	data+=4;
 	pad4=*(int*)data;
 	data+=4;
-	name=new char[strlen(data)+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 
@@ -2960,7 +2929,7 @@ Anim_Shape_Alternate_Texturing_Chunk::Anim_Shape_Alternate_Texturing_Chunk(Chunk
 /////////////////////////////////////////
 
 // Class Poly_Not_In_Bounding_Box_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("PNOTINBB",Poly_Not_In_Bounding_Box_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PNOTINBB",Poly_Not_In_Bounding_Box_Chunk,8)
 
 Poly_Not_In_Bounding_Box_Chunk::Poly_Not_In_Bounding_Box_Chunk(Chunk_With_Children* const parent,const char* data,size_t const datasize)
 :Chunk(parent,"PNOTINBB")
@@ -3008,7 +2977,7 @@ void Poly_Not_In_Bounding_Box_Chunk::fill_data_block(char* data_start)
 
 // Class Anim_Shape_Centre_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("ANSHCEN2",Anim_Shape_Centre_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ANSHCEN2",Anim_Shape_Centre_Chunk,20)
 
 Anim_Shape_Centre_Chunk::Anim_Shape_Centre_Chunk(Chunk_With_Children* const parent,const char* data,size_t const /*datasize*/)
 :Chunk(parent,"ANSHCEN2")
