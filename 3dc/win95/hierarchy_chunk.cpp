@@ -4,10 +4,13 @@
 //   has no name is refused
 //   counted lists are measured against their chunks before they're made
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
+//   a hierarchy the game couldn't build refuses the level
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
-//#include "animation_objects.hpp"
+#include "animation_objects.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(hierarchy_chunk)
@@ -42,6 +45,96 @@ List <Object_Hierarchy_Chunk *> Object_Hierarchy_Chunk::list_h_children()
 	}
 	return(h_l);
 	
+}
+
+// The long list of a section's sequences, which the game uses if the section has no compact list
+static void ListLongSequences(Object_Hierarchy_Chunk * section, List <Object_Animation_Sequence_Chunk *> * sequences)
+{
+	Chunk * const list = section->lookup_single_child ("OBANSEQS");
+
+	if (list)
+	{
+		((Object_Animation_Sequences_Chunk *)list)->list_sequences(sequences);
+	}
+}
+
+// One section, and all the sections inside it. Each has to have the chunk with its name in, which is the first thing the game reads, and sequences it can play. The game looks up a sequence
+// in every section it animates, and a section with none gives it nothing to read. Sections can only go as deep as chunks can, so this can't run away.
+bool Object_Hierarchy_Chunk::section_can_be_built()
+{
+	if (!get_data())
+	{
+		return false;
+	}
+
+	Object_Animation_All_Sequence_Chunk * const compact = Get_Object_Animation_All_Sequence_Chunk(this);
+
+	if (compact)
+	{
+		if (!compact->sequences_can_be_played())
+		{
+			return false;
+		}
+	}
+	else
+	{
+		List <Object_Animation_Sequence_Chunk *> sequences;
+		ListLongSequences(this, &sequences);
+
+		if (sequences.size() == 0)
+		{
+			return false;
+		}
+
+		for (LIF<Object_Animation_Sequence_Chunk *> sequence(&sequences); !sequence.done(); sequence.next())
+		{
+			if (!sequence()->can_be_played())
+			{
+				return false;
+			}
+		}
+	}
+
+	List <Object_Hierarchy_Chunk *> inside = list_h_children();
+
+	for (LIF<Object_Hierarchy_Chunk *> section(&inside); !section.done(); section.next())
+	{
+		if (!section()->section_can_be_built())
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// A hierarchy is a model's skeleton and its animations. A file holds each one as an outermost chunk, with exactly one section inside it, and the rest of the skeleton inside that. The game
+// builds the model from that one section (add_hierarchy in projload.cpp), and it trusts what it finds there. The outermost chunk's own sequences are only names, so they aren't looked at.
+// All 91 hierarchies in the game's own files and one 2007 mod have one section there, and keep to all of this, in 2,872 sections.
+bool Object_Hierarchy_Chunk::can_be_built()
+{
+	List <Object_Hierarchy_Chunk *> inside = list_h_children();
+
+	if (inside.size() != 1)
+	{
+		return false;
+	}
+
+	Object_Hierarchy_Chunk * const first = inside.first_entry();
+
+	// The game leaves a hierarchy out altogether if its first section has no sequences of the long kind and no compact list, so nothing in it gets built. Two of the game's own are like that.
+	if (!Get_Object_Animation_All_Sequence_Chunk(first))
+	{
+		List <Object_Animation_Sequence_Chunk *> sequences;
+		ListLongSequences(first, &sequences);
+
+		if (sequences.size() == 0)
+		{
+			return true;
+		}
+	}
+
+	return first->section_can_be_built();
 }
 
 Object_Hierarchy_Data_Chunk * Object_Hierarchy_Chunk::get_data ()
@@ -240,7 +333,7 @@ Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * 
 
 
 ///////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("OBHALTSH",Object_Hierarchy_Alternate_Shape_Set_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBHALTSH",Object_Hierarchy_Alternate_Shape_Set_Chunk,4)
 
 Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,int num,const char* name)
 :Chunk(parent,"OBHALTSH")
@@ -298,15 +391,9 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 	size_t const smallest_entry=8;
 	int num_shapes=ReadListCount(start,data,size,smallest_entry);
 
+	// Long names can use up the room that the count was measured against. Each read here looks for itself, so a list that runs out is refused, and the count stops it going on for long.
 	for(int i=0;i<num_shapes;i++)
 	{
-		// names can be longer than the smallest, so they can use up the room that the count was measured against
-		if((size_t)(data - start) + smallest_entry > size)
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-		}
-
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
 		rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);
@@ -318,13 +405,11 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 		Replaced_Shape_List.add_entry(rsd);	
 	}
 
-   	flags=*(int*)data;
-	data+=4;
+   	flags=ReadFromChunk<int>(start,size,data);
 
 	for(int i=0;i<3;i++)
 	{
-		spare[i]=*(int*)data;
-		data+=4;
+		spare[i]=ReadFromChunk<int>(start,size,data);
 	}
 	
 }
@@ -395,7 +480,7 @@ size_t Object_Hierarchy_Alternate_Shape_Set_Chunk::size_chunk()
 
 
 ///////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("HSETCOLL",Hierarchy_Shape_Set_Collection_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("HSETCOLL",Hierarchy_Shape_Set_Collection_Chunk,4)
 
 Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,int num,const char* name)
 :Chunk(parent,"HSETCOLL")
@@ -427,10 +512,8 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 		data+=4;
 	}
 
-	TypeIndex=*(int*)data;
-	data+=4;
-	flags=*(int*)data;
-	data+=4;
+	TypeIndex=ReadFromChunk<int>(start,size,data);
+	flags=ReadFromChunk<int>(start,size,data);
 }
 
 Hierarchy_Shape_Set_Collection_Chunk::~Hierarchy_Shape_Set_Collection_Chunk()
@@ -561,7 +644,7 @@ size_t Hierarchy_Degradation_Distance_Chunk::size_chunk()
 
 ///////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("HIERBBOX",Hierarchy_Bounding_Box_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("HIERBBOX",Hierarchy_Bounding_Box_Chunk,24)
 
 Hierarchy_Bounding_Box_Chunk::Hierarchy_Bounding_Box_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"HIERBBOX")

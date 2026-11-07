@@ -1,0 +1,1199 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "HOLDS AVPGENER AVP_Generator_Chunk in SPECLOBJ: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"AVPGENER\",AVP_Generator_Chunk,\"SPECLOBJ\",Special_Objects_Chunk,28)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"AVPGENER\",AVP_Generator_Chunk,\"SPECLOBJ\",Special_Objects_Chunk,27)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS GLOGENDC Global_Generator_Data_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"GLOGENDC\",Global_Generator_Data_Chunk,28)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"GLOGENDC\",Global_Generator_Data_Chunk,27)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS AVPSTART AVP_Player_Start_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AVPSTART\",AVP_Player_Start_Chunk,56)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AVPSTART\",AVP_Player_Start_Chunk,55)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS AVPCABLE AVP_Power_Cable_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AVPCABLE\",AVP_Power_Cable_Chunk,48)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AVPCABLE\",AVP_Power_Cable_Chunk,47)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS PARGENDA AVP_Particle_Generator_Data_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PARGENDA\",AVP_Particle_Generator_Data_Chunk,68)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PARGENDA\",AVP_Particle_Generator_Data_Chunk,67)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS VOBJPROP Virtual_Object_Properties_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"VOBJPROP\",Virtual_Object_Properties_Chunk,16)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"VOBJPROP\",Virtual_Object_Properties_Chunk,15)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBASEQFR Object_Animation_Sequence_Frame_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQFR\",Object_Animation_Sequence_Frame_Chunk,40)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQFR\",Object_Animation_Sequence_Frame_Chunk,39)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBASEQHD Object_Animation_Sequence_Header_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQHD\",Object_Animation_Sequence_Header_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQHD\",Object_Animation_Sequence_Header_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBASEQTM Object_Animation_Sequence_Time_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQTM\",Object_Animation_Sequence_Time_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQTM\",Object_Animation_Sequence_Time_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBASEQSP Object_Animation_Sequence_Speed_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQSP\",Object_Animation_Sequence_Speed_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQSP\",Object_Animation_Sequence_Speed_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBASEQFL Object_Animation_Sequence_Flags_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/animation_objects.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQFL\",Object_Animation_Sequence_Flags_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBASEQFL\",Object_Animation_Sequence_Flags_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMPNAMES Global_BMP_Name_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPNAMES\",Global_BMP_Name_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPNAMES\",Global_BMP_Name_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMPLSTST Bitmap_List_Store_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPLSTST\",Bitmap_List_Store_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPLSTST\",Bitmap_List_Store_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMNAMVER BMP_Names_Version_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMNAMVER\",BMP_Names_Version_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMNAMVER\",BMP_Names_Version_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMNAMEXT BMP_Names_ExtraData_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMNAMEXT\",BMP_Names_ExtraData_Chunk,52)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMNAMEXT\",BMP_Names_ExtraData_Chunk,51)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHBMPNAM External_Shape_BMPs_Store_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHBMPNAM\",External_Shape_BMPs_Store_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHBMPNAM\",External_Shape_BMPs_Store_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS MATCHIMG Matching_Images_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MATCHIMG\",Matching_Images_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MATCHIMG\",Matching_Images_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMPMD5ID Bitmap_MD5_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPMD5ID\",Bitmap_MD5_Chunk,28)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPMD5ID\",Bitmap_MD5_Chunk,27)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS DUMOBJDT Dummy_Object_Data_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_dummy.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"DUMOBJDT\",Dummy_Object_Data_Chunk,52)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"DUMOBJDT\",Dummy_Object_Data_Chunk,51)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS FRGSOUND Fragment_Type_Sound_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRGSOUND\",Fragment_Type_Sound_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRGSOUND\",Fragment_Type_Sound_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ASPRHEAD AllSprites_Header_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_gsprites.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ASPRHEAD\",AllSprites_Header_Chunk,24)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ASPRHEAD\",AllSprites_Header_Chunk,23)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS LTSETHDR Light_Set_Header_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"LTSETHDR\",Light_Set_Header_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"LTSETHDR\",Light_Set_Header_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS STDLIGHT Light_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"STDLIGHT\",Light_Chunk,84)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"STDLIGHT\",Light_Chunk,83)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS AMBIENCE Lighting_Ambience_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AMBIENCE\",Lighting_Ambience_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"AMBIENCE\",Lighting_Ambience_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS LITSCALE Light_Scale_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"LITSCALE\",Light_Scale_Chunk,40)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"LITSCALE\",Light_Scale_Chunk,39)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS PLOBJLIT Placed_Object_Light_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_light.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PLOBJLIT\",Placed_Object_Light_Chunk,60)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PLOBJLIT\",Placed_Object_Light_Chunk,59)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS MAPBLOCK Map_Block_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_map.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MAPBLOCK\",Map_Block_Chunk,204)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MAPBLOCK\",Map_Block_Chunk,203)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS STRATEGY Strategy_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_map.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"STRATEGY\",Strategy_Chunk,124)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"STRATEGY\",Strategy_Chunk,123)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS MODFLAGS Module_Flag_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODFLAGS\",Module_Flag_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODFLAGS\",Module_Flag_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS MODZONE Module_Zone_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODZONE\",Module_Zone_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODZONE\",Module_Zone_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS MODACOUS Module_Acoustics_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODACOUS\",Module_Acoustics_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"MODACOUS\",Module_Acoustics_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS TRAKSOUN Object_Track_Sound_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"TRAKSOUN\",Object_Track_Sound_Chunk,24)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"TRAKSOUN\",Object_Track_Sound_Chunk,23)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ALTLOCAT Object_Alternate_Locations_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ALTLOCAT\",Object_Alternate_Locations_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ALTLOCAT\",Object_Alternate_Locations_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENVPALET Environment_Palette_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVPALET\",Environment_Palette_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVPALET\",Environment_Palette_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS PRSETPAL Preset_Palette_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PRSETPAL\",Preset_Palette_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PRSETPAL\",Preset_Palette_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENVTXLIT Environment_TLT_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVTXLIT\",Environment_TLT_Chunk,32)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVTXLIT\",Environment_TLT_Chunk,31)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS GMODHEAD Environment_Game_Mode_Header_Chunk in GAMEMODE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"GMODHEAD\",Environment_Game_Mode_Header_Chunk,\"GAMEMODE\",Environment_Game_Mode_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"GMODHEAD\",Environment_Game_Mode_Header_Chunk,\"GAMEMODE\",Environment_Game_Mode_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS RIFCHILD RIF_Child_Chunk in GAMEMODE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"RIFCHILD\",RIF_Child_Chunk,\"GAMEMODE\",Environment_Game_Mode_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"RIFCHILD\",RIF_Child_Chunk,\"GAMEMODE\",Environment_Game_Mode_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SETPALST Preset_Palette_Store_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SETPALST\",Preset_Palette_Store_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SETPALST\",Preset_Palette_Store_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS CLRLOOKP Coloured_Polygons_Lookup_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"CLRLOOKP\",Coloured_Polygons_Lookup_Chunk,32)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"CLRLOOKP\",Coloured_Polygons_Lookup_Chunk,31)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPCENTR Shape_Centre_Chunk in REBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPCENTR\",Shape_Centre_Chunk,\"REBSHAPE\",Shape_Chunk,16)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPCENTR\",Shape_Centre_Chunk,\"REBSHAPE\",Shape_Chunk,15)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPCENTR Shape_Centre_Chunk in SUBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPCENTR\",Shape_Centre_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,16)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPCENTR\",Shape_Centre_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,15)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPTEXFN Shape_Texture_Filenames_Chunk in REBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPTEXFN\",Shape_Texture_Filenames_Chunk,\"REBSHAPE\",Shape_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPTEXFN\",Shape_Texture_Filenames_Chunk,\"REBSHAPE\",Shape_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPTEXFN Shape_Texture_Filenames_Chunk in SUBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPTEXFN\",Shape_Texture_Filenames_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPTEXFN\",Shape_Texture_Filenames_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPHEAD1 Shape_Header_Chunk in REBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPHEAD1\",Shape_Header_Chunk,\"REBSHAPE\",Shape_Chunk,64)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SHPHEAD1\",Shape_Header_Chunk,\"REBSHAPE\",Shape_Chunk,63)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPEXTFN Shape_External_Filename_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHPEXTFN\",Shape_External_Filename_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHPEXTFN\",Shape_External_Filename_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS EXTOBJNM Shape_External_Object_Name_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"EXTOBJNM\",Shape_External_Object_Name_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"EXTOBJNM\",Shape_External_Object_Name_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SUBSHPHD Shape_Sub_Shape_Header_Chunk in SUBSHAPE: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SUBSHPHD\",Shape_Sub_Shape_Header_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,44)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"SUBSHPHD\",Shape_Sub_Shape_Header_Chunk,\"SUBSHAPE\",Shape_Sub_Shape_Chunk,43)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SHPPCINF Shape_Poly_Change_Info_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHPPCINF\",Shape_Poly_Change_Info_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SHPPCINF\",Shape_Poly_Change_Info_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS FRAGDATA Shape_Fragments_Data_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRAGDATA\",Shape_Fragments_Data_Chunk,16)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRAGDATA\",Shape_Fragments_Data_Chunk,15)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS FRAGLOCN Shape_Fragment_Location_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRAGLOCN\",Shape_Fragment_Location_Chunk,28)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"FRAGLOCN\",Shape_Fragment_Location_Chunk,27)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ANISEQDT Anim_Shape_Sequence_Data_Chunk in ANIMSEQU: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"ANISEQDT\",Anim_Shape_Sequence_Data_Chunk,\"ANIMSEQU\",Anim_Shape_Sequence_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"ANISEQDT\",Anim_Shape_Sequence_Data_Chunk,\"ANIMSEQU\",Anim_Shape_Sequence_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ANIFRADT Anim_Shape_Frame_Data_Chunk in ANIMFRAM: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"ANIFRADT\",Anim_Shape_Frame_Data_Chunk,\"ANIMFRAM\",Anim_Shape_Frame_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"ANIFRADT\",Anim_Shape_Frame_Data_Chunk,\"ANIMFRAM\",Anim_Shape_Frame_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS PNOTINBB Poly_Not_In_Bounding_Box_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PNOTINBB\",Poly_Not_In_Bounding_Box_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"PNOTINBB\",Poly_Not_In_Bounding_Box_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ANSHCEN2 Anim_Shape_Centre_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ANSHCEN2\",Anim_Shape_Centre_Chunk,20)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ANSHCEN2\",Anim_Shape_Centre_Chunk,19)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SOUNDOB2 Sound_Object_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SOUNDOB2\",Sound_Object_Chunk,40)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SOUNDOB2\",Sound_Object_Chunk,39)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS INDSOUND Indexed_Sound_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"INDSOUND\",Indexed_Sound_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"INDSOUND\",Indexed_Sound_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SPRISIZE Sprite_Size_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sprites.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPRISIZE\",Sprite_Size_Chunk,32)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPRISIZE\",Sprite_Size_Chunk,31)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SPRITVER Sprite_Version_Number_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sprites.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPRITVER\",Sprite_Version_Number_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPRITVER\",Sprite_Version_Number_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS SPREXTEN Sprite_Extent_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sprites.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPREXTEN\",Sprite_Extent_Chunk,40)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"SPREXTEN\",Sprite_Extent_Chunk,39)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS AIMODSLA AI_Module_Slave_Chunk in MODULEDT: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_waypoint.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"AIMODSLA\",AI_Module_Slave_Chunk,\"MODULEDT\",Object_Module_Data_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST(\"AIMODSLA\",AI_Module_Slave_Chunk,\"MODULEDT\",Object_Module_Data_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENUMHEAD Enum_Header_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/enum_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENUMHEAD\",Enum_Header_Chunk,24)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENUMHEAD\",Enum_Header_Chunk,23)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS BMPENUMS BMP_Enums_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/enumsch.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPENUMS\",BMP_Enums_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"BMPENUMS\",BMP_Enums_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENDTHEAD Environment_Data_Header_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENDTHEAD\",Environment_Data_Header_Chunk,24)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENDTHEAD\",Environment_Data_Header_Chunk,23)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENVSDSCL Environment_Scale_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVSDSCL\",Environment_Scale_Chunk,8)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVSDSCL\",Environment_Scale_Chunk,7)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS ENVACOUS Environment_Acoustics_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVACOUS\",Environment_Acoustics_Chunk,12)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"ENVACOUS\",Environment_Acoustics_Chunk,11)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS OBHALTSH Object_Hierarchy_Alternate_Shape_Set_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBHALTSH\",Object_Hierarchy_Alternate_Shape_Set_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"OBHALTSH\",Object_Hierarchy_Alternate_Shape_Set_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS HSETCOLL Hierarchy_Shape_Set_Collection_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"HSETCOLL\",Hierarchy_Shape_Set_Collection_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"HSETCOLL\",Hierarchy_Shape_Set_Collection_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS HIERBBOX Hierarchy_Bounding_Box_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"HIERBBOX\",Hierarchy_Bounding_Box_Chunk,24)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"HIERBBOX\",Hierarchy_Bounding_Box_Chunk,23)"
+				}
+			]
+		},
+		{
+			"name": "HOLDS RIFVERIN RIF_Version_Num_Chunk: one byte too few is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"RIFVERIN\",RIF_Version_Num_Chunk,4)",
+					"to": "RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST(\"RIFVERIN\",RIF_Version_Num_Chunk,3)"
+				}
+			]
+		},
+		{
+			"name": "READ AVP_Path_Chunk: PathID is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/path_chunk.cpp",
+					"from": "\tPathID=ReadFromChunk<int>(start,datasize,data);",
+					"to": "\tPathID=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ AVP_Path_Chunk: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/path_chunk.cpp",
+					"from": "\tflags=ReadFromChunk<int>(start,datasize,data);",
+					"to": "\tflags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ AVP_Path_Chunk: spare2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/path_chunk.cpp",
+					"from": "\tspare2=ReadFromChunk<int>(start,datasize,data);",
+					"to": "\tspare2=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Virtual_Object_Properties_Chunk: ID is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tID = ReadFromChunk<ObjectID>(chunk_start, chunk_bytes, data);",
+					"to": "\tID = (*(ObjectID*)data); data += sizeof(ObjectID);"
+				}
+			]
+		},
+		{
+			"name": "READ Virtual_Object_Properties_Chunk: pad1 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tpad1=ReadFromChunk<int>(chunk_start, chunk_bytes, data);\t\t\t\t",
+					"to": "\tpad1=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Virtual_Object_Properties_Chunk: pad2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tpad2=ReadFromChunk<int>(chunk_start, chunk_bytes, data);\t\t\t\t",
+					"to": "\tpad2=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ External_Shape_BMPs_Store_Chunk: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "\tflags = (GlobalBMPFlags)(ReadFromChunk<int>(chunk_start, ssize, sdata) & GBF_MASK);",
+					"to": "\tflags = (GlobalBMPFlags)((*(int*)sdata) & GBF_MASK); sdata += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ External_Shape_BMPs_Store_Chunk: version_num is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "\tversion_num = ReadFromChunk<int>(chunk_start, ssize, sdata);",
+					"to": "\tversion_num = (*(int*)sdata); sdata += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ External_Shape_BMPs_Store_Chunk: reserved[i] is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/bitmap_names.cpp",
+					"from": "\t\treserved[i] = ReadFromChunk<int>(chunk_start, ssize, sdata);",
+					"to": "\t\treserved[i] = (*(int*)sdata); sdata += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Data_Chunk: pad1 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tdata += (length+4)&~3;\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tdata += (length+4)&~3;\n\n\tpad1 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Data_Chunk: pad2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tdata += (length+4)&~3;\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tdata += (length+4)&~3;\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Data_Chunk: pad3 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tdata += (length+4)&~3;\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tdata += (length+4)&~3;\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Shape_Chunk: num_fragments is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tnum_fragments = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tnum_fragments = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Shape_Chunk: location is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);",
+					"to": "\tlocation = (*(ChunkVectorInt*)data); data += sizeof(ChunkVectorInt);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Shape_Chunk: pad1 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Shape_Chunk: pad2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Fragment_Type_Shape_Chunk: pad3 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_fragments.cpp",
+					"from": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = ReadFromChunk<int>(start, chunk_bytes, data);",
+					"to": "\tlocation = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);\n\n\tpad1 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad2 = ReadFromChunk<int>(start, chunk_bytes, data);\n\tpad3 = (*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Object_Track_Chunk2: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "\tflags=ReadFromChunk<int>(start,size,data);",
+					"to": "\tflags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Object_Track_Chunk2: timer_start is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "\ttimer_start=ReadFromChunk<int>(start,size,data);",
+					"to": "\ttimer_start=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ RIF_Child_Chunk: version_num is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "\tversion_num = ReadFromChunk<int>(start, ssize, sdata);",
+					"to": "\tversion_num = (*(int*)sdata); sdata += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Shape_Fragment_Type_Chunk: pad1 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tpad1=ReadFromChunk<int>(start,chunk_bytes,data);",
+					"to": "\tpad1=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Shape_Fragment_Type_Chunk: pad2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_shape.cpp",
+					"from": "\tpad2=ReadFromChunk<int>(start,chunk_bytes,data);",
+					"to": "\tpad2=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Indexed_Sound_Chunk: inner_range is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\tinner_range=ReadFromChunk<int>(start,size,data);",
+					"to": "\tinner_range=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Indexed_Sound_Chunk: outer_range is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\touter_range=ReadFromChunk<int>(start,size,data);",
+					"to": "\touter_range=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Indexed_Sound_Chunk: max_volume is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\tmax_volume=ReadFromChunk<int>(start,size,data);",
+					"to": "\tmax_volume=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Indexed_Sound_Chunk: pitch is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\tpitch=ReadFromChunk<int>(start,size,data);",
+					"to": "\tpitch=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Indexed_Sound_Chunk: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\tflags=ReadFromChunk<int>(start,size,data);",
+					"to": "\tflags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Sprite_Bitmap_Centre_Chunk: spare is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sprites.cpp",
+					"from": "\tspare=ReadFromChunk<int>(start,size,data);",
+					"to": "\tspare=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Module_Waypoint_Chunk: ml->flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_waypoint.cpp",
+					"from": "\t\t\t\tml->flags=ReadFromChunk<int>(start,size,data);",
+					"to": "\t\t\t\tml->flags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Random_Texture_ID_Chunk: spare1 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "\tspare1=ReadFromChunk<int>(start,size,data);",
+					"to": "\tspare1=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Random_Texture_ID_Chunk: spare2 is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/environment_chunk.cpp",
+					"from": "\tspare2=ReadFromChunk<int>(start,size,data);",
+					"to": "\tspare2=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Object_Hierarchy_Alternate_Shape_Set_Chunk: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "   \tflags=ReadFromChunk<int>(start,size,data);",
+					"to": "   \tflags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Object_Hierarchy_Alternate_Shape_Set_Chunk: spare[i] is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "\t\tspare[i]=ReadFromChunk<int>(start,size,data);",
+					"to": "\t\tspare[i]=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Hierarchy_Shape_Set_Collection_Chunk: TypeIndex is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "\tTypeIndex=ReadFromChunk<int>(start,size,data);",
+					"to": "\tTypeIndex=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "READ Hierarchy_Shape_Set_Collection_Chunk: flags is read without looking",
+			"changes": [
+				{
+					"file": "3dc/win95/hierarchy_chunk.cpp",
+					"from": "\tTypeIndex=ReadFromChunk<int>(start,size,data);\n\tflags=ReadFromChunk<int>(start,size,data);",
+					"to": "\tTypeIndex=ReadFromChunk<int>(start,size,data);\n\tflags=(*(int*)data); data += sizeof(int);"
+				}
+			]
+		},
+		{
+			"name": "GATE: a chunk that holds too little is let in",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.cpp",
+					"from": "if (holds >= leastBytes)\n",
+					"to": "if (true)\n"
+				}
+			]
+		},
+		{
+			"name": "GATE: a chunk holding exactly enough is kept out",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.cpp",
+					"from": "if (holds >= leastBytes)\n",
+					"to": "if (holds > leastBytes)\n"
+				}
+			]
+		},
+		{
+			"name": "GATE: a chunk that holds too little is kept out, and the file isn't told",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.cpp",
+					"from": "\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n\treturn new Miscellaneous_Chunk(parent, data, data + 12, holds);",
+					"to": "\treturn new Miscellaneous_Chunk(parent, data, data + 12, holds);"
+				}
+			]
+		},
+		{
+			"name": "READ: a place past the end isn't noticed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "if (used > size || size - used < sizeof(Type))",
+					"to": "if (size - used < sizeof(Type))"
+				}
+			]
+		},
+		{
+			"name": "READ: a number that doesn't fit isn't noticed",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "if (used > size || size - used < sizeof(Type))",
+					"to": "if (used > size)"
+				}
+			]
+		},
+		{
+			"name": "READ: a number that doesn't fit isn't read, and the file isn't told",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "if (used > size || size - used < sizeof(Type))\n\t{\n\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "if (used > size || size - used < sizeof(Type))\n\t{\n"
+				}
+			]
+		},
+		{
+			"name": "READ: the place doesn't move on",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "\tType const value = *(Type const *)data;\n\tdata += sizeof(Type);\n",
+					"to": "\tType const value = *(Type const *)data;\n"
+				}
+			]
+		},
+		{
+			"name": "REGISTER: a kind with any parent has no look at its size",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \\\n\tChunk * const tooSmall = KeepIfItHoldsTooLittle(parent,data,leastBytes); \\\n\tif (tooSmall) return tooSmall; \\\n\tChunk * pChunk = new tokenClassName(parent,",
+					"to": "static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \\\n\tChunk * pChunk = new tokenClassName(parent,"
+				}
+			]
+		},
+		{
+			"name": "REGISTER: a kind with a named parent has no look at its size",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk.hpp",
+					"from": "static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \\\n\tChunk * const tooSmall = KeepIfItHoldsTooLittle(parent,data,leastBytes); \\\n\tif (tooSmall) return tooSmall; \\\n\tChunk * pChunk = new tokenClassName((parentClassName*)parent,",
+					"to": "static Chunk * RifCreateClassObject ## tokenClassName ##_## nLine (Chunk_With_Children* parent,const char* data) { \\\n\tChunk * pChunk = new tokenClassName((parentClassName*)parent,"
+				}
+			]
+		},
+		{
+			"name": "COLOURS: the table is read whatever the chunk holds",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "if (ssize < 32 + (size_t)(1<<15))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "COLOURS: a whole table is refused",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "if (ssize < 32 + (size_t)(1<<15))",
+					"to": "if (ssize <= 32 + (size_t)(1<<15))"
+				}
+			]
+		},
+		{
+			"name": "COLOURS: a short table isn't read, and the file isn't told",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_palette.cpp",
+					"from": "if (ssize < 32 + (size_t)(1<<15))\n\t\t{\n\t\t\tParent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;\n",
+					"to": "if (ssize < 32 + (size_t)(1<<15))\n\t\t{\n"
+				}
+			]
+		},
+		{
+			"name": "MAP: the interior type is read from the old wrong place",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_map.cpp",
+					"from": "map_data.MapInteriorType=*((int*)(data+156));",
+					"to": "map_data.MapInteriorType=*((int*)(data+126));"
+				}
+			]
+		},
+		{
+			"name": "WAYPOINT: it reads a number after its list again, where nothing is written",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_waypoint.cpp",
+					"from": "\t\t}\n\t}\n}\n\nModule_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)",
+					"to": "\t\t}\n\t}\n\tvolatile int const spare = *(int*)data;\n}\n\nModule_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)"
+				}
+			]
+		}
+	]
+}

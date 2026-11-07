@@ -14,8 +14,10 @@ bool PixelLights_Ready(LPDIRECT3DDEVICE9 device);
 void PixelLights_Release();
 
 // Adds up all the lights at each pixel, once a frame, after the surface pictures are drawn and before any light reads them. lights is the
-// frame's list of chosen lights, kToyLightFloats numbers each. This changes which picture is being drawn on, so the caller sets that next.
-void PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, IDirect3DTexture9 *depth);
+// frame's list of chosen lights, kToyLightFloats numbers each. reachesScreen says which of them reach the screen at all, and reach says which
+// rectangle of it each of those can light. This changes which picture is being drawn on, so the caller sets that next. It gives back how many
+// screens' worth of pixels all the lights' rectangles came to, which is what this costs.
+float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, const RECT *reach, const bool *reachesScreen, IDirect3DTexture9 *depth);
 
 // For a light baked into the walls: on every pixel the stencil has marked, adds this light's share to the mask being drawn on.
 // strength is how much of its share to take, which is 1 for an ordinary shadow. Says whether the card took it.

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the list of shapes comes from AllocateMem, which stops the game with a message if there is no memory left
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -101,14 +104,7 @@ int load_precompiled_shapes(void)
 	if (!mainshapelist)
 	{
 		maxshapes = 750;
-		/*I'm not using AllocateMem because I'll have to realloc this later*/
-		mainshapelist = (SHAPEHEADER**)malloc(sizeof(SHAPEHEADER*) * maxshapes);
-		LOCALASSERT(mainshapelist);
-		if (!mainshapelist)
-		{
-			ReleaseDirect3D();
-			exit(0x74363);
-		}
+		mainshapelist = (SHAPEHEADER**)AllocateMem(sizeof(SHAPEHEADER*) * maxshapes);
 		for (i = 0; i < maxshapes; i++)
 		{
 			mainshapelist[i] = 0;

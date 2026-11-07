@@ -37,6 +37,11 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the settings file can't say where shaders come from
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine's shoulder lamp has a shader of its own, and a way of blending that brightens what's already there
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
 #include "d3_func.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
@@ -54,6 +59,10 @@
 #include "user_profile.h"
 #include "console.h"
 #include "texture_size_check.h"
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "win32/d3_func.cpp";
 
 extern void RenderListInit();
 extern void RenderListDeInit();
@@ -418,7 +427,7 @@ bool R_BeginScene()
 	{
 		if (!saidBeginFailed)
 		{
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			saidBeginFailed = true;
 		}
 
@@ -432,7 +441,7 @@ bool R_BeginScene()
 	{
 		if (!saidClearFailed)
 		{
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			saidClearFailed = true;
 		}
 
@@ -454,7 +463,7 @@ bool R_EndScene()
 	LastError = d3d.lpD3DDevice->EndScene();
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 /*
@@ -491,7 +500,7 @@ bool R_CreateVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't create vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -535,7 +544,7 @@ bool R_CreateIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't create index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -677,7 +686,7 @@ bool R_DrawPrimitive(uint32_t numPrimitives)
 	LastError = d3d.lpD3DDevice->DrawPrimitive(D3DPT_TRIANGLESTRIP, 0, numPrimitives);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -706,7 +715,7 @@ bool R_LockVertexBuffer(class VertexBuffer &vertexBuffer, uint32_t offsetToLock,
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't lock vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -727,7 +736,7 @@ bool R_DrawIndexedPrimitive(uint32_t baseVertexIndex, uint32_t minIndex, uint32_
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't draw indexed primitive");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -759,7 +768,7 @@ bool R_LockIndexBuffer(class IndexBuffer &indexBuffer, uint32_t offsetToLock, ui
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't lock index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -774,7 +783,7 @@ bool R_SetVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -787,7 +796,7 @@ bool R_SetIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -804,7 +813,7 @@ bool R_UnlockVertexBuffer(class VertexBuffer &vertexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't unlock vertex buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -823,7 +832,7 @@ bool R_UnlockIndexBuffer(class IndexBuffer &indexBuffer)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't unlock index buffer");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1060,7 +1069,7 @@ void CreateScreenShotImage()
 	// create surface to copy screen to
 	if (FAILED(d3d.lpD3DDevice->CreateOffscreenPlainSurface(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, D3DFMT_A8R8G8B8, D3DPOOL_SCRATCH, &frontBuffer, NULL)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Couldn't create screenshot surface");
 		return;
 	}
@@ -1068,7 +1077,7 @@ void CreateScreenShotImage()
 	// copy front buffer screen to surface
 	if (FAILED(d3d.lpD3DDevice->GetFrontBufferData(0, frontBuffer)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Couldn't get a copy of the front buffer");
 		SAFE_RELEASE(frontBuffer);
 		return;
@@ -1077,7 +1086,7 @@ void CreateScreenShotImage()
 	// save surface to image file
 	if (FAILED(D3DXSaveSurfaceToFile(fileName.str().c_str(), D3DXIFF_JPG, frontBuffer, NULL, NULL)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		LogErrorString("Save Surface to file failed");
 	}
 
@@ -1167,7 +1176,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	LastError = d3d.lpD3DDevice->CreateTexture(padWidth, padHeight, 1, textureUsage, colourFormat, texturePool, &texture.texture, NULL);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1177,7 +1186,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	if (FAILED(LastError))
 	{
 		texture.texture->Release();
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1234,7 +1243,7 @@ bool R_CreateTallFontTexture(AVPTEXTURE &tex, enum TextureUsage usageType, Textu
 	LastError = texture.texture->UnlockRect(0);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	
@@ -1366,7 +1375,7 @@ bool R_CreateVertexDeclaration(class VertexDeclaration *vertexDeclaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not create vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1378,7 +1387,7 @@ bool R_SetVertexDeclaration(class VertexDeclaration &declaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not set vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1390,7 +1399,7 @@ bool R_ReleaseVertexDeclaration(class VertexDeclaration &declaration)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not release vertex declaration");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 	return true;
@@ -1406,7 +1415,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
 	if (!fileOpenTest.good())
 	{
-		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("Can't open vertex shader file '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 	// close the file
@@ -1425,13 +1434,13 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 
 	if (FAILED(LastError))
 	{
-		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, kThisFile);
 		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
 			// shader didn't compile for some reason
-			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, __FILE__);
+			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, kThisFile);
 			LogErrorString(std::string((const char*)pErrors->GetBufferPointer()));
 
 			pErrors->Release();
@@ -1443,7 +1452,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LastError = d3d.lpD3DDevice->CreateVertexShader((DWORD*)pCode->GetBufferPointer(), &vertexShader.shader);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreateVertexShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreateVertexShader failed for '" + actualPath + "'", __LINE__, kThisFile);
 
 		// A card with no shader model 3 ends up here, once for each shader that needs it, so these two are given back.
 		pCode->Release();
@@ -1460,7 +1469,7 @@ bool R_CreateVertexShader(const std::string &fileName, r_VertexShader &vertexSha
 	LastError = vertexShader.constantTable->GetDesc(&constantTableDesc);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreateVertexShader failed getting constant table description for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreateVertexShader failed getting constant table description for '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1503,7 +1512,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	std::ifstream fileOpenTest(actualPath.c_str(), std::ifstream::in | std::ifstream::binary);
 	if (!fileOpenTest.good())
 	{
-		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("Can't open pixel shader file '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 	// close the file
@@ -1522,13 +1531,13 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 
 	if (FAILED(LastError))
 	{
-		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("D3DXCompileShaderFromFile failed for '" + actualPath + "'", __LINE__, kThisFile);
 		LogErrorString("DX Error- " + DxErrorToString(LastError));
 
 		if (pErrors)
 		{
 			// shader didn't compile for some reason
-			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, __FILE__);
+			LogErrorString("Shader compile errors found for '" + actualPath + "'", __LINE__, kThisFile);
 			LogErrorString(std::string((const char*)pErrors->GetBufferPointer()));
 
 			pErrors->Release();
@@ -1540,7 +1549,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	LastError = d3d.lpD3DDevice->CreatePixelShader((DWORD*)pCode->GetBufferPointer(), &pixelShader.shader);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreatePixelShader failed for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreatePixelShader failed for '" + actualPath + "'", __LINE__, kThisFile);
 
 		// the same as for a vertex shader, above
 		pCode->Release();
@@ -1557,7 +1566,7 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	pixelShader.constantTable->GetDesc(&constantTableDesc);
 	if (FAILED(LastError))
 	{
-		LogErrorString("CreatePixelShader failed getting constant table description for '" + actualPath + "'", __LINE__, __FILE__);
+		LogErrorString("CreatePixelShader failed getting constant table description for '" + actualPath + "'", __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1596,7 +1605,7 @@ bool R_SetVertexShader(r_VertexShader &vertexShader)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex shader " + vertexShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1609,7 +1618,7 @@ bool R_UnsetVertexShader()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set vertex shader to NULL");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1654,7 +1663,7 @@ bool R_SetPixelShaderConstant(r_PixelShader &pixelShader, uint32_t registerIndex
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't SetValue for pixel shader " + pixelShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1699,7 +1708,7 @@ bool R_SetVertexShaderConstant(r_VertexShader &vertexShader, uint32_t registerIn
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't SetValue for vertex shader " + vertexShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1712,7 +1721,7 @@ bool R_SetPixelShader(r_PixelShader &pixelShader)
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set pixel shader " + pixelShader.shaderName);
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1725,7 +1734,7 @@ bool R_UnsetPixelShader()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Can't set pixel shader to NULL");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1784,7 +1793,7 @@ bool R_CreateTextureWithCopies(uint32_t side, uint32_t levels, Texture &texture)
 	LastError = d3d.lpD3DDevice->CreateTexture(side, side, levels, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &made, NULL);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1815,7 +1824,7 @@ bool R_LockTextureCopy(Texture &texture, uint32_t level, uint8_t **data, uint32_
 	LastError = texture.texture->LockRect(level, &lock, NULL, 0);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1829,7 +1838,7 @@ bool R_UnlockTextureCopy(Texture &texture, uint32_t level)
 	LastError = texture.texture->UnlockRect(level);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -1861,7 +1870,7 @@ bool R_CreateTextureFromFile(const std::string &fileName, Texture &texture)
 
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		texture.texture = NULL;
 		return false;
 	}
@@ -1964,7 +1973,7 @@ bool R_CreateTextureFromAvPTexture(AVPTEXTURE &AvPTexture, enum TextureUsage usa
 		0,
 		&d3dTexture)))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		delete[] buffer;
 		texture.texture = NULL;
 		return false;
@@ -2077,7 +2086,7 @@ bool R_CreateTexture(uint32_t width, uint32_t height, uint32_t bitsPerPixel, enu
 	LastError = d3d.lpD3DDevice->CreateTexture(realWidth, realHeight, 1, textureUsage, textureFormat, texturePool, &d3dTexture, NULL);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -2166,12 +2175,12 @@ bool R_ChangeResolution(uint32_t width, uint32_t height)
 			// try reset again, if it doesnt work, bail out
 			LastError = d3d.lpD3DDevice->Reset(&d3d.d3dpp);
 			if (FAILED(LastError)) {
-				LogDxError(LastError, __LINE__, __FILE__);
+				LogDxError(LastError, __LINE__, kThisFile);
 				return false;
 			}
 		}
 		else {
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 	}
@@ -2184,7 +2193,7 @@ bool R_ChangeResolution(uint32_t width, uint32_t height)
 
 	LastError = d3d.lpD3DDevice->SetViewport(&d3d.D3DViewport);
 	if (FAILED(LastError)) {
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 
 	ScreenDescriptorBlock.SDB_Width     = width;
@@ -2263,7 +2272,7 @@ bool InitialiseDirect3D()
 		LastError = d3d.lpD3D->GetAdapterIdentifier(driverIndex, /*D3DENUM_WHQL_LEVEL*/0, &d3d.Driver[driverIndex].AdapterInfo);
 		if (FAILED(LastError))
 		{
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 	}
@@ -2278,7 +2287,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("GetAdapterDisplayMode call failed");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return false;
 		}
 		else
@@ -2526,7 +2535,7 @@ bool InitialiseDirect3D()
 	if (FAILED(LastError))
 	{
 		Con_PrintError("Could not create Direct3D device");
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return false;
 	}
 
@@ -2643,7 +2652,7 @@ bool InitialiseDirect3D()
 	LastError = d3d.lpD3DDevice->SetViewport(&d3d.D3DViewport);
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 
 	ScreenDescriptorBlock.SDB_Width     = width;
@@ -2791,7 +2800,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not create missing texture signifying texture");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 
 		D3DLOCKED_RECT lock;
@@ -2799,7 +2808,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not lock missing texture signifying texture");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 		else
 		{
@@ -2820,7 +2829,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not create white texture for shader sampling");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 
 		D3DLOCKED_RECT lock;
@@ -2828,7 +2837,7 @@ bool InitialiseDirect3D()
 		if (FAILED(LastError))
 		{
 			Con_PrintError("Could not lock white texture for shader sampling");
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 		}
 		else
 		{
@@ -2848,6 +2857,7 @@ bool InitialiseDirect3D()
 
 	d3d.mainEffect  = d3d.effectSystem->Add("main", "vertex.vsh", "pixel.psh", d3d.mainDecl);
 	d3d.orthoEffect = d3d.effectSystem->Add("ortho", "orthoVertex.vsh", "orthoPixel.psh", d3d.orthoDecl);
+	d3d.shoulderLampEffect = d3d.effectSystem->Add("shoulderLamp", "orthoVertex.vsh", "shoulderLamp.psh", d3d.orthoDecl);
 	d3d.decalEffect = d3d.effectSystem->Add("decal", "decal.vsh", "decal.psh", d3d.decalDecl);
 	d3d.fmvEffect   = d3d.effectSystem->Add("fmv", "fmvVertex.vsh", "fmvPixel.psh", d3d.fmvDecl);
 	d3d.rhwEffect   = d3d.effectSystem->Add("rhw", "rhw.vsh", "rhw.psh", d3d.rhwDecl);
@@ -2941,7 +2951,7 @@ void FlipBuffers()
 
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 
 	FrameTiming_FrameShown();
@@ -3112,6 +3122,26 @@ void ChangeTranslucencyMode(enum TRANSLUCENCY_TYPE translucencyRequired)
 			{
 				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 				D3DSrcBlend = D3DBLEND_SRCALPHA;
+			}
+			if (D3DDestBlend != D3DBLEND_ONE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+				D3DDestBlend = D3DBLEND_ONE;
+			}
+			break;
+		}
+		// The picture's own colour times what's drawn, added to the picture, so it can make something up to twice as bright, and black stays black
+		case TRANSLUCENCY_BRIGHTEN:
+		{
+			if (D3DAlphaBlendEnable != TRUE)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+				D3DAlphaBlendEnable = TRUE;
+			}
+			if (D3DSrcBlend != D3DBLEND_DESTCOLOR)
+			{
+				d3d.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_DESTCOLOR);
+				D3DSrcBlend = D3DBLEND_DESTCOLOR;
 			}
 			if (D3DDestBlend != D3DBLEND_ONE)
 			{

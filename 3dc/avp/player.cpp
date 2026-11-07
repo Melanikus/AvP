@@ -1,5 +1,10 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the marine's shoulder lamp starts off
 /* KJL 16:23:20 10/25/96 - I'm moved all the weapon stuff to the newly created weapon.c,
 so player.c is looking a bit bare at the moment. */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   an unknown difficulty, from a damaged save, uses medium Marine stats, not a pointer that was never set
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -30,6 +35,7 @@ so player.c is looking a bit bare at the moment. */
 #include "pldghost.h"
 #include "showcmds.h"
 #include "bonusabilities.h"
+#include "shoulder_lamp.h"
 
 #define PLAYER_HMODEL 0
 
@@ -116,6 +122,9 @@ int PrintDebuggingText(const char* t, ...);
 
 void InitPlayer(STRATEGYBLOCK* sbPtr, int sb_type)
 {
+	// The shoulder lamp starts off, every time
+	ShoulderLamp_TurnOff();
+
 	/*KJL**************************************************************************************
 	* InitPlayer() was written by me. It attaches the extra player data to the strategy block *
 	* and fills in some initial values.                                                       *
@@ -910,7 +919,9 @@ void PlayerIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiplie
 		}
 
 		{
-			NPC_DATA *NpcData;
+			// Only a damaged save can give a difficulty the lists below do not have. This keeps such a game
+			// running, because every path now has stats to use.
+			NPC_DATA *NpcData = GetThisNpcData(I_PC_Marine_Medium);
 			int scaled_DeltaHealth;
 
 			switch (AvP.PlayerType)

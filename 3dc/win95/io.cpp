@@ -2,11 +2,14 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the debug text shown on screen is written with a size limit, so it always fits;
 //   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a frame never counts as nothing, because the game divides by its length
 
 #include "3dc.h"
 #include <sys\stat.h>
 #include <string.h>
 #include "io.h"
+#include "frame_time.h"
 #include "inline.h"
 #include "module.h"
 #include "chunk_textures.h"
@@ -268,6 +271,9 @@ void FrameCounterHandler(void)
 	/* cap NormalFrameTime if frame rate is really low */
 	if (NormalFrameTime > 16384) // 0.25. quarter of a second?
 		NormalFrameTime = 16384;
+
+	/* A short frame in slow motion can scale down to nothing, and the game divides by this. See frame_time.h. */
+	NormalFrameTime = FrameTime_NeverNothing(NormalFrameTime);
 
 	GlobalFrameCounter++;
 	CloakingPhase += NormalFrameTime>>5;

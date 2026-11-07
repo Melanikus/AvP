@@ -1,0 +1,1480 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "it starts on",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "static bool lampIsOn = false;",
+					"to": "static bool lampIsOn = true;"
+				}
+			]
+		},
+		{
+			"name": "a press does nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "lampIsOn = !lampIsOn;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it can only be turned on",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "lampIsOn = !lampIsOn;",
+					"to": "lampIsOn = true;"
+				}
+			]
+		},
+		{
+			"name": "it cannot be turned off",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "void ShoulderLamp_TurnOff()\n{\n\tlampIsOn = false;",
+					"to": "void ShoulderLamp_TurnOff()\n{\n\t;"
+				}
+			]
+		},
+		{
+			"name": "it is drawn when off",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "lampIsAskedFor = lampIsOn && playerCanHaveALamp;",
+					"to": "lampIsAskedFor = playerCanHaveALamp;"
+				}
+			]
+		},
+		{
+			"name": "anyone can have one",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "lampIsAskedFor = lampIsOn && playerCanHaveALamp;",
+					"to": "lampIsAskedFor = lampIsOn;"
+				}
+			]
+		},
+		{
+			"name": "it stays asked for",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\tlampIsAskedFor = false;\n\n\tif (answer)",
+					"to": "\tif (answer)"
+				}
+			]
+		},
+		{
+			"name": "frames are not counted",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "framesDrawn++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "frames are counted when it is not drawn",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (answer)\n\t{\n\t\tframesDrawn++;",
+					"to": "if (true)\n\t{\n\t\tframesDrawn++;"
+				}
+			]
+		},
+		{
+			"name": "who it is for is not kept",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "playerCouldHaveALamp = playerCanHaveALamp;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the flicker goes too low",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "- 0.20 * dip",
+					"to": "- 0.40 * dip"
+				}
+			]
+		},
+		{
+			"name": "the flicker goes past full",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "0.92 + 0.04 * middle",
+					"to": "1.02 + 0.04 * middle"
+				}
+			]
+		},
+		{
+			"name": "there is no flicker",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "return (float)(0.92 + 0.04 * middle + 0.03 * quick - 0.20 * dip);",
+					"to": "return 0.92f;"
+				}
+			]
+		},
+		{
+			"name": "the flicker strobes",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "sin(turn * 11.0)",
+					"to": "sin(turn * 29.0)"
+				}
+			]
+		},
+		{
+			"name": "an old profile keeps Escape",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (stored != neverSet)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "every key is replaced",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (stored != neverSet)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the default is taken from another key",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "return defaultIsTaken ? noKey : defaultKey;",
+					"to": "return defaultKey;"
+				}
+			]
+		},
+		{
+			"name": "the default is never given",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "return defaultIsTaken ? noKey : defaultKey;",
+					"to": "return noKey;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the marine has no more keys",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.h",
+					"from": "#define NUMBER_OF_MARINE_INPUTS\t28\n#else",
+					"to": "#define NUMBER_OF_MARINE_INPUTS\t27\n#else"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the key has its own byte",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.h",
+					"from": "unsigned char Predator_Say;        // Predator\n\t\tunsigned char Marine_ShoulderLamp;",
+					"to": "unsigned char Predator_Say;        // Predator\n\t};\n\tunsigned char Marine_ShoulderLamp;\n\tunion\n\t{\n\t\tunsigned char ExpansionSpace9;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing checks the menu reaches its byte",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.cpp",
+					"from": "static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 1, \"the menu would change the wrong key\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing checks profiles still fit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.cpp",
+					"from": "static_assert(sizeof(PLAYER_INPUT_CONFIGURATION) == 32, \"saved profiles wouldn't load\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a press does not reach it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.cpp",
+					"from": "\t\t\t\t\tShoulderLamp_Toggle();",
+					"to": "\t\t\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: only the first key works",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.cpp",
+					"from": " ||DebouncedKeyboardInput[secondaryInput->Marine_ShoulderLamp])",
+					"to": " )"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: held down it flashes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/user_io.cpp",
+					"from": "if (DebouncedKeyboardInput[primaryInput->Marine_ShoulderLamp]",
+					"to": "if (KeyboardInput[primaryInput->Marine_ShoulderLamp]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an old profile is left alone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "\tSettleShoulderLampKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: G taken is not looked for on the second keys",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "primaryKeys[i] == KEY_G || secondaryKeys[i] == KEY_G",
+					"to": "primaryKeys[i] == KEY_G"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp finds its own G",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "i < NUMBER_OF_MARINE_INPUTS - 1",
+					"to": "i < NUMBER_OF_MARINE_INPUTS"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the second key gets G too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/user_profile.cpp",
+					"from": "KEY_ESCAPE, KEY_VOID, false, KEY_VOID)",
+					"to": "KEY_ESCAPE, KEY_G, false, KEY_VOID)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page uses the next name along",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "(j == NUMBER_OF_MARINE_INPUTS - 1) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j",
+					"to": "TEXTSTRING_MARINE_KEY_FORWARD+j"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it stays on across levels",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "\tShoulderLamp_TurnOff();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can have one",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "ShoulderLamp_AskForThisFrame(AvP.PlayerType == I_Marine && playerStatusPtr->IsAlive);",
+					"to": "ShoulderLamp_AskForThisFrame(playerStatusPtr->IsAlive);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dead can have one",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "ShoulderLamp_AskForThisFrame(AvP.PlayerType == I_Marine && playerStatusPtr->IsAlive);",
+					"to": "ShoulderLamp_AskForThisFrame(AvP.PlayerType == I_Marine);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it is drawn on every part of a frame",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())",
+					"to": "if (ShoulderLamp_TakeThisFramesAnswer())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls are lit from an old frame",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tsurfacePicturesAreFromThisFrame = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls are never lit",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "surfacePicturesAreFromThisFrame = true;\n\t\t\tFrameTiming_Mark",
+					"to": "FrameTiming_Mark"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it borrows textures and keeps them",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (onWalls)\n\t{\n\t\tdevice->SetTexture(3, NULL);",
+					"to": "if (onWalls)\n\t{\n\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game turns it off",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (d3d.shoulderLampEffect == kNullEffectID)",
+					"to": "if (AvP.Network != I_No_Network) { return; }\n\tif (d3d.shoulderLampEffect == kNullEffectID)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a missing shader stops the game",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "(d3d.orthoEffect == kNullShaderID)    ||",
+					"to": "(d3d.orthoEffect == kNullShaderID)    || (d3d.shoulderLampEffect == kNullShaderID) ||"
+				}
+			]
+		},
+		{
+			"name": "looking takes the answer away",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool ShoulderLamp_IsAskedForThisFrame()\n{\n\treturn lampIsAskedFor;",
+					"to": "bool ShoulderLamp_IsAskedForThisFrame()\n{\n\tbool const was = lampIsAskedFor;\n\tlampIsAskedFor = false;\n\treturn was;"
+				}
+			]
+		},
+		{
+			"name": "extra is drawn with the lamp off",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool ShoulderLamp_CouldBeDrawn()\n{\n\treturn lampIsOn && playerCouldHaveALamp;",
+					"to": "bool ShoulderLamp_CouldBeDrawn()\n{\n\treturn playerCouldHaveALamp;"
+				}
+			]
+		},
+		{
+			"name": "extra is drawn for someone who cannot have one",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool ShoulderLamp_CouldBeDrawn()\n{\n\treturn lampIsOn && playerCouldHaveALamp;",
+					"to": "bool ShoulderLamp_CouldBeDrawn()\n{\n\treturn lampIsOn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the normals are not written for the lamp",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (ToyShadowsMode || ShoulderLamp_CouldBeDrawn())",
+					"to": "if (ToyShadowsMode)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pictures are drawn twice",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (surfacePicturesAreFromThisFrame || !surfaceNormalsWereWrittenThisFrame || !ShoulderLamp_IsAskedForThisFrame())",
+					"to": "if (!surfaceNormalsWereWrittenThisFrame || !ShoulderLamp_IsAskedForThisFrame())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pictures come from a frame with no normals",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (surfacePicturesAreFromThisFrame || !surfaceNormalsWereWrittenThisFrame || !ShoulderLamp_IsAskedForThisFrame())",
+					"to": "if (surfacePicturesAreFromThisFrame || !ShoulderLamp_IsAskedForThisFrame())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pictures are drawn with the lamp off",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (surfacePicturesAreFromThisFrame || !surfaceNormalsWereWrittenThisFrame || !ShoulderLamp_IsAskedForThisFrame())",
+					"to": "if (surfacePicturesAreFromThisFrame || !surfaceNormalsWereWrittenThisFrame)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the card is left in the wrong state",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "surfacePicturesAreFromThisFrame = ToyDrawPictures(device, worldAxes, false);\n\n\t\tdevice->SetRenderTarget(0, screen);\n\t\tdevice->SetViewport(&viewport);\n\t\tsavedCardSettings->Apply();",
+					"to": "surfacePicturesAreFromThisFrame = ToyDrawPictures(device, worldAxes, false);\n\n\t\tdevice->SetRenderTarget(0, screen);\n\t\tdevice->SetViewport(&viewport);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen is left behind",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "surfacePicturesAreFromThisFrame = ToyDrawPictures(device, worldAxes, false);\n\n\t\tdevice->SetRenderTarget(0, screen);\n",
+					"to": "surfacePicturesAreFromThisFrame = ToyDrawPictures(device, worldAxes, false);\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pictures are never drawn for the lamp",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tViewSwitches_ApplyAsked();\n\t\tDrawSurfacePicturesForTheLamp();\n",
+					"to": "\t\tViewSwitches_ApplyAsked();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the middle layer keeps its own size",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "kSizeAtFarEnd * kMiddleSize",
+					"to": "kMiddleSize"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cone brightens too",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)",
+					"to": "lerp(kBrighten * max(spot, cone), (kGlow + onWall) * spot + haze, Lamp.y)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cone shows walls",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)",
+					"to": "lerp(kBrighten * spot, (kGlow + onWall) * max(spot, cone) + haze, Lamp.y)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: there is no haze",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)",
+					"to": "lerp(kBrighten * spot, (kGlow + onWall) * spot, Lamp.y)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the haze has the wall in it",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float3 haze = kHaze * cone;",
+					"to": "float3 haze = kHaze * cone * tex2D(SurfaceColour, In.Place).rgb;"
+				}
+			]
+		},
+		{
+			"name": "a frame of no time divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (seconds <= 0.0)\n\t{\n\t\treturn;\n\t}\n\n\tbool const putSomewhereNew",
+					"to": "bool const putSomewhereNew"
+				}
+			]
+		},
+		{
+			"name": "the first frame chases",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool const putSomewhereNew = !aimIsKnown || ",
+					"to": "bool const putSomewhereNew = "
+				}
+			]
+		},
+		{
+			"name": "a long frame chases",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " || seconds > kShoulderLampLongFrame",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "being put far away chases",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " || moved > (double)kShoulderLampMostStep",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "walking is taken for being put somewhere",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "moved > (double)kShoulderLampMostStep",
+					"to": "moved >= (double)kShoulderLampMostStep"
+				}
+			]
+		},
+		{
+			"name": "a view turned right round chases",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " || DotProductOf(look, lookBefore) < kShoulderLampSnapTurn",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a quarter turn is taken for being put somewhere",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.h",
+					"from": "double const kShoulderLampSnapTurn = -0.17;",
+					"to": "double const kShoulderLampSnapTurn = 0.5;"
+				}
+			]
+		},
+		{
+			"name": "turning does not leave it behind",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "behind[i] + lookBefore[i] - look[i]",
+					"to": "behind[i]"
+				}
+			]
+		},
+		{
+			"name": "it goes the wrong way",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "behind[i] + lookBefore[i] - look[i]",
+					"to": "behind[i] + look[i] - lookBefore[i]"
+				}
+			]
+		},
+		{
+			"name": "where he was looking is not kept",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\t\tlookBefore[i] = look[i];\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "it snaps to him with no curve",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "behind[i] = (behind[i] + pull * seconds) * dyingAway;",
+					"to": "behind[i] = behind[i] * dyingAway;"
+				}
+			]
+		},
+		{
+			"name": "it never catches up",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "behind[i] = (behind[i] + pull * seconds) * dyingAway;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "it goes past where he is looking",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "catchingUp[i] = (catchingUp[i] - strength * pull * seconds) * dyingAway;",
+					"to": "catchingUp[i] = (catchingUp[i] - 4.0 * strength * pull * seconds) * dyingAway;"
+				}
+			]
+		},
+		{
+			"name": "it takes longer than a second",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const strength = 7.0 / followSeconds;",
+					"to": "double const strength = 4.0 / followSeconds;"
+				}
+			]
+		},
+		{
+			"name": "it is there at once",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const strength = 7.0 / followSeconds;",
+					"to": "double const strength = 70.0 / followSeconds;"
+				}
+			]
+		},
+		{
+			"name": "it goes by frames and not time",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const dyingAway = exp(-strength * seconds);",
+					"to": "double const dyingAway = exp(-strength / 60.0);"
+				}
+			]
+		},
+		{
+			"name": "it can get as far behind as it likes",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (howFarBehind > kShoulderLampMostBehind)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "it keeps speeding up at the limit",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\t\t\tcatchingUp[i] = 0.0;\n\t\t}\n\t}\n\n\t// Where that puts",
+					"to": "\t\t}\n\t}\n\n\t// Where that puts"
+				}
+			]
+		},
+		{
+			"name": "across is measured the wrong way",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "aimAcross = DotProductOf(aim, right) / ahead;",
+					"to": "aimAcross = -DotProductOf(aim, right) / ahead;"
+				}
+			]
+		},
+		{
+			"name": "down is measured the wrong way",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "aimDown = DotProductOf(aim, down) / ahead;",
+					"to": "aimDown = -DotProductOf(aim, down) / ahead;"
+				}
+			]
+		},
+		{
+			"name": "across is not told",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "return (float)aimAcross;",
+					"to": "return 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "down is not told",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "return (float)aimDown;",
+					"to": "return 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game does not say where he is looking",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "ShoulderLamp_FollowTheView(look, right, down, (double)Approximate3dMagnitude(&moved), (double)NormalFrameTime / 65536.0);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the spot stays in the middle",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float2 aim = (kAim + Swing.xy * kFollowing) * wide;",
+					"to": "float2 aim = kAim * wide;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beam does not swing",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float2 beam = aim - start;",
+					"to": "float2 beam = kAim * wide - start;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the painted lamp is not told where",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f",
+					"to": "0.0f, 0.0f, 0.0f"
+				}
+			]
+		},
+		{
+			"name": "the lamp starts at another time",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "static double followSeconds = kShoulderLampFollowSeconds;",
+					"to": "static double followSeconds = 0.5;"
+				}
+			]
+		},
+		{
+			"name": "LAMPFOLLOW changes nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "followSeconds = seconds;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the arm ignores LAMPFOLLOW",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "double const strength = 7.0 / followSeconds;",
+					"to": "double const strength = 7.0 / kShoulderLampFollowSeconds;"
+				}
+			]
+		},
+		{
+			"name": "0 divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (followSeconds <= 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "being stuck keeps how far behind it was",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "behind[i] = 0.0;\n\t\t\tcatchingUp[i] = 0.0;\n\t\t}\n\n\t\taimAcross = 0.0;",
+					"to": ";\n\t\t}\n\n\t\taimAcross = 0.0;"
+				}
+			]
+		},
+		{
+			"name": "being stuck leaves the aim where it was",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "aimAcross = 0.0;\n\t\taimDown = 0.0;\n\t\treturn;",
+					"to": "return;"
+				}
+			]
+		},
+		{
+			"name": "no words at all are read",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (!words || length == 0 || length > 8)",
+					"to": "if (length == 0 || length > 8)"
+				}
+			]
+		},
+		{
+			"name": "any length of number is read",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (!words || length == 0 || length > 8)",
+					"to": "if (!words || length == 0)"
+				}
+			]
+		},
+		{
+			"name": "a second dot is read",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (c == '.' && !seenDot)",
+					"to": "if (c == '.')"
+				}
+			]
+		},
+		{
+			"name": "anything that is not a digit is read",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "else\n\t\t{\n\t\t\treturn false;\n\t\t}\n\t}\n\n\tif (digits == 0",
+					"to": "else\n\t\t{\n\t\t\t;\n\t\t}\n\t}\n\n\tif (digits == 0"
+				}
+			]
+		},
+		{
+			"name": "what comes after the dot counts the same",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "place *= 10.0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "what comes before the dot only counts the last digit",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "allTheDigits = allTheDigits * 10.0 + (c - '0');",
+					"to": "allTheDigits = (c - '0');"
+				}
+			]
+		},
+		{
+			"name": "a dot alone is a number",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (digits == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "there is no limit",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "if (!ReadPlainNumber(words, length, &number) || number > kShoulderLampMostFollowSeconds)",
+					"to": "if (!ReadPlainNumber(words, length, &number))"
+				}
+			]
+		},
+		{
+			"name": "the limit is refused",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "number > kShoulderLampMostFollowSeconds)",
+					"to": "number >= kShoulderLampMostFollowSeconds)"
+				}
+			]
+		},
+		{
+			"name": "the number read is not given back",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "*seconds = number;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console does not know the word",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\"LAMPFOLLOW\",",
+					"to": "\"LAMPFOLLOWS\","
+				}
+			]
+		},
+		{
+			"name": "SOURCE: LAMPFOLLOW needs -dev",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "void LampFollowCommand(char *words)\n{",
+					"to": "void LampFollowCommand(char *words)\n{\n\tif (!DevMode) return;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any number is taken",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (length > 0 && !ShoulderLamp_FollowSecondsFromWords(start, (unsigned int)length, &seconds))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refusal says nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(\"LAMPFOLLOW TAKES SECONDS FROM 0 TO 5, LIKE 0.5. 0 STICKS THE LAMP TO THE VIEW\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refusal goes on to change it",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "STICKS THE LAMP TO THE VIEW\");\n\t\treturn;",
+					"to": "STICKS THE LAMP TO THE VIEW\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it does not say what it is now",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\"LAMP IS STUCK TO THE VIEW\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the limit it says is not the limit",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.h",
+					"from": "double const kShoulderLampMostFollowSeconds = 5.0;",
+					"to": "double const kShoulderLampMostFollowSeconds = 6.0;"
+				}
+			]
+		},
+		{
+			"name": "the spot starts at another size",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "static double spotSize = kShoulderLampSpotSize;",
+					"to": "static double spotSize = 0.3;"
+				}
+			]
+		},
+		{
+			"name": "it starts at another strength",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "static double spotIntensity = kShoulderLampIntensity;",
+					"to": "static double spotIntensity = 1.5;"
+				}
+			]
+		},
+		{
+			"name": "a size can be any number",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "|| number < kShoulderLampFewestSpotSize || number > kShoulderLampMostSpotSize)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a size has no least",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "number < kShoulderLampFewestSpotSize || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a size has no most",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " || number > kShoulderLampMostSpotSize)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a strength has no least",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "number < kShoulderLampFewestIntensity || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a strength has no most",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": " || number > kShoulderLampMostIntensity)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a size read is not given back",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "*size = number;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a strength read is not given back",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "*intensity = number;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "setting a size does nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "spotSize = size < kShoulderLampFewestSpotSize ? kShoulderLampFewestSpotSize : size > kShoulderLampMostSpotSize ? kShoulderLampMostSpotSize : size;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a size can be set to nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "spotSize = size < kShoulderLampFewestSpotSize ? kShoulderLampFewestSpotSize : size >",
+					"to": "spotSize = size >"
+				}
+			]
+		},
+		{
+			"name": "a size can be set to anything big",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "size > kShoulderLampMostSpotSize ? kShoulderLampMostSpotSize : size;",
+					"to": "size;"
+				}
+			]
+		},
+		{
+			"name": "setting a strength does nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "spotIntensity = intensity < kShoulderLampFewestIntensity ? kShoulderLampFewestIntensity : intensity > kShoulderLampMostIntensity ? kShoulderLampMostIntensity : intensity;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a strength can be set to nothing",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "spotIntensity = intensity < kShoulderLampFewestIntensity ? kShoulderLampFewestIntensity : intensity >",
+					"to": "spotIntensity = intensity >"
+				}
+			]
+		},
+		{
+			"name": "a strength can be set to anything big",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "intensity > kShoulderLampMostIntensity ? kShoulderLampMostIntensity : intensity;",
+					"to": "intensity;"
+				}
+			]
+		},
+		{
+			"name": "putting back misses a changed size",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;",
+					"to": "bool const wasChanged = spotIntensity != kShoulderLampIntensity;"
+				}
+			]
+		},
+		{
+			"name": "putting back misses a changed strength",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "bool const wasChanged = spotSize != kShoulderLampSpotSize || spotIntensity != kShoulderLampIntensity;",
+					"to": "bool const wasChanged = spotSize != kShoulderLampSpotSize;"
+				}
+			]
+		},
+		{
+			"name": "putting back leaves the size",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\tspotSize = kShoulderLampSpotSize;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "putting back leaves the strength",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "\tspotIntensity = kShoulderLampIntensity;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the shader is not told the size",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "four[0] = (float)spotSize;",
+					"to": "four[0] = (float)kShoulderLampSpotSize;"
+				}
+			]
+		},
+		{
+			"name": "the shader is not told how much nearer",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "four[1] = (float)(kShoulderLampSpotSize / spotSize);",
+					"to": "four[1] = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "the shader is not told how strong",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "four[2] = (float)spotIntensity;",
+					"to": "four[2] = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console has no LAMPSPOTSIZE",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "LampSpotSizeCommand\n",
+					"to": "LampFollowCommand\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the console has no LAMPINTENSITY",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "LampIntensityCommand\n",
+					"to": "LampFollowCommand\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game takes a bigger lamp",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (LampStaysAsBuiltHere(\"LAMPSPOTSIZE IS OFF IN A NETWORK GAME: A BIGGER LAMP WOULD BE CHEATING\", length))\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game takes a brighter lamp",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (LampStaysAsBuiltHere(\"LAMPINTENSITY IS OFF IN A NETWORK GAME: A BRIGHTER LAMP WOULD BE CHEATING\", length))\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: playing alone refuses too",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (AvP.Network == I_No_Network || length == 0)",
+					"to": "if (length == 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game says nothing on its own",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (AvP.Network == I_No_Network || length == 0)",
+					"to": "if (AvP.Network == I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game keeps what was set before",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (ShoulderLamp_PutSpotBack())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything goes in as a size",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (length > 0 && !ShoulderLamp_SpotSizeFromWords(start, (unsigned int)length, &size))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything goes in as a strength",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (length > 0 && !ShoulderLamp_IntensityFromWords(start, (unsigned int)length, &intensity))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader is not told",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "device->SetPixelShaderConstantF(2, spot, 1);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the spot does not grow",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float fromAim = distance(here, aim) * Spot.y;",
+					"to": "float fromAim = distance(here, aim);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cone does not meet it",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "lerp(kSizeAtShoulder, Spot.x, along)",
+					"to": "lerp(kSizeAtShoulder, kSizeAtFarEnd, along)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the spot does not get stronger",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "kLightInTheMiddle) * Spot.z;",
+					"to": "kLightInTheMiddle);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the haze gets stronger too",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float3 haze = kHaze * cone;",
+					"to": "float3 haze = kHaze * cone * Spot.z;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader listens to the wrong register",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "float4 Spot : register(c2);",
+					"to": "float4 Spot : register(c3);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader is built at another size",
+			"changes": [
+				{
+					"file": "shaders/shoulderLamp.psh",
+					"from": "static const float kSizeAtFarEnd = 0.21f;",
+					"to": "static const float kSizeAtFarEnd = 0.25f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with no pictures, old ones can be read",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tdevice->SetTexture(3, NULL);\n\t\tdevice->SetTexture(4, NULL);\n\t}\n\n\tChangeTranslucencyMode(TRANSLUCENCY_GLOWING);",
+					"to": "\t}\n\n\tChangeTranslucencyMode(TRANSLUCENCY_GLOWING);"
+				}
+			]
+		},
+		{
+			"name": "the number is added up a place at a time, and the top of a range is lost",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "*out = allTheDigits / place;",
+					"to": "*out = allTheDigits / place + 0.0000000000001;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a size that is refused goes on anyway",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(\"LAMPSPOTSIZE TAKES A NUMBER FROM 0.05 TO 0.35, LIKE 0.21\");\n\t\treturn;",
+					"to": "SaySwitch(\"LAMPSPOTSIZE TAKES A NUMBER FROM 0.05 TO 0.35, LIKE 0.21\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a strength that is refused goes on anyway",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SaySwitch(\"LAMPINTENSITY TAKES A NUMBER FROM 0.25 TO 2, LIKE 1\");\n\t\treturn;",
+					"to": "SaySwitch(\"LAMPINTENSITY TAKES A NUMBER FROM 0.25 TO 2, LIKE 1\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the drawing lets a changed spot into a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (AvP.Network != I_No_Network && ShoulderLamp_PutSpotBack())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the spot is put back after the numbers are read",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tShoulderLamp_SpotNumbers(spot);\n",
+					"to": "\tShoulderLamp_SpotNumbers(spot); ShoulderLamp_PutSpotBack();\n"
+				}
+			]
+		}
+	]
+}

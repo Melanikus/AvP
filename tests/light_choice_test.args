@@ -1,0 +1,5 @@
+/std:c++17 /EHsc /MD /J /W3 /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/light_choice_test.cpp
+3dc/light_choice.cpp

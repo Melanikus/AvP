@@ -3,6 +3,7 @@
 //   removed code and declarations only the level editor used: the game itself never runs them
 //   a sequence starts with no frames, so one a broken list never reached is safe to free
 //   a sequence checks that each of its frames has a place of its own
+//   a sequence can say whether the game can play it
 
 #ifndef _animobs_hpp
 #define _animobs_hpp 1
@@ -54,6 +55,9 @@ public:
 
 	// Refuses the level unless every frame has a place of its own. See the .cpp.
 	virtual void post_input_processing();
+
+	// Can the game play this sequence? Only asked once post_input_processing has checked every frame's place. See the .cpp.
+	bool can_be_played();
 
 	int get_sequence_time(); //gets time in ms
 	int get_sequence_speed(); //gets movement speed in mm/second
@@ -263,6 +267,9 @@ public:
 	
 	int num_sequences;
 	Object_Animation_Sequence* sequences;
+
+	// Can the game play all of these? See the .cpp.
+	bool sequences_can_be_played();
 
 };
 #endif

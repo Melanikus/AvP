@@ -4,6 +4,7 @@
 //   level file is checked against the size of its chunk
 //   counted lists are measured against their chunks before they're made
 //   a light's times have to be ones that don't wrap round
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -31,7 +32,7 @@ Children for Light_Set_Chunk :
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("LTSETHDR",Light_Set_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("LTSETHDR",Light_Set_Header_Chunk,12)
 
 void Light_Set_Header_Chunk::fill_data_block ( char * data_start)
 {
@@ -63,7 +64,7 @@ Light_Set_Header_Chunk::Light_Set_Header_Chunk (Chunk_With_Children * parent, co
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("STDLIGHT",Light_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("STDLIGHT",Light_Chunk,84)
 
 
 void Light_Chunk::fill_data_block ( char * data_start)
@@ -236,7 +237,7 @@ Shape_Vertex_Intensities_Chunk::~Shape_Vertex_Intensities_Chunk()
 
 ///////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AMBIENCE",Lighting_Ambience_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AMBIENCE",Lighting_Ambience_Chunk,4)
 
 
 void Lighting_Ambience_Chunk::fill_data_block ( char * data_start)
@@ -256,7 +257,7 @@ void Lighting_Ambience_Chunk::fill_data_block ( char * data_start)
 
 
 ///////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("LITSCALE",Light_Scale_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("LITSCALE",Light_Scale_Chunk,40)
 
 Light_Scale_Chunk::Light_Scale_Chunk(Light_Set_Chunk* parent,int mode)
 :Chunk(parent,"LITSCALE")
@@ -347,7 +348,7 @@ int Light_Scale_Chunk::ApplyRuntimeScale(int l)
 	return max(l,runtime_multiply_above);
 }
 ////////////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("PLOBJLIT",Placed_Object_Light_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PLOBJLIT",Placed_Object_Light_Chunk,60)
 
 Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const size)
 : Chunk (parent, "PLOBJLIT")
