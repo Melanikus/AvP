@@ -1,0 +1,28 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "HUFFMAN: the entry is picked without leaving the spare bit out",
+			"changes": [
+				{
+					"file": "3dc/win95/huffman.cpp",
+					"from": "(table + ((bits >> 1) & ((1 << MAX_DEPTH) - 1)))",
+					"to": "(table + ((bits) & ((1 << MAX_DEPTH) - 1)))"
+				}
+			]
+		},
+		{
+			"name": "HUFFMAN: the entry is picked from one bit more than a code has",
+			"changes": [
+				{
+					"file": "3dc/win95/huffman.cpp",
+					"from": "(table + ((bits >> 1) & ((1 << MAX_DEPTH) - 1)))",
+					"to": "(table + ((bits >> 1) & ((2 << MAX_DEPTH) - 1)))"
+				}
+			]
+		}
+	]
+}
