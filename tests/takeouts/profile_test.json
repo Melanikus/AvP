@@ -95,12 +95,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: the time is told it has the whole box",
+			"name": "the time is told it has the whole box",
 			"changes": [
 				{
-					"file": "3dc/avp/win95/frontend/menus.cpp",
-					"from": "NULL, time, 99);",
-					"to": "NULL, time, 100);"
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "&when, timeFormat, time, 99)",
+					"to": "&when, timeFormat, time, 100)"
 				}
 			]
 		},
@@ -291,6 +291,146 @@
 					"file": "3dc/avp/cheatmodes.cpp",
 					"from": "ProfileChecks_StepToAllowed(cheatModePtr, MAX_NUMBER_OF_CHEATMODES, searchForward,",
 					"to": "ProfileChecks_StepToAllowed(cheatModePtr, 1, searchForward,"
+				}
+			]
+		},
+		{
+			"name": "OLD: a date that Windows refuses keeps whatever was there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tchar date[100] = { 0 };\n",
+					"to": "\tchar date[100];\n\tmemset(date, 'x', sizeof(date));\n\tdate[99] = 0;\n"
+				},
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\tdate[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a time that Windows refuses keeps whatever was there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tchar time[100] = { 0 };\n",
+					"to": "\tchar time[100];\n\tmemset(time, 'x', sizeof(time));\n\ttime[99] = 0;\n"
+				},
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\ttime[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused date is not forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\tdate[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused time is not forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\t\ttime[0] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: the two parts run past the box",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "_snprintf(text, size - 1, \"%s  %s\", time, date);",
+					"to": "_snprintf(text, 1000, \"%s  %s\", time, date);"
+				}
+			]
+		},
+		{
+			"name": "the end of the text is not written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\ttext[size - 1] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a box of nothing gets written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\tif (size == 0)\n\t{\n\t\treturn;\n\t}\n\n\tchar date[100]",
+					"to": "\tchar date[100]"
+				}
+			]
+		},
+		{
+			"name": "the date is told it has room for more",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "&when, dateFormat, date, 80)",
+					"to": "&when, dateFormat, date, 100)"
+				}
+			]
+		},
+		{
+			"name": "a format and a kind of date go together",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "dateFormat ? 0 : dateKind",
+					"to": "dateKind"
+				}
+			]
+		},
+		{
+			"name": "the two parts go the other way round",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/profile_checks.h",
+					"from": "\"%s  %s\", time, date);",
+					"to": "\"%s  %s\", date, time);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus use a format of their own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "ProfileChecks_MakeTimeText(when, dateKind, NULL, NULL, text, size);",
+					"to": "ProfileChecks_MakeTimeText(when, dateKind, \"yyyy\", \"HH\", text, size);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fading row reads the list itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tb=BrightnessOfRow(i);\n\t\t\tRenderMenuText_Clipped(textPtr",
+					"to": "\t\t\tb=Brightness[i];\n\t\t\tRenderMenuText_Clipped(textPtr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rows 16 apart do not share a number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "return Brightness[row & 15];",
+					"to": "return Brightness[row];"
 				}
 			]
 		}
