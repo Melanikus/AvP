@@ -1154,6 +1154,15 @@
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\net_checks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\sound_address.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h">
       <Filter>Header Files</Filter>
     </ClInclude>

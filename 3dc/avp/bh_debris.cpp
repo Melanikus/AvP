@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game, no debris is made once the blocks are down to what's kept back for this machine's own player
 /* KJL 15:01:53 02/25/97 - bh_debri.c */
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -35,6 +37,9 @@
 #include "user_profile.h"
 #include "savegame.h"
 #include <math.h>
+
+// In pldnet.cpp
+extern bool Net_BlocksAreShort();
 
 #define HDEBRIS_BLEEDING_TIME	(ONE_FIXED*2)
 
@@ -86,7 +91,7 @@ DISPLAYBLOCK *MakeDebris(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
   MODULEMAPBLOCK *mmbptr;
   MODULE m_temp;
 
-  if( (NumActiveBlocks > maxobjects-5) || (NumActiveStBlocks > maxstblocks-5)) return NULL;
+  if( (NumActiveBlocks > maxobjects-5) || (NumActiveStBlocks > maxstblocks-5) || Net_BlocksAreShort()) return NULL;
 
   // 1. Set up shape data BEFORE making the displayblock,
   // since "AllocateModuleObject()" will fill in shapeheader
@@ -638,7 +643,8 @@ void MakeFragments (STRATEGYBLOCK * sbptr)
 	SHAPEFRAGMENTDESC * fragdesc;
 
 	if( (NumActiveBlocks > maxobjects-5)
-			|| (NumActiveStBlocks > maxstblocks-5))
+			|| (NumActiveStBlocks > maxstblocks-5)
+			|| Net_BlocksAreShort())
 		return;
 
 	if (!sbptr)
@@ -869,7 +875,7 @@ DISPLAYBLOCK *MakeHierarchicalDebris(STRATEGYBLOCK *parent_sbPtr,SECTION_DATA *r
 	if(positionPtr->vz>1000000 || positionPtr->vz<-1000000)
 		return NULL;
 
-	if( (NumActiveBlocks > maxobjects-5) || (NumActiveStBlocks > maxstblocks-5)) return NULL;
+	if( (NumActiveBlocks > maxobjects-5) || (NumActiveStBlocks > maxstblocks-5) || Net_BlocksAreShort()) return NULL;
 
 	/* Right away, try to intercept all molotov cocktails! */
 	GLOBALASSERT(root);
@@ -1740,7 +1746,8 @@ STRATEGYBLOCK*  MakeDebrisForLoad(int shapeIndex,int counter,BOOL dynamicModuleO
 	DYNAMICSBLOCK *dynPtr;
 
 	if( (NumActiveBlocks > maxobjects-5)
-			|| (NumActiveStBlocks > maxstblocks-5))
+			|| (NumActiveStBlocks > maxstblocks-5)
+			|| Net_BlocksAreShort())
 		return NULL;
 
 

@@ -1,3 +1,7 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a ghost of a kind this game can't show, or with a shape it hasn't loaded, isn't made
+//   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
+//   a corpse with no display block stays far, and what only an autogun's ghost used has gone, because no network game has one
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -70,7 +74,6 @@ void UpdateObjectTrails(STRATEGYBLOCK *sbPtr);
 void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon);
 void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType);
 void CreatePredatorHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon);
-static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation);
 void UpdateAlienAIGhostAnimSequence(STRATEGYBLOCK *sbPtr,HMODEL_SEQUENCE_TYPES type, int subtype, int length, int tweeningtime);
 void MakePlasmaTrailParticles(DYNAMICSBLOCK *dynPtr, int number);
 void MakeGrenadeTrailParticles(VECTORCH *prevPositionPtr, VECTORCH *positionPtr);
@@ -432,6 +435,13 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 	myContainingModule = ModuleFromPosition(position, (MODULE *)0);
 	if(myContainingModule==NULL) return NULL;
 
+	// What's left is kept for this machine's own player. A ghost that gets more messages will try again with the next one.
+	if (Net_BlocksAreShort())
+	{
+		Net_NoteRefused("the game is short of blocks, so a ghost wasn't made");
+		return NULL;
+	}
+
 	/* create a strategy block */	
 	sbPtr = CreateActiveStrategyBlock();
 	if(!sbPtr) 
@@ -454,7 +464,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 		if(type==I_BehaviourMarinePlayer||type==I_BehaviourAlienPlayer||type==I_BehaviourPredatorPlayer || type==I_BehaviourAlien)
 		{
 			dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_MARINE_PLAYER);
-			if(type==I_BehaviourAlienPlayer || type==I_BehaviourAlien)
+			if(dynPtr && (type==I_BehaviourAlienPlayer || type==I_BehaviourAlien))
 			{
 				dynPtr->ToppleForce=TOPPLE_FORCE_ALIEN;	
 			}
@@ -554,18 +564,39 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 			case(I_BehaviourMarinePlayer):
 			{
 				CreateMarineHModel(ghostData,WEAPON_PULSERIFLE);
+
+				if (!ghostData->HModelController.Root_Section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
+
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
 			case(I_BehaviourAlienPlayer):
 			{
 				CreateAlienHModel(ghostData,0);
+
+				if (!ghostData->HModelController.Root_Section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
+
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
  			case(I_BehaviourPredatorPlayer):
 			{
 				CreatePredatorHModel(ghostData,WEAPON_PRED_WRISTBLADE);
+
+				if (!ghostData->HModelController.Root_Section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
+
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
@@ -574,7 +605,13 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 			case(I_BehaviourAlien):
 			{
 				CreateAlienHModel(ghostData,subtype);
-				
+
+				if (!ghostData->HModelController.Root_Section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
+
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
@@ -611,8 +648,12 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				{
 
 				SECTION *root_section = GetNamedHierarchyFromLibrary("disk","Disk");
-	
-				GLOBALASSERT(root_section);
+
+				if (!root_section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
 
 				Create_HModel(&ghostData->HModelController,root_section);
 				InitHModelSequence(&ghostData->HModelController,HMSQT_MarineStand,MSSS_Minigun_Delta,ONE_FIXED);
@@ -626,8 +667,12 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				{
 
 				SECTION *root_section = GetNamedHierarchyFromLibrary("mdisk","Mdisk");
-	
-				GLOBALASSERT(root_section);
+
+				if (!root_section)
+				{
+					sbPtr->shapeIndex = -1;
+					break;
+				}
 
 				Create_HModel(&ghostData->HModelController,root_section);
 				InitHModelSequence(&ghostData->HModelController,HMSQT_MarineStand,MSSS_Minigun_Delta,(ONE_FIXED>>1));
@@ -670,12 +715,11 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 							sbPtr->shapeIndex=GetLoadedShapeMSL("sadar");
 							break;
 						default :
-							GLOBALASSERT(0=="Unexpected weapon type");
-							
-						
+							// The number came in a message, so it could be anything
+							sbPtr->shapeIndex = -1;
+							break;
 					}
 					sbPtr->DynPtr->IsPickupObject=1;
-					GLOBALASSERT(sbPtr->shapeIndex!=-1);
 
 				}
 				else
@@ -683,9 +727,11 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 					SECTION *disc_section;
 					SECTION *root_section = GetNamedHierarchyFromLibrary("disk","Disk");
 	
-					GLOBALASSERT(IOType==IOT_Ammo);
-					GLOBALASSERT(subtype==AMMO_PRED_DISC);
-					GLOBALASSERT(root_section);
+					if (!root_section)
+					{
+						sbPtr->shapeIndex = -1;
+						break;
+					}
 
 					#if 0
 					Create_HModel(&ghostData->HModelController,root_section);
@@ -698,9 +744,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 					/* Now it's not hierarchical! */
 					disc_section=GetThisSection(root_section,"disk");
 
-					if (disc_section) {
-						sbPtr->shapeIndex = disc_section->ShapeNum;
-					}
+					sbPtr->shapeIndex = disc_section ? disc_section->ShapeNum : -1;
 					#endif
 				}
 				break;
@@ -715,9 +759,6 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				break;
 			case(I_BehaviourAlienSpit):
 				sbPtr->shapeIndex = GetLoadedShapeMSL("Spit");
-				break;					
-			case(I_BehaviourAutoGun):
-				sbPtr->shapeIndex = GetLoadedShapeMSL("Sentry01");
 				break;					
 			case(I_BehaviourSpeargunBolt):
 				sbPtr->shapeIndex = GetLoadedShapeMSL("spear");
@@ -738,10 +779,18 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				
 				break;					
 			default:
+				// The kind came in a message, so it could be anything. This list is everything a ghost can be.
+				sbPtr->shapeIndex = -1;
 				break;
 		}
-		LOCALASSERT(sbPtr->shapeIndex!=-1);	
-		
+
+		// Nothing to draw it with: this level hasn't loaded that shape, or it isn't a kind of ghost at all. Better no ghost than one with no shape.
+		if (sbPtr->shapeIndex == -1)
+		{
+			Net_NoteRefused("a ghost with a model or shape this level hasn't loaded");
+			RemoveBehaviourStrategy(sbPtr);
+			return NULL;
+		}
 	}
 
 	/* strategy block initialisation, after dynamics block creation */
@@ -952,9 +1001,10 @@ void ChangeGhostMarineAccoutrementSet(HMODELCONTROLLER *HModelController, NetID 
 
 }
 
-void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
+// The body a marine's ghost needs to be holding this gun. Nothing, if this level didn't load it, and which gun came in a message.
+static SECTION *MarineBodyForGun(int weapon)
 {
-	SECTION *root_section;
+	SECTION *root_section = NULL;
 	
 	/* KJL 11:09:14 27/01/98 - pick which model to create based on the character's weapon */
 	switch (weapon)
@@ -1011,6 +1061,20 @@ void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
 			break;
 		}
 	}
+	return root_section;
+}
+
+void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
+{
+	SECTION *const root_section = MarineBodyForGun(weapon);
+
+	// Without a model the ghost stays out of the game
+	if (!root_section)
+	{
+		Net_NoteRefused("a player's ghost held a gun this level has no model for");
+		return;
+	}
+
 	Create_HModel(&ghostDataPtr->HModelController,root_section);
 	ghostDataPtr->CurrentWeapon = weapon;
 
@@ -1063,6 +1127,11 @@ void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType)
 			break;
 	}
 
+	// A kind of alien this level didn't load has no model, and the kind came in a message
+	if (!root_section)
+	{
+		return;
+	}
 
 	Create_HModel(&ghostDataPtr->HModelController,root_section);
 	ghostDataPtr->currentAnimSequence = ASQ_Stand;
@@ -1080,9 +1149,10 @@ void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType)
 		delta->Active=0; /* Default for predator. */
 	}
 }
-void CreatePredatorHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
+// The same for a predator's ghost
+static SECTION *PredatorBodyForGun(int weapon)
 {
-	SECTION *root_section;
+	SECTION *root_section = NULL;
 	/* KJL 11:09:14 27/01/98 - pick which model to create based on the character's weapon */
 	switch (weapon)
 	{
@@ -1127,6 +1197,19 @@ void CreatePredatorHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
 	WEAPON_PRED_RIFLE,
 	,
 		  */
+	}
+
+	return root_section;
+}
+
+void CreatePredatorHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
+{
+	SECTION *const root_section = PredatorBodyForGun(weapon);
+
+	if (!root_section)
+	{
+		Net_NoteRefused("a player's ghost held a gun this level has no model for");
+		return;
 	}
 
 	Create_HModel(&ghostDataPtr->HModelController,root_section);
@@ -1186,6 +1269,11 @@ void MakeGhostNear(STRATEGYBLOCK *sbPtr)
 	if(ghostData->onlyValidFar)
 	{
 		//Far alien ai , don't have enough information to make it near
+		if (sfxPtr)
+		{
+			DeallocateSfxBlock(sfxPtr);
+		}
+
 		return;
 	}
 
@@ -1201,7 +1289,16 @@ void MakeGhostNear(STRATEGYBLOCK *sbPtr)
 	tempModule.m_dptr = NULL; /* this is important */	
 	AllocateModuleObject(&tempModule); 
 	dPtr = tempModule.m_dptr;
-	if(dPtr==NULL) return; /* cannot create displayblock, so leave object "far" */
+	/* cannot create displayblock, so leave object "far" */
+	if(dPtr==NULL)
+	{
+		if (sfxPtr)
+		{
+			DeallocateSfxBlock(sfxPtr);
+		}
+
+		return;
+	}
 
 			
 	sbPtr->SBdptr = dPtr;
@@ -3308,6 +3405,13 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 	{
 		if (weapon != ghostDataPtr->CurrentWeapon)
 		{
+			// Letting go of the model first would leave a ghost with none at all, so a ghost keeps the one it has
+			if (!MarineBodyForGun(weapon))
+			{
+				Net_NoteRefused("a player's ghost held a gun this level has no model for");
+				return;
+			}
+
 			Dispel_HModel(&ghostDataPtr->HModelController);
 			CreateMarineHModel(ghostDataPtr, weapon);
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
@@ -3492,6 +3596,12 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 	{
 		if (weapon != ghostDataPtr->CurrentWeapon)
 		{
+			if (!PredatorBodyForGun(weapon))
+			{
+				Net_NoteRefused("a player's ghost held a gun this level has no model for");
+				return;
+			}
+
 			Dispel_HModel(&ghostDataPtr->HModelController);
 			CreatePredatorHModel(ghostDataPtr, weapon);
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
@@ -3691,13 +3801,16 @@ void MaintainGhosts(void)
 					if (sbPtr->SBdptr)
 					{
 						LIGHTBLOCK *lightPtr = sbPtr->SBdptr->ObLights[0];
-						LOCALASSERT(sbPtr->SBdptr->ObNumLights==1);
-						LOCALASSERT(lightPtr);
-						lightPtr->LightBright = 1+MUL_FIXED
+
+						// The game can run out of lights to give, and a flood of flares would make it
+						if (lightPtr)
+						{
+							lightPtr->LightBright = 1+MUL_FIXED
 												(
 													(ONE_FIXED*4-(FastRandom()&32767)),
 													ghostData->timer/FLARE_LIFETIME
 												);
+						}
 					}
 			   		ghostData->timer -= NormalFrameTime;
 					
@@ -3793,115 +3906,6 @@ void MaintainGhosts(void)
 			}
 		}
 	}	
-}
-
-/* Patrick 13/10/97 --------------------------------------------------
-Added for autogun ghost support
----------------------------------------------------------------------*/
-#define AGUNGHOST_FIRINGPOINT_INFRONT	500
-#define AGUNGHOST_FIRINGPOINT_ACROSS	0
-#define AGUNGHOST_FIRINGPOINT_UP		200
-
-void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing)
-{
-	NETGHOSTDATABLOCK *ghostData;
-
-	LOCALASSERT(sbPtr);
-	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
-	LOCALASSERT(ghostData);
-	LOCALASSERT(ghostData->type == I_BehaviourAutoGun);
-
-	if(ghostData->myGunFlash)
-	{
-		/* I've already got a gun flash... */
-		if(firing)
-		{
-			/* Maintain existing gun flash */
-			VECTORCH position;
-			EULER orientation;
-			MATRIXCH mat;
-			CalculatePosnForGhostAutoGunMuzzleFlash(sbPtr, &position, &orientation);
-			
-			CreateEulerMatrix(&orientation, &mat);
-			TransposeMatrixCH(&mat);	
-
-			MaintainNPCGunFlashEffect(ghostData->myGunFlash, &position, &mat);
-		}
-		else
-		{
-			RemoveNPCGunFlashEffect(ghostData->myGunFlash);
-			ghostData->myGunFlash = NULL;
-		} 
-	}
-	else
-	{
-		if(firing)
-		{
-  			/* Need a new gun flash */
-			VECTORCH position;
-			EULER orientation;
-			MATRIXCH mat;
-			CalculatePosnForGhostAutoGunMuzzleFlash(sbPtr, &position, &orientation);
-			CreateEulerMatrix(&orientation, &mat);
-			TransposeMatrixCH(&mat);	
-			ghostData->myGunFlash = AddNPCGunFlashEffect(&position, &mat, SFX_MUZZLE_FLASH_AMORPHOUS);
-		}
-	}
-}
-
-void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing)
-{
-	NETGHOSTDATABLOCK *ghostData;
-	AVP_BEHAVIOUR_TYPE type;
-
-	LOCALASSERT(sbPtr);
-	LOCALASSERT(sbPtr->DynPtr);		
-
-	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
-	LOCALASSERT(ghostData);
-	type = ghostData->type;
-	LOCALASSERT(type==I_BehaviourAutoGun);
-
-	if(firing)
-	{
-		if(ghostData->SoundHandle == SOUND_NOACTIVEINDEX)
-			Sound_Play(SID_SENTRY_GUN,"eld",&(ghostData->SoundHandle),&(sbPtr->DynPtr->Position));					
-		/* don't need sound update, as autoguns don't move */
-	}
-	else if(ghostData->SoundHandle != SOUND_NOACTIVEINDEX) 
-	{	
-		Sound_Stop(ghostData->SoundHandle);				
-		Sound_Play(SID_SENTRY_END,"hd",&(sbPtr->DynPtr->Position));					
-	}
-}
-
-static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)
-{
-	VECTORCH upNormal = {0,-65536,0};
-	VECTORCH inFrontVec = {0,0,0};
-	VECTORCH toSideVec = {0,0,0};
-	EULER firingOrient = {0,0,0};
-
-	/* orientation is easy */
-	firingOrient.EulerY = sbPtr->DynPtr->OrientEuler.EulerY;
-	*orientation = firingOrient;
-
-	/* vector in front */
-	inFrontVec.vx = GetSin(firingOrient.EulerY & wrap360);
-	inFrontVec.vz = GetCos(firingOrient.EulerY & wrap360);
-	Normalise(&inFrontVec);
-
-	/* vectors in front, to side, and up */
-	CrossProduct(&inFrontVec,&upNormal,&toSideVec);
-	LOCALASSERT(toSideVec.vy==0);
-	inFrontVec.vx = MUL_FIXED(inFrontVec.vx,AGUNGHOST_FIRINGPOINT_INFRONT);
-	inFrontVec.vz = MUL_FIXED(inFrontVec.vz,AGUNGHOST_FIRINGPOINT_INFRONT);
-	toSideVec.vx = MUL_FIXED(toSideVec.vx,AGUNGHOST_FIRINGPOINT_ACROSS);
-	toSideVec.vz = MUL_FIXED(toSideVec.vz,AGUNGHOST_FIRINGPOINT_ACROSS);
-
-	position->vx = sbPtr->DynPtr->Position.vx + inFrontVec.vx +	toSideVec.vx;
-	position->vy = sbPtr->DynPtr->Position.vy - AGUNGHOST_FIRINGPOINT_UP;
-	position->vz = sbPtr->DynPtr->Position.vz + inFrontVec.vz +	toSideVec.vz;
 }
 
 /* patrick 14/10/97 : added to support cloaked predators in net game */
@@ -5019,8 +5023,13 @@ STRATEGYBLOCK *MakeNewCorpse()
 	corpseData->HModelController.Looped=0;
 	ProveHModel_Far(&corpseData->HModelController,sbPtr);
 	MakeCorpseNear(sbPtr);
-	GLOBALASSERT(sbPtr->SBdptr);
-	sbPtr->SBdptr->ObFlags|=ObFlag_NotVis;
+
+	// It stays far, with nothing to draw, if the display blocks have run out
+	if (sbPtr->SBdptr)
+	{
+		sbPtr->SBdptr->ObFlags|=ObFlag_NotVis;
+	}
+
 	/* And the fire. */
 	
 	if (Player->ObStrategyBlock->SBDamageBlock.IsOnFire) {

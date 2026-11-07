@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a flare with no light left has no corona
 /* KJL 14:50:53 10/13/97 - 
  *
  *	Experimental particle system
@@ -3285,6 +3287,13 @@ void DoFlareCorona(DISPLAYBLOCK *objectPtr)
 	if (CameraCanSeeThisPosition_WithIgnore(objectPtr, &position))
 	{
 		LIGHTBLOCK *lPtr = objectPtr->ObLights[0];
+
+		// The game can run out of lights to give
+		if (!lPtr)
+		{
+			return;
+		}
+
 		int a = lPtr->LightBright>>8;
 		int colour;
 

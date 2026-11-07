@@ -12,7 +12,6 @@
 3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET: waits for another PR
 3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | NOT SAFE YET: waits for another PR
 3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | NOT SAFE YET: waits for another PR
-3dc/avp/win95/pldnet.cpp | GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES); | NOT SAFE YET: waits for another PR
 
 # ---- A real check is right beside it
 3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them

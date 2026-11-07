@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   how many times a hit counts comes from another machine, so a number below nothing can't run away, and a spear with no dynamics block doesn't use one
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch;
@@ -4069,7 +4071,7 @@ static void DamageDamageBlock(DAMAGEBLOCK *DBPtr, DAMAGE_PROFILE *damage, int mu
 	
 	/* Now, the integer. */
 	
-	while (Integer) {
+	while (Integer > 0) {
 	
 		ArmourDamage=0;
 		HealthDamage=0;
@@ -10711,7 +10713,11 @@ void CreateSpearPossiblyWithFragment(DISPLAYBLOCK *dispPtr, VECTORCH *spearPosit
 
 		/* setup dynamics block */
 		dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
-		dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+
+		if (dynPtr)
+		{
+			dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+		}
 		
 		if (!dynPtr) 
 		{

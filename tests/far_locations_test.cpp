@@ -34,6 +34,13 @@
 int ModuleArraySize = 0;
 int memoryInitialisationFailure = 0;
 
+// The memory code tells the game's sounds about memory that's about to go (DeallocMem in our_mem.cpp). There are no sounds in this
+// test. Without this, that call would go to nothing, which /FORCE:UNRESOLVED lets through the build, and the test would crash the
+// first time anything is freed.
+void Sound_ForgetAddressesInside(const void *, size_t)
+{
+}
+
 static int checksFailed = 0;
 
 static void FarCheck(bool passed, char const *what)

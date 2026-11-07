@@ -2,6 +2,8 @@
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   two commented-out calls to DecalWithinFrustum are gone, with the function (see frustum.cpp)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
 //   overflowed;
@@ -3611,8 +3613,6 @@ void RenderDecal(DECAL *decalPtr)
 	VerticesBuffer[3].Y = decalPtr->Vertices[3].vy;
 	VerticesBuffer[3].Z = decalPtr->Vertices[3].vz;
 #endif
-	//  int outcode = DecalWithinFrustum(decalPtr);
-	//  if (outcode) // bjd
 	{
 		switch (decalPtr->DecalID) {
 			default:
@@ -4051,8 +4051,6 @@ void RenderMirroredDecal(DECAL *decalPtr)
 	VerticesBuffer[3].Y = translatedPosition.vy;
 	VerticesBuffer[3].Z = translatedPosition.vz;
 
-	//  int outcode = DecalWithinFrustum(decalPtr);
-	//  if (outcode) // bjd
 	{
 		switch (decalPtr->DecalID) {
 			default:

@@ -5,6 +5,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved sound has to hold everything it says it holds, and its name has to end inside the block
 
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a sound forgets the address of a number in whatever started it, if that goes away before the sound ends
 #define DB_LEVEL 1
 
 #include "3dc.h"
@@ -14,6 +16,7 @@
 #include "gamedef.h"
 #include "io.h"
 #include "psndplat.h"
+#include "sound_address.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "showcmds.h"
@@ -580,6 +583,17 @@ void Sound_Stop(int activeSoundNumber)
 
 	/* release the active sound slot */
 	ActiveSounds[activeSoundNumber] = BlankActiveSound;
+}
+
+void Sound_ForgetAddressesInside(const void *start, size_t bytes)
+{
+	for (int i = 0; i < SOUND_MAXACTIVE; i++)
+	{
+		if (ActiveSounds[i].soundIndex != SID_NOSOUND && SoundAddressIsInside(ActiveSounds[i].externalRef, start, bytes))
+		{
+			ActiveSounds[i].externalRef = NULL;
+		}
+	}
 }
 
 void Sound_ChangeVolume(int activeSoundNumber, int volume)

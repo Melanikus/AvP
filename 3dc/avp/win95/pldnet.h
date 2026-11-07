@@ -1,3 +1,6 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the game description has the players' names, because a client has no other way to learn them
+//   what a client can afford, and whether the blocks are short, can be asked here, and nothing sends an autogun's state any more
 /* Patrick 10/7/97------------------------------------------------------
   Header for Multi-Player game support header
   ----------------------------------------------------------------------*/
@@ -294,6 +297,7 @@ typedef struct gamedescription_playerdata
 	unsigned char characterType: 2;
 	unsigned char characterSubType: 6;
 	unsigned char startFlag;
+	char name[NET_PLAYERNAMELENGTH];
 } GAMEDESCRIPTION_PLAYERDATA;
 
 typedef struct netmessage_gamedescription
@@ -867,6 +871,9 @@ extern int PlayerIdInPlayerList(NetID Id);
 extern void RecordFinalNetGameScores(void);
 extern void DoNetScoresForHostDeath(NETGAME_CHARACTERTYPE myType,NETGAME_CHARACTERTYPE killerType);
 extern void RemovePlayerFromGame(NetID id);
+extern bool AddPlayerToGame(NetID id, const char *name);
+extern void Net_PlayerHasGone(NetID id);
+extern void Net_HostHasGone(void);
 extern int EmptySlotInPlayerList(void);
 extern void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame);
 extern int AddUpPlayerFrags(int playerId);
@@ -894,7 +901,6 @@ extern void AddNetMsg_LOSRequestBinarySwitch(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_PlatformLiftState(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RequestPlatformLiftReverse(STRATEGYBLOCK *sbPtr);
-extern void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_EndGame(void);
 extern void AddNetMsg_MakeDecal(enum DECAL_ID decalID, VECTORCH *normalPtr, VECTORCH *positionPtr, int moduleIndex);
 extern void AddNetMsg_ChatBroadcast(char *string,BOOL same_species_only);
@@ -904,6 +910,18 @@ extern void AddNetMsg_MakePlasmaExplosion(VECTORCH *positionPtr, VECTORCH *fromP
 extern void AddNetMsg_PredatorLaserSights(VECTORCH *positionPtr, VECTORCH *normalPtr, DISPLAYBLOCK *dispPtr);
 extern void AddNetMsg_LocalObjectOnFire(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RestartNetworkGame(int seed);
+
+// A message was refused, and why. It goes to the log, but only so often, because anyone can cause this as fast as they like.
+extern void Net_NoteRefused(const char *why);
+
+// Whether the level a host named is on the list for the game type it named. It says why in the log if not.
+extern bool Net_HostsLevelIsOnItsList();
+
+// Whether a client may send this message now, by the limits on the costly kinds of part. It says why in the log if not. connection is its place in the host's list.
+extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
+
+// In a network game, whether the blocks are down to what's kept back for this machine's own player. Anything a message asks for, or that's only for show, isn't made then.
+extern bool Net_BlocksAreShort();
 extern void AddNetMsg_FragmentalObjectsStatus(void);
 extern void AddNetMsg_StrategySynch(void);
 extern void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr);
