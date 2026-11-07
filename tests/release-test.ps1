@@ -2,12 +2,17 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1, tools/check-no-hudson.ps1 and tools/check-release-package.ps1 are run for real, on made-up folders with something wrong in each. Each one
+- tools/check-release.ps1, tools/check-no-hudson.ps1, tools/check-release-package.ps1 and tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
 - .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
 
 What this can't prove: that GitHub will do what the workflow asks. The first real run is what proves that.
+
+-OnlyNewFunctions runs only the part about tools/check-new-functions.ps1. tests.yml runs that on Ubuntu, the machine the release runs that
+check on, so that its first real run there isn't a release.
 #>
+param([switch]$OnlyNewFunctions)
+
 $ErrorActionPreference = 'Stop'
 
 $repository = Split-Path -Parent $PSScriptRoot
@@ -59,6 +64,159 @@ function Write-File([string]$path, [string]$text)
 {
     New-Item -ItemType Directory -Force (Split-Path -Parent $path) | Out-Null
     [System.IO.File]::WriteAllText($path, $text)
+}
+
+# --- As GitHub really runs a step. It starts PowerShell with a file holding the step's words, then one more line of its own, which exits with whatever the last
+# program left behind. So a script that only ends, with a refused program before it, reads as a failure, and the other way round. Running them with -File, as
+# everything above does, hides that. This one has a program fail first, so only a script that says what it means can pass.
+$stepFile = Join-Path $temporary 'avp-release-step.ps1'
+
+function Run-AsAStep([string]$name, [string[]]$arguments)
+{
+    $words = @($arguments | ForEach-Object { if ($_.StartsWith('-')) { $_ } else { "'$_'" } }) -join ' '
+
+    @(
+        '$ErrorActionPreference = ''stop''',
+        "& '$powershell' -NoProfile -Command 'exit 3'",
+        "& '$(Join-Path $repository "tools/$name")' $words",
+        'if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }'
+    ) | Set-Content -Encoding Ascii -LiteralPath $stepFile
+
+    $ErrorActionPreference = 'Continue'
+    & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '$stepFile'" *> $null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    return $code
+}
+
+# --- A new function the game doesn't use. This check reads history, so each row is a real git repository: a small game with one commit behind it, and the row's
+# files added on top. Nothing here builds, so the code in the rows only has to look like code.
+$gitQuietly = @('-C', $work, '-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'core.autocrlf=false', '-c', 'core.safecrlf=false')
+$lonely = "void Lonely(int x)`n{`n}`n"
+
+function Game-With([string]$line)
+{
+    return "void Stock_NothingCallsThis()`n{`n}`n`nvoid Stock_Used()`n{`n}`n`nint main()`n{`n`tStock_Used();`n`t$line`n}`n"
+}
+
+function Commit-Work
+{
+    & git @gitQuietly add -A
+    & git @gitQuietly commit -q --allow-empty -m 'a change'
+}
+
+function Make-GameWithFiles([hashtable]$files)
+{
+    Clear-Work
+    & git -C $work init -q
+    Write-File (Join-Path $work '3dc/game.cpp') (Game-With '')
+    Commit-Work
+    $script:firstCommit = & git -C $work rev-parse HEAD
+
+    foreach ($path in $files.Keys)
+    {
+        Write-File (Join-Path $work $path) $files[$path]
+    }
+
+    Commit-Work
+}
+
+function New-Functions-Arguments { return @('-Repository', $work, '-Since', $script:firstCommit) }
+
+# Each way a function can be written has to be seen, and each way a name can show up without being a use mustn't count as one
+$notUsedRows = @(
+    @{ What = 'a function nothing calls'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely } },
+    @{ What = 'one that is only declared as well'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/new.h' = "extern void Lonely(int x);`nstatic void Lonely(int x);`n" } },
+    @{ What = 'one only comments mention'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/other.cpp' = "// Lonely(1);`n/* Lonely(1); */`n * Lonely(1);`n" } },
+    @{ What = 'one only a comment after some code mentions'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Stock_Used(); // Lonely(1) was here') } },
+    @{ What = 'one only a comment inside a line mentions'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Stock_Used(/* Lonely(1) */);') } },
+    @{ What = 'one only a string mentions'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Log("Lonely(1)");') } },
+    @{ What = 'one only a test calls'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; 'tests/new_test.cpp' = "int main()`n{`n`tLonely(1);`n}`n" } },
+    @{ What = 'one a longer name has inside it'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'LonelyPlanet(1);') } },
+    @{ What = 'one called with other capitals'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'lonely(1);') } },
+    @{ What = 'a static one in a header'; At = '3dc/new.h:1'; Files = @{ '3dc/new.h' = "static int Lonely(int x)`n{`n`treturn x;`n}`n" } },
+    @{ What = 'an inline one on one line'; At = '3dc/new.h:1'; Files = @{ '3dc/new.h' = "inline int Lonely(int x) { return x; }`n" } },
+    @{ What = 'one with its brace on its first line'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = "void Lonely(int x) {`n}`n" } },
+    @{ What = 'one with a comment after its first line'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = "void Lonely(int x) // why it is here`n{`n}`n" } },
+    @{ What = 'one with its arguments on many lines'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = "void Lonely(`n`tint x,`n`tint y)`n{`n}`n" } },
+    @{ What = 'one belonging to a class'; At = '3dc/new.cpp:1'; Files = @{ '3dc/new.cpp' = "void Thing::Lonely(int x)`n{`n}`n" } },
+    @{ What = 'one in a nameless namespace'; At = '3dc/new.cpp:3'; Files = @{ '3dc/new.cpp' = "namespace`n{`nvoid Lonely(int x)`n{`n}`n}`n" } },
+    @{ What = 'one in a namespace opened on the same line'; At = '3dc/new.cpp:2'; Files = @{ '3dc/new.cpp' = "namespace Stuff {`nvoid Lonely(int x)`n{`n}`n}`n" } },
+    @{ What = 'one inside extern "C"'; At = '3dc/new.cpp:2'; Files = @{ '3dc/new.cpp' = "extern `"C`" {`nvoid Lonely(int x)`n{`n}`n}`n" } },
+    @{ What = 'one below an #if with a brace on each side'; At = '3dc/new.cpp:8'; Files = @{ '3dc/new.cpp' = "#if ONE`nvoid Other(int a) {`n#else`nvoid Other(int a, int b) {`n#endif`n}`n`nvoid Lonely(int x)`n{`n}`n"; '3dc/game.cpp' = (Game-With 'Other(1);') } }
+)
+
+foreach ($row in $notUsedRows)
+{
+    Make-GameWithFiles $row.Files
+    Expect-Refused 'check-new-functions.ps1' (New-Functions-Arguments) "nothing in the game uses these new functions: Lonely ($($row.At))" "$($row.What) is refused"
+}
+
+Make-GameWithFiles @{ '3dc/new.cpp' = "$lonely`nvoid AlsoLonely()`n{`n}`n" }
+Expect-Refused 'check-new-functions.ps1' (New-Functions-Arguments) 'Lonely (3dc/new.cpp:1), AlsoLonely (3dc/new.cpp:5)' 'every unused one is named, not only the first'
+
+$usedRows = @(
+    @{ What = 'a function the game calls'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Lonely(1);') } },
+    @{ What = 'one a return uses'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'return Lonely(1);') } },
+    @{ What = 'one an else uses'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'else Lonely(1);') } },
+    @{ What = 'one whose result goes through a pointer'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With '*setting = Lonely(1);') } },
+    @{ What = 'one handed over as a pointer'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Register(Lonely);') } },
+    @{ What = 'one called from win32'; Files = @{ '3dc/new.cpp' = $lonely; 'win32/other.cpp' = "int x = Lonely(1);`n" } },
+    @{ What = 'one called from a line with a comment too'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Lonely(1); // Lonely again') } },
+    @{ What = 'a function moved to another file, still called'; Files = @{ '3dc/new.cpp' = "void Stock_Used()`n{`n}`n"; '3dc/game.cpp' = "int main()`n{`n`tStock_Used();`n}`n" } },
+    @{ What = 'a declaration with no body yet'; Files = @{ '3dc/new.h' = "void Later(int x);`n" } },
+    @{ What = 'a variable set by a call'; Files = @{ '3dc/new.cpp' = "int table = Make(1);`n" } },
+    @{ What = 'a destructor, which is not called by name'; Files = @{ '3dc/new.cpp' = "Thing::~Thing()`n{`n}`n" } },
+    @{ What = 'a note that only looks like code'; Files = @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Lonely(1);'); '3dc/notes.txt' = "void Looks_Like_Code()`n{`n}`n" } },
+    @{ What = 'a function in a test'; Files = @{ 'tests/new_test.cpp' = $lonely } },
+    @{ What = 'a function in a tool'; Files = @{ 'tools/new.cpp' = $lonely } },
+    @{ What = 'a function in someone else''s library'; Files = @{ 'dependencies/lib/lib.cpp' = $lonely } },
+    @{ What = 'a change that adds no function'; Files = @{ '3dc/game.cpp' = (Game-With 'Stock_Used();') } },
+    @{ What = 'a commit changing nothing'; Files = @{ } }
+)
+
+foreach ($row in $usedRows)
+{
+    Make-GameWithFiles $row.Files
+    $result = Run-Script 'check-new-functions.ps1' (New-Functions-Arguments)
+    Check ($result.Code -eq 0 -and $result.Text.Contains('The game uses all')) "$($row.What) passes. It said: $($result.Text)"
+}
+
+Make-GameWithFiles @{ '3dc/new.cpp' = $lonely; '3dc/game.cpp' = (Game-With 'Lonely(1);') }
+$result = Run-Script 'check-new-functions.ps1' (New-Functions-Arguments)
+Check ($result.Text.Contains('The game uses all 1 functions')) "the one new function is counted, so a pass means something was looked at. It said: $($result.Text)"
+
+# Stock code nothing calls isn't this check's job, but only because it was there before the fixed commit
+$oldUnused = Join-Path $work '3dc/game.cpp'
+Check ((Get-Content -Raw -LiteralPath $oldUnused).Contains('Stock_NothingCallsThis')) 'and a function that was already unused was left alone, not judged'
+
+foreach ($bad in '--output=stolen', 'abc123', ('A' * 40), ('0' * 39), ('0' * 41))
+{
+    Expect-Refused 'check-new-functions.ps1' @('-Repository', $work, '-Since', $bad) 'the commit to compare with has to be a whole commit number' "the commit [$bad] is refused"
+}
+
+Expect-Refused 'check-new-functions.ps1' @('-Repository', $work, '-Since', ('0' * 40)) "commit $('0' * 40) isn't here" 'a commit that is not here is refused, so a shallow checkout cannot pass by comparing nothing'
+
+# Not told where the repository is, as release.yml doesn't tell it. With the history there, as on Ubuntu, this reads the real code, and the log says what it found.
+# What it found can't fail this, because a function can land in one pull request and its caller in the next: only a release refuses. With no history, it says so.
+$result = Run-Script 'check-new-functions.ps1' @()
+$gaveAnAnswer = $result.Text.Contains('The game uses all') -or $result.Text.Contains('nothing in the game uses these new functions')
+$hasNoHistory = $result.Text.Contains("isn't here, so nothing can be compared")
+Check ($gaveAnAnswer -or ($hasNoHistory -and -not $OnlyNewFunctions)) "check-new-functions.ps1 finds the repository by itself. It said: $($result.Text)"
+Write-Host "On this commit's own code, it says: $($result.Text)"
+
+Make-GameWithFiles @{ }
+Check ((Run-AsAStep 'check-new-functions.ps1' (New-Functions-Arguments)) -eq 0) 'as a step, check-new-functions.ps1 passes when it should'
+Make-GameWithFiles @{ '3dc/new.cpp' = $lonely }
+Check ((Run-AsAStep 'check-new-functions.ps1' (New-Functions-Arguments)) -eq 1) 'and it fails when it should'
+
+if ($OnlyNewFunctions)
+{
+    Remove-Item -Force -LiteralPath $stepFile
+    Clear-Work
+    Remove-Item -Recurse -Force -LiteralPath $work
+    Write-Host "$script:passes passed, $script:failures failed"
+    exit $(if ($script:failures -gt 0) { 1 } else { 0 })
 }
 
 # --- A made-up repository with everything right. Each test breaks one thing in it.
@@ -325,30 +483,6 @@ Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'License.txt')
 $result = Run-Script 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit)
 Check ($result.Text.Contains('REFUSED: License.txt is not in the package')) "check-release-package.ps1 starts without being told either. It said: $($result.Text)"
-
-# --- As GitHub really runs a step. It starts PowerShell with a file holding the step's words, then one more line of its own, which exits with whatever the last
-# program left behind. So a script that only ends, with a refused program before it, reads as a failure, and the other way round. Running them with -File, as
-# everything above does, hides that. This one has a program fail first, so only a script that says what it means can pass.
-$stepFile = Join-Path $temporary 'avp-release-step.ps1'
-
-function Run-AsAStep([string]$name, [string[]]$arguments)
-{
-    $words = @($arguments | ForEach-Object { if ($_.StartsWith('-')) { $_ } else { "'$_'" } }) -join ' '
-
-    @(
-        '$ErrorActionPreference = ''stop''',
-        'cmd /c exit 3',
-        "& '$(Join-Path $repository "tools/$name")' $words",
-        'if ((Test-Path -LiteralPath variable:\LASTEXITCODE)) { exit $LASTEXITCODE }'
-    ) | Set-Content -Encoding Ascii -LiteralPath $stepFile
-
-    $ErrorActionPreference = 'Continue'
-    & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '$stepFile'" *> $null
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = 'Stop'
-    return $code
-}
-
 Make-GoodRepository
 Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub')) -eq 0) 'as a step, check-release.ps1 passes when it should'
 Write-Blockers "## What's in the way`n`n- Something.`n"
@@ -367,7 +501,7 @@ Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 1) 'and i
 
 Remove-Item -Force -LiteralPath $stepFile
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tests/release-test.ps1')
+foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -395,6 +529,8 @@ Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything
 
 Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
 Check ($checkJob -match 'run: \./tools/check-no-hudson\.ps1\n') 'and refuses any of Hudson'
+Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses a new function the game does not use'
+Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
 Check ($buildJob -match '(?m)^    needs: check$') 'the build needs the checks to have passed'
 Check ($publishJob -match '(?m)^    needs: build$') 'and the draft needs the build, so it comes after the checks too'
@@ -441,6 +577,18 @@ $testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tes
 Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
 Check-Order $testsWorkflow 'name: Unit tests' './tools/check-no-hudson.ps1' 'and the required Unit tests check refuses any of Hudson'
 Check-Order $testsWorkflow './tools/check-no-hudson.ps1' './tests/build.ps1' 'before it builds anything'
+
+# --- Pull requests try the release's own checks on the machine the release runs them on
+$ubuntuJob = [regex]::Match($testsWorkflow, '(?ms)^  release-checks-on-ubuntu:\n.*\z').Value
+$releaseMachine = [regex]::Match($checkJob, '(?m)^    runs-on: (\S+)').Groups[1].Value
+$ubuntuMachine = [regex]::Match($ubuntuJob, '(?m)^    runs-on: (\S+)').Groups[1].Value
+$ubuntuName = [regex]::Match($ubuntuJob, '(?m)^    name: (.+)$').Groups[1].Value.Trim()
+Check ($releaseMachine.Length -gt 0 -and $ubuntuMachine -ceq $releaseMachine) 'pull requests try the checks on the machine the release uses'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tools/check-no-hudson\.ps1\s') 'and refuse any of Hudson there, with the same PowerShell'
+Check ($ubuntuJob -match 'shell: pwsh\n\s+run: \./tests/release-test\.ps1 -OnlyNewFunctions\s') 'and try the new-function rows there'
+Check ($ubuntuJob -match '(?m)^          fetch-depth: 0\b') 'with the history, so the real code gets read as well'
+Check ($ubuntuJob.Contains('persist-credentials: false')) 'leaving no token behind'
+Check ($ubuntuName.Length -gt 0 -and $listInCheck.Contains("'$ubuntuName'")) 'and a release asks for that check like the others'
 
 Clear-Work
 Remove-Item -Recurse -Force -LiteralPath $work
