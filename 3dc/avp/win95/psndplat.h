@@ -2,14 +2,11 @@
   AvP platform specific sound management header:
   Support for sample and CDDA sounds.
   ----------------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
 #ifndef PSNDPLAT_H
 #define PSNDPLAT_H
-
-#ifdef USE_XAUDIO2
-#include <xaudio2.h>
-#include <xaudio2fx.h>
-#include <x3daudio.h>
-#endif
 
 #ifdef USE_OPENAL
 #include <AL/al.h>
@@ -54,14 +51,6 @@ typedef struct soundsampledata
 	LPDIRECTSOUNDBUFFER dsBufferP;
 #endif
 
-#ifdef USE_XAUDIO2
-	uint8_t             *audioBuffer;
-	XAUDIO2_BUFFER      xa2Buffer;
-	X3DAUDIO_EMITTER    xa2Emitter;
-	IXAudio2SourceVoice *pSourceVoice;
-	WAVEFORMATEX        audioWaveFormat;
-#endif
-
 #ifdef USE_OPENAL
 	uint8_t *audioBuffer;
 	ALuint  buffer;
@@ -84,11 +73,6 @@ typedef struct soundsampledata
 
 		#ifdef _XBOX
 			dsBufferP = NULL;
-		#endif
-
-		#ifdef USE_XAUDIO2
-			audioBuffer  = NULL;
-			pSourceVoice = NULL;
 		#endif
 
 		#ifdef USE_OPENAL
@@ -132,13 +116,6 @@ typedef struct activesoundsample
 	LPDIRECTSOUND3DBUFFER ds3DBufferP;
 #endif
 
-#ifdef USE_XAUDIO2
-	uint8_t *audioBuffer;
-	XAUDIO2_BUFFER xa2Buffer;
-	X3DAUDIO_EMITTER xa2Emitter;
-	IXAudio2SourceVoice *pSourceVoice;
-#endif
-
 #ifdef USE_OPENAL
 	uint8_t *audioBuffer;
 	sndSource *source;
@@ -156,11 +133,6 @@ typedef struct activesoundsample
 		#ifdef _XBOX
 			dsBufferP   = NULL;
 			ds3DBufferP = NULL;
-		#endif
-
-		#ifdef USE_XAUDIO2
-			audioBuffer  = NULL;
-			pSourceVoice = NULL;
 		#endif
 
 		#ifdef USE_OPENAL
