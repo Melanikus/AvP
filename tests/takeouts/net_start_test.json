@@ -303,6 +303,56 @@
 					"to": "if (false)"
 				}
 			]
+		},
+		{
+			"name": "LEAVING: the host is let go without closing its connections",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);",
+					"to": "int const stillClosing = 0;"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: the host is let go before its connections are closed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);",
+					"to": "enet_host_destroy(host);\n\t\tint const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: a connection that never answered isn't said",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (stillClosing > 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: the host's connection closing isn't said",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && eEvent.peer == ServerPeer)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEAVING: a host says the host's connection closed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host && eEvent.peer == ServerPeer)",
+					"to": "if (true)"
+				}
+			]
 		}
 	]
 }

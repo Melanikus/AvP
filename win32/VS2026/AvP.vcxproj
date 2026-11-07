@@ -418,6 +418,7 @@
     <ClCompile Include="..\..\3dc\MurmurHash3.cpp" />
     <ClCompile Include="..\..\3dc\MusicPlayer.cpp" />
     <ClCompile Include="..\..\3dc\networking.cpp" />
+    <ClCompile Include="..\..\3dc\net_close.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
@@ -653,6 +654,7 @@
     <ClInclude Include="..\..\3dc\include\prototyp.h" />
     <ClInclude Include="..\..\3dc\include\shape.h" />
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
+    <ClInclude Include="..\..\3dc\net_close.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />

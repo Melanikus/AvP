@@ -3,6 +3,9 @@
 // This runs the real file. Only ENet and the rest of the game are stand-ins, in tests/net_start_test_stubs, and they open nothing: they count what was asked for, and the clock is the test's.
 //
 // WHY THESE TWO: only a client has a server to send to, so anything else asking to send has to be told no. And a game that isn't doing anything on a network has no reason to have anything open on one.
+//
+// Modified 2026-11-07 by Melanikus for the AvP port: and how it leaves. What's waiting goes first and each connection is closed after
+// it, while the ENet host is still there (3dc/net_close.h), and a client says in the log when the host's connection closes.
 
 #include "enet/enet.h"
 #include "networking.h"
@@ -162,8 +165,20 @@ int enet_host_service(ENetHost *, ENetEvent *event, enet_uint32)
 	return 0;
 }
 
-int enet_host_check_events(ENetHost *, ENetEvent *)
+// The next look at what has happened finds that the connection to thePeer has closed
+static bool aConnectionCloses = false;
+
+int enet_host_check_events(ENetHost *, ENetEvent *event)
 {
+	if (event && aConnectionCloses)
+	{
+		aConnectionCloses = false;
+		event->type = ENET_EVENT_TYPE_DISCONNECT;
+		event->peer = &thePeer;
+		event->packet = NULL;
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -204,6 +219,39 @@ int enet_peer_send(ENetPeer *, uint8_t, ENetPacket *)
 	packetsToAPeer++;
 	packetsToAPeerThatsGone += peerIsLive ? 0 : 1;
 	return 0;
+}
+
+// The game's log. networking.cpp writes a few lines there, and the tests read them back.
+static std::vector<std::string> logLines;
+
+void LogString(const std::string &line)
+{
+	logLines.push_back(line);
+}
+
+static bool LogHas(const std::string &line)
+{
+	for (std::string const &said : logLines)
+	{
+		if (said == line)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Leaving closes each connection with net_close.cpp, which needs the real ENet and has its own test, tests/net_close_test.cpp. Here
+// it's only counted, with how many hosts had been let go when it was asked, so the order can be checked: a host that had already
+// been destroyed would have no connections left to close, and its memory would be gone.
+static int closesAsked = 0, hostsDestroyedWhenClosed = -1, connectionsThatDontAnswer = 0;
+
+int Net_CloseConnectionsAfterWhatsWaiting(ENetHost *, unsigned int)
+{
+	closesAsked++;
+	hostsDestroyedWhenClosed = hostsDestroyed;
+	return connectionsThatDontAnswer;
 }
 
 int enet_address_get_host_ip(const ENetAddress *, char *hostName, size_t nameLength)
@@ -515,8 +563,11 @@ static void TestHosting()
 	Net_UpdateSessionList(selection);
 	Check(socketsOpen == 1, "and nor does a search's time being up");
 
+	int const hostClosesBefore = closesAsked;
+
 	Net_Disconnect();
 	Check(socketsOpen == 0, "the game ending closes it");
+	Check(closesAsked == hostClosesBefore + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1, "and a host closes its connections after what's waiting, before letting its ENet host go");
 	AvP.Network = I_No_Network;
 
 	int const destroyed = socketsDestroyed;
@@ -579,10 +630,13 @@ static void TestJoining()
 	int const goneBefore = packetsToAPeerThatsGone;
 	int const sentBeforeLeaving = packetsToAPeer;
 
+	int const closesBefore = closesAsked;
+
 	lastMessageSent = 0xFFFFFFFF;
 	Net_Disconnect();
 	Check(lastMessageSent == NET_DESTROYPLAYERORGROUP && packetsToAPeer == sentBeforeLeaving + 1, "leaving says so");
 	Check(hostsDestroyed == hostsCreated, "and lets its ENet host go");
+	Check(closesAsked == closesBefore + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1, "and first closes its connection after what's waiting, its goodbye among it");
 	Check(Net_SendSystemMessage(NET_DESTROYPLAYERORGROUP, 0, 0, &id, sizeof(id)) == NET_FAIL, "and after that there's nobody to send to");
 	Check(packetsToAPeerThatsGone == goneBefore, "so nothing is sent to it");
 
@@ -591,6 +645,7 @@ static void TestJoining()
 
 	Net_Disconnect();
 	Check(packetsToAPeer == sentNow && hostsDestroyed == destroyed, "and leaving again does nothing");
+	Check(closesAsked == closesBefore + 1, "and has nothing left to close");
 	AvP.Network = I_No_Network;
 }
 
@@ -659,6 +714,44 @@ static void TestJoiningWhileAPageIsSearching()
 	Net_StopSearchingForSessions();
 }
 
+// A connection whose other end never answers is waited for only so long, and the log says how many there were
+static void TestLeavingWithoutAnAnswer()
+{
+	Check(JoinAGame() == NET_OK, "joining, to leave without an answer");
+
+	int const destroyed = hostsDestroyed;
+
+	logLines.clear();
+	connectionsThatDontAnswer = 1;
+	Net_Disconnect();
+	connectionsThatDontAnswer = 0;
+	Check(LogHas("net: left without hearing back from 1 connection(s), which may have gone already"), "leaving without an answer from a connection says so");
+	Check(hostsDestroyed == destroyed + 1, "and still lets its ENet host go");
+	AvP.Network = I_No_Network;
+}
+
+// A client's one connection is the host's, so its closing is the host gone, and the log says so. On a host, a connection closing is
+// a client gone, and that isn't this line.
+static void TestTheHostsConnectionClosing()
+{
+	uint8_t message[16];
+	size_t size = 0;
+
+	Check(JoinAGame() == NET_OK, "joining, for the host's connection to close");
+	logLines.clear();
+	aConnectionCloses = true;
+	Net_Receive(message, size);
+	Check(LogHas("net: the host's connection closed"), "a client says when the host's connection closes");
+	EndTheGame();
+
+	Check(HostAGame() == NET_OK, "hosting, for a client's connection to close");
+	logLines.clear();
+	aConnectionCloses = true;
+	Net_Receive(message, size);
+	Check(!LogHas("net: the host's connection closed"), "and a host doesn't say that when a client's connection closes");
+	EndTheGame();
+}
+
 static void TestTheGameUsesThis()
 {
 	std::string const menus = ReadSourceFile("3dc/avp/win95/frontend/menus.cpp");
@@ -688,6 +781,8 @@ int main()
 	TestJoiningAgainWhenItCantBeDone();
 	TestJoinThatGetsNoAnswerThenHosting();
 	TestJoiningWhileAPageIsSearching();
+	TestLeavingWithoutAnAnswer();
+	TestTheHostsConnectionClosing();
 	TestTheGameUsesThis();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");

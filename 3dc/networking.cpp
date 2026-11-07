@@ -30,6 +30,9 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
+//   all away (see net_close.h), and a client says in the log when the host's connection closes
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -39,6 +42,7 @@
 #include "menus.h"
 #include "mp_config.h"
 #include "networking.h"
+#include "net_close.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -563,6 +567,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	return NET_OK;
 }
 
+// How long leaving waits for the other ends to hear that this machine is closing. On a network that works, that takes a few
+// thousandths of a second. A machine that has gone already never answers, so this is the most that's ever spent on one.
+static unsigned int const kMostMillisecondsToClose = 1000;
+
 void Net_Disconnect()
 {
 	OutputDebugString("Net_Disconnect\n");
@@ -585,6 +593,15 @@ void Net_Disconnect()
 
 	if (host)
 	{
+		// What's still waiting goes first, the goodbye above among it, and then each connection closes with the other end told.
+		// Destroying the host straight away would throw all of that away: see net_close.h.
+		int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);
+
+		if (stillClosing > 0)
+		{
+			LogString("net: left without hearing back from " + std::to_string(stillClosing) + " connection(s), which may have gone already");
+		}
+
 		enet_host_destroy(host);
 		host = NULL;
 	}
@@ -756,6 +773,14 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				case ENET_EVENT_TYPE_DISCONNECT:
 				{
 					NewOnScreenMessage("ENet got a disconnection\n");
+
+					// A client has one connection, the host's, so on a client this is the host gone. The log says so, so that a
+					// run shows why its game ended.
+					if (AvP.Network != I_Host && eEvent.peer == ServerPeer)
+					{
+						LogString("net: the host's connection closed");
+					}
+
 					eEvent.peer->data = NULL;
 					break;
 				}

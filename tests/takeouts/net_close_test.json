@@ -1,0 +1,58 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "CLOSE: an open connection is closed at once",
+			"changes": [
+				{
+					"file": "3dc/net_close.cpp",
+					"from": "enet_peer_disconnect_later(peer, 0);",
+					"to": "enet_peer_disconnect_now(peer, 0);"
+				}
+			]
+		},
+		{
+			"name": "CLOSE: an open connection is never asked to close",
+			"changes": [
+				{
+					"file": "3dc/net_close.cpp",
+					"from": "if (peer->state == ENET_PEER_STATE_CONNECTED)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "CLOSE: it never waits",
+			"changes": [
+				{
+					"file": "3dc/net_close.cpp",
+					"from": "if (closing == 0 || GetTickCount() - startedAt >= mostMilliseconds)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "CLOSE: it waits four times as long as asked",
+			"changes": [
+				{
+					"file": "3dc/net_close.cpp",
+					"from": "GetTickCount() - startedAt >= mostMilliseconds)",
+					"to": "GetTickCount() - startedAt >= mostMilliseconds * 4)"
+				}
+			]
+		},
+		{
+			"name": "CLOSE: a connection told to close later is taken as closed",
+			"changes": [
+				{
+					"file": "3dc/net_close.cpp",
+					"from": "\t\tcase ENET_PEER_STATE_DISCONNECT_LATER:\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
