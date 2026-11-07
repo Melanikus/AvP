@@ -99,9 +99,10 @@ static void TakeAwayWhatWasMade(const std::string &base)
 
 static void TestMakingIt()
 {
-	char const *const outputFolder = getenv("RUNNER_TEMP");
-	// a folder of this run's own: something an earlier run left behind must not count against this one, and this only takes away what it knows it made
-	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_folder_test_files_" + std::to_string(::GetCurrentProcessId());
+	// A folder of this run's own, inside the folder the test runs in: something an earlier run left behind must not count against this one,
+	// and this only takes away what it knows it made. It's named by nothing but this program's number, so no setting from outside can point
+	// it anywhere else.
+	std::string base = "save_folder_test_files_" + std::to_string(::GetCurrentProcessId());
 
 	// The answer comes back with forward slashes, so that's what it's compared with
 	std::replace(base.begin(), base.end(), '\\', '/');
@@ -332,8 +333,8 @@ static void TestTryingAgain(std::string const &base, std::string const &slot, st
 // On real files, because what matters here is what's on the disk afterwards.
 static void TestWritingASave()
 {
-	char const *const outputFolder = getenv("RUNNER_TEMP");
-	std::string base = std::string(outputFolder ? outputFolder : ".") + "/save_write_test_files_" + std::to_string(::GetCurrentProcessId());
+	// This run's own folder, inside the folder the test runs in, named by nothing but this program's number
+	std::string base = "save_write_test_files_" + std::to_string(::GetCurrentProcessId());
 	std::string const slot = base + "/slot_1.sav";
 	std::string const newFile = slot + ".new";
 

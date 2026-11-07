@@ -1,3 +1,6 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   walking and crouching always slow the player down, and TurnSpeedAdjust only decides whether turning slows too (walk_speeds.h).
+//   Found through Bobblen's avp-forever (commit 2b70546)
 /*-------------- Patrick 15/10/96 ------------------
 	Source file for Player Movement ...
 ----------------------------------------------------*/
@@ -13,6 +16,7 @@
 #include "Input.h"
 #include "bh_types.h"
 #include "Player.h"
+#include "walk_speeds.h"
 #define UseLocalAssert 1
 #include "ourasert.h"
 #include "compiled_shapes.h"
@@ -459,9 +463,10 @@ void ExecuteFreeMovement(STRATEGYBLOCK* sbPtr)
 			}
 		}
 		
-		if (( ((AvP.PlayerType == I_Alien) || (playerStatusPtr->ShapeState == PMph_Standing))
+		// Running is for an alien, or anyone standing, holding the run key and able to run. Anything else walks or crawls, at half
+		// speed, whatever TurnSpeedAdjust says: that setting only decides whether turning slows down too (walk_speeds.h)
+		if ( ((AvP.PlayerType == I_Alien) || (playerStatusPtr->ShapeState == PMph_Standing))
 			&& (playerStatusPtr->Mvt_InputRequests.Flags.Rqst_Faster) && (playerStatusPtr->Encumberance.CanRun) )
-			|| !bTurnSpeedAdjust)
 		{	
 			/* Test - half backward speed for predators */
 			if (AvP.PlayerType==I_Predator) {
@@ -473,9 +478,7 @@ void ExecuteFreeMovement(STRATEGYBLOCK* sbPtr)
 		else 
 		{
 			/* walk = half speed */
-			strafeSpeed = (strafeSpeed)/2;
-			forwardSpeed = (forwardSpeed)/2;
-			turnSpeed = (turnSpeed)/2;
+			WalkSpeeds_Halve(forwardSpeed, strafeSpeed, turnSpeed, bTurnSpeedAdjust);
 		}	
 
 		/* Marker */

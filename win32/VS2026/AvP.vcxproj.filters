@@ -1328,6 +1328,9 @@
     <ClInclude Include="..\..\3dc\avp\bh_types.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\walk_speeds.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_videoscreen.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
