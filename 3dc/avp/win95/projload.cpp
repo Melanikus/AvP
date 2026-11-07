@@ -17,6 +17,7 @@
 //   a model that lacks a part the game needs stops the game with a message naming the part
 //   baked colours has a place for every point, even if the file has fewer colours; the list of shapes grows through
 //   ReallocMem
+//   a model's frame with no length gets the shortest length there is, because a sequence of them would hang the game
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -1058,6 +1059,14 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 					{
 						kfd->Sequence_Length =(unsigned short) min(65536 - this_frame_no,65535);
 					}
+
+					// These numbers come from the file. If all of a sequence's frames had no length, the search for the current
+					// frame in hmodel.cpp would never finish, so each gets the shortest length there is. None of the 304,817
+					// frames in the game's own files has no length, so they stay as they are.
+					if (kfd->Sequence_Length == 0)
+					{
+						kfd->Sequence_Length = 1;
+					}
 				}
 				//sort out some settings for the last frame
 				kfd->last_frame=1;
@@ -1248,6 +1257,14 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 					else
 					{
 						kfd->Sequence_Length =(unsigned short) min(65536 - this_frame_no , 65535);
+					}
+
+					// These numbers come from the file. If all of a sequence's frames had no length, the search for the current
+					// frame in hmodel.cpp would never finish, so each gets the shortest length there is. None of the 304,817
+					// frames in the game's own files has no length, so they stay as they are.
+					if (kfd->Sequence_Length == 0)
+					{
+						kfd->Sequence_Length = 1;
 					}
 				}
 				//sort out some settings for the last frame

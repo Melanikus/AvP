@@ -1,0 +1,324 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "shots fired let a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "shots that hit let a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "the time held lets a slot one past the end through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "(slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;",
+					"to": "(slot <= MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;"
+				}
+			]
+		},
+		{
+			"name": "shots fired let a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.ShotsFired[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "shots that hit let a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.ShotsHit[slot] += rounds;"
+				}
+			]
+		},
+		{
+			"name": "the time held lets a slot below the start through",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;",
+					"to": "if (slot < MAX_NO_OF_WEAPON_SLOTS) {\n\t\tCurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;"
+				}
+			]
+		},
+		{
+			"name": "the collision list has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "if (NumberOfCollisionPolys <= MAXIMUM_NUMBER_OF_COLLISIONPOLYS - 2)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the collision list keeps room for one, where a polygon can take two",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "NumberOfCollisionPolys <= MAXIMUM_NUMBER_OF_COLLISIONPOLYS - 2",
+					"to": "NumberOfCollisionPolys <= MAXIMUM_NUMBER_OF_COLLISIONPOLYS - 1"
+				}
+			]
+		},
+		{
+			"name": "collision list writer 1 doesn't ask if it's full",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "\t\t\t\t\t\tif (CollisionListIsFull())",
+					"to": "\t\t\t\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "collision list writer 2 doesn't ask if it's full",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "static void TestShapeWithDynamicBoundingBox(DISPLAYBLOCK *objectPtr, DYNAMICSBLOCK *mainDynPtr)\n{\n\tint numberOfItems;\n    int needToRotate = 0;\n\n    /* KJL 10:58:22 24/11/98 - If the object is a static object rather than a module,\n\twe'll need to rotate the polygons into world-space */\n   \tif (objectPtr->ObStrategyBlock)\n\t{\n\t\tDYNAMICSBLOCK *dynPtr = objectPtr->ObStrategyBlock->DynPtr;\n\n\t\tif (dynPtr)\n\t\t{\n\t\t\tif (dynPtr->IsStatic)\n\t\t\t{\n\t\t\t\tneedToRotate = 1;\n\t\t\t}\n\t\t}\n\t}\n    \n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (CollisionListIsFull())",
+					"to": "static void TestShapeWithDynamicBoundingBox(DISPLAYBLOCK *objectPtr, DYNAMICSBLOCK *mainDynPtr)\n{\n\tint numberOfItems;\n    int needToRotate = 0;\n\n    /* KJL 10:58:22 24/11/98 - If the object is a static object rather than a module,\n\twe'll need to rotate the polygons into world-space */\n   \tif (objectPtr->ObStrategyBlock)\n\t{\n\t\tDYNAMICSBLOCK *dynPtr = objectPtr->ObStrategyBlock->DynPtr;\n\n\t\tif (dynPtr)\n\t\t{\n\t\t\tif (dynPtr->IsStatic)\n\t\t\t{\n\t\t\t\tneedToRotate = 1;\n\t\t\t}\n\t\t}\n\t}\n    \n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "collision list writer 3 doesn't ask if it's full",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "static void TestShapeWithParticlesDynamicBoundingBox(DISPLAYBLOCK *objectPtr)\n{\n\tint numberOfItems;\n    int needToRotate = 0;\n\n    /* KJL 10:58:22 24/11/98 - If the object is a static object rather than a module,\n\twe'll need to rotate the polygons into world-space */\n   \tif (objectPtr->ObStrategyBlock)\n\t{\n\t\tDYNAMICSBLOCK *dynPtr = objectPtr->ObStrategyBlock->DynPtr;\n\n\t\tif (dynPtr)\n\t\t{\n\t\t\tif (dynPtr->IsStatic)\n\t\t\t{\n\t\t\t\tneedToRotate = 1;\n\t\t\t}\n\t\t}\n\t}\n    \n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (CollisionListIsFull())",
+					"to": "static void TestShapeWithParticlesDynamicBoundingBox(DISPLAYBLOCK *objectPtr)\n{\n\tint numberOfItems;\n    int needToRotate = 0;\n\n    /* KJL 10:58:22 24/11/98 - If the object is a static object rather than a module,\n\twe'll need to rotate the polygons into world-space */\n   \tif (objectPtr->ObStrategyBlock)\n\t{\n\t\tDYNAMICSBLOCK *dynPtr = objectPtr->ObStrategyBlock->DynPtr;\n\n\t\tif (dynPtr)\n\t\t{\n\t\t\tif (dynPtr->IsStatic)\n\t\t\t{\n\t\t\t\tneedToRotate = 1;\n\t\t\t}\n\t\t}\n\t}\n    \n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "collision list writer 4 doesn't ask if it's full",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "\t}\n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (CollisionListIsFull())",
+					"to": "\t}\n    \n    /* okay, let's setup the shape's data and access the first poly */\n\tnumberOfItems = SetupPolygonAccess(objectPtr);\n    \n    /* go through polys looking for those which intersect with the bounding box */\n  \twhile(numberOfItems--)\n\t{\n\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "collision list writer 5 doesn't ask if it's full",
+			"changes": [
+				{
+					"file": "3dc/avp/dynamics.cpp",
+					"from": "\t\t{\n\t\t\tif (CollisionListIsFull())",
+					"to": "\t\t{\n\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "a sequence below nothing is looked for",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (sequence < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the list of sequences is read past its end",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!sequences[i])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a polygon is told about a sequence that isn't there",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (txah && iptr)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a missing sequence still plays",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "taptr->tac_txah.txa_flags = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no check for a sequence that isn't there or has no frames",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!txah || txah->txa_numframes < 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a sequence with no frames reads a list it doesn't have",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!txah || txah->txa_numframes < 1)",
+					"to": "if (!txah)"
+				}
+			]
+		},
+		{
+			"name": "the see-through list has no limit",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (CurrentNumberOfTranslucentPolygons >= MAX_NO_OF_TRANSLUCENT_POLYGONS)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the see-through list stops one too late",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "CurrentNumberOfTranslucentPolygons >= MAX_NO_OF_TRANSLUCENT_POLYGONS",
+					"to": "CurrentNumberOfTranslucentPolygons > MAX_NO_OF_TRANSLUCENT_POLYGONS"
+				}
+			]
+		},
+		{
+			"name": "a frame number outside the sequence is used",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "if (sacd->current_frame < 0 || sacd->current_frame >= (signed)sacd->sequence->num_frames)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a frame that takes no time hangs the game",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "if ((signed long)current->seconds_per_frame <= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "sequence check 1 is taken out",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "unsigned int SetShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCONTROLDATA *sacd)\n{\n\tSHAPEANIMATIONCONTROLLER * sac = dptr->ShapeAnimControlBlock;\n\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)",
+					"to": "unsigned int SetShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCONTROLDATA *sacd)\n{\n\tSHAPEANIMATIONCONTROLLER * sac = dptr->ShapeAnimControlBlock;\n\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "sequence check 2 is taken out",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "unsigned int SetNextShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCONTROLDATA *sacd)\n{\n\tSHAPEANIMATIONCONTROLLER * sac = dptr->ShapeAnimControlBlock;\n\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)",
+					"to": "unsigned int SetNextShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCONTROLDATA *sacd)\n{\n\tSHAPEANIMATIONCONTROLLER * sac = dptr->ShapeAnimControlBlock;\n\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "sequence check 3 is taken out",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "{\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)",
+					"to": "{\n\tGLOBALASSERT(sac);\n\tGLOBALASSERT(sacd);\n\t// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves\n\t// the shape doing what it was doing.\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "end frame check 1 goes back to what the assert guarded",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "\t\tsac->current.stop_now = 1;\n\t\treturn;\n\t}\n\n\t// -1 means no change to the last frame, and so does a frame the sequence doesn't have\n\tif (end_frame >= 0 && end_frame < (signed)sac->current.sequence->num_frames)",
+					"to": "\t\tsac->current.stop_now = 1;\n\t\treturn;\n\t}\n\n\t// -1 means no change to the last frame, and so does a frame the sequence doesn't have\n\tif (end_frame != -1)"
+				}
+			]
+		},
+		{
+			"name": "end frame check 2 goes back to what the assert guarded",
+			"changes": [
+				{
+					"file": "3dc/shpanim.cpp",
+					"from": "\t\tsac->playing = 0;\n\t\treturn;\n\t}\n\n\t// -1 means no change to the last frame, and so does a frame the sequence doesn't have\n\tif (end_frame >= 0 && end_frame < (signed)sac->current.sequence->num_frames)",
+					"to": "\t\tsac->playing = 0;\n\t\treturn;\n\t}\n\n\t// -1 means no change to the last frame, and so does a frame the sequence doesn't have\n\tif (end_frame != -1)"
+				}
+			]
+		},
+		{
+			"name": "a text number outside the table is used",
+			"changes": [
+				{
+					"file": "3dc/avp/support/string_table.cpp",
+					"from": "if ( (int)stringID < 0 || (int)stringID >= (int)NumStrings )",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "typing at the start of a line runs backwards through memory",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/text_input.cpp",
+					"from": "for (size_t i = NumChars + 1; i > Pos_Where; i--)",
+					"to": "for (size_t i = NumChars; i >= Pos_Where; i--)"
+				},
+				{
+					"file": "3dc/avp/win95/gadgets/text_input.cpp",
+					"from": "ProjCh[ i ] = ProjCh[ i - 1 ];",
+					"to": "ProjCh[ i + 1 ] = ProjCh[ i ];"
+				}
+			]
+		},
+		{
+			"name": "a polygon's corners have no limit",
+			"changes": [
+				{
+					"file": "3dc/win95/plat_shp.cpp",
+					"from": " && numberOfVertices < 4",
+					"to": ""
+				}
+			]
+		}
+	]
+}

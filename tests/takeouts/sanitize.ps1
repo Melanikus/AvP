@@ -56,7 +56,8 @@ function Copy-SanitizerLibrary([string]$to)
     Copy-Item -LiteralPath $library -Destination $to -Force
 }
 
-$built = Invoke-Tool 'cl.exe' "/nologo @tests\$Test.args /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`"" $repository (Join-Path $out 'build.txt')
+# The test's settings come last, because they can end with /link, and anything after /link goes to the linker
+$built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @tests\$Test.args" $repository (Join-Path $out 'build.txt')
 
 if ($built -ne 0) {
     Write-Host "$Test didn't build:"

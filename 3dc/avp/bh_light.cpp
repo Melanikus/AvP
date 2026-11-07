@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
+//   a light whose shape has fewer animation sequences than expected is no longer an assert, because looking one up now copes with that
 //   a light can only be set to a sequence of its own texture animation
+
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -178,8 +180,6 @@ void SetTextureAnimationSequence(int shapeindex, TXACTRLBLK* tac, int sequence)
 
 						if (num_seq < 3) 
 							pl_bhv->has_broken_sequence = 0;
-
-						GLOBALASSERT(num_seq >= 2);
 					}
 				}
 				else (*pptxactrlblk) = NULL; 
