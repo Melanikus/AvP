@@ -5,6 +5,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
+//   the room for far locations is counted the same way it's shared out
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -247,23 +248,21 @@ static void InitFarLocDataAreas(MODULE **moduleList, int numModules)
 	FL_TotalNumAuxLocs = 0;
 	FL_AuxData = (VECTORCH *)0;
 		
-	/* work out the number of adjacent modules/auxilary locations for each module, 
-	and add them up */
-	for(moduleCounter=0;moduleCounter<numModules;moduleCounter++)
+	// Room is shared out below by going through the groups of modules, so it's counted here the same way. A level file says
+	// which modules are in a group, and it can put one in two groups or list it twice. Counting anything else would then
+	// give less room than gets shared out, and locations would be written past the end.
+	for(moduleCounter=0;moduleCounter<AIModuleArraySize;moduleCounter++)
 	{
-		MODULE *thisModule; 
-		int thisModuleIndex;
+		MODULE** modulearray=AIModuleArray[moduleCounter].m_module_ptrs;
 
-		thisModule = moduleList[moduleCounter]; 
-		LOCALASSERT(thisModule);
-		thisModuleIndex = thisModule->m_index;
-		LOCALASSERT(thisModuleIndex >= 0);
-		LOCALASSERT(thisModuleIndex < ModuleArraySize);
-		
-		if(ModuleIsPhysical(thisModule))
+		if(modulearray)
 		{
-			FL_TotalNumAuxLocs += FAR_MAX_LOCS;
-		}	
+			while(*modulearray)
+			{
+				modulearray++;
+				FL_TotalNumAuxLocs += FAR_MAX_LOCS;
+			}
+		}
 	}
 
 	/* allocate base data areas */

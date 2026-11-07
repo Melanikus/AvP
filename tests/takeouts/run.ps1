@@ -99,7 +99,8 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
 function Build-And-Run {
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }
     New-Item -ItemType Directory -Force $out | Out-Null
-    Invoke-Tool 'cl.exe' "/nologo @tests\$Test.args `"/Fe:$out\t.exe`" `"/Fo:$out/`"" $tree (Join-Path $out 'build.txt') | Out-Null
+    # The test's settings come last, because they can end with /link, and anything after /link goes to the linker
+    Invoke-Tool 'cl.exe' "/nologo `"/Fe:$out\t.exe`" `"/Fo:$out/`" @tests\$Test.args" $tree (Join-Path $out 'build.txt') | Out-Null
     $built = Test-Path (Join-Path $out 't.exe')
     if (-not $built) { return @{ Built = $false; Exit = -1; Words = (Get-Content (Join-Path $out 'build.txt') -TotalCount 3) -join ' ' } }
 

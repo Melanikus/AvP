@@ -1125,16 +1125,6 @@
 			]
 		},
 		{
-			"name": "a game that has left tries to send",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "// A game that has already left has nobody to send to\n\tif (!host)\n\t{\n\t\treturn NET_FAIL;\n\t}",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "leaving throws away what was still to go",
 			"changes": [
 				{
@@ -1831,6 +1821,36 @@
 					"file": "3dc/frustum.cpp",
 					"from": "int QuadWithinFrustum(void)",
 					"to": "int DecalWithinFrustum(DECAL *decalPtr) { return 2; }\n\nint QuadWithinFrustum(void)"
+				}
+			]
+		},
+		{
+			"name": "a game message with no game running goes on regardless",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!host)\n\t{\n\t\tstatic unsigned long long noGameToSendIn = 0;",
+					"to": "\tif (false)\n\t{\n\t\tstatic unsigned long long noGameToSendIn = 0;"
+				}
+			]
+		},
+		{
+			"name": "a game message always fails",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!host)\n\t{\n\t\tstatic unsigned long long noGameToSendIn = 0;",
+					"to": "\tif (true)\n\t{\n\t\tstatic unsigned long long noGameToSendIn = 0;"
+				}
+			]
+		},
+		{
+			"name": "the log says so every time",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tif (LogThisDrop(noGameToSendIn))",
+					"to": "\t\tnoGameToSendIn++;\n\t\tif (true)"
 				}
 			]
 		},

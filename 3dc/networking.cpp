@@ -31,6 +31,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a connection that never says who it is is dropped, answers to anyone asking about a game are limited, a second game found in one look is read properly, and a joiner must speak this version
 //   a system message with no server to send it to fails, and leaving a game forgets the server
+//   a message with no network game running fails, where it used to hand ENet an empty pointer
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
 //   the host answers each client itself and knows who sent what from the connection it came on, so a client can only speak for itself; it passes on what clients say to each other
 //   a client has no fixed port of its own, a join that fails lets go of what it opened, and leaving tells the other end straight away
@@ -1312,9 +1313,19 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 		return NET_FAIL;
 	}
 
-	// A game that has already left has nobody to send to
+	// There's no host before a network game starts, after one ends, or if one couldn't start, and ENet would read through
+	// the empty pointer. This can come up once for each message the game wants to send, so the log only says so now and then.
 	if (!host)
 	{
+		static unsigned long long noGameToSendIn = 0;
+
+		if (LogThisDrop(noGameToSendIn))
+		{
+			std::stringstream sstream;
+			sstream << "Net_Send - no network game to send " << Net_MessageTypeToString(messageType) << " in (" << noGameToSendIn << " so far)";
+			Con_PrintError(sstream.str());
+		}
+
 		return NET_FAIL;
 	}
 
