@@ -1,4 +1,6 @@
 // The test for four crash fixes in the NPC code. Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   it also checks how a marine's glow is chosen when you play the alien
 //
 // WHAT IT TESTS
 //
@@ -238,6 +240,24 @@ static void TestTheQueenWithNoRoomToBeDrawn()
 	Check(ComesBefore(near, leave, "sbPtr->SBdptr = dPtr;"), "before anything is written through the empty pointer");
 }
 
+// When you play the alien, every body glows in a colour that says what it is (DoAlienEnergyView in kshape.cpp). The
+// marine's part of that choice used to carry on into the part for another player's stand-in, and read the marine's
+// details as if they were a stand-in's. With today's numbers that happened to change nothing, which is luck, not a
+// rule. Only a running game with a marine in view reaches these lines, so this reads the source.
+static void TestTheMarineSeenByAnAlien()
+{
+	puts("A marine's glow when you play the alien:");
+
+	std::string const glow = Between(ReadSourceFile("3dc/kshape.cpp"), "void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)", "case I_BehaviourNetCorpse: {");
+	std::string const marine = Between(glow, "case I_BehaviourSeal: {", "case I_BehaviourNetGhost: {");
+	std::string const colour = "colour = MARINES_LIFEFORCE_GLOW_COLOUR;";
+	std::string::size_type const colourAt = marine.find(colour);
+
+	Check(colourAt != std::string::npos, "the marine's part still gives him the marine colour");
+	Check(colourAt != std::string::npos && marine.find("break;", colourAt) != std::string::npos,
+	      "and stops there, so his details aren't read as another player's stand-in's");
+}
+
 int main()
 {
 	TestTheXenoborg();
@@ -248,6 +268,7 @@ int main()
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
+	TestTheMarineSeenByAnAlien();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;
