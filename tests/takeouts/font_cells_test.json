@@ -1,0 +1,78 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "CELLS: no width is let through",
+			"changes": [
+				{
+					"file": "3dc/font_cells.h",
+					"from": "cellWidth >= 1 && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "CELLS: no height is let through",
+			"changes": [
+				{
+					"file": "3dc/font_cells.h",
+					"from": "cellHeight >= 1 && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "CELLS: too wide is let through",
+			"changes": [
+				{
+					"file": "3dc/font_cells.h",
+					"from": "cellWidth <= mapWidth && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "CELLS: too tall is let through",
+			"changes": [
+				{
+					"file": "3dc/font_cells.h",
+					"from": " && cellHeight <= mapHeight",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "CELLS: exactly the picture is refused",
+			"changes": [
+				{
+					"file": "3dc/font_cells.h",
+					"from": "cellWidth <= mapWidth",
+					"to": "cellWidth < mapWidth"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a .dat of the wrong size is read anyway",
+			"changes": [
+				{
+					"file": "3dc/Fonts.cpp",
+					"from": "if (kFontDATsize != fileLength)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cells are not checked",
+			"changes": [
+				{
+					"file": "3dc/Fonts.cpp",
+					"from": "if (!Font_CellsFit(Fonts[fontType].mapWidth, Fonts[fontType].mapHeight, Fonts[fontType].cellWidth, Fonts[fontType].cellHeight))",
+					"to": "if (false)"
+				}
+			]
+		}
+	]
+}
