@@ -39,14 +39,7 @@
 #include "kshape.h"
 #include "shpanim.h"
 #include "string_table.hpp"
-
-// The line being typed is private to the text input, so this lets the test's own kind of text input see it. It has to be
-// "protected" and nothing more open than that: the compiler builds that into the names of a class's functions, so changing
-// what's "protected" here would make them different functions from the game's, and the test would crash calling them. It
-// doesn't change how anything works.
-#define private protected
 #include "text_input.hpp"
-#undef private
 
 // Parts of the game that no header declares
 extern int CurrentNumberOfTranslucentPolygons;
@@ -632,7 +625,10 @@ static void CheckTextTable()
 class TestTextInput : public TextInputState
 {
 public:
-	enum { LongestLine = MAX_LENGTH_INPUT };
+	// The longest line the game takes, not counting the zero that ends it. The game's own number is MAX_LENGTH_INPUT in
+	// text_input.hpp, which only the text input itself can see, so it's written again here. If the two ever differ,
+	// CheckTyping fails.
+	enum { LongestLine = 250 };
 
 	TestTextInput(char *start) : TextInputState(false, start)
 	{
@@ -640,12 +636,12 @@ public:
 
 	char const *Line() const
 	{
-		return ProjCh;
+		return GetProjChar();
 	}
 
 	size_t Length() const
 	{
-		return NumChars;
+		return GetNumChars();
 	}
 
 	int Insert(char letter, size_t place)
@@ -734,12 +730,20 @@ static void CheckTyping()
 	LimitCheck(strcmp(input.Line(), "yaxbc") == 0, "and it goes where it should");
 	LimitCheck(input.Length() == 5, "and the line is one longer");
 
-	while (input.Length() < TestTextInput::LongestLine)
+	// Fill the line up. This stops early if a letter is refused, so the test can't go round for ever if the game's longest
+	// line is ever shorter than the number above.
+	while (input.Length() < TestTextInput::LongestLine && input.Insert('z', 0) != 0)
 	{
-		input.Insert('z', 0);
 	}
 
-	LimitCheck(input.Line()[TestTextInput::LongestLine] == 0, "a full line still ends where it should");
+	LimitCheck(input.Length() == TestTextInput::LongestLine, "a line takes letters up to the longest the game allows");
+
+	// Only looked at when the line really is that long, or this would read past the end of a shorter one
+	if (input.Length() == TestTextInput::LongestLine)
+	{
+		LimitCheck(input.Line()[TestTextInput::LongestLine] == 0, "a full line still ends where it should");
+	}
+
 	LimitCheck(input.Insert('z', 0) == 0, "and a letter that doesn't fit is refused");
 	LimitCheck(input.Length() == TestTextInput::LongestLine, "and doesn't change it");
 }
