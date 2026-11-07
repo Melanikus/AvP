@@ -142,5 +142,5 @@ jobs:
 
           # Nothing to look in would mean this looked at nothing, not that all is well
           if [ "$looked" -eq 0 ]; then echo "::error::No C or C++ files were found to look in"; exit 1; fi
-          echo "Looked in $looked C and C++ files, and found the form $found times"
+          echo "Looked in $looked C and C++ files. Lines written this way: $found"
           if [ "$found" -gt 0 ]; then echo "CODING-STANDARD.md, rule 1, says why, and how to write it instead"; exit 1; fi
