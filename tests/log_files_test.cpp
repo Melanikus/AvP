@@ -506,7 +506,7 @@ static void TestTheGameUsesIt()
 	Check(!Has(log, "IsBadReadPtr"), "and doesn't read memory itself to do it");
 
 	// Leaving out the player: found before the writer starts, and every line and the crash words go through it before they're written
-	Check(ComesBefore(log, "LogWriter() :", "LogFiles_PrivateGather(privateThings, folder);") && ComesBefore(log, "LogFiles_PrivateGather(privateThings, folder);", "thread = CreateThread("), "what to leave out is found before the writer's thread starts");
+	Check(ComesBefore(log, "LogWriter() :", "LogFiles_PrivateGather(privateThings, GetSaveFolderPath());") && ComesBefore(log, "LogFiles_PrivateGather(privateThings, GetSaveFolderPath());", "thread = CreateThread("), "what to leave out is found before the writer's thread starts");
 	Check(ComesBefore(log, "void Add(const std::string &line, bool mustGoIn)\n\t{\n\t\tstd::string const written = LogFiles_LeaveOutThePlayer(line, privateThings);", "waiting += written;"), "every line has the player left out before it waits to be written");
 	Check(!Has(log, "waiting += line;") && !Has(log, "waiting.size() + line.size()"), "and nothing puts a line on the list as it came");
 	Check(ComesBefore(log, "void WriteCrashWords(const char *words)\n\t{\n\t\tLogFiles_LeaveOutThePlayer(words, privateThings, crashWritten, sizeof(crashWritten));", "WriteFile(crashFile, crashWritten, (DWORD)strlen(crashWritten), &written, NULL);"), "the crash words too, in a buffer of their own");

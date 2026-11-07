@@ -195,7 +195,7 @@ public:
 		filePath += logFilename;
 
 		// What every line leaves out about the player: their folders, names and addresses (log_files.h). Found before any line is written.
-		LogFiles_PrivateGather(privateThings, folder);
+		LogFiles_PrivateGather(privateThings, GetSaveFolderPath());
 
 		wake = CreateEvent(NULL, FALSE, FALSE, NULL);
 
