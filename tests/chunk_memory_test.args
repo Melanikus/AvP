@@ -11,5 +11,5 @@ tests/chunk_memory_test.cpp
 3dc/win95/huffman.cpp
 3dc/win95/list_tem.cpp
 3dc/win95/md5.c
-3dc/win95/mishchnk.cpp
+3dc/win95/mishchnk.cpp 3dc/win95/our_mem.cpp
 user32.lib

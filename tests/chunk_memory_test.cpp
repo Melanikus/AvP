@@ -33,6 +33,22 @@
 #include "strategy_chunk.hpp"
 #include "avp_chunk.hpp"
 
+// The chunk code asks for its lists through the game's memory code, which stops the game through these if the computer
+// runs out of memory. Here that stops the test, and what it says is the last line of the output.
+void avp_MessageBox(const char *message, int)
+{
+	puts(message);
+}
+
+void avp_exit(int code)
+{
+	exit(code);
+}
+
+void LogErrorStringC(const char *)
+{
+}
+
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
 HANDLE avp_CreateFile(const char *, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE)
