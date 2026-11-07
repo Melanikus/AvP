@@ -183,6 +183,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a half-made alien's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tif (asb)\n\t\t\t\t{\n\t\t\t\t\tDispel_HModel(&asb->HModelController);\n\t\t\t\t}\n",
+					"to": "\t\t\t\tDispel_HModel(&asb->HModelController);\n"
+				}
+			]
+		},
+		{
+			"name": "a half-made facehugger's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n\t\t\t}\n",
+					"to": "\t\t\t}\n\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n"
+				}
+			]
+		},
+		{
+			"name": "a half-made queen's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n\t\t\t}\n",
+					"to": "\t\t\t}\n\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n"
+				}
+			]
 		}
 	]
 }

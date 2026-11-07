@@ -151,6 +151,19 @@ static void TestTheSentryGunJustMade()
 	}
 }
 
+// Making an alien, facehugger or queen can stop before its block exists (no room left for its movement, or bad level data), and
+// RemoveBehaviourStrategy then cleans it up. Reading the missing block there would crash.
+static void TestTheHalfMadeNpc()
+{
+	puts("An NPC whose making stopped before its block existed:");
+
+	std::string const cleanup = Between(ReadSourceFile("3dc/avp/bh_types.cpp"), "void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)", "case I_BehaviourNetGhost:");
+
+	Check(Has(cleanup, "\t\t\t\tif (asb)\n\t\t\t\t{\n\t\t\t\t\tDispel_HModel(&asb->HModelController);"), "an alien's cleanup only reads its block if there is one");
+	Check(Has(cleanup, "\t\t\t\tif(fhugStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(fhugStatusPointer->soundHandle);\n\t\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n\t\t\t}"), "and a facehugger's");
+	Check(Has(cleanup, "\t\t\t\t//stop any sound the queen is making\n\t\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n\t\t\t}"), "and a queen's");
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -192,6 +205,7 @@ int main()
 	TestTheXenoborg();
 	TestTheXenoborgJustMade();
 	TestTheSentryGunJustMade();
+	TestTheHalfMadeNpc();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
