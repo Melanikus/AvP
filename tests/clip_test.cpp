@@ -25,7 +25,7 @@
 #include <string.h>
 #include <string>
 #include <math.h>
-#include <corecrt_io.h> // _dup. The game has an io.h of its own, which would be found first
+#include <corecrt_io.h> // _dup and _close. The game has an io.h of its own, which would be found first
 
 #include "frustum.cpp"
 
@@ -349,9 +349,32 @@ static RENDERVERTEX const kFoundQuad[4] =
 
 int main()
 {
-	report = _fdopen(_dup(_fileno(stdout)), "w");
+	// The report goes to a copy of the real output, made before ordinary printing is sent nowhere. Each step is checked,
+	// and everything opened here is closed again before main() ends, whichever way it ends.
+	int const realOutput = _dup(_fileno(stdout));
+	report = (realOutput == -1) ? NULL : _fdopen(realOutput, "w");
+
+	if (!report)
+	{
+		if (realOutput != -1)
+		{
+			_close(realOutput);
+		}
+
+		puts("FAILED: the test couldn't keep a copy of its output for the report");
+		return 1;
+	}
+
 	setvbuf(report, NULL, _IONBF, 0);
-	freopen("NUL", "w", stdout);
+
+	FILE *const nowhere = freopen("NUL", "w", stdout);
+
+	if (!nowhere)
+	{
+		fprintf(report, "FAILED: the test couldn't send the game's own printing nowhere\n");
+		fclose(report);
+		return 1;
+	}
 
 	fprintf(report, "The test itself:\n");
 
@@ -471,9 +494,13 @@ int main()
 	if (checksFailed)
 	{
 		fprintf(report, "%d checks FAILED\n", checksFailed);
-		return 1;
+	}
+	else
+	{
+		fprintf(report, "All checks passed\n");
 	}
 
-	fprintf(report, "All checks passed\n");
-	return 0;
+	fclose(nowhere);
+	fclose(report);
+	return checksFailed ? 1 : 0;
 }
