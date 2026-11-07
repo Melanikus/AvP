@@ -764,8 +764,12 @@ static void TestSendingWithNoGame()
 	Check(Net_Send(NET_SETPLAYERID, 1, 0, NULL, 0) == NET_FAIL, "a message of nothing fails as well");
 
 	Check(HostAGame() == NET_OK, "with a game going");
+
+	int const packetsWithAGame = packetsMade;
+
+	// A host doesn't broadcast: it sends to each player it has let in (SendToClients), so with nobody let in yet, it goes to nobody
 	Check(Net_Send(NET_SETPLAYERID, 1, 0, message, sizeof(message)) == NET_OK, "a game message goes");
-	Check(broadcasts == 1 && broadcastsWithNoHost == 0, "to everyone, through the host");
+	Check(packetsMade == packetsWithAGame + 1 && broadcastsWithNoHost == 0, "made into one packet for the players the host has let in, and ENet is never handed an empty host");
 
 	EndTheGame();
 	broadcasts = 0;
