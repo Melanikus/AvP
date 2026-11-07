@@ -26,6 +26,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # Hudson is the team's private test bot, and its code never ships. This comes first, because it takes seconds, and a hook left behind
+      # should fail the pull request that brings it.
+      - name: Refuse any of Hudson
+        shell: pwsh
+        run: ./tools/check-no-hudson.ps1
+
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
         shell: pwsh
