@@ -12,7 +12,31 @@ Visual Studio with the C++ tools, and PowerShell.
 - **noticed:** the test failed, or crashed, or ran until it was stopped. That's what should happen.
 - **NOT NOTICED:** the test still passed with that thing broken, so that check isn't really being tested. Add a row to the test that catches it. If the change truly makes no difference to what
   the code does, that's worth knowing too: take out the row, or the code.
-- **it should match exactly once:** the code has moved on. Update the row in the list.
+- **CAN'T FIND ITS TEXT, or FINDS ITS TEXT MORE THAN ONCE:** the code has moved on. See below.
+- **CAN'T RUN:** the row names a file that isn't there, or its change leaves code that doesn't build. See below.
+
+## When the Take-outs check fails
+
+A row that can't run fails the check, the same as one that isn't noticed. That's on purpose: if the code a row breaks has moved, the check it guards may be untested now, and nobody would know.
+The log names the list, the row (counted from 0), the file and the text, and says what to do. Fix it in the same pull request as the change that moved the code:
+
+- **The code is still there, in different words** (a renamed variable, a new argument): change the row's `"from"` to the code as it is now, and check its `"to"` still breaks it the way the
+  row's name says. This finds the places most like the old text, and with `--write` puts the best one in the row:
+
+      node tests/takeouts/find-moved-row.js npc_crashes_test 2
+      node tests/takeouts/find-moved-row.js npc_crashes_test 2 --write
+
+  It never decides for you: it changes only `"from"`, never `"to"`. Read the place, look at the change with `git diff`, and run the row: `tests/takeouts/run.ps1 npc_crashes_test -From 2 -To 2`.
+- **What it checks moved to another place, or is gone:** remove the row, and add one that breaks the check where it is now. If the check is gone on purpose, say why in the pull request.
+- **Its text is there more than once:** make `"from"` longer, with the lines around the one you mean, until it's there only once.
+- **NOT NOTICED:** the test still passes with that broken. Make the test notice it, or, if it truly doesn't matter any more, remove the row and say why.
+- **It didn't build:** a row's `"to"` has to leave code that builds, so the only thing broken is what the row is about.
+
+On GitHub the same words are in the job's log (Take-outs for `<list>`, Run the list), and each failed row is a note on the pull request's page.
+
+**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs the lists a pull request can affect, each on a clean machine, and fails if
+any row isn't noticed or can't be run. A pull request that changes the check or `run.ps1` runs every list. Anyone who can run workflows can run any of them, or
+all, by hand: Actions, Take-outs, Run workflow.
 
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
