@@ -52,6 +52,7 @@
 #include "tables.h"
 #include "dxlog.h"
 #include "logString.h"
+#include "npc_file_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "sequences.h"
@@ -18137,7 +18138,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	// His weapon decides his model, and everything below reads it, so a number that isn't on the list refuses his part of the
 	// save before anything is changed. He stays as the level made him, or isn't made, as when the block is the wrong size.
-	if (!GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))
+	if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))
 	{
 		NoteRefusedFromAFile("a save named a marine weapon that isn't on the list, so that marine's part of the save is left out");
 		return;

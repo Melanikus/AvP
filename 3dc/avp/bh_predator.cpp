@@ -35,6 +35,7 @@ Source file for predator AI
 #include "targeting.h"
 #include "dxlog.h"
 #include "logString.h"
+#include "npc_file_checks.h"
 #include "showcmds.h"
 #include "huddefs.h"
 #include "pldghost.h"
@@ -7066,7 +7067,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	// His weapon decides which parts of his model are looked up below, so a number that isn't on the list refuses his part of
 	// the save before anything is changed. He stays as the level made him, as when the block is the wrong size.
-	if (!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))
+	if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))
 	{
 		NoteRefusedFromAFile("a save named a predator weapon that isn't on the list, so that predator's part of the save is left out");
 		return;

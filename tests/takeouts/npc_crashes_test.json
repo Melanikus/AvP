@@ -239,7 +239,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\tif (!GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))\n",
+					"from": "\tif (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))\n",
 					"to": "\tif (!block)\n"
 				}
 			]
@@ -269,7 +269,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_predator.cpp",
-					"from": "\tif (!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))\n",
+					"from": "\tif (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))\n",
 					"to": "\tif (!block)\n"
 				}
 			]
@@ -281,6 +281,46 @@
 					"file": "3dc/avp/bh_predator.cpp",
 					"from": "LogString(std::string(\"npc: refused: \") + why);",
 					"to": "LogString(why);"
+				}
+			]
+		},
+		{
+			"name": "a negative weapon number from a save is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_file_checks.h",
+					"from": "return number >= 0 && number < endOfList;",
+					"to": "return number < endOfList;"
+				}
+			]
+		},
+		{
+			"name": "a weapon number past the end of the list is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_file_checks.h",
+					"from": "return number >= 0 && number < endOfList;",
+					"to": "return number >= 0;"
+				}
+			]
+		},
+		{
+			"name": "a save's marine weapon number isn't checked as a number first",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(",
+					"to": "if (!GetThisNPCMarineWeapon("
+				}
+			]
+		},
+		{
+			"name": "a save's predator weapon number isn't checked as a number first",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(",
+					"to": "if (!GetThisNPCPredatorWeapon("
 				}
 			]
 		}

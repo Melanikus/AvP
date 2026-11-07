@@ -19,6 +19,8 @@
 #include <sstream>
 #include <string>
 
+#include "npc_file_checks.h"
+
 static int checksFailed = 0;
 
 static void Check(bool good, const std::string &what)
@@ -170,6 +172,13 @@ static void TestTheWeaponFromAFile()
 {
 	puts("A marine's or predator's weapon named by a level or save file:");
 
+	// The check itself, with a list of ten weapons numbered 0 to 9, as a save could give them
+	Check(!NpcFile_WeaponNumberIsOnList(-1, 10), "a weapon number below the list is refused");
+	Check(!NpcFile_WeaponNumberIsOnList(10, 10), "and the list's end mark itself");
+	Check(!NpcFile_WeaponNumberIsOnList(2147483647, 10), "and the largest number a save can hold");
+	Check(!NpcFile_WeaponNumberIsOnList(-2147483647 - 1, 10), "and the smallest");
+	Check(NpcFile_WeaponNumberIsOnList(0, 10) && NpcFile_WeaponNumberIsOnList(9, 10), "but the first and the last weapon on it are kept");
+
 	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
 	std::string const predator = ReadSourceFile("3dc/avp/bh_predator.cpp");
 	std::string const marineMade = Between(marine, "void InitMarineBehaviour(", "#if 0");
@@ -182,13 +191,13 @@ static void TestTheWeaponFromAFile()
 	Check(ComesBefore(marineMade, "if (!marineStatus->My_Weapon)", "marineStatus->My_Weapon->Android"), "a level's marine with a kind that isn't on the list is caught before his weapon is read");
 	Check(Has(marineMade, "NoteRefusedFromAFile(\"a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle\");\n\t\t\tmarineStatus->My_Weapon=GetThisNPCMarineWeapon(MNPCW_PulseRifle);"), "and he's an ordinary marine, and the log says so in those words");
 
-	Check(ComesBefore(marineLoaded, "if (!GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's marine with a weapon that isn't on the list is refused before anything is changed");
+	Check(ComesBefore(marineLoaded, "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's marine with a weapon that isn't on the list is refused before anything is changed");
 	Check(Has(marineLoaded, "NoteRefusedFromAFile(\"a save named a marine weapon that isn't on the list, so that marine's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
 
 	Check(ComesBefore(predatorMade, "if (!predatorStatus->Selected_Weapon)", "predatorStatus->Selected_Weapon->Riffname"), "a level's predator with a weapon that isn't on the list is caught before it's read");
 	Check(Has(predatorMade, "NoteRefusedFromAFile(\"a level named a predator weapon that isn't on the list, so he has his wristblade\");"), "and he has his wristblade, and the log says so in those words");
 
-	Check(ComesBefore(predatorLoaded, "if (!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's predator with a weapon that isn't on the list is refused before anything is changed");
+	Check(ComesBefore(predatorLoaded, "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's predator with a weapon that isn't on the list is refused before anything is changed");
 	Check(Has(predatorLoaded, "NoteRefusedFromAFile(\"a save named a predator weapon that isn't on the list, so that predator's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
 }
 
