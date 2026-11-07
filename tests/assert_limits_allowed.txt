@@ -5,15 +5,14 @@
 # Before adding a line: an assert is left out of the game players run, so it guards nothing. If a level, a model, a save, a picture, another player or anything else from outside the code can reach
 # it, it needs a real check. Add a line only when nothing can, and say why, so that someone reading this years from now can check the reason for themselves.
 #
-# Two kinds here are not yet safe, and say so: a save file can still reach the weapon slots and path numbers (card SAVE-2), and a network message can still reach one damage number until the branch
-# that fixes it lands.
+# Some here are not yet safe, and say so. Each waits for a fix on its way in another PR, and that PR says more when it lands, and takes its row out.
 
 # ---- Not safe yet: each has a fix on another branch or a card of its own
-3dc/avp/hud.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET from a save file: card SAVE-2, fixed on the save-2 branch. Nothing else sets it past the list
-3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET from a save file: card SAVE-2, fixed on the save-2 branch. Nothing else sets it past the list
-3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | NOT SAFE YET from a save file: card SAVE-2. A level's path numbers are checked by the loader, which this needs under it
-3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | NOT SAFE YET from a save file: card SAVE-2. A level's path numbers are checked by the loader, which this needs under it
-3dc/avp/win95/pldnet.cpp | GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES); | NOT SAFE YET from the network: the number comes off the wire, and the fix is on the fix-net-damage-number branch
+3dc/avp/hud.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET: waits for another PR
+3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET: waits for another PR
+3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | NOT SAFE YET: waits for another PR
+3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | NOT SAFE YET: waits for another PR
+3dc/avp/win95/pldnet.cpp | GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES); | NOT SAFE YET: waits for another PR
 
 # ---- A real check is right beside it
 3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them
