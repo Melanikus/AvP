@@ -29,6 +29,7 @@
 //   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a system message with no server to send it to fails, and leaving a game forgets the server
+//   a message with no network game running fails, where it used to hand ENet an empty pointer
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
 
 #include "3dc.h"
@@ -838,6 +839,22 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 	if (messageData == NULL)
 	{
 		Con_PrintError("Net_Send - messageData was NULL");
+		return NET_FAIL;
+	}
+
+	// There's no host before a network game starts, after one ends, or if one couldn't start, and ENet would read through
+	// the empty pointer. This can come up once for each message the game wants to send, so the log only says so now and then.
+	if (!host)
+	{
+		static unsigned long long noGameToSendIn = 0;
+
+		if (LogThisDrop(noGameToSendIn))
+		{
+			std::stringstream sstream;
+			sstream << "Net_Send - no network game to send " << Net_MessageTypeToString(messageType) << " in (" << noGameToSendIn << " so far)";
+			Con_PrintError(sstream.str());
+		}
+
 		return NET_FAIL;
 	}
 

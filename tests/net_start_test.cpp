@@ -167,8 +167,12 @@ int enet_host_check_events(ENetHost *, ENetEvent *)
 	return 0;
 }
 
-void enet_host_broadcast(ENetHost *, uint8_t, ENetPacket *)
+static int broadcasts = 0, broadcastsWithNoHost = 0;
+
+void enet_host_broadcast(ENetHost *host, uint8_t, ENetPacket *)
 {
+	broadcasts++;
+	broadcastsWithNoHost += host ? 0 : 1;
 }
 
 void enet_host_flush(ENetHost *)
@@ -373,6 +377,36 @@ static void TestNobodyToSendTo()
 	}
 
 	Check(errorLines - linesBefore < 40, "and the log only says so now and then: " + std::to_string(errorLines - linesBefore) + " lines");
+}
+
+// A game message goes to everyone through the host, and with no game running there isn't one
+static void TestSendingWithNoGame()
+{
+	uint8_t message[4] = { 1, 2, 3, 4 };
+	int const packetsBefore = packetsMade;
+
+	Check(Net_Send(NET_SETPLAYERID, 1, 0, message, sizeof(message)) == NET_FAIL, "a game message with no game running fails");
+	Check(packetsMade == packetsBefore && broadcasts == 0, "and nothing is made or sent");
+	Check(broadcastsWithNoHost == 0, "and ENet is never handed an empty host");
+
+	int const linesBefore = errorLines;
+
+	for (int i = 0; i < 100000; i++)
+	{
+		Net_Send(NET_SETPLAYERID, 1, 0, message, sizeof(message));
+	}
+
+	Check(errorLines - linesBefore < 40, "and the log only says so now and then: " + std::to_string(errorLines - linesBefore));
+	Check(Net_Send(NET_SETPLAYERID, 1, 0, NULL, 0) == NET_FAIL, "a message of nothing fails as well");
+
+	Check(HostAGame() == NET_OK, "with a game going");
+	Check(Net_Send(NET_SETPLAYERID, 1, 0, message, sizeof(message)) == NET_OK, "a game message goes");
+	Check(broadcasts == 1 && broadcastsWithNoHost == 0, "to everyone, through the host");
+
+	EndTheGame();
+	broadcasts = 0;
+	Check(Net_Send(NET_SETPLAYERID, 1, 0, message, sizeof(message)) == NET_FAIL, "and after the game has ended, it fails again");
+	Check(broadcasts == 0, "with nothing sent");
 }
 
 static void TestDisconnectWithNoGame()
@@ -676,6 +710,7 @@ int main()
 {
 	TestStartingTheGame();
 	TestNobodyToSendTo();
+	TestSendingWithNoGame();
 	TestDisconnectWithNoGame();
 	TestLookingForGames();
 	TestWhenASocketCantBeHad();

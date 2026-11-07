@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   an assert on the sound number that could never fail now tests what it says
+
 #ifdef USE_XAUDIO2
 
 #pragma comment(lib, "X3DAudio.lib")
@@ -675,7 +679,7 @@ int PlatPlaySound(int activeIndex)
 	SOUNDINDEX gameIndex;
 
 	// check bounds of active sound index
-	LOCALASSERT ((activeIndex >= 0) || (activeIndex < SOUND_MAXACTIVE));
+	LOCALASSERT ((activeIndex >= 0) && (activeIndex < SOUND_MAXACTIVE));
 	gameIndex = ActiveSounds[activeIndex].soundIndex;
 	LOCALASSERT ((gameIndex >= 0) && (gameIndex < SID_MAXIMUM));
 	LOCALASSERT (GameSounds[gameIndex].loaded);

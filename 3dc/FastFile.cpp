@@ -27,6 +27,7 @@
 //   wrong file; reading the list of packed files stops at the end of the archive, whatever count it claims
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   FF_FileIsThere asks whether a file is there and writes nothing, for a file that's allowed not to be
+//   a packed file that says it runs past the end of its archive is left out
 
 #include "FastFile.h"
 #include "FileStream.h"
@@ -190,6 +191,9 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 	uint32_t nHeaderBytes = file.GetUint32LE(); // total bytes of file data header in fast file
 	uint32_t nDataBytes   = file.GetUint32LE(); // we don't need this
 
+	uint64_t const archiveBytes = file.GetFileSize();
+	bool saidSomeRunPast = false;
+
 	std::string requestedFile;
 
 	// nFiles comes from the file, so a damaged archive can claim billions of files. Stop when the file runs out, or
@@ -216,6 +220,20 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 		while (bytesToSkip) {
 			file.GetByte();
 			bytesToSkip--;
+		}
+
+		// Where it is and how long it is come from the archive, which can come from anywhere. Added up in a number too large to wrap round, one that can't be there is left out here, so that
+		// nothing can ask for it later. The game's own 2,548 packed files are all inside their archives, and the last in each ends exactly at its end.
+		if (kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes)
+		{
+			if (!saidSomeRunPast)
+			{
+				saidSomeRunPast = true;
+				Con_PrintError(fastFileName + " lists a file that runs past its end, so it's left out, along with any more like it: " + requestedFile);
+			}
+
+			requestedFile.clear();
+			continue;
 		}
 
 		// the actual data offset - skip past main header plus total bytes for all file headers
