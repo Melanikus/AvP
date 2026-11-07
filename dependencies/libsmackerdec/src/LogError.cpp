@@ -17,15 +17,16 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   SM-P19: errors aren't kept in a string that several threads wrote to and nothing read
 #include "LogError.h"
 
 namespace SmackerCommon {
 
-static std::string LastError;
-
-void LogError(const std::string &error)
+// SM-P19: this used to keep the message in one string, which every film's thread wrote to with nothing to stop two doing it at once, and which nothing ever read. It says nothing now, and it's
+// kept so that the decoder can go on saying what went wrong in one place, for anyone who wants to look.
+void LogError(const std::string &)
 {
-	LastError = error;
 }
 
 } // close namespace SmackerCommon

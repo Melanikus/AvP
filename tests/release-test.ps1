@@ -238,6 +238,14 @@ Write-File (Join-Path $package 'other.exe') 'a program'
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'other.exe is in the package' 'a second program is refused'
 
+foreach ($name in 'AvPx.pdb', 'AvPx.map')
+{
+    Make-GoodPackage
+    Write-File (Join-Path $package $name) 'the build''s symbols'
+    Write-Sums
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$name is in the package, and a build's symbols stay with the build" "a package with $name is refused"
+}
+
 Make-GoodPackage
 Write-File (Join-Path $package 'extra.txt') 'not on the list'
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'extra.txt is in the package, but not on its list of hashes' 'a file not on the list is refused'

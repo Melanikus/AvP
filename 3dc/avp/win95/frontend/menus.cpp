@@ -8,6 +8,7 @@
 //   byte
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   leaving the page of games found closes what the search has open on the network
+//   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
@@ -245,7 +246,7 @@ static int &BrightnessOfRow(int row)
 
 static unsigned char MultipleAssignments[2][32];
 
-static char *GetDescriptionOfKey(unsigned char key);
+char *GetDescriptionOfKey(unsigned char key);
 static int OkayToPlayNextEpisode(void);
 static PLAYER_INPUT_CONFIGURATION PlayerInputPrimaryConfig;
 static PLAYER_INPUT_CONFIGURATION PlayerInputSecondaryConfig;
@@ -797,6 +798,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 	AvPMenus.UserEnteringText = 0;
 	AvPMenus.UserEnteringNumber = 0;
 	AvPMenus.UserChangingKeyConfig = 0;
+	AvPMenus.UserChangingViewKey = 0;
 	AvPMenus.PositionInTextField = 0;
 	AvPMenus.WidthLeftForText = 0;
 
@@ -2131,6 +2133,26 @@ static void ActUponUsersInput(void)
 		}
 		KeyboardEntryQueue_Clear();
 	}
+	// A key on the rendering page. This asks view_settings.cpp rather than writing the key itself, because it can be refused, and the line's help then says why. Even a digit is passed on, for that reason.
+	else if (AvPMenus.UserChangingViewKey)
+	{
+		if (DebouncedKeyboardInput[KEY_ESCAPE])
+		{
+			AvPMenus.UserChangingViewKey = 0;
+		}
+		else
+		{
+			for (int key = 0; key < KEY_VOID; key++)
+			{
+				if (DebouncedKeyboardInput[key])
+				{
+					ViewSettings_PressedKeyForLine(AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].MaxValue, key);
+					AvPMenus.UserChangingViewKey = 0;
+					break;
+				}
+			}
+		}
+	}
 	// bjd - key config
 	else if (AvPMenus.UserChangingKeyConfig)
 	{
@@ -2371,6 +2393,11 @@ static void ActUponUsersInput(void)
 					{
 						*(((unsigned char*)&PlayerInputSecondaryConfig)+AvPMenus.CurrentlySelectedElement-2) = KEY_VOID;
 					}
+					break;
+				}
+				case AVPMENU_ELEMENT_VIEWKEY:
+				{
+					ViewSettings_PressedKeyForLine(AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].MaxValue, KEY_VOID);
 					break;
 				}
 				case AVPMENU_ELEMENT_USERPROFILE:
@@ -3047,6 +3074,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			break;
 		}
 
+		case AVPMENU_ELEMENT_VIEWKEY:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				ViewSettings_ChoosingKey(elementPtr->MaxValue);
+				AvPMenus.UserChangingViewKey = 1;
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_KEYCONFIG:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -3660,6 +3696,35 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			);
 			break;
 		}
+		case AVPMENU_ELEMENT_VIEWKEY:
+		{
+			int const line = elementPtr->MaxValue;
+			char *const keyName = GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(line)));
+
+			RenderText
+			(
+				GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->TextDescription)),
+				MENU_CENTREX-MENU_ELEMENT_SPACING,
+				y,
+				elementPtr->Brightness,
+				AVPMENUFORMAT_RIGHTJUSTIFIED
+			);
+
+			if (AvPMenus.UserChangingViewKey && e==AvPMenus.CurrentlySelectedElement)
+			{
+				int b = GetSin(CloakingPhase&4095);
+				RenderText("_",MENU_CENTREX+MENU_ELEMENT_SPACING,y,MUL_FIXED(b,b),AVPMENUFORMAT_LEFTJUSTIFIED);
+			}
+			else if (ViewSettings_LineIsHeldByAControl(line))
+			{
+				RenderText_Coloured(keyName,MENU_CENTREX+MENU_ELEMENT_SPACING,y,ONE_FIXED,AVPMENUFORMAT_LEFTJUSTIFIED,ONE_FIXED,ONE_FIXED,0);
+			}
+			else
+			{
+				RenderText(keyName,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_KEYCONFIG:
 		{
 			unsigned char *primaryKey = ((unsigned char*)&PlayerInputPrimaryConfig)+e-2;
@@ -3831,7 +3896,7 @@ static int HeightOfMenuElement(AVPMENU_ELEMENT *elementPtr)
 	return h;
 }
 
-static char *GetDescriptionOfKey(unsigned char key)
+char *GetDescriptionOfKey(unsigned char key)
 {
 	static char KeyDescBuffer[2];
 	KeyDescBuffer[0] = '\0';
@@ -5001,6 +5066,12 @@ void CheckForKeysWithMultipleAssignments(void)
 				{
 					MultipleAssignments[column][row] = 1;
 				}
+			}
+
+			// A key on the rendering page counts as well. The control wins, so this is where the player gets to see it.
+			if (ViewSettings_KeyIsOnALine((configPtr[column])[row]))
+			{
+				MultipleAssignments[column][row] = 1;
 			}
 		}
 	}

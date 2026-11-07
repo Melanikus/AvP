@@ -1,5 +1,6 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page
+//   the rendering page's lines for choosing a key
 #ifndef _included_AvP_Menus_h_
 #define _included_AvP_Menus_h_
 
@@ -205,6 +206,7 @@ enum AVPMENU_ELEMENT_ID
 
 	AVPMENU_ELEMENT_SAVEGAME,
 	AVPMENU_ELEMENT_LOADGAME,
+	AVPMENU_ELEMENT_VIEWKEY,   // a key on the rendering page. Its MaxValue is which of ViewKeyLine it is
 };
 
 
@@ -296,6 +298,7 @@ typedef struct
 	unsigned int		UserEnteringNumber :1;
 	unsigned int		UserChangingKeyConfig :1;
 	unsigned int		ChangingPrimaryConfig :1;
+	unsigned int		UserChangingViewKey :1;
 
 } AVP_MENUS;
 
