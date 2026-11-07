@@ -323,6 +323,16 @@
 					"to": "if (!GetThisNPCPredatorWeapon("
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a marine's glow runs on into the stand-in's part",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "what it read was meaningless.\n\t\t\t\t\tbreak;\n",
+					"to": "what it read was meaningless.\n"
+				}
+			]
 		}
 	]
 }
