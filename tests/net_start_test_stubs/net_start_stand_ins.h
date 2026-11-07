@@ -1,5 +1,6 @@
 // What 3dc/networking.cpp needs from the rest of the game, so that tests/net_start_test.cpp can run the real file with nothing else. Written 2026-11-06 by Melanikus for the AvP port.
 // tests/net_start_test.args puts this at the top of every file it compiles, and it sets the markers the game's own console.h, ConfigFile.h and logString.h look for, so that those stay out.
+// Modified 2026-11-07 by Melanikus for the AvP port: says what LogString is, now that networking.cpp writes to the log.
 
 #ifndef NET_START_STAND_INS_H
 #define NET_START_STAND_INS_H
@@ -57,6 +58,9 @@ void Con_AddCommand(char *commandName, funcPointer function);
 void Con_PrintError(const std::string &errorString);
 void Con_PrintMessage(const std::string &messageString);
 void Con_PrintDebugMessage(const std::string &messageString);
+
+// The game's log, which logString.h would declare. net_start_test.cpp keeps each line, for the checks to read.
+void LogString(const std::string &logString);
 
 // ConfigFile.h
 int Config_GetInt(const std::string &heading, const std::string &variable, int defaultValue);
