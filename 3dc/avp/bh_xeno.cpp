@@ -1,6 +1,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a xenoborg's block starts cleared, and the pointers to its moving parts are set as soon as it's made, not on its
 //   first turn, so waking it before then can't write through whatever the memory last held
+//   a xenoborg whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
+//   Bobblen's avp-forever, commit 207704e)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a xenoborg that has just been killed no longer has its freed block read and written
 /* Patrick 4/7/97 ----------------------------------------------------
@@ -653,7 +655,12 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		root_section=GetNamedHierarchyFromLibrary("hnpc_xenoborg","xenobasic");
 
-		GLOBALASSERT(root_section);
+		// Its model's parts and its sounds were set to none above, so taking it out here frees and stops nothing
+		if (!NpcModelIsLoaded(root_section, "a xenoborg the level places", "hnpc_xenoborg", "xenobasic"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 
 		Create_HModel(&xenoStatus->HModelController,root_section);
 		InitHModelSequence(&xenoStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Down_Standard,ONE_FIXED);
