@@ -1,0 +1,114 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "OLD: no limit at all, switch off",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				},
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		},
+		{
+			"name": "corners kept have no limit",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		},
+		{
+			"name": "corners made have no limit",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (true) \\"
+				}
+			]
+		},
+		{
+			"name": "corners kept: limit one too high",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted <= maxpolypts) \\"
+				}
+			]
+		},
+		{
+			"name": "corners made: limit one too high",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted <= maxpolypts) \\"
+				}
+			]
+		},
+		{
+			"name": "corners kept: limit one too low",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts - 1) \\"
+				}
+			]
+		},
+		{
+			"name": "corners made: limit one too low",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts) \\",
+					"to": "\t\tif (nextVertexInside != curVertexInside) \\\n\t\t{ \\\n\t\t\tif (numberOfPointsOutputted < maxpolypts - 1) \\"
+				}
+			]
+		},
+		{
+			"name": "the log hears every time",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\talreadySaid = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the log never hears",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\tLogString(\"Clipping made more corners than a polygon can hold, so the extra ones were left out. Any more like it won't be logged.\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "corners made are in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "\t\t\t\tlambda = Lambda; \\",
+					"to": "\t\t\t\tlambda = (Lambda) / 2; \\"
+				}
+			]
+		}
+	]
+}

@@ -7,6 +7,8 @@
 //   a track sound with no place of its own is skipped
 //   times and tracks from the level file that would divide by nothing, hang or crash are kept to what the game can use
 //   removed the switched-off code for a lift in another level file
+//   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
+//   a module with more lights than can be shown is logged, where an assert stood before
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -3626,7 +3628,19 @@ void SetUpRunTimeLights ()
 		
 		this_mod->m_numlights = lights_for_this_module.size();
 
-		assert (lights_for_this_module.size() <= MaxObjectLights);
+		// All of a module's lights get copied to whatever shows that module, which holds MaxObjectLights. AddLightBlock leaves
+		// out the rest, so nothing goes wrong, but those lights do nothing. That's worth knowing, so it goes in the log. Once
+		// is enough, because a big level could have it in many rooms.
+		if (lights_for_this_module.size() > MaxObjectLights)
+		{
+			static bool logged = false;
+
+			if (!logged)
+			{
+				logged = true;
+				LogString("A module has more lights than can be shown, so some of them won't do anything. This isn't logged again.");
+			}
+		}
 		
 		if (lights_for_this_module.size())
 		{

@@ -1,8 +1,14 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a level only starts from the menu if what the sliders say is allowed
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the menu's sliders go once round their choices instead of searching for ever, so a crafted profile can't hang the menu
+
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "user_profile.h"
+#include "profile_checks.h"
 #include "menus.h"
 
 int CheatMode_Active=0;
@@ -1020,27 +1026,10 @@ CHEATMODEDESC CheatModeDesc[] =
 
 extern void CheatMode_GetNextAllowedSpecies(int *speciesPtr, int searchForward)
 {
-	while(!(CheatModeDesc[CheatMode_Active].PlayableForSpecies[*speciesPtr]
-			&&ThereIsAnAllowedEnvironment()) )
+	ProfileChecks_StepToAllowed(speciesPtr, NUMBER_OF_SPECIES, searchForward, [](int species)
 	{
-		OutputDebugString("CheatMode_GetNextAllowedSpecies\n");
-		if (searchForward)
-		{
-			(*speciesPtr)++;
-			if (*speciesPtr>= NUMBER_OF_SPECIES)
-			{
-				*speciesPtr = 0;
-			}
-		}
-		else
-		{
-			if (*speciesPtr==0)
-			{
-				*speciesPtr = NUMBER_OF_SPECIES;
-			}
-			(*speciesPtr)--;
-		}
-	}
+		return CheatModeDesc[CheatMode_Active].PlayableForSpecies[species] && ThereIsAnAllowedEnvironment();
+	});
 }
 
 static int ThereIsAnAllowedEnvironment(void)
@@ -1086,62 +1075,35 @@ static int EnvironmentPlayableBySpecies(int environment)
 }
 extern void CheatMode_GetNextAllowedEnvironment(int *environmentPtr, int searchForward)
 {
-	char buf[100];
-	// bjd - NUMBER_OF_ENVIRONMENTS = 32
-	int playableForEnvironment = CheatModeDesc[CheatMode_Active].PlayableForEnvironment[*environmentPtr];
-	int playableBySpecies = EnvironmentPlayableBySpecies(*environmentPtr);
-
-	// both of these need to be 1 for loop to stop
-	while(! (CheatModeDesc[CheatMode_Active].PlayableForEnvironment[*environmentPtr]
-			 && EnvironmentPlayableBySpecies(*environmentPtr) ) )
+	ProfileChecks_StepToAllowed(environmentPtr, NUMBER_OF_ENVIRONMENTS, searchForward, [](int environment)
 	{
-		int playableForEnvironment = CheatModeDesc[CheatMode_Active].PlayableForEnvironment[*environmentPtr];
-		int playableBySpecies = EnvironmentPlayableBySpecies(*environmentPtr);
-
-		sprintf(buf, "playableForEnvironment: %d playableBySpecies: %d\n", playableForEnvironment, playableBySpecies);
-		OutputDebugString(buf);
-
-		if (searchForward)
-		{
-			(*environmentPtr)++;
-			if (*environmentPtr>=NUMBER_OF_ENVIRONMENTS)
-			{
-				OutputDebugString("environmentPtr resetting to zero\n");
-				*environmentPtr = 0;
-			}
-		}
-		else
-		{
-			if (*environmentPtr==0)
-			{
-				*environmentPtr = NUMBER_OF_ENVIRONMENTS;
-			}
-			(*environmentPtr)--;
-		}
-	}
+		return CheatModeDesc[CheatMode_Active].PlayableForEnvironment[environment] && EnvironmentPlayableBySpecies(environment);
+	});
 }
 
 extern void CheatMode_GetNextAllowedMode(int *cheatModePtr, int searchForward)
-{														  
-	while(! (UserProfilePtr->CheatMode[*cheatModePtr]))
+{
+	ProfileChecks_StepToAllowed(cheatModePtr, MAX_NUMBER_OF_CHEATMODES, searchForward, [](int cheatMode)
 	{
-		if (searchForward)
-		{
-			(*cheatModePtr)++;
-			if (*cheatModePtr >= MAX_NUMBER_OF_CHEATMODES)
-			{
-				*cheatModePtr = 0;
-			}
-		}
-		else
-		{
-			if (*cheatModePtr==0)
-			{
-				*cheatModePtr = MAX_NUMBER_OF_CHEATMODES;
-			}
-			(*cheatModePtr)--;
-		}
+		return UserProfilePtr->CheatMode[cheatMode] != 0;
+	});
+}
+
+// Whether what the three sliders say can really be played. With a normal profile it always can, because the sliders only stop on what's allowed. A crafted profile can have a cheat on and no
+// level completed, and then nothing is allowed, the sliders have nowhere to stop, and they just step along. So this is what the Start button asks.
+extern int CheatMode_SelectionIsAllowed(void)
+{
+	if (CheatMode_Active < 0 || CheatMode_Active >= MAX_NUMBER_OF_CHEATMODES
+		|| CheatMode_Species < 0 || CheatMode_Species >= NUMBER_OF_SPECIES
+		|| CheatMode_Environment < 0 || CheatMode_Environment >= NUMBER_OF_ENVIRONMENTS)
+	{
+		return 0;
 	}
+
+	return UserProfilePtr->CheatMode[CheatMode_Active]
+		&& CheatModeDesc[CheatMode_Active].PlayableForSpecies[CheatMode_Species]
+		&& CheatModeDesc[CheatMode_Active].PlayableForEnvironment[CheatMode_Environment]
+		&& EnvironmentPlayableBySpecies(CheatMode_Environment);
 }
 
 extern int AnyCheatModesAllowed(void)
