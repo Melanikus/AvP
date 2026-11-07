@@ -1,0 +1,145 @@
+# Shows that the tests notice broken code, on a clean machine. Written 2026-11-07 by Melanikus for the AvP port.
+#
+# Each list in tests/takeouts/<test>.json is a set of rows, and each row breaks one thing in a copy of the code. The runner beside the lists
+# (tests/takeouts/run.ps1) builds the test against that broken copy and runs it, and the test has to fail. A row the test still passes on,
+# or one that can't be run any more because the code has moved on, fails this check. tests/takeouts/README.md says more.
+#
+# On a pull request this runs the lists the pull request can affect: those whose list, test, settings or stand-ins it changes, or which
+# break a file it changes. A pull request that changes this file or the runner runs every list. By hand (Actions, Take-outs, Run workflow)
+# it runs the lists named, or all of them. Each list runs on its own machine, at the same time as the others, because a list can take an hour.
+#
+# The job that decides whether this passes is the last one, "Take-outs": it fails if choosing the lists failed, or any list did.
+
+name: Take-outs
+
+on:
+  pull_request:
+    branches: [avpx_main]
+  workflow_dispatch:
+    inputs:
+      lists:
+        description: 'Which lists to run: their names without .json, separated by spaces, or "all"'
+        required: true
+        default: 'all'
+
+permissions:
+  contents: read
+
+jobs:
+  choose:
+    name: Choose the lists
+    runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
+    outputs:
+      lists: ${{ steps.choose.outputs.lists }}
+      count: ${{ steps.choose.outputs.count }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0   # the whole history, so that what the pull request changes can be seen
+
+      # What was typed by hand, and the commit a pull request goes into, come in as plain text in the environment. They're never
+      # pasted into the script itself, so nothing typed can become part of it.
+      - name: Choose the lists
+        id: choose
+        shell: pwsh
+        env:
+          ASKED: ${{ github.event.inputs.lists }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # A list's name is only letters, digits and underscores, the way every test here is named. Anything else is refused.
+          $all = @(Get-ChildItem tests/takeouts -Filter *.json | ForEach-Object { $_.BaseName } | Sort-Object)
+          foreach ($name in $all) {
+            if ($name -cnotmatch '^[A-Za-z0-9_]+$') { throw "tests/takeouts/$name.json isn't named the way a test is" }
+          }
+
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            $asked = "$env:ASKED".Trim()
+            if ($asked -eq 'all') {
+              $chosen = $all
+            }
+            else {
+              $chosen = @($asked -split '[\s,]+' | Where-Object { $_ })
+              foreach ($name in $chosen) {
+                if ($all -cnotcontains $name) { throw "There's no take-out list called $name" }
+              }
+            }
+          }
+          else {
+            if ($env:BASE -cnotmatch '^[0-9a-f]{40}$') { throw 'This pull request has no commit to compare with' }
+            $changed = @(git diff --name-only "$($env:BASE)...HEAD")
+            if ($LASTEXITCODE -ne 0) { throw "Couldn't see what this pull request changes" }
+
+            # A change to this check, or to the runner, is tried on every list, so the check is never changed untested
+            $checkerChanged = @($changed | Where-Object { $_ -ceq '.github/workflows/takeouts.yml' -or $_ -ceq 'tests/takeouts/run.ps1' }).Count -gt 0
+
+            $chosen = if ($checkerChanged) { $all } else { @(foreach ($name in $all) {
+              # The list, the test and its settings, its stand-ins, every source file its settings name, and every file its rows break
+              $files = @("tests/takeouts/$name.json", "tests/$name.cpp", "tests/$name.args")
+              if (Test-Path "tests/$name.args") {
+                $files += @(Get-Content "tests/$name.args" | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ -match '^[\w./-]+\.(c|cpp|h|hpp)$' })
+              }
+              $list = Get-Content "tests/takeouts/$name.json" -Raw | ConvertFrom-Json
+              $files += @($list.rows | ForEach-Object { $_.changes } | ForEach-Object { $_.file })
+
+              $touched = @($changed | Where-Object { ($files -ccontains $_) -or $_.StartsWith("tests/$($name)_stubs/") })
+              if ($touched.Count -gt 0) { $name }
+            }) }
+          }
+
+          "These lists run: $(if ($chosen.Count) { $chosen -join ', ' } else { 'none, because nothing they cover has changed' })"
+          # Written out by hand, because ConvertTo-Json writes a list of one or none differently in different versions. Every name is
+          # letters, digits and underscores, checked above, so nothing in one needs escaping.
+          "lists=[$(($chosen | ForEach-Object { '"' + $_ + '"' }) -join ',')]" >> $env:GITHUB_OUTPUT
+          "count=$($chosen.Count)" >> $env:GITHUB_OUTPUT
+
+  run:
+    name: Take-outs for ${{ matrix.list }}
+    needs: choose
+    if: needs.choose.outputs.count != '0'
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false   # one list failing doesn't stop the others, so a run shows every list that needs work
+      max-parallel: 8
+      matrix:
+        list: ${{ fromJSON(needs.choose.outputs.lists) }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The runner says how each row went, and gives back a non-zero result if any row wasn't noticed or couldn't be run. A list
+      # whose test isn't here at all can't be run either, and fails the same way.
+      - name: Run the list
+        shell: pwsh
+        env:
+          LIST: ${{ matrix.list }}
+        run: |
+          if (-not (Test-Path "tests/$($env:LIST).args")) { throw "tests/takeouts/$($env:LIST).json is a list for a test that isn't here: there's no tests/$($env:LIST).args" }
+          ./tests/takeouts/run.ps1 $env:LIST
+          exit $LASTEXITCODE
+
+  # One job with one name, to make a required check of. It passes only if the lists were chosen, and every list that ran passed.
+  # When nothing a list covers has changed, no list runs, and that passes.
+  result:
+    name: Take-outs
+    needs: [choose, run]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Say how it went
+        env:
+          CHOSE: ${{ needs.choose.result }}
+          RAN: ${{ needs.run.result }}
+        run: |
+          echo "Choosing the lists: $CHOSE. Running them: $RAN."
+          if [ "$CHOSE" != "success" ]; then echo "The lists couldn't be chosen"; exit 1; fi
+          if [ "$RAN" != "success" ] && [ "$RAN" != "skipped" ]; then
+            echo "At least one list has a row its test didn't notice, or couldn't run. The failed list's own job says which row, and why."
+            echo "tests/takeouts/README.md, under \"When the Take-outs check fails\", says what to do."
+            exit 1
+          fi
+          echo "Every list that ran is noticed, row by row"
