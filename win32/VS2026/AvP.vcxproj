@@ -535,6 +535,7 @@
     <ClInclude Include="..\..\3dc\avp\bh_types.h" />
     <ClInclude Include="..\..\3dc\avp\bh_videoscreen.h" />
     <ClInclude Include="..\..\3dc\avp\bh_waypoint.h" />
+    <ClInclude Include="..\..\3dc\avp\walk_speeds.h" />
     <ClInclude Include="..\..\3dc\avp\bh_weapon.h" />
     <ClInclude Include="..\..\3dc\avp\bh_xeno.h" />
     <ClInclude Include="..\..\3dc\avp\bonusabilities.h" />

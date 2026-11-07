@@ -9,6 +9,8 @@
 #
 # The copy and the programs land in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks. Not the temp folder: antivirus programs distrust
 # new programs that appear there. It gives back a non-zero result if any row wasn't noticed, or couldn't be run.
+#
+# A row that can't run says why and what to do. When its text has moved, node tests/takeouts/find-moved-row.js <test> <row> finds where it went (added 2026-11-07).
 
 param(
     [Parameter(Mandatory = $true)][string]$Test,
@@ -19,6 +21,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not run the take-outs: $_"; exit 2 }
+
+# A list's name is a test's name, which is only letters, digits and underscores, so it can't name a file anywhere else
+if ($Test -cnotmatch '^[A-Za-z0-9_]+$') { throw "A list's name is letters, digits and underscores only, and this isn't: $Test" }
 
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $rowsFile = Join-Path $PSScriptRoot "$Test.json"
@@ -113,7 +118,9 @@ function Build-And-Run {
         return @{ Built = $true; Exit = 'ran on until it was stopped'; Words = '' }
     }
 
-    $failed = @(Select-String -Path $said -Pattern 'FAILED' -SimpleMatch | Where-Object { $_.Line -notmatch 'checks FAILED$' })
+    # The tests write FAILED in capitals for a check that failed, and Select-String ignores case unless told, which counted
+    # passing lines that only say "failed" in passing, such as "the failed join's ENet host"
+    $failed = @(Select-String -Path $said -Pattern 'FAILED' -SimpleMatch -CaseSensitive | Where-Object { $_.Line -cnotmatch 'checks FAILED$' })
     $first = if ($failed.Count) { $failed[0].Line.Trim() } else { '' }
     return @{ Built = $true; Exit = $process.ExitCode; Words = "$($failed.Count) failed. $first"; Ok = (@(Select-String -Path $said -Pattern '^\s*ok').Count) }
 }
@@ -126,22 +133,63 @@ $rows = @($list.rows)
 $last = if ($To -ge 0) { [Math]::Min($To, $rows.Count - 1) } else { $rows.Count - 1 }
 $noticed = 0; $missed = 0; $notRun = 0
 
+# A list can come from anyone's pull request, and what it says is shown in the log. On GitHub, a log line that starts
+# with :: is read as an order to GitHub, so a row's name is kept to one line, and its text is shown behind a margin.
+function Show-OneLine([string]$text) { return ($text -replace "[`r`n]+", ' / ') }
+function Show-Lines([string]$text) { return @(($text -replace "`r", '') -split "`n" | ForEach-Object { "      | $_" }) }
+
+# On GitHub, a row that fails also becomes a note on the pull request's page. GitHub reads %, line ends and, in the
+# note's title, : and , as part of the note itself, so those are written the way GitHub asks.
+function Write-GitHubNote([string]$title, [string]$words) {
+    if (-not $env:GITHUB_ACTIONS) { return }
+    $safeTitle = $title.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A').Replace(':', '%3A').Replace(',', '%2C')
+    $safeWords = $words.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+    Write-Host "::error file=tests/takeouts/$Test.json,title=$($safeTitle)::$safeWords"
+}
+
+$whatToDo = 'tests/takeouts/README.md, under "When the Take-outs check fails", says what to do.'
+
 for ($r = $From; $r -le $last; $r++) {
     $row = $rows[$r]
+    $name = Show-OneLine "$($row.name)"
     $kept = @{}
     $matched = $true
 
     foreach ($change in $row.changes) {
-        $path = Join-Path $tree $change.file
+        # The file a row changes has to be in the copy: not a path from a drive or a root, not one that climbs out
+        # with .., and not one the copy doesn't have
+        $file = "$($change.file)"
+        $parts = $file -split '[\\/]'
+        if ($file -eq '' -or $file.Contains(':') -or [System.IO.Path]::IsPathRooted($file) -or ($parts -contains '..') -or
+            -not (Test-Path -LiteralPath (Join-Path $tree $file) -PathType Leaf)) {
+            Write-Host "#$r $($name): CAN'T RUN, it names a file that isn't in the copy: $(Show-OneLine $file)"
+            Write-Host "    A row names a file inside the repository, such as 3dc/module.cpp, in a folder the list copies. $whatToDo"
+            Write-GitHubNote "Take-out row $r of $Test names a file that isn't there" "Row $r ($name) names $(Show-OneLine $file). $whatToDo"
+            $matched = $false
+            continue
+        }
+
+        $path = Join-Path $tree $file
         if (-not $kept.ContainsKey($path)) { $kept[$path] = [System.IO.File]::ReadAllText($path, $bytes) }
 
         $text = [System.IO.File]::ReadAllText($path, $bytes)
         $windows = $text.Contains("`r`n")
         $plain = $text.Replace("`r`n", "`n")
         $at = $plain.IndexOf($change.from, [StringComparison]::Ordinal)
+        $again = if ($at -ge 0) { $plain.IndexOf($change.from, $at + 1, [StringComparison]::Ordinal) } else { -1 }
 
-        if ($at -lt 0 -or $plain.IndexOf($change.from, $at + 1, [StringComparison]::Ordinal) -ge 0) {
-            Write-Host "#$r $($row.name): it should match exactly once, and doesn't: $($change.from)"
+        # A row that can't find its text fails, so a check nobody is testing any more can't hide. What to do about it
+        # is said here, where the person who has to do it will look.
+        if ($at -lt 0 -or $again -ge 0) {
+            $why = if ($at -lt 0) { "CAN'T FIND ITS TEXT in $file" } else { "FINDS ITS TEXT MORE THAN ONCE in $file, so it can't tell which to change" }
+            Write-Host "#$r $($name): $why (tests/takeouts/$Test.json, row $r, counted from 0). It looks for:"
+            foreach ($line in (Show-Lines $change.from)) { Write-Host $line }
+            Write-Host "    To fix it, in the same pull request as the change that moved the code:"
+            Write-Host "    - If the code it breaks is still there with different words, change the row's ""from"" to the code as it is now, and check its ""to"" still breaks it."
+            Write-Host "    - If what it checks has moved somewhere else, or is gone, remove the row, and add one where the check is now."
+            Write-Host "    - If the text is there more than once, make ""from"" longer, with lines around it, until it's there only once."
+            Write-Host "    node tests/takeouts/find-moved-row.js $Test $r   shows the places most like the old text, and with --write puts the best one in the row for you to check."
+            Write-GitHubNote "Take-out row $r of $Test $(if ($at -lt 0) { "can't find its text" } else { 'finds its text more than once' })" "Row $r ($name) looks in $(Show-OneLine $file). The job's log shows the text and how to fix it, and node tests/takeouts/find-moved-row.js $Test $r finds where it went. $whatToDo"
             $matched = $false
             continue
         }
@@ -157,15 +205,19 @@ for ($r = $From; $r -le $last; $r++) {
     else {
         $result = Build-And-Run
         if (-not $result.Built) {
-            Write-Host "#$r $($row.name): it didn't build: $($result.Words)"
+            Write-Host "#$r $($name): CAN'T RUN, it didn't build: $($result.Words)"
+            Write-Host "    The row's ""to"" has to leave code that still builds, so only what it breaks is broken. $whatToDo"
+            Write-GitHubNote "Take-out row $r of $Test didn't build" "Row $r ($name): the copy with this row's change didn't build. $whatToDo"
             $notRun++
         }
         elseif ($result.Exit -eq 0) {
-            Write-Host "#$r NOT NOTICED $($row.name)"
+            Write-Host "#$r NOT NOTICED $name"
+            Write-Host "    The test still passes with this broken, so nothing is checking it. Make the test notice it, or, if it no longer needs checking, remove the row. $whatToDo"
+            Write-GitHubNote "Take-out row $r of $Test wasn't noticed" "Row $r ($name): the test still passes with this broken, so nothing is checking it. $whatToDo"
             $missed++
         }
         else {
-            Write-Host "#$r noticed     $($row.name): exit $($result.Exit), $($result.Words)"
+            Write-Host "#$r noticed     $($name): exit $($result.Exit), $($result.Words)"
             $noticed++
         }
     }
@@ -174,4 +226,5 @@ for ($r = $From; $r -le $last; $r++) {
 }
 
 Write-Host "$noticed noticed, $missed not noticed, $notRun not run"
+if ($missed -or $notRun) { Write-Host "A row that isn't noticed, or can't run, fails this. $whatToDo" }
 exit $(if ($missed -or $notRun) { 1 } else { 0 })
