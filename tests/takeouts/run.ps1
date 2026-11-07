@@ -89,7 +89,9 @@ function Build-And-Run {
         return @{ Built = $true; Exit = 'ran on until it was stopped'; Words = '' }
     }
 
-    $failed = @(Select-String -Path $said -Pattern 'FAILED' -SimpleMatch | Where-Object { $_.Line -notmatch 'checks FAILED$' })
+    # The tests write FAILED in capitals for a check that failed, and Select-String ignores case unless told, which counted
+    # passing lines that only say "failed" in passing, such as "the failed join's ENet host"
+    $failed = @(Select-String -Path $said -Pattern 'FAILED' -SimpleMatch -CaseSensitive | Where-Object { $_.Line -cnotmatch 'checks FAILED$' })
     $first = if ($failed.Count) { $failed[0].Line.Trim() } else { '' }
     return @{ Built = $true; Exit = $process.ExitCode; Words = "$($failed.Count) failed. $first"; Ok = (@(Select-String -Path $said -Pattern '^\s*ok').Count) }
 }
