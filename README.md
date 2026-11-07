@@ -40,3 +40,7 @@ msbuild win32\VS2026\AvP.sln /p:Configuration=Release /p:Platform=Win32
 ```
 
 The first build takes a while, because vcpkg builds the libraries from source. The game and its DLLs end up in win32\VS2026\Win32\Release.
+
+## Pull requests
+
+A pull request into `avpx_main` runs four checks from `.github/workflows`: Game build, Tests, Snyk (the security scans) and Take-outs. Take-outs breaks one thing at a time in a copy of the code and checks that the tests notice. If it fails, `tests/takeouts/README.md`, under "When the Take-outs check fails", says what to do.
