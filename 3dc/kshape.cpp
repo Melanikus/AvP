@@ -20,6 +20,9 @@
 //   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
 //   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
 //   the lights that get a place are the ones that put the most light on what's on screen, not the nearest. See light_choice.h
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
+//   Found while reading Bobblen's avp-forever fork
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -3056,6 +3059,11 @@ void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)
 					}
 
 					colour = MARINES_LIFEFORCE_GLOW_COLOUR;
+
+					// A marine's colour is settled, so stop here. Without this line the code went straight on into the part
+					// below, which is for another player's stand-in on this machine (a "ghost"), and read this marine's own
+					// details as if they were a stand-in's. The two are laid out differently, so what it read was meaningless.
+					break;
 				}
 
 				case I_BehaviourNetGhost: {
