@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   GetPolygonVertexIndices stops at the four corners its list holds
+
 /*RWH moved to a seperate file*/
 
 
@@ -341,7 +345,8 @@ int *GetPolygonVertexIndices(void)
 
     patPolyVertexIndices[3]	= -1;
 
-    while(*vertexNumberPtr != kTerminationMarker)
+    // The list holds four, and the numbers come from a shape in a level file, so it stops at four whatever the shape says
+    while(*vertexNumberPtr != kTerminationMarker && numberOfVertices < 4)
 	{
     	patPolyVertexIndices[numberOfVertices++] = (*vertexNumberPtr);
 		vertexNumberPtr++; 
