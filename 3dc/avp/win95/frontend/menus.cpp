@@ -118,6 +118,9 @@ static void RenderBriefingScreenInfo(void);
 static void RenderEpisodeSelectMenu(void);
 static void RenderCustomMapPicture(void);
 
+// How far down a page a picture starts: below the title, a few pixels clear of the tails of letters like "p"
+static const int kMenuPictureTop = 106;
+
 extern int CustomMapToPlay;
 extern int CustomMapSpecies;
 extern int CustomMapDifficulty;
@@ -1336,7 +1339,7 @@ static void RenderCustomMapPicture(void)
 
 	if (picture != MISSING_TEXTURE)
 	{
-		DrawAvPMenuGfx(picture, MENU_CENTREX, 100, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		DrawAvPMenuGfx(picture, MENU_CENTREX, kMenuPictureTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 }
 
