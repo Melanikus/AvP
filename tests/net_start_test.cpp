@@ -12,8 +12,11 @@
 #include "net_checks.h"
 
 #include <algorithm>
+#include <cctype>
 #include <deque>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <vector>
 
 // menus.cpp says this for itself, and it isn't in networking.h
@@ -216,27 +219,52 @@ void enet_deinitialize()
 {
 }
 
+// Every packet the stand-in ENet makes, with its bytes, is held here from when it's made until ENet is asked to destroy it. So none
+// can be lost on the way, whichever way a test goes. Destroying one really frees it, so a later use of it is still a use of freed
+// memory, which the address sanitizer sees (tests/takeouts/sanitize.ps1). Destroying one that isn't held, or the same one twice,
+// is counted, and the last check says if it ever happened.
+struct StandInPacket
+{
+	ENetPacket packet;
+	std::vector<uint8_t> bytes;
+};
+
+static std::map<ENetPacket *, std::unique_ptr<StandInPacket>> packetsHeld;
+static int packetsDestroyedThatWerentHeld = 0;
+
 static ENetPacket *MakePacket(const void *data, size_t dataLength)
 {
-	ENetPacket *packet = new ENetPacket;
+	std::unique_ptr<StandInPacket> made = std::make_unique<StandInPacket>();
 
-	packet->data = new uint8_t[dataLength ? dataLength : 1];
-	packet->dataLength = dataLength;
-	packet->referenceCount = 0;
+	made->bytes.resize(dataLength ? dataLength : 1);
 
 	if (data && dataLength)
 	{
-		memcpy(packet->data, data, dataLength);
+		memcpy(made->bytes.data(), data, dataLength);
 	}
 
+	made->packet.data = made->bytes.data();
+	made->packet.dataLength = dataLength;
+	made->packet.referenceCount = 0;
+
+	ENetPacket *const packet = &made->packet;
+
+	packetsHeld[packet] = std::move(made);
 	packetsAlive++;
 	return packet;
 }
 
 void enet_packet_destroy(ENetPacket *packet)
 {
-	delete[] packet->data;
-	delete packet;
+	std::map<ENetPacket *, std::unique_ptr<StandInPacket>>::iterator const held = packetsHeld.find(packet);
+
+	if (held == packetsHeld.end())
+	{
+		packetsDestroyedThatWerentHeld++;
+		return;
+	}
+
+	packetsHeld.erase(held);
 	packetsAlive--;
 }
 
@@ -2108,11 +2136,18 @@ static void TestTheTableOfMessageParts()
 	while (std::getline(lines, line))
 	{
 		std::string::size_type const at = line.find("NetMT_");
-		std::string::size_type const comma = line.find(',', at);
 
 		if (at != std::string::npos && line.find("//") > at)
 		{
-			names.push_back(line.substr(at, (comma == std::string::npos ? line.find_last_not_of(" \t") + 1 : comma) - at));
+			// The kind's name is the word that starts there: letters, digits and underscores, up to the comma or the end
+			std::string name;
+
+			for (std::string::size_type i = at; i < line.size() && (isalnum((unsigned char)line[i]) || line[i] == '_'); i++)
+			{
+				name += line[i];
+			}
+
+			names.push_back(name);
 		}
 	}
 
@@ -2435,6 +2470,8 @@ int main()
 	TestTheGameUsesThis();
 
 	TestNoHeaderLeftAnything();
+
+	Check(packetsDestroyedThatWerentHeld == 0, "ENet is never asked to destroy a packet it doesn't hold, or the same one twice");
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 
