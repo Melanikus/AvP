@@ -57,6 +57,9 @@
     <ClCompile Include="..\..\3dc\ConfigFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\build_identity.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\console.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
