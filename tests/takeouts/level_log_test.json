@@ -274,18 +274,28 @@
 			"changes": [
 				{
 					"file": "3dc/logString.cpp",
-					"from": "LevelLog_NoteLine(logLine, false);",
-					"to": ";"
+					"from": "\t\tLevelLog_NoteLine(written, mustGoIn);\n",
+					"to": ""
 				}
 			]
 		},
 		{
-			"name": "SOURCE: the game's errors aren't handed on",
+			"name": "SOURCE: the game's errors are handed on as plain lines",
 			"changes": [
 				{
 					"file": "3dc/logString.cpp",
-					"from": "LevelLog_NoteLine(logLine, true);",
-					"to": ";"
+					"from": "LevelLog_NoteLine(written, mustGoIn);",
+					"to": "LevelLog_NoteLine(written, false);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level's log gets a line before the player is left out of it",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "LevelLog_NoteLine(written, mustGoIn);",
+					"to": "LevelLog_NoteLine(line, mustGoIn);"
 				}
 			]
 		}

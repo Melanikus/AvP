@@ -16,8 +16,12 @@
 //   a new level starts with nothing noted about what was on screen
 //   -shadownearest chooses lights by distance, as the game used to, to compare with what replaced it
 //   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the log starts with which build this is: its version and commit, the program file's size and fingerprint, and which Windows
+//   it runs on (build_identity.h)
 
 #include "3dc.h"
+#include "build_identity.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
@@ -179,6 +183,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	SetWindowTitle();
 	ClearLog();
 	LogString(GetWindowTitle());
+	LogString(BuildIdentity_Lines());
 
 	I_AVP_ENVIRONMENTS level_to_load = I_Num_Environments;
 	char *command_line = lpCmdLine;

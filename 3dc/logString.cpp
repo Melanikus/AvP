@@ -30,13 +30,18 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   if the save folder couldn't be found or made, the log says why as soon as it can write
 // Modified 2026-11-07 by Melanikus for the AvP port:
-//   every line is handed to the level's own log too, which keeps them only while a level is loading (level_log.h)
+//   the last logs are kept as avp_log.1.txt to avp_log.5.txt, and only a plain file is ever written to (log_files.h); a crash writes what
+//   it was and the places on the stack, as file names and distances, straight to the file without waiting for a lock
+//   every line, and the crash lines, leave out the player's Windows user name, computer name, folders and network addresses
+//   every line is handed to the level's own log too, once the player is left out of it; the level's log keeps lines only while a level
+//   is loading (level_log.h)
 
 #include "logString.h"
 #include "renderer.h"
 #include "utilities.h"
 #include "frame_timing.h"
 #include "level_log.h"
+#include "log_files.h"
 
 #ifdef _XBOX
 	#include "D3dx8core.h"
@@ -189,6 +194,9 @@ public:
 		filePath = GetSaveFolderPath();
 		filePath += logFilename;
 
+		// What every line leaves out about the player: their folders, names and addresses (log_files.h). Found before any line is written.
+		LogFiles_PrivateGather(privateThings, folder);
+
 		wake = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 		if (wake)
@@ -197,18 +205,24 @@ public:
 		}
 	}
 
-	// mustGoIn is for errors, which go on the list even if it's full
+	// mustGoIn is for errors, which go on the list even if it's full. Every line that reaches the file comes through here, and the player is
+	// left out of it first, before it waits anywhere.
 	void Add(const std::string &line, bool mustGoIn)
 	{
+		std::string const written = LogFiles_LeaveOutThePlayer(line, privateThings);
+
+		// The level's own log gets the line as it's written here, with the player already left out (level_log.h). An error is one that must go in.
+		LevelLog_NoteLine(written, mustGoIn);
+
 		EnterCriticalSection(&listLock);
 
-		if (!mustGoIn && waiting.size() + line.size() > kMostWaiting)
+		if (!mustGoIn && waiting.size() + written.size() > kMostWaiting)
 		{
 			linesLost++;
 		}
 		else
 		{
-			waiting += line;
+			waiting += written;
 		}
 
 		LeaveCriticalSection(&listLock);
@@ -269,14 +283,28 @@ public:
 			file = INVALID_HANDLE_VALUE;
 		}
 
-		HANDLE const cleared = CreateFileA(filePath.c_str(), GENERIC_WRITE, kShareEverything, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-		if (cleared != INVALID_HANDLE_VALUE)
-		{
-			CloseHandle(cleared);
-		}
+		// The last run's log, and the ones before it, are kept: they move along by one, and this run starts a fresh one (log_files.h)
+		LogFiles_MoveAlong(filePath);
+		LogFiles_Empty(filePath);
 
 		LeaveCriticalSection(&fileLock);
+	}
+
+	// For a crash: these words go straight to the file, with a handle of their own, so no lock is needed. Whatever crashed may be holding one.
+	// They're only file names and numbers, but they go through the same leaving out as every other line, in a buffer kept for it, so that
+	// nothing is asked of memory while the game is crashing.
+	void WriteCrashWords(const char *words)
+	{
+		LogFiles_LeaveOutThePlayer(words, privateThings, crashWritten, sizeof(crashWritten));
+
+		HANDLE const crashFile = LogFiles_OpenToAdd(filePath);
+
+		if (crashFile != INVALID_HANDLE_VALUE)
+		{
+			DWORD written = 0;
+			WriteFile(crashFile, crashWritten, (DWORD)strlen(crashWritten), &written, NULL);
+			CloseHandle(crashFile);
+		}
 	}
 
 	void TakeWriteTimes(int *writesDone, float *slowestMilliseconds, int *lost)
@@ -294,9 +322,6 @@ public:
 private:
 	static const size_t kMostWaiting = 4 * 1024 * 1024;
 	static const int kCrashTries = 200;   // a millisecond each
-
-	// left open, and shared, so that anyone can read, copy, rename or delete the log while the game runs, and a second game can write to it too
-	static const DWORD kShareEverything = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
 	static DWORD WINAPI WriterThread(void *self)
 	{
@@ -324,9 +349,10 @@ private:
 		LARGE_INTEGER started, finished;
 		QueryPerformanceCounter(&started);
 
+		// Only a plain file is written to: a folder or a link in the log's place gets nothing
 		if (file == INVALID_HANDLE_VALUE)
 		{
-			file = CreateFileA(filePath.c_str(), FILE_APPEND_DATA, kShareEverything, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			file = LogFiles_OpenToAdd(filePath);
 		}
 
 		if (file != INVALID_HANDLE_VALUE)
@@ -355,6 +381,8 @@ private:
 	std::string waiting;
 	std::string beingWritten;
 	std::string filePath;
+	LogFiles_Private privateThings;   // found once, before any line, and only read after that, so no lock is needed for it
+	char crashWritten[8192];          // the crash words with the player left out: they can come out longer than they went in
 	HANDLE file;
 	HANDLE wake;
 	HANDLE thread;
@@ -367,11 +395,22 @@ private:
 static LogWriter *logWriter = 0;
 static LPTOP_LEVEL_EXCEPTION_FILTER filterBeforeOurs = 0;
 
+// Kept here rather than on the stack, because a crash can be the stack running out
+static void *crashPlaces[kLogFilesMostCrashPlaces];
+static char crashWords[4096];
+
 static LONG WINAPI WriteLogBeforeCrash(EXCEPTION_POINTERS *crash)
 {
 	if (logWriter)
 	{
+		// What was waiting first, so the lines stay in order, then what crashed and where
 		logWriter->WriteWaitingIfFree();
+
+		// Windows gives the places on this thread's stack, starting here, so they go back through the code that crashed. Each is written
+		// as a file name and a distance into it, to be looked up in the .map kept beside the build.
+		USHORT const count = RtlCaptureStackBackTrace(0, kLogFilesMostCrashPlaces, crashPlaces, NULL);
+		LogFiles_DescribeCrash(crash->ExceptionRecord->ExceptionCode, crash->ExceptionRecord->ExceptionAddress, crashPlaces, count, crashWords, sizeof(crashWords));
+		logWriter->WriteCrashWords(crashWords);
 	}
 
 	return filterBeforeOurs ? filterBeforeOurs(crash) : EXCEPTION_CONTINUE_SEARCH;
@@ -418,8 +457,6 @@ void WriteToLog(const std::string &logLine)
 {
 	ProcessorStageClock clock(kProcessorLog);
 
-	LevelLog_NoteLine(logLine, false);
-
 	if (LogWriter *writer = TheLogWriter())
 	{
 		writer->Add(logLine, false);
@@ -429,8 +466,6 @@ void WriteToLog(const std::string &logLine)
 void WriteErrorToLog(const std::string &logLine)
 {
 	ProcessorStageClock clock(kProcessorLog);
-
-	LevelLog_NoteLine(logLine, true);
 
 	if (LogWriter *writer = TheLogWriter())
 	{

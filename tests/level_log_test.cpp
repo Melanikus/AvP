@@ -141,11 +141,11 @@ static void TestNames()
 
 // ---- The writer, on real files --------------------------------------------------------------------------------------------
 
-// The folder for this run's files: something an earlier run left behind must not count against this one
+// The folder for this run's files: something an earlier run left behind must not count against this one. It's inside the folder the test
+// runs in, named by nothing but this program's number, so no setting from outside can point it anywhere else.
 static std::string TestFolder()
 {
-	char const *const outputFolder = getenv("RUNNER_TEMP");
-	return std::string(outputFolder ? outputFolder : ".") + "/level_log_test_files_" + std::to_string(::GetCurrentProcessId());
+	return "level_log_test_files_" + std::to_string(::GetCurrentProcessId());
 }
 
 static void TestTheWriter()
@@ -351,9 +351,11 @@ static void TestTheGameUsesIt()
 	Check(ComesBefore(loading, "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);", "exit(0x3421);"), "a level that can't be loaded has its log written before the game stops");
 	Check(ComesBefore(loading, "copy_rif_data(", "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);"), "and one that loads, once all of it is in");
 
+	// The log's writer hands every line on once the player is left out of it (log_files.h), so the level's log never has them either
 	std::string const log = ReadWholeFile("3dc/logString.cpp");
-	Check(ComesBefore(log, "void WriteToLog(const std::string &logLine)", "LevelLog_NoteLine(logLine, false);"), "every line the game logs is handed on");
-	Check(ComesBefore(log, "void WriteErrorToLog(const std::string &logLine)", "LevelLog_NoteLine(logLine, true);"), "and every error, as an error");
+	Check(ComesBefore(log, "std::string const written = LogFiles_LeaveOutThePlayer(line, privateThings);", "LevelLog_NoteLine(written, mustGoIn);") && ComesBefore(log, "LevelLog_NoteLine(written, mustGoIn);", "waiting += written;"), "every line the game logs is handed on, with the player already left out");
+	Check(ComesBefore(log, "void WriteErrorToLog(const std::string &logLine)", "writer->Add(logLine, true);"), "and every error, as an error");
+	Check(!Has(log, "LevelLog_NoteLine(logLine") && !Has(log, "LevelLog_NoteLine(line"), "and nothing hands on a line as it came");
 }
 
 int main()
