@@ -28,7 +28,7 @@ if (-not $Repository)
 }
 
 # The checks a merge has to pass, the same names as in branch protection and in build.yml. Add a new required check here as well.
-$requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game'
+$requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu'
 
 # What Shadows & Shaders is made of: the shadows, the per-pixel lighting, the relief mapping and the rendering menu. A file being here
 # isn't enough for code, because a file can be left behind and not built, so each .cpp has to be in the game's project too.
