@@ -15,8 +15,6 @@ RELEASING.md says how a release is made.
 ## What's in the way
 
 - Level, memory and hardening fixes haven't merged. Custom levels are something people download, so they're treated as hostile, and until these land, a crafted level can still crash the game.
-- The shader compiler doesn't ship with the game yet, so the package may not start on a Windows without the old DirectX runtime.
 - Save files and the network still have known issues to fix or to rule out.
-- CodeQL isn't one of the required checks yet. When it is, its name goes in tools/check-release.ps1 too.
 - The notes that ship in the package (PLAYTEST.md) still call it a test build and say known security bugs are open. They have to say what's true on the day.
 - Nobody has started the package on a clean Windows. No check here can prove it starts there, because the machines that run the checks have files a player's may not. A person has to try it, and then take this line out.

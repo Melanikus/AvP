@@ -4,6 +4,8 @@
 //   identical loops
 //   a child chunk whose size cannot be real is refused
 //   counted lists are measured against their chunks before they're made
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include "chunk_sprites.hpp"
 #include "mishchnk.hpp"
@@ -389,7 +391,7 @@ Playstation_Sprite_Chunk::Playstation_Sprite_Chunk(Sprite_Header_Chunk* parent,c
 
 
 ////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SPRISIZE",Sprite_Size_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SPRISIZE",Sprite_Size_Chunk,32)
 
 
 Sprite_Size_Chunk::Sprite_Size_Chunk(Chunk_With_Children* parent,const char* data,size_t /*datasize*/)
@@ -462,7 +464,7 @@ void Sprite_Size_Chunk::fill_data_block(char* data_start)
 	data_start+=4;
 }
 ///////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SPRITVER",Sprite_Version_Number_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SPRITVER",Sprite_Version_Number_Chunk,4)
 
 Sprite_Version_Number_Chunk::Sprite_Version_Number_Chunk(Chunk_With_Children* parent,const char* data,size_t /*datasize*/)
 : Chunk(parent, "SPRITVER")
@@ -603,7 +605,7 @@ Sprite_Bitmap_Centre_Chunk::Sprite_Bitmap_Centre_Chunk(Chunk_With_Children* pare
 		OffsetX=0;
 		OffsetY=0;
 	}
-	spare=*(int*)data;
+	spare=ReadFromChunk<int>(start,size,data);
 }
 Sprite_Bitmap_Centre_Chunk::Sprite_Bitmap_Centre_Chunk(Chunk_With_Children* parent)
 : Chunk(parent, "SPRBMPCE")
@@ -652,7 +654,7 @@ void Sprite_Bitmap_Centre_Chunk::fill_data_block(char* data_start)
 	*(int*)data_start=spare;
 }
 /////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SPREXTEN",Sprite_Extent_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SPREXTEN",Sprite_Extent_Chunk,40)
 
 Sprite_Extent_Chunk::Sprite_Extent_Chunk(Chunk_With_Children* parent,const char* data,size_t /*datasize*/)
 : Chunk(parent, "SPREXTEN")

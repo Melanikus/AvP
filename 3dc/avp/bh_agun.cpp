@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a sentry gun's block starts cleared, and the pointers to its pan and tilt are set as soon as it's made, not on its first turn
 // RWH moved out here to provide easier access
 
 /* CDF 25/7/98 - A completely new file. */
@@ -64,6 +66,7 @@ extern unsigned char Null_Name[8];
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
 extern SECTION * GetNamedHierarchyFromLibrary(const char * rif_name, const char * hier_name);
 void CreateSentrygun(VECTORCH *Position,int type);
+static void Autogun_VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);
 
 void AGunMovement_ScanLeftRight(STRATEGYBLOCK *sbPtr,int rate);
 void AGunMovement_Centre(STRATEGYBLOCK *sbPtr,int rate);
@@ -163,6 +166,10 @@ void CreateSentrygun(VECTORCH *Position,int type)
 		SECTION *root_section;
 		AUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;
 
+		// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything
+		// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.
+		memset(agunStatus, 0, sizeof(*agunStatus));
+
 		/* Initialise xenoborg's stats */
 		{
 			NPC_DATA *NpcData;
@@ -236,6 +243,11 @@ void CreateSentrygun(VECTORCH *Position,int type)
 			delta->Active=0;
 
 		}
+
+		// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each
+		// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last
+		// held. Single player never does; a network game that reports where each gun points can.
+		Autogun_VerifyDeltaControllers(sbPtr);
 
 		/* Containment test NOW! */
 		if(!(sbPtr->containingModule))
@@ -370,6 +382,10 @@ void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {
 		SECTION *root_section;
 		AUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;
 
+		// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything
+		// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.
+		memset(agunStatus, 0, sizeof(*agunStatus));
+
 		/* Initialise xenoborg's stats */
 		{
 			NPC_DATA *NpcData;
@@ -445,6 +461,11 @@ void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {
 			delta->Active=0;
 
 		}
+
+		// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each
+		// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last
+		// held. Single player never does; a network game that reports where each gun points can.
+		Autogun_VerifyDeltaControllers(sbPtr);
 
 		/* Containment test NOW! */
 		if(!(sbPtr->containingModule))

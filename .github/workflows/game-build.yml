@@ -43,3 +43,23 @@ jobs:
       - name: Build the game and make its package
         shell: pwsh
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
+
+      # The symbols and map of the game and its two film libraries, to name the place of a crash in this build. They're never in the
+      # package. This is open source, so they hold nothing secret, and the folders they name are this machine's.
+      - name: Keep the symbols
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: symbols
+          path: |
+            win32/VS2026/Win32/Release/*.pdb
+            win32/VS2026/Win32/Release/*.map
+          if-no-files-found: error
+
+      # It works whether or not this machine has its own copies, because the test tells Windows not to look at them: see tests/package_test.cpp.
+      - name: Try the package, and show its checks refuse a package with something wrong
+        shell: pwsh
+        run: |
+          ./tests/build.ps1 -Only package_test
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./tests/try-package.ps1 -Package "$env:RUNNER_TEMP\package" -TestProgram "$env:RUNNER_TEMP\avp-tests\package_test.exe"
+          if ($LASTEXITCODE -ne 0) { exit 1 }

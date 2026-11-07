@@ -16,6 +16,10 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 //   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
+//   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
+//   the lights that get a place are the ones that put the most light on what's on screen, not the nearest. See light_choice.h
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -60,6 +64,9 @@
 #include "d3d_render.h"
 #include "los.h"
 #include "shadow_shoot.h"
+#include "bh_light.h"
+#include "light_choice.h"
+#include "view_switches.h"
 
 const RCOLOR ALIENS_LIFEFORCE_GLOW_COLOUR    = 0x20ff8080;
 const RCOLOR MARINES_LIFEFORCE_GLOW_COLOUR   = 0x208080ff;
@@ -5561,6 +5568,10 @@ void ToyShadows_NoteObjectLights()
 
 // The camera and the view of the frame the polygons came from, kept for when the lights are chosen at the end of the frame.
 static float toyViewMatrix[12];
+static float samplesViewMatrix[12];  // the view of the frame before, which is the one its polygons were seen from. See light_choice.h
+extern LightChoiceSamples lightChoiceSamples;
+extern int StaticSceneOn;
+extern int ShadowLightsByNearest;
 static float toyCameraPlace[3];   // where the camera was when toyViewMatrix was kept
 static VECTORCH toyCameraWorld;
 
@@ -5594,8 +5605,8 @@ void ToyShadows_NextCollectingFrame()
 	toyCollectingFrame++;
 }
 
-// A chosen light stays chosen until another is clearly nearer: a light picked last frame counts as this many quarters of
-// its real distance. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
+// While lights are gathered, and all the time when they go by distance (-shadownearest, or a frame with nothing to score them on, such as with shadows off), a light picked last frame counts
+// as this many quarters of its real distance. When they go by score, light_choice.h has a number of its own that does the same job. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
 // from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
 // been thrown away does no harm.
 static const int kToyStayQuarters = 3;
@@ -5604,6 +5615,7 @@ struct ToyFoundLight
 {
 	LIGHTBLOCK *light;
 	void const *owner;  // what carries it, or nothing
+	bool comesFirst;    // a flare or one of the player's own lights, which come ahead of any score
 	int order;          // lowest first
 	int distance;       // from the camera
 };
@@ -5619,7 +5631,7 @@ static int placesChangedSinceReport = 0;
 
 // For the log, to tell walking past lights from a light flipping on and off the list: the lights that left most recently, and when. A light that
 // comes back soon after it left was flipping. Only compared, never read through.
-static const int kLightsLeftKept = 16;
+static const int kLightsLeftKept = 64;
 static const int kBackSoonFrames = 60;
 static LIGHTBLOCK *lightsThatLeft[kLightsLeftKept];
 static unsigned int lightsLeftFrame[kLightsLeftKept];
@@ -5731,20 +5743,75 @@ static int ToyDistanceToCamera(const LIGHTBLOCK *light)
 	return Approximate3dMagnitude(&toLight);
 }
 
-// Keeps the best lights seen so far, in order. A light marked first goes ahead of every other, nearest of those first, and
+// Which kind of light this is, for the rule in light_choice.h. It comes from two real things. A placed light's has_corona is set when the level loads, if a polygon of its shape has
+// iflag_light_corona (InitPlacedLight in bh_light.cpp). LFlag_AbsPos is given to a level light by setup_light_data in object_setup.cpp, and to nothing else in the game. Both start out in the
+// level file, so a level could be crafted to say anything here. All that can do is say yes or no to a shadow on this player's own screen, and nothing else reads the answer. A placed light is
+// looked for first, because a light's flags are copied from the file, so a crafted flag can't change what a lamp counts as. block is what carries the light, or nothing for a light element.
+static LightKindForShadows KindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
+{
+	STRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;
+
+	if (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)
+	{
+		return ((PLACED_LIGHT_BEHAV_BLOCK const *)owner->SBdataptr)->has_corona ? kLampWithACorona : kLampWithNoCorona;
+	}
+
+	if (light->LightFlags & LFlag_AbsPos)
+	{
+		return kLightFromTheLevel;
+	}
+
+	return kLightOfAnyOtherKind;
+}
+
+// What became of every light the choosing looked at on the latest frame, for the log.
+struct LightsLookedAt
+{
+	int notAVisibleLamp;  // one of the map's lights with no corona, which the rule in light_choice.h holds back, whatever would have become of it next
+	int notAVisibleLampInView;  // how many of those could have reached the view
+	int dark;             // nothing to give just now
+	int atTheCamera;      // so close that its shadows would all fall straight away from the eye
+	int outOfView;        // nothing it lights can be on screen
+	int lightNothing;     // it could reach the view, and nothing that was on screen last frame is in its reach
+	int steadyInReach;    // lit and in view: these compete for the steady places
+	int briefInReach;     // and these for the brief places
+	int lampsInReach;     // how many of those competing are lamps with a corona
+	int steadyChosen;
+	int briefChosen;
+};
+
+static LightsLookedAt lightsThisFrame;
+
+// Keeps the nearest lights seen so far, in order, up to as many as can be scored: see KeepTheLightsThatShowMost. A light marked first goes ahead of every other, nearest of those first, and
 // none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
 // light element, which is on no block.
 //
 // A lamp that flickers goes dark for a moment and comes back. If that lost it its place, the next light in line would come in for that moment,
 // and move from the game's lighting to ours and straight back. So a dark lamp that has a place keeps it, and competes for it just as if it were
 // lit. A lamp that's been shot out is dark for good, and is treated the same way: it only gives up its place once enough other lights are
-// clearly nearer, or the camera leaves it behind.
-static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most)
+// clearly better, by score or by distance, or the camera leaves it behind.
+static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most, int *inReach)
 {
 	bool const hasAPlace = LightHasAPlace(light);
 
 	if (!ToyLightIsLit(light) && !(hasAPlace && LightIsDarkForNow(light)))
 	{
+		lightsThisFrame.dark++;
+		return;
+	}
+
+	// The map's lights with no corona stay out of the list unless SHADOWAMBIENT is on. Leaving the list takes nothing away from the map: what lights it stays in the game's lighting. See light_choice.h.
+	LightKindForShadows const kind = KindOfLight(light, block);
+
+	if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))
+	{
+		lightsThisFrame.notAVisibleLamp++;
+
+		if (ToyLightCanReachTheView(light, false))
+		{
+			lightsThisFrame.notAVisibleLampInView++;
+		}
+
 		return;
 	}
 
@@ -5757,6 +5824,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 		// a lamp's place for nothing. In the game's lighting it's held to the same dim red, and lights nothing that can be seen.
 		if (!ToyLightCanReachTheView(light, hasAPlace))
 		{
+			lightsThisFrame.outOfView++;
 			return;
 		}
 
@@ -5767,15 +5835,32 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 		// Something at the camera throws every shadow straight away from the eye, where it can't be seen, so it isn't worth a
 		// place. That keeps out the glow on the alien's teeth, which is a light element at the player's spot. The player's own
 		// lights, such as a muzzle flash, still count: they have to leave the game's lighting to be blocked like any other.
-		if (block != Player && (distance < (hasAPlace ? 200 : 300) || !ToyLightCanReachTheView(light, hasAPlace)))
+		if (block != Player)
 		{
-			return;
+			if (distance < (hasAPlace ? 200 : 300))
+			{
+				lightsThisFrame.atTheCamera++;
+				return;
+			}
+
+			if (!ToyLightCanReachTheView(light, hasAPlace))
+			{
+				lightsThisFrame.outOfView++;
+				return;
+			}
 		}
 
 		if (hasAPlace)
 		{
 			order = (int)(((long long)distance * kToyStayQuarters) / 4);
 		}
+	}
+
+	(*inReach)++;
+
+	if (kind == kLampWithACorona)
+	{
+		lightsThisFrame.lampsInReach++;
 	}
 
 	int place = *numFound;
@@ -5797,6 +5882,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 
 	found[place].light = light;
 	found[place].owner = block ? ToyOwnerOf(block) : 0;
+	found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));
 	found[place].order = order;
 	found[place].distance = distance;
 }
@@ -5806,6 +5892,72 @@ static float ToyFraction(int fixedPoint)
 {
 	float const fraction = (float)fixedPoint / 65536.0f;
 	return (fraction < 0.0f) ? 0.0f : (fraction > 1.0f) ? 1.0f : fraction;
+}
+
+// How much light a light gives at full strength, for its score, with its colours counted as an eye counts them. A dark lamp is judged by how bright it'll be when it comes back, or it would score
+// nothing and lose its place for a flicker. A live light can be brighter than 1: see ToyShadows_ChooseLights.
+static float LightStrength(const LIGHTBLOCK *light)
+{
+	int const brightness = light->LightBright ? light->LightBright : light->LightBrightStore;
+	float bright = ToyFraction(brightness);
+
+	if (!(light->LightFlags & LFlag_PreLitSource))
+	{
+		float const live = (float)MUL_FIXED(brightness, LightScale) / 65536.0f;
+		bright = (live < 0.0f) ? 0.0f : (live > 8.0f) ? 8.0f : live;
+	}
+
+	return bright * (0.3f * ToyFraction(light->RedScale) + 0.59f * ToyFraction(light->GreenScale) + 0.11f * ToyFraction(light->BlueScale));
+}
+
+// Cuts a list of the nearest lights down to the ones that put the most light on what was on screen last frame, best first, and gives back how many that is. See light_choice.h. With nothing to go by, as
+// on the first frame of a level, or with walls that were never noted, or if -shadownearest asks, it goes by nearest, as the list already is. Only ever moves pointers around that it was given.
+static int KeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int most, int *inReach)
+{
+	if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)
+	{
+		return (numFound < most) ? numFound : most;
+	}
+
+	LightChoiceCandidate candidates[kLightChoiceMostCandidates];
+	int picked[kLightChoiceMostCandidates];
+	int const howMany = (numFound < kLightChoiceMostCandidates) ? numFound : kLightChoiceMostCandidates;
+
+	for (int i = 0; i < howMany; i++)
+	{
+		LIGHTBLOCK const *light = found[i].light;
+		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+		float view[3];
+
+		TranslatePoint(source, view, samplesViewMatrix);
+
+		bool const hasAPlace = LightHasAPlace(light);
+
+		candidates[i].score = LightChoice_Score(lightChoiceSamples, view[0], -view[1], view[2], (float)light->LightRange, LightStrength(light), (light->LightFlags & LFlag_PreLitSource) != 0);
+		candidates[i].comesFirst = found[i].comesFirst;
+		candidates[i].hasAPlace = hasAPlace;
+		candidates[i].keepsItsPlace = hasAPlace && LightIsDarkForNow(light);
+	}
+
+	int showNothing = 0;
+	int const numPicked = LightChoice_Pick(candidates, howMany, most, picked, &showNothing);
+
+	(*inReach) -= showNothing;
+	lightsThisFrame.lightNothing += showNothing;
+
+	ToyFoundLight kept[kLightChoiceMostCandidates];
+
+	for (int i = 0; i < numPicked; i++)
+	{
+		kept[i] = found[picked[i]];
+	}
+
+	for (int i = 0; i < numPicked; i++)
+	{
+		found[i] = kept[i];
+	}
+
+	return numPicked;
 }
 
 // The lights chosen for this frame, already in the space the polygons are collected in. ToyShadows_ChooseLights works them out once
@@ -6012,12 +6164,14 @@ static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, co
 // one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
 // once, before this.
 //
-// Up to 8 steady lights, nearest the camera first, except that flares come ahead of all of them, near or far, so that a flare in
-// flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 4 brief lights of their own. A live
+// The map's own lights only count if they're lamps you can see, unless SHADOWAMBIENT is on: see light_choice.h.
+// Up to 20 steady lights, the ones that put the most light on what's on screen, except that flares come ahead of all of them, near or far, so that a flare in
+// flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 12 brief lights of their own. A live
 // light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
 // ToyHoldFlaresToTheirCap.
 void ToyShadows_ChooseLights()
 {
+	memcpy(samplesViewMatrix, toyViewMatrix, sizeof(samplesViewMatrix));
 	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
 	toyCameraPlace[0] = (float)Global_VDB_Ptr->VDB_World.vx;
 	toyCameraPlace[1] = (float)Global_VDB_Ptr->VDB_World.vy;
@@ -6034,15 +6188,17 @@ void ToyShadows_ChooseLights()
 
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;
+	memset(&lightsThisFrame, 0, sizeof(lightsThisFrame));
 
 	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
+		LightChoice_Forget(&lightChoiceSamples);
 		ToyHoldFlaresToTheirCap();
 		return;
 	}
 
-	ToyFoundLight steady[kToyMostSteadyLights];
-	ToyFoundLight brief[kToyMostBriefLights];
+	ToyFoundLight steady[kLightChoiceMostCandidates];
+	ToyFoundLight brief[kLightChoiceMostCandidates];
 	int numSteady = 0;
 	int numBrief = 0;
 	int const mostSteady = (ToyShadowsMaxLights < kToyMostSteadyLights) ? ToyShadowsMaxLights : kToyMostSteadyLights;
@@ -6059,19 +6215,29 @@ void ToyShadows_ChooseLights()
 
 			if (!isFlare && ToyLightIsBrief(light))
 			{
-				ToyConsiderLight(light, block, brief, &numBrief, mostBrief);
+				ToyConsiderLight(light, block, brief, &numBrief, kLightChoiceMostCandidates, &lightsThisFrame.briefInReach);
 			}
 			else
 			{
-				ToyConsiderLight(light, block, steady, &numSteady, mostSteady);
+				ToyConsiderLight(light, block, steady, &numSteady, kLightChoiceMostCandidates, &lightsThisFrame.steadyInReach);
 			}
 		}
 	}
 
 	for (int i = 0; i < NumActiveLightElements; i++)
 	{
-		ToyConsiderLight(&LightElementStorage[i].LightBlock, 0, brief, &numBrief, mostBrief);
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, 0, brief, &numBrief, kLightChoiceMostCandidates, &lightsThisFrame.briefInReach);
 	}
+
+	LightChoice_KeepTheLargest(&lightChoiceSamples);
+	numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
+	numBrief = KeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);
+
+	lightsThisFrame.steadyChosen = numSteady;
+	lightsThisFrame.briefChosen = numBrief;
+
+	// What the coming frame draws is what the next one's lights are judged by
+	LightChoice_Forget(&lightChoiceSamples);
 
 	ToyFoundLight chosen[kToyMostLights];
 	int numChosen = 0;
@@ -6181,6 +6347,55 @@ void ToyShadows_ChooseLights()
 
 	PickLampsForPositions(chosen, numChosen, placeOf, hadPositions);
 	ToyHoldFlaresToTheirCap();
+}
+
+// The largest each number has reached since the game started, whichever frames they were on. This is the log's answer to how many lights there really are.
+static int mostInReach = 0;
+static int mostInReachFrame = 0;
+static char mostInReachRoom[sizeof(toyRoomName)] = "none";
+static int mostChosen = 0;
+static int mostPasses = 0;
+static float mostMilliseconds = 0.0f;
+
+// The shadow pass calls this at the end of every frame it finishes.
+void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
+{
+	int const inReach = lightsThisFrame.steadyInReach + lightsThisFrame.briefInReach;
+	int const chosen = lightsThisFrame.steadyChosen + lightsThisFrame.briefChosen;
+
+	if (inReach > mostInReach)
+	{
+		mostInReach = inReach;
+		mostInReachFrame = frame;
+		memcpy(mostInReachRoom, toyRoomName, sizeof(mostInReachRoom));
+	}
+
+	mostChosen = (chosen > mostChosen) ? chosen : mostChosen;
+	mostPasses = (passes > mostPasses) ? passes : mostPasses;
+	mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;
+}
+
+// Two lines for each report: what the choosing did on this frame and what it cost, then the most there have been. A light with no place left is
+// still in the game's own lighting, so it hasn't gone dark. It just casts no shadow.
+void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float milliseconds, float frameMilliseconds)
+{
+	char line[640];  // the longest numbers still fit, and a longer line would only be cut short
+
+	_snprintf(line, sizeof(line) - 1,
+		"shadow lights: frame %d: %d in reach; chosen %d steady and %d brief, of %d and %d allowed; passed over: %d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark, %d lighting nothing on screen; held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; %d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame",
+		frame, lightsThisFrame.steadyInReach + lightsThisFrame.briefInReach, lightsThisFrame.steadyChosen, lightsThisFrame.briefChosen, ToyShadowsMaxLights, ToyShadowsMaxBrief,
+		lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen,
+		lightsThisFrame.outOfView, lightsThisFrame.atTheCamera, lightsThisFrame.dark, lightsThisFrame.lightNothing,
+		lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn ? "ON" : "OFF", lightsThisFrame.lampsInReach,
+		passes, screensOfTotal, milliseconds, frameMilliseconds);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	_snprintf(line, sizeof(line) - 1,
+		"shadow lights: the most in one frame so far: %d in reach (frame %d, room %s), %d chosen, %d shadow passes, %.1f ms on the processor",
+		mostInReach, mostInReachFrame, mostInReachRoom, mostChosen, mostPasses, mostMilliseconds);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
 }
 
 // Gives the shadow pass this frame's list, and how many are on it. lights and owners have room for kToyMostLights each.

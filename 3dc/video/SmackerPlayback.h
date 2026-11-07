@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a new player's decoder handle starts out as no handle, so that closing one that never opened does nothing
+
 #ifndef _SmackerPlayback_h_
 #define _SmackerPlayback_h_
 
@@ -95,7 +98,10 @@ class SmackerPlayback
 			_audioDataBufferSize(0),
 			_sampleRate(0),
 			_frame(0)
-			{}
+			{
+				_handle.isValid = false;
+				_handle.instanceIndex = -1;
+			}
 };
 
 #endif

@@ -15,6 +15,8 @@
 //   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
 //   number is left out; when two sounds have the same number, the earlier one is given back
 //   a model that lacks a part the game needs stops the game with a message naming the part
+//   baked colours has a place for every point, even if the file has fewer colours; the list of shapes grows through
+//   ReallocMem
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -2877,15 +2879,7 @@ int GetMSLPos(void)
 		if(msl_term_pos>=maxshapes)
 		{
 			//alocate another 50 slots on the mainshapelist
-			mainshapelist=(SHAPEHEADER**)realloc(mainshapelist,sizeof(SHAPEHEADER*)*(maxshapes+50));
-			assert(mainshapelist);
-
-			LOCALASSERT(mainshapelist);
-			if(!mainshapelist)
-			{
-				ReleaseDirect3D();
-				exit(0x74363); 
-			}
+			mainshapelist=(SHAPEHEADER**)ReallocMem(mainshapelist,sizeof(SHAPEHEADER*)*(maxshapes+50));
 			for(int i=maxshapes;i<maxshapes+50;i++)
 			{
 				mainshapelist[i]=0;

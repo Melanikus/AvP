@@ -6,6 +6,9 @@
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   an alien type the game does not know would play as a standard alien, so no path uses a pointer that was never set
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -224,6 +227,9 @@ void CreateAlienBot(VECTORCH *Position,int type)
 			NPC_DATA *NpcData;
 
 			switch (alienStatus->Type) {
+				default:
+					// no caller gives another type today; if one ever did, it would play as a standard alien
+					GLOBALASSERT(0);
 				case AT_Standard:
 					NpcData=GetThisNpcData(I_NPC_Alien);
 					alienStatus->MaxSpeed=ALIEN_FORWARDVELOCITY;
@@ -244,9 +250,6 @@ void CreateAlienBot(VECTORCH *Position,int type)
 					alienStatus->EnableWaypoints=0;
 					alienStatus->PreferToCrouch=0;
 					sbPtr->DynPtr->Mass = PRAETORIAN_MASS;
-					break;
-				default:
-					GLOBALASSERT(0);
 					break;
 			}
 			LOCALASSERT(NpcData);
@@ -299,6 +302,9 @@ void CreateAlienBot(VECTORCH *Position,int type)
 		alienStatus->HModelController.Deltas=NULL;
 
 		switch (alienStatus->Type) {
+			default:
+				// no caller gives another type today; if one ever did, it would play as a standard alien
+				GLOBALASSERT(0);
 			case AT_Standard:
 				root_section=GetNamedHierarchyFromLibrary("hnpcalien","alien");
 				break;
@@ -307,9 +313,6 @@ void CreateAlienBot(VECTORCH *Position,int type)
 				break;
 			case AT_Praetorian:
 				root_section=GetNamedHierarchyFromLibrary("hnpcpretorian","Template");
-				break;
-			default:
-				GLOBALASSERT(0);
 				break;
 		}
 
@@ -463,6 +466,9 @@ void CreateAlienDynamic(STRATEGYBLOCK *Generator, ALIEN_TYPE type_of_alien)
 			NPC_DATA *NpcData;
 
 			switch (alienStatus->Type) {
+				default:
+					// no caller gives another type today; if one ever did, it would play as a standard alien
+					GLOBALASSERT(0);
 				case AT_Standard:
 					NpcData=GetThisNpcData(I_NPC_Alien);
 					alienStatus->MaxSpeed=ALIEN_FORWARDVELOCITY;
@@ -483,9 +489,6 @@ void CreateAlienDynamic(STRATEGYBLOCK *Generator, ALIEN_TYPE type_of_alien)
 					alienStatus->EnableWaypoints=0;
 					alienStatus->PreferToCrouch=0;
 					sbPtr->DynPtr->Mass = PRAETORIAN_MASS;
-					break;
-				default:
-					GLOBALASSERT(0);
 					break;
 			}
 			LOCALASSERT(NpcData);
@@ -535,6 +538,9 @@ void CreateAlienDynamic(STRATEGYBLOCK *Generator, ALIEN_TYPE type_of_alien)
 		alienStatus->generator_sbptr=Generator;
 
 		switch (alienStatus->Type) {
+			default:
+				// no caller gives another type today; if one ever did, it would play as a standard alien
+				GLOBALASSERT(0);
 			case AT_Standard:
 				root_section=GetNamedHierarchyFromLibrary("hnpcalien","alien");
 				break;
@@ -543,9 +549,6 @@ void CreateAlienDynamic(STRATEGYBLOCK *Generator, ALIEN_TYPE type_of_alien)
 				break;
 			case AT_Praetorian:
 				root_section=GetNamedHierarchyFromLibrary("hnpcpretorian","Template");
-				break;
-			default:
-				GLOBALASSERT(0);
 				break;
 		}
 
@@ -670,6 +673,9 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 			NPC_DATA *NpcData;
 
 			switch (alienStatus->Type) {
+				default:
+					// no caller gives another type today; if one ever did, it would play as a standard alien
+					GLOBALASSERT(0);
 				case AT_Standard:
 					NpcData=GetThisNpcData(I_NPC_Alien);
 					alienStatus->MaxSpeed=ALIEN_FORWARDVELOCITY;
@@ -690,9 +696,6 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 					alienStatus->EnableWaypoints=0;
 					alienStatus->PreferToCrouch=0;
 					sbPtr->DynPtr->Mass = PRAETORIAN_MASS;
-					break;
-				default:
-					GLOBALASSERT(0);
 					break;
 			}
 			LOCALASSERT(NpcData);
@@ -747,6 +750,9 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 
 		switch (alienStatus->Type) {
+			default:
+				// no caller gives another type today; if one ever did, it would play as a standard alien
+				GLOBALASSERT(0);
 			case AT_Standard:
 				root_section=GetNamedHierarchyFromLibrary("hnpcalien","alien");
 				break;
@@ -755,9 +761,6 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 				break;
 			case AT_Praetorian:
 				root_section=GetNamedHierarchyFromLibrary("hnpcpretorian","Template");
-				break;
-			default:
-				GLOBALASSERT(0);
 				break;
 		}
 

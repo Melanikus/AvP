@@ -41,10 +41,11 @@
     <VcpkgRoot Condition="'$(VcpkgRoot)'==''">$(VsInstallRoot)\VC\vcpkg</VcpkgRoot>
   </PropertyGroup>
   <!-- vcpkg reinstalls libraries only when vcpkg.json or vcpkg-configuration.json changes, so a changed patch in our
-       overlay ports would leave the old library in place with no warning. Adding the ports to the inputs of its step
-       makes a change to them rebuild the libraries. -->
+       overlay ports, or a change to our triplet, would leave the old library in place with no warning. Adding the ports
+       and the triplet to the inputs of its step makes a change to them rebuild the libraries. -->
   <ItemGroup>
     <_ZVcpkgInstallManifestDependenciesInputs Include="..\..\vcpkg-overlay-ports\**\*" />
+    <_ZVcpkgInstallManifestDependenciesInputs Include="..\..\vcpkg-overlay-triplets\**\*" />
   </ItemGroup>
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.props')" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -99,6 +100,8 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
       <SmallerTypeCheck>false</SmallerTypeCheck>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
@@ -138,9 +141,11 @@
       <HeapCommitSize>0</HeapCommitSize>
       <StackReserveSize>0</StackReserveSize>
       <StackCommitSize>0</StackCommitSize>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -174,6 +179,11 @@
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
+      <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
+           the Debug build uses Edit and Continue, which cannot be combined with it. -->
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -188,8 +198,8 @@
       <ProgramDataBaseFileName>$(IntDir)vc90.pdb</ProgramDataBaseFileName>
       <WarningLevel>Level3</WarningLevel>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <DebugInformationFormat>
-      </DebugInformationFormat>
+      <!-- /Zi: the compiler writes what the .pdb needs, in a file of its own. It changes nothing in the code it makes. -->
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
       <DisableSpecificWarnings>4018;4013;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
@@ -203,17 +213,27 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <!-- Symbols: a .pdb and a .map beside the program, so the place of a crash can be named. They stay with the build and are
+           never in the package: tools/build-and-package.ps1 copies only what a player needs, and tools/check-release-package.ps1
+           refuses them. /PDBALTPATH has the program record only the .pdb's name, not the folder it was built in. /DEBUG would
+           turn off ICF (folding identical functions), so ICF and REF are set here, and the program's code is the same as without
+           symbols. -->
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <AssemblyDebug>false</AssemblyDebug>
-      <ProgramDatabaseFile>$(Platform)\$(Configuration)\$(Platform)\$(Configuration)\$(TargetName).pdb</ProgramDatabaseFile>
-      <GenerateMapFile>false</GenerateMapFile>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
+      <GenerateMapFile>true</GenerateMapFile>
+      <MapFileName>$(OutDir)$(TargetName).map</MapFileName>
       <MapExports>false</MapExports>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <AdditionalOptions>/PDBALTPATH:%_PDB% %(AdditionalOptions)</AdditionalOptions>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -388,6 +408,7 @@
     <ClCompile Include="..\..\3dc\frustum.cpp" />
     <ClCompile Include="..\..\3dc\IndexBuffer.cpp" />
     <ClCompile Include="..\..\3dc\kshape.cpp" />
+    <ClCompile Include="..\..\3dc\light_choice.cpp" />
     <ClCompile Include="..\..\3dc\logString.cpp" />
     <ClCompile Include="..\..\3dc\map.cpp" />
     <ClCompile Include="..\..\3dc\mathline.cpp" />
@@ -404,6 +425,7 @@
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
+    <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
@@ -416,6 +438,7 @@
     <ClCompile Include="..\..\3dc\flicker_meter.cpp" />
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
+    <ClCompile Include="..\..\3dc\view_keys.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -695,6 +718,7 @@
     <None Include="..\..\shaders\fmvVertex.vsh" />
     <None Include="..\..\shaders\orthoPixel.psh" />
     <None Include="..\..\shaders\orthoVertex.vsh" />
+    <None Include="..\..\shaders\shoulderLamp.psh" />
     <None Include="..\..\shaders\particle.psh" />
     <None Include="..\..\shaders\particle.vsh" />
     <None Include="..\..\shaders\pixel.psh" />
@@ -733,4 +757,10 @@
   <Import Project="$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets" Condition="Exists('$(VcpkgRoot)\scripts\buildsystems\msbuild\vcpkg.targets')" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <!-- The game compiles its shaders every time it starts. D3DX does that with D3DCompiler_43.dll, which it loads by name while the
+       game is running. vcpkg only copies what AvPx.exe links to, so it leaves this one behind. This copy fails the build if the
+       file isn't there. -->
+  <Target Name="CopyShaderCompiler" AfterTargets="Build">
+    <Copy SourceFiles="$(VcpkgInstalledDir)$(VcpkgTriplet)\bin\D3DCompiler_43.dll" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

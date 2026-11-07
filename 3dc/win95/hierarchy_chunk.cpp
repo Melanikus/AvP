@@ -4,6 +4,8 @@
 //   has no name is refused
 //   counted lists are measured against their chunks before they're made
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
@@ -240,7 +242,7 @@ Object_Hierarchy_Name_Chunk::Object_Hierarchy_Name_Chunk (Chunk_With_Children * 
 
 
 ///////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("OBHALTSH",Object_Hierarchy_Alternate_Shape_Set_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBHALTSH",Object_Hierarchy_Alternate_Shape_Set_Chunk,4)
 
 Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set_Chunk(Chunk_With_Children* parent,int num,const char* name)
 :Chunk(parent,"OBHALTSH")
@@ -298,15 +300,9 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 	size_t const smallest_entry=8;
 	int num_shapes=ReadListCount(start,data,size,smallest_entry);
 
+	// Long names can use up the room that the count was measured against. Each read here looks for itself, so a list that runs out is refused, and the count stops it going on for long.
 	for(int i=0;i<num_shapes;i++)
 	{
-		// names can be longer than the smallest, so they can use up the room that the count was measured against
-		if((size_t)(data - start) + smallest_entry > size)
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-		}
-
 		Replaced_Shape_Details* rsd=new Replaced_Shape_Details;
 		
 		rsd->old_object_name=CopyNameFromChunk(start,size,data,&name_length);
@@ -318,13 +314,11 @@ Object_Hierarchy_Alternate_Shape_Set_Chunk::Object_Hierarchy_Alternate_Shape_Set
 		Replaced_Shape_List.add_entry(rsd);	
 	}
 
-   	flags=*(int*)data;
-	data+=4;
+   	flags=ReadFromChunk<int>(start,size,data);
 
 	for(int i=0;i<3;i++)
 	{
-		spare[i]=*(int*)data;
-		data+=4;
+		spare[i]=ReadFromChunk<int>(start,size,data);
 	}
 	
 }
@@ -395,7 +389,7 @@ size_t Object_Hierarchy_Alternate_Shape_Set_Chunk::size_chunk()
 
 
 ///////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("HSETCOLL",Hierarchy_Shape_Set_Collection_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("HSETCOLL",Hierarchy_Shape_Set_Collection_Chunk,4)
 
 Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk_With_Children* parent,int num,const char* name)
 :Chunk(parent,"HSETCOLL")
@@ -427,10 +421,8 @@ Hierarchy_Shape_Set_Collection_Chunk::Hierarchy_Shape_Set_Collection_Chunk(Chunk
 		data+=4;
 	}
 
-	TypeIndex=*(int*)data;
-	data+=4;
-	flags=*(int*)data;
-	data+=4;
+	TypeIndex=ReadFromChunk<int>(start,size,data);
+	flags=ReadFromChunk<int>(start,size,data);
 }
 
 Hierarchy_Shape_Set_Collection_Chunk::~Hierarchy_Shape_Set_Collection_Chunk()
@@ -561,7 +553,7 @@ size_t Hierarchy_Degradation_Distance_Chunk::size_chunk()
 
 ///////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("HIERBBOX",Hierarchy_Bounding_Box_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("HIERBBOX",Hierarchy_Bounding_Box_Chunk,24)
 
 Hierarchy_Bounding_Box_Chunk::Hierarchy_Bounding_Box_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"HIERBBOX")

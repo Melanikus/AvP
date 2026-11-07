@@ -7,7 +7,9 @@
 // THE LIGHT TOTAL: to keep every shadow visible, each light only takes its share of all the light on a pixel, which means knowing all the
 // light on that pixel. That sum was the same for every light, so it's now worked out once and kept as a picture of its own. It holds two
 // numbers a pixel. Lights baked into the walls are in the first, and are taken out by the mask. Lights added per pixel are in the second.
-// A light is in one or the other, never both.
+// A light is in one or the other, never both. Each light adds itself to this picture in a pass of its own, on only the part of the screen it
+// can reach. One shader adding up every light at once would cost every pixel every light, whether it reached that pixel or not, so that's
+// not what happens: the compiler can't look a light up by its number, and so it would have to look through the whole list for each light.
 //
 // WHAT THE PICTURES CAN'T DO: they hold one surface a pixel, so a polygon you can see through isn't in them, and per-pixel lights can't reach
 // it. So a light left out of the game's lighting for an object is remembered, and each see-through corner of that object gets it back at
@@ -26,10 +28,12 @@
 #include "d3d_render.h"
 #include "logString.h"
 #include "pixel_lights.h"
+#include "light_total_picture.h"
 #include "surface_pictures.h"
 
 extern VECTORCH *Global_ShapePoints;
 extern VECTORCH *Global_ShapeVNormals;
+extern int ShadowsPretendNoFloatBlend;
 
 // Where each number is in a light on the list. See kToyLightFloats.
 enum
@@ -82,13 +86,13 @@ void PixelLights_Release()
 	totalFailed = false;
 }
 
-// The total only needs two numbers a pixel, and it can go well over 1, so it needs a float picture. A picture of four numbers does as well,
-// at twice the memory. Gives back D3DFMT_UNKNOWN if the card has neither.
+// The total only needs two numbers a pixel, and it can go well over 1, so it needs a float picture, and each light adds itself to what's already
+// there, so the card has to be able to add on one. Gives back D3DFMT_UNKNOWN if it can't, on either kind.
 static D3DFORMAT BestTotalFormat(LPDIRECT3DDEVICE9 device)
 {
-	static D3DFORMAT const wanted[2] = { D3DFMT_G16R16F, D3DFMT_A16B16G16R16F };
+	static D3DFORMAT const pictures[2] = { D3DFMT_G16R16F, D3DFMT_A16B16G16R16F };
 
-	D3DFORMAT chosen = D3DFMT_UNKNOWN;
+	bool canAdd[2] = { false, false };
 	IDirect3D9 *direct3D = 0;
 	D3DDEVICE_CREATION_PARAMETERS created;
 	D3DDISPLAYMODE mode;
@@ -97,19 +101,27 @@ static D3DFORMAT BestTotalFormat(LPDIRECT3DDEVICE9 device)
 	{
 		if (SUCCEEDED(device->GetCreationParameters(&created)) && SUCCEEDED(device->GetDisplayMode(0, &mode)))
 		{
-			for (int i = 1; i >= 0; i--)
+			for (int i = 0; i < 2; i++)
 			{
-				if (direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, wanted[i]) == D3D_OK)
-				{
-					chosen = wanted[i];
-				}
+				canAdd[i] = !ShadowsPretendNoFloatBlend && direct3D->CheckDeviceFormat(created.AdapterOrdinal, created.DeviceType, mode.Format,
+					D3DUSAGE_RENDERTARGET | D3DUSAGE_QUERY_POSTPIXELSHADER_BLENDING, D3DRTYPE_TEXTURE, pictures[i]) == D3D_OK;
 			}
 		}
 
 		direct3D->Release();
 	}
 
-	return chosen;
+	switch (LightTotal_BestPicture(canAdd[0], canAdd[1]))
+	{
+		case kLightTotalTwoNumbers:
+			return pictures[0];
+
+		case kLightTotalFourNumbers:
+			return pictures[1];
+
+		default:
+			return D3DFMT_UNKNOWN;
+	}
 }
 
 bool PixelLights_Ready(LPDIRECT3DDEVICE9 device)
@@ -143,10 +155,23 @@ bool PixelLights_Ready(LPDIRECT3DDEVICE9 device)
 	HRESULT const measured = screen->GetDesc(&size);
 	screen->Release();
 
-	D3DFORMAT const format = SUCCEEDED(measured) ? BestTotalFormat(device) : D3DFMT_UNKNOWN;
+	if (FAILED(measured))
+	{
+		totalFailed = true;
+		return false;
+	}
 
-	if (format == D3DFMT_UNKNOWN
-		|| FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, &totalTexture, NULL))
+	D3DFORMAT const format = BestTotalFormat(device);
+
+	// Nothing else is needed for the game to go on. Whoever asks gets a no, and shadows are drawn the way they are without the pictures.
+	if (format == D3DFMT_UNKNOWN)
+	{
+		totalFailed = true;
+		LogString("pixel lights: the card can't add to a float picture, so lights stay in the game's own lighting, and shadows are drawn without the surface pictures");
+		return false;
+	}
+
+	if (FAILED(device->CreateTexture(size.Width, size.Height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, &totalTexture, NULL))
 		|| FAILED(totalTexture->GetSurfaceLevel(0, &totalSurface)))
 	{
 		PixelLights_Release();
@@ -237,58 +262,59 @@ static float Largest(float a, float b, float c)
 	return (larger > c) ? larger : c;
 }
 
-void PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, IDirect3DTexture9 *depth)
+float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, const RECT *reach, const bool *reachesScreen, IDirect3DTexture9 *depth)
 {
-	// see lightTotal.psh for what each of these is. Places with no light stay at 0, so they add nothing.
-	enum { kFirstLight = 0, kFirstKind = kFirstLight + kToyMostLights, kConstants = kFirstKind + kToyMostLights };
-	float constants[kConstants * 4] = { 0.0f };
-
-	for (int i = 0; i < numLights && i < kToyMostLights; i++)
-	{
-		float const *light = &lights[i * kToyLightFloats];
-		bool const perPixel = light[kLightKind] == kKindAddedPerPixel;
-
-		if (LightOnListIsDark(light))
-		{
-			continue;
-		}
-
-		constants[(kFirstLight + i) * 4 + 0] = light[0];
-		constants[(kFirstLight + i) * 4 + 1] = light[1];
-		constants[(kFirstLight + i) * 4 + 2] = light[2];
-		constants[(kFirstLight + i) * 4 + 3] = 1.0f / light[kLightRange];
-
-		// A light's three colours hold its colour times its brightness, so the brightest of them is its brightness. For a baked light, the
-		// average of the three is what a wall's picture really holds of it.
-		if (perPixel)
-		{
-			constants[(kFirstKind + i) * 4 + 0] = Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]);
-			constants[(kFirstKind + i) * 4 + 1] = (light[kLightLook] == 0.0f) ? kShapeFlare : kShapeGame;
-			constants[(kFirstKind + i) * 4 + 2] = 1.0f;
-		}
-		else
-		{
-			constants[(kFirstKind + i) * 4 + 0] = (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f;
-			constants[(kFirstKind + i) * 4 + 1] = light[kLightKind];
-			constants[(kFirstKind + i) * 4 + 2] = 0.0f;
-		}
-	}
-
 	device->SetRenderTarget(0, totalSurface);
+
+	// Every pixel starts with no light on it, and one that no light reaches stays that way. A clear only reaches what the scissor lets through, so that's off first.
 	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
 
 	d3d.effectSystem->SetActive(d3d.lightTotalEffect);
 	SetScreenConstant(device);
-	device->SetPixelShaderConstantF(1, constants, kConstants);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
 	ReadPicture(device, kSamplerColours, SurfacePictures_Colour());
 
-	SetRectangleState(device, false, false);
-	DrawRectangle(device);
+	SetRectangleState(device, false, true);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
 
+	double pixelsAsked = 0.0;
+
+	for (int i = 0; i < numLights && i < kToyMostLights; i++)
+	{
+		float const *light = &lights[i * kToyLightFloats];
+
+		if (LightOnListIsDark(light) || !reachesScreen[i] || reach[i].right <= reach[i].left || reach[i].bottom <= reach[i].top)
+		{
+			continue;
+		}
+
+		bool const perPixel = light[kLightKind] == kKindAddedPerPixel;
+
+		// see lightTotal.psh for what each of these is. A light's three colours hold its colour times its brightness, so the brightest of them is its
+		// brightness. For a baked light, the average of the three is what a wall's picture really holds of it.
+		float const constants[2 * 4] =
+		{
+			light[0], light[1], light[2], 1.0f / light[kLightRange],
+			perPixel ? Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]) : (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f,
+			perPixel ? ((light[kLightLook] == 0.0f) ? kShapeFlare : kShapeGame) : light[kLightKind],
+			perPixel ? 1.0f : 0.0f,
+			0.0f,
+		};
+
+		device->SetScissorRect(&reach[i]);
+		device->SetPixelShaderConstantF(1, constants, 2);
+		DrawRectangle(device);
+
+		pixelsAsked += (double)(reach[i].right - reach[i].left) * (double)(reach[i].bottom - reach[i].top);
+	}
+
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 	StopReadingPictures(device);
+
+	return (float)(pixelsAsked / ((double)totalWidth * (double)totalHeight));
 }
 
 HRESULT PixelLights_AddShareToMask(LPDIRECT3DDEVICE9 device, const float *light, float strength, IDirect3DTexture9 *depth)

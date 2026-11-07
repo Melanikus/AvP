@@ -77,6 +77,19 @@ jobs:
         shell: pwsh
         run: ./tools/check-release-package.ps1 -Package "$env:RUNNER_TEMP\package" -Commit $env:GITHUB_SHA
 
+      # Once the package is checked: the symbols and map of the game and its two film libraries, to name the place of a crash in
+      # this build. They're never in the package. This is open source, so they hold nothing secret, and the folders they name are
+      # this machine's.
+      - name: Keep the symbols
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-symbols
+          path: |
+            win32/VS2026/Win32/Release/*.pdb
+            win32/VS2026/Win32/Release/*.map
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Zip the package, and work out its hash
         shell: pwsh
         env:

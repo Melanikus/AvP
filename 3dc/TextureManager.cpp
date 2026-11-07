@@ -600,10 +600,17 @@ void Tex_DeInit()
 		textureList[i].isValid = false;
 	}
 
-	// special case releases
-	R_ReleaseTexture(textureList[MISSING_TEXTURE]);
-	R_UnsetTexture(MISSING_TEXTURE);
+	// Special case releases. If the game stops before Direct3D has started (it ran out of memory very early, say), these
+	// two have not been made yet, so there is nothing to release, and the list has no places for them.
+	if (MISSING_TEXTURE < textureList.size())
+	{
+		R_ReleaseTexture(textureList[MISSING_TEXTURE]);
+		R_UnsetTexture(MISSING_TEXTURE);
+	}
 
-	R_ReleaseTexture(textureList[NO_TEXTURE]);
-	R_UnsetTexture(NO_TEXTURE);
+	if (NO_TEXTURE < textureList.size())
+	{
+		R_ReleaseTexture(textureList[NO_TEXTURE]);
+		R_UnsetTexture(NO_TEXTURE);
+	}
 }

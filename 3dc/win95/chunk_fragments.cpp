@@ -3,6 +3,8 @@
 //   removed code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include "chunk_fragments.hpp"
 
@@ -39,16 +41,14 @@ RIF_IMPLEMENT_DYNCREATE("FRGTYPDC",Fragment_Type_Data_Chunk)
 Fragment_Type_Data_Chunk::Fragment_Type_Data_Chunk(Chunk_With_Children* const parent, const char* data, size_t const chunk_bytes)
 :Chunk(parent,"FRGTYPDC")
 {
+	char const * const start = data;
 	size_t length = 0;
-	frag_type_name = CopyNameFromChunk(data, chunk_bytes, data, &length);
+	frag_type_name = CopyNameFromChunk(start, chunk_bytes, data, &length);
 	data += (length+4)&~3;
 
-	pad1 = *(int*)data;
-	data+=4;
-	pad2 = *(int*)data;
-	data+=4;
-	pad3 = *(int*)data;
-	data+=4;
+	pad1 = ReadFromChunk<int>(start, chunk_bytes, data);
+	pad2 = ReadFromChunk<int>(start, chunk_bytes, data);
+	pad3 = ReadFromChunk<int>(start, chunk_bytes, data);
 }
 
 Fragment_Type_Data_Chunk::~Fragment_Type_Data_Chunk()
@@ -99,22 +99,17 @@ Fragment_Type_Shape_Chunk::Fragment_Type_Shape_Chunk(Chunk_With_Children* parent
 Fragment_Type_Shape_Chunk::Fragment_Type_Shape_Chunk(Chunk_With_Children* const parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"FRGTYPSC")
 {
+	char const * const start = data;
 	size_t length = 0;
-	name = CopyNameFromChunk(data, chunk_bytes, data, &length);
+	name = CopyNameFromChunk(start, chunk_bytes, data, &length);
 	data += (length+4)&~3;
 
-	num_fragments = *(int*)data;
-	data += 4;
+	num_fragments = ReadFromChunk<int>(start, chunk_bytes, data);
+	location = ReadFromChunk<ChunkVectorInt>(start, chunk_bytes, data);
 
-	location = *(ChunkVectorInt*)data;
-	data += sizeof(ChunkVectorInt);
-
-	pad1 = *(int*)data;
-	data+=4;
-	pad2 = *(int*)data;
-	data+=4;
-	pad3 = *(int*)data;
-	data+=4;
+	pad1 = ReadFromChunk<int>(start, chunk_bytes, data);
+	pad2 = ReadFromChunk<int>(start, chunk_bytes, data);
+	pad3 = ReadFromChunk<int>(start, chunk_bytes, data);
 }
 
 Fragment_Type_Shape_Chunk::~Fragment_Type_Shape_Chunk()
@@ -155,7 +150,7 @@ size_t Fragment_Type_Shape_Chunk::size_chunk()
 }
 
 ////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("FRGSOUND",Fragment_Type_Sound_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("FRGSOUND",Fragment_Type_Sound_Chunk,20)
 
 Fragment_Type_Sound_Chunk::Fragment_Type_Sound_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"FRGSOUND")

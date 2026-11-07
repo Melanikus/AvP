@@ -4,6 +4,9 @@
 //   text is copied using its exact measured length, so it always fits
 //   counted lists are measured against their chunks before they're made
 //   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
+//   a chunk for collections of sounds, which was only ever a comment, is gone
 
 #include "chunk.hpp"
 #include "environment_chunk.hpp"
@@ -14,7 +17,7 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(chunk_sound)
 
-RIF_IMPLEMENT_DYNCREATE("SOUNDOB2",Sound_Object_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SOUNDOB2",Sound_Object_Chunk,40)
 
 Sound_Object_Chunk::Sound_Object_Chunk (Chunk_With_Children * parent, 
 	ChunkVectorInt & pos,
@@ -222,7 +225,7 @@ size_t Sound_Object_Extra_Name_Chunk::size_chunk()
 	return chunk_size;
 }
 /////////////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("INDSOUND",Indexed_Sound_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("INDSOUND",Indexed_Sound_Chunk,4)
 
 Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char* data,const size_t size)
 :Chunk(parent,"INDSOUND")
@@ -230,11 +233,11 @@ Indexed_Sound_Chunk::Indexed_Sound_Chunk(Chunk_With_Children* parent,const char*
 	char const * const start = data;
 	CHUNK_EXTRACT(index,int)
 	CHUNK_EXTRACT_STRING(wav_name,start,size)
-	CHUNK_EXTRACT(inner_range,int)
-	CHUNK_EXTRACT(outer_range,int)
-	CHUNK_EXTRACT(max_volume,int)
-	CHUNK_EXTRACT(pitch,int)
-	CHUNK_EXTRACT(flags,int)
+	inner_range=ReadFromChunk<int>(start,size,data);
+	outer_range=ReadFromChunk<int>(start,size,data);
+	max_volume=ReadFromChunk<int>(start,size,data);
+	pitch=ReadFromChunk<int>(start,size,data);
+	flags=ReadFromChunk<int>(start,size,data);
 	num_extra_data=ReadListCount(start,data,size,sizeof(int));
 
 	if(num_extra_data)
@@ -292,42 +295,3 @@ size_t Indexed_Sound_Chunk::size_chunk()
 
 	return chunk_size;
 }
-
-/////////////////////////////////////////////////////////////////////////////////////
-/*
-Sound_Collection_Chunk::Sound_Collection_Chunk(Chunk_With_Children* parent,const char* data,const size_t)
-:Chunk(parent,"SOUNDCOL")
-{
-	CHUNK_EXTRACT(index,int)
-	CHUNK_EXTRACT_ARRAY(num_sounds,sounds,ChunkSoundWeighting)
-	CHUNK_EXTRACT(spare,int)
-}
-
-Sound_Collection_Chunk::Sound_Collection_Chunk(Chunk_With_Children* parent)
-:Chunk(parent,"SOUNDCOL")
-{
-	index=-1;
-	num_sounds=0;
-	sounds=0;
-	spare=0;
-}
-
-Sound_Collection_Chunk::~Sound_Collection_Chunk()
-{
-	delete[] sounds;
-}
-
-void Sound_Collection_Chunk::fill_data_block(char* data)
-{
-	CHUNK_FILL_START	
-	CHUNK_FILL(index,int)
-	CHUNK_FILL_ARRAY(num_sounds,sounds,ChunkSoundWeighting)
-	CHUNK_FILL(spare,int)
-}
-
-size_t Sound_Collection_Chunk::size_chunk()
-{
-	chunk_size=12+12+num_sounds*sizeof(ChunkSoundWeighting);
-	return chunk_size;
-}
-*/

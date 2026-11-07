@@ -4,7 +4,7 @@ Says whether a finished package is fit to be a release. release.yml runs this af
 The build has already passed if we get here, so this looks for what a build wouldn't notice:
 - A file the game only asks for while it's running. The game compiles its shaders from text files every time it starts, using
   D3DCompiler_43.dll, and nothing links to that file, so the build can't tell if it's gone. Without it, on a Windows that doesn't
-  already have one, shadows and shaders wouldn't work.
+  already have one, no shader would compile and the game wouldn't start.
 - Shaders that aren't the ones in this commit, or that aren't there at all.
 - A package from another commit, or with a list of hashes that doesn't match it.
 - A program in it that isn't the game.
@@ -35,6 +35,14 @@ foreach ($needed in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.t
     {
         Stop-Release "$needed is not in the package"
     }
+}
+
+# A build's symbols and map (.pdb, .map) name the place of a crash. They stay with the build, and a player never needs them.
+$symbols = @(Get-ChildItem -LiteralPath $Package -Recurse -File | Where-Object { $_.Extension -eq '.pdb' -or $_.Extension -eq '.map' })
+
+if ($symbols.Count -gt 0)
+{
+    Stop-Release "$($symbols[0].Name) is in the package, and a build's symbols stay with the build"
 }
 
 $programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { $_.Name -ne 'AvPx.exe' })

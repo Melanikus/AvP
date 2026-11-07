@@ -1,7 +1,10 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
-//   size limits, so no name, chat line or language-file text can run past the end of its buffer
+//   size limits, so no name, chat line or language-file text can run past the end of its buffer;
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 //   the disc is checked before use, because a save file can leave that part out
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
@@ -51,6 +54,8 @@
 int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISPLAYBLOCK *ignoredObjectPtr, VECTORCH *positionPtr, int maxRange);
 
 #include "networking.h"
+#include "lift_checks.h"
+#include "logString.h"
 #include "MemoryStream.h"
 #include <assert.h>
 
@@ -7059,6 +7064,18 @@ static void ProcessNetMsg_LOSRequestBinarySwitch(NETMESSAGE_LOSREQUESTBINARYSWIT
 	RequestState(objectPtr, 1, NULL);
 }
 
+// The first refused lift state is written in the log, so a bad host can be found. Any more aren't, so a flood of them can't fill the disk.
+static void NoteRefusedLiftState()
+{
+	static bool saidSo = false;
+
+	if (!saidSo)
+	{
+		saidSo = true;
+		LogString("net: refused: a lift's message named a state lifts don't have. Any more aren't written down");
+	}
+}
+
 static void ProcessNetMsg_PlatformLiftState(NETMESSAGE_PLATFORMLIFTSTATE *msgPtr)
 {
 	// only peers should get this
@@ -7083,6 +7100,13 @@ static void ProcessNetMsg_PlatformLiftState(NETMESSAGE_PLATFORMLIFTSTATE *msgPtr
 
 	if (objectPtr->I_SBtype != I_BehaviourPlatform) {
 		return;    // we only do binary switches
+	}
+
+	// The state is a plain byte from another machine. A car given one that isn't a lift's would never move again here.
+	if (!Lift_StateIsKnown(msgPtr->state, (int)PLBS_GoingDown + 1))
+	{
+		NoteRefusedLiftState();
+		return;
 	}
 
 	// update the lift state
@@ -9385,8 +9409,8 @@ void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startO
 #else
 void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame)
 {
-	int numStartPositions;
-	MULTIPLAYER_START *startPositions;
+	int numStartPositions = 0;
+	MULTIPLAYER_START *startPositions = 0;
 	int sbIndex = 0;
 	int start_index;
 	int numChecked = 0;

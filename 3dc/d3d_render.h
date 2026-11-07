@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a polygon says which shape it came from, for -shadowshoot
+//   up to 20 steady and 12 brief lights can cast shadows, where it was 8 and 4
 // added the kinds of polygon the shadow toy keeps, and how many lights it handles.
 #ifndef _included_d3d_render_h_ /* Is this your first time? */
 #define _included_d3d_render_h_ 1
@@ -19,13 +21,14 @@ enum ToyCasterKind
 	kToyCasterKinds = 5
 };
 
-// How many lights the shadow toy handles in one frame. Steady lights are lamps and flares. Brief lights are muzzle flashes, fires
+// How many lights can cast shadows in one frame. Steady lights are lamps and flares. Brief lights are muzzle flashes, fires
 // and explosions, which get places of their own, so that one can't push out a steady light and make that light's shadows jump.
-// lightTotal.psh is sized for kToyMostLights, so it has to change along with it.
+// Nothing on the graphics card is sized by these, because each light is drawn on its own. What more lights cost is time: each lit light needs
+// its own prisms, stencil and mask. The store of kept prisms has its own limit, and d3d_render.cpp checks that it's enough.
 enum
 {
-	kToyMostSteadyLights = 8,
-	kToyMostBriefLights = 4,
+	kToyMostSteadyLights = 20,
+	kToyMostBriefLights = 12,
 	kToyMostLights = kToyMostSteadyLights + kToyMostBriefLights,
 
 	// each light is 13 numbers: x y z, range, red green blue, its kind (0 baked into the walls, 1 live, in the game's lighting,

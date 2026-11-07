@@ -6,6 +6,8 @@
 //   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
 //   a name is only read as far as the end of its chunk
 //   memory made with new[] goes back with delete[], and a mission objective now gives back its two lists
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -263,7 +265,7 @@ Children for Virtual_Object_Chunk
 ////////////////////////////////////////////////////////
 //Class Virtual_Object_Properties_Chunk
 
-RIF_IMPLEMENT_DYNCREATE("VOBJPROP",Virtual_Object_Properties_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("VOBJPROP",Virtual_Object_Properties_Chunk,16)
 
 ObjectID Virtual_Object_Properties_Chunk::CalculateID()
 {
@@ -307,13 +309,10 @@ Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Chil
 	name = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);
 	data += (length+4)&~3;
 	
-	ID = *(ObjectID*)data;
-	data+=sizeof(ObjectID);
+	ID = ReadFromChunk<ObjectID>(chunk_start, chunk_bytes, data);
 
-	pad1=*(int*)data;
-	data+=sizeof(int);				
-	pad2=*(int*)data;
-	data+=sizeof(int);				
+	pad1=ReadFromChunk<int>(chunk_start, chunk_bytes, data);				
+	pad2=ReadFromChunk<int>(chunk_start, chunk_bytes, data);				
 }
 
 Virtual_Object_Properties_Chunk::~Virtual_Object_Properties_Chunk()

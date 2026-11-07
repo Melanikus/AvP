@@ -13,6 +13,7 @@
 #include "shadow_tuning.h"
 
 #include "view_switches.h"
+#include "light_choice.h"
 
 // The switches themselves live in d3d_render.cpp. The header only has to know their names, and nothing here uses them.
 
@@ -75,6 +76,53 @@ static void WordsForShadows()
 
 	Check(ShadowsAskFor(0) == kNotUnderstood, "SHADOWS refuses no words at all");
 	Check(ShadowsAskFor(std::string(300, '1').c_str()) == kNotUnderstood, "and a batch file's longest line");
+}
+
+static int AmbientAskFor(char const *words)
+{
+	int asked = kWasNotedBefore;
+
+	if (!SwitchWords_ShadowAmbientAsk(words, &asked))
+	{
+		return (asked == kWasNotedBefore) ? kNotUnderstood : -999;
+	}
+
+	return asked;
+}
+
+static void WordsForAmbient()
+{
+	Check(AmbientAskFor("") == kAskedNext, "SHADOWAMBIENT alone switches it, so one key can flip it");
+	Check(AmbientAskFor("   ") == kAskedNext, "and so does SHADOWAMBIENT with only spaces after it");
+	Check(AmbientAskFor("0") == 0, "SHADOWAMBIENT 0 is off");
+	Check(AmbientAskFor("1") == 1, "SHADOWAMBIENT 1 is on");
+	Check(AmbientAskFor("OFF") == 0, "SHADOWAMBIENT OFF is off");
+	Check(AmbientAskFor("ON") == 1, "SHADOWAMBIENT ON is on");
+	Check(AmbientAskFor("off") == 0, "in small letters too");
+	Check(AmbientAskFor("On\r") == 1, "and in mixed letters, at the end of a line from a file");
+	Check(AmbientAskFor("  ON  ") == 1, "and with spaces around it");
+
+	char const *const refused[] = { "2", "-1", "01", "00", "10", "1 1", "1x", "x1", "O", "OF", "OFFF", "ONN", "ON OFF", "OFF ON", "ABC", "1.0", "0x1", "\xFF", "ON\xFF" };
+
+	for (char const *words : refused)
+	{
+		Check(AmbientAskFor(words) == kNotUnderstood, std::string("SHADOWAMBIENT refuses '") + words + "', and leaves what was noted alone");
+	}
+
+	Check(AmbientAskFor(0) == kNotUnderstood, "SHADOWAMBIENT refuses no words at all");
+	Check(AmbientAskFor(std::string(300, '1').c_str()) == kNotUnderstood, "and a batch file's longest line");
+}
+
+static void TheMapLightsRule()
+{
+	Check(!LightChoice_MayCast(kLightFromTheLevel, false), "with SHADOWAMBIENT off, a level light takes no place");
+	Check(!LightChoice_MayCast(kLampWithNoCorona, false), "and nor does a lamp with no corona");
+	Check(LightChoice_MayCast(kLampWithACorona, false), "a lamp with a corona does");
+	Check(LightChoice_MayCast(kLightOfAnyOtherKind, false), "and so does everything that isn't the map's own, corona or not");
+	Check(LightChoice_MayCast(kLightFromTheLevel, true), "with SHADOWAMBIENT on, a level light competes again");
+	Check(LightChoice_MayCast(kLampWithNoCorona, true), "and so does a lamp with no corona");
+	Check(LightChoice_MayCast(kLampWithACorona, true), "and a lamp with a corona stays in");
+	Check(LightChoice_MayCast(kLightOfAnyOtherKind, true), "and so does everything else");
 }
 
 static void WordsForLighting()
@@ -279,10 +327,10 @@ static void TheView()
 
 	comeBack = kFinal;
 	Check(View_AfterSwitches(kPolygons, kOff, false, false, &comeBack) == kPolygons && comeBack == kFinal, "not everything off, nothing moves");
-	Check(View_AfterSwitches(kOff, kOff, false, false, &comeBack) == kOff, "and G's own OFF stays, while the switches aren't all off");
+	Check(View_AfterSwitches(kOff, kOff, false, false, &comeBack) == kOff, "and J's own OFF stays, while the switches aren't all off");
 	Check(View_AfterSwitches(kOff, kOff, true, true, &comeBack) == kOff && comeBack == kFinal, "still all off, nothing moves");
-	Check(View_AfterSwitches(kEdges, kOff, true, true, &comeBack) == kEdges && comeBack == kFinal, "and G's view stays too, while they are");
-	Check(View_AfterSwitches(kEdges, kOff, true, false, &comeBack) == kEdges, "G moved it off OFF: turning a switch on leaves it where G put it");
+	Check(View_AfterSwitches(kEdges, kOff, true, true, &comeBack) == kEdges && comeBack == kFinal, "and J's view stays too, while they are");
+	Check(View_AfterSwitches(kEdges, kOff, true, false, &comeBack) == kEdges, "J moved it off OFF: turning a switch on leaves it where J put it");
 
 	// no stencil: the switches stay all off, so nothing ever brings the view back
 	comeBack = kFinal;
@@ -297,13 +345,13 @@ static void TheView()
 
 	Check(view == kOff && comeBack == kFinal, "a card with no stencil stays at OFF, frame after frame");
 
-	// the moves of G
-	Check(View_AfterG(kOff, kViewCount, kFinal, false) == kFinal, "G goes from OFF to FINAL");
-	Check(View_AfterG(kFinal, kViewCount, kFinal, false) == kEdges, "and on to the next");
-	Check(View_AfterG(kPolygons, kViewCount, kFinal, false) == kOff, "and round from the last to OFF");
-	Check(View_AfterG(kOff, kViewCount, kFinal, true) == kEdges, "with everything off, G goes past FINAL");
-	Check(View_AfterG(kEdges, kViewCount, kFinal, true) == kPolygons, "the other views are as they were");
-	Check(View_AfterG(kPolygons, kViewCount, kFinal, true) == kOff, "and it still comes round to OFF");
+	// the moves of J
+	Check(View_AfterViewKey(kOff, kViewCount, kFinal, false) == kFinal, "J goes from OFF to FINAL");
+	Check(View_AfterViewKey(kFinal, kViewCount, kFinal, false) == kEdges, "and on to the next");
+	Check(View_AfterViewKey(kPolygons, kViewCount, kFinal, false) == kOff, "and round from the last to OFF");
+	Check(View_AfterViewKey(kOff, kViewCount, kFinal, true) == kEdges, "with everything off, J goes past FINAL");
+	Check(View_AfterViewKey(kEdges, kViewCount, kFinal, true) == kPolygons, "the other views are as they were");
+	Check(View_AfterViewKey(kPolygons, kViewCount, kFinal, true) == kOff, "and it still comes round to OFF");
 }
 
 // Every one of the eight, on a card that has everything
@@ -423,12 +471,13 @@ static void TheRealGame()
 
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
 	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
-	std::string const keys = Between(applying, "if (DevKeysCanAct())", "bool const hasStencil");
+	std::string const keys = Between(applying, "if (PlayerKeysCanAct())", "bool const hasStencil");
 
 	Check(CountOf(render, "ViewSwitches_ApplyAsked();") == 2, "the switches change from one place, named once ahead and called once");
 	Check(Has(render, "ToyShadows_Draw();\n\t\tViewSwitches_ApplyAsked();"), "and that's straight after the frame's shadows");
 
 	std::string const canAct = Between(render, "static bool DevKeysCanAct()", "}");
+	std::string const playerCanAct = Between(render, "static bool PlayerKeysCanAct()", "}");
 
 	Check(Has(canAct, "DevMode"), "the keys need -dev");
 	Check(Has(canAct, "AvP.Network == I_No_Network"), "and do nothing in a network game, where they'd show what walls hide");
@@ -437,7 +486,7 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
 
 	for (char const *const name : devToggles)
@@ -456,7 +505,7 @@ static void TheRealGame()
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
 	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
-	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ToyShadowsCasters" };
+	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ShadowsPretendNoFloatBlend", "ToyShadowsCasters" };
 
 	for (char const *const name : tuned)
 	{
@@ -474,20 +523,22 @@ static void TheRealGame()
 	Check(Has(keepingOut, "ShadowShootOn = 0;") && Has(keepingOut, "ShadowFlickerOn = 0;") && Has(keepingOut, "ShadowsFullReport = 0;"), "and the tools that say the same in words go off");
 	Check(Has(keepingOut, "LogString("), "and the log says why");
 
-	std::string::size_type const gKey = render.find("if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])");
+	std::string::size_type const viewKey = render.find("if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))");
 	std::string::size_type const keptOut = render.find("KeepDeveloperToolsOutOfNetworkGames();");
 
-	Check(gKey != std::string::npos && keptOut != std::string::npos && gKey < keptOut && keptOut < render.find("bool const lightsOurs"), "that's asked every frame, after G and before anything is drawn");
-	Check(Has(canAct, "AvP.MainLoopRunning"), "and a level being played, so a letter typed into a main menu doesn't press them");
-	Check(Has(canAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
-	Check(Has(canAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
-	Check(Has(keys, "if (DevKeysCanAct())"), "L and H ask that");
-	Check(Has(render, "if (DevKeysCanAct() && DebouncedKeyboardInput[KEY_G])"), "and so does G");
-	Check(Has(render, "Not while typing, like G.\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
-	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 1, "and nothing else in the drawing code reads those keys");
-	Check(Has(keys, "DebouncedKeyboardInput[KEY_L]") && Has(keys, "lightingAsked = kAskedNext"), "L is the next lighting, once a press");
-	Check(Has(keys, "DebouncedKeyboardInput[KEY_H]") && Has(keys, "shadowsAsked = kAskedNext"), "H switches the shadows, once a press");
-	Check(CountOf(render, "KEY_L]") == 1 && CountOf(render, "KEY_H]") == 1, "and nothing else in the drawing code reads those keys");
+	Check(viewKey != std::string::npos && keptOut != std::string::npos && viewKey < keptOut && keptOut < render.find("bool const lightsOurs"), "that's asked every frame, after G and before anything is drawn");
+	Check(Has(canAct, "PlayerKeysCanAct()"), "and everything a key that anyone may press needs");
+	Check(!Has(playerCanAct, "DevMode") && !Has(playerCanAct, "I_No_Network"), "which is neither of those two");
+	Check(Has(playerCanAct, "AvP.MainLoopRunning"), "but a level being played, so a letter typed into a main menu doesn't press them");
+	Check(Has(playerCanAct, "!InGameMenusAreRunning()"), "and no menu open in that level");
+	Check(Has(playerCanAct, "IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK))"), "and do nothing while typing");
+	Check(Has(keys, "if (PlayerKeysCanAct())"), "the rendering and shadows keys ask that, so they work for everyone");
+	Check(Has(render, "if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))"), "and the dev views' key asks for -dev as well");
+	Check(Has(render, "Not while typing, like J.\n\tif (DevKeysCanAct())"), "and so do F7, F8 and the shoot tool's keys");
+	Check(CountOf(render, "DebouncedKeyboardInput[KEY_F7]") == 1 && CountOf(render, "DebouncedKeyboardInput[KEY_J]") == 0 && CountOf(render, "DebouncedKeyboardInput[KEY_G]") == 0, "and nothing else in the drawing code reads those keys, and G is the marine's now");
+	Check(Has(keys, "ViewSettings_KeyPressed(kViewKeyRendering)") && Has(keys, "lightingAsked = kAskedNext"), "the rendering key is the next lighting, once a press");
+	Check(Has(keys, "ViewSettings_KeyPressed(kViewKeyShadows)") && Has(keys, "shadowsAsked = kAskedNext"), "the shadows key switches the shadows, once a press");
+	Check(CountOf(render, "KEY_L]") == 0 && CountOf(render, "KEY_H]") == 0, "and the drawing code reads no fixed letter for them, because the player chooses: tests/view_keys_test.cpp");
 
 	std::string const shadowsCommand = Between(render, "void ShadowsCommand(char *words)", "void LightingCommand(char *words)");
 	std::string const lightingCommand = Between(render, "void LightingCommand(char *words)", "// The menu asks the same way the commands do");
@@ -498,7 +549,7 @@ static void TheRealGame()
 	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
 	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
 	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights())"), "the surface pass only asks for the maps when the choice reads them");
-	Check(Has(render, "ToyShadowsMode = View_AfterG(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "G goes past FINAL when everything is off");
+	Check(Has(render, "ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "J goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
 
@@ -561,7 +612,7 @@ static void TheRealGame()
 	Check(settingsRead != std::string::npos && settingsRead < launch.find("\"-reliefoff\"") && settingsRead < launch.find("\"-shadowsoff\""), "the settings are read straight after the file, ahead of the switches that change them for one run");
 
 	// a new player's game: nothing written for what's off
-	Check(Has(render, "if (ToyShadowsMode)\n\t\t{\n\t\t\tSurfaceNormals_Lock();"), "with the view off, the normals aren't opened, so none are written");
+	Check(Has(render, "if (ToyShadowsMode || ShoulderLamp_CouldBeDrawn())\n\t\t{\n\t\t\tSurfaceNormals_Lock();"), "with the view off and the shoulder lamp off, the normals aren't opened, so none are written");
 	Check(CountOf(render, "SurfaceNormals_Lock();") == 1, "and that's the only place they're opened");
 
 	std::string const saying = Between(render, "static void SaySwitch(const char *words)", "// A reason is worth hearing once");
@@ -736,6 +787,73 @@ static void TheVolumesSwitch()
 	Check(Has(render, "float const perPass = passesHere ? (float)pixelsByLight[i] / (float)passesHere : 0.0f;"), "the report doesn't divide by no passes");
 }
 
+// The rule in light_choice.h, as the game really uses it. These only read the source, so what they say on a graphics card needs a run of the game.
+static void TheMapLightsInTheGame()
+{
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const setup = ReadSourceFile("3dc/avp/win95/object_setup.cpp");
+	std::string const commands = ReadSourceFile("3dc/avp/game_commands.cpp");
+	std::string const launch = ReadSourceFile("3dc/avp/win95/winmain.cpp");
+
+	// Which kind of light is which
+	// A light's kind comes from two real fields, and both start out in the level file: has_corona, which InitPlacedLight sets from the polygon flag iflag_light_corona, and LFlag_AbsPos, which
+	// setup_light_data gives a level light, on top of flags copied from the file. A crafted level can say anything in them, and all that can do is say yes or no to a shadow on one player's screen.
+	std::string const kinds = Between(shapes, "static LightKindForShadows KindOfLight(", "// What became of every light the choosing looked at");
+
+	Check(Has(kinds, "if (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;"), "a light with LFlag_AbsPos is a level light");
+	Check(Has(kinds, "owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr"), "only a placed light's data is read as a placed light's");
+	Check(Has(kinds, "has_corona ? kLampWithACorona : kLampWithNoCorona"), "and its corona says which kind of lamp it is");
+	Check(Has(kinds, "return kLightOfAnyOtherKind;"), "and anything else is left alone");
+
+	std::string::size_type const placedIsLookedFor = kinds.find("I_BehaviourPlacedLight");
+	std::string::size_type const flagIsLookedFor = kinds.find("LFlag_AbsPos");
+
+	Check(placedIsLookedFor != std::string::npos && flagIsLookedFor != std::string::npos && placedIsLookedFor < flagIsLookedFor, "a placed light is looked for first, so a flag crafted in the level file can't change what a lamp counts as");
+	Check(Has(kinds, "block ? block->ObStrategyBlock : 0"), "a light element, which is on no block, is safe to ask about");
+
+	std::string const levelLights = Between(setup, "void setup_light_data (LIGHTBLOCK * lPtr, Light_Chunk * lc)\n{", "void setup_placed_light_data");
+	std::string const placedLights = Between(setup, "void setup_placed_light_data (LIGHTBLOCK * lPtr, Placed_Object_Light_Chunk * lc)\n{", "void SetUpRunTimeLights ()");
+
+	Check(Has(levelLights, "LFlag_AbsPos"), "a level light does get LFlag_AbsPos");
+	Check(!Has(placedLights, "LFlag_AbsPos"), "and a placed light doesn't, so the flag tells them apart");
+
+	// Where it's asked
+	std::string const considering = Between(shapes, "static void ToyConsiderLight(", "int const distance = ToyDistanceToCamera(light);");
+
+	Check(Has(considering, "if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))"), "every light on its way to the list is asked about, with what SHADOWAMBIENT says");
+	Check(Has(considering, "LightKindForShadows const kind = KindOfLight(light, block);"), "by the block that carries it");
+
+	// How it's set
+	Check(Has(render, "int ShadowAmbientOn = 0;"), "SHADOWAMBIENT starts off");
+
+	std::string const ungated = Between(commands, "void CreateGameSpecificConsoleCommands(void)", "bool IsACheat");
+
+	Check(Has(ungated, "\"SHADOWAMBIENT\"") && Has(ungated, "ShadowAmbientCommand"), "the command is made ahead of everything that needs a cheat or -debug");
+
+	std::string const command = Between(render, "void ShadowAmbientCommand(char *words)", "// The menu asks the same way the commands do.");
+
+	Check(Has(command, "SwitchWords_ShadowAmbientAsk(words, &shadowAmbientAsked)"), "the command notes what it's asked for");
+	Check(Has(command, "SaySwitch(\"SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT\")"), "and says so if it doesn't know the words");
+
+	std::string const applying = Between(render, "static void ViewSwitches_ApplyAsked()\n{", "static void ToyShadows_Draw()");
+	std::string const ambientPart = Between(applying, "if (shadowAmbientAsked != kAskedNothing)", "if (lightingAsked != kAskedNothing)");
+
+	Check(Has(ambientPart, "ShadowAmbientOn = Shadows_AfterAsking(ShadowAmbientOn, shadowAmbientAsked);"), "it only changes between frames, with the other switches");
+	Check(Has(ambientPart, "SaySwitch(ShadowAmbientOn ? \"SHADOWAMBIENT: ON\" : \"SHADOWAMBIENT: OFF\");"), "and the screen says which it is now");
+	Check(Has(ambientPart, "shadowAmbientAsked = kAskedNothing;"), "and one press only counts once");
+
+	std::string const atStart = Between(launch, "\"-shadowambient\"", "}");
+
+	Check(Has(launch, "strstr(command_line, \"-shadowambient\")"), "-shadowambient is there without -dev, because it only changes this player's own screen");
+	Check(Has(atStart, "ShadowAmbientOn = 1;"), "and it turns it on");
+
+	// A network game leaves it alone, because all it changes is what one player's own screen draws
+	std::string const tuningTable = Between(render, "static const ShadowTuningNumber shadowTuning[] =", "static float const shadowSurfaceBiasAsBuilt");
+
+	Check(!Has(tuningTable, "ShadowAmbientOn"), "a network game doesn't put it back");
+}
+
 static void PuttingTheTuningBack()
 {
 	int dark = 85;
@@ -752,6 +870,8 @@ int main()
 {
 	PuttingTheTuningBack();
 	WordsForShadows();
+	WordsForAmbient();
+	TheMapLightsRule();
 	WordsForLighting();
 	ShadowsAnswers();
 	TheCycle();
@@ -761,6 +881,7 @@ int main()
 	TheEightStates();
 	TheRealGame();
 	TheVolumesSwitch();
+	TheMapLightsInTheGame();
 
 	if (checksFailed)
 	{
