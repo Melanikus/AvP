@@ -49,6 +49,12 @@ void LogErrorStringC(const char *)
 {
 }
 
+// The memory code tells the game's sounds about memory that's about to go (DeallocMem in our_mem.cpp, since net-fixes). There are no
+// sounds in this test, so there's nothing to tell.
+void Sound_ForgetAddressesInside(const void *, size_t)
+{
+}
+
 // The chunk code can open files, through these two functions from another part of the game. This test only gives it
 // bytes in memory, so they are never meant to run, and they answer that there is no such file.
 HANDLE avp_CreateFile(const char *, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE)
