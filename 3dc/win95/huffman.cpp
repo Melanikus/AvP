@@ -1,12 +1,15 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   adds a checked Huffman decoder for save games and text files: it refuses data that does not fit or
-//   decodes to fewer bytes than it claims
+//   decodes to fewer bytes than it claims; the room for compressed data allows for data that grows when compressed;
+//   the memory for compressing a save comes from AllocateMem, which stops the game with a message if there is none left;
+//   the decoder picks its table entry as an int, which is what the table holds
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "malloc.h"
 #include "huffman.hpp"
+#include "mem3dc.h"
 
 /* KJL 17:12:25 17/09/98 - Huffman compression/decompression routines */
 
@@ -82,7 +85,11 @@ extern HuffmanPackage *HuffmanCompression(unsigned char *sourcePtr, int length)
 	// Step 6: Making the encoding table
 	MakeHuffmanEncodeTable(EncodingTable,&SymbolCensus[256],Depths);
 	// Step 7: Encoding data
-	outpackage = (HuffmanPackage*)AllocateMemory(sizeof(HuffmanPackage)+length);
+	// Compressing can make data bigger: when all the bytes are about as common as each other, a byte can take up to
+	// MAX_DEPTH bits, which is more than the 8 it started with. So the room is worked out for that worst case: MAX_DEPTH
+	// bytes for every 8 bytes of data, MAX_DEPTH more for the few left over, and 8 for the last word the encoder writes.
+	size_t const mostBytes = (size_t)length / 8 * MAX_DEPTH + MAX_DEPTH + 8;
+	outpackage = (HuffmanPackage*)AllocMem(sizeof(HuffmanPackage) + mostBytes);
 	strncpy(outpackage->Identifier,COMPRESSED_RIF_IDENTIFIER,8);
 	outpackage->CompressedDataSize = HuffEncodeBytes((int*)(outpackage+1), sourcePtr, length, EncodingTable);
 	outpackage->UncompressedDataSize = length;
@@ -418,25 +425,9 @@ static void MakeHuffmanDecodeTable(const int *depth, int depthmax, const unsigne
 static int HuffmanDecode(unsigned char *dest, const int *source, const int *sourceEnd, const int *table, int length);
 
 
-extern char *HuffmanDecompress(const HuffmanPackage *inpackage)
-{
-	unsigned char *uncompressedData = NULL;
-	// Step 1: Make the decoding table
-	MakeHuffmanDecodeTable(inpackage->CodelengthCount, MAX_DEPTH, inpackage->ByteAssignment);
-
-	// Step 2: Decode data
-	uncompressedData = (unsigned char*)AllocateMemory(inpackage->UncompressedDataSize+16);
-	if (uncompressedData)
-	{
-		HuffmanDecode(uncompressedData,(int*)(inpackage+1),NULL,DecodeTable,inpackage->UncompressedDataSize);
-	}
-
-	return (char*)uncompressedData;	
-}
-
 /*
-	HuffmanDecompress for a package read from an untrusted file (a save game, language.txt, credits.txt) of
-	packageSize bytes, header included.
+	Decompresses a package read from a file (a level, a save game, language.txt, credits.txt) of packageSize
+	bytes, header included. Everything in a package can be crafted, so there is no decoder that trusts one.
 	Returns NULL when the package cannot be decoded safely and completely:
 	- it is smaller than its header;
 	- UncompressedDataSize is negative or larger than the data could hold (every code is at least one bit long,
@@ -448,9 +439,8 @@ extern char *HuffmanDecompress(const HuffmanPackage *inpackage)
 	The first three are checked before anything is changed. After them DecodeTable has been rebuilt, which is
 	harmless (every decode rebuilds it first); nothing else outlives a NULL result.
 	A package written by HuffmanCompression passes all four (its code is a complete Huffman code, and its data holds
-	every symbol), and is decoded exactly as HuffmanDecompress does; the only other difference is that the decoder
-	never reads past the end of the package (it reads zero bits there, which only ever fill the look-ahead after the
-	last code).
+	every symbol). The decoder never reads past the end of the package (it reads zero bits there, which only ever
+	fill the look-ahead after the last code).
 */
 extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packageSize)
 {
@@ -486,7 +476,7 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 	MakeHuffmanDecodeTable(inpackage->CodelengthCount, MAX_DEPTH, inpackage->ByteAssignment);
 
 	// Step 2: Decode data, reading no further than the end of the package
-	uncompressedData = (unsigned char*)AllocateMemory(inpackage->UncompressedDataSize+16);
+	uncompressedData = (unsigned char*)AllocateMemory((size_t)inpackage->UncompressedDataSize+HUFFMAN_SPARE_BYTES);
 	if (uncompressedData)
 	{
 		const int *source = (const int*)(inpackage+1);
@@ -496,6 +486,8 @@ extern char *HuffmanDecompressChecked(const HuffmanPackage *inpackage, int packa
 			free(uncompressedData);
 			return NULL;
 		}
+
+		memset(uncompressedData+inpackage->UncompressedDataSize,0,HUFFMAN_SPARE_BYTES);
 	}
 
 	return (char*)uncompressedData;
@@ -557,9 +549,10 @@ static void MakeHuffmanDecodeTable(const int *depth, int depthmax, const unsigne
 }
 
 
-#define EDXMASK ((((1 << (MAX_DEPTH + 1)) - 1) ^ 1) ^ -1)
-
-// sourceEnd: NULL, or the end of the compressed data (words at or after it are read as 0)
+// table holds one int for each possible code. A code is the next MAX_DEPTH bits of the data, just above the lowest bit
+// of bits, which is kept spare. In an int, the lowest byte is how many bits that code really takes, and the next byte is
+// the letter it stands for. p points at the int, so p[0] and p[1] are those two bytes.
+// sourceEnd: the end of the compressed data (words at or after it are read as 0)
 static int HuffmanDecode(unsigned char *dest, const int *source, const int *sourceEnd, const int *table, int length)
 {
     unsigned char          *start;
@@ -585,7 +578,7 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *sour
             {
             	bits   = (bits >> reserve) | (resbits << (32 - reserve));
 			}
-            if (sourceEnd && source >= sourceEnd)
+            if (source >= sourceEnd)
             {
                 resbits = 0;
             }
@@ -604,7 +597,7 @@ static int HuffmanDecode(unsigned char *dest, const int *source, const int *sour
         {
             bits      >>= wid;
             *dest++   = p[1];
-lpent:      p         = (const unsigned char *)(((const short *)table)+(bits & ~EDXMASK));
+lpent:      p         = (const unsigned char *)(table + ((bits >> 1) & ((1 << MAX_DEPTH) - 1)));
         }
         while ((available  -= (wid = *p)) >= 0 && (dest-start)!=length);
 

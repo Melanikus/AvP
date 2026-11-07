@@ -1,6 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed code and declarations only the level editor used: the game itself never runs them
+//   removed code and declarations only the level editor used: the game itself never runs them; added a
+//   check on the shape numbers a level file gives, and on the numbers that give a shape's size
+//   removed the class that read a shape stored in a level as a raw copy of memory
+//   removed the shapes made for the PlayStation and Saturn
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _shpchunk_hpp
 #define _shpchunk_hpp 1
@@ -33,27 +37,7 @@
 class Object_Chunk;
 class Shape_Header_Chunk;
 class Anim_Shape_Frame_Chunk;
-class Console_Shape_Chunk;
 // flags structure
-
-enum Console_Type
-{
-	CT_PSX=0,
-	CT_Saturn=1,
-
-	// IMPORTANT
-	// since enums are not guaranteed to assume any particular
-	// storage class, code compiled on different compilers or
-	// with different settings may result in enums to be written
-	// to the data block as a char and read back in as an int,
-	// with the three most significant bytes containing junk.
-	// THIS MASK MUST BE KEPT UP TO DATE AS THE ENUM IS EXTENDED;
-	// ALSO ENSURE THAT NEW FILES LOADED INTO OLD SOFTWARE WILL
-	// NOT HAVE THEIR ENUM VALUE OVER-MASKED; THE MASK IS ONLY
-	// HERE TO ATTEMPT TO REMOVE PROBLEMS FROM FILES MADE
-	// PRIOR TO ITS INTRODUCTION
-	CT_MASK=0xff
-};
 
 // The shape chunk contains and handles all the interface data for the
 // child chunks that it recognises in ChunkShape
@@ -68,6 +52,10 @@ public:
 
 	// constructor from buffer
 	Shape_Chunk (Chunk_With_Children * parent, const char *, size_t);
+
+	// says whether the numbers that give this shape's size can be real. See the function itself.
+	bool numbers_are_valid();
+	bool points_fit_box();
 
 	// I want the external file load to be as transparent as possible
 	// i.e. we have a shape which is loaded as usaul - it should then
@@ -96,13 +84,10 @@ public:
 
 	// functions for the locking functionality
 
-	BOOL file_equals (HANDLE &);
-	const char * get_head_id();
 	void set_lock_user(char *);
 
 	virtual void post_input_processing();
 
-	Console_Shape_Chunk* get_console_shape_data(Console_Type);
 
 	BOOL inc_v_no();
 
@@ -155,7 +140,9 @@ public:
 
 	const char * get_shape_name();
 
-	Console_Shape_Chunk* get_console_shape_data(Console_Type);
+
+	// refuses the level if the numbers that give this sub-shape's size can't be real
+	virtual void post_input_processing();
 
 	// Number stored for list_pos when loading
 
@@ -315,37 +302,6 @@ class Poly_Not_In_Bounding_Box_Chunk : public Chunk
 };
 ///////////////////////////////////////////////
 
-class Console_Type_Chunk: public Chunk
-{
-	public :
-	Console_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t)
-	:Chunk(parent,"CONSTYPE"),console((Console_Type)(*(int*)data & CT_MASK))
-	{}
-
-	Console_Type console;
-
-	virtual size_t size_chunk()
-	{return chunk_size=16;}
-
-	virtual void fill_data_block(char * data_start);
-};
-///////////////////////////////////////////////
-class Console_Shape_Chunk : public Chunk_With_Children
-{
-	public :
-	Console_Shape_Chunk(Chunk_With_Children* const  parent,const char*,size_t);
-
-	const ChunkShape shape_data;
-
-	void generate_console_chunkshape();//needs parent's chunkshape to be set up first
-
-	private:
-	friend class Shape_Polygon_Chunk;
-	friend class Shape_UV_Coord_Chunk;
-	ChunkShape * shape_data_store;
-};
-///////////////////////////////////////////////
-
 class Shape_Vertex_Chunk : public Chunk
 {
 public:
@@ -494,7 +450,6 @@ public:
 	// constructor from buffer
 	Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const char * pdata, size_t psize);
 	Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pdata, size_t psize);
-	Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const char * pdata, size_t psize);
 
 	virtual size_t size_chunk ()
 	{
@@ -513,7 +468,6 @@ private:
 
 	friend class Shape_Chunk;
 	friend class Shape_Sub_Shape_Chunk;
-	friend class Console_Shape_Chunk;
 
 
 
@@ -524,11 +478,6 @@ private:
 	{}
 
 	Shape_Polygon_Chunk (Shape_Chunk * parent, int n_polys)
-	: Chunk (parent, "SHPPOLYS"),
-	poly_data (parent->shape_data_store->poly_list), num_polys (n_polys)
-	{}
-
-	Shape_Polygon_Chunk (Console_Shape_Chunk * parent, int n_polys)
 	: Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (n_polys)
 	{}
@@ -560,6 +509,13 @@ public:
 	List<char *> object_names_store;
 
 	int flags;
+
+	// File_Chunk joins objects to shapes through a list with a place for every shape number, up to the highest it finds.
+	// The number comes straight from the level file, so it could be anything: a negative one would point in front of the
+	// list, and a huge one would ask for a list too big to make. Numbers in the game's own files run from 1 to 7304, so
+	// this limit leaves plenty of room. A file that fails this check is refused.
+	static const int Max_File_Id_Num = 65535;
+	bool file_id_num_is_valid() const { return file_id_num >= 0 && file_id_num <= Max_File_Id_Num; }
 
 private:
 
@@ -614,7 +570,6 @@ public:
 	// constructor from buffer
 	Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t uvsize);
 	Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t uvsize);
-	Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t uvsize);
 
 	virtual size_t size_chunk ();
 
@@ -630,7 +585,6 @@ private:
 
 	friend class Shape_Chunk;
 	friend class Shape_Sub_Shape_Chunk;
-	friend class Console_Shape_Chunk;
 
 
 	// constructor from data
@@ -640,11 +594,6 @@ private:
 	{}
 
 	Shape_UV_Coord_Chunk (Shape_Chunk * parent, int n_uvs)
-	: Chunk (parent, "SHPUVCRD"),
-	uv_data (parent->shape_data_store->uv_list), num_uvs (n_uvs)
-	{}
-
-	Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, int n_uvs)
 	: Chunk (parent, "SHPUVCRD"),
 	uv_data (parent->shape_data_store->uv_list), num_uvs (n_uvs)
 	{}
@@ -1008,40 +957,4 @@ private:
 
 };
 
-///////////////////////////////////////////////
-class Shape_Preprocessed_Data_Chunk : public Chunk
-{
-public:
-
-	Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent,int _blocksize,int _first_pointer,unsigned int* _memory_block);
-	Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent, const char * data, size_t ssize);
-	~Shape_Preprocessed_Data_Chunk ()
-	{
-		delete[] extra_data;
-		delete[] memory_block;
-	}
-
-	virtual size_t size_chunk ()
-	{
-		return (chunk_size = 12 + 12+block_size*4+num_extra_data*4);
-	}
-
-	virtual void fill_data_block (char *);
-
-
-	int num_extra_data;
-	int* extra_data;
-
-	void* GetMemoryBlock();
-
-private:
-
-	int block_size;
-	int first_pointer;
-	unsigned int* memory_block;
-
-	friend class Shape_Chunk;
-	friend class Shape_Sub_Shape_Chunk;
-
-};
 #endif

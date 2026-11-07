@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   removed the code that read a shape stored in a level as a raw copy of memory
+//   a level file can only ask for so many pictures, so its handle keeps count
+
 #ifndef _chnkload_hpp
 #define _chnkload_hpp 1
 
@@ -16,17 +21,6 @@ extern void copy_to_module (Object_Chunk * ob, int mod_pos, int shplst_pos);
 extern BOOL copy_to_shapeheader (
 							RIFFHANDLE,
 							ChunkShape const & cshp,
-							SHAPEHEADER *& shphd,
-							Chunk_With_Children * shape,
-							int flags,
-							int local_max_index,
-							int * local_tex_index_nos,
-							int listpos = GLS_NOTINLIST,
-							const ChunkObject* object=0	  //object used so that conversion from float to int can be done in world coordinates
-							);
-extern BOOL copy_preprocessed_to_shapeheader (
-							RIFFHANDLE,
-							Shape_Preprocessed_Data_Chunk*,
 							SHAPEHEADER *& shphd,
 							Chunk_With_Children * shape,
 							int flags,
@@ -74,6 +68,8 @@ struct _RifHandle : Project_RifHandle
 	List<int> shape_nums;
 	int max_index;
 	int * tex_index_nos;
+	int pictures_asked_for;       // how many pictures this file has asked for so far: see LoadPictureItNames in chunk_load.cpp
+	bool said_too_many_pictures;  // so that the log says so once, not once for every name
 
 	~_RifHandle()
 		{}
@@ -83,6 +79,8 @@ struct _RifHandle : Project_RifHandle
 		, palparent(0)
 		, max_index(0)
 		, tex_index_nos(0)
+		, pictures_asked_for(0)
+		, said_too_many_pictures(false)
 		{}
 };
 

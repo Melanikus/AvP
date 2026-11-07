@@ -1,3 +1,7 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
+
 #ifdef _WIN32
 /****
 
@@ -26,6 +30,10 @@ extern unsigned char KeyboardInput[256];
 #include <zmouse.h>
 #include "vdb.h"
 #include <assert.h>
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "3dc/avp/win95/win_proj.cpp";
 
 void MakeToAsciiTable(void);
 
@@ -540,7 +548,7 @@ void ChangeWindowsSize(uint32_t width, uint32_t height)
 		if (::AdjustWindowRect(&newWindowSize, ::GetWindowLongPtr(hWndMain, GWL_STYLE), FALSE) == 0)
 		{
 			LastError = ::HRESULT_FROM_WIN32(::GetLastError());
-			LogDxError(LastError, __LINE__, __FILE__);
+			LogDxError(LastError, __LINE__, kThisFile);
 			return;
 		}
 	}
@@ -548,14 +556,14 @@ void ChangeWindowsSize(uint32_t width, uint32_t height)
 	if (::SetWindowPos(hWndMain, 0, 0, 0, newWindowSize.right - newWindowSize.left, newWindowSize.bottom - newWindowSize.top, SWP_SHOWWINDOW) == 0)
 	{
 		LastError = ::HRESULT_FROM_WIN32(::GetLastError());
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		return;
 	}
 
 	if (::GetClientRect(hWndMain, &testRect) == 0)
 	{
 		LastError = ::HRESULT_FROM_WIN32(::GetLastError());
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 	}
 }
 

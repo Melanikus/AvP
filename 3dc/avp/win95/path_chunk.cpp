@@ -1,3 +1,10 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a path's list of points is measured against its chunk before it's made
+//   a path's number has to be a place in the list of paths
+//   a name is only read as far as the end of its chunk
+//   what comes after a name or a list is only read while it's still inside the chunk
+
 #include "path_chunk.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -18,20 +25,23 @@ AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent)
 AVP_Path_Chunk::AVP_Path_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPPATH2")
 {
-	int name_length=strlen(data);
-	PathName=new char[name_length+1];
-	strcpy(PathName,data);
+	char const * const start = data;
+	size_t name_length=0;
+	PathName=CopyNameFromChunk(start,datasize,data,&name_length);
 	data+=(name_length+4)&~3;
 	
-	PathID=*(int*)data;
-	data+=4;
-	flags=*(int*)data;
-	data+=4;
-	spare2=*(int*)data;
-	data+=4;
-	PathLength=*(int*)data;
-	data+=4;
-	
+	PathID=ReadFromChunk<int>(start,datasize,data);
+
+	// This is used as a place in the list of paths, so a negative one would write in front of the list, and a bigger one would only ask for a bigger list.
+	if(PathID<0 || PathID>=MostPathNumbers)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	flags=ReadFromChunk<int>(start,datasize,data);
+	spare2=ReadFromChunk<int>(start,datasize,data);
+	PathLength=ReadListCount(start,data,datasize,sizeof(ChunkPathPoint));
+
 	if(PathLength) Path=new ChunkPathPoint[PathLength];
 	else Path=0;
 	

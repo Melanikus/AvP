@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an empty module is checked for before it is read
 /*
 	Modules - AvP is an entirely module-based engine. Modules are defined as regular orthogonal boxes within the
 	gameworld. Modules contain the polygons which make up the rooms & corridors - module size is defined by the
@@ -9,6 +11,9 @@
 	be 'seen' at any one time. In the following plan view, from where the stick man is, the shaded yellow modules
 	are the ones that are visible.
 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 
 #include "3dc.h"
 #include "inline.h"
@@ -200,7 +205,7 @@ void FindVisibleModules(VMODULE *vptr,int flag)
 {
 	while(vptr->vmod_type != vmtype_term)
 	{
-		MODULE *mptr;
+		MODULE *mptr = 0;
 
 		/* Add this module to the visible array */
 		if(vptr->vmod_mref.mref_ptr)
@@ -1020,13 +1025,14 @@ void PrintName(char *name)
 int IsModuleVisibleFromModule(MODULE *source, MODULE *target) {
 
 	VMODULE *vptr;
-	MODULE *mptr;
+	MODULE *mptr = 0;
 	int gotit;
+
+	if ((source==NULL)||(target==NULL)) return(0);
 
 	vptr=source->m_vmptr;
 	gotit=0;
 
-	if ((source==NULL)||(target==NULL)) return(0);
 	if (source==target) return(1);
 
 	while(! ((vptr->vmod_type == vmtype_term)||(gotit)) ) {

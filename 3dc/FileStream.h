@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   adds RanOutOfData, which says that a read reached the end of the file
+
 #ifndef _FileStream_h_
 #define _FileStream_h_
 
@@ -74,6 +77,8 @@ class FileStream
 			fromFastFile = false;
 			fileOffset = 0;
 			fileSize = 0;
+			memberBytesLeft = 0;
+			ranOutOfData = false;
 		}
 		~FileStream();
 
@@ -81,6 +86,10 @@ class FileStream
 		bool FileStream::Open(const std::string &fileName, eAccess accessType, eFastFileCheck skipFastFileCheck = DoFastFileCheck);
 		void Close();
 		bool IsGood();
+
+		// True once a read has asked for more than the file had left, or failed. It stays true after that. A loop
+		// reading a file that says its own length has to ask this, or a damaged file can keep it going for ever.
+		bool RanOutOfData();
 
 		DWORD ReadBytes(uint8_t *buffer, size_t nBytes);
 		bool WriteBytes(const uint8_t *buffer, size_t nBytes);
@@ -108,6 +117,7 @@ class FileStream
 		bool WriteString(const std::string &theString);
 		bool WriteString(const char *theString);
 		uint32_t GetFileSize();
+		uint64_t BytesLeft();
 		bool Seek(int64_t offset, eSeek seekType);
 		bool SkipBytes(int64_t nBytes);
 		int64_t GetCurrentPos();
@@ -115,11 +125,13 @@ class FileStream
 	private:
 		HANDLE fileHandle;
 		bool isGood;
+		bool ranOutOfData;
 
 		// fast file specific stuff
 		bool fromFastFile;
 		uint32_t fileOffset;
 		uint32_t fileSize;
+		uint32_t memberBytesLeft;    // how much of a file inside a fastfile is still to be read
 
 		bool OpenActual(const std::string &fileName, eAccess accessType);
 };

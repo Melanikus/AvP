@@ -1,0 +1,19 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: a baked shape does not say how many colours it has",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\tshape->sh_numextraitems = svic->num_vertices;\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

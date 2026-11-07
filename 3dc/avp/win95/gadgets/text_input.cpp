@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   typing at the very start of a line no longer runs a loop backwards through memory
+
 /*******************************************************************
  *
  *    DESCRIPTION: 	textin.cpp
@@ -611,9 +615,12 @@ int TextInputState :: bInsertAt(ProjChar ProjCh_In, size_t Pos_Where)
 					// Advance all to the right of the cursor, starting with the final
 					// character in the string:
 					
-					for (size_t i = NumChars; i >= Pos_Where; i--)
+					// This counts down to just above the place, not to the place itself, because i can't go below 0. When typing
+					// at the very start of the line, a test of "i >= 0" would always pass, and the loop would run on through
+					// memory before the line.
+					for (size_t i = NumChars + 1; i > Pos_Where; i--)
 					{
-						ProjCh[ i + 1 ] = ProjCh[ i ];
+						ProjCh[ i ] = ProjCh[ i - 1 ];
 					}
 
 					ProjCh[ Pos_Where ] = ProjCh_In;

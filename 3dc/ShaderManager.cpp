@@ -23,6 +23,7 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "ShaderManager.h"
+#include "frame_timing.h"
 #include <vector>
 #include "console.h"
 #include <sstream>
@@ -234,6 +235,8 @@ void EffectManager::Reset()
 
 bool EffectManager::SetActive(effectID_t effectID)
 {
+	FrameTiming_NoteEffectUsed((uint32_t)effectID, effectList[effectID].effectName.c_str());
+
 	vsPool.SetActive(effectList[effectID].vertexShaderID);
 	psPool.SetActive(effectList[effectID].pixelShaderID);
 	return true;

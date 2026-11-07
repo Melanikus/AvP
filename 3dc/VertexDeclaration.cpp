@@ -89,6 +89,12 @@ void VertexDeclaration::Add(uint16_t stream, VD_TYPE type, VD_METHOD method, VD_
 			break;
 	}
 
+	// each list of vertices is counted from its own start, so the first element of a second list is at 0
+	if (!this->elements.empty() && this->elements.back().stream != stream)
+	{
+		this->offset = 0;
+	}
+
 	vertexElement newElement;
 	newElement.stream = stream;
 	newElement.offset = this->offset;

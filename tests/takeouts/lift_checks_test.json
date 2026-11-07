@@ -1,0 +1,68 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a negative state is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/lift_checks.h",
+					"from": "return state >= 0 && state < howMany;",
+					"to": "return state < howMany;"
+				}
+			]
+		},
+		{
+			"name": "a state past the last is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/lift_checks.h",
+					"from": "return state >= 0 && state < howMany;",
+					"to": "return state >= 0;"
+				}
+			]
+		},
+		{
+			"name": "the host's lift state isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (!Lift_StateIsKnown(msgPtr->state, (int)PLBS_GoingDown + 1))\n\t{\n\t\tNoteRefusedLiftState();\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused lift state is used anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tNoteRefusedLiftState();\n\t\treturn;\n",
+					"to": "\t\tNoteRefusedLiftState();\n"
+				}
+			]
+		},
+		{
+			"name": "a refused lift state leaves no word in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "LogString(\"net: refused: a lift's message named a state lifts don't have. Any more aren't written down\");",
+					"to": "LogString(\"net: something was refused\");"
+				}
+			]
+		},
+		{
+			"name": "a lift gets a fifth state the check doesn't count",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.h",
+					"from": "\tPLBS_GoingDown,\n} PLATFORMLIFT_STATES;",
+					"to": "\tPLBS_GoingDown,\n\tPLBS_Stuck,\n} PLATFORMLIFT_STATES;"
+				}
+			]
+		}
+	]
+}

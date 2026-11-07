@@ -4,20 +4,47 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
-//   overflowed
+//   overflowed;
+//   Global_ShapePoints is declared as what it holds, a list of VECTORCH
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   the shadow code is told which polygons show both sides, and on a report frame which ones the game draws
+//   the shadow code is told which shapes are staying still, so their prisms can be kept
+//   the rule for a module that never moves is one function, which the static level uses too
+//   a wall drawn from the fixed buffer is collected as a group, and its polygons can be read without being drawn
+//   a shape the game places by the camera is never kept
+//   -shadowshoot: finds the polygon under the crosshair, and a polygon says which shape it came from. Only the shoot tool asks, and that needs -dev
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
+//   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
+//   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
+//   the lights that get a place are the ones that put the most light on what's on screen, not the nearest. See light_choice.h
+//   the list of see-through polygons leaves out what doesn't fit, where only an assert stood before, and a texture animation sequence a shape doesn't have is no longer looked for past the end of its list
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
+//   Found while reading Bobblen's avp-forever fork
 #include "3dc.h"
+#include "surface_normals.h"
+#include "static_scene.h"
+#include "logString.h"
 #include <math.h>
+#include <vector>
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "chunk_textures.h"
 #include "kshape.h"
+#include "pixel_lights.h"
+#include "shadow_reach.h"
+#include "frame_timing.h"
 #include "kzsort.h"
 #include "frustum.h"
 #include "io.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
+#include "logString.h"
 #include "equipment.h"
 #include "bh_predator.h"
 #include "bh_marine.h"
@@ -30,6 +57,7 @@
 #include "vision.h"
 #include "sfx.h"
 #include "view.h"
+#include "lighting.h"
 #include "sphere.h"
 #include "detaillevels.h"
 #include "user_profile.h"
@@ -39,6 +67,11 @@
 #include "renderer.h"
 #include "renderlist.h"
 #include "d3d_render.h"
+#include "los.h"
+#include "shadow_shoot.h"
+#include "bh_light.h"
+#include "light_choice.h"
+#include "view_switches.h"
 
 const RCOLOR ALIENS_LIFEFORCE_GLOW_COLOUR    = 0x20ff8080;
 const RCOLOR MARINES_LIFEFORCE_GLOW_COLOUR   = 0x208080ff;
@@ -53,10 +86,10 @@ extern fixed_t SmartTargetSightX, SmartTargetSightY;
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 
 extern SHAPEHEADER *Global_ShapeHeaderPtr;
-extern int *Global_ShapePoints;
+extern VECTORCH *Global_ShapePoints;
 extern int **Global_ShapeItems;
 extern int *Global_ShapeNormals;
-extern int *Global_ShapeVNormals;
+extern VECTORCH *Global_ShapeVNormals;
 extern int **Global_ShapeTextures;
 
 extern MATRIXCH LToVMat;
@@ -152,6 +185,18 @@ void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr);
 
 VECTORCH Global_LightVector;
 
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind);
+void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr);
+extern int DrawingAReflection;
+void ToyShadows_NoteObjectLights();
+void ToyShadows_AddCaster(const float *pts, int count, int kind, const void *owner, const CasterFacts &facts);
+int ShadowGroup_Start(const void *shape, unsigned int listNumber, const int *place);
+void ShadowGroup_StartWalked(const void *shape, unsigned int listNumber, const int *place, int numPolygons, const float *ballInWorld, const ShadowReachBall &ballOnTheList);
+bool ShadowReportIsDue();
+void ToyShadows_NoteModelPart(const void *model, int polygons);
+void ToyShadows_NoteWorldDrawn();
+bool ToyShadows_VolumesInThisView();
+
 /*
  Global variables and arrays
 */
@@ -224,7 +269,7 @@ extern void InitialiseLightIntensityStamps(void)
 void SetupShapePipeline(void)
 {
 	/* Set up these global pointers */
-	Global_ShapePoints    = *(Global_ShapeHeaderPtr->points);
+	Global_ShapePoints    = (VECTORCH *)*(Global_ShapeHeaderPtr->points);
 	Global_ShapeTextures  = Global_ShapeHeaderPtr->sh_textures;
 
 	if (Global_ODB_Ptr->ObEIDPtr) {
@@ -242,7 +287,7 @@ void SetupShapePipeline(void)
 	}
 
 	if (Global_ShapeHeaderPtr->sh_vnormals) {
-		Global_ShapeVNormals = *(Global_ShapeHeaderPtr->sh_vnormals);
+		Global_ShapeVNormals = (VECTORCH *)*(Global_ShapeHeaderPtr->sh_vnormals);
 	} else {
 		Global_ShapeVNormals = 0;
 	}
@@ -250,6 +295,7 @@ void SetupShapePipeline(void)
 	// if((Global_ODB_Ptr->ObStrategyBlock)&&(Global_ODB_Ptr->ObStrategyBlock->I_SBtype == I_BehaviourQueenAlien))
 	//      Global_ODB_Ptr->ObFlags3 &= ObFlag3_NoLightDot;
 	ObjectCounter++;
+	SurfaceNormals_StartObject();
 }
 
 void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
@@ -307,6 +353,8 @@ void ChooseLightingModel(DISPLAYBLOCK *dispPtr)
 **********************************************************************************KJL*/
 void ShapePipeline(SHAPEHEADER *shapePtr)
 {
+	ProcessorStageClock clock(kProcessorShapes);
+
 	int numitems = shapePtr->numitems;
 	int **itemArrayPtr = shapePtr->items;
 
@@ -677,7 +725,7 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 
 						D3D_ZBufferedGouraudPolygon_Output(polyPtr, RenderPolygon.Vertices);
 					} else {
-						D3D_ZBufferedGouraudPolygon_Output(polyPtr, VerticesBuffer);
+						D3D_ZBufferedGouraudPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 					}
 
 					break;
@@ -778,7 +826,7 @@ void ShapePipeline(SHAPEHEADER *shapePtr)
 							// bjd - glass rendering goes through here
 							AddToTranslucentPolyList(polyPtr, VerticesBuffer);
 						} else {
-							D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer);
+							D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 						}
 					}
 
@@ -883,7 +931,7 @@ void PredatorSeeAliensVision_ShapePipeline(SHAPEHEADER *shapePtr)
 					                        if (RenderPolygon.NumberOfVertices<3) continue;
 					                        D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, RenderPolygon.Vertices);
 					                    }
-					                    else*/ D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer);
+					                    else*/ D3D_ZBufferedGouraudTexturedPolygon_Output(polyPtr, VerticesBuffer, shapePtr->numitems - numitems);
 				}
 
 				break;
@@ -1292,6 +1340,10 @@ static void GouraudTexturedPolygon_Construct(POLYHEADER *polyPtr)
 				}
 			} else {
 				VertexIntensity(renderVerticesPtr);
+
+				if (RenderPolygon.TranslucencyMode != TRANSLUCENCY_OFF) {
+					PixelLights_LightSeeThroughCorner(renderVerticesPtr, *VertexNumberPtr);
+				}
 			}
 
 			renderVerticesPtr++;
@@ -1421,6 +1473,10 @@ static void GouraudTexturedPolygon_Construct(POLYHEADER *polyPtr)
 				}
 			} else {
 				VertexIntensity(renderVerticesPtr);
+
+				if (RenderPolygon.TranslucencyMode != TRANSLUCENCY_OFF) {
+					PixelLights_LightSeeThroughCorner(renderVerticesPtr, *VertexNumberPtr);
+				}
 			}
 
 			renderVerticesPtr++;
@@ -1446,8 +1502,8 @@ static void VertexIntensity_Pred_Thermal(RENDERVERTEX *renderVertexPtr)
 	}
 
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1549,7 +1605,7 @@ static void VertexIntensity_Pred_SeeAliens(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1634,7 +1690,7 @@ static void VertexIntensity_Pred_SeePredatorTech(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		redI = 0;
@@ -1710,8 +1766,8 @@ static void VertexIntensity_ImageIntensifier(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -1870,8 +1926,8 @@ static void VertexIntensity_Standard_Opt(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -2064,8 +2120,8 @@ static void VertexIntensity_DiscoInferno(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -2175,7 +2231,7 @@ static void VertexIntensity_DiscoInferno(RENDERVERTEX *renderVertexPtr)
 	{
 		int i = (redI + greenI + blueI);
 		int si = (specularR + specularG + specularB);
-		VECTORCH vertex = *(((VECTORCH *)Global_ShapePoints) + vertexNumber);
+		VECTORCH vertex = Global_ShapePoints[vertexNumber];
 		int r, g, b;
 		vertex.vx += Global_ODB_Ptr->ObWorld.vx;
 		vertex.vy += Global_ODB_Ptr->ObWorld.vy;
@@ -2263,8 +2319,8 @@ static void VertexIntensity_Underwater(RENDERVERTEX *renderVertexPtr)
 
 	ColourIntensityArray[vertexNumber].Stamp = ObjectCounter;
 	{
-		VECTORCH *vertexNormalPtr = ((VECTORCH *)Global_ShapeVNormals) + vertexNumber;
-		VECTORCH *vertexPtr = ((VECTORCH *)Global_ShapePoints) + vertexNumber;
+		VECTORCH *vertexNormalPtr = Global_ShapeVNormals + vertexNumber;
+		VECTORCH *vertexPtr = Global_ShapePoints + vertexNumber;
 		LIGHTBLOCK **larrayptr;
 		LIGHTBLOCK *lptr;
 		int i;
@@ -2459,6 +2515,27 @@ int *GetTxAnimArrayZ(int shape, int item)
 	return 0;
 }
 
+// An animated polygon has a list of animation sequences, and an empty entry marks the end of the list. The game asks for
+// sequences by number, and a shape from a level file can have fewer than the game expects: a switch expects two, for
+// example. This finds one without looking past the end of the list, and gives back nothing if it isn't there.
+static TXANIMHEADER *FindTxAnimSequence(TXANIMHEADER **sequences, int sequence)
+{
+	if (sequence < 0)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < sequence; i++)
+	{
+		if (!sequences[i])
+		{
+			return 0;
+		}
+	}
+
+	return sequences[sequence];
+}
+
 TXANIMHEADER *GetTxAnimDataZ(int shape, int item, int sequence)
 {
 	TXANIMHEADER **txah_ptr;
@@ -2477,7 +2554,7 @@ TXANIMHEADER *GetTxAnimDataZ(int shape, int item, int sequence)
 		if (pheader->PolyFlags & iflag_txanim) {
 			txah_ptr = (TXANIMHEADER **) shape_textures[pheader->PolyColour >> TxDefn];
 			txah_ptr++;     /* Skip sequence shadow */
-			return txah_ptr[sequence];
+			return FindTxAnimSequence(txah_ptr, sequence);
 		}
 	}
 
@@ -2503,6 +2580,11 @@ TXANIMHEADER *GetTxAnimHeaderFromShape(TXACTRLBLK *taptr, int shape)
 		taptr->tac_txah.txa_currentframe = txah->txa_currentframe;
 		taptr->tac_txah.txa_maxframe     = txah->txa_maxframe;
 		taptr->tac_txah.txa_speed        = txah->txa_speed;
+	}
+	else
+	{
+		// There's no such sequence, so there's nothing to play. With no flags set, UpdateTxAnim leaves this alone.
+		taptr->tac_txah.txa_flags = 0;
 	}
 
 	return txah;
@@ -2572,12 +2654,17 @@ void ControlTextureAnimation(DISPLAYBLOCK *dptr)
 		UpdateTxAnim(&taptr->tac_txah);
 		/* Get the TXANIMHEADER from the shape data */
 		txah = taptr->tac_txah_s;
-		/* Copy across the current frame */
-		LOCALASSERT(txah);
-		txah->txa_currentframe = taptr->tac_txah.txa_currentframe;
 		iptr = taptr->tac_txarray;
-		LOCALASSERT(iptr);
-		*iptr = taptr->tac_sequence;
+
+		// If the shape has no such sequence, the polygon stays on the one it had. Telling it the new number would send
+		// CreateTxAnimUVArray looking for a sequence that isn't there.
+		if (txah && iptr)
+		{
+			/* Copy across the current frame */
+			txah->txa_currentframe = taptr->tac_txah.txa_currentframe;
+			*iptr = taptr->tac_sequence;
+		}
+
 		taptr = taptr->tac_next;
 	}
 }
@@ -2605,16 +2692,31 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	/* The sequence # will have been copied across by the control block */
 	int sequence = *txa_data++;
 	txah_ptr = (TXANIMHEADER **) txa_data;
-	txah = txah_ptr[sequence];
-	txaf = txah->txa_framedata;
+	txah = FindTxAnimSequence(txah_ptr, sequence);
 
-	/* Because the current frame can be set from outside, clamp it first */
-	if (txah->txa_currentframe < 0) {
-		txah->txa_currentframe = 0;
+	// A shape from a level file can have a polygon with no sequences at all, or a sequence with no frames, which has no list
+	// of frames to read. Its corners all get the same place in the image, so nothing looks right, but nothing goes wrong. All
+	// three callers give an array of this size.
+	if (!txah || txah->txa_numframes < 1)
+	{
+		for (i = 0; i < maxpolypts * 2; i++)
+		{
+			uv_array[i] = 0;
+		}
+
+		return;
 	}
 
+	txaf = txah->txa_framedata;
+
+	// Because the current frame can be set from outside, clamp it first. An animation with one frame has a last frame of
+	// 0, which makes the first test give -1, so the test for below 0 has to come second.
 	if (txah->txa_currentframe >= txah->txa_maxframe) {
 		txah->txa_currentframe = txah->txa_maxframe - 1;
+	}
+
+	if (txah->txa_currentframe < 0) {
+		txah->txa_currentframe = 0;
 	}
 
 	/* Frame # */
@@ -2852,6 +2954,14 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		ControlTextureAnimation(dptr);
 	}
 
+	// A wall this frame draws from the fixed buffer needs none of what follows: see static_scene.cpp. A reflection is never one, because the mirror keeps its
+	// whole frame on the old route, but the test costs nothing, and a reflection drawn from there would land in the wrong place.
+	if (dptr->ObMyModule && !DrawingAReflection && StaticScene_TookModule(dptr->ObMyModule->m_index)) {
+		SurfaceNormals_NoteModuleDrawn(dptr->ObMyModule->m_index);
+		ToyShadows_CollectStaticModule(dptr, shapeheaderptr);
+		return;
+	}
+
 	/* Global Variables */
 	Global_VDB_Ptr        = VDB_Ptr;
 	Global_ODB_Ptr        = dptr;
@@ -2909,6 +3019,7 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 
 	/* Find out which light sources are in range of of the object */
 	LightSourcesInRangeOfObject(dptr);
+	ToyShadows_NoteObjectLights();
 	/* Shape Language Execution Shell */
 	{
 		SHAPEINSTR *shapeinstrptr = shapeheaderptr->sh_instruction;
@@ -2927,6 +3038,8 @@ void AddShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 			}
 		}
 	}
+
+	ToyShadows_Collect(dptr, shapeheaderptr, dptr->ObMyModule ? kToyCasterLevel : kToyCasterObject);
 
 	// call polygon pipeline
 	ShapePipeline(shapeheaderptr);
@@ -2994,6 +3107,11 @@ void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)
 					}
 
 					colour = MARINES_LIFEFORCE_GLOW_COLOUR;
+
+					// A marine's colour is settled, so stop here. Without this line the code went straight on into the part
+					// below, which is for another player's stand-in on this machine (a "ghost"), and read this marine's own
+					// details as if they were a stand-in's. The two are laid out differently, so what it read was meaningless.
+					break;
 				}
 
 				case I_BehaviourNetGhost: {
@@ -3155,6 +3273,7 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 	if (!(PIPECLEANER_CHEATMODE || BALLSOFFIRE_CHEATMODE) || !dptr->ObStrategyBlock) {
 		/* Find out which light sources are in range of of the object */
 		LightSourcesInRangeOfObject(dptr);
+		ToyShadows_NoteObjectLights();
 		/* Shape Language Execution Shell */
 		shapeinstrptr = shapeheaderptr->sh_instruction;
 
@@ -3165,6 +3284,8 @@ void AddHierarchicalShape(DISPLAYBLOCK *dptr, VIEWDESCRIPTORBLOCK *VDB_Ptr)
 		} else {
 			TranslateShapeVertices(shapeinstrptr);
 		}
+
+		ToyShadows_Collect(dptr, shapeheaderptr, kToyCasterModel);
 
 		/* call polygon pipeline */
 		ShapePipeline(shapeheaderptr);
@@ -3333,7 +3454,7 @@ void MorphPoints(SHAPEINSTR *shapeinstrptr)
 			SHAPEHEADER *shape2Ptr;
 			shape2Ptr = MorphDisplay.md_sptr2;
 			srcPtr = (VECTORCH *)*shape2Ptr->points;
-			Global_ShapePoints = *(shape2Ptr->points);
+			Global_ShapePoints = (VECTORCH *)*(shape2Ptr->points);
 		} else {
 			SHAPEHEADER *shape2Ptr;
 			shape2Ptr = MorphDisplay.md_sptr2;
@@ -3362,7 +3483,7 @@ void MorphPoints(SHAPEINSTR *shapeinstrptr)
 					morphedPointsPtr++;
 				}
 			}
-			Global_ShapePoints = (int *)MorphedPts;
+			Global_ShapePoints = MorphedPts;
 			srcPtr = (VECTORCH *)MorphedPts;
 		}
 	}
@@ -4017,6 +4138,21 @@ void ClearTranslucentPolyList(void)
 
 void AddToTranslucentPolyList(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
 {
+	// The list has a fixed size, and a level decides how many see-through polygons are in view. One that doesn't fit is left
+	// out for this frame. Writing it would damage whatever is in memory after the list.
+	if (CurrentNumberOfTranslucentPolygons >= MAX_NO_OF_TRANSLUCENT_POLYGONS)
+	{
+		static bool logged = false;
+
+		if (!logged)
+		{
+			logged = true;
+			LogString("The list of see-through polygons is full, so some are being left out. This isn't logged again.");
+		}
+
+		return;
+	}
+
 	/* copy the data to the list for processing later */
 	int i = RenderPolygon.NumberOfVertices;
 	int maxZ = 0;
@@ -4049,7 +4185,6 @@ void AddToTranslucentPolyList(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVert
 	TranslucentPolygonHeaders[CurrentNumberOfTranslucentPolygons] = *inputPolyPtr;
 
 	CurrentNumberOfTranslucentPolygons++;
-	LOCALASSERT(CurrentNumberOfTranslucentPolygons < MAX_NO_OF_TRANSLUCENT_POLYGONS);
 }
 
 void OutputTranslucentPolyList(void)
@@ -5466,4 +5601,1691 @@ int LightIntensityAtPoint(VECTORCH *pointPtr)
 	}
 
 	return intensity;
+}
+
+
+// ---- toy-shadows ------------------------------------------------------------------------------------------------
+
+extern int ToyShadowsMode;
+extern int NumActiveLightElements;
+extern LIGHTELEMENT LightElementStorage[];
+extern int DrawingAReflection;
+extern bool gunLayer;
+extern int ToyShadowsLightsByPixel;
+extern int ToyShadowsMaxLights;
+extern int ToyShadowsMaxBrief;
+extern int LightScale;
+extern int ToyShadowsFlareCap;
+extern int ToyShadowsFlareReach;
+extern int ToyShadowsCasters;
+extern int ToyShadowsInMirror;
+
+static int toyMostLightsOnAnObject = 0;
+static int toyMostLightsInAFrame = 0;
+
+void ToyShadows_NoteObjectLights()
+{
+	if (ToyShadowsMode && NumLightSourcesForObject > toyMostLightsOnAnObject)
+	{
+		toyMostLightsOnAnObject = NumLightSourcesForObject;
+
+		char line[80];
+		_snprintf(line, sizeof(line) - 1, "toy-shadows: most lights on one object so far: %d", toyMostLightsOnAnObject);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+}
+
+// The camera and the view of the frame the polygons came from, kept for when the lights are chosen at the end of the frame.
+static float toyViewMatrix[12];
+static float samplesViewMatrix[12];  // the view of the frame before, which is the one its polygons were seen from. See light_choice.h
+extern LightChoiceSamples lightChoiceSamples;
+extern int StaticSceneOn;
+extern int ShadowLightsByNearest;
+static float toyCameraPlace[3];   // where the camera was when toyViewMatrix was kept
+static VECTORCH toyCameraWorld;
+
+// Which modules ToyShadows_Collect took polygons from. Each module has a place here holding the number of the frame it was last
+// collected on, so nothing needs wiping between frames, and "was it collected?" is only "does its number match this frame's?".
+extern int ModuleArraySize;
+static std::vector<unsigned int> toyModuleLastCollected;
+static unsigned int toyCollectingFrame = 1;
+
+static void ToyNoteModuleCollected(const MODULE *module)
+{
+	if (toyModuleLastCollected.size() != (size_t)ModuleArraySize)
+	{
+		toyModuleLastCollected.assign(ModuleArraySize, 0);
+	}
+
+	if (module->m_index >= 0 && module->m_index < ModuleArraySize)
+	{
+		toyModuleLastCollected[module->m_index] = toyCollectingFrame;
+	}
+}
+
+static bool ToyModuleWasCollected(const MODULE *module)
+{
+	return module->m_index >= 0 && (size_t)module->m_index < toyModuleLastCollected.size()
+		&& toyModuleLastCollected[module->m_index] == toyCollectingFrame;
+}
+
+void ToyShadows_NextCollectingFrame()
+{
+	toyCollectingFrame++;
+}
+
+// While lights are gathered, and all the time when they go by distance (-shadownearest, or a frame with nothing to score them on, such as with shadows off), a light picked last frame counts
+// as this many quarters of its real distance. When they go by score, light_choice.h has a number of its own that does the same job. Without this, two lights at about the same distance swap places as the camera moves, and every shadow
+// from both of them jumps. Last frame's choices are only compared with, never read through, so a light that has since
+// been thrown away does no harm.
+static const int kToyStayQuarters = 3;
+
+struct ToyFoundLight
+{
+	LIGHTBLOCK *light;
+	void const *owner;  // what carries it, or nothing
+	bool comesFirst;    // a flare or one of the player's own lights, which come ahead of any score
+	int order;          // lowest first
+	int distance;       // from the camera
+};
+
+// A light keeps one place on the list for as long as it's chosen, and a new light takes a free place. So everything that goes by place stays
+// with its light: its colour in the debug views, and its line in the log. If the list were simply remade in order, every light below one that
+// came or went would move up or down a place, and change colour, while nothing about it had changed. This says who's in each place, with
+// nothing in a free place. These are only compared, never read through, for the reason kToyStayQuarters gives.
+static LIGHTBLOCK *lightInPlace[kToyMostLights];
+static bool placeHasPositions[kToyMostLights];   // whether the lamp in this place is one of those drawn from several positions
+static int placesChangedLastFrame = 0;
+static int placesChangedSinceReport = 0;
+
+// For the log, to tell walking past lights from a light flipping on and off the list: the lights that left most recently, and when. A light that
+// comes back soon after it left was flipping. Only compared, never read through.
+static const int kLightsLeftKept = 64;
+static const int kBackSoonFrames = 60;
+static LIGHTBLOCK *lightsThatLeft[kLightsLeftKept];
+static unsigned int lightsLeftFrame[kLightsLeftKept];
+static int nextLightThatLeft = 0;
+static unsigned int placesFrame = 0;
+static int lightsBackSoon = 0;
+
+extern int ToyShadowsNearLights;
+
+// What the log says about the lights chosen most recently. These are copies, so the log never reads a light that may have gone.
+struct ToyChosenNote
+{
+	int distance, range, bright, flags;
+};
+
+static ToyChosenNote toyChosen[kToyMostLights];
+static int toyNumChosen = 0;
+
+// A light that only lasts a moment: a muzzle flash, remade with a new brightness every frame, or a light element such as
+// sparks or an explosion. These have places of their own, because one taking a steady light's place, even for a frame, would
+// make that light's shadows jump.
+static bool ToyLightIsBrief(const LIGHTBLOCK *light)
+{
+	return (light->LightFlags & LFlag_Deallocate) != 0;
+}
+
+// Is this a flare? Another player's flare arrives as a ghost, and is a flare all the same.
+bool ToyBlockIsFlare(const DISPLAYBLOCK *block)
+{
+	STRATEGYBLOCK const *owner = block->ObStrategyBlock;
+
+	if (!owner)
+	{
+		return false;
+	}
+
+	if (owner->I_SBtype == I_BehaviourNetGhost && owner->SBdataptr)
+	{
+		return ((NETGHOSTDATABLOCK const *)owner->SBdataptr)->type == I_BehaviourFlareGrenade;
+	}
+
+	return owner->I_SBtype == I_BehaviourFlareGrenade;
+}
+
+// What this block's lights and polygons belong to, which tells a body from the lights it carries. A piece of the level belongs to
+// nothing, even a door, which has a strategy block: it holds the lights of its room, and its polygons must still block them.
+static void const *ToyOwnerOf(const DISPLAYBLOCK *block)
+{
+	return block->ObMyModule ? 0 : block->ObStrategyBlock;
+}
+
+// Could any of this light's range be on screen? The test is a deliberately wide view, about 127 degrees across in both
+// directions, so that it never drops a light the camera can really see, whatever the field of view or the zoom. A wrong
+// "no" would show as shadows popping off, and a wrong "yes" only costs a pass. A light behind the camera can still pass,
+// because what counts is its whole range and not where it sits. A light with a place is tested a little wider, so that one right at the edge
+// doesn't drop out and come back as the camera turns.
+static bool ToyLightCanReachTheView(const LIGHTBLOCK *light, bool hasAPlace)
+{
+	float const kWideSlope = hasAPlace ? 2.5f : 2.0f;
+	float const kPlaneScale = hasAPlace ? 2.693f : 2.236f;  // the square root of 1 + kWideSlope squared: turns the sums below into distances
+
+	float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+	float view[3];
+	TranslatePoint(source, view, toyViewMatrix);
+
+	float const range = (float)light->LightRange;
+
+	if (view[2] + range < 0.0f)
+	{
+		return false;  // all of it lies behind the camera
+	}
+
+	float const reach = range * kPlaneScale;
+
+	return (fabs(view[0]) - view[2] * kWideSlope <= reach) && (fabs(view[1]) - view[2] * kWideSlope <= reach);
+}
+
+static bool ToyLightIsLit(const LIGHTBLOCK *light)
+{
+	return light->LightBright && light->LightRange > 0 && (light->RedScale || light->GreenScale || light->BlueScale);
+}
+
+// A lamp with everything a lamp needs, except that its brightness is 0 just now.
+static bool LightIsDarkForNow(const LIGHTBLOCK *light)
+{
+	return !light->LightBright && light->LightRange > 0 && (light->RedScale || light->GreenScale || light->BlueScale);
+}
+
+static bool LightHasAPlace(const LIGHTBLOCK *light)
+{
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (lightInPlace[place] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static int ToyDistanceToCamera(const LIGHTBLOCK *light)
+{
+	VECTORCH toLight;
+	toLight.vx = light->LightWorld.vx - toyCameraWorld.vx;
+	toLight.vy = light->LightWorld.vy - toyCameraWorld.vy;
+	toLight.vz = light->LightWorld.vz - toyCameraWorld.vz;
+
+	return Approximate3dMagnitude(&toLight);
+}
+
+// Which kind of light this is, for the rule in light_choice.h. It comes from two real things. A placed light's has_corona is set when the level loads, if a polygon of its shape has
+// iflag_light_corona (InitPlacedLight in bh_light.cpp). LFlag_AbsPos is given to a level light by setup_light_data in object_setup.cpp, and to nothing else in the game. Both start out in the
+// level file, so a level could be crafted to say anything here. All that can do is say yes or no to a shadow on this player's own screen, and nothing else reads the answer. A placed light is
+// looked for first, because a light's flags are copied from the file, so a crafted flag can't change what a lamp counts as. block is what carries the light, or nothing for a light element.
+static LightKindForShadows KindOfLight(const LIGHTBLOCK *light, const DISPLAYBLOCK *block)
+{
+	STRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;
+
+	if (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)
+	{
+		return ((PLACED_LIGHT_BEHAV_BLOCK const *)owner->SBdataptr)->has_corona ? kLampWithACorona : kLampWithNoCorona;
+	}
+
+	if (light->LightFlags & LFlag_AbsPos)
+	{
+		return kLightFromTheLevel;
+	}
+
+	return kLightOfAnyOtherKind;
+}
+
+// What became of every light the choosing looked at on the latest frame, for the log.
+struct LightsLookedAt
+{
+	int notAVisibleLamp;  // one of the map's lights with no corona, which the rule in light_choice.h holds back, whatever would have become of it next
+	int notAVisibleLampInView;  // how many of those could have reached the view
+	int dark;             // nothing to give just now
+	int atTheCamera;      // so close that its shadows would all fall straight away from the eye
+	int outOfView;        // nothing it lights can be on screen
+	int lightNothing;     // it could reach the view, and nothing that was on screen last frame is in its reach
+	int steadyInReach;    // lit and in view: these compete for the steady places
+	int briefInReach;     // and these for the brief places
+	int lampsInReach;     // how many of those competing are lamps with a corona
+	int steadyChosen;
+	int briefChosen;
+};
+
+static LightsLookedAt lightsThisFrame;
+
+// Keeps the nearest lights seen so far, in order, up to as many as can be scored: see KeepTheLightsThatShowMost. A light marked first goes ahead of every other, nearest of those first, and
+// none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
+// light element, which is on no block.
+//
+// A lamp that flickers goes dark for a moment and comes back. If that lost it its place, the next light in line would come in for that moment,
+// and move from the game's lighting to ours and straight back. So a dark lamp that has a place keeps it, and competes for it just as if it were
+// lit. A lamp that's been shot out is dark for good, and is treated the same way: it only gives up its place once enough other lights are
+// clearly better, by score or by distance, or the camera leaves it behind.
+static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFoundLight *found, int *numFound, int most, int *inReach)
+{
+	bool const hasAPlace = LightHasAPlace(light);
+
+	if (!ToyLightIsLit(light) && !(hasAPlace && LightIsDarkForNow(light)))
+	{
+		lightsThisFrame.dark++;
+		return;
+	}
+
+	// The map's lights with no corona stay out of the list unless SHADOWAMBIENT is on. Leaving the list takes nothing away from the map: what lights it stays in the game's lighting. See light_choice.h.
+	LightKindForShadows const kind = KindOfLight(light, block);
+
+	if (!LightChoice_MayCast(kind, ShadowAmbientOn != 0))
+	{
+		lightsThisFrame.notAVisibleLamp++;
+
+		if (ToyLightCanReachTheView(light, false))
+		{
+			lightsThisFrame.notAVisibleLampInView++;
+		}
+
+		return;
+	}
+
+	int const distance = ToyDistanceToCamera(light);
+	int order = distance;
+
+	if (block && ToyBlockIsFlare(block))
+	{
+		// A flare goes ahead of every lamp so that its shadows always move. One that can't reach the view has no shadows to move, and it would take
+		// a lamp's place for nothing. In the game's lighting it's held to the same dim red, and lights nothing that can be seen.
+		if (!ToyLightCanReachTheView(light, hasAPlace))
+		{
+			lightsThisFrame.outOfView++;
+			return;
+		}
+
+		order = distance - 0x40000000;
+	}
+	else
+	{
+		// Something at the camera throws every shadow straight away from the eye, where it can't be seen, so it isn't worth a
+		// place. That keeps out the glow on the alien's teeth, which is a light element at the player's spot. The player's own
+		// lights, such as a muzzle flash, still count: they have to leave the game's lighting to be blocked like any other.
+		if (block != Player)
+		{
+			if (distance < (hasAPlace ? 200 : 300))
+			{
+				lightsThisFrame.atTheCamera++;
+				return;
+			}
+
+			if (!ToyLightCanReachTheView(light, hasAPlace))
+			{
+				lightsThisFrame.outOfView++;
+				return;
+			}
+		}
+
+		if (hasAPlace)
+		{
+			order = (int)(((long long)distance * kToyStayQuarters) / 4);
+		}
+	}
+
+	(*inReach)++;
+
+	if (kind == kLampWithACorona)
+	{
+		lightsThisFrame.lampsInReach++;
+	}
+
+	int place = *numFound;
+	while (place > 0 && found[place - 1].order > order)
+	{
+		place--;
+	}
+
+	if (place >= most)
+	{
+		return;
+	}
+
+	int const last = (*numFound < most) ? (*numFound)++ : most - 1;
+	for (int i = last; i > place; i--)
+	{
+		found[i] = found[i - 1];
+	}
+
+	found[place].light = light;
+	found[place].owner = block ? ToyOwnerOf(block) : 0;
+	found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));
+	found[place].order = order;
+	found[place].distance = distance;
+}
+
+// A fixed point number as a fraction, kept between 0 and 1.
+static float ToyFraction(int fixedPoint)
+{
+	float const fraction = (float)fixedPoint / 65536.0f;
+	return (fraction < 0.0f) ? 0.0f : (fraction > 1.0f) ? 1.0f : fraction;
+}
+
+// How much light a light gives at full strength, for its score, with its colours counted as an eye counts them. A dark lamp is judged by how bright it'll be when it comes back, or it would score
+// nothing and lose its place for a flicker. A live light can be brighter than 1: see ToyShadows_ChooseLights.
+static float LightStrength(const LIGHTBLOCK *light)
+{
+	int const brightness = light->LightBright ? light->LightBright : light->LightBrightStore;
+	float bright = ToyFraction(brightness);
+
+	if (!(light->LightFlags & LFlag_PreLitSource))
+	{
+		float const live = (float)MUL_FIXED(brightness, LightScale) / 65536.0f;
+		bright = (live < 0.0f) ? 0.0f : (live > 8.0f) ? 8.0f : live;
+	}
+
+	return bright * (0.3f * ToyFraction(light->RedScale) + 0.59f * ToyFraction(light->GreenScale) + 0.11f * ToyFraction(light->BlueScale));
+}
+
+// Cuts a list of the nearest lights down to the ones that put the most light on what was on screen last frame, best first, and gives back how many that is. See light_choice.h. With nothing to go by, as
+// on the first frame of a level, or with walls that were never noted, or if -shadownearest asks, it goes by nearest, as the list already is. Only ever moves pointers around that it was given.
+static int KeepTheLightsThatShowMost(ToyFoundLight *found, int numFound, int most, int *inReach)
+{
+	if (!LightChoice_HasSamples(lightChoiceSamples) || StaticSceneOn || ShadowLightsByNearest)
+	{
+		return (numFound < most) ? numFound : most;
+	}
+
+	LightChoiceCandidate candidates[kLightChoiceMostCandidates];
+	int picked[kLightChoiceMostCandidates];
+	int const howMany = (numFound < kLightChoiceMostCandidates) ? numFound : kLightChoiceMostCandidates;
+
+	for (int i = 0; i < howMany; i++)
+	{
+		LIGHTBLOCK const *light = found[i].light;
+		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+		float view[3];
+
+		TranslatePoint(source, view, samplesViewMatrix);
+
+		bool const hasAPlace = LightHasAPlace(light);
+
+		candidates[i].score = LightChoice_Score(lightChoiceSamples, view[0], -view[1], view[2], (float)light->LightRange, LightStrength(light), (light->LightFlags & LFlag_PreLitSource) != 0);
+		candidates[i].comesFirst = found[i].comesFirst;
+		candidates[i].hasAPlace = hasAPlace;
+		candidates[i].keepsItsPlace = hasAPlace && LightIsDarkForNow(light);
+	}
+
+	int showNothing = 0;
+	int const numPicked = LightChoice_Pick(candidates, howMany, most, picked, &showNothing);
+
+	(*inReach) -= showNothing;
+	lightsThisFrame.lightNothing += showNothing;
+
+	ToyFoundLight kept[kLightChoiceMostCandidates];
+
+	for (int i = 0; i < numPicked; i++)
+	{
+		kept[i] = found[picked[i]];
+	}
+
+	for (int i = 0; i < numPicked; i++)
+	{
+		found[i] = kept[i];
+	}
+
+	return numPicked;
+}
+
+// The lights chosen for this frame, already in the space the polygons are collected in. ToyShadows_ChooseLights works them out once
+// and the shadow pass reads this copy at the end of the frame, so the lighting and the pass always agree on the same list.
+static float toyChosenLights[kToyMostLights * kToyLightFloats];
+static void const *toyChosenOwners[kToyMostLights];
+static LIGHTBLOCK const *toyLightsByPixel[kToyMostLights];
+static char toyRoomName[32] = "none";
+static bool levelViewRan = false;
+
+const char *ToyShadows_RoomName()
+{
+	return toyRoomName;
+}
+
+// Has a level been shown since this was last asked? Menus and loading screens don't count.
+bool ToyShadows_TakeViewRan()
+{
+	bool const ran = levelViewRan;
+	levelViewRan = false;
+	return ran;
+}
+static int toyNumLightsByPixel = 0;
+
+// While shadows are on, a flare can still reach the game's lighting: one that wasn't chosen, which lights the room but casts no shadow, and
+// any flare on glass or in a mirror. At the game's own brightness it would turn white, because a new flare is so bright that all three colours
+// clip. So every flare is held to the cap, and stays the dim red the user chose. This only changes the number the lighting reads this frame:
+// UpdateObjectLights works that out afresh every frame from the flare's real brightness, so the flare itself isn't touched, and a save is
+// no different. A card that can't add lights per pixel is held to the cap as well, and so is Gouraud lighting with shadows on, so they get the dim red too. The OFF view
+// and the vision modes keep the game's own flares, except for the one frame after switching, while ToyShadowsLightsByPixel is still set.
+static void ToyHoldFlaresToTheirCap()
+{
+	if (!ToyShadowsLightsByPixel && (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL))
+	{
+		return;
+	}
+
+	int const cap = (int)(((long long)ONE_FIXED * ToyShadowsFlareCap) / 100);
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		if (!ToyBlockIsFlare(block))
+		{
+			continue;
+		}
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK *light = block->ObLights[j];
+
+			if (light->LightBright > cap && light->LightRange > 0)
+			{
+				light->BrightnessOverRange = DIV_FIXED(MUL_FIXED(cap, LightScale), light->LightRange);
+			}
+		}
+	}
+}
+
+static bool LightIsInPlaces(LIGHTBLOCK *const *places, const LIGHTBLOCK *light)
+{
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (places[place] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Gives each chosen light its place on the list: the one it already has, or else a free one. placeOf and hadPositions get one answer for each
+// chosen light: which place it's in, and whether it was already one of the lamps with several positions. Gives back how many places the list
+// needs, which is the last one in use and every place before it, so a free place in the middle is on the list. It's filled in as a dark light.
+static int GiveLightsTheirPlaces(const ToyFoundLight *chosen, int numChosen, int *placeOf, bool *hadPositions)
+{
+	LIGHTBLOCK *newPlaces[kToyMostLights] = { 0 };
+
+	placesFrame++;
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		placeOf[i] = -1;
+		hadPositions[i] = false;
+
+		for (int place = 0; place < kToyMostLights; place++)
+		{
+			if (lightInPlace[place] == chosen[i].light)
+			{
+				placeOf[i] = place;
+				hadPositions[i] = placeHasPositions[place];
+				newPlaces[place] = chosen[i].light;
+				break;
+			}
+		}
+	}
+
+	// This can't run off the end: there are as many places as lights can be chosen, and each light has one.
+	int firstFree = 0;
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		if (placeOf[i] < 0)
+		{
+			while (newPlaces[firstFree])
+			{
+				firstFree++;
+			}
+
+			placeOf[i] = firstFree;
+			newPlaces[firstFree] = chosen[i].light;
+
+			for (int left = 0; left < kLightsLeftKept; left++)
+			{
+				if (lightsThatLeft[left] == chosen[i].light && placesFrame - lightsLeftFrame[left] <= (unsigned int)kBackSoonFrames)
+				{
+					lightsBackSoon++;
+					break;
+				}
+			}
+		}
+	}
+
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (lightInPlace[place] && !LightIsInPlaces(newPlaces, lightInPlace[place]))
+		{
+			lightsThatLeft[nextLightThatLeft] = lightInPlace[place];
+			lightsLeftFrame[nextLightThatLeft] = placesFrame;
+			nextLightThatLeft = (nextLightThatLeft + 1) % kLightsLeftKept;
+		}
+	}
+
+	int placesUsed = 0;
+	int placesChanged = 0;
+
+	for (int place = 0; place < kToyMostLights; place++)
+	{
+		if (newPlaces[place])
+		{
+			placesUsed = place + 1;
+		}
+
+		if (newPlaces[place] != lightInPlace[place])
+		{
+			placesChanged++;
+		}
+
+		lightInPlace[place] = newPlaces[place];
+		placeHasPositions[place] = false;
+	}
+
+	placesChangedLastFrame = placesChanged;
+	FrameTiming_CountPlacesChanged(placesChanged);
+	placesChangedSinceReport += placesChanged;
+
+	return placesUsed;
+}
+
+// Picks the lamps drawn from several positions: the nearest few, leaving out live lights, whichever way they're lit. Those are gone too soon for the shape of a
+// shadow's edge to be seen, apart from flares added per pixel, which always have positions. A lamp that has them keeps them until another is clearly nearer, the
+// same way a light keeps its place. Otherwise, two lamps about as near as each other would swap as the camera moved, and both their shadows
+// would jump. Each position is another stencil pass, so this can't be every lamp.
+static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, const int *placeOf, const bool *hadPositions)
+{
+	bool picked[kToyMostLights] = { false };
+
+	for (int round = 0; round < ToyShadowsNearLights; round++)
+	{
+		int nearest = -1;
+		int nearestDistance = 0;
+
+		for (int i = 0; i < numChosen; i++)
+		{
+			if (picked[i] || toyChosenLights[placeOf[i] * kToyLightFloats + 7] != 0.0f)
+			{
+				continue;
+			}
+
+			int const distance = hadPositions[i] ? (int)(((long long)chosen[i].distance * kToyStayQuarters) / 4) : chosen[i].distance;
+
+			if (nearest < 0 || distance < nearestDistance)
+			{
+				nearest = i;
+				nearestDistance = distance;
+			}
+		}
+
+		if (nearest < 0)
+		{
+			return;
+		}
+
+		picked[nearest] = true;
+		placeHasPositions[placeOf[nearest]] = true;
+		toyChosenLights[placeOf[nearest] * kToyLightFloats + kLightManyPositions] = 1.0f;
+	}
+}
+
+// Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
+// before: a live light can only leave the game's lighting for a frame it hasn't been used in yet, and a muzzle flash only has that
+// one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
+// once, before this.
+//
+// The map's own lights only count if they're lamps you can see, unless SHADOWAMBIENT is on: see light_choice.h.
+// Up to 20 steady lights, the ones that put the most light on what's on screen, except that flares come ahead of all of them, near or far, so that a flare in
+// flight always moves its shadows: the player can have 4 going at once (pmove.cpp). Then up to 12 brief lights of their own. A live
+// light past those limits simply stays in the game's lighting, so nothing vanishes. Flares stay there too, but dimmed: see
+// ToyHoldFlaresToTheirCap.
+void ToyShadows_ChooseLights()
+{
+	memcpy(samplesViewMatrix, toyViewMatrix, sizeof(samplesViewMatrix));
+	memcpy(toyViewMatrix, ViewMatrix, sizeof(toyViewMatrix));
+	toyCameraPlace[0] = (float)Global_VDB_Ptr->VDB_World.vx;
+	toyCameraPlace[1] = (float)Global_VDB_Ptr->VDB_World.vy;
+	toyCameraPlace[2] = (float)Global_VDB_Ptr->VDB_World.vz;
+	toyCameraWorld = Global_VDB_Ptr->VDB_World;
+
+	// The log prints this on every report, menus too. A room's name lives in the level's memory, which is given back when the level
+	// ends, so the log keeps a copy of its own. This function only runs while a level is showing, when the name is still good.
+	extern MODULE *playerPherModule;
+	_snprintf(toyRoomName, sizeof(toyRoomName) - 1, "%s", (playerPherModule && playerPherModule->name) ? playerPherModule->name : "none");
+	toyRoomName[sizeof(toyRoomName) - 1] = 0;
+	FrameTiming_SetRoom(toyRoomName);
+	levelViewRan = true;
+
+	toyNumChosen = 0;
+	toyNumLightsByPixel = 0;
+	memset(&lightsThisFrame, 0, sizeof(lightsThisFrame));
+
+	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
+	{
+		LightChoice_Forget(&lightChoiceSamples);
+		ToyHoldFlaresToTheirCap();
+		return;
+	}
+
+	ToyFoundLight steady[kLightChoiceMostCandidates];
+	ToyFoundLight brief[kLightChoiceMostCandidates];
+	int numSteady = 0;
+	int numBrief = 0;
+	int const mostSteady = (ToyShadowsMaxLights < kToyMostSteadyLights) ? ToyShadowsMaxLights : kToyMostSteadyLights;
+	int const mostBrief = (ToyShadowsMaxBrief < kToyMostBriefLights) ? ToyShadowsMaxBrief : kToyMostBriefLights;
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+		bool const isFlare = ToyBlockIsFlare(block);
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK *light = block->ObLights[j];
+
+			if (!isFlare && ToyLightIsBrief(light))
+			{
+				ToyConsiderLight(light, block, brief, &numBrief, kLightChoiceMostCandidates, &lightsThisFrame.briefInReach);
+			}
+			else
+			{
+				ToyConsiderLight(light, block, steady, &numSteady, kLightChoiceMostCandidates, &lightsThisFrame.steadyInReach);
+			}
+		}
+	}
+
+	for (int i = 0; i < NumActiveLightElements; i++)
+	{
+		ToyConsiderLight(&LightElementStorage[i].LightBlock, 0, brief, &numBrief, kLightChoiceMostCandidates, &lightsThisFrame.briefInReach);
+	}
+
+	LightChoice_KeepTheLargest(&lightChoiceSamples);
+	numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
+	numBrief = KeepTheLightsThatShowMost(brief, numBrief, mostBrief, &lightsThisFrame.briefInReach);
+
+	lightsThisFrame.steadyChosen = numSteady;
+	lightsThisFrame.briefChosen = numBrief;
+
+	// What the coming frame draws is what the next one's lights are judged by
+	LightChoice_Forget(&lightChoiceSamples);
+
+	ToyFoundLight chosen[kToyMostLights];
+	int numChosen = 0;
+
+	for (int i = 0; i < numSteady; i++)
+	{
+		chosen[numChosen++] = steady[i];
+	}
+
+	for (int i = 0; i < numBrief; i++)
+	{
+		chosen[numChosen++] = brief[i];
+	}
+
+	int placeOf[kToyMostLights];
+	bool hadPositions[kToyMostLights];
+
+	toyNumChosen = GiveLightsTheirPlaces(chosen, numChosen, placeOf, hadPositions);
+
+	// To start with, every place reads as a dark light with nothing in it. Its range is 1 only so that nothing can divide by 0.
+	for (int place = 0; place < toyNumChosen; place++)
+	{
+		float *out = &toyChosenLights[place * kToyLightFloats];
+
+		memset(out, 0, kToyLightFloats * sizeof(float));
+		out[3] = 1.0f;
+		out[8] = 1.0f;
+		toyChosenOwners[place] = 0;
+		memset(&toyChosen[place], 0, sizeof(toyChosen[place]));
+	}
+
+	for (int i = 0; i < numChosen; i++)
+	{
+		LIGHTBLOCK const *light = chosen[i].light;
+		int const place = placeOf[i];
+		float *out = &toyChosenLights[place * kToyLightFloats];
+		float const source[3] = { (float)light->LightWorld.vx, (float)light->LightWorld.vy, (float)light->LightWorld.vz };
+		float view[3];
+
+		TranslatePoint(source, view, toyViewMatrix);
+
+		float const bright = ToyFraction(light->LightBright);
+
+		out[0] = view[0];
+		out[1] = -view[1];
+		out[2] = view[2];
+		out[3] = (float)((light->LightRange < kToyMostRange) ? light->LightRange : kToyMostRange);
+		out[4] = bright * ToyFraction(light->RedScale);
+		out[5] = bright * ToyFraction(light->GreenScale);
+		out[6] = bright * ToyFraction(light->BlueScale);
+
+		// 0 for a light baked into the walls, 1 for one the game works out live, like a muzzle flash
+		bool const live = !(light->LightFlags & LFlag_PreLitSource);
+		out[7] = live ? 1.0f : 0.0f;
+		out[8] = 1.0f;
+		out[kToyLightWorld + 0] = source[0];
+		out[kToyLightWorld + 1] = source[1];
+		out[kToyLightWorld + 2] = source[2];
+
+		// A live light can be brighter than 1: an explosion is 4. What matters here is what the game really adds to the wall, so a
+		// live light counts at its real brightness, worked out as the game works it out (view.cpp, UpdateObjectLights).
+		if (live)
+		{
+			// A flare left in the game's lighting is held to its cap (ToyHoldFlaresToTheirCap), so the cap is all it adds to a wall. Counting its full brightness
+			// would let its shadow take more of a wall's light than it ever gave. A flare added per pixel gets numbers of its own further down.
+			int const flareCap = (int)(((long long)ONE_FIXED * ToyShadowsFlareCap) / 100);
+			int const reallyAdds = (chosen[i].order < 0 && light->LightBright > flareCap) ? flareCap : light->LightBright;
+			float const liveBright = (float)MUL_FIXED(reallyAdds, LightScale) / 65536.0f;
+			float const weight = (liveBright < 0.0f) ? 0.0f : (liveBright > 8.0f) ? 8.0f : liveBright;
+
+			out[4] = weight * ToyFraction(light->RedScale);
+			out[5] = weight * ToyFraction(light->GreenScale);
+			out[6] = weight * ToyFraction(light->BlueScale);
+		}
+
+		// 2: a live light left out of the game's lighting, which the shadow pass adds per pixel
+		if (ToyShadowsLightsByPixel && live)
+		{
+			out[7] = 2.0f;
+			toyLightsByPixel[toyNumLightsByPixel++] = light;
+
+			// Only a flare has an order below 0. A flare's brightness is its seconds left divided by 4, from 4 down to nothing over
+			// 16 seconds, with a flicker on top. So it's capped: at 1.5 a flare holds steady, with no flicker, until its last 6
+			// seconds, and then fades out. The cap is also what gives a flare its look: its colour is a pink, and the game only
+			// makes it white by being so bright that all three colours clip. The user chose this dim red look, so don't raise it
+			// to match the game.
+			if (chosen[i].order < 0)
+			{
+				float const cap = (float)ToyShadowsFlareCap / 100.0f;
+				float const flareBright = (float)light->LightBright / 65536.0f;
+				float const held = (flareBright < cap) ? flareBright : cap;
+
+				out[3] *= (float)ToyShadowsFlareReach / 100.0f;
+				out[4] = held * ToyFraction(light->RedScale);
+				out[5] = held * ToyFraction(light->GreenScale);
+				out[6] = held * ToyFraction(light->BlueScale);
+				out[8] = 0.0f;
+			}
+		}
+
+		toyChosenOwners[place] = chosen[i].owner;
+		toyChosen[place].distance = chosen[i].distance;
+		toyChosen[place].range = light->LightRange;
+		toyChosen[place].bright = light->LightBright;
+		toyChosen[place].flags = light->LightFlags;
+	}
+
+	PickLampsForPositions(chosen, numChosen, placeOf, hadPositions);
+	ToyHoldFlaresToTheirCap();
+}
+
+// The largest each number has reached since the game started, whichever frames they were on. This is the log's answer to how many lights there really are.
+static int mostInReach = 0;
+static int mostInReachFrame = 0;
+static char mostInReachRoom[sizeof(toyRoomName)] = "none";
+static int mostChosen = 0;
+static int mostPasses = 0;
+static float mostMilliseconds = 0.0f;
+
+// The shadow pass calls this at the end of every frame it finishes.
+void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
+{
+	int const inReach = lightsThisFrame.steadyInReach + lightsThisFrame.briefInReach;
+	int const chosen = lightsThisFrame.steadyChosen + lightsThisFrame.briefChosen;
+
+	if (inReach > mostInReach)
+	{
+		mostInReach = inReach;
+		mostInReachFrame = frame;
+		memcpy(mostInReachRoom, toyRoomName, sizeof(mostInReachRoom));
+	}
+
+	mostChosen = (chosen > mostChosen) ? chosen : mostChosen;
+	mostPasses = (passes > mostPasses) ? passes : mostPasses;
+	mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;
+}
+
+// Two lines for each report: what the choosing did on this frame and what it cost, then the most there have been. A light with no place left is
+// still in the game's own lighting, so it hasn't gone dark. It just casts no shadow.
+void ShadowLights_SayCounts(int frame, int passes, float screensOfTotal, float milliseconds, float frameMilliseconds)
+{
+	char line[640];  // the longest numbers still fit, and a longer line would only be cut short
+
+	_snprintf(line, sizeof(line) - 1,
+		"shadow lights: frame %d: %d in reach; chosen %d steady and %d brief, of %d and %d allowed; passed over: %d steady and %d brief with no place left, %d out of view, %d at the camera, %d dark, %d lighting nothing on screen; held back: %d of the map's lights with no corona, %d of them in view (SHADOWAMBIENT %s), %d lamps with a corona in reach; %d shadow passes, the light total covered %.1f screens, %.1f ms on the processor, %.1f ms a frame",
+		frame, lightsThisFrame.steadyInReach + lightsThisFrame.briefInReach, lightsThisFrame.steadyChosen, lightsThisFrame.briefChosen, ToyShadowsMaxLights, ToyShadowsMaxBrief,
+		lightsThisFrame.steadyInReach - lightsThisFrame.steadyChosen, lightsThisFrame.briefInReach - lightsThisFrame.briefChosen,
+		lightsThisFrame.outOfView, lightsThisFrame.atTheCamera, lightsThisFrame.dark, lightsThisFrame.lightNothing,
+		lightsThisFrame.notAVisibleLamp, lightsThisFrame.notAVisibleLampInView, ShadowAmbientOn ? "ON" : "OFF", lightsThisFrame.lampsInReach,
+		passes, screensOfTotal, milliseconds, frameMilliseconds);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	_snprintf(line, sizeof(line) - 1,
+		"shadow lights: the most in one frame so far: %d in reach (frame %d, room %s), %d chosen, %d shadow passes, %.1f ms on the processor",
+		mostInReach, mostInReachFrame, mostInReachRoom, mostChosen, mostPasses, mostMilliseconds);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+}
+
+// Gives the shadow pass this frame's list, and how many are on it. lights and owners have room for kToyMostLights each.
+int ToyShadows_ChosenLights(float *lights, const void **owners)
+{
+	memcpy(lights, toyChosenLights, sizeof(toyChosenLights));
+	memcpy(owners, toyChosenOwners, sizeof(toyChosenOwners));
+
+	return toyNumChosen;
+}
+
+// Is this light being added per pixel this frame? If so, the game's own lighting has to leave it out, or it would count twice.
+bool ToyShadows_LightIsByPixel(const LIGHTBLOCK *light)
+{
+	for (int i = 0; i < toyNumLightsByPixel; i++)
+	{
+		if (toyLightsByPixel[i] == light)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Gives the world's x, y and z directions in the space the light list uses, three numbers each. A light's positions are set out
+// along these, so they stay put in the world while the camera turns. The matrix's last column is its movement, which a direction
+// doesn't have, and its middle row is the height, which that space has upside down.
+void ToyShadows_WorldAxes(float *axes)
+{
+	for (int axis = 0; axis < 3; axis++)
+	{
+		axes[axis * 3 + 0] = toyViewMatrix[0 + axis];
+		axes[axis * 3 + 1] = -toyViewMatrix[4 + axis];
+		axes[axis * 3 + 2] = toyViewMatrix[8 + axis];
+	}
+}
+
+void ToyShadows_ViewMatrix(float *matrix)
+{
+	memcpy(matrix, toyViewMatrix, sizeof(toyViewMatrix));
+}
+
+void ToyShadows_CameraPlace(float *place)
+{
+	memcpy(place, toyCameraPlace, sizeof(toyCameraPlace));
+}
+
+// Breaks "active" down by kind, so the count means something. Writes a line each time the total passes its record, and every
+// 300 frames. "Active" is the test LightSourcesInRangeOfObject starts from: lit, and on something the game is keeping active.
+void ToyShadows_NoteFrameLights(int frame)
+{
+	if (!ToyShadowsMode)
+	{
+		return;
+	}
+
+	const int kMostSpots = 256;
+	VECTORCH spots[kMostSpots];
+	int numSpots = 0;
+	int level = 0, objects = 0, flares = 0, brief = 0, onPlayer = 0, cameraInside = 0, canReach = 0;
+
+	for (int i = 0; i < NumActiveBlocks; i++)
+	{
+		DISPLAYBLOCK *block = ActiveBlockList[i];
+
+		for (int j = 0; j < block->ObNumLights; j++)
+		{
+			LIGHTBLOCK const *light = block->ObLights[j];
+
+			if (!ToyLightIsLit(light))
+			{
+				continue;
+			}
+
+			if (block == Player)
+			{
+				onPlayer++;
+			}
+			else if (ToyBlockIsFlare(block))
+			{
+				flares++;
+			}
+			else if (ToyLightIsBrief(light))
+			{
+				brief++;
+			}
+			else if (block->ObMyModule)
+			{
+				level++;
+			}
+			else
+			{
+				objects++;
+			}
+
+			if (ToyDistanceToCamera(light) < light->LightRange)
+			{
+				cameraInside++;
+			}
+
+			if (ToyLightCanReachTheView(light, false))
+			{
+				canReach++;
+			}
+
+			if (numSpots < kMostSpots)
+			{
+				spots[numSpots++] = light->LightWorld;
+			}
+		}
+	}
+
+	int const total = level + objects + flares + brief + onPlayer + NumActiveLightElements;
+	bool const isRecord = total > toyMostLightsInAFrame;
+
+	if (isRecord)
+	{
+		toyMostLightsInAFrame = total;
+	}
+
+	if (!isRecord && (frame % 300) != 0)
+	{
+		return;
+	}
+
+	// two lights in exactly the same place would be one light counted twice
+	int sameSpot = 0;
+	for (int i = 1; i < numSpots; i++)
+	{
+		for (int j = 0; j < i; j++)
+		{
+			if (spots[i].vx == spots[j].vx && spots[i].vy == spots[j].vy && spots[i].vz == spots[j].vz)
+			{
+				sameSpot++;
+				break;
+			}
+		}
+	}
+
+	// which room the player is in, so a log can be read against the level, and whether a mirror is being drawn this frame
+	char const *room = toyRoomName;
+
+	char line[300];
+	_snprintf(line, sizeof(line) - 1,
+		"toy-lights: frame %d%s: %d active = %d level + %d objects + %d flares + %d brief + %d elements + %d on the player; camera inside the range of %d, %d can reach the view, %d share a spot; room %s, mirror %d",
+		frame, isRecord ? " (most yet)" : "", total, level, objects, flares, brief, NumActiveLightElements, onPlayer, cameraInside, canReach, sameSpot, room, MirroringActive ? 1 : 0);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	// A lit lamp that keeps its place never counts here. A light coming onto the list or leaving it does, once.
+	_snprintf(line, sizeof(line) - 1, "shadow lights: %d places on the list changed owner on the last frame, %d since the last report; %d lights came back within %d frames of leaving",
+		placesChangedLastFrame, placesChangedSinceReport, lightsBackSoon, kBackSoonFrames);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+	placesChangedSinceReport = 0;
+	lightsBackSoon = 0;
+
+	for (int i = 0; i < toyNumChosen; i++)
+	{
+		if (!lightInPlace[i])
+		{
+			continue;
+		}
+
+		_snprintf(line, sizeof(line) - 1, "toy-lights:   chosen %d: %d away, range %d, brightness %d, flags %08x", i,
+			toyChosen[i].distance, toyChosen[i].range, toyChosen[i].bright, toyChosen[i].flags);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+}
+
+// Is this a Predator with its cloak on, or another player's? These are the two tests ShapePipeline uses to draw one as a
+// shimmer. The player needs no test: their own body is never drawn, because view.cpp leaves it off the list of things on
+// screen, and the cloak test ShapePipeline has for the player only covers their weapon, which is left out anyway.
+static bool ToyBlockIsCloaked(const DISPLAYBLOCK *block)
+{
+	STRATEGYBLOCK const *owner = block->ObStrategyBlock;
+
+	if (!owner || !owner->SBdataptr)
+	{
+		return false;
+	}
+
+	if (owner->I_SBtype == I_BehaviourNetGhost)
+	{
+		return ((NETGHOSTDATABLOCK const *)owner->SBdataptr)->CloakingEffectiveness != 0;
+	}
+
+	if (owner->I_SBtype == I_BehaviourPredator)
+	{
+		return ((PREDATOR_STATUS_BLOCK const *)owner->SBdataptr)->CloakingEffectiveness != 0;
+	}
+
+	return false;
+}
+
+// What may this polygon do? kind says where it came from: the level, an object or a model.
+static int ToyChooseKind(const DISPLAYBLOCK *block, int kind)
+{
+	if (kind != kToyCasterLevel && ToyBlockIsCloaked(block))
+	{
+		return kToyCasterCloaked;
+	}
+
+	return kind;
+}
+
+// Keeps a copy of every solid polygon of this shape for the end of the frame, in view space, so that it can cast a shadow and
+// have shadows fall on it. AddShape calls this for the level and for placed objects, and AddHierarchicalShape calls it for
+// each body part of a model. kind says which of those this is.
+//
+// Left out:
+// - The player's weapon, and whatever else is drawn with it, such as a facehugger on the player's face: they hang in front
+//   of the camera.
+// - Anything drawn as a reflection, because it isn't really standing there.
+// - The special vision modes, which don't show shadows.
+// - Sprites, because they turn to face the camera, so their shadow would turn too.
+// - A block with neither a piece of the level nor an owner. Those are made up for one draw, such as the alien's teeth, which
+//   are drawn while gunLayer is off. ShapePipeline reads the same two blanks as "part of the player's own view". A spear stuck
+//   in a wall and the grappling hook are made the same way, so they cast nothing either.
+// Which shapes can use the planes they keep. A plane is in the shape's own numbers, and all that's added here is where the object is, so the
+// object has to line up with the world, and a morphing object's corners don't stay still. Anything else works its planes out from its corners.
+// So does everything while the mirror cheat is on: it flips the view left to right, which makes the list the same way round as the shape
+// and not a mirror image of it, so every stored arrow would point the wrong way.
+static SurfacePolygon const *ToyStoredPlanes(const SHAPEHEADER *shape, const MATRIXCH &matrix, bool morphing)
+{
+	extern MATRIXCH IdentityMatrix;
+
+	if (!shape->sh_surfacepolygons || morphing || MIRROR_CHEATMODE || memcmp(&matrix, &IdentityMatrix, sizeof(MATRIXCH)) != 0)
+	{
+		return 0;
+	}
+
+	return shape->sh_surfacepolygons;
+}
+
+// A stored plane, moved to where its object is. Four numbers, as ToyShadows_AddCaster wants them.
+static void ToyPlaneInWorld(const SurfacePolygon &polygon, const VECTORCH &place, float *plane)
+{
+	plane[0] = polygon.nx;
+	plane[1] = polygon.ny;
+	plane[2] = polygon.nz;
+	plane[3] = polygon.distance + polygon.nx * (float)place.vx + polygon.ny * (float)place.vy + polygon.nz * (float)place.vz;
+}
+
+void ShadowReach_StartDrawnThing(const void *owner);
+
+// Is this block staying where it is? One with no dynamics can't move by itself. Where it is doesn't matter here: a new place is simply a new shadow.
+static bool BlockIsStill(const DISPLAYBLOCK *dptr)
+{
+	STRATEGYBLOCK const *owner = dptr->ObStrategyBlock;
+
+	if (!owner || !owner->DynPtr)
+	{
+		return true;
+	}
+
+	DYNAMICSBLOCK const *dynamics = owner->DynPtr;
+
+	return dynamics->Position.vx == dynamics->PrevPosition.vx && dynamics->Position.vy == dynamics->PrevPosition.vy && dynamics->Position.vz == dynamics->PrevPosition.vz;
+}
+
+// The corners of one polygon of a shape standing at place, in the world's numbers, written as x y z. Gives back how many there are, or 0 if the
+// polygon can't be used. These are the shape's own numbers, not the rounded ones on the light list, so a corner two polygons share is the same
+// corner to the last digit, whenever each of their prisms was made, and no crack of light can open between them. A kept polygon next to one that went
+// the ordinary way, because the store was full, can be up to 0.87 from it at their edge, but only until the store has been emptied and refilled.
+int ToyShadows_CornersInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners)
+{
+	SHAPEHEADER const *shape = (SHAPEHEADER const *)shapePointer;
+
+	if (polygonNumber < 0 || polygonNumber >= shape->numitems)
+	{
+		return 0;
+	}
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+	VECTORCH const *points = (VECTORCH const *)*shape->points;
+	int const *vertexNumberPtr = &polygon->Poly1stPt;
+	int count = 0;
+
+	while (*vertexNumberPtr != kTerminationMarker)
+	{
+		// this number comes from a game file, so it's checked before it's used to find a point
+		int const pointNumber = *vertexNumberPtr++;
+
+		if (count == mostCorners || pointNumber < 0 || pointNumber >= shape->numpoints)
+		{
+			return 0;
+		}
+
+		corners[count * 3 + 0] = (float)place[0] + (float)points[pointNumber].vx;
+		corners[count * 3 + 1] = (float)place[1] + (float)points[pointNumber].vy;
+		corners[count * 3 + 2] = (float)place[2] + (float)points[pointNumber].vz;
+		count++;
+	}
+
+	return count;
+}
+
+static ShadowReachBall ToyModuleBallOnTheList(const MODULE *module);
+
+// A wall on the fixed buffer's route has no corners on the list, because it never went through the pipeline, so this is where its shadows are collected from.
+// Its prisms are made from the shape itself, for each light that wants them.
+void ToyShadows_CollectStaticModule(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+{
+	if (!ToyShadowsMode)
+	{
+		return;
+	}
+
+	MODULE const *module = dptr->ObMyModule;
+
+	// without this it would be taken for a wall out of view, and cast twice
+	ToyNoteModuleCollected(module);
+
+	if (ToyShadowsCasters & (1 << kToyCasterLevel))
+	{
+		if (ToyShadows_VolumesInThisView())
+		{
+			ShadowGroup_StartWalked(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx, shapePtr->numitems, module->m_ball, ToyModuleBallOnTheList(module));
+		}
+		else
+		{
+			ToyShadows_NoteWorldDrawn();
+		}
+	}
+}
+
+// One polygon of a shape standing at place, as the shadow code wants it, read from the shape with nothing drawn. Gives back how many corners it has, or 0 if it
+// casts no shadow: the same ones ToyShadows_Collect leaves out. plane gets its stored plane, moved to the place, as ToyShadows_AddCaster wants it.
+int ToyShadows_PolygonInWorld(const void *shapePointer, int polygonNumber, const int *place, float *corners, int mostCorners, float *plane, bool *twoSided)
+{
+	SHAPEHEADER const *shape = (SHAPEHEADER const *)shapePointer;
+
+	if (polygonNumber < 0 || polygonNumber >= shape->numitems || !shape->sh_surfacepolygons)
+	{
+		return 0;
+	}
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+
+	if (polygon->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+	{
+		return 0;
+	}
+
+	VECTORCH const world = { place[0], place[1], place[2] };
+
+	ToyPlaneInWorld(shape->sh_surfacepolygons[polygonNumber], world, plane);
+	*twoSided = (polygon->PolyFlags & iflag_no_bfc) != 0;
+
+	return ToyShadows_CornersInWorld(shapePointer, polygonNumber, place, corners, mostCorners);
+}
+
+// ---- for the shoot tool, -shadowshoot: see shadow_shoot.cpp ----
+
+extern int maxshapes;
+extern fixed_t GunMuzzleSightX, GunMuzzleSightY;
+
+int ShadowShoot_ShapeNumber(const void *shape)
+{
+	for (int i = 0; shape && i < maxshapes; i++)
+	{
+		if (mainshapelist[i] == shape)
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+// An Alien has no sight, and its numbers are left over from whoever had one last.
+void ShadowShoot_CrosshairPixel(int *x, int *y)
+{
+	bool const hasSight = AvP.PlayerType != I_Alien;
+
+	*x = hasSight ? (int)(GunMuzzleSightX >> 16) : -1;
+	*y = hasSight ? (int)(GunMuzzleSightY >> 16) : -1;
+}
+
+void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
+{
+	memset(target, 0, sizeof(*target));
+	target->shapeNumber = -1;
+	target->polygon = -1;
+	target->moduleNumber = -1;
+	target->behaviour = -1;
+
+	if (!Player || !Global_VDB_Ptr)
+	{
+		return;
+	}
+
+	VECTORCH place = Global_VDB_Ptr->VDB_World;
+	VECTORCH aim = { (int)(direction[0] * 65536.0f), (int)(direction[1] * 65536.0f), (int)(direction[2] * 65536.0f) };
+
+	// The game reads these right after it asks, so nothing should need them now. They're put back anyway, so that a shot can't change the game.
+	VECTORCH const keptPoint = LOS_Point, keptNormal = LOS_ObjectNormal;
+	int const keptLambda = LOS_Lambda, keptPolygon = LOS_PolygonNumber;
+	DISPLAYBLOCK *const keptObject = LOS_ObjectHitPtr;
+	SECTION_DATA *const keptSection = LOS_HModel_Section;
+
+	FindPolygonInLineOfSight(&aim, &place, 0, Player);
+
+	DISPLAYBLOCK const *hit = LOS_ObjectHitPtr;
+	SECTION_DATA const *section = LOS_HModel_Section;
+	int const polygonNumber = LOS_PolygonNumber;
+
+	if (hit)
+	{
+		target->distance = LOS_Lambda;
+		target->point[0] = LOS_Point.vx;
+		target->point[1] = LOS_Point.vy;
+		target->point[2] = LOS_Point.vz;
+		target->arrow[0] = (float)LOS_ObjectNormal.vx / 65536.0f;
+		target->arrow[1] = (float)LOS_ObjectNormal.vy / 65536.0f;
+		target->arrow[2] = (float)LOS_ObjectNormal.vz / 65536.0f;
+	}
+
+	LOS_Point = keptPoint;
+	LOS_ObjectNormal = keptNormal;
+	LOS_Lambda = keptLambda;
+	LOS_PolygonNumber = keptPolygon;
+	LOS_ObjectHitPtr = keptObject;
+	LOS_HModel_Section = keptSection;
+
+	if (!hit)
+	{
+		return;
+	}
+
+	// The line of sight code tests a model's part by the shape in its plan, so that's what the polygon's number means. A part can have been given another shape since, and that's the one it casts.
+	SHAPEHEADER const *shape = !section ? GetShapeData(hit->ObShape) : section->sempai->Shape;
+	SHAPEHEADER const *shapeItCasts = (section && section->Shape) ? section->Shape : shape;
+
+	if (!shape || polygonNumber < 0 || polygonNumber >= shape->numitems)
+	{
+		return;
+	}
+
+	// A module is never turned, and its shape's numbers are the world's, moved to where it is. Anything else has its own turn as well, as the line of sight code has it.
+	bool const turned = section != 0 || !hit->ObMyModule;
+	VECTORCH const standsAt = section ? section->World_Offset : hit->ObWorld;
+	MATRIXCH turn = section ? section->SecMat : hit->ObMat;
+
+	POLYHEADER const *polygon = (POLYHEADER const *)shape->items[polygonNumber];
+	VECTORCH const *points = (VECTORCH const *)*shape->points;
+	int const *vertexNumberPtr = &polygon->Poly1stPt;
+
+	while (*vertexNumberPtr != kTerminationMarker)
+	{
+		// this number comes from a game file, so it's checked before it's used to find a point
+		int const pointNumber = *vertexNumberPtr++;
+
+		if (target->numCorners == kShootMostCorners || pointNumber < 0 || pointNumber >= shape->numpoints)
+		{
+			target->numCorners = 0;
+			break;
+		}
+
+		VECTORCH corner = points[pointNumber];
+
+		if (turned)
+		{
+			RotateVector(&corner, &turn);
+		}
+
+		target->corners[target->numCorners * 3 + 0] = (float)corner.vx + (float)standsAt.vx;
+		target->corners[target->numCorners * 3 + 1] = (float)corner.vy + (float)standsAt.vy;
+		target->corners[target->numCorners * 3 + 2] = (float)corner.vz + (float)standsAt.vz;
+		target->numCorners++;
+	}
+
+	target->found = true;
+	target->shape = shapeItCasts;
+	target->partWasReplaced = shapeItCasts != shape;
+	target->hasSimplerVersions = section != 0 && shapeItCasts->shape_degradation_array != 0;
+	target->isMorphing = hit->ObMorphCtrl != 0;
+	target->shapeNumber = ShadowShoot_ShapeNumber(shape);
+	target->polygon = polygonNumber;
+	target->moduleNumber = hit->ObMyModule ? hit->ObMyModule->m_index : -1;
+	target->behaviour = hit->ObStrategyBlock ? (int)hit->ObStrategyBlock->I_SBtype : -1;
+	target->flags = polygon->PolyFlags;
+	target->isPartOfAModel = section != 0;
+
+	if (!turned && shape->sh_surfacepolygons)
+	{
+		target->hasPlane = true;
+		ToyPlaneInWorld(shape->sh_surfacepolygons[polygonNumber], standsAt, target->plane);
+	}
+}
+
+void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
+{
+	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
+	{
+		return;
+	}
+
+	// kind is 0, 1 or 2 here, and the switch's 1, 2 and 4 are those same numbers written as single bits
+	if (!(ToyShadowsCasters & (1 << kind)))
+	{
+		return;
+	}
+
+	if (!dptr->ObMyModule && !dptr->ObStrategyBlock)
+	{
+		return;
+	}
+
+	if (shapePtr->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR))
+	{
+		return;
+	}
+
+	// With the shadow volumes off nothing casts, so the list isn't wanted. This comes after the tests above, so that a frame counts as the same kind of frame either way.
+	if (!ToyShadows_VolumesInThisView())
+	{
+		ToyShadows_NoteWorldDrawn();
+		return;
+	}
+
+	int const whatItMayDo = ToyChooseKind(dptr, kind);
+	void const *owner = ToyOwnerOf(dptr);
+	int polygonsKept = 0;
+
+	ShadowReach_StartDrawnThing(owner);
+
+	if (dptr->ObMyModule)
+	{
+		ToyNoteModuleCollected(dptr->ObMyModule);
+	}
+
+	SurfacePolygon const *stored = ToyStoredPlanes(shapePtr, dptr->ObMat, dptr->ObMorphCtrl != 0);
+	bool const reportDue = ShadowReportIsDue();
+	int const keptGroup = (stored && (whatItMayDo == kToyCasterLevel || whatItMayDo == kToyCasterObject) && BlockIsStill(dptr) && !(dptr->ObFlags & ObFlag_ArbRot)) ? ShadowGroup_Start(shapePtr, shapePtr->sh_surfacelistnumber, &dptr->ObWorld.vx) : -1;
+	CasterSource const source = { dptr->ObShape, { dptr->ObWorld.vx, dptr->ObWorld.vy, dptr->ObWorld.vz }, dptr->ObStrategyBlock ? (int)dptr->ObStrategyBlock->I_SBtype : -1,
+		stored ? "stored plane" : !shapePtr->sh_surfacepolygons ? "its shape has no list" : dptr->ObMorphCtrl ? "it's morphing" : "it's turned" };
+	int numitems = shapePtr->numitems;
+	int **itemArrayPtr = shapePtr->items;
+
+	while (numitems-- > 0)
+	{
+		int const polygonNumber = shapePtr->numitems - 1 - numitems;
+		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
+
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+		{
+			continue;
+		}
+
+		float pts[maxpolypts * 3];
+		int count = 0;
+		int *vertexNumberPtr = &polyPtr->Poly1stPt;
+		bool pointsAreSafe = true;
+
+		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
+		{
+			// this number comes from a game file, so it's checked before it's used to find a point
+			int const pointNumber = *vertexNumberPtr++;
+			if (pointNumber < 0 || pointNumber >= shapePtr->numpoints || pointNumber >= maxrotpts)
+			{
+				pointsAreSafe = false;
+				break;
+			}
+
+			VECTORCH const *point = &RotatedPts[pointNumber];
+			pts[count * 3 + 0] = (float)point->vx;
+			pts[count * 3 + 1] = (float)-point->vy;
+			pts[count * 3 + 2] = (float)point->vz;
+			count++;
+		}
+
+		if (pointsAreSafe)
+		{
+			float plane[4];
+
+			if (stored)
+			{
+				ToyPlaneInWorld(stored[polygonNumber], dptr->ObWorld, plane);
+			}
+
+			// PolygonWithinFrustum is the game's own test, the one it's about to make on this polygon anyway, so the report can't disagree
+			// with what really happens. That's why it's only asked on a report frame.
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, reportDue && PolygonWithinFrustum(polyPtr) != 0, keptGroup, polygonNumber, &source, shapePtr };
+
+			ToyShadows_AddCaster(pts, count, whatItMayDo, owner, facts);
+			polygonsKept++;
+		}
+	}
+
+	if (kind == kToyCasterModel)
+	{
+		ToyShadows_NoteModelPart(dptr->ObStrategyBlock, polygonsKept);
+	}
+}
+
+// A wall only reaches ToyShadows_Collect if it's drawn, so a wall that leaves the screen would stop casting, and its shadow would
+// vanish from what's still on screen. The code below finds those walls and adds them as casters that are never drawn.
+
+bool ToyShadows_StartUnseenModule(const ShadowReachBall &ball);
+bool ModuleShadowCanShow(const ShadowReachBall &ball, const float *lights, int numLights, const float *axes);
+
+extern int ToyShadowsLampSize;
+extern int ToyShadowsFlareSize;
+
+// The most polygons a frame adds here. It only matters for lights with a huge range, which can reach most of a level. If the log
+// shows exactly this many out of view, the limit was reached, and some walls were left out.
+static const int kToyMostOutOfView = 20000;
+
+// Whether this module can cast while it isn't drawn. It has to be a wall that stays put. Anything with a strategy block moves, or
+// can, as doors and lifts do, and its shape here wouldn't match where it really is. A morphing shape's points change too. So those
+// still cast only while drawn. An infinite module is the level's outer box and has no shape of its own, a dormant one is switched
+// off, and one marked not visible wouldn't be drawn when in view either.
+// Is this a module that stays exactly as it is for the whole level? Nothing controls it, nothing morphs it, and it's a real part of the level.
+bool ModuleNeverMoves(const MODULE *module)
+{
+	if (!module || !module->m_mapptr)
+	{
+		return false;
+	}
+
+	if ((module->m_flags & (m_flag_infinite | m_flag_dormant)) || module->m_sbptr || module->m_mapptr->MapMorphHeader)
+	{
+		return false;
+	}
+
+	return !(module->m_mapptr->MapFlags & ObFlag_NotVis);
+}
+
+static bool ToyModuleCanCastUnseen(const MODULE *module)
+{
+	return ModuleNeverMoves(module) && !ToyModuleWasCollected(module);
+}
+
+// Whether any of the chosen lights can reach this module's ball, which it's had since the level loaded. A ball is rougher than the module's box,
+// but it can only let in too many, and the prism builder tests each polygon anyway. Both are in the world's numbers, so nothing has to be turned
+// to match the camera just to find out that no light's anywhere near. A light drawn from several positions reaches a little further than its
+// range, by the size of the light, so that's added.
+static bool ToyModuleTouchesALight(const MODULE *module, const float *lights, int numLights)
+{
+	float const *ball = module->m_ball;
+	float const lightSize = (float)((ToyShadowsLampSize > ToyShadowsFlareSize) ? ToyShadowsLampSize : ToyShadowsFlareSize) * 0.5f;
+
+	for (int i = 0; i < numLights; i++)
+	{
+		float const *light = &lights[i * kToyLightFloats];
+
+		if (LightOnListIsDark(light))
+		{
+			continue;
+		}
+
+		float const dx = ball[0] - light[kToyLightWorld + 0];
+		float const dy = ball[1] - light[kToyLightWorld + 1];
+		float const dz = ball[2] - light[kToyLightWorld + 2];
+		float const reach = ball[3] + light[3] + lightSize;
+
+		if (dx * dx + dy * dy + dz * dz < reach * reach)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// This module's ball, turned to match the camera, in the same numbers as the lights and polygons.
+static ShadowReachBall ToyModuleBallOnTheList(const MODULE *module)
+{
+	float view[3];
+	TranslatePoint(module->m_ball, view, toyViewMatrix);
+
+	ShadowReachBall const ball = { view[0], -view[1], view[2], module->m_ball[3] };
+	return ball;
+}
+
+// Adds this module's solid polygons as casters, and gives back how many. Its points go through a list of our own, because
+// RotatedPts holds what was last drawn, and the rest of the frame may still want it. All modules line up with the world's axes,
+// so a point's place in the world is only the module's place plus the point.
+static int ToyCollectUnseenModule(const MODULE *module)
+{
+	static float viewPoints[maxrotpts * 3];
+
+	SHAPEHEADER const *shape = GetShapeData(module->m_mapptr->MapShape);
+
+	if (!shape || !shape->points || !shape->points[0] || !shape->items)
+	{
+		return 0;
+	}
+
+	if (shape->numpoints < 0 || shape->numpoints > maxrotpts || (shape->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR)))
+	{
+		return 0;
+	}
+
+	VECTORCH const &place = module->m_mapptr->MapWorld;
+	int const *point = shape->points[0];
+
+	for (int i = 0; i < shape->numpoints; i++)
+	{
+		float const source[3] = { (float)place.vx + (float)point[0], (float)place.vy + (float)point[1], (float)place.vz + (float)point[2] };
+		float view[3];
+
+		TranslatePoint(source, view, toyViewMatrix);
+		viewPoints[i * 3 + 0] = view[0];
+		viewPoints[i * 3 + 1] = -view[1];
+		viewPoints[i * 3 + 2] = view[2];
+		point += 3;
+	}
+
+	extern MATRIXCH IdentityMatrix;
+
+	SurfacePolygon const *stored = ToyStoredPlanes(shape, IdentityMatrix, false);   // a module always lines up with the world
+	int const keptGroup = stored ? ShadowGroup_Start(shape, shape->sh_surfacelistnumber, &place.vx) : -1;
+	int polygonsAdded = 0;
+	int numitems = shape->numitems;
+	int **itemArrayPtr = shape->items;
+
+	while (numitems-- > 0)
+	{
+		int const polygonNumber = shape->numitems - 1 - numitems;
+		POLYHEADER *polyPtr = (POLYHEADER *)(*itemArrayPtr++);
+
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+		{
+			continue;
+		}
+
+		float pts[maxpolypts * 3];
+		int count = 0;
+		int *vertexNumberPtr = &polyPtr->Poly1stPt;
+		bool pointsAreSafe = true;
+
+		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
+		{
+			// this number comes from a game file, so it's checked before it's used to find a point
+			int const pointNumber = *vertexNumberPtr++;
+
+			if (pointNumber < 0 || pointNumber >= shape->numpoints)
+			{
+				pointsAreSafe = false;
+				break;
+			}
+
+			memcpy(&pts[count * 3], &viewPoints[pointNumber * 3], 3 * sizeof(float));
+			count++;
+		}
+
+		if (pointsAreSafe)
+		{
+			float plane[4];
+
+			if (stored)
+			{
+				ToyPlaneInWorld(stored[polygonNumber], place, plane);
+			}
+
+			// a wall has no owner, and this one isn't being drawn
+			CasterFacts const facts = { stored ? plane : 0, (polyPtr->PolyFlags & iflag_no_bfc) != 0, false, keptGroup, polygonNumber, 0, shape };
+
+			ToyShadows_AddCaster(pts, count, kToyCasterCastOnly, 0, facts);
+			polygonsAdded++;
+		}
+	}
+
+	return polygonsAdded;
+}
+
+// Called once a frame, after the lights are read and everything that's on screen has been collected. Only a module whose shadow can land on
+// something on screen is kept, because the rest would be work for the card with nothing to show for it. Gives back how many polygons that is.
+// axes holds the world's three directions on the list. polygonsLeftOut gets how many were in a light's range and left out, for the log.
+int ToyShadows_CollectOutOfView(const float *lights, int numLights, const float *axes, int *polygonsLeftOut)
+{
+	*polygonsLeftOut = 0;
+
+	extern SCENE Global_Scene;
+
+	// -shadowcasters can turn the level off, and these are the level
+	if (!(ToyShadowsCasters & (1 << kToyCasterLevel)) || !Global_ModulePtr)
+	{
+		return 0;
+	}
+
+	SCENEMODULE const *scene = Global_ModulePtr[Global_Scene];
+
+	if (!scene || !scene->sm_marray)
+	{
+		return 0;
+	}
+
+	int polygonsKept = 0;
+
+	for (int i = 0; i < ModuleArraySize && polygonsKept < kToyMostOutOfView; i++)
+	{
+		MODULE const *module = scene->sm_marray[i];
+
+		if (!ToyModuleCanCastUnseen(module) || !ToyModuleTouchesALight(module, lights, numLights))
+		{
+			continue;
+		}
+
+		ShadowReachBall const ball = ToyModuleBallOnTheList(module);
+
+		if (!ModuleShadowCanShow(ball, lights, numLights, axes))
+		{
+			SHAPEHEADER const *shape = GetShapeData(module->m_mapptr->MapShape);
+			*polygonsLeftOut += shape ? shape->numitems : 0;
+			continue;
+		}
+
+		if (!ToyShadows_StartUnseenModule(ball))
+		{
+			break;
+		}
+
+		polygonsKept += ToyCollectUnseenModule(module);
+	}
+
+	return polygonsKept;
 }

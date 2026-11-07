@@ -1,0 +1,1168 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "OLD: any number of planes",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.nPlanes > kMostPlanes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "OLD: any way of packing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.compression > kCompressionByteRun1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "OLD: no-op counts the run before it",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\t\t\tlength = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: the header check is not listened to",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (!HandleBMHD())\n\t\t\t\t\t\t{\n\t\t\t\t\t\t\treturn false;\n\t\t\t\t\t\t}",
+					"to": "HandleBMHD();"
+				}
+			]
+		},
+		{
+			"name": "the plane limit is one too low",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "const int kMostPlanes = 16;",
+					"to": "const int kMostPlanes = 15;"
+				}
+			]
+		},
+		{
+			"name": "the plane limit is one too high",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "const int kMostPlanes = 16;",
+					"to": "const int kMostPlanes = 17;"
+				}
+			]
+		},
+		{
+			"name": "packing method 1 is refused",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.compression > kCompressionByteRun1)",
+					"to": "if (header.compression >= kCompressionByteRun1)"
+				}
+			]
+		},
+		{
+			"name": "packing method 2 is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.compression > kCompressionByteRun1)",
+					"to": "if (header.compression > 2)"
+				}
+			]
+		},
+		{
+			"name": "a repeated run is not cut at the end of the row",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "length = (-val)+1;\n\n\t\t\tlength = (std::min)(length, rowBytes-bytesDone);",
+					"to": "length = (-val)+1;"
+				}
+			]
+		},
+		{
+			"name": "a plain run is not cut at the end of the row",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "length = val+1;\n\n\t\t\tlength = (std::min)(length, rowBytes-bytesDone);",
+					"to": "length = val+1;"
+				}
+			]
+		},
+		{
+			"name": "a colour past the table is looked up anyway",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (index < numColours)",
+					"to": "if (colourMap)"
+				}
+			]
+		},
+		{
+			"name": "the see-through colour is ignored",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.masking == kMaskTransparentColour)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a table too big is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (nEntries > kMaxColours)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the first table counts",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "uint32_t nEntries = chunkSize / 3;\n",
+					"to": "uint32_t nEntries = chunkSize / 3;\n\tif (colourMap) { file.Seek(chunkSize, FileStream::SeekCurrent); return true; }\n"
+				}
+			]
+		},
+		{
+			"name": "a file that runs out searches for ever",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "default:\n\t\t\t\t// ERROR!\n\t\t\t\treturn Refuse(kRimPartsWrong);\n\t\t}\n\t}\n\n\treturn true;",
+					"to": "default:\n\t\t\t\tif (!file.IsGood()) return true;\n\t\t\t\tbreak;\n\t\t}\n\t}\n\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "the font check stops a letter short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "letter < lettersToRead",
+					"to": "letter < lettersToRead - 1"
+				}
+			]
+		},
+		{
+			"name": "the font check lets the very end through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "lastX + lastY * width >= pixels",
+					"to": "lastX + lastY * width > pixels"
+				}
+			]
+		},
+		{
+			"name": "the font check overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "uint64_t const pixels = (uint64_t)width * height;",
+					"to": "uint32_t const pixels = width * height;"
+				},
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "if (lastX + lastY * width >= pixels)",
+					"to": "if ((uint32_t)(lastX + lastY * width) >= pixels)"
+				}
+			]
+		},
+		{
+			"name": "the font check forgets the letter height",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "(uint64_t)FontChecks_LetterY(letter) + letterHeight - 1",
+					"to": "(uint64_t)FontChecks_LetterY(letter)"
+				}
+			]
+		},
+		{
+			"name": "the font check forgets the letter width",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "(uint64_t)FontChecks_LetterX(letter) + letterWidth",
+					"to": "(uint64_t)FontChecks_LetterX(letter)"
+				}
+			]
+		},
+		{
+			"name": "the height is one too many",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "(uint64_t)FontChecks_LetterY(letter) + letterHeight - 1",
+					"to": "(uint64_t)FontChecks_LetterY(letter) + letterHeight"
+				}
+			]
+		},
+		{
+			"name": "the grid across is wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "((letter - 32) & 15) * 16",
+					"to": "((letter - 32) & 15) * 15"
+				}
+			]
+		},
+		{
+			"name": "the grid down is wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "((letter - 32) >> 4) * 16",
+					"to": "((letter - 32) >> 4) * 15"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game does not check the font",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "if (!FontChecks_LettersFit(textureWidth, textureHeight, nChars, HUD_FONT_WIDTH, HUD_FONT_HEIGHT))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SIZE: a wide picture is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(uint32_t)header.width > kLargestRimSide || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SIZE: a tall picture is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(uint32_t)header.height > kLargestRimSide || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SIZE: any number of pixels is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": " || (uint64_t)header.width * header.height > kMostRimPixels",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SIZE: the limit on a side is smaller than the font",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kLargestRimSide = 8192",
+					"to": "kLargestRimSide = 4096"
+				}
+			]
+		},
+		{
+			"name": "SIZE: the limit on pixels is smaller",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kMostRimPixels = 2048 * 2048",
+					"to": "kMostRimPixels = 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "BODY: a body past the end is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tif (chunkSize > file.BytesLeft())\n\t{\n\t\treturn Refuse(kRimBodyPastEnd);\n\t}\n\n\tif (header.compression",
+					"to": "\tif (header.compression"
+				}
+			]
+		},
+		{
+			"name": "BODY: a plain picture need not be whole",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "header.compression == kCompressionNone ? chunkSize < needed : (uint64_t)chunkSize * 64 < needed",
+					"to": "header.compression == kCompressionNone ? false : (uint64_t)chunkSize * 64 < needed"
+				}
+			]
+		},
+		{
+			"name": "BODY: a packed picture can hold nothing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "header.compression == kCompressionNone ? chunkSize < needed : (uint64_t)chunkSize * 64 < needed",
+					"to": "header.compression == kCompressionNone ? chunkSize < needed : false"
+				}
+			]
+		},
+		{
+			"name": "BODY: the check is not asked",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())",
+					"to": "if (!LevelHasRoomForThePicture())"
+				}
+			]
+		},
+		{
+			"name": "BODY: reading goes on past its data",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tif (bodyLeft == 0)\n\t{\n\t\tproblem = (chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut;\n\t\tranOut = true;\n\t\treturn 0;\n\t}\n\n\tbodyLeft--;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "BODY: running out is not noted",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\t\tranOut = true;\n\t\treturn 0;\n",
+					"to": "\t\treturn 0;\n"
+				}
+			]
+		},
+		{
+			"name": "BODY: a row that ran out is written",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tif (ranOut)\n\t{\n\t\treturn bytesDone;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "BODY: decoding says it finished anyway",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return !ranOut;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "BODY: rows go on after it ran out",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "y < header.height && !ranOut; y++",
+					"to": "y < header.height; y++"
+				}
+			]
+		},
+		{
+			"name": "BODY: a run reads the file directly",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "memset(&destRow[destRowIndex], NextBodyByte(), length);",
+					"to": "memset(&destRow[destRowIndex], file.GetByte(), length);"
+				}
+			]
+		},
+		{
+			"name": "BODY: a count reads the file directly",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "int8_t val = NextBodyByte();",
+					"to": "int8_t val = file.GetByte();"
+				}
+			]
+		},
+		{
+			"name": "FILE: a member ends where the fastfile does",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "(fromFastFile ? (int64_t)fileOffset : 0) + (int64_t)GetFileSize()",
+					"to": "(int64_t)GetFileSize() + (fromFastFile ? (int64_t)fileOffset + 100000 : 0)"
+				}
+			]
+		},
+		{
+			"name": "FILE: a member is taken to start at the start",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "(fromFastFile ? (int64_t)fileOffset : 0) + (int64_t)GetFileSize()",
+					"to": "(int64_t)GetFileSize()"
+				}
+			]
+		},
+		{
+			"name": "FONT: a width from the wrong column",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "pixels[(size_t)y * pitch + (size_t)x * 4] >= 0x80",
+					"to": "pixels[(size_t)y * pitch + (size_t)(x + 1) * 4] >= 0x80"
+				}
+			]
+		},
+		{
+			"name": "FONT: rows taken to be the width",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "pixels[(size_t)y * pitch + (size_t)x * 4] >= 0x80",
+					"to": "pixels[(size_t)y * 256 * 4 + (size_t)x * 4] >= 0x80"
+				}
+			]
+		},
+		{
+			"name": "FONT: too dim counts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": ">= 0x80",
+					"to": ">= 0x7F"
+				}
+			]
+		},
+		{
+			"name": "FONT: too bright to count",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": ">= 0x80",
+					"to": "> 0x80"
+				}
+			]
+		},
+		{
+			"name": "FONT: a letter is one short across",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "for (int x = left + letterWidth; x > left; x--)",
+					"to": "for (int x = left + letterWidth - 1; x > left; x--)"
+				}
+			]
+		},
+		{
+			"name": "FONT: a letter takes in the column before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "for (int x = left + letterWidth; x > left; x--)",
+					"to": "for (int x = left + letterWidth; x >= left; x--)"
+				}
+			]
+		},
+		{
+			"name": "FONT: a letter is one short down",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "y < top + letterHeight; y++",
+					"to": "y < top + letterHeight - 1; y++"
+				}
+			]
+		},
+		{
+			"name": "FONT: a letter takes in the row below",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "y < top + letterHeight; y++",
+					"to": "y <= top + letterHeight; y++"
+				}
+			]
+		},
+		{
+			"name": "FONT: nothing narrows it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/font_checks.h",
+					"from": "\t\twidth--;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: short rows are read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "if (pitch < textureWidth * 4)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: widths are not worked out with the pitch",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "FontChecks_LetterWidth(originalSrcPtr, pitch, c,",
+					"to": "FontChecks_LetterWidth(originalSrcPtr, textureWidth * 4, c,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a font too small gets no width",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\t\tCon_PrintError(\"The font picture is too small to hold its letters, so they all get one width\");\n\t\tGiveEveryLetterOneWidth();\n",
+					"to": "\t\tCon_PrintError(\"The font picture is too small to hold its letters, so they all get one width\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture that can not be finished is kept",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "if (!decoded)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture that can not be finished stays on the card",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "\t\tR_ReleaseTexture(newTexture);\n\t\treturn MISSING_TEXTURE;\n\t}\n\n\t// get the next available ID",
+					"to": "\t\treturn MISSING_TEXTURE;\n\t}\n\n\t// get the next available ID"
+				}
+			]
+		},
+		{
+			"name": "CAP: packed data is read to the end of its chunk",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(std::min)((uint64_t)chunkSize, MostBodyBytes())",
+					"to": "chunkSize"
+				}
+			]
+		},
+		{
+			"name": "CAP: packed data can only be its plain size",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return (uint64_t)rowBytes * header.nPlanes * header.height * 2;",
+					"to": "return (uint64_t)rowBytes * header.nPlanes * header.height;"
+				}
+			]
+		},
+		{
+			"name": "CAP: packed data can be three times its plain size",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return (uint64_t)rowBytes * header.nPlanes * header.height * 2;",
+					"to": "return (uint64_t)rowBytes * header.nPlanes * header.height * 3;"
+				}
+			]
+		},
+		{
+			"name": "NO PLANES: let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.nPlanes == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "TABLE: past the end is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if ((uint64_t)nEntries * 3 > file.BytesLeft())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "TABLE: one colour short is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(uint64_t)nEntries * 3 > file.BytesLeft()",
+					"to": "(uint64_t)nEntries * 3 > file.BytesLeft() + 3"
+				}
+			]
+		},
+		{
+			"name": "PARTS: no limit",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (++parts > kMostRimParts)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "PARTS: the limit is one too low",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "const int kMostRimParts = 16;",
+					"to": "const int kMostRimParts = 15;"
+				}
+			]
+		},
+		{
+			"name": "PARTS: the limit is one too high",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (++parts > kMostRimParts)",
+					"to": "if (++parts > kMostRimParts + 1)"
+				}
+			]
+		},
+		{
+			"name": "REASON: too large says planes",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimTooLarge);",
+					"to": "return Refuse(kRimPlanesWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: no planes says packing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.nPlanes == 0)\n\t{\n\t\treturn Refuse(kRimPlanesWrong);",
+					"to": "if (header.nPlanes == 0)\n\t{\n\t\treturn Refuse(kRimPackingWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: too many planes says packing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.nPlanes > kMostPlanes)\n\t{\n\t\treturn Refuse(kRimPlanesWrong);",
+					"to": "if (header.nPlanes > kMostPlanes)\n\t{\n\t\treturn Refuse(kRimPackingWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: packing says planes",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimPackingWrong);",
+					"to": "return Refuse(kRimPlanesWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: table too big says past the end",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimColourTableTooBig);",
+					"to": "return Refuse(kRimColourTablePastEnd);"
+				}
+			]
+		},
+		{
+			"name": "REASON: table past the end says parts",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimColourTablePastEnd);",
+					"to": "return Refuse(kRimPartsWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: no file says parts",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimNoFile);",
+					"to": "return Refuse(kRimPartsWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: too many parts says parts wrong",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimTooManyParts);",
+					"to": "return Refuse(kRimPartsWrong);"
+				}
+			]
+		},
+		{
+			"name": "REASON: an unknown part after ILBM says too many",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\t\t\t\t\t\t// ERROR!\n\t\t\t\t\t\treturn Refuse(kRimPartsWrong);",
+					"to": "\t\t\t\t\t\t// ERROR!\n\t\t\t\t\t\treturn Refuse(kRimTooManyParts);"
+				}
+			]
+		},
+		{
+			"name": "REASON: an unknown part says too many",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\t\t\t\t// ERROR!\n\t\t\t\treturn Refuse(kRimPartsWrong);\n\t\t}\n\t}",
+					"to": "\t\t\t\t// ERROR!\n\t\t\t\treturn Refuse(kRimTooManyParts);\n\t\t}\n\t}"
+				}
+			]
+		},
+		{
+			"name": "REASON: body past the end says too short",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimBodyPastEnd);",
+					"to": "return Refuse(kRimBodyTooShort);"
+				}
+			]
+		},
+		{
+			"name": "REASON: too short says past the end",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "return Refuse(kRimBodyTooShort);",
+					"to": "return Refuse(kRimBodyPastEnd);"
+				}
+			]
+		},
+		{
+			"name": "REASON: running out always says too long",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut",
+					"to": "kRimBodyTooLong"
+				}
+			]
+		},
+		{
+			"name": "REASON: running out always says the file ended",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(chunkSize > MostBodyBytes()) ? kRimBodyTooLong : kRimRanOut",
+					"to": "kRimRanOut"
+				}
+			]
+		},
+		{
+			"name": "REASON: the reason is not kept",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tproblem = why;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FILE: a member is not stopped at its end",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "nBytes = (std::min)(nBytes, (size_t)memberBytesLeft);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FILE: reading does not count down",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "memberBytesLeft -= nBytesRead;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FILE: going somewhere else does not count",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "memberBytesLeft = (uint32_t)BytesLeft();",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "FILE: before its start counts as inside it",
+			"changes": [
+				{
+					"file": "3dc/FileStream.cpp",
+					"from": "(place < start || place > end)",
+					"to": "(place < 0 || place > end)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused picture says nothing",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menu font uses rows it did not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "if (!introFontRIM.Decode(srcBuffer, width*4))",
+					"to": "introFontRIM.Decode(srcBuffer, width*4);\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the check is not asked",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (!BodyCanHoldThePicture() || !LevelHasRoomForThePicture())",
+					"to": "if (!BodyCanHoldThePicture())"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a picture is let through whatever has been spent",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: it stops one byte short of the limit",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)",
+					"to": "if (bytes >= kMostRimBytesPerLevel - bytesThisLevel)"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: nothing is charged",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tbytesThisLevel += bytes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a picture is charged by its pixels",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >",
+					"to": "(std::max)((uint64_t)header.width * header.height, kLeastRimChargeBytes);\n\n\tif (bytes >"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: width is left out of the charge",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >",
+					"to": "(std::max)((uint64_t)header.height * 4, kLeastRimChargeBytes);\n\n\tif (bytes >"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a refusal is charged anyway",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);",
+					"to": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\tbytesThisLevel = kMostRimBytesPerLevel;\n\t\treturn Refuse(kRimLevelHasTooMany);"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: a new level keeps what was spent",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tbytesThisLevel = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the limit is too low",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kMostRimBytesPerLevel = 256 * 1024 * 1024",
+					"to": "kMostRimBytesPerLevel = 128 * 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: the limit is too high",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kMostRimBytesPerLevel = 256 * 1024 * 1024",
+					"to": "kMostRimBytesPerLevel = 512 * 1024 * 1024"
+				}
+			]
+		},
+		{
+			"name": "LEVEL: says something else",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);",
+					"to": "if (bytes > kMostRimBytesPerLevel - bytesThisLevel)\n\t{\n\t\treturn Refuse(kRimTooLarge);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level does not start its allowance",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tRimLoader_NewLevel();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture has no least cost",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "(std::max)((uint64_t)header.width * header.height * 4, kLeastRimChargeBytes)",
+					"to": "(uint64_t)header.width * header.height * 4"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the least cost is half what it says",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kLeastRimChargeBytes = 64 * 1024",
+					"to": "kLeastRimChargeBytes = 32 * 1024"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the least cost is more than it says",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.h",
+					"from": "kLeastRimChargeBytes = 64 * 1024",
+					"to": "kLeastRimChargeBytes = 128 * 1024"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no size is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no width is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (header.height == 0)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a picture with no height is let through",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (header.width == 0)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the size is checked only where a file gives it, which a file can leave out",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (header.width == 0 || header.height == 0)",
+					"to": "if (false)"
+				},
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "rowBytes = (header.width+7) / 8;",
+					"to": "rowBytes = (header.width+7) / 8;\n\n\tif (header.width == 0 || header.height == 0)\n\t{\n\t\treturn Refuse(kRimHasNoSize);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a bad picture costs nothing",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (why != kRimNoFile && why != kRimLevelHasTooMany)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a file that is not there costs the least",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (why != kRimNoFile && why != kRimLevelHasTooMany)",
+					"to": "if (why != kRimLevelHasTooMany)"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level still opens files",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "if (kMostRimBytesPerLevel - bytesThisLevel < kLeastRimChargeBytes)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);\n\t}\n\n\tfile.Open(",
+					"to": "if (false)\n\t{\n\t\treturn Refuse(kRimLevelHasTooMany);\n\t}\n\n\tfile.Open("
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level is said every time",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bool const say = !saidLevelIsFull;",
+					"to": "bool const say = true;"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: a full level is never said",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "bool const say = !saidLevelIsFull;",
+					"to": "bool const say = false;"
+				}
+			]
+		},
+		{
+			"name": "BUDGET: the next level can not say it",
+			"changes": [
+				{
+					"file": "3dc/RimLoader.cpp",
+					"from": "\tsaidLevelIsFull = false;\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus get no fresh allowance",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tRimLoader_NewLevel();\n\n\tLoadAllMenuTextures();",
+					"to": "\tLoadAllMenuTextures();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the font keeps its old picture when it can not read a new one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tIntroFont_Light.textureID = MISSING_TEXTURE;\n\n\tRimLoader introFontRIM;",
+					"to": "\tRimLoader introFontRIM;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the font keeps its picture after it is released",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_gfx.cpp",
+					"from": "\tTex_Release(IntroFont_Light.textureID);\n\tIntroFont_Light.textureID = MISSING_TEXTURE;\n",
+					"to": "\tTex_Release(IntroFont_Light.textureID);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a full level is logged for every picture",
+			"changes": [
+				{
+					"file": "3dc/TextureManager.cpp",
+					"from": "if (newRim.Problem() != kRimNoFile && (newRim.Problem() != kRimLevelHasTooMany || RimLoader_SayLevelIsFull()))",
+					"to": "if (newRim.Problem() != kRimNoFile)"
+				}
+			]
+		}
+	]
+}

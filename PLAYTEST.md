@@ -56,8 +56,16 @@ from source.
   address.
 - Your antivirus may warn about the build: it's new and unsigned. Don't run a build your antivirus blocks, and don't turn your
   antivirus off. Matching hashes don't make a warning safe. Tell us instead.
-- The security scans have limits. Microsoft's D3DX library comes as a binary, so it can't be scanned. Four reports against
+- The security scans have limits. Microsoft's D3DX library and its shader compiler come as binaries, so they can't be scanned. Four reports against
   libvorbis are accepted until a set date: see `.github/snyk-accepted.json`.
+
+## Turning on the new look
+A new install looks the way the game always has: the new lighting and shadows are off until you choose them. They're under **Rendering options** in the audio and video options, in the main menus and while playing:
+- **Rendering:** Gouraud, Per-pixel (flat), Per-pixel + normals, or Relief map.
+- **Shadows:** yes or no.
+- **Auto-generate maps:** works out maps for textures that have none. Turning it on takes effect from the next level.
+
+What you choose is saved in `AliensVsPredator.cfg`. To put them on keys, type these in the console: `BIND <key> LIGHTING` moves on to the next rendering, and `BIND <key> SHADOWS` switches shadows. Those change the game until it closes, and only the menu saves.
 
 ## What may look different
 The game now refuses damaged or unexpected files instead of reading them, so you may meet these:

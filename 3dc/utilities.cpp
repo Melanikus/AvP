@@ -22,6 +22,11 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
 #include "utilities.h"
 #include <string>
 #include <algorithm>
@@ -33,6 +38,10 @@
 	#include <shlobj.h>
 	#include <shlwapi.h>
 #endif
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "3dc/utilities.cpp";
 
 static char saveFolder[MAX_PATH] = {0};
 
@@ -123,7 +132,7 @@ char *GetSaveFolderPath()
 	// get path to users "My Documents" folder
 	if (FAILED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, saveFolder)))
 	{
-		LogErrorString("Can't find save folder path. ", __LINE__, __FILE__);
+		LogErrorString("Can't find save folder path. ", __LINE__, kThisFile);
 		return 0;
 	}
 
@@ -141,7 +150,7 @@ char *GetSaveFolderPath()
 		DWORD error = ::GetLastError();
 		if (error == ERROR_PATH_NOT_FOUND)
 		{
-			LogErrorString("Can't create directory " + path, __LINE__, __FILE__);
+			LogErrorString("Can't create directory " + path, __LINE__, kThisFile);
 			return NULL;
 		}
 	}
@@ -155,7 +164,7 @@ char *GetSaveFolderPath()
 		DWORD error = ::GetLastError();
 		if (error == ERROR_PATH_NOT_FOUND)
 		{
-			LogErrorString("Can't create directory " + path, __LINE__, __FILE__);
+			LogErrorString("Can't create directory " + path, __LINE__, kThisFile);
 			return NULL;
 		}
 	}
@@ -172,7 +181,7 @@ char *GetSaveFolderPath()
 		DWORD error = ::GetLastError();
 		if (error == ERROR_PATH_NOT_FOUND)
 		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, __FILE__);
+			LogErrorString("Can't create directory " + profilePath, __LINE__, kThisFile);
 			return NULL;
 		}
 	}
@@ -186,7 +195,7 @@ char *GetSaveFolderPath()
 		DWORD error = ::GetLastError();
 		if (error == ERROR_PATH_NOT_FOUND)
 		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, __FILE__);
+			LogErrorString("Can't create directory " + profilePath, __LINE__, kThisFile);
 			return NULL;
 		}
 	}
@@ -326,16 +335,6 @@ HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData)
 #ifdef _WIN32
 	return FindFirstFile(lpFileName, lpFindFileData);
 #endif
-}
-
-void avp_GetCommandLineArgs(char *args, uint32_t size)
-{
-	assert (args);
-	std::string commandLine = Config_GetString("[Misc]", "CommandLine", "");
-
-	size_t copySize = (std::min)(size, commandLine.size());
-
-	strncpy(args, commandLine.c_str(), copySize);
 }
 
 void avp_MessageBox(const char* message, int type)

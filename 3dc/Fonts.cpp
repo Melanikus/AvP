@@ -22,12 +22,16 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a font whose .dat file is the wrong size, or whose cells can't be found in its picture, is refused
+
 /*
  * this code is written to use fonts created with Codehead's Bitmap Font Generator
  * from http://www.codehead.co.uk/cbfg/
  */
 
 #include "Fonts.h"
+#include "font_cells.h"
 #include "TextureManager.h"
 #include "FileStream.h"
 #include "console.h"
@@ -233,22 +237,34 @@ bool Font_Load(const std::string &fontFile, enum eFontTypes fontType)
 
 	size_t fileLength = file.GetFileSize();
 
-	if (kFontDATsize == fileLength)
+	// Without this file there's no telling where a letter is
+	if (kFontDATsize != fileLength)
 	{
-		Fonts[fontType].mapWidth   = file.GetUint32LE();
-		Fonts[fontType].mapHeight  = file.GetUint32LE();
-		Fonts[fontType].cellWidth  = file.GetUint32LE();
-		Fonts[fontType].cellHeight = file.GetUint32LE();
-		Fonts[fontType].startChar  = file.GetByte();
-		
-		for (int i = 0; i < kNumChars; i++) {
-			Fonts[fontType].charWidths[i] = file.GetByte();
-		}
+		Con_PrintError("Font data file '" + fontFile + ".dat' is the wrong size");
+		Tex_Release(Fonts[fontType].textureID);
+		return false;
+	}
+
+	Fonts[fontType].mapWidth   = file.GetUint32LE();
+	Fonts[fontType].mapHeight  = file.GetUint32LE();
+	Fonts[fontType].cellWidth  = file.GetUint32LE();
+	Fonts[fontType].cellHeight = file.GetUint32LE();
+	Fonts[fontType].startChar  = file.GetByte();
+
+	for (int i = 0; i < kNumChars; i++) {
+		Fonts[fontType].charWidths[i] = file.GetByte();
 	}
 #endif
 
 	// get the font texture width and height
 	Tex_GetDimensions(Fonts[fontType].textureID, Fonts[fontType].mapWidth, Fonts[fontType].mapHeight);
+
+	if (!Font_CellsFit(Fonts[fontType].mapWidth, Fonts[fontType].mapHeight, Fonts[fontType].cellWidth, Fonts[fontType].cellHeight))
+	{
+		Con_PrintError("Font data file '" + fontFile + ".dat' has cells that can't be found in its picture");
+		Tex_Release(Fonts[fontType].textureID);
+		return false;
+	}
 
 	Fonts[fontType].isValid = true;
 

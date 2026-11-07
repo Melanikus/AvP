@@ -1,6 +1,11 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code only the level editor used: the game itself never runs it
+//   counted lists are measured against their chunks before they're made
+//   a sequence checks that each of its frames has a place of its own
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   a sequence the game couldn't play refuses the level: see StartTimeFits
 
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
@@ -10,7 +15,7 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(animation_objects)
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFR",Object_Animation_Sequence_Frame_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFR",Object_Animation_Sequence_Frame_Chunk,40)
 
 void Object_Animation_Sequence_Frame_Chunk::fill_data_block (char *data_start)
 {
@@ -57,9 +62,10 @@ void Object_Animation_Sequence_Frame_Chunk::fill_data_block (char *data_start)
 	}
 }
 
-Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Chunk_With_Children * parent,const char *data_start, size_t)
+Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Chunk_With_Children * parent,const char *data_start, size_t size)
 : Chunk (parent, "OBASEQFR")
 {
+	char const * const start = data_start;
 	orientation.x = *((float *) data_start);
 	data_start += 4;
 	orientation.y = *((float *) data_start);
@@ -85,8 +91,7 @@ Object_Animation_Sequence_Frame_Chunk::Object_Animation_Sequence_Frame_Chunk (Ch
 	flags = *((int *) data_start);
 	data_start += 4;
 	
-	num_extra_data=*(int*) data_start;
-	data_start+=4;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 	
 	if(num_extra_data)
 		extra_data=new int[num_extra_data];
@@ -109,7 +114,7 @@ void Object_Animation_Sequence_Frame_Chunk::set_sound_index(int ind)
 	}
 }
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQHD",Object_Animation_Sequence_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQHD",Object_Animation_Sequence_Header_Chunk,12)
 
 void Object_Animation_Sequence_Header_Chunk::fill_data_block (char *data_start)
 {
@@ -158,9 +163,10 @@ Object_Animation_Sequence_Header_Chunk::~Object_Animation_Sequence_Header_Chunk(
 		delete[] extra_data;
 }
 
-Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (Chunk_With_Children * parent,const char * data_start, size_t)
+Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (Chunk_With_Children * parent,const char * data_start, size_t size)
 : Chunk (parent, "OBASEQHD"), sequence_name (0)
 {
+	char const * const start = data_start;
 	num_frames = *((int *) data_start);
 	data_start += 4;
 
@@ -170,8 +176,7 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 	sub_sequence_number = *((int *) data_start);
 	data_start += 4;
 
-	num_extra_data=*(int*) data_start;
-	data_start+=4;
+	num_extra_data=ReadListCount(start,data_start,size,sizeof(int));
 
 	if(num_extra_data)
 		extra_data=new int[num_extra_data];
@@ -184,16 +189,97 @@ Object_Animation_Sequence_Header_Chunk::Object_Animation_Sequence_Header_Chunk (
 		data_start += 4;
 	}
 
-	if (strlen(data_start))
-	{
-		sequence_name = new char [strlen(data_start) + 1];
-		strcpy (sequence_name, data_start);
-	}
+	sequence_name = CopyOptionalNameFromChunk(start, size, data_start);
 }
 
 Object_Animation_Sequence_Header_Chunk * Object_Animation_Sequence_Chunk::get_header()
 {
 	return(Object_Animation_Sequence_Header_Chunk *) lookup_single_child("OBASEQHD");
+}
+
+// Each frame says which place it takes in its sequence, and the game puts it straight in that place, in a list just big enough to hold them all. So every
+// number has to be a place in the list, or it would write past the end, and no two can be the same, or a place would be left empty for the game to read.
+void Object_Animation_Sequence_Chunk::post_input_processing()
+{
+	List <Object_Animation_Sequence_Frame_Chunk *> frames;
+	get_frames(&frames);
+
+	int const num_frames = frames.size();
+	bool * const place_taken = new bool [num_frames] ();
+
+	for (LIF<Object_Animation_Sequence_Frame_Chunk *> frame(&frames); !frame.done(); frame.next())
+	{
+		int const place = frame()->frame_ref_no;
+
+		if (place < 0 || place >= num_frames || place_taken[place])
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		place_taken[place] = true;
+	}
+
+	delete[] place_taken;
+
+	Chunk_With_Children::post_input_processing();
+}
+
+// Each frame of a sequence says when it starts, from 0 to 65535. The game turns that into how long the frame lasts: the time until the next one starts, or until 65536 for the last. The
+// code that plays a sequence divides by that length, and goes round a loop taking lengths away from the time until it finds the right frame, so a length of 0 can stop the game or
+// hang it for good, and a negative one comes out as a very long one. So each start has to come after the one before it. This takes the starts in order. earliest is the first time this
+// one can start, and it moves on past it. All 304,817 frames in the game's own files keep to this, and start from 0.
+static bool StartTimeFits(signed long start, signed long & earliest)
+{
+	signed long const latest_start = 65535;
+
+	if (start < earliest || start > latest_start)
+	{
+		return false;
+	}
+
+	earliest = start + 1;
+	return true;
+}
+
+// Three things the code that builds a sequence uses with no check: its header, at least one frame, and each frame's start. An outermost hierarchy chunk's sequences have no frames, because
+// they're only names, so this is only asked about the sections the game really builds, and not where the chunks are read.
+bool Object_Animation_Sequence_Chunk::can_be_played()
+{
+	if (!get_header())
+	{
+		return false;
+	}
+
+	List <Object_Animation_Sequence_Frame_Chunk *> frames;
+	get_frames(&frames);
+
+	int const num_frames = frames.size();
+
+	if (num_frames == 0)
+	{
+		return false;
+	}
+
+	// The file can hold them in any order, and each says which place it takes
+	signed long * const starts = new signed long [num_frames];
+
+	for (LIF<Object_Animation_Sequence_Frame_Chunk *> frame(&frames); !frame.done(); frame.next())
+	{
+		starts[frame()->frame_ref_no] = frame()->at_frame_no;
+	}
+
+	bool good = true;
+	signed long earliest = 0;
+
+	for (int i = 0; i < num_frames && good; i++)
+	{
+		good = StartTimeFits(starts[i], earliest);
+	}
+
+	delete[] starts;
+
+	return good;
 }
 
 void Object_Animation_Sequence_Chunk::get_frames(List <Object_Animation_Sequence_Frame_Chunk*> *pList)
@@ -315,7 +401,7 @@ Hierarchy_Bounding_Box_Chunk* Object_Animation_Sequence_Chunk::get_bounding_box(
 				** Object_Animation_Sequence_Time_Chunk **
 				**--------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQTM",Object_Animation_Sequence_Time_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQTM",Object_Animation_Sequence_Time_Chunk,4)
 
 Object_Animation_Sequence_Time_Chunk::Object_Animation_Sequence_Time_Chunk (Chunk_With_Children * parent,const char * data_start, size_t)
 : Chunk (parent, "OBASEQTM")
@@ -338,7 +424,7 @@ void Object_Animation_Sequence_Time_Chunk::fill_data_block(char* data_start)
 				** Object_Animation_Sequence_Speed_Chunk **
 				**---------------------------------------*/
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQSP",Object_Animation_Sequence_Speed_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQSP",Object_Animation_Sequence_Speed_Chunk,12)
 
 Object_Animation_Sequence_Speed_Chunk::Object_Animation_Sequence_Speed_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQSP")
@@ -362,7 +448,7 @@ void Object_Animation_Sequence_Speed_Chunk::fill_data_block(char* data)
 				**---------------------------------------*/
 
 
-RIF_IMPLEMENT_DYNCREATE("OBASEQFL",Object_Animation_Sequence_Flags_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("OBASEQFL",Object_Animation_Sequence_Flags_Chunk,4)
 
 Object_Animation_Sequence_Flags_Chunk::Object_Animation_Sequence_Flags_Chunk (Chunk_With_Children * parent,const char * data, size_t)
 : Chunk (parent, "OBASEQFL")
@@ -387,19 +473,28 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 	sequences=0;
 }
 
-Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_With_Children * const parent,const char * data, const size_t)
+Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_With_Children * const parent,const char * data, const size_t size)
 :Chunk(parent,"OBANALLS")
 {
-	num_sequences=*(int*)data;
-	data+=4;
+	char const * const start = data;
+	size_t const sequence_bytes=4*sizeof(int);
 
-	if(num_sequences) sequences=new Object_Animation_Sequence[num_sequences];	
+	num_sequences=ReadListCount(start,data,size,sequence_bytes);
+
+	if(num_sequences) sequences=new Object_Animation_Sequence[num_sequences];
 	else sequences=0;
 
 	for(int i=0;i<num_sequences;i++)
 	{
+		// the lists of frames can use up the room that the count of sequences was measured against
+		if((size_t)(data - start) + sequence_bytes > size)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
 		Object_Animation_Sequence* seq=&sequences[i];
-		seq->num_frames=*(int*)data;
+		int const frames_in_file=*(int*)data;
 		data+=4;
 		seq->sequence_number=*(int*)data;
 		data+=4;
@@ -407,6 +502,14 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 		data+=4;
 		seq->sequence_time=*(int*)data;
 		data+=4;
+
+		if(!CountFitsChunk(frames_in_file,sizeof(Object_Animation_Frame),size-(data-start)))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		seq->num_frames=frames_in_file;
 
 		if(seq->num_frames) seq->frames=new Object_Animation_Frame[seq->num_frames];
 		else seq->frames=0;
@@ -417,6 +520,37 @@ Object_Animation_All_Sequence_Chunk::Object_Animation_All_Sequence_Chunk(Chunk_W
 			data+=sizeof(Object_Animation_Frame);
 		}
 	}
+}
+
+// The same for the compact list: at least one sequence, because the game looks one up in every section it animates, and in each, at least one frame, with their starts in order
+bool Object_Animation_All_Sequence_Chunk::sequences_can_be_played()
+{
+	if (num_sequences == 0)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < num_sequences; i++)
+	{
+		Object_Animation_Sequence const & sequence = sequences[i];
+
+		if (sequence.num_frames == 0)
+		{
+			return false;
+		}
+
+		signed long earliest = 0;
+
+		for (unsigned long frame = 0; frame < sequence.num_frames; frame++)
+		{
+			if (!StartTimeFits(sequence.frames[frame].at_frame_no, earliest))
+			{
+				return false;
+			}
+		}
+	}
+
+	return true;
 }
 
 void Object_Animation_All_Sequence_Chunk::fill_data_block(char* data)

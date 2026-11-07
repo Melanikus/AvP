@@ -4,6 +4,11 @@
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
 //   an impossible sequence number is skipped too, and an object with no usable sequence is left out, as is a
 //   placed sound with no file name
+//   a track sound with no place of its own is skipped
+//   times and tracks from the level file that would divide by nothing, hang or crash are kept to what the game can use
+//   removed the switched-off code for a lift in another level file
+//   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
+//   a module with more lights than can be shown is logged, where an assert stood before
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -181,7 +186,7 @@ void setup_track_sound(Object_Chunk* oc,TRACK_SOUND** start_sound,TRACK_SOUND** 
 	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
 	{
 		Object_Track_Sound_Chunk* otsc=(Object_Track_Sound_Chunk*)chlif();
-		TRACK_SOUND** sound_ptr;
+		TRACK_SOUND** sound_ptr=0;
 
 		switch(otsc->index)
 		{
@@ -228,7 +233,9 @@ void setup_track_sound(Object_Chunk* oc,TRACK_SOUND** start_sound,TRACK_SOUND** 
 TRACK_CONTROLLER* setup_track_controller(Object_Chunk* oc)
 {
 	Object_Track_Chunk2* otc=(Object_Track_Chunk2*)oc->lookup_single_child("OBJTRAK2");
-	if(!otc) return 0;
+
+	// a track with no sections has nowhere to go, and everything below reads the first one
+	if(!otc || !otc->num_sections) return 0;
 
 	
 	
@@ -532,7 +539,8 @@ void create_strategies_from_list ()
 
 		if(!sbPtr)
 		{
-			GLOBALASSERT(0=="Run out of strategy blocks");
+			// a level can ask for more than there are, and what doesn't fit is left out
+			continue;
 		}
 
 		InitialiseSBValues(sbPtr);
@@ -875,8 +883,8 @@ static void add_trackobject(Object_Chunk* ob, int list_pos,AVP_Strategy_Chunk* a
 	TRACK_CONTROLLER* track=setup_track_controller(ob);
 	if(!track)
 	{
-		LOGDXFMT(("%s has no track\n",ob->object_data.o_name));	
-	 	GLOBALASSERT(track);
+		LOGDXFMT(("%s has no track\n",ob->object_data.o_name));
+	 	return;
 	}
 	
 	TrackStrategy* ts=(TrackStrategy*) asc->Strategy;
@@ -1239,8 +1247,10 @@ static void add_fan(Object_Chunk* ob, int list_pos,AVP_Strategy_Chunk* asc)
 {
 	
 	TRACK_CONTROLLER* track=setup_track_controller(ob);
-	GLOBALASSERT(track);
-	
+
+	// a fan with no track has nothing to turn on
+	if(!track) return;
+
 	FanStrategy* fs=(FanStrategy*) asc->Strategy;
 				
 	FAN_TOOLS_TEMPLATE* ftt=(FAN_TOOLS_TEMPLATE*) PoolAllocateMem(sizeof(FAN_TOOLS_TEMPLATE));
@@ -3013,8 +3023,8 @@ void setup_generators (Environment_Data_Chunk * envd)
 	//first setup the global generator paramaters
 	Chunk * pChunk = envd->lookup_single_child("GLOGENDC");
 	
-	int generator_enemy;
-	
+	int generator_enemy=I_BehaviourAlien;
+
 	if(pChunk)
 	{
 		Global_Generator_Data_Chunk* ggdc=(Global_Generator_Data_Chunk*)pChunk;
@@ -3618,7 +3628,19 @@ void SetUpRunTimeLights ()
 		
 		this_mod->m_numlights = lights_for_this_module.size();
 
-		assert (lights_for_this_module.size() <= MaxObjectLights);
+		// All of a module's lights get copied to whatever shows that module, which holds MaxObjectLights. AddLightBlock leaves
+		// out the rest, so nothing goes wrong, but those lights do nothing. That's worth knowing, so it goes in the log. Once
+		// is enough, because a big level could have it in many rooms.
+		if (lights_for_this_module.size() > MaxObjectLights)
+		{
+			static bool logged = false;
+
+			if (!logged)
+			{
+				logged = true;
+				LogString("A module has more lights than can be shown, so some of them won't do anything. This isn't logged again.");
+			}
+		}
 		
 		if (lights_for_this_module.size())
 		{
@@ -3642,70 +3664,8 @@ void SetUpRunTimeLights ()
 		}
 	}
 }
-#if 0
-void SetupExternalLift(AVP_External_Strategy_Chunk* aesc)
-{
-	LiftStrategy* ls=(LiftStrategy*)aesc->Strategy;
-
-	ObjectID ControlID={0x7fffffff,0x7fffffff};
-	for(int i=0;i<ls->NumExternalLifts;i++)
-	{
-		if(ls->ExternalLifts[i].EnvNum==aesc->ThisEnvNum)
-		{
-	  		ControlID=Minimum(ControlID,ls->ExternalLifts[i].LiftID);
-		}
-	}
-	
-	
-	LIFT_TOOLS_TEMPLATE * ltt = new LIFT_TOOLS_TEMPLATE;
-	
-	*((ObjectID *)ltt->my_module_name) = aesc->ObjID;
-	*((ObjectID *)ltt->call_switch_name) = ls->AssocCallSwitch;
-	*((ObjectID *)ltt->lift_door_name) = ls->AssocDoor;
-	*((ObjectID *)ltt->lift_floor_switch_name) = ls->AssocFloorSwitch;
-
-	ltt->environment = aesc->ExtEnvNum-1;
-	
-	ltt->num_floor = ls->Floor;
-
-	*((ObjectID *)ltt->control_sb_name)=ControlID;
-	
-	ltt->controller = 0;
-	
-	ltt->num_stations = ls->NumAssocLifts + ls->NumExternalLifts+1;
-
-	ltt->lift_flags=ls->LiftFlags;
-	
-	*((ObjectID *)ltt->nameID) = aesc->ObjID;
-
-	ltt->orient=ls->Facing;
-	if((ls->LiftFlags & LiftFlag_Airlock) || (ls->LiftFlags & LiftFlag_ExitOtherSide))
-		ltt->orient=(ltt->orient+2) % 4;
-
-	ltt_list.add_entry(ltt);	
-}
-#endif
-
 void DealWithExternalObjectStategies (Environment_Data_Chunk * envd)
 {
-	List<Chunk*> chlist;
-	#if 0
-	envd->lookup_child("AVPEXSTR",chlist);
-	for(LIF<Chunk*> slif(&chlist);!slif.done();slif.next())
-	{
-		AVP_External_Strategy_Chunk* aesc=(AVP_External_Strategy_Chunk*) slif();
-		if(aesc->Strategy)
-		{
-			switch(aesc->Strategy->StrategyType)
-			{
-				case StratLift :
-					SetupExternalLift(aesc);
-					break;
-			}
-		}
-	}
-	#endif
-
 	Chunk * pChunk = envd->lookup_single_child("SPECLOBJ");
 	if(pChunk)
 	{
@@ -3890,9 +3850,9 @@ void setup_particle_generators(Environment_Data_Chunk * envd)
 		part_temp->speed=data_chunk->speed*10;
 		
 		if(data_chunk->type==PARGEN_TYPE_SPARK)
-			part_temp->frequency=(data_chunk->time*ONE_FIXED)/10;
+			part_temp->frequency=max((data_chunk->time*ONE_FIXED)/10,1);
 		else
-			part_temp->frequency=ONE_FIXED/max(data_chunk->quantity,1);
+			part_temp->frequency=max(ONE_FIXED/max(data_chunk->quantity,1),1);
 
 		part_temp->active=!(data_chunk->flags & ParticleGeneratorFlag_Inactive);
 

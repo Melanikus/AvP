@@ -2,6 +2,14 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
 //   text is copied using its exact measured length, so it always fits
+//   a shape stored in a level as a raw copy of memory is no longer read, because nothing could check it
+//   an animated shape with no merge data no longer crashes; an alternate skin only shares an animation that fits it
+//   is_textured moved to chunk_type.cpp, because the checks made as a level is read need it too
+//   a shape stays still if a frame of its texture animation names a picture that isn't real
+//   the list of a level's image numbers is freed the way it was made
+//   a level file can only ask for so many pictures
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a shape records how long each of its texture coordinate lists is
 
 #include <stdlib.h>
 #include <string>
@@ -25,9 +33,11 @@
 #include "chunk_fragments.hpp"
 #include "jsndsup.h"
 #include "mempool.h"
+#include "logstring.h"
+#include "surface_tangent.h"
 #include <math.h>
 // for log file
-void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc);
+void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos);
 void SetupAnimOnTriangle(SHAPEHEADER *shp, TEXANIM *ta, int poly);
 void SetupAnimOnQuad(Shape_Chunk *sc, SHAPEHEADER *shp, TEXANIM *ta1, TEXANIM *ta2, int poly);
 
@@ -611,7 +621,7 @@ RIFFHANDLE load_rif_non_env(const char *fname)
 #if OUTPUT_LOG
 		CL_LogFile.lprintf("FAILED TO LOAD RIF: %s\n", fname);
 #endif
-		// fname can come from a level's RIFCHILD chunk: no fixed-size buffer
+		// no fixed-size buffer: a name's length shouldn't be able to matter here
 		std::string message = std::string("Error loading ") + fname;
 		ChangeWindowsSize(1, 1);
 		avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
@@ -709,7 +719,33 @@ void close_rif_handle(RIFFHANDLE h)
 
 //////////////////////////////////////////////////////////
 
-static void setup_tex_conv_array(
+// The most pictures one level file can ask for. Each one costs a search through all the textures the game has so far, then a try at opening a file,
+// and it costs that even when there's no such file. A file can hold a list of names for each of its outside shapes, with up to 65,535 names in each,
+// so without a limit a small file could keep the game busy for as long as it liked, and fill the log, before the level even starts. All of a file's
+// lists count together. The most any of the game's 86 files holds is 439, in all its lists, so this leaves plenty of room for a real level.
+static int const kMostPicturesOneFileCanAskFor = 4096;
+
+// Asks for a picture that a level file names. Past the limit it's treated as a picture that couldn't be loaded, which a level already has to cope with,
+// because any picture can turn out to be missing.
+static texID_t LoadPictureItNames(RIFFHANDLE h, char const * name, BMPN_Flags flags)
+{
+	if (h->pictures_asked_for >= kMostPicturesOneFileCanAskFor)
+	{
+		if (!h->said_too_many_pictures)
+		{
+			LogErrorStringC("This level file names too many pictures, so the rest of them aren't loaded");
+			h->said_too_many_pictures = true;
+		}
+
+		return GEI_NOTLOADED;
+	}
+
+	h->pictures_asked_for++;
+	return load_rif_bitmap(name, flags);
+}
+
+// Not static, only so that tests/level_pictures_test.cpp can reach it
+void setup_tex_conv_array(
     int &max_indices,
     int *&conv_array,
     RIFFHANDLE h,
@@ -785,7 +821,7 @@ static void setup_tex_conv_array(
 					tex += bns().filename;
 				}
 
-				texID_t imgnum = load_rif_bitmap(tex, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, tex, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{
@@ -836,36 +872,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 	int start_shape_no = list_pos;
 	String rif_name;
 	setup_tex_conv_array(local_max_index, local_tex_index_nos, h, tmpshp);
-	Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)tmpshp->lookup_single_child("SHPPRPRO");
-
-	if (spdc)
-	{
-		copy_preprocessed_to_shapeheader(
-		    h,
-		    spdc,
-		    mainshapelist[list_pos],
-		    tmpshp,
-		    flags,
-		    local_max_index,
-		    local_tex_index_nos,
-		    list_pos,
-		    object
-		);
-	}
-	else
-	{
-		copy_to_shapeheader(
-		    h,
-		    tmpshp->shape_data,
-		    mainshapelist[list_pos],
-		    tmpshp,
-		    flags,
-		    local_max_index,
-		    local_tex_index_nos,
-		    list_pos,
-		    object
-		);
-	}
+	copy_to_shapeheader(
+	    h,
+	    tmpshp->shape_data,
+	    mainshapelist[list_pos],
+	    tmpshp,
+	    flags,
+	    local_max_index,
+	    local_tex_index_nos,
+	    list_pos,
+	    object
+	);
 
 	Shape_External_File_Chunk *seflc = 0;
 	Chunk *pChunk = tmpshp->lookup_single_child("SHPEXTFL");
@@ -919,7 +936,14 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 				    list_pos,
 				    object
 				);
-				CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
+				// Sharing an animation points this skin at the frames' lists, which fit the main shape. A skin with other
+				// counts would run off the end of them, so it stays still instead.
+				if (mainshapelist[start_shape_no]->numpoints == mainshapelist[list_pos]->numpoints &&
+				    mainshapelist[start_shape_no]->numitems == mainshapelist[list_pos]->numitems)
+				{
+					CopyShapeAnimationHeader(mainshapelist[start_shape_no], mainshapelist[list_pos]);
+				}
+
 				const char *shpname = sssc->get_shape_name();
 				GLOBALASSERT(shpname);
 				msl_shapes.add_entry(new ShapeInMSL(mainshapelist[list_pos], shpname, list_pos));
@@ -1074,36 +1098,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 							if (afi()->shape1a->list_pos_number == -1)
 							{
 								list_pos = GetMSLPos();
-								Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)afi()->shape1a->lookup_single_child("SHPPRPRO");
-
-								if (spdc)
-								{
-									copy_preprocessed_to_shapeheader(
-									    h,
-									    spdc,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
-								else
-								{
-									copy_to_shapeheader(
-									    h,
-									    afi()->shape1a->shape_data,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
+								copy_to_shapeheader(
+								    h,
+								    afi()->shape1a->shape_data,
+								    mainshapelist[list_pos],
+								    afi()->shape1a,
+								    flags,
+								    local_max_index,
+								    local_tex_index_nos,
+								    list_pos,
+								    object
+								);
 
 								post_process_shape(mainshapelist[list_pos]);
 								afi()->shape1a->list_pos_number = list_pos;
@@ -1137,36 +1142,17 @@ CTM_ReturnType copy_to_mainshapelist(RIFFHANDLE h, Shape_Chunk *tmpshp, int flag
 							if (afi()->shape2a->list_pos_number == -1)
 							{
 								list_pos = GetMSLPos();
-								Shape_Preprocessed_Data_Chunk *spdc = (Shape_Preprocessed_Data_Chunk *)afi()->shape2a->lookup_single_child("SHPPRPRO");
-
-								if (spdc)
-								{
-									copy_preprocessed_to_shapeheader(
-									    h,
-									    spdc,
-									    mainshapelist[list_pos],
-									    afi()->shape1a,
-									    flags,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
-								else
-								{
-									copy_to_shapeheader(
-									    h,
-									    afi()->shape2a->shape_data,
-									    mainshapelist[list_pos],
-									    afi()->shape2a,
-									    0,
-									    local_max_index,
-									    local_tex_index_nos,
-									    list_pos,
-									    object
-									);
-								}
+								copy_to_shapeheader(
+								    h,
+								    afi()->shape2a->shape_data,
+								    mainshapelist[list_pos],
+								    afi()->shape2a,
+								    0,
+								    local_max_index,
+								    local_tex_index_nos,
+								    list_pos,
+								    object
+								);
 
 								post_process_shape(mainshapelist[list_pos]);
 								afi()->shape2a->list_pos_number = list_pos;
@@ -1257,7 +1243,7 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 
 		if (h->tex_index_nos)
 		{
-			delete h->tex_index_nos;
+			delete[] h->tex_index_nos;
 		}
 
 		h->tex_index_nos = new int [h->max_index + 1];
@@ -1277,7 +1263,7 @@ BOOL load_rif_bitmaps(RIFFHANDLE h, int /*flags*/)
 			if (!(bns().flags & ChunkBMPFlag_NotInPC))
 			{
 				// JH 17-2-97 -- image loaders have changed to avoid loading the same image twice
-				texID_t imgnum = load_rif_bitmap(bns().filename, bns().flags);
+				texID_t imgnum = LoadPictureItNames(h, bns().filename, bns().flags);
 
 				if (GEI_NOTLOADED != imgnum)
 				{
@@ -1911,31 +1897,6 @@ void DeallocateRifLoadedShapeheader(SHAPEHEADER *shp)
 #endif  //!USE_LEVEL_MEMORY_POOL
 }
 
-///////
-// Misc
-///////
-
-// return TRUE if the poly item type corresponds to a textured polygon
-BOOL is_textured(int type)
-{
-	if (
-	    type == I_2dTexturedPolygon
-	    || type == I_Gouraud2dTexturedPolygon
-	    || type == I_3dTexturedPolygon
-	    || type == I_Gouraud3dTexturedPolygon
-	    || type == I_ZB_2dTexturedPolygon
-	    || type == I_ZB_Gouraud2dTexturedPolygon
-	    || type == I_ZB_3dTexturedPolygon
-	    || type == I_ZB_Gouraud3dTexturedPolygon
-	)
-	{
-		return(TRUE);
-	}
-
-	return(FALSE);
-}
-
-
 #if SupportModules
 
 // static Object_Chunk ** o_chunk_array;
@@ -2232,8 +2193,19 @@ void SetupAnimOnQuad(Shape_Chunk *sc, SHAPEHEADER *shp, TEXANIM *ta1, TEXANIM *t
 	shp->items[poly][3] = UVIndex << 16;
 }
 
-void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int *local_tex_index_nos)
+void SetupAnimatedTextures(Shape_Chunk *sc, SHAPEHEADER *shp, Animation_Chunk *ac, Shape_Merge_Data_Chunk *smdc, int local_max_index, int *local_tex_index_nos)
 {
+	// Each frame finds its picture by a texture number from the level file, and a picture that isn't there would become part of the polygon's
+	// colour. It can only be checked here, once the level's pictures are known. A shape with one that isn't real stays still, and keeps
+	// the texture it has. All 14542 frames in the game's own levels have a real one.
+	for (int i = 0; i < ac->NumPolys; i++)
+	{
+		if (!ac->AnimList[i]->ImagesAreKnown(local_max_index, local_tex_index_nos))
+		{
+			return;
+		}
+	}
+
 	//create conversion between unmerged poly nos and merged poly nos
 	int *PolyConv = 0;
 	int *mgd = 0;
@@ -2331,12 +2303,21 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	//create conversion between unmerged poly nos and merged poly nos
 	int *PolyConv = 0;
 	int *mgd = 0;
-	PolyConv = new int[smdc->num_polys];
+	// with no merge data, nothing was merged, so the shape still has all its polygons
+	int const polys_before_merging = smdc ? smdc->num_polys : shp->numitems;
+	PolyConv = new int[polys_before_merging];
 
 	if (smdc)
 	{
 		mgd = smdc->merge_data;
 
+		// j steps through the merged list, but that list no longer says which pairs really merged, so j goes by whether the
+		// polygon it's looking at has a fourth corner. Why it can't run off the end: call the true place in the merged list t.
+		// j starts equal to t. While they're equal, items[j] really is this step's polygon, so j moves as t does: 2 for a pair
+		// of triangles that stayed apart, 1 for a pair that merged. If a pair of four-cornered polygons stayed apart, t moves 2
+		// and j only 1, so j falls behind, and from behind, a step of 2 can only catch up, never pass. So j never gets past t,
+		// and t is always inside the list. If merging never ran, j is limited by the polygons used so far. The checks on merge
+		// data made as the level is read are what make each step here a real pair.
 		for (int i = 0, j = 0; i < smdc->num_polys; i++)
 		{
 			if (mgd[i] == -1)
@@ -2365,7 +2346,7 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	}
 	else
 	{
-		for (int i = 0; i < smdc->num_polys; i++)
+		for (int i = 0; i < polys_before_merging; i++)
 		{
 			PolyConv[i] = i;
 		}
@@ -2491,6 +2472,66 @@ void SetupAnimatingShape(Shape_Chunk *sc, SHAPEHEADER *shp, Shape_Merge_Data_Chu
 	shp->sh_vnormals[0] = sas->vertex_normals;
 }
 
+
+// How big a triangle is, as the square of twice its area, which is all a comparison needs. a, b and c have been checked by the caller.
+static double TriangleSize(const int *points, int a, int b, int c)
+{
+	double const ax = (double)points[b * 3 + 0] - points[a * 3 + 0], ay = (double)points[b * 3 + 1] - points[a * 3 + 1], az = (double)points[b * 3 + 2] - points[a * 3 + 2];
+	double const bx = (double)points[c * 3 + 0] - points[a * 3 + 0], by = (double)points[c * 3 + 1] - points[a * 3 + 1], bz = (double)points[c * 3 + 2] - points[a * 3 + 2];
+	double const x = ay * bz - az * by, y = az * bx - ax * bz, z = ax * by - ay * bx;
+
+	return x * x + y * y + z * z;
+}
+
+// Works out which way this polygon's texture runs across it, for relief pictures. These numbers all come from the level file, so each is checked
+// first: a polygon that fails keeps an empty entry, and nothing bends its normal.
+static void work_out_polygon_tangent(SHAPEHEADER *shphd, const ChunkShape *cshp_ptr, int polygon, int UVIndex)
+{
+	ChunkPoly const &poly = cshp_ptr->poly_list[polygon];
+
+	if (!shphd->sh_surfacetangents || UVIndex < 0 || UVIndex >= cshp_ptr->num_uvs || poly.num_verts < 3 || cshp_ptr->uv_list[UVIndex].num_verts < 3)
+	{
+		return;
+	}
+
+	// A polygon's first three corners can lie almost in a line, and then they say very little about how the texture lies on it. So a four-cornered
+	// polygon uses whichever of its two triangles is bigger.
+	int const *points = *shphd->points;
+	int which[3] = { 0, 1, 2 };
+
+	for (int corner = 0; corner < poly.num_verts; corner++)
+	{
+		int const point = poly.vert_ind[corner];
+
+		if (corner >= 4 || point < 0 || point >= shphd->numpoints)
+		{
+			return;
+		}
+	}
+
+	if (poly.num_verts == 4 && cshp_ptr->uv_list[UVIndex].num_verts >= 4
+		&& TriangleSize(points, poly.vert_ind[0], poly.vert_ind[2], poly.vert_ind[3]) > TriangleSize(points, poly.vert_ind[0], poly.vert_ind[1], poly.vert_ind[2]))
+	{
+		which[1] = 2;
+		which[2] = 3;
+	}
+
+	float corners[9], coordinates[6];
+
+	for (int i = 0; i < 3; i++)
+	{
+		int const corner = which[i];
+		int const point = poly.vert_ind[corner];
+
+		corners[i * 3 + 0] = (float)points[point * 3 + 0];
+		corners[i * 3 + 1] = (float)points[point * 3 + 1];
+		corners[i * 3 + 2] = (float)points[point * 3 + 2];
+		coordinates[i * 2 + 0] = cshp_ptr->uv_list[UVIndex].vert[corner].u;
+		coordinates[i * 2 + 1] = cshp_ptr->uv_list[UVIndex].vert[corner].v;
+	}
+
+	SurfaceTangent_Work(corners, coordinates, &shphd->sh_surfacetangents[polygon]);
+}
 
 BOOL copy_to_shapeheader(
     RIFFHANDLE h,
@@ -2631,6 +2672,22 @@ BOOL copy_to_shapeheader(
 			uv_imnums[i] = -1;
 			shphd->sh_textures[i] = 0;
 		}
+
+		// nothing else remembers how long these lists are once the shape is built
+		shphd->sh_uvlistlengths = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->num_uvs);
+
+		if (shphd->sh_uvlistlengths)
+		{
+			memset(shphd->sh_uvlistlengths, 0, sizeof(int) * cshp_ptr->num_uvs);
+			shphd->sh_numuvlists = cshp_ptr->num_uvs;
+		}
+	}
+
+	shphd->sh_surfacetangents = (SurfaceTangent *) PoolAllocateMem(sizeof(SurfaceTangent) * shphd->numitems);
+
+	if (shphd->sh_surfacetangents)
+	{
+		memset(shphd->sh_surfacetangents, 0, sizeof(SurfaceTangent) * shphd->numitems);
 	}
 
 	for (i = 0; i < shphd->numitems; i++)
@@ -2654,11 +2711,18 @@ BOOL copy_to_shapeheader(
 				item_list[i * 9 + 3] += local_tex_index_nos[texno];
 				shphd->sh_textures[UVIndex] = (int *) PoolAllocateMem(sizeof(int) * cshp_ptr->uv_list[UVIndex].num_verts * 2);
 
+				if (shphd->sh_uvlistlengths)
+				{
+					shphd->sh_uvlistlengths[UVIndex] = cshp_ptr->uv_list[UVIndex].num_verts;
+				}
+
 				for (j = 0; j < cshp_ptr->uv_list[UVIndex].num_verts; j++)
 				{
 					(shphd->sh_textures[UVIndex])[(j * 2)] = (int)cshp_ptr->uv_list[UVIndex].vert[j].u; //ProcessUVCoord(h, UVC_POLY_U, (int)cshp_ptr->uv_list[UVIndex].vert[j].u, uv_imnums[UVIndex]);
 					(shphd->sh_textures[UVIndex])[(j * 2) + 1] = (int)cshp_ptr->uv_list[UVIndex].vert[j].v; //ProcessUVCoord(h, UVC_POLY_V, (int)cshp_ptr->uv_list[UVIndex].vert[j].v, uv_imnums[UVIndex]);
 				}
+
+				work_out_polygon_tangent(shphd, cshp_ptr, i, UVIndex);
 			}
 			else
 			{
@@ -2728,7 +2792,7 @@ BOOL copy_to_shapeheader(
 			smdc = (Shape_Merge_Data_Chunk *)pCh;
 		}
 
-		SetupAnimatedTextures((Shape_Chunk *)shape, shphd, ac, smdc, local_tex_index_nos);
+		SetupAnimatedTextures((Shape_Chunk *)shape, shphd, ac, smdc, local_max_index, local_tex_index_nos);
 	}
 
 	if (shape->count_children("ANIMSEQU"))
@@ -2742,44 +2806,6 @@ BOOL copy_to_shapeheader(
 		}
 
 		SetupAnimatingShape((Shape_Chunk *)shape, shphd, smdc);
-	}
-
-	return TRUE;
-}
-
-BOOL copy_preprocessed_to_shapeheader(
-    RIFFHANDLE h,
-    Shape_Preprocessed_Data_Chunk *spdc,
-    SHAPEHEADER  *&shphd,
-    Chunk_With_Children *shape,
-    int /*flags*/,
-    int local_max_index,
-    int *local_tex_index_nos,
-    int /*listpos*/,
-    const ChunkObject *object
-)
-{
-	shphd = (SHAPEHEADER *)spdc->GetMemoryBlock();
-
-	for (int i = 0; i < shphd->numitems; i++)
-	{
-		if (is_textured(shphd->items[i][0]))
-		{
-			int texno = shphd->items[i][3] & 0x7fff;
-
-			if (texno <= local_max_index &&
-			    local_tex_index_nos[texno] != -1)
-			{
-				shphd->items[i][3] &= 0xffff0000;
-				shphd->items[i][3] += local_tex_index_nos[texno];
-			}
-			else
-			{
-				shphd->items[i][0] = I_Polyline;
-				shphd->items[i][2] |= iflag_nolight;
-				shphd->items[i][3] = 0xffffffff;
-			}
-		}
 	}
 
 	return TRUE;

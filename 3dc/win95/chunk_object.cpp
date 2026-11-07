@@ -4,6 +4,15 @@
 //   copied using their exact measured length, so they always fit; code only the level editor used was removed
 //   a child chunk whose size cannot be real is refused
 //   the copy of an object's name moved to chunk_object_name.hpp
+//   a module's lists and an object's track and alternate places are measured against their chunks before they're made
+//   an object's header is only made inside an object, because it writes through its parent
+//   a jump in a module's list of what it can see has to go forward
+//   a track's sound has to be its middle, start or end sound
+//   a track's times have to be ones the game can work through
+//   a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include <string>
 #include "chunk.hpp"
@@ -131,36 +140,9 @@ BOOL Object_Chunk::deassoc_with_shape (Shape_Chunk * shpch)
 
 }
 
-BOOL Object_Chunk::file_equals(HANDLE &rif_file)
-{
-	unsigned long bytes_read;
-	char name[50];
+	
 
-	// get header list
-	List<int> obhead;
-	list_chunks_in_file (&obhead, rif_file, "OBJHEAD1");
-
-	if (obhead.size() != 1) return FALSE;
-
-	// get object identifier
-	SetFilePointer(rif_file,obhead.first_entry() + 96,0,FILE_BEGIN);
-	int i = 0; 
-	do ReadFile (rif_file, (long *) (name + i), 1, &bytes_read, 0);
-	while (name[i++] != 0);
-
-	if (!strcmp(name, object_data.o_name) ) return (TRUE);
-
-	return (FALSE);
-}	
-
-const char * Object_Chunk::get_head_id()
-{
-	Object_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
-}	
+	
 
 void Object_Chunk::set_lock_user (char * user)
 {
@@ -399,7 +381,9 @@ ObjectID Object_Chunk::CalculateID()
 /////////////////////////////////////////
 
 // Class Object_Header_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("OBJHEAD1",Object_Header_Chunk)
+// This constructor writes through its parent, so it can only be made under the object it belongs to. Under anything else it's a chunk
+// nothing reads. Every one of the 23068 of these in the game's own levels is inside an object.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("OBJHEAD1",Object_Header_Chunk,"RBOBJECT",Object_Chunk)
 
 // from buffer
 Object_Header_Chunk::Object_Header_Chunk(Chunk_With_Children * parent, const char * hdata, size_t hsize)
@@ -705,13 +689,14 @@ size_t VModule_Array_Chunk::size_chunk()
 		
 }
 
-VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const char * vmdata, size_t /*vmsize*/)
+VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const char * vmdata, size_t vmsize)
 : Chunk (parent, "VMDARRAY")
 {
-	num_array_items = *((int *) vmdata);
+	char const * const start = vmdata;
+	size_t const item_bytes = 4 * sizeof(int);
 
-	vmdata += 4;
-	
+	num_array_items = ReadListCount (start, vmdata, vmsize, item_bytes);
+
 	vmod_array = new VMod_Arr_Item [num_array_items];
 
 	for (int i=0; i<num_array_items; i++)
@@ -722,7 +707,14 @@ VModule_Array_Chunk::VModule_Array_Chunk (Chunk_With_Children * parent, const ch
 
 		vmod_array[i].branch_no = *((int *) vmdata);
 		vmdata += 4;
-		
+
+		// A closed door makes the game jump along this list to the place named here, and it walks the list until the end. A jump back would never reach the
+		// end, so the game would hang. So a jump goes forward, as far as the end of the list and no further.
+		if (vmod_array[i].branch_no != 0 && (vmod_array[i].branch_no <= i || vmod_array[i].branch_no > num_array_items))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+
 		vmod_array[i].flags = *((int *) vmdata);
 		vmdata += 4;
 
@@ -779,13 +771,13 @@ size_t Adjacent_Module_Entry_Points_Chunk::size_chunk()
 	return(chunk_size);
 }
 
-Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_With_Children * parent, const char * data, size_t /*size*/)
+Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_With_Children * parent, const char * data, size_t size)
 : Chunk (parent, "ADJMDLEP")
 {
-	int num_array_items = *((int *) data);
+	char const * const start = data;
+	size_t const item_bytes = 2 * sizeof(int) + sizeof(ChunkVectorInt);
+	int num_array_items = ReadListCount (start, data, size, item_bytes);
 
-	data += 4;
-	
 	for (int i=0; i<num_array_items; i++)
 	{
 		Adjacent_Module am;
@@ -807,7 +799,7 @@ Adjacent_Module_Entry_Points_Chunk::Adjacent_Module_Entry_Points_Chunk (Chunk_Wi
 }
 
 ///////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("MODFLAGS",Module_Flag_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MODFLAGS",Module_Flag_Chunk,8)
 
 Module_Flag_Chunk::Module_Flag_Chunk(Object_Module_Data_Chunk* parent)
 :Chunk(parent,"MODFLAGS")
@@ -839,7 +831,7 @@ void Module_Flag_Chunk::fill_data_block(char* data_start)
 	
 }
 ///////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("MODZONE",Module_Zone_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MODZONE",Module_Zone_Chunk,8)
 
 Module_Zone_Chunk::Module_Zone_Chunk(Object_Module_Data_Chunk* parent)
 :Chunk(parent,"MODZONE")
@@ -873,7 +865,7 @@ void Module_Zone_Chunk::fill_data_block(char* data_start)
 
 ///////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("MODACOUS",Module_Acoustics_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("MODACOUS",Module_Acoustics_Chunk,12)
 
 Module_Acoustics_Chunk::Module_Acoustics_Chunk(Object_Module_Data_Chunk* parent)
 :Chunk(parent,"MODACOUS")
@@ -927,7 +919,7 @@ Object_Track_Chunk2::Object_Track_Chunk2(Object_Chunk * parent)
 
 Object_Track_Chunk2::~Object_Track_Chunk2()
 {
-	if(sections) delete sections;
+	delete[] sections;
 }
 
 void Object_Track_Chunk2::fill_data_block (char *data_start)
@@ -964,13 +956,13 @@ size_t Object_Track_Chunk2::size_chunk ()
 	return(chunk_size);
 }
 
-Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const char * data, size_t /*size*/)
+Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const char * data, size_t size)
 : Chunk (parent, "OBJTRAK2")
 {
 	int i;
+	char const * const start = data;
 
-	num_sections=*(int*)data;
-	data+=4;
+	num_sections=ReadListCount(start,data,size,sizeof(ChunkTrackSection));
 
 	if(num_sections)
 		sections=new ChunkTrackSection[num_sections];
@@ -983,9 +975,27 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 		data+=sizeof(ChunkTrackSection);
 	}
 
-	flags=*(int*)data;
-	data+=4;
-	timer_start=*(int*)data;
+	flags=ReadFromChunk<int>(start,size,data);
+	timer_start=ReadFromChunk<int>(start,size,data);
+
+	// The game works through a track's timer a section at a time, until what's left fits inside a section. So a section has to take some time, or the timer
+	// would never be used up, and the game would hang. 65 is about a thousandth of a second, and the shortest in the game's own levels is 3,276. A start
+	// time that's negative or huge could keep that going as well, and the game's own go up to 524,288.
+	int const shortest_section=65;
+	int const latest_start=1<<24;
+
+	for(i=0;i<num_sections;i++)
+	{
+		if(sections[i].time_for_section<shortest_section)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
+
+	if(timer_start<0 || timer_start>latest_start)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
 
 	if(!(flags & TrackFlag_QuatProblemSorted))
 	{
@@ -1009,7 +1019,7 @@ Object_Track_Chunk2::Object_Track_Chunk2 (Chunk_With_Children * parent,const cha
 }
 
 ///////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("TRAKSOUN",Object_Track_Sound_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("TRAKSOUN",Object_Track_Sound_Chunk,24)
 
 Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"TRAKSOUN")
@@ -1023,9 +1033,10 @@ Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* parent)
 	index=0;
 }
 
-Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* const parent,const char* data,size_t const )
+Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* const parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"TRAKSOUN")
 {
+	char const * const chunk_start = data;
 	inner_range=*(unsigned long*)data;
 	data+=4;
 	outer_range=*(unsigned long*)data;
@@ -1040,8 +1051,13 @@ Object_Track_Sound_Chunk::Object_Track_Sound_Chunk(Chunk_With_Children* const pa
 	index=*(int*)data;
 	data+=4;
 
-	wav_name=new char[strlen(data)+1];
-	strcpy(wav_name,data);
+	// A track has three sounds, for the middle, the start and the end of its movement, and this says which one this is.
+	if(index<0 || index>2)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	wav_name=CopyNameFromChunk(chunk_start,chunk_bytes,data);
 
 }
 
@@ -1083,18 +1099,19 @@ size_t Object_Track_Sound_Chunk::size_chunk()
 }
 ///////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("ALTLOCAT",Object_Alternate_Locations_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ALTLOCAT",Object_Alternate_Locations_Chunk,8)
 
-Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Object_Alternate_Locations_Chunk::Object_Alternate_Locations_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"ALTLOCAT")
 {
+	char const * const start = data;
+
 	group=*(int*) data;
 	data+=4;
 	spare2=*(int*) data;
 	data+=4;
-	
-	num_locations=*(int*) data;
-	data+=4;
+
+	num_locations=ReadListCount(start,data,size,sizeof(AltObjectLocation));
 
 	if(num_locations)
 		locations=new AltObjectLocation[num_locations];

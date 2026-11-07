@@ -24,7 +24,10 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every packed file's name is checked when a file is looked up, so a damaged archive cannot hand back the
-//   wrong file
+//   wrong file; reading the list of packed files stops at the end of the archive, whatever count it claims
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   FF_FileIsThere asks whether a file is there and writes nothing, for a file that's allowed not to be
+//   a packed file that says it runs past the end of its archive is left out
 
 #include "FastFile.h"
 #include "FileStream.h"
@@ -57,8 +60,8 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex);
 
 // pass this function the name of a file within a fast file you want to find (eg comp1.wav) and it'll return
 // a handle to the file if it exists in a known fast file, or a null handle if file doesn't exist in a known fast file,
-// or also null if the fast file system hasn't been initialised
-FastFileHandle* FF_Find(const std::string &fileName)
+// or also null if the fast file system hasn't been initialised. sayIfNotThere is whether a missing file matters enough to write an error.
+static FastFileHandle* FF_Search(const std::string &fileName, bool sayIfNotThere)
 {
 	if (!isInited) {
 		return NULL;
@@ -98,8 +101,22 @@ FastFileHandle* FF_Find(const std::string &fileName)
 	}
 
 	// not in any fast file. The old code returned entry 0 here: log what it would have returned
-	Con_PrintError("FF_Find - '" + fileName + "' is not in a fast file (before, this lookup returned '" + fastFileHandles[hash][0].fileName + "' from " + FF_GetFastFileName(fastFileHandles[hash][0].fastFileIndex) + ")");
+	if (sayIfNotThere)
+	{
+		Con_PrintError("FF_Find - '" + fileName + "' is not in a fast file (before, this lookup returned '" + fastFileHandles[hash][0].fileName + "' from " + FF_GetFastFileName(fastFileHandles[hash][0].fastFileIndex) + ")");
+	}
+
 	return NULL;
+}
+
+FastFileHandle* FF_Find(const std::string &fileName)
+{
+	return FF_Search(fileName, true);
+}
+
+bool FF_FileIsThere(const std::string &fileName)
+{
+	return DoesFileExist(fileName) || FF_Search(fileName, false) != NULL;
 }
 
 const std::string & FF_GetFastFileName(int32_t fastFileIndex)
@@ -174,9 +191,14 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 	uint32_t nHeaderBytes = file.GetUint32LE(); // total bytes of file data header in fast file
 	uint32_t nDataBytes   = file.GetUint32LE(); // we don't need this
 
+	uint64_t const archiveBytes = file.GetFileSize();
+	bool saidSomeRunPast = false;
+
 	std::string requestedFile;
 
-	for (uint32_t i = 0; i < nFiles; i++)
+	// nFiles comes from the file, so a damaged archive can claim billions of files. Stop when the file runs out, or
+	// this would go on adding empty entries long after there was anything left to read.
+	for (uint32_t i = 0; i < nFiles && !file.RanOutOfData(); i++)
 	{
 		// read file header
 		uint32_t dataOffset = file.GetUint32LE();
@@ -198,6 +220,20 @@ static bool FF_Open(const std::string &fastFileName, int32_t fastFileIndex)
 		while (bytesToSkip) {
 			file.GetByte();
 			bytesToSkip--;
+		}
+
+		// Where it is and how long it is come from the archive, which can come from anywhere. Added up in a number too large to wrap round, one that can't be there is left out here, so that
+		// nothing can ask for it later. The game's own 2,548 packed files are all inside their archives, and the last in each ends exactly at its end.
+		if (kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes)
+		{
+			if (!saidSomeRunPast)
+			{
+				saidSomeRunPast = true;
+				Con_PrintError(fastFileName + " lists a file that runs past its end, so it's left out, along with any more like it: " + requestedFile);
+			}
+
+			requestedFile.clear();
+			continue;
 		}
 
 		// the actual data offset - skip past main header plus total bytes for all file headers

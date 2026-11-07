@@ -6,7 +6,16 @@
 //   the module name read from avp_rifs/module.aaa (debug builds only) always ends inside its buffer; a sound
 //   file path too long for its buffer, or a sound with an impossible number, is skipped, like a missing sound;
 //   a shape set collection is limited to the sets and shapes the game has room for, and one with an impossible
-//   number is left out; when two sounds have the same number, the earlier one is given back
+//   number is left out; when two sounds have the same number, the earlier one is given back; a shape's list of
+//   baked colours has a place for every point, even if the file has fewer colours
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   each of a level's own shapes gets its list of polygon facts once it's finished.
+//   a shape records how many baked colours it holds
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
+//   baked colours has a place for every point, even if the file has fewer colours; the list of shapes grows through
+//   ReallocMem
+//   a model's frame with no length gets the shortest length there is, because a sequence of them would hang the game
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -32,6 +41,8 @@
 #include "chunk_sprites.hpp"
 #include <math.h>
 #include "chunk_waypoint.hpp"
+#include "texture_relief.h"
+#include "view_switches.h"
 #include "hierarchy_chunk.hpp"
 #include "animation_objects.hpp"
 #include "sequences.h"
@@ -57,6 +68,9 @@
 #include "TextureManager.h"
 #include "utilities.h"
 #include "logString.h"
+#include "surface_normals.h"
+#include "shadow_reach.h"
+#include "level_file_name.h"
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -1016,6 +1030,14 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 					{
 						kfd->Sequence_Length =(unsigned short) min(65536 - this_frame_no,65535);
 					}
+
+					// These numbers come from the file. If all of a sequence's frames had no length, the search for the current
+					// frame in hmodel.cpp would never finish, so each gets the shortest length there is. None of the 304,817
+					// frames in the game's own files has no length, so they stay as they are.
+					if (kfd->Sequence_Length == 0)
+					{
+						kfd->Sequence_Length = 1;
+					}
 				}
 				//sort out some settings for the last frame
 				kfd->last_frame=1;
@@ -1207,6 +1229,14 @@ SECTION * Global_Hierarchy_Store::build_hierarchy (Object_Hierarchy_Chunk * ohc,
 					{
 						kfd->Sequence_Length =(unsigned short) min(65536 - this_frame_no , 65535);
 					}
+
+					// These numbers come from the file. If all of a sequence's frames had no length, the search for the current
+					// frame in hmodel.cpp would never finish, so each gets the shortest length there is. None of the 304,817
+					// frames in the game's own files has no length, so they stay as they are.
+					if (kfd->Sequence_Length == 0)
+					{
+						kfd->Sequence_Length = 1;
+					}
 				}
 				//sort out some settings for the last frame
 				kfd->last_frame=1;
@@ -1334,6 +1364,42 @@ int Global_Hierarchy_Store::get_time_from_sequence_id(int id)
 }
 
 
+// Gives a shape its baked colours, the lighting worked out when the level was made. The game looks up a colour for each
+// point of the shape, so the list has a place for every point, even if the level file has fewer colours than that. The
+// list starts empty, so a point with no colour reads as unlit, not as whatever was in that memory before.
+static BOOL set_up_baked_colours(SHAPEHEADER * shape, Shape_Vertex_Intensities_Chunk * svic)
+{
+	size_t const list_bytes = svic->colour_places_for_shape(shape->numpoints) * sizeof(EXTRAITEMDATA);
+
+	shape->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(list_bytes);
+	if (!shape->sh_extraitemdata)
+	{
+		memoryInitialisationFailure = 1;
+		return FALSE;
+	}
+
+	memset(shape->sh_extraitemdata, 0, list_bytes);
+
+	// How many colours the level really gave. The list can be longer, with the rest unlit, and a shape short of colours
+	// stays off the fixed buffer, because StaticLevel_Shape compares this with how many points it has.
+	shape->sh_numextraitems = svic->num_vertices;
+
+	for (int vn = 0; vn < svic->num_vertices; vn++)
+	{
+		//convert coloured light to a brightness value
+		int ir = svic->intensity_array[vn]>>16;
+		int ig = svic->intensity_array[vn]>>8 &0xff;
+		int ib = svic->intensity_array[vn] &0xff;
+		int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
+
+		shape->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
+	}
+
+	shape->shapeflags |= ShapeFlag_PreLit;
+
+	return TRUE;
+}
+
 static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_start,int progress_interval)
 {
  //////////////////////////
@@ -1410,26 +1476,9 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 			}
 		}
 
-		if (svic)
+		if (svic && !set_up_baked_colours(mainshapelist[osnp->sh_num], svic))
 		{
-			mainshapelist[osnp->sh_num]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-			if (!mainshapelist[osnp->sh_num]->sh_extraitemdata)
-			{
-				memoryInitialisationFailure = 1;
-				return FALSE;
-			}
-
-			for (int vn = 0; vn < svic->num_vertices; vn++) 
-			{
-				//convert coloured light to a brightness value
-				int ir = svic->intensity_array[vn]>>16;
-				int ig = svic->intensity_array[vn]>>8 &0xff;
-				int ib = svic->intensity_array[vn] &0xff;
-				int mag = (int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-				mainshapelist[osnp->sh_num]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-			}
-			mainshapelist[osnp->sh_num]->shapeflags |= ShapeFlag_PreLit;
+			return FALSE;
 		}
 	}
 	/*-----------------------------**
@@ -1910,6 +1959,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 					int start_shape_no = list_pos;
 					#endif
 
+					// An imported shape, such as a crate or a console, gets its list of polygon facts too. Several objects can share the
+					// shape, at different angles, and that's fine: the list is in the shape's own numbers, and each object turns it.
+					if ((flags & CCF_ENVIRONMENT) && !rt_temp.mc)
+					{
+						SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+					}
+
 					int AnimationShape=-1;
 					if (shplif()->lookup_single_child("TEXTANIM"))
 					{
@@ -1947,6 +2003,13 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 						int start_shape_no = list_pos;
 						#endif
 
+						// A level's own shape gets its list of polygon facts here, now that it's finished. Models never come through here. A door
+						// that morphs doesn't get one, because its polygons are swapped for another shape's as it's made.
+						if ((flags & CCF_ENVIRONMENT) && !mc)
+						{
+							SurfaceNormals_PrepareShape(mainshapelist[list_pos]);
+						}
+
 						//see if object has prelighting data
 						Shape_Vertex_Intensities_Chunk * svic = 0;
 
@@ -1963,28 +2026,10 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 							}
 						}
 
-						if (svic)
+						//if this object has prelighting , set up extra item data
+						if (svic && !set_up_baked_colours(mainshapelist[list_pos], svic))
 						{
-							//this object has prelighting , so set up extra item data
-							mainshapelist[list_pos]->sh_extraitemdata = (EXTRAITEMDATA *)PoolAllocateMem(12 * svic->num_vertices);
-							if (!mainshapelist[list_pos]->sh_extraitemdata)
-							{
-								memoryInitialisationFailure = 1;
-								return FALSE;
-							}
-
-							for (int vn = 0; vn < svic->num_vertices; vn++) 
-							{
-								//convert coloured light to a brightness value
-								int ir=svic->intensity_array[vn]>>16;
-								int ig=svic->intensity_array[vn]>>8 &0xff;
-								int ib=svic->intensity_array[vn] &0xff;
-								int mag =(int)sqrt((ir*ir+ig*ig+ib*ib)/3.0);
-
-								mainshapelist[list_pos]->sh_extraitemdata[vn].EID_VertexI = svic->intensity_array[vn] + (mag<<24);
-							}
-
-							mainshapelist[list_pos]->shapeflags |= ShapeFlag_PreLit;
+							return FALSE;
 						}
 
 						int AnimationShape=-1;
@@ -2169,6 +2214,19 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 				mod->m_minx=world_min.vx - mod->m_world.vx;
 				mod->m_miny=world_min.vy - mod->m_world.vy;
 				mod->m_minz=world_min.vz - mod->m_world.vz;
+
+				// The shadow pass asks about this ball many times a frame, so it's worked out once, here. These numbers come from the level
+				// file, so they're made floats first: adding whole numbers that big can overflow.
+				float const smallest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_minx, (float)mod->m_world.vy + (float)mod->m_miny, (float)mod->m_world.vz + (float)mod->m_minz
+				};
+				float const largest[3] =
+				{
+					(float)mod->m_world.vx + (float)mod->m_maxx, (float)mod->m_world.vy + (float)mod->m_maxy, (float)mod->m_world.vz + (float)mod->m_maxz
+				};
+
+				ShadowReach_BallRoundBox(smallest, largest, mod->m_ball);
 			}
 
 			Chunk * pChunk = o_chunk_array[i]->lookup_single_child ("MODULEDT");
@@ -2685,11 +2743,22 @@ BOOL copy_rif_data (RIFFHANDLE h, int flags, int progress_start, int progress_in
 // hook to load a bitmap - so you can load them from test directories, etc. should return tex index
 texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 {
-	std::string fileName = fname;
+	// The name comes from the level file, which can come from anyone. A refused one goes on as a texture that isn't there, which the game already copes with.
+	char const *const whyRefused = LevelFileName_WhyRefused(fname);
+
+	if (whyRefused)
+	{
+		char safeName[64];
+
+		LevelFileName_ForTheLog(fname, safeName, sizeof(safeName));
+		LogErrorString(std::string("level file names a texture the game won't open: ") + whyRefused + ": " + safeName);
+	}
+
+	std::string fileName = whyRefused ? "" : fname;
 
 	Util::ChangeSlashes(fileName);
 
-	texID_t textureID = Tex_CreateFromRIM("graphics/" + fileName);
+	texID_t textureID = whyRefused ? MISSING_TEXTURE : Tex_CreateFromRIM("graphics/" + fileName);
 /*
 		CL_LoadImageOnce
 		(
@@ -2705,11 +2774,25 @@ texID_t load_rif_bitmap(char const * fname, BMPN_Flags flags)
 		);
 */
 	ingameTextureList.push_back(textureID);
+
+	// A picture of the shape its painting shows, for the lights to use. A level loaded with a lighting that draws no maps reads no map, so a stranger's file stays unread, and the first run of the
+	// game is the old game. Switching to a lighting with maps mid-level draws flat until the next level. -dev reads them anyway, because a developer comparing lightings on one spot wants
+	// them all there on the first press. It's a choice made on the command line, and a player without it is unaffected.
+	extern int DevMode;
+	extern int LightingNow;
+
+	if (DevMode || Lighting_UsesMaps(LightingNow))
+	{
+		textureRelief.Build(textureID);
+	}
+
 	return textureID;
 }
 
 void release_rif_bitmaps()
 {
+	textureRelief.ReleaseAll();
+
 	for (size_t i = 0; i < ingameTextureList.size(); i++)
 	{
 		Tex_Release(ingameTextureList[i]);
@@ -2772,15 +2855,7 @@ int GetMSLPos(void)
 		if(msl_term_pos>=maxshapes)
 		{
 			//alocate another 50 slots on the mainshapelist
-			mainshapelist=(SHAPEHEADER**)realloc(mainshapelist,sizeof(SHAPEHEADER*)*(maxshapes+50));
-			assert(mainshapelist);
-
-			LOCALASSERT(mainshapelist);
-			if(!mainshapelist)
-			{
-				ReleaseDirect3D();
-				exit(0x74363); 
-			}
+			mainshapelist=(SHAPEHEADER**)ReallocMem(mainshapelist,sizeof(SHAPEHEADER*)*(maxshapes+50));
 			for(int i=maxshapes;i<maxshapes+50;i++)
 			{
 				mainshapelist[i]=0;

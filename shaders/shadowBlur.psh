@@ -1,0 +1,50 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float2 Texture    : TEXCOORD0;
+};
+
+// Global variables
+sampler2D Mask  : register(s0);        // how much of each pixel's light is blocked, 0 to 1
+sampler2D Depth : register(s1);        // how far away each pixel of the level is
+float4    Soft  : register(c0);        // x y: one pixel, as a distance on the texture. z: how wide the softening is, in pixels,
+                                       // up close. w: how far away it stays that wide
+float4    Dark  : register(c1);        // x: how much of a pixel goes when all its light is blocked. What's left is the glow
+
+// where to look around a pixel: spread evenly over a circle of radius 1
+static const float2 kPlaces[12] =
+{
+    float2(-0.326f, -0.406f), float2(-0.840f, -0.074f), float2(-0.696f,  0.457f), float2(-0.203f,  0.621f),
+    float2( 0.962f, -0.195f), float2( 0.473f, -0.480f), float2( 0.519f,  0.767f), float2( 0.185f, -0.893f),
+    float2( 0.507f,  0.064f), float2( 0.896f,  0.412f), float2(-0.322f, -0.933f), float2(-0.792f, -0.598f),
+};
+
+
+// Name: Shadow softening pixel shader
+// Type: Pixel shader
+// Desc: Softens the edge of a shadow by averaging the mask around each pixel, then says how much of the pixel to keep: all of it
+// when nothing is blocked, and only the glow when everything is. A neighbour that's on a different surface is left
+// out, so a shadow doesn't bleed from a wall onto something in front of it. A shadow further away looks smaller on screen, so
+// the softening shrinks with distance to match.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    float here  = tex2Dlod(Depth, float4(In.Texture, 0.0f, 0.0f)).r;
+    float wide  = Soft.z * min(1.0f, Soft.w / max(here, 1.0f));
+    float total = tex2Dlod(Mask, float4(In.Texture, 0.0f, 0.0f)).r;
+    float count = 1.0f;
+
+    for (int i = 0; i < 12; i++)
+    {
+        float2 place = In.Texture + kPlaces[i] * Soft.xy * wide;
+        float  there = tex2Dlod(Depth, float4(place, 0.0f, 0.0f)).r;
+        float  same  = saturate(1.0f - abs(there - here) / (here * 0.04f + 30.0f));
+
+        total += same * tex2Dlod(Mask, float4(place, 0.0f, 0.0f)).r;
+        count += same;
+    }
+
+    float keep = 1.0f - Dark.x * saturate(total / count);
+
+    return float4(keep, keep, keep, 1.0f);
+}

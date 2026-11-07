@@ -3,6 +3,12 @@
 //   names saved into level data are copied by their measured length, an ID's name is built in text that
 //   grows as needed instead of a fixed 100-byte box, and unused code for making new level files was removed;
 //   the decal list in a level file is checked against the real size of its chunk before it is read
+//   a generator is only made inside the special objects chunk, because it looks two levels up
+//   a generator's weights have to fit their chunk, and are freed the same way they were made
+//   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
+//   a level's generators have to make aliens or marines
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 #include <string>
 #include <limits.h>
 #include "avp_chunk.hpp"
@@ -11,7 +17,9 @@
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(avp_chunk)
 
-RIF_IMPLEMENT_DYNCREATE("AVPGENER",AVP_Generator_Chunk)
+// This one looks two levels up for the level's name, so it can only be made where that's safe. All 1480 in the game's own levels are
+// in the special objects chunk.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("AVPGENER",AVP_Generator_Chunk,"SPECLOBJ",Special_Objects_Chunk,28)
 
 void AVP_Generator_Chunk::fill_data_block (char * data_start)
 {
@@ -58,9 +66,10 @@ size_t AVP_Generator_Chunk::size_chunk ()
 	return(chunk_size);
 }
 
-AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 : Chunk (parent, "AVPGENER")
 {
+	char const * const chunk_start = data;
 	location = *((ChunkVectorInt*) data);
 	data += sizeof(ChunkVectorInt);
 		
@@ -85,8 +94,7 @@ AVP_Generator_Chunk::AVP_Generator_Chunk (Chunk_With_Children * parent, const ch
 	extra2 = *(unsigned char*)(data);
 	data ++;
 	
-	name = new char [strlen(data) + 1];
-	strcpy (name, data);
+	name = CopyNameFromChunk(chunk_start, chunk_bytes, data);
 }
 
 
@@ -200,12 +208,10 @@ AVP_Generator_Chunk* AVP_Generator_Extra_Data_Chunk::get_generator_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("AVPGENNM",AVP_Generator_Extra_Name_Chunk)
 
-AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t /*size*/)
+AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * data, size_t const chunk_bytes)
 :Chunk(parent,"AVPGENNM")
 {
-	int length=strlen(data);
-	name=new char[length+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(data,chunk_bytes,data);
 }
 
 AVP_Generator_Extra_Name_Chunk::AVP_Generator_Extra_Name_Chunk(Chunk_With_Children * parent, const char * _name)
@@ -242,9 +248,29 @@ size_t AVP_Generator_Extra_Name_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("GENEXSET",AVP_Generator_Extended_Settings_Chunk)
 
-AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+// Twenty bytes of settings, then a block of weights whose first number is its own size. That size came straight from the file and went
+// into a copy, so a negative one copied about 4 GB over the heap, and a big one read far past the chunk. So the block has to fill the
+// rest of the chunk exactly, as all 384 of these in the game's own levels do, with a block of 64 bytes. A shorter block is still
+// allowed, because the list below always has room for every weight the game knows about, and the rest of them stay at 0.
+AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent,const char* data,size_t chunk_bytes)
 :Chunk(parent,"GENEXSET")
 {
+	size_t const settings_bytes = 20;
+
+	// Whatever happens next, the list is there for the destructor and for anything that reads it.
+	GenerationRate = GenRateIncrease = 0;
+	GenLimit = pad1 = pad2 = pad3 = 0;
+	spare1 = spare2 = 0;
+	weights = (AVP_Generator_Weighting*)new unsigned char[sizeof(AVP_Generator_Weighting)];
+	memset(weights,0,sizeof(AVP_Generator_Weighting));
+	weights->data_size = sizeof(AVP_Generator_Weighting);
+
+	if (chunk_bytes < settings_bytes + sizeof(int))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	CHUNK_EXTRACT(GenerationRate,int)
 	CHUNK_EXTRACT(GenRateIncrease,int)
 	CHUNK_EXTRACT(GenLimit,unsigned char)
@@ -254,19 +280,30 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 	CHUNK_EXTRACT(spare1,int)
 	CHUNK_EXTRACT(spare2,int)
 
-	size_t size=max(*(int*) data,(int)sizeof(AVP_Generator_Weighting));
+	int const weight_bytes = *(int*) data;
 
-	weights=(AVP_Generator_Weighting*)new unsigned char[size];
-	memset(weights,0,sizeof(AVP_Generator_Weighting));
-	memcpy(weights,data,*(int*) data);
+	// a negative size turns into a huge number here, so it fails too
+	if ((size_t) weight_bytes != chunk_bytes - settings_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
 
-	weights->data_size=size;
+	if ((size_t) weight_bytes > sizeof(AVP_Generator_Weighting))
+	{
+		delete[] (unsigned char*) weights;
+		weights = (AVP_Generator_Weighting*)new unsigned char[weight_bytes];
+	}
+
+	memcpy(weights,data,weight_bytes);
+
+	weights->data_size = max(weight_bytes,(int)sizeof(AVP_Generator_Weighting));
 }
 
 AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"GENEXSET")
 {
-	weights=new AVP_Generator_Weighting;
+	weights=(AVP_Generator_Weighting*)new unsigned char[sizeof(AVP_Generator_Weighting)];
 	memset(weights,0,sizeof(AVP_Generator_Weighting));
 	weights->data_size=sizeof(AVP_Generator_Weighting);
 	GenLimit=pad1=pad2=pad3=0;
@@ -276,7 +313,7 @@ AVP_Generator_Extended_Settings_Chunk::AVP_Generator_Extended_Settings_Chunk(Chu
 
 AVP_Generator_Extended_Settings_Chunk::~AVP_Generator_Extended_Settings_Chunk()
 {
-	delete weights;
+	delete[] (unsigned char*) weights;
 }
 
 void AVP_Generator_Extended_Settings_Chunk::fill_data_block (char * data)
@@ -303,7 +340,7 @@ size_t AVP_Generator_Extended_Settings_Chunk::size_chunk ()
 
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("GLOGENDC",Global_Generator_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("GLOGENDC",Global_Generator_Data_Chunk,28)
 
 Global_Generator_Data_Chunk::Global_Generator_Data_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"GLOGENDC")
@@ -321,6 +358,13 @@ Global_Generator_Data_Chunk::Global_Generator_Data_Chunk(Chunk_With_Children* pa
 {
 	EnemyGenerated=*(int*)data;
 	data+=sizeof(int);
+
+	// the code that loads a level's models and the code that sets up its generators both choose by this, and anything else leaves them disagreeing
+	if(EnemyGenerated!=Generate_Aliens && EnemyGenerated!=Generate_Marines)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
 	MaxNPCSOnLevel=*(int*)data;
 	data+=sizeof(int);
 	NPCSPerMinute=*(int*)data;
@@ -369,7 +413,7 @@ size_t Global_Generator_Data_Chunk::size_chunk ()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("AVPSTART",AVP_Player_Start_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AVPSTART",AVP_Player_Start_Chunk,56)
 
 AVP_Player_Start_Chunk::AVP_Player_Start_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"AVPSTART")
@@ -407,11 +451,12 @@ size_t AVP_Player_Start_Chunk::size_chunk ()
 	return(chunk_size);
 }
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("AVPCABLE",AVP_Power_Cable_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AVPCABLE",AVP_Power_Cable_Chunk,48)
 
-AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk (parent,"AVPCABLE")
 {
+	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 
@@ -436,16 +481,7 @@ AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const c
 		data+=4;
 	}
 
-	int length=strlen(data);
-	if(length)
-	{
-		name=new char[length+1];
-		strcpy(name,data);	
-	}
-	else
-	{
-		name=0;
-	}
+	name=CopyOptionalNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 AVP_Power_Cable_Chunk::AVP_Power_Cable_Chunk(Chunk_With_Children* parent,const char* _name,ObjectID _id)
@@ -722,7 +758,7 @@ Indexed_Sound_Chunk* AVP_Particle_Generator_Chunk::get_sound_chunk()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("PARGENDA",AVP_Particle_Generator_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PARGENDA",AVP_Particle_Generator_Data_Chunk,68)
 
 AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* _name,ObjectID & _id)
 :Chunk(parent,"PARGENDA")
@@ -737,9 +773,10 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 }
 
 
-AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t)
+AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_Children* parent, const char* data,size_t const chunk_bytes)
 :Chunk(parent,"PARGENDA")
 {
+	char const * const chunk_start = data;
 	
 	CHUNK_EXTRACT(type,int)
 	CHUNK_EXTRACT(flags,int)
@@ -753,7 +790,7 @@ AVP_Particle_Generator_Data_Chunk::AVP_Particle_Generator_Data_Chunk(Chunk_With_
 	CHUNK_EXTRACT(parent_id,ObjectID)
 	CHUNK_EXTRACT(location,ChunkVectorInt)
 	CHUNK_EXTRACT(orientation,ChunkQuat)
-	CHUNK_EXTRACT_STRING(name);
+	CHUNK_EXTRACT_STRING(name,chunk_start,chunk_bytes);
 }
 
 AVP_Particle_Generator_Data_Chunk::~AVP_Particle_Generator_Data_Chunk()
@@ -792,15 +829,38 @@ size_t AVP_Particle_Generator_Data_Chunk::size_chunk()
 
 RIF_IMPLEMENT_DYNCREATE("R6GENDAT",Rainbow6_Generator_Extra_Data_Chunk)
 
-Rainbow6_Generator_Extra_Data_Chunk::Rainbow6_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+// Two numbers, then a list with its own count. No level the game comes with has one of these, so nothing measures an exact size for it, and all
+// this asks is that the list fits the chunk. The count has to be checked before the list is made: asking for more memory than there is ends the game.
+Rainbow6_Generator_Extra_Data_Chunk::Rainbow6_Generator_Extra_Data_Chunk(Chunk_With_Children* parent,const char* data,size_t chunk_bytes)
 :Chunk(parent,"R6GENDAT")
 {
+	size_t const numbers_bytes = 3 * sizeof(int);
+
+	distance = 0;
+	flags = 0;
+	num_extra_data = 0;
+	extra_data = 0;
+
+	if (chunk_bytes < numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	int const count = *(int *)(data + 2 * sizeof(int));
+
+	if (!CountFitsChunk(count, sizeof(int), chunk_bytes - numbers_bytes))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	distance=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
 	data+=4;
-	
-	num_extra_data=*(int*)data;
+
+	num_extra_data=count;
 	data+=4;
 	if(num_extra_data)
 	{

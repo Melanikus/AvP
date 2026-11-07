@@ -2,6 +2,14 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the message naming the default sound device is written with a size limit, so it always fits;
 //   a sound volume is kept inside the volume table before the table is read
+//   a WAV file's size for its sound data is checked before the memory is asked for, and failing to
+//   get that memory now loses only that sound
+//   a WAV file with no sound data in it is refused; the search for it used to go round for ever
+//   an assert on the sound number that could never fail now tests what it says
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a level's room echo setting is checked against the list of echo settings before the list is read;
+//   a sound whose sample has been unloaded while it played counts as stopped, instead of being read through a pointer that's gone;
+//   a sound stream that failed to start can be let go of, and waiting on one that's stopping ends
 
 #ifdef USE_OPENAL
 
@@ -22,6 +30,7 @@
 #include "ourasert.h"
 #include <math.h>
 #include <new>
+#include "wav_chunks.h"
 #include <AL\al.h>
 #include <AL\alc.h>
 #include <AL\alext.h>
@@ -847,7 +856,7 @@ static sndSource* FindFreeSource()
 int PlatPlaySound(int activeIndex)
 {
 	// check bounds of active sound index
-	LOCALASSERT ((activeIndex >= 0) || (activeIndex < SOUND_MAXACTIVE));
+	LOCALASSERT ((activeIndex >= 0) && (activeIndex < SOUND_MAXACTIVE));
 	
 	SOUNDINDEX gameIndex = ActiveSounds[activeIndex].soundIndex;
 	LOCALASSERT ((gameIndex >= 0) && (gameIndex < SID_MAXIMUM));
@@ -961,6 +970,11 @@ void PlatStopSound(int activeIndex)
 		return;
 	}
 
+	// already stopped: PlatUnloadGameSound takes the player away from a sound whose sample it unloads
+	if (!ActiveSounds[activeIndex].source) {
+		return;
+	}
+
 //	if (!ActiveSounds[activeIndex].paused)
 	{
 		alSourceStop(ActiveSounds[activeIndex].source->_alSource);
@@ -1002,6 +1016,11 @@ int PlatChangeSoundPitch(int activeIndex, int pitch)
 {
 	LOCALASSERT((pitch >= PITCH_MIN) && (pitch <= PITCH_MAX));
 
+	// nothing to play it on: see PlatStopSound
+	if (!ActiveSounds[activeIndex].source) {
+		return 1;
+	}
+
 	// calculate new frequency from base pitch for game sound (NB don't need to scale pitch values...)
 	SOUNDINDEX gameSoundIndex = ActiveSounds[activeIndex].soundIndex;
 
@@ -1026,6 +1045,11 @@ int PlatChangeSoundPitch(int activeIndex, int pitch)
 
 int PlatSoundHasStopped(int activeIndex)
 {
+	// a sound with nothing to play it on has stopped, so the sound system can clear its slot
+	if (!ActiveSounds[activeIndex].source) {
+		return 1;
+	}
+
 	ALint value;
 
 	alGetSourceiv(ActiveSounds[activeIndex].source->_alSource, AL_SOURCE_STATE, &value);
@@ -1044,6 +1068,11 @@ int PlatDo3dSound(int activeIndex)
 
 	if (!soundEnabled) {
 		return 0;
+	}
+
+	// nothing to play it on: see PlatStopSound
+	if (!ActiveSounds[activeIndex].source) {
+		return 1;
 	}
 
 	// find the distance of the sound
@@ -1141,6 +1170,10 @@ void PlatUnloadGameSound(SOUNDINDEX index)
 		if (ActiveSounds[i].soundIndex == index) {
 //			alSourcei(ActiveSounds[i].source->_alSource, AL_BUFFER, 0);
 			PlatStopSound(i);
+
+			// The slot stays in use until the sound system next looks, sees the sound has stopped and clears it. It wouldn't clear
+			// a paused one, so this one isn't paused any more.
+			ActiveSounds[i].paused = 0;
 		}
 	}
 
@@ -1194,6 +1227,23 @@ int ReturnInvalidWAV()
 {
 	Con_PrintError("Invalid WAV file");
 	return 0;
+}
+
+// The most sound data one WAV file may hold. The largest of the 1,656 sounds in the stock game is 172,282 bytes, and
+// 64 MB is about six minutes of CD-quality stereo, so this leaves plenty of room for a mod.
+static const uint32_t kMaxWavDataBytes = 64 * 1024 * 1024;
+
+// Sets aside the memory for a sound's data. The size comes from the WAV file, which can claim anything up to 4 GB, so
+// it is checked first. "nothrow" means that if the memory cannot be found we get an empty answer, and only this sound
+// fails to load; without it, the game would stop. A file that claims more than it holds is caught when it is read.
+static bool AllocateWavData(int soundNum, uint32_t nAudioBytes)
+{
+	if (nAudioBytes > kMaxWavDataBytes)
+	{
+		return false;
+	}
+	GameSounds[soundNum].audioBuffer = new(std::nothrow) uint8_t[nAudioBytes];
+	return GameSounds[soundNum].audioBuffer != NULL;
 }
 
 inline ALenum GetALFormat(uint16_t bitsPerSample, uint16_t nChannels)
@@ -1272,25 +1322,19 @@ int LoadWavFile(int soundNum, const std::string &fileName)
 		return 0;
 	}
 
-	while (1)
+	if (!FindWavDataChunk(fStream))
 	{
-		subChunkID = fStream.GetUint32BE();
-
-		if (subChunkID != 'data') 
-		{
-			subChunkSize = fStream.GetUint32LE();
-			fStream.Seek(subChunkSize, FileStream::SeekCurrent);
-		}
-		else {
-			break;
-		}
+		return ReturnInvalidWAV();
 	}
 
 	uint32_t nAudioBytes = fStream.GetUint32LE();
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
-	GameSounds[soundNum].audioBuffer = new uint8_t[nAudioBytes];
+	if (!AllocateWavData(soundNum, nAudioBytes))
+	{
+		return ReturnInvalidWAV();
+	}
 
 	// Read sound data from file to buffer
 	uint32_t nBytesRead = fStream.ReadBytes(GameSounds[soundNum].audioBuffer, nAudioBytes);
@@ -1381,25 +1425,21 @@ int ExtractWavFile(int soundNum, FileStream &fStream)
 		return 0;
 	}
 
-	while (1)
+	if (!FindWavDataChunk(fStream))
 	{
-		subChunkID = fStream.GetUint32BE();
-
-		if (subChunkID != 'data') 
-		{
-			subChunkSize = fStream.GetUint32LE();
-			fStream.Seek(subChunkSize, FileStream::SeekCurrent);
-		}
-		else {
-			break;
-		}
+		return ReturnInvalidWAV();
 	}
 
 	uint32_t nAudioBytes = fStream.GetUint32LE();
 
 	ALenum alFormat = GetALFormat(wBitsPerSample, nChannels);
 
-	GameSounds[soundNum].audioBuffer = new uint8_t[nAudioBytes];
+	if (!AllocateWavData(soundNum, nAudioBytes))
+	{
+		// step over this sound, so that the next one in the sound bank is still found
+		fStream.Seek(startOffset + totalChunkSize, FileStream::SeekStart);
+		return ReturnInvalidWAV();
+	}
 
 	// Read sound data from file to buffer
 	uint32_t nBytesRead = fStream.ReadBytes(GameSounds[soundNum].audioBuffer, nAudioBytes);
@@ -1587,8 +1627,20 @@ void PlatSetEnviroment(unsigned int env_index, float reverb_mix)
 		return;
 	}
 
+	// This number comes from the level file, so it could be anything. The stock levels use 0 to 25, which is all of the list. With
+	// any other, the room keeps the echo it has now.
+	if (env_index >= (unsigned int)kMaxReverbPresets)
+	{
+		static bool alreadySaid = false;
+
+		if (!alreadySaid)
+		{
+			Con_PrintError("This level asks for a room echo setting the game doesn't have, so it's ignored");
+			alreadySaid = true;
+		}
+	}
 	// Set up the enviroment.
-	if (SoundConfig.env_index != env_index)
+	else if (SoundConfig.env_index != env_index)
 	{
 		// set 
 		alAuxiliaryEffectSloti(effectSlot, AL_EFFECTSLOT_EFFECT, Sound_Enviroments[env_index].effect);
@@ -1675,6 +1727,8 @@ AudioStream::AudioStream()
 	_dataBuffers = NULL;
 	_format = 0;
 	_volume = 0;
+	_threadStarted = false;
+	_mutexMade = false;
 }
 
 bool AudioStream::Init(uint32_t nChannels, uint32_t rate, uint32_t bitsPerSample, uint32_t bufferSize, uint32_t nBuffers)
@@ -1704,7 +1758,8 @@ bool AudioStream::Init(uint32_t nChannels, uint32_t rate, uint32_t bitsPerSample
 
 	alGenBuffers(nBuffers, _buffers);
 	AlCheckError();
-	
+	_bufferCount = nBuffers;
+
 	_source = FindFreeSource();
 	if (!_source) {
 		Con_PrintError("No free sources available for streaming audio");
@@ -1731,12 +1786,16 @@ bool AudioStream::Init(uint32_t nChannels, uint32_t rate, uint32_t bitsPerSample
 		_freeBufferQueue.push_back(_buffers[i]);
 	}
 
-	if (pthread_create(&_playbackThread, NULL, CheckProcessedBuffers, static_cast<void*>(this)) != 0) {
-		return false;
-	}
+	// the lock has to exist before the thread that uses it starts
 	if (pthread_mutex_init(&_bufferMutex, NULL) != 0) {
 		return false;
 	}
+	_mutexMade = true;
+
+	if (pthread_create(&_playbackThread, NULL, CheckProcessedBuffers, static_cast<void*>(this)) != 0) {
+		return false;
+	}
+	_threadStarted = true;
 
 	return true;
 }
@@ -1777,9 +1836,10 @@ uint32_t AudioStream::WriteData(uint8_t *audioData, uint32_t size)
 	return size;
 }
 
+// Waits until there's room for more sound, or until the stream is stopped. There may never be room after that.
 void AudioStream::WaitForFreeBuffer()
 {
-	while (_freeBufferQueue.size() == 0) {
+	while (_freeBufferQueue.size() == 0 && _isPlaying) {
 		Sleep(20);
 	}
 }
@@ -1849,6 +1909,11 @@ uint32_t AudioStream::GetWritableBufferSize()
 
 int32_t AudioStream::SetVolume(uint32_t volume)
 {
+	if (!_source)
+	{
+		return AUDIOSTREAM_OK;
+	}
+
 	alSourcef(_source->_alSource, AL_GAIN, VolumeToGain((volume > (uint32_t)VOLUME_MAX) ? VOLUME_MAX + 1 : (int)volume));
 	alGetError();
 
@@ -1870,14 +1935,23 @@ int32_t AudioStream::Stop()
 {
 	_isPlaying = false;
 
-	alSourceStop(_source->_alSource);
-	alGetError();
+	// a stream that couldn't start has nothing to stop
+	if (_source)
+	{
+		alSourceStop(_source->_alSource);
+		alGetError();
+	}
 
 	return AUDIOSTREAM_OK;
 }
 
 int32_t AudioStream::Play()
 {
+	if (!_source)
+	{
+		return AUDIOSTREAM_OK;
+	}
+
 	alSourcePlay(_source->_alSource);
 	AlCheckError();
 	_isPaused = false;
@@ -1889,15 +1963,29 @@ AudioStream::~AudioStream()
 {
 	Stop();
 
-	pthread_join(_playbackThread, NULL);
-	pthread_mutex_destroy(&_bufferMutex);
+	// Init can stop at any step, so this only lets go of what it got as far as making
+	if (_threadStarted)
+	{
+		pthread_join(_playbackThread, NULL);
+	}
 
-	alSourcei(_source->_alSource, AL_BUFFER, NULL);
+	if (_mutexMade)
+	{
+		pthread_mutex_destroy(&_bufferMutex);
+	}
 
-	_source->_isFree = true;
-	_source = NULL;
+	if (_source)
+	{
+		alSourcei(_source->_alSource, AL_BUFFER, NULL);
 
-	alDeleteBuffers(_bufferCount, _buffers);
+		_source->_isFree = true;
+		_source = NULL;
+	}
+
+	if (_buffers && _bufferCount)
+	{
+		alDeleteBuffers(_bufferCount, _buffers);
+	}
 
 	// clear the new-ed memory
 	delete[] _buffers;

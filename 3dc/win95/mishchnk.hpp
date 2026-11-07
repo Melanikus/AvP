@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an empty file chunk remembers its version chunk, so that who owns it is plain to read
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of code only the level editor used: the game itself never runs it
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _miscchunk_hpp
 #define _miscchunk_hpp 1
@@ -36,12 +39,6 @@ public:
 // derived classes from this class must have the
 // following functions (or it won't compile)!!
 
-	virtual BOOL file_equals(HANDLE &) = 0;
-	// the file equals function knows to look in
-	// the file from the start of the current chunk
-	// to see if the current chunk is the same one
-
-	virtual const char * get_head_id() = 0;
 	virtual void set_lock_user(char *) = 0;
 
 // this function will lock the chunk if it can -
@@ -56,8 +53,6 @@ public:
 // If there is no update, the chunk will be unlocked in the file
 
 	BOOL unlock_chunk (File_Chunk &, BOOL updateyn);
-
-	BOOL update_chunk_in_file(HANDLE &rif_file);
 
 	// Selective output functions,
 	// These will output on condition of the flag, the flag will be set
@@ -102,9 +97,7 @@ public:
 	BOOL update_file ();
 	BOOL write_file (const char *);
 
-	BOOL check_file();
 
-	BOOL update_chunks_from_file();
 
 	// the file_chunk must link all of its shapes & objects together
 	// in post_input_processing
@@ -114,6 +107,10 @@ public:
 	// copy string when constructed
 	// to this variable
 	char * filename;
+
+	// A file chunk that starts empty starts with a version chunk, and this remembers it. A chunk joins its parent's list of children as it's made,
+	// and the parent's destructor deletes everything on that list (chunk.cpp), so this is not to be freed here. It's 0 in a file chunk read from a file.
+	Chunk * version_chunk;
 
 
 	// some easy access functions

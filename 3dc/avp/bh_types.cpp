@@ -1,3 +1,9 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a lift station with a bad controller or floor number from the level file is left out of its lift
+//   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -1136,9 +1142,10 @@ void AssignAllSBNames()
 						if(*((int *)switchDoorBehaviourPtr->linkedDoorName) + *( ((int *)switchDoorBehaviourPtr->linkedDoorName)+1 ) )
 							switchDoorBehaviourPtr->linkedDoorPtr = FindSBWithName(switchDoorBehaviourPtr->linkedDoorName);
 			 			/* may or may not be linked to another door */
-			 			if(switchDoorBehaviourPtr->linkedDoorPtr)
+			 			// the name comes from the level file, and anything but a switch door would be read as one
+			 			if(switchDoorBehaviourPtr->linkedDoorPtr && switchDoorBehaviourPtr->linkedDoorPtr->I_SBtype != I_BehaviourSwitchDoor)
 						{
-			 				GLOBALASSERT(switchDoorBehaviourPtr->linkedDoorPtr->I_SBtype == I_BehaviourSwitchDoor);
+			 				switchDoorBehaviourPtr->linkedDoorPtr = 0;
 						}
 			 			break;
 					}
@@ -1178,11 +1185,27 @@ void AssignAllSBNames()
 						// find the controlling lift behave block
 						lift_bhv->control_sb = FindSBWithName(lift_bhv->control_sb_name);
 
-						GLOBALASSERT(lift_bhv->control_sb);
-
 						{
 							LIFT_STATION **lift_array;
-							LIFT_BEHAV_BLOCK *cont_bhv = (LIFT_BEHAV_BLOCK*)lift_bhv->control_sb->SBdataptr;
+							LIFT_BEHAV_BLOCK *cont_bhv = NULL;
+
+							// The controller's name and this station's floor number both come from the level file. The name
+							// may find nothing, or something that isn't a lift, and the floor number picks a place in a
+							// list that is written to below. A station that fails any of this is left out of its lift.
+							if (lift_bhv->control_sb && lift_bhv->control_sb->I_SBtype == I_BehaviourLift)
+							{
+								cont_bhv = (LIFT_BEHAV_BLOCK*)lift_bhv->control_sb->SBdataptr;
+							}
+
+							if (!cont_bhv || !cont_bhv->controller || curr_stn->num_floor < 0
+								|| curr_stn->num_floor >= cont_bhv->lift_control->num_stations)
+							{
+								if (!lift_bhv->controller)
+								{
+									lift_bhv->lift_control = NULL;
+								}
+								break;
+							}
 
 							lift_bhv->lift_control = cont_bhv->lift_control;
 							lift_array = cont_bhv->lift_control->lift_stations;
@@ -2545,7 +2568,11 @@ void RequestState(STRATEGYBLOCK* sbptr, int message, STRATEGYBLOCK * SBRequester
 
 BOOL GetState(STRATEGYBLOCK* sbptr)
 {
-	GLOBALASSERT(sbptr);
+	// a lift's door can be named in a level file and not exist
+	if(!sbptr)
+	{
+		return FALSE;
+	}
 
 	switch (sbptr->I_SBtype)
 	  {
@@ -3083,7 +3110,13 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 			{
 				ALIEN_STATUS_BLOCK *asb;
 				asb=(ALIEN_STATUS_BLOCK *)(sbptr->SBdataptr);
-				Dispel_HModel(&asb->HModelController);
+
+				// Making an alien can stop before its block exists, when there's no room left for its movement, and then it's
+				// cleaned up here with nothing to read
+				if (asb)
+				{
+					Dispel_HModel(&asb->HModelController);
+				}
 			}
 			break;
 		case I_BehaviourGenerator:
@@ -3163,11 +3196,12 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 		{
 			FACEHUGGER_STATUS_BLOCK *fhugStatusPointer;
 			fhugStatusPointer = (FACEHUGGER_STATUS_BLOCK *)(sbptr->SBdataptr);
+			// Its block may not exist yet, if making it stopped early, so everything that reads it is inside this test
 			if(fhugStatusPointer)
 			{
 				if(fhugStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(fhugStatusPointer->soundHandle);
+				Dispel_HModel(&fhugStatusPointer->HModelController);
 			}
-			Dispel_HModel(&fhugStatusPointer->HModelController);
 			break;
 		}
 
@@ -3207,12 +3241,14 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 		{
 			QUEEN_STATUS_BLOCK *queenStatusPointer;
 			queenStatusPointer = (QUEEN_STATUS_BLOCK *)(sbptr->SBdataptr);
+			// Her block may not exist yet, if making her stopped early, so everything that reads it is inside this test
 			if(queenStatusPointer)
 			{
 				Dispel_HModel(&queenStatusPointer->HModelController);
+
+				//stop any sound the queen is making
+				if(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);
 			}
-			//stop any sound the queen is making
-			if(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);
 
 			break;
 		}

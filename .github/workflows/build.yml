@@ -6,8 +6,8 @@
 # closed. Before that, a tag must be checked by something a commit can't remove, because this file comes from the commit
 # being built.
 #
-# The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release. To install one, see
-# PLAYTEST.md.
+# The build is kept as a workflow artifact with its SHA-256 hashes. It is NOT a GitHub release: release.yml makes those. To install
+# one of these, see PLAYTEST.md.
 name: Build
 
 on:
@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: Build the game
+    name: Make a test build
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
       - name: Check out the repository
@@ -38,57 +38,27 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/avpx_main') { throw 'Builds come only from avpx_main' }
           $results = gh api --paginate "repos/$env:GITHUB_REPOSITORY/commits/$env:GITHUB_SHA/check-runs?per_page=100" --jq '.check_runs[] | .name + "=" + .conclusion'
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the scan results' }
-          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests'
+          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game'
           foreach ($check in $required) {
             if ($results -notcontains "$check=success") { throw "'$check' did not pass on this commit" }
           }
           "$env:GITHUB_SHA is scanned code on avpx_main."
 
-      # The registry commit is the builtin-baseline in vcpkg.json, so the library versions never drift.
-      - name: Get vcpkg at the manifest's baseline
+      # The same script every pull request runs (game-build.yml), so this can't be the first time these steps have run.
+      - name: Build the game and make its package
         shell: pwsh
-        run: |
-          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
-          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
-          git init -q $root
-          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
-          git -C $root checkout -q FETCH_HEAD
-          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
-          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+        run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
 
-      - name: Build the game (Release, Win32)
-        shell: pwsh
-        run: |
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
-          if (-not $msbuild) { throw 'MSBuild was not found' }
-          & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      # Only what the game needs, plus a hash of every file so anyone can check their copy.
-      - name: Package the build
-        shell: pwsh
-        run: |
-          $out = Join-Path $env:RUNNER_TEMP 'package'
-          New-Item -ItemType Directory -Force $out | Out-Null
-          $release = 'win32\VS2026\Win32\Release'
-          Copy-Item (Join-Path $release 'AvPx.exe') $out
-          Copy-Item (Join-Path $release '*.dll') $out
-          Copy-Item -Recurse shaders (Join-Path $out 'shaders')
-          Copy-Item PLAYTEST.md, License.txt $out
-          if (-not (Test-Path (Join-Path $out 'AvPx.exe'))) { throw 'AvPx.exe was not built' }
-          "$env:GITHUB_REF_NAME $env:GITHUB_SHA" | Out-File -Encoding ascii (Join-Path $out 'BUILD.txt')
-          Push-Location $out
-          # The hashes are worked out first and written after. Writing the list while the folder is being read would make it
-          # hash its own half-written file, and that fails with a sharing violation.
-          $hashes = Get-ChildItem -Recurse -File | Resolve-Path -Relative | ForEach-Object {
-            '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 $_).Hash.ToLower(), ($_ -replace '^\.\\', '' -replace '\\', '/')
-          }
-          $hashes | Out-File -Encoding ascii SHA256SUMS.txt
-          Pop-Location
-          Get-Content (Join-Path $out 'SHA256SUMS.txt')
+      # The symbols and map of the game and its two film libraries, to name the place of a crash in this build. They're never in the
+      # package. This is open source, so they hold nothing secret, and the folders they name are this machine's.
+      - name: Keep the symbols
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: symbols
+          path: |
+            win32/VS2026/Win32/Release/*.pdb
+            win32/VS2026/Win32/Release/*.map
+          if-no-files-found: error
 
       - name: Keep the build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -1,7 +1,13 @@
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP Project sound source
   ----------------------------------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a sound bank that cannot be opened, or that has no end mark, no longer makes the game hang
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a sound in the bank that can't be read isn't counted as loaded, so the game tries that sound's own WAV file
 #include "3dc.h"
+#include "logString.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -591,10 +597,18 @@ void LoadSounds(char *soundDirectory)
 	FileStream fStream;
 	fStream.Open(filename, FileStream::FileRead, FileStream::SkipFastFileCheck);
 
+	// without the sound bank there is nothing to load here
+	if (!fStream.IsGood())
+	{
+		LogErrorString(std::string("LoadSounds - cannot open the sound bank: ") + filename);
+		return;
+	}
+
 	soundIndex = fStream.GetByte();
 	pitch      = fStream.GetByte();
 
-	while ((soundIndex != 0xff) || (pitch != -1))
+	// the bank finishes with an end mark, but a damaged one may not have it, so stop at the end of the file as well
+	while (((soundIndex != 0xff) || (pitch != -1)) && !fStream.RanOutOfData())
 	{
 		if ((soundIndex < 0) || (soundIndex >= SID_MAXIMUM))
 		{
@@ -607,7 +621,15 @@ void LoadSounds(char *soundDirectory)
 			LOCALASSERT("Duplicate game sound loaded"==0);
 		}
 
-		ExtractWavFile(soundIndex, fStream);
+		// A sound that can't be read isn't loaded. It had already read this sound's name, and a name left here would make GetSound take this for a loaded sound, and it would stay silent
+		// instead of trying the WAV on its own. The loop's own test ends a bank that's cut short.
+		if (!ExtractWavFile(soundIndex, fStream))
+		{
+			GameSounds[soundIndex].wavName.clear();
+			soundIndex = fStream.GetByte();
+			pitch      = fStream.GetByte();
+			continue;
+		}
 
 		GameSounds[soundIndex].loaded = 1;
 		GameSounds[soundIndex].activeInstances = 0;

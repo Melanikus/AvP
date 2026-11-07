@@ -1,0 +1,3 @@
+/std:c++17 /EHsc /MD /W3 /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+tests/settings_file_test.cpp

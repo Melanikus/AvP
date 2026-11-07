@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   an object of a type the game doesn't know is left out
+
 /*------------------------Patrick 14/1/97-----------------------------
   This source file contains all the functions for the object visibility 
   management system     (which controls visibility for aliens, objects,
@@ -1350,11 +1354,18 @@ void InitInanimateObject(void* bhdata, STRATEGYBLOCK *sbPtr)
 
         }
 
+        /* an object of a type the game doesn't know, from the level file, was given no dynamics */
+        if(!sbPtr->DynPtr)
+        {
+                RemoveBehaviourStrategy(sbPtr);
+                return;
+        }
+
         /* Initialise the dynamics block */
         {
                 DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
                 GLOBALASSERT(dynPtr);
-        
+
         dynPtr->PrevPosition = dynPtr->Position = toolsData->position;
                 dynPtr->OrientEuler = toolsData->orientation;
                 CreateEulerMatrix(&dynPtr->OrientEuler, &dynPtr->OrientMat);

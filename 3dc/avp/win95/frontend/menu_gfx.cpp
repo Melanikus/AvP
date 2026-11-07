@@ -4,11 +4,17 @@
 //   treats a plain char; the wrapped text function stops counting a word's width at a limit, so a huge word in a
 //   file cannot make the sum overflow; the size of the menu font picture is checked before it is used, and its
 //   memory is given back afterwards; the menu font's letter widths are looked up with an unsigned byte too
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a font picture too small to hold its letters is refused before they're read, and its letters then all get one width, so that text doesn't pile up on one spot;
+//   each row is found from the picture's real row length
+//   the menus get a fresh allowance for their pictures, whatever the last level spent; and the font's texture number goes
+//   back to the missing one when the font is released or can't be read, so it can't name someone else's picture
 #include "3dc.h"
 #include "inline.h"
 #include "string_table.hpp"
 #include "chunk_textures.h"
 #include "hud_layout.h"
+#include "font_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "renderer.h"
@@ -182,6 +188,10 @@ static void LoadMenuFont(void)
 	IntroFont_Light.swidth = 5;
 	IntroFont_Light.ascii  = 32;
 
+	// Until this has worked, the font has no picture. Without this, a failure below would leave the number from last time,
+	// which by now can be another picture altogether.
+	IntroFont_Light.textureID = MISSING_TEXTURE;
+
 	RimLoader introFontRIM;
 	if (!introFontRIM.Open("graphics/Menus/IntroFont.RIM"))
 	{
@@ -214,7 +224,14 @@ static void LoadMenuFont(void)
 
 	// allocate buffer to decode into
 	uint8_t *srcBuffer = new uint8_t[width*height*4];
-	introFontRIM.Decode(srcBuffer, width*4);
+
+	// Packed data that runs out only shows now, and the rows it didn't reach hold whatever was in memory
+	if (!introFontRIM.Decode(srcBuffer, width*4))
+	{
+		Con_PrintError(std::string("Menus/IntroFont.RIM isn't used, because ") + RimLoader_ProblemWords(introFontRIM.Problem()));
+		delete[] srcBuffer;
+		return;
+	}
 
 	uint8_t *srcPtr = srcBuffer;
 
@@ -917,6 +934,10 @@ void LoadAllMenuTextures()
 
 extern void LoadAllAvPMenuGfx(void)
 {
+	// Coming back from a level, what it spent on pictures still counts, and a level that spent it all would leave the menus
+	// with none. The menus are the game's own, so they start again.
+	RimLoader_NewLevel();
+
 	LoadAllMenuTextures();
 	LoadMenuFont();
 //	CalculateWidthsOfAAFont();
@@ -995,6 +1016,7 @@ extern void ReleaseAllAvPMenuGfx(void)
 	Tex_Release(AVPMENUGFX_SPLASH_SCREEN5);
 
 	Tex_Release(IntroFont_Light.textureID);
+	IntroFont_Light.textureID = MISSING_TEXTURE;
 }
 
 extern void DrawAvPMenuGfx(texID_t textureID, int topleftX, int topleftY, int alpha, enum AVPMENUFORMAT_ID format)
@@ -1136,22 +1158,48 @@ extern int HeightOfMenuGfx(texID_t textureID)
 
 extern texID_t AAFontImageNumber;
 
+// For a font that can't be measured. Letters that all take up room can be read, more or less, and letters with no width would all land on one spot.
+static void GiveEveryLetterOneWidth()
+{
+	for (int c = 33; c < 256; c++)
+	{
+		AAFontWidths[c] = MAX_SMALL_LETTER_WIDTH;
+	}
+
+	AAFontWidths[32] = 3;
+}
+
+// Works out how wide each letter is, by looking for the last column with anything in it at the place the letter should be. font_checks.h has where that is.
 /*static*/ void CalculateWidthsOfAAFont()
 {
 	if (MISSING_TEXTURE == AAFontImageNumber)
 	{
 		// the texture isn't loaded or hasn't loaded correctly so we can't perform the width calculation
+		GiveEveryLetterOneWidth();
 		return;
 	}
 
-	uint32_t textureWidth  = 0;
-	uint32_t textureHeight = 0;
+	// what the card really made, which is what's in memory, whatever was asked for
+	Texture const &fontDetails = Tex_GetTextureDetails(AAFontImageNumber);
+	uint32_t const textureWidth  = fontDetails.realWidth;
+	uint32_t const textureHeight = fontDetails.realHeight;
 
-	Tex_GetDimensions(AAFontImageNumber, textureWidth, textureHeight);
+	int nChars;
 
-	// we'll assume it can't be smaller than the original AvP font texture
-//	assert(textureWidth  >= 256);
-//	assert(textureHeight >= 256);
+	if (IsDemoVersion()) {
+		nChars = 64;
+	}
+	else {
+		nChars = 255;
+	}
+
+	// The picture is a file anyone can replace, and the places below are fixed, so it might not reach them.
+	if (!FontChecks_LettersFit(textureWidth, textureHeight, nChars, HUD_FONT_WIDTH, HUD_FONT_HEIGHT))
+	{
+		Con_PrintError("The font picture is too small to hold its letters, so they all get one width");
+		GiveEveryLetterOneWidth();
+		return;
+	}
 
 	uint8_t *originalSrcPtr = NULL;
 	uint32_t pitch = 0;
@@ -1162,49 +1210,20 @@ extern texID_t AAFontImageNumber;
 		return;
 	}
 
-	uint8_t *srcPtr = originalSrcPtr;
+	// the check above took each row to be at least as long as the picture is wide
+	if (pitch < textureWidth * 4)
+	{
+		Con_PrintError("The font picture's rows are shorter than its width, so its letters all get one width");
+		Tex_Unlock(AAFontImageNumber);
+		GiveEveryLetterOneWidth();
+		return;
+	}
 
 	AAFontWidths[32] = 3;
 
-	int nChars;
-	
-	if (IsDemoVersion()) {
-		nChars = 64;
-	}
-	else {
-		nChars = 255;
-	}
-
-	for (int c = 33; c < nChars; c++) 
+	for (int c = 33; c < nChars; c++)
 	{
-		int x,y;
-		int x1 = 1+((c-32)&15)*16;
-		int y1 = 1+((c-32)>>4)*16;
-
-		AAFontWidths[c] = MAX_SMALL_LETTER_WIDTH;
-
-		for (x = x1 + HUD_FONT_WIDTH; x > x1; x--)
-		{
-			bool blank = true;
-
-			for (y = y1; y < y1 + HUD_FONT_HEIGHT; y++)
-			{
-				uint8_t *s = &srcPtr[(x + y*textureWidth) * 4]; // FIXME - pitch?
-
-				if (s[0] >= 0x80) // checking blue.
-				{
-					blank = false;
-					break;
-				}
-			}
-
-			if (blank) {
-				AAFontWidths[c]--;
-			}
-			else {
-				break;
-			}
-		}
+		AAFontWidths[c] = (char)FontChecks_LetterWidth(originalSrcPtr, pitch, c, HUD_FONT_WIDTH, HUD_FONT_HEIGHT, MAX_SMALL_LETTER_WIDTH);
 	}
 
 	Tex_Unlock(AAFontImageNumber);

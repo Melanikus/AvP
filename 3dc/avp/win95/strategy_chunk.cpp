@@ -1,6 +1,12 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an ID's name is built in text that grows as needed instead of a fixed 100-byte box
+//   a strategy reads from a copy of its chunk and has to be exactly its own size, and every counted list is measured first
+//   a message's number has to be a place in the table of level messages
+//   removed the chunk for a lift in another level file, which nothing used and which read with no look at its size; a strategy too short to hold its three numbers is refused
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 #include <string>
 #include "strategy_chunk.hpp"
 #include "md5.h"
@@ -10,13 +16,52 @@ FORCE_CHUNK_INCLUDE_IMPLEMENT(strategy_chunk)
 
 RIF_IMPLEMENT_DYNCREATE("AVPSTRAT",AVP_Strategy_Chunk)
 
+// How many spare bytes follow a strategy's copy of its chunk. The strategies read a fixed set of numbers with no look at the chunk's size, and the
+// longest set of them is a good deal shorter than this.
+static size_t const StrategySpareBytes = 512;
+
+// A message's number from the file. The game adds it to the first of the level messages, and then goes straight to that place in a table of text. So it has
+// to be one of the 450 places there are. 0 is allowed, because it can mean no message at all.
+static int const MostLevelMessages = 450;
+
+static void CheckMessageNumber(int number)
+{
+	if (number < 0 || number > MostLevelMessages)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
+
+// Two numbers, then a strategy, whose first number says what kind it is. There are about 30 kinds, and most read a fixed set of numbers with no
+// look at the chunk's size. So each reads from a copy with spare bytes after it, and whatever it reads stays in the copy. Each kind knows
+// how big it should be, so afterwards it has to be exactly the size of its chunk. All 11368 of these in the game's own levels are.
 AVP_Strategy_Chunk::AVP_Strategy_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
 :Chunk(parent,"AVPSTRAT")
 {
+	size_t const numbers_bytes = 8;
+
+	Strategy=0;
+	index=spare2=0;
+
+	// Every kind starts with three numbers: its kind and two more. MiscStrategy holds whatever comes after them, so with fewer it would ask for a negative amount of memory, and the game would stop.
+	size_t const smallest_strategy_bytes=12;
+
+	if(datasize<numbers_bytes+smallest_strategy_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	index= *(int*)data;
 	data+=4;
 	spare2= *(int*)data;
 	data+=4;
+
+	size_t const strategy_bytes=datasize-numbers_bytes;
+	char * const copy=new char[strategy_bytes+StrategySpareBytes];
+	memcpy(copy,data,strategy_bytes);
+	memset(copy+strategy_bytes,0,StrategySpareBytes);
+	data=copy;
 
 	int type=*((int*)data);
 	switch(type)
@@ -137,7 +182,14 @@ AVP_Strategy_Chunk::AVP_Strategy_Chunk(Chunk_With_Children* parent,const char* d
 			break;
 	   
 		default :
-			Strategy=new MiscStrategy(data,datasize-8);	
+			Strategy=new MiscStrategy(data,datasize-8);
+	}
+
+	delete[] copy;
+
+	if(Strategy->GetStrategySize()!=strategy_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 	}
 }
 
@@ -196,102 +248,6 @@ void AVP_Strategy_Chunk::fill_data_block(char* data_start)
 
 ////////////////////////////////////////////////////////
 //Class AvP_External_Strategy_Chunk
-RIF_IMPLEMENT_DYNCREATE("AVPEXSTR",AVP_External_Strategy_Chunk)
-
-AVP_External_Strategy_Chunk::AVP_External_Strategy_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
-:Chunk(parent,"AVPEXSTR")
-{
-	ObjID=*(ObjectID*)data;
-	data+=8;
-	ExtEnvNum=*(int*)data;
-	data+=4;
-	ThisEnvNum= *(int*)data;
-	data+=4;
-	spare= *(int*)data;
-	data+=4;
-
-	int type=*((int*)data);
-	switch(type)
-	{
-		case StratLift :
-			Strategy=new LiftStrategy(data,datasize-8);
-			break;
-		case StratDoor :
-			Strategy=new DoorStrategy(data,datasize-8);
-			break;
-		case StratBinSwitch :
-			Strategy=new BinSwitchStrategy(data,datasize-8);
-			break;
-	 	case StratSimpleObject :
-	 		Strategy=new AvpStrat(data);
-			break;
-		case StratPlatLift :
-			Strategy=new PlatLiftStrategy(data,datasize-8);
-			break;
-		default :
-			Strategy=new MiscStrategy(data,datasize-8);	
-	}
-}
-
-AVP_External_Strategy_Chunk::AVP_External_Strategy_Chunk(Chunk_With_Children* parent)
-:Chunk(parent,"AVPEXSTR")
-{
-	ObjID.id1=ObjID.id2=0;
-	ExtEnvNum=0;
-	Strategy=0;
-	ThisEnvNum=0;
-	spare=0;
-}
-
-AVP_External_Strategy_Chunk::~AVP_External_Strategy_Chunk()
-{
-	delete Strategy;
-}
-
-BOOL AVP_External_Strategy_Chunk::output_chunk (HANDLE &hand)
-{
-	unsigned long junk;
-	BOOL ok;
-	char * data_block;
-
-	data_block = this->make_data_block_from_chunk();
-
-	ok = WriteFile (hand, (long *) data_block, (unsigned long) chunk_size, &junk, 0);
-
-	delete[] data_block;
-
-	if (!ok) return FALSE;
-
-	return TRUE;
-}
-
-size_t AVP_External_Strategy_Chunk::size_chunk()
-{
-	chunk_size=32+Strategy->GetStrategySize();
-	return chunk_size;
-}
-
-void AVP_External_Strategy_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-
-	data_start += 8;
-
-	*((int *) data_start) = chunk_size;
-
-	data_start += 4;
-
-	*((ObjectID *) data_start) =ObjID;
-	data_start += 8;
-	*((int *) data_start) = ExtEnvNum;
-	data_start += 4;
-	*((int *) data_start) = ThisEnvNum;
-	data_start += 4;
-	*((int *) data_start) = spare;
-	data_start += 4;
-	
-	Strategy->fill_data_block(data_start);
-}
 /////////////////////////////////////////////////////////////
 //Class Virtual_Object_Chunk
 
@@ -308,7 +264,7 @@ Children for Virtual_Object_Chunk
 ////////////////////////////////////////////////////////
 //Class Virtual_Object_Properties_Chunk
 
-RIF_IMPLEMENT_DYNCREATE("VOBJPROP",Virtual_Object_Properties_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("VOBJPROP",Virtual_Object_Properties_Chunk,16)
 
 ObjectID Virtual_Object_Properties_Chunk::CalculateID()
 {
@@ -339,26 +295,23 @@ Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Chil
 	CalculateID();
 }
 
-Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Children* parent,const char* data,size_t)
+Virtual_Object_Properties_Chunk::Virtual_Object_Properties_Chunk(Chunk_With_Children* parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"VOBJPROP")
 {
+	char const * const chunk_start = data;
 	location=*(ChunkVectorInt*)data;
 	data+=sizeof(ChunkVectorInt);
 	size=*(int*)data;
 	data+=sizeof(int);
 	
-	size_t length = strlen(data);
-	name = new char[length+1];
-	strcpy(name, data);
+	size_t length = 0;
+	name = CopyNameFromChunk(chunk_start, chunk_bytes, data, &length);
 	data += (length+4)&~3;
 	
-	ID = *(ObjectID*)data;
-	data+=sizeof(ObjectID);
+	ID = ReadFromChunk<ObjectID>(chunk_start, chunk_bytes, data);
 
-	pad1=*(int*)data;
-	data+=sizeof(int);				
-	pad2=*(int*)data;
-	data+=sizeof(int);				
+	pad1=ReadFromChunk<int>(chunk_start, chunk_bytes, data);				
+	pad2=ReadFromChunk<int>(chunk_start, chunk_bytes, data);				
 }
 
 Virtual_Object_Properties_Chunk::~Virtual_Object_Properties_Chunk()
@@ -603,14 +556,14 @@ void R6SimpleStrategy::fill_data_block(char* data)
 
 //////////////////////////////////////////////
 
-LiftStrategy::LiftStrategy(const char* data_start,size_t /*size*/)
+LiftStrategy::LiftStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
 
 	data_start+=AvpStrat::GetStrategySize();
-	
-	NumAssocLifts=*(int*)data_start;
-	data_start+=4;
+
+	NumAssocLifts=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumAssocLifts)
 	{
 		AssocLifts=new ObjectID[NumAssocLifts];
@@ -637,8 +590,7 @@ LiftStrategy::LiftStrategy(const char* data_start,size_t /*size*/)
 	Floor=*(int*)data_start;
 	data_start+=4;
 	
-	NumExternalLifts=*(int*)data_start;
-	data_start+=4;
+	NumExternalLifts=ReadListCount(start,data_start,size,sizeof(ExtLift));
 	if(NumExternalLifts)
 	{
 		ExternalLifts=new ExtLift[NumExternalLifts];
@@ -844,10 +796,11 @@ void BinSwitchStrategy::fill_data_block(char* data)
 LinkSwitchStrategy::LinkSwitchStrategy(const char* data_start,size_t size)
 :BinSwitchStrategy(data_start,size)
 {
+	char const * const start=data_start;
+
 	data_start+=BinSwitchStrategy::GetStrategySize();
-	
-	NumLinks=*(int*)data_start;
-	data_start+=4;
+
+	NumLinks=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumLinks)
 	{
 		LinkedSwitches=new ObjectID[NumLinks];
@@ -976,9 +929,11 @@ void LightingStrategy::fill_data_block(char* data)
 
 
 
-MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
+MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 
 	RestState=*(int*) data_start;
@@ -990,9 +945,8 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 	Security=*(int*) data_start;
 	data_start+=4;
 
-	NumTargets=*(int*) data_start;
-	data_start+=4;
-	
+	NumTargets=ReadListCount(start,data_start,size,sizeof(SwitchTarget));
+
 	if(NumTargets)
 	{
 		Targets=new SwitchTarget[NumTargets];
@@ -1007,8 +961,7 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 		Targets=0;
 	}
 
-	NumLinks=*(int*)data_start;
-	data_start+=4;
+	NumLinks=ReadListCount(start,data_start,size,sizeof(ObjectID));
 	if(NumLinks)
 	{
 		LinkedSwitches=new ObjectID[NumLinks];
@@ -1048,8 +1001,8 @@ MultiSwitchStrategy::MultiSwitchStrategy(const char* data_start,size_t /*size*/)
 
 MultiSwitchStrategy::~MultiSwitchStrategy()
 {
-	if(Targets)delete Targets;
-	if(LinkedSwitches)delete LinkedSwitches;
+	delete[] Targets;
+	delete[] LinkedSwitches;
 }
 
 
@@ -1272,17 +1225,22 @@ void GeneratorStrategy::fill_data_block(char* data)
 
 /////////////////////////////////////////////////////////////
 
-MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t /*size*/ )
+MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 	
 	mission_description_string=*(int*)data_start;
 	data_start+=4;
-	
+
 	mission_complete_string=*(int*)data_start;
 	data_start+=4;
-	
+
+	CheckMessageNumber(mission_description_string);
+	CheckMessageNumber(mission_complete_string);
+
 	mission_number=*(int*)data_start;
 	data_start+=4;
 
@@ -1292,8 +1250,7 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 	mission_completion_effect=*(int*)data_start;
 	data_start+=4;
 
-	num_mission_targets=*(int*)data_start;
-	data_start+=4;
+	num_mission_targets=ReadListCount(start,data_start,size,sizeof(MissionMessage));
 
 	if(num_mission_targets)
 	{
@@ -1308,8 +1265,7 @@ MissionObjectiveStrategy::MissionObjectiveStrategy(const char* data_start,size_t
 	else
 		mission_targets=0;
 
-	num_request_targets=*(int*)data_start;
-	data_start+=4;
+	num_request_targets=ReadListCount(start,data_start,size,sizeof(RequestTarget));
 
 	if(num_request_targets)
 	{
@@ -1441,7 +1397,9 @@ TextMessageStrategy::TextMessageStrategy(const char* data_start,size_t /*size*/ 
 
 	message_string=*(int*)data_start;
 	data_start+=4;
-	
+
+	CheckMessageNumber(message_string);
+
 	flags=*(int*)data_start;
 	data_start+=4;
 	
@@ -1472,45 +1430,66 @@ void TextMessageStrategy::fill_data_block(char* data)
 
 /////////////////////////////////////////////////////////////
 
-TrackStrategy::TrackStrategy(const char* data_start,size_t /*size*/ )
-:AvpStrat(data_start)
+// A track or a hierarchy has a list of effects, three numbers each, and each effect has a list of its own. The two lists are read the same way.
+// Each list is measured before it's made, and each effect needs room for its numbers, because a long list of effects could otherwise run on
+// past the end, even with every list inside it empty. Gives back where the next number is.
+static const char * ReadPointEffects(const char * start, const char * data, size_t size, int & count, TrackPointEffect ** & effects)
 {
-	data_start+=AvpStrat::GetStrategySize();
+	size_t const effect_bytes = 3 * sizeof(int);
 
-	num_point_effects=*(int*)data_start;
-	data_start+=4;
+	count = ReadListCount(start, data, size, effect_bytes);
+	effects = 0;
 
-	if(num_point_effects)
+	if (!count)
 	{
-		point_effects=new TrackPointEffect*[num_point_effects];
-		for(int i=0;i<num_point_effects;i++)
+		return data;
+	}
+
+	effects = new TrackPointEffect*[count];
+
+	for (int i = 0; i < count; i++)
+	{
+		if ((size_t)(data - start) + effect_bytes > size)
 		{
-			point_effects[i]=new TrackPointEffect;
-			TrackPointEffect* tpe=point_effects[i];
+			// the destructor goes through count effects, and these are all there are
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			count = i;
+			return data;
+		}
 
-			tpe->point_no=*(int*)data_start;
-			data_start+=4;
-			tpe->pad1=*(int*)data_start;
-			data_start+=4;
-			tpe->num_targets=*(int*)data_start;
-			data_start+=4;
+		effects[i] = new TrackPointEffect;
+		TrackPointEffect * effect = effects[i];
 
-			if(tpe->num_targets)
+		effect->point_no = *(int *)data;
+		data += 4;
+		effect->pad1 = *(int *)data;
+		data += 4;
+		effect->num_targets = ReadListCount(start, data, size, sizeof(TrackRequestTarget));
+		effect->targets = 0;
+
+		if (effect->num_targets)
+		{
+			effect->targets = new TrackRequestTarget[effect->num_targets];
+
+			for (int j = 0; j < effect->num_targets; j++)
 			{
-				tpe->targets=new TrackRequestTarget[tpe->num_targets];
-				for(int j=0;j<tpe->num_targets;j++)
-				{
-					tpe->targets[j]=*(TrackRequestTarget*)data_start;
-					data_start+=sizeof(TrackRequestTarget);
-				}
+				effect->targets[j] = *(TrackRequestTarget *)data;
+				data += sizeof(TrackRequestTarget);
 			}
-			else
-				tpe->targets=0;
-
 		}
 	}
-	else
-		point_effects=0;
+
+	return data;
+}
+
+TrackStrategy::TrackStrategy(const char* data_start,size_t size)
+:AvpStrat(data_start)
+{
+	char const * const start=data_start;
+
+	data_start+=AvpStrat::GetStrategySize();
+
+	data_start=ReadPointEffects(start,data_start,size,num_point_effects,point_effects);
 
 	pad1=*(int*)data_start;
 	data_start+=4;
@@ -1610,45 +1589,14 @@ size_t TrackDestructStrategy::GetStrategySize()
 }
 
 ////////////////////////////////////////////////////////////
-HierarchyStrategy::HierarchyStrategy(const char* data_start,size_t /*size*/ )
+HierarchyStrategy::HierarchyStrategy(const char* data_start,size_t size)
 :AvpStrat(data_start)
 {
+	char const * const start=data_start;
+
 	data_start+=AvpStrat::GetStrategySize();
 
-	num_point_effects=*(int*)data_start;
-	data_start+=4;
-
-	if(num_point_effects)
-	{
-		point_effects=new TrackPointEffect*[num_point_effects];
-		for(int i=0;i<num_point_effects;i++)
-		{
-			point_effects[i]=new TrackPointEffect;
-			TrackPointEffect* tpe=point_effects[i];
-
-			tpe->point_no=*(int*)data_start;
-			data_start+=4;
-			tpe->pad1=*(int*)data_start;
-			data_start+=4;
-			tpe->num_targets=*(int*)data_start;
-			data_start+=4;
-
-			if(tpe->num_targets)
-			{
-				tpe->targets=new TrackRequestTarget[tpe->num_targets];
-				for(int j=0;j<tpe->num_targets;j++)
-				{
-					tpe->targets[j]=*(TrackRequestTarget*)data_start;
-					data_start+=sizeof(TrackRequestTarget);
-				}
-			}
-			else
-				tpe->targets=0;
-
-		}
-	}
-	else
-		point_effects=0;
+	data_start=ReadPointEffects(start,data_start,size,num_point_effects,point_effects);
 
 	pad1=*(int*)data_start;
 	data_start+=4;
@@ -1662,8 +1610,7 @@ HierarchyStrategy::~HierarchyStrategy()
 	{
 		delete point_effects[i];
 	}
-	if(point_effects) 
-		delete point_effects;
+	delete[] point_effects;
 }
 
 size_t HierarchyStrategy::GetStrategySize()

@@ -3,13 +3,37 @@
 //   removed a large amount of code only the level editor used: the game itself never runs it;
 //   text is copied using its exact measured length, so it always fits
 //   a child chunk whose size cannot be real is refused
+//   added a check on how many points a shape claims
+//   a polygon's corners are limited to the 4 places it has for them, and each must be one of the shape's points;
+//   sub-shapes get the same checks, and a morphing shape must fit the morph list and match its frames
+//   removed the class that read a shape stored in a level as a raw copy of memory, because nothing could check it
+//   a polygon needs at least 3 corners; a shape can only have one list of points and one of polygons, and a shape with no
+//   points chunk can't claim any; merge data and animations are checked against the shape; a sub-shape that fails stops
+//   lists of texture coordinates are read within their chunk and their 4 places, and each textured polygon's list is checked
+//   a shape must have one normal for each point and one for each polygon, each normal's numbers must be sensible, and a polygon's
+//   own normal must be one of those in its list
+//   the two polygons of a merge pair must be triangles that share exactly one edge
+//   a chunk of morph frames must be exactly the size its count says, and hold no more frames than the game can count
+//   a textured polygon can't have the bit set that makes the game skip its texture coordinates
+//   a module's points have to fit the box stored with its shape
+//   a shape's centre is only made inside a shape, because it writes into the shape
+//   a chunk of texture animation must fit the polygons it names, and only a shape can have one
+//   a shape's lists of names and polygon changes are measured against their chunks before they're made
+//   a polygon can't bring the flag that says its texture list is a table of pointers
+//   removed the shapes made for the PlayStation and Saturn: nothing made or read one, and a console type read past the end of its chunk
+//   a name is only read as far as the end of its chunk
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
 
 #include <math.h>
+#include <vector>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
 #include "chunk_shape.hpp"
 #include "chunk_object.hpp"
+#include "animation_chunk.hpp"
 
 
 //macro for helping to force inclusion of chunks when using libraries
@@ -43,7 +67,6 @@ Children for Shape_Chunk :
 "PNOTINBB"		Poly_Not_In_Bounding_Box_Chunk
 "ANSHCEN2"		Anim_Shape_Centre_Chunk
 "ASALTTEX"		Anim_Shape_Alternate_Texturing_Chunk
-"SHPPRPRO"		Shape_Preprocessed_Data_Chunk	
 */
 
 Shape_Chunk::Shape_Chunk(Chunk_With_Children * parent, const char *data, size_t size)
@@ -100,6 +123,430 @@ Shape_Chunk::~Shape_Chunk ()
 Shape_Header_Chunk * Shape_Chunk::get_header()
 {
 	return (Shape_Header_Chunk *) this->lookup_single_child ("SHPHEAD1");
+}
+
+// One number from a normal. A normal is a direction, so its numbers are small: the longest of all the 2.57 million normals in the
+// game's own levels is 1.09 long. Anything much bigger means nothing, and the game can't turn it into its whole-number form safely,
+// and neither can it turn infinity or "not a number". A normal of all zeros is allowed: the game's own levels have 8619 of them.
+// This reads the float's bits instead of comparing the float itself, because the Release build's fast floating point setting lets
+// the compiler assume every float is a real number, and it could drop a comparison meant to catch one that isn't. With the sign
+// taken off, a float's bits count upwards in the same order as its size. 0x40000000 is 2, and infinity and "not a number" come
+// after every real number, so this one test catches all of them.
+static bool normal_number_is_valid (float number)
+{
+	unsigned int bits;
+	memcpy (&bits, &number, sizeof(bits));
+
+	return (bits & 0x7fffffff) <= 0x40000000;
+}
+
+// A shape's normals are in two lists: one for its points and one for its polygons, each read from a chunk with a count of its own.
+// The game reads both using the shape's counts, not theirs, so a list that's short, or isn't there at all, would be read past its
+// end. So its length has to be exactly what the shape needs. All 30673 shapes in the game's own levels have both lists, at
+// exactly the right length.
+static bool normals_are_valid (ChunkVectorFloat const * list, int list_count, int needed)
+{
+	if (list_count != needed)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < list_count; i++)
+	{
+		if (!normal_number_is_valid (list[i].x) || !normal_number_is_valid (list[i].y) || !normal_number_is_valid (list[i].z))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Merge data pairs up triangles that the game joins into four-cornered polygons. There's one entry for each polygon: -1 if it
+// stands alone, or else the place of the polygon it joins. The game uses that place to reach into its lists, and goes through
+// every pair from its first polygon only, so an entry that doesn't lead back would leave its polygon with no place in the
+// merged list. Every one of the 12528 chunks of merge data in the game's own levels has one entry per polygon, and all of
+// their 89320 pairs lead back to each other.
+//
+// The game joins a pair by walking round the two triangles and crossing at the edge they share, so a pair has to be just that. To
+// find the corner it's adding, it looks for a corner of the second triangle that the first doesn't have, and it trusts there is one.
+// Two polygons with all their corners in common would send it to a place holding nothing. Every one of those 89320 pairs is two
+// triangles with exactly two corners in common, seen from either side.
+static int corners_also_in (ChunkPoly const & triangle, ChunkPoly const & other)
+{
+	int const corners_in_a_triangle = 3;
+	int shared = 0;
+
+	for (int i = 0; i < corners_in_a_triangle; i++)
+	{
+		for (int j = 0; j < corners_in_a_triangle; j++)
+		{
+			if (triangle.vert_ind[i] == other.vert_ind[j])
+			{
+				shared++;
+				break;
+			}
+		}
+	}
+
+	return shared;
+}
+
+static bool merge_data_is_valid (Shape_Merge_Data_Chunk const * merge, ChunkPoly const * polygons, int polygon_count)
+{
+	if (merge->num_polys != polygon_count)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		int const partner = merge->merge_data[i];
+
+		if (partner == -1)
+		{
+			continue;
+		}
+
+		if (partner < 0 || partner >= polygon_count)
+		{
+			return false;
+		}
+
+		if (merge->merge_data[partner] != i)
+		{
+			return false;
+		}
+
+		// This runs from each polygon of the pair in turn, so it only has to look one way. A polygon that names itself as its partner
+		// fails here too, because it has all its corners in common with itself.
+		if (polygons[i].num_verts != 3 || corners_also_in (polygons[i], polygons[partner]) != 2)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// A shape's animation number picks its place in a list made to fit the biggest number, so a negative one would write before
+// that list, and a huge one would make the list's size wrap round to something small. This is far more than a shape needs.
+static int const most_animation_sequences = 1024;
+
+// In an animated shape, each frame has a full set of points and of polygon normals. To show a frame, the game points the shape
+// at that frame's lists and goes on using the shape's own counts, so every frame must have exactly as many as the shape has.
+// The game also goes straight to the first frame it can find, so there has to be one. A frame can be marked as one the game
+// worked out between two others: it no longer makes those, and throws them away as it loads, so a file that marked its frames
+// could leave none. No level that comes with the game has an animated shape, so these rules come from how the code uses the
+// numbers, not from measuring levels.
+static bool animation_matches_shape (Chunk_With_Children const * shape_chunk, int point_count, int polygon_count)
+{
+	List<Chunk *> sequences;
+	shape_chunk->lookup_child ("ANIMSEQU", sequences);
+
+	int frames_found = 0;
+
+	for (LIF<Chunk *> sequence(&sequences); !sequence.done(); sequence.next())
+	{
+		ChunkAnimSequence const & animation = ((Anim_Shape_Sequence_Chunk *) sequence())->sequence_data;
+
+		if (animation.SequenceNum < 0 || animation.SequenceNum >= most_animation_sequences)
+		{
+			return false;
+		}
+
+		for (int i = 0; i < animation.NumFrames; i++)
+		{
+			ChunkAnimFrame const * frame = animation.Frames[i];
+
+			if (frame->num_verts != point_count || frame->num_polys != polygon_count)
+			{
+				return false;
+			}
+
+			if (frame->flags & animframeflag_interpolated_frame)
+			{
+				return false;
+			}
+		}
+
+		frames_found += animation.NumFrames;
+	}
+
+	return sequences.size() == 0 || frames_found > 0;
+}
+
+// Two animated polygons of a merge pair become one, and the game reads the second's sequences and frames using the first's counts.
+static bool animations_have_the_same_frames (TEXANIM const * first, TEXANIM const * second)
+{
+	if (first->NumSeq != second->NumSeq)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < first->NumSeq; i++)
+	{
+		if (first->Seq[i]->NumFrames != second->Seq[i]->NumFrames)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// A textured polygon keeps the place of its list of texture coordinates in the top half of its colour. The game uses that
+// place to write into lists of its own, so it has to be a real list. The game reads the colour both as a signed number and
+// as an unsigned one, so reading it as signed here means a number with its top bit set fails, which is safe for both. A list
+// with fewer corners than its polygon would be read past its end when the polygon is drawn. An empty list is allowed: the game
+// shows that polygon as a plain line. Every one of the 951593 textured polygons in the game's own levels has a real list with
+// exactly as many corners as it has. A polygon with no texture uses its colour for something else, so it isn't checked: 316 of
+// the others in those levels would fail.
+static bool texture_numbers_are_valid (ChunkShape const & shape, ChunkPoly const & polygon)
+{
+	if (!is_textured (polygon.engine_type))
+	{
+		return true;
+	}
+
+	// This bit makes the game skip the step that copies a polygon's texture coordinates, and the polygon stays textured, so it would
+	// be drawn from a list that was never filled in. None of the 951593 textured polygons in the game's own levels has it.
+	if (polygon.colour & 0x8000)
+	{
+		return false;
+	}
+
+	int const list = (int) polygon.colour >> 16;
+
+	if (list < 0 || list >= shape.num_uvs)
+	{
+		return false;
+	}
+
+	int const list_corners = shape.uv_list[list].num_verts;
+
+	return list_corners == 0 || list_corners >= polygon.num_verts;
+}
+
+// A chunk of texture animation names its polygons by number, and the game goes straight to that polygon in its lists, then writes there. These
+// numbers are places in the shape's own list, before any pairs are merged, which is the list the game looks them up in: with merge data it
+// turns each one into a merged place itself, and with none the two lists are the same. It's all been measured: all 3552 animated polygons
+// in the game's own levels pass.
+// - The polygon has to be real, and a triangle with three different corners. To join a pair the game finds each corner in the merged polygon
+//   and adds up where they were to work out the fourth, so two the same would send that sum, and a write, outside the list.
+// - All 1353 pairs that are both animated match, frame for frame. See animations_have_the_same_frames.
+// - An animation replaces a polygon's list of texture coordinates with a list of its own, of another kind and much shorter. So a polygon that
+//   isn't animated can't share that list: it would read the new list as coordinates, and run past its end.
+static bool texture_animation_fits_shape (ChunkShape const & shape, Chunk_With_Children const * shape_chunk)
+{
+	Animation_Chunk const * animation = (Animation_Chunk const *) shape_chunk->lookup_single_child ("TEXTANIM");
+
+	if (!animation)
+	{
+		return true;
+	}
+
+	int const polygon_count = shape.num_polys;
+	std::vector<TEXANIM const *> animation_of_polygon (polygon_count, (TEXANIM const *) 0);
+	std::vector<bool> list_is_animated (shape.num_uvs, false);
+
+	for (int i = 0; i < animation->NumPolys; i++)
+	{
+		TEXANIM const * entry = animation->AnimList[i];
+
+		if (entry->poly < 0 || entry->poly >= polygon_count)
+		{
+			return false;
+		}
+
+		ChunkPoly const & polygon = shape.poly_list[entry->poly];
+		int const * corners = polygon.vert_ind;
+
+		if (polygon.num_verts != 3 || corners[0] == corners[1] || corners[1] == corners[2] || corners[0] == corners[2])
+		{
+			return false;
+		}
+
+		animation_of_polygon[entry->poly] = entry;
+
+		if (is_textured (polygon.engine_type))
+		{
+			list_is_animated[(int) polygon.colour >> 16] = true;
+		}
+	}
+
+	Shape_Merge_Data_Chunk const * merging = (Shape_Merge_Data_Chunk const *) shape_chunk->lookup_single_child ("SHPMRGDT");
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		TEXANIM const * entry = animation_of_polygon[i];
+
+		if (!entry)
+		{
+			if (is_textured (shape.poly_list[i].engine_type) && list_is_animated[(int) shape.poly_list[i].colour >> 16])
+			{
+				return false;
+			}
+
+			continue;
+		}
+
+		int const partner = merging ? merging->merge_data[i] : -1;
+
+		if (partner != -1 && animation_of_polygon[partner] && !animations_have_the_same_frames (entry, animation_of_polygon[partner]))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Checks the numbers that say how big a shape is, all of which come from the level file.
+// - Each time a shape is drawn, its points are copied into RotatedPts, a list of a fixed size, with no other check on how
+//   many there are, so a shape with too many would be written past the end of that list. The biggest shape in the game's
+//   own levels has 2421 points.
+// - The header gives counts of its own, which have to agree with the points and polygons really in the file. If they
+//   didn't, the code that loops on those counts would run past the end of the shape's lists.
+// - Each corner of a polygon is a place in the shape's list of points, and in the lists built from it. A corner past the
+//   end of those lists would read whatever memory comes next. Every corner of all 952940 polygons in the game's own
+//   levels is in range, and all the counts agree.
+// - A chunk of points or polygons replaces the shape's list as it's read, but these checks look at the first one. With two,
+//   they would pass a list the shape no longer has. None of the 30673 shapes in the game's own levels has two.
+static bool shape_numbers_are_valid (ChunkShape const & shape, Chunk_With_Children const * shape_chunk)
+{
+	if (shape_chunk->count_children ("SHPRAWVT") > 1 || shape_chunk->count_children ("SHPPOLYS") > 1)
+	{
+		return false;
+	}
+
+	int const point_count = shape.num_verts;
+
+	// There's no need to test for a count below 0: the next step only passes a count that a real chunk of points agrees with,
+	// or a count of 0.
+	if (point_count > maxrotpts)
+	{
+		return false;
+	}
+
+	Shape_Vertex_Chunk * points = (Shape_Vertex_Chunk *) shape_chunk->lookup_single_child ("SHPRAWVT");
+
+	// With no chunk of points there's no list of points at all, so the shape can't claim to have any.
+	if (points ? points->num_verts != point_count : point_count != 0)
+	{
+		return false;
+	}
+
+	Shape_Polygon_Chunk * polygons = (Shape_Polygon_Chunk *) shape_chunk->lookup_single_child ("SHPPOLYS");
+	int const polygon_count = polygons ? polygons->num_polys : 0;
+
+	if (shape.num_polys != polygon_count)
+	{
+		return false;
+	}
+
+	// A second chunk of normals would replace the list, just as a second chunk of points would. None of the game's shapes has one.
+	if (shape_chunk->count_children ("SHPVNORM") > 1 || shape_chunk->count_children ("SHPPNORM") > 1)
+	{
+		return false;
+	}
+
+	Shape_Vertex_Normal_Chunk * point_normals = (Shape_Vertex_Normal_Chunk *) shape_chunk->lookup_single_child ("SHPVNORM");
+	Shape_Polygon_Normal_Chunk * polygon_normals = (Shape_Polygon_Normal_Chunk *) shape_chunk->lookup_single_child ("SHPPNORM");
+
+	if (!normals_are_valid (shape.v_normal_list, point_normals ? point_normals->num_verts : 0, point_count))
+	{
+		return false;
+	}
+
+	if (!normals_are_valid (shape.p_normal_list, polygon_normals ? polygon_normals->num_polys : 0, polygon_count))
+	{
+		return false;
+	}
+
+	for (int i = 0; i < polygon_count; i++)
+	{
+		// A polygon says where in the list its own normal is, and the game goes straight there. In the game's own levels each of
+		// the 952940 polygons points at its own place in the list.
+		if (shape.poly_list[i].normal_index < 0 || shape.poly_list[i].normal_index >= polygon_count)
+		{
+			return false;
+		}
+
+		for (int j = 0; j < shape.poly_list[i].num_verts; j++)
+		{
+			int const corner = shape.poly_list[i].vert_ind[j];
+
+			if (corner < 0 || corner >= point_count)
+			{
+				return false;
+			}
+		}
+
+		if (!texture_numbers_are_valid (shape, shape.poly_list[i]))
+		{
+			return false;
+		}
+	}
+
+	// A shape that morphs blends its points with those of its morph frames, and writes the result into MorphedPts, another
+	// list of a fixed size and a smaller one. The blend goes by the shape's count, so every frame needs that many points.
+	// All 860 morph frames in the game's own levels match their shape, and the biggest has 808 points. Sub-shapes anywhere
+	// else don't have to match: fragments of a shape are shapes of their own, and nearly all of them are smaller.
+	Chunk_With_Children * morphing = (Chunk_With_Children *) shape_chunk->lookup_single_child ("SHPMORPH");
+
+	if (morphing)
+	{
+		if (point_count > maxmorphPts)
+		{
+			return false;
+		}
+
+		List<Chunk *> frames;
+		morphing->lookup_child ("SUBSHAPE", frames);
+
+		for (LIF<Chunk *> frame(&frames); !frame.done(); frame.next())
+		{
+			if (((Shape_Sub_Shape_Chunk *) frame())->shape_data.num_verts != point_count)
+			{
+				return false;
+			}
+		}
+	}
+
+	Shape_Merge_Data_Chunk * merging = (Shape_Merge_Data_Chunk *) shape_chunk->lookup_single_child ("SHPMRGDT");
+
+	if (merging && !merge_data_is_valid (merging, shape.poly_list, polygon_count))
+	{
+		return false;
+	}
+
+	return animation_matches_shape (shape_chunk, point_count, polygon_count) && texture_animation_fits_shape (shape, shape_chunk);
+}
+
+// A module's extents, and the ball round it that the shadow pass trusts, come from the box stored with its shape, not from its points. In all
+// 12813 module shapes in the game's own levels the box is exact. Other shapes can't be held to this: 655 others have points outside
+// their box, by up to 5845, so only a module's shape is asked.
+bool Shape_Chunk::points_fit_box()
+{
+	for (int i = 0; i < shape_data.num_verts; i++)
+	{
+		ChunkVectorInt const & point = shape_data.v_list[i];
+
+		if (point.x < shape_data.min.x || point.x > shape_data.max.x
+			|| point.y < shape_data.min.y || point.y > shape_data.max.y
+			|| point.z < shape_data.min.z || point.z > shape_data.max.z)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool Shape_Chunk::numbers_are_valid()
+{
+	return shape_numbers_are_valid (shape_data, this);
 }
 
 List<Object_Chunk *> const & Shape_Chunk::list_assoc_objs()
@@ -200,58 +647,12 @@ void Shape_Chunk::destroy_auxiliary_chunks()
 		chlst.delete_first_entry();
 	}
 
-	lookup_child("CONSHAPE",chlst);
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-
 	lookup_child("ASALTTEX",chlst);
 	while (chlst.size())
 	{
 		delete chlst.first_entry();
 		chlst.delete_first_entry();
 	}
-
-	lookup_child("SHPPRPRO",chlst);
-	while (chlst.size())
-	{
-		delete chlst.first_entry();
-		chlst.delete_first_entry();
-	}
-}
-
-BOOL Shape_Chunk::file_equals(HANDLE &rif_file)
-{
-	unsigned long bytes_read;
-	int id;
-	Shape_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (FALSE);
-
-	// get header list
-	List<int> obhead;
-	list_chunks_in_file (&obhead, rif_file, "SHPHEAD1");
-
-	if (obhead.size() != 1) return FALSE;
-
-	// get object identifier
-	SetFilePointer(rif_file,obhead.first_entry() + 32,0,FILE_BEGIN);
-	ReadFile (rif_file, (long *) &(id), 4, &bytes_read, 0);
-
-	if (hdptr->file_id_num == id) return TRUE;
-
-	return (FALSE);
-}
-
-const char * Shape_Chunk::get_head_id()
-{
-	Shape_Header_Chunk * hdptr = get_header();
-
-	if (!hdptr) return (0);
-
-	return(hdptr->identifier);
 }
 
 void Shape_Chunk::set_lock_user (char * user)
@@ -316,25 +717,6 @@ BOOL Shape_Chunk::assoc_with_object_list(File_Chunk *fc)
 		}
 	}
 	return(TRUE);
-}
-
-Console_Shape_Chunk* Shape_Chunk::get_console_shape_data(Console_Type ct)
-{
-	List<Chunk*> chlist;
-	lookup_child("CONSHAPE",chlist);
-	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
-	{
-		Console_Shape_Chunk* csc=(Console_Shape_Chunk*)chlif();
-		List<Chunk*> chlist2;
-		csc->lookup_child("CONSTYPE",chlist2);
-		if(chlist2.size())
-		{
-			if(((Console_Type_Chunk*)chlist2.first_entry())->console==ct)
-				return csc;
-		}
-	}
-
-	return 0;//no console specific shape data
 }
 
 /////////////////////////////////////////
@@ -615,14 +997,53 @@ void Shape_Polygon_Normal_Chunk::fill_data_block(char * data_start)
 
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"REBSHAPE",Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPPOLYS",Shape_Polygon_Chunk,"CONSHAPE",Console_Shape_Chunk)
+
+// Reads one polygon from a level file. Each takes 36 bytes: four numbers, then five places for its corners, which end
+// with a -1. vert_ind holds 4 corners, so the reading stops there, whatever the file says: going by the -1 alone, a
+// polygon that left it out would be written past the end of vert_ind. A polygon with no -1 can't be real, so the level
+// is refused. Nor can one with fewer than 3 corners: the code that draws a polygon counts down its corners and stops at
+// the last, so with none it would never stop. Every one of the 952940 polygons in the game's own levels has 3 or 4 corners
+// and its -1.
+static void read_polygon (ChunkPoly & poly, const char * record)
+{
+	int const * const corners = (int const *) (record + 16);
+	int const most_corners = sizeof(poly.vert_ind) / sizeof(poly.vert_ind[0]);
+	int const fewest_corners = 3;
+
+	poly.engine_type = *((int *) record);
+	poly.normal_index = *((int *) (record + 4));
+	poly.flags = *((int *) (record + 8));
+	poly.colour = *((int *) (record + 12));
+
+	poly.num_verts = 0;
+
+	while (poly.num_verts < most_corners && corners[poly.num_verts] != -1)
+	{
+		poly.vert_ind[poly.num_verts] = corners[poly.num_verts];
+		poly.num_verts++;
+	}
+
+	if (poly.num_verts < fewest_corners || corners[poly.num_verts] != -1)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+
+	// The loader sets this flag itself on a polygon with texture animation (iflag_txanim), and the game then reads the polygon's list of texture coordinates
+	// as a table of pointers. From a file, it would turn numbers in the file into pointers. None of the 952,940 polygons in the game's own levels has it.
+	int const flag_only_the_loader_sets = 0x40000000;
+
+	if (poly.flags & flag_only_the_loader_sets)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	}
+}
 
 // from buffer
 Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pdata, size_t psize)
 : Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (psize / 36) // 9 * 4 bytes per polygon
 {
-	int i, j;
+	int i;
 
 	parent->shape_data_store->poly_list = new ChunkPoly [num_polys];
 	parent->shape_data_store->num_polys = num_polys;
@@ -631,18 +1052,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Chunk * parent, const char * pda
 
 	for (i=0; i<num_polys; i++)
 	{
-		parent->shape_data_store->poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		parent->shape_data_store->poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		parent->shape_data_store->poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		parent->shape_data_store->poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		parent->shape_data_store->poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			parent->shape_data_store->poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			parent->shape_data_store->poly_list[i].num_verts++;
-		}
+		read_polygon (parent->shape_data_store->poly_list[i], pdata + (36*i));
 	}
 }
 
@@ -650,7 +1060,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const 
 : Chunk (parent, "SHPPOLYS"),
 	poly_data (parent->shape_data_store->poly_list), num_polys (psize / 36) // 9 * 4 bytes per polygon
 {
-	int i, j;
+	int i;
 
 	parent->shape_data_store->poly_list = new ChunkPoly [num_polys];
 	parent->shape_data_store->num_polys = num_polys;
@@ -659,45 +1069,7 @@ Shape_Polygon_Chunk::Shape_Polygon_Chunk (Shape_Sub_Shape_Chunk * parent, const 
 
 	for (i=0; i<num_polys; i++)
 	{
-		parent->shape_data_store->poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		parent->shape_data_store->poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		parent->shape_data_store->poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		parent->shape_data_store->poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		parent->shape_data_store->poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			parent->shape_data_store->poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			parent->shape_data_store->poly_list[i].num_verts++;
-		}
-	}
-}
-
-Shape_Polygon_Chunk::Shape_Polygon_Chunk (Console_Shape_Chunk * parent, const char * pdata, size_t psize)
-: Chunk (parent, "SHPPOLYS"),
-	poly_data(0), num_polys (psize / 36) // 9 * 4 bytes per polygon
-{
-	int i, j;
-
-	ChunkPoly* poly_list = new ChunkPoly [num_polys];
-
-	*((ChunkPoly **) &poly_data) =poly_list;
-
-	for (i=0; i<num_polys; i++)
-	{
-		poly_list[i].engine_type = *((int *) (pdata + (36*i)));
-		poly_list[i].normal_index = *((int *) (pdata + (36*i) + 4));
-		poly_list[i].flags = *((int *) (pdata + (36*i) + 8));
-		poly_list[i].colour = *((int *) (pdata + (36*i) + 12));
-
-		poly_list[i].num_verts = 0;
-
-		for (j=0; *((int *) (pdata + (36*i) + 16 + (j*4))) != -1; j++)
-		{
-			poly_list[i].vert_ind[j] = *((int *) (pdata + (36*i) + 16 + (j*4)));
-			poly_list[i].num_verts++;
-		}
+		read_polygon (parent->shape_data_store->poly_list[i], pdata + (36*i));
 	}
 }
 
@@ -743,7 +1115,9 @@ void Shape_Polygon_Chunk::fill_data_block(char * data_start)
 /////////////////////////////////////////
 //Class Shape_Centre_Chunk :
 
-RIF_IMPLEMENT_DYNCREATE("SHPCENTR",Shape_Centre_Chunk)
+// This constructor writes into its parent's shape, so it can only be made under a shape. All 28193 of these in the game's own levels are.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPCENTR",Shape_Centre_Chunk,"REBSHAPE",Shape_Chunk,16)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPCENTR",Shape_Centre_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,16)
 
 Shape_Centre_Chunk::Shape_Centre_Chunk(Chunk_With_Children* parent,const char* data, size_t datasize)
 :Chunk (parent,"SHPCENTR")
@@ -803,90 +1177,104 @@ void Shape_Centre_Chunk::fill_data_block(char * data_start)
 // the shape chunks data will automatically be updated by it is created
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"REBSHAPE",Shape_Chunk)
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPUVCRD",Shape_UV_Coord_Chunk,"CONSHAPE",Console_Shape_Chunk)
+
+// How many lists of texture coordinates a chunk says it holds, which sizes the list the game makes. Each list takes at least 4
+// bytes, so a count that couldn't fit in the chunk can't be real, and the level is refused. Turned into an unsigned number, a
+// negative count becomes a huge one, so the same test refuses those too.
+static int count_uv_lists (const char * uvdata, size_t uvsize)
+{
+	size_t const count_bytes = sizeof(int);
+	size_t const smallest_list = sizeof(int);
+
+	if (uvsize < count_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	int const count = *((int *) uvdata);
+
+	if ((size_t) count > (uvsize - count_bytes) / smallest_list)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return 0;
+	}
+
+	return count;
+}
+
+// Reads the lists of texture coordinates from a level file. Each is a number of corners, then two numbers for each corner.
+// A list has 4 places, so going by the file's number alone, a list with more would be written past the end of its places. So
+// that number has to fit the places, and everything read has to be inside the chunk, or the level is refused. All 951735 lists
+// in the game's own levels have 3 or 4 corners or none, and all 30671 chunks hold exactly what they say.
+static void read_uv_lists (ChunkUV_List * lists, int count, const char * uvdata, size_t uvsize)
+{
+	size_t const most_corners = sizeof(lists[0].vert) / sizeof(lists[0].vert[0]);
+	const char * const end = uvdata + uvsize;
+
+	// a list that's never reached stays empty
+	for (int i = 0; i < count; i++)
+	{
+		lists[i].num_verts = 0;
+	}
+
+	// Step past the count. With no lists there is nothing after it to read, and the chunk may end right here.
+	if (count)
+	{
+		uvdata += sizeof(int);
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		if ((size_t) (end - uvdata) < sizeof(int))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		int const corners = *((int *) uvdata);
+		uvdata += sizeof(int);
+
+		// Turned into an unsigned number, a negative count of corners becomes a huge one, so this refuses those too.
+		if ((size_t) corners > most_corners || (size_t) (end - uvdata) < corners * sizeof(ChunkUV))
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			return;
+		}
+
+		lists[i].num_verts = corners;
+
+		for (int j = 0; j < corners; j++)
+		{
+			lists[i].vert[j] = *((ChunkUV *) uvdata);
+			uvdata += sizeof(ChunkUV);
+		}
+	}
+}
 
 // from buffer
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
+Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Chunk * parent, const char * uvdata, size_t uvsize)
 : Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
+uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 {
-	int i,j;
-
-	if (num_uvs)
-	{
-		parent->shape_data_store->uv_list = new ChunkUV_List[num_uvs];
-	}
-	else
-	{
-		parent->shape_data_store->uv_list = 0;
-	}
+	parent->shape_data_store->uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
 	*((ChunkUV_List**) &uv_data) = parent->shape_data_store->uv_list;
 
 	parent->shape_data_store->num_uvs = num_uvs;
 
-	uvdata += 4;
-
-	for (i = 0; i < num_uvs; i++)
-	{
-		parent->shape_data_store->uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<parent->shape_data_store->uv_list[i].num_verts; j++)
-		{
-			parent->shape_data_store->uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
+	read_uv_lists (parent->shape_data_store->uv_list, num_uvs, uvdata, uvsize);
 }
 
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
+Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Shape_Sub_Shape_Chunk * parent, const char * uvdata, size_t uvsize)
 : Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
+uv_data (NULL), num_uvs (count_uv_lists (uvdata, uvsize))
 {
-	int i,j;
-
-	parent->shape_data_store->uv_list = new ChunkUV_List[num_uvs];
+	parent->shape_data_store->uv_list = num_uvs ? new ChunkUV_List[num_uvs] : 0;
 	*((ChunkUV_List**) &uv_data) = parent->shape_data_store->uv_list;
 
 	parent->shape_data_store->num_uvs = num_uvs;
 
-	uvdata += 4;
-
-	for (i=0;i<num_uvs;i++)
-	{
-		parent->shape_data_store->uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<parent->shape_data_store->uv_list[i].num_verts; j++) 
-		{
-			parent->shape_data_store->uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
-}
-
-Shape_UV_Coord_Chunk::Shape_UV_Coord_Chunk (Console_Shape_Chunk * parent, const char * uvdata, size_t /*uvsize*/)
-: Chunk (parent, "SHPUVCRD"),
-uv_data (NULL), num_uvs (*((int *) uvdata))
-{
-	int i,j;
-
-	ChunkUV_List* uv_list= new ChunkUV_List[num_uvs];
-	*((ChunkUV_List**) &uv_data) = uv_list;
-
-	uvdata += 4;
-
-	for (i=0;i<num_uvs;i++)
-	{
-		uv_list[i].num_verts = *((int *) uvdata);
-		uvdata += 4;
-
-		for (j=0; j<uv_list[i].num_verts; j++)
-		{
-			uv_list[i].vert[j] = *((ChunkUV *)uvdata);
-			uvdata += sizeof(ChunkUV);
-		}
-	}
+	read_uv_lists (parent->shape_data_store->uv_list, num_uvs, uvdata, uvsize);
 }
 
 BOOL Shape_UV_Coord_Chunk::output_chunk (HANDLE &hand)
@@ -948,16 +1336,18 @@ size_t Shape_UV_Coord_Chunk::size_chunk ()
 // These can only be children of Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"REBSHAPE",Shape_Chunk)
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPTEXFN",Shape_Texture_Filenames_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPTEXFN",Shape_Texture_Filenames_Chunk,"REBSHAPE",Shape_Chunk,4)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPTEXFN",Shape_Texture_Filenames_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,4)
 // from buffer
-Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Chunk * parent, const char * tfndata, size_t /*tfnsize*/)
+Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Chunk * parent, const char * tfndata, size_t tfnsize)
 : Chunk (parent, "SHPTEXFN"),
-tex_fns (), num_tex_fns (*((int *) tfndata))
+tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (tfnsize, sizeof(int))))
 {
 	int i;
+	char const * const start = tfndata;
 
-	parent->shape_data_store->texture_fns = new char * [num_tex_fns];
+	// the () makes every place start empty: if the list stops early, the ones it didn't reach are still freed
+	parent->shape_data_store->texture_fns = new char * [num_tex_fns] ();
 	*((char***) &tex_fns) = parent->shape_data_store->texture_fns;
 
 	parent->shape_data_store->num_texfiles = num_tex_fns;
@@ -966,19 +1356,30 @@ tex_fns (), num_tex_fns (*((int *) tfndata))
 
 	for (i=0; i<num_tex_fns; i++)
 	{
-		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
-		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
-		tfndata += (strlen(tfndata)+1);
+		// A name can take more than the one byte the count was measured with. The shape then only counts the names it really has, because a copy of it
+		// reads every name it counts.
+		if ((size_t)(tfndata - start) + 1 > tfnsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			parent->shape_data_store->num_texfiles = i;
+			break;
+		}
+
+		size_t length = 0;
+		parent->shape_data_store->texture_fns[i] = CopyNameFromChunk(start, tfnsize, tfndata, &length);
+		tfndata += length + 1;
 	}
 }
 
-Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Sub_Shape_Chunk * parent, const char * tfndata, size_t /*tfnsize*/)
+Shape_Texture_Filenames_Chunk::Shape_Texture_Filenames_Chunk (Shape_Sub_Shape_Chunk * parent, const char * tfndata, size_t tfnsize)
 : Chunk (parent, "SHPTEXFN"),
-tex_fns (), num_tex_fns (*((int *) tfndata))
+tex_fns (), num_tex_fns (CountIfItFits (*((int *) tfndata), 1, BytesLeftAfter (tfnsize, sizeof(int))))
 {
 	int i;
+	char const * const start = tfndata;
 
-	parent->shape_data_store->texture_fns = new char * [num_tex_fns];
+	// the () makes every place start empty: if the list stops early, the ones it didn't reach are still freed
+	parent->shape_data_store->texture_fns = new char * [num_tex_fns] ();
 	*((char***) &tex_fns) = parent->shape_data_store->texture_fns;
 
 	parent->shape_data_store->num_texfiles = num_tex_fns;
@@ -987,9 +1388,18 @@ tex_fns (), num_tex_fns (*((int *) tfndata))
 
 	for (i=0; i<num_tex_fns; i++)
 	{
-		parent->shape_data_store->texture_fns[i] = new char [strlen(tfndata)+1];
-		strcpy (parent->shape_data_store->texture_fns[i], tfndata);
-		tfndata += (strlen(tfndata)+1);
+		// A name can take more than the one byte the count was measured with. The shape then only counts the names it really has, because a copy of it
+		// reads every name it counts.
+		if ((size_t)(tfndata - start) + 1 > tfnsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			parent->shape_data_store->num_texfiles = i;
+			break;
+		}
+
+		size_t length = 0;
+		parent->shape_data_store->texture_fns[i] = CopyNameFromChunk(start, tfnsize, tfndata, &length);
+		tfndata += length + 1;
 	}
 }
 
@@ -1050,13 +1460,14 @@ size_t Shape_Texture_Filenames_Chunk::size_chunk()
 
 // These can only be children of Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SHPHEAD1",Shape_Header_Chunk,"REBSHAPE",Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SHPHEAD1",Shape_Header_Chunk,"REBSHAPE",Shape_Chunk,64)
 
 
-Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata, size_t /*hsize*/)
+Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata, size_t hsize)
 	: Chunk (parent, "SHPHEAD1"),
 	shape_data (parent->shape_data_store)
 {
+	char const * const start = hdata;
 	int num_as_obj;
 
 	flags = *((int *) hdata);
@@ -1094,17 +1505,23 @@ Shape_Header_Chunk::Shape_Header_Chunk (Shape_Chunk * parent, const char * hdata
 	version_no = *((int *) hdata);
 	hdata+=4;
 
-	num_as_obj = *((int *) hdata);
-	hdata+=4;
+	num_as_obj = ReadListCount (start, hdata, hsize, 1);
 
 	char * obj_store;
 
-	for (int i = 0; i< num_as_obj; i++) 
+	for (int i = 0; i< num_as_obj; i++)
 	{
-		obj_store = new char [strlen (hdata) +1];
-		strcpy (obj_store, (hdata));
+		// a name can take more than the one byte the count was measured with
+		if ((size_t)(hdata - start) + 1 > hsize)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+			break;
+		}
+
+		size_t length = 0;
+		obj_store = CopyNameFromChunk(start, hsize, hdata, &length);
 		object_names_store.add_entry(obj_store);
-		hdata += (strlen (hdata)+1);
+		hdata += length + 1;
 	}
 }
 
@@ -1347,17 +1764,17 @@ const char* Shape_External_File_Chunk::get_shape_name()
 }
 
 /////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SHPEXTFN",Shape_External_Filename_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHPEXTFN",Shape_External_Filename_Chunk,12)
 
-Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t /*fsize*/)
+Shape_External_Filename_Chunk::Shape_External_Filename_Chunk (Chunk_With_Children * parent, const char *fdata, size_t const chunk_bytes)
 : Chunk (parent, "SHPEXTFN")
 {
+	char const * const chunk_start = fdata;
 	rescale = *((double *) fdata);
 	fdata += 8;
 	version_no = *((int *) fdata);
 	fdata += 4;
-	file_name = new char [strlen(fdata)+1];
-	strcpy (file_name, fdata);
+	file_name = CopyNameFromChunk(chunk_start, chunk_bytes, fdata);
 }
 
 Shape_External_Filename_Chunk::~Shape_External_Filename_Chunk()
@@ -1387,7 +1804,7 @@ void Shape_External_Filename_Chunk::fill_data_block (char *data_start)
 }
 
 ///////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("EXTOBJNM",Shape_External_Object_Name_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("EXTOBJNM",Shape_External_Object_Name_Chunk,4)
 
 Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk(Chunk_With_Children * parent, const char * oname)
 : Chunk (parent, "EXTOBJNM")
@@ -1410,13 +1827,13 @@ Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk(Chunk_With_Ch
 	}
 }
 
-Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk (Chunk_With_Children * parent, const char *data, size_t /*fsize*/)
+Shape_External_Object_Name_Chunk::Shape_External_Object_Name_Chunk (Chunk_With_Children * parent, const char *data, size_t const chunk_bytes)
 : Chunk (parent, "EXTOBJNM")
 {
+	char const * const chunk_start = data;
 	pad=*(int*)data;
 	data+=4;
-	object_name = new char [strlen(data)+1];
-	strcpy (object_name, data);
+	object_name = CopyNameFromChunk(chunk_start, chunk_bytes, data);
 	shape_name=0;
 }
 
@@ -1537,20 +1954,50 @@ void Shape_Morphing_Data_Chunk::prepare_for_output()
 
 RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("FRMMORPH",Shape_Morphing_Frame_Data_Chunk,"SHPMORPH",Shape_Morphing_Data_Chunk)
 
-Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *data, size_t /*size*/)
+// A chunk of morph frames holds three numbers, the last a count of frames, and then three numbers for each frame. The count comes
+// from the level file, and this goes on to make a list of that size and read the file into it. A count too big for the chunk would
+// read past its end, and one big enough would wrap round when it's multiplied, leaving a tiny list that the loop below writes far
+// past the end of. So the chunk has to be exactly the size its count says. All 761 of these in the game's own levels are.
+Shape_Morphing_Frame_Data_Chunk::Shape_Morphing_Frame_Data_Chunk (Shape_Morphing_Data_Chunk * parent,const char *data, size_t size)
 : Chunk (parent, "FRMMORPH")
 {
+	size_t const numbers_bytes = 12;
+	unsigned long long const bytes_for_each_frame = 12;
+
+	// The game keeps a count of frames in the top half of a number (mph_maxframes, in chunk_load.cpp), so it can't count more than
+	// this. The most in any chunk in the game's own levels is 2.
+	int const most_frames = 32767;
+
+	a_flags = 0;
+	a_speed = 0;
+	num_frames = 0;
+	frame_store = 0;
+
+	if (size < numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	a_flags = *((int *)data);
 	data +=4;
 	a_speed = *((int *)data);
 	data +=4;
-	num_frames = *((int *)data);
+	int const count = *((int *)data);
 	data +=4;
+
+	// These numbers are wide enough that the sum can't wrap round, and a negative count turns into a huge number, so it's refused too.
+	if (count > most_frames || (unsigned long long) count * bytes_for_each_frame != size - numbers_bytes)
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	num_frames = count;
 
 	if (num_frames)
 		frame_store = new int [num_frames * 3];
-	else 
-		frame_store=0;
+
 	for (int i=0; i<num_frames; i++)
 	{
 		frame_store[i*3] = *((int *)data);
@@ -1738,7 +2185,6 @@ Children for Shape_Sub_Shape_Chunk :
 "PNOTINBB"		Poly_Not_In_Bounding_Box_Chunk
 "ANSHCEN2"		Anim_Shape_Centre_Chunk
 "ASALTTEX"		Anim_Shape_Alternate_Texturing_Chunk
-"SHPPRPRO"		Shape_Preprocessed_Data_Chunk	
 
 
 "SHPFNAME"		Shape_Name_Chunk
@@ -1770,6 +2216,23 @@ Shape_Sub_Shape_Chunk::~Shape_Sub_Shape_Chunk ()
 {
 }
 
+// A sub-shape becomes a shape in the game like any other, so it has to pass the same checks. It can sit in several
+// different places inside a shape, and this step reaches every one of them. load_rif sees the error and stops the level.
+// A sub-shape that fails stops here, because the chunks inside it use its numbers as they stand, and one of them writes.
+//
+// A sub-shape can't have texture animation: the game treats whatever holds that chunk as a Shape_Chunk, which a sub-shape isn't, and none of the
+// 418 of them in the game's own levels is in a sub-shape.
+void Shape_Sub_Shape_Chunk::post_input_processing()
+{
+	if (!shape_numbers_are_valid (shape_data, this) || count_children ("TEXTANIM"))
+	{
+		GetRootChunk()->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
+	Chunk_With_Children::post_input_processing();
+}
+
 Shape_Sub_Shape_Header_Chunk * Shape_Sub_Shape_Chunk::get_header()
 {
 	return (Shape_Sub_Shape_Header_Chunk *) this->lookup_single_child ("SUBSHPHD");
@@ -1789,30 +2252,11 @@ const char * Shape_Sub_Shape_Chunk::get_shape_name()
 	}
 }
 
-Console_Shape_Chunk* Shape_Sub_Shape_Chunk::get_console_shape_data(Console_Type ct)
-{
-	List<Chunk*> chlist;
-	lookup_child("CONSHAPE",chlist);
-	for(LIF<Chunk*> chlif(&chlist);!chlif.done();chlif.next())
-	{
-		Console_Shape_Chunk* csc=(Console_Shape_Chunk*)chlif();
-		List<Chunk*> chlist2;
-		csc->lookup_child("CONSTYPE",chlist2);
-		if(chlist2.size())
-		{
-			if(((Console_Type_Chunk*)chlist2.first_entry())->console==ct)
-				return csc;
-		}
-	}
-
-	return 0;//no console specific shape data
-}
-
 /////////////////////////////////////////
 
 // Class Shape_Sub_Shape_Header_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("SUBSHPHD",Shape_Sub_Shape_Header_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("SUBSHPHD",Shape_Sub_Shape_Header_Chunk,"SUBSHAPE",Shape_Sub_Shape_Chunk,44)
 
 // These can only be children of Shape_Sub_Shape_Chunks
 // the shape chunks data will automatically be updated by it is created
@@ -1903,7 +2347,7 @@ void Shape_Sub_Shape_Header_Chunk::fill_data_block(char * data_start)
 
 // Class Shape_Poly_Change_Info_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("SHPPCINF",Shape_Poly_Change_Info_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("SHPPCINF",Shape_Poly_Change_Info_Chunk,4)
 
 void Shape_Poly_Change_Info_Chunk::fill_data_block(char * data_start)
 {
@@ -1939,16 +2383,16 @@ void Shape_Poly_Change_Info_Chunk::fill_data_block(char * data_start)
 	}
 }
 
-Shape_Poly_Change_Info_Chunk::Shape_Poly_Change_Info_Chunk (Chunk_With_Children * parent,const char * data, size_t /*size*/)
+Shape_Poly_Change_Info_Chunk::Shape_Poly_Change_Info_Chunk (Chunk_With_Children * parent,const char * data, size_t size)
 : Chunk (parent, "SHPPCINF")
 {
+	char const * const start = data;
+
 	original_num_verts = *((int *) data);
 
 	data += 4;
 
-	int n_entries = *((int *) data);
-
-	data += 4;
+	int n_entries = ReadListCount (start, data, size, 3 * sizeof(int));
 
 	for (int i=0; i<n_entries; i++)
 	{
@@ -1979,11 +2423,10 @@ Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * s
 	strcpy (shape_name, sname);
 }
 
-Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * sndata, size_t /*rsize*/)
+Shape_Name_Chunk::Shape_Name_Chunk (Chunk_With_Children * parent, const char * sndata, size_t const chunk_bytes)
 : Chunk (parent, "SHPFNAME")
 {
-	shape_name = new char [strlen(sndata)+1];
-	strcpy (shape_name, sndata);
+	shape_name = CopyNameFromChunk(sndata, chunk_bytes, sndata);
 }
 
 Shape_Name_Chunk::~Shape_Name_Chunk ()
@@ -2023,7 +2466,7 @@ Children for Shape_Fragments_Chunk :
 /////////////////////////////////////////
 
 // Class Shape_Fragments_Data_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("FRAGDATA",Shape_Fragments_Data_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("FRAGDATA",Shape_Fragments_Data_Chunk,16)
 
 void Shape_Fragments_Data_Chunk::fill_data_block (char * data_start)
 {
@@ -2074,7 +2517,7 @@ Shape_Fragments_Data_Chunk::Shape_Fragments_Data_Chunk (Chunk_With_Children * pa
 /////////////////////////////////////////
 
 // Class Shape_Fragments_Location_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("FRAGLOCN",Shape_Fragment_Location_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("FRAGLOCN",Shape_Fragment_Location_Chunk,28)
 
 void Shape_Fragment_Location_Chunk::fill_data_block (char * data_start)
 {
@@ -2139,18 +2582,16 @@ Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* parent
 	pad1=pad2-0;
 }
 
-Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t const )
+Shape_Fragment_Type_Chunk::Shape_Fragment_Type_Chunk(Chunk_With_Children* const parent,const char* data,size_t const chunk_bytes)
 :Chunk(parent,"SHPFRGTP")
 {
-	int length=strlen(data)+1;
-	frag_type_name=new char[length];
-	strcpy(frag_type_name,data);
-	data+=(length+3)&~3;
+	char const * const start=data;
+	size_t length=0;
+	frag_type_name=CopyNameFromChunk(start,chunk_bytes,data,&length);
+	data+=(length+4)&~3;
 
-	pad1=*(int*)data;
-	data+=4;
-	pad2=*(int*)data;
-	data+=4;
+	pad1=ReadFromChunk<int>(start,chunk_bytes,data);
+	pad2=ReadFromChunk<int>(start,chunk_bytes,data);
 }
 
 Shape_Fragment_Type_Chunk::~Shape_Fragment_Type_Chunk()
@@ -2252,7 +2693,7 @@ int Anim_Shape_Sequence_Chunk::ConstructSequenceDataFromChildren()
 
 		Anim_Shape_Frame_Data_Chunk* asfdc=(Anim_Shape_Frame_Data_Chunk*)asfc->lookup_single_child("ANIFRADT");
 		if(!asfdc) return 0;
-		if(asfdc->FrameNum>=sequence_data_store->NumFrames) return 0;
+		if(asfdc->FrameNum<0 || asfdc->FrameNum>=sequence_data_store->NumFrames) return 0;
 
 		if(sequence_data_store->Frames[asfdc->FrameNum])return 0;
 		sequence_data_store->Frames[asfdc->FrameNum]=new ChunkAnimFrame;
@@ -2359,11 +2800,12 @@ Anim_Shape_Frame_Chunk::Anim_Shape_Frame_Chunk(Anim_Shape_Sequence_Chunk *const 
 
 // Class Anim_Shape_Sequence_Data_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("ANISEQDT",Anim_Shape_Sequence_Data_Chunk,"ANIMSEQU",Anim_Shape_Sequence_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("ANISEQDT",Anim_Shape_Sequence_Data_Chunk,"ANIMSEQU",Anim_Shape_Sequence_Chunk,20)
 
-Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char* data,size_t const/*datasize*/)
+Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequence_Chunk* const parent,const char* data,size_t const chunk_bytes)
 : Chunk(parent, "ANISEQDT")
 {
+	char const * const chunk_start = data;
 	SequenceNum=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
@@ -2374,8 +2816,7 @@ Anim_Shape_Sequence_Data_Chunk::Anim_Shape_Sequence_Data_Chunk(Anim_Shape_Sequen
 	data+=4;
 	pad4=*(int*)data;
 	data+=4;
-	name=new char[strlen(data)+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 void Anim_Shape_Sequence_Data_Chunk::fill_data_block(char* datastart)
@@ -2410,11 +2851,12 @@ size_t Anim_Shape_Sequence_Data_Chunk::size_chunk()
 /////////////////////////////////////////
 
 // Class Anim_Shape_Frame_Data_Chunk functions
-RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("ANIFRADT",Anim_Shape_Frame_Data_Chunk,"ANIMFRAM",Anim_Shape_Frame_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("ANIFRADT",Anim_Shape_Frame_Data_Chunk,"ANIMFRAM",Anim_Shape_Frame_Chunk,20)
 
-Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,const char* data,size_t const /*datasize*/)
+Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk* const parent,const char* data,size_t const chunk_bytes)
 : Chunk(parent, "ANIFRADT")
 {
+	char const * const chunk_start = data;
 	FrameNum=*(int*)data;
 	data+=4;
 	flags=*(int*)data;
@@ -2425,8 +2867,7 @@ Anim_Shape_Frame_Data_Chunk::Anim_Shape_Frame_Data_Chunk(Anim_Shape_Frame_Chunk*
 	data+=4;
 	pad4=*(int*)data;
 	data+=4;
-	name=new char[strlen(data)+1];
-	strcpy(name,data);
+	name=CopyNameFromChunk(chunk_start,chunk_bytes,data);
 }
 
 
@@ -2488,7 +2929,7 @@ Anim_Shape_Alternate_Texturing_Chunk::Anim_Shape_Alternate_Texturing_Chunk(Chunk
 /////////////////////////////////////////
 
 // Class Poly_Not_In_Bounding_Box_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("PNOTINBB",Poly_Not_In_Bounding_Box_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PNOTINBB",Poly_Not_In_Bounding_Box_Chunk,8)
 
 Poly_Not_In_Bounding_Box_Chunk::Poly_Not_In_Bounding_Box_Chunk(Chunk_With_Children* const parent,const char* data,size_t const datasize)
 :Chunk(parent,"PNOTINBB")
@@ -2536,7 +2977,7 @@ void Poly_Not_In_Bounding_Box_Chunk::fill_data_block(char* data_start)
 
 // Class Anim_Shape_Centre_Chunk functions
 
-RIF_IMPLEMENT_DYNCREATE("ANSHCEN2",Anim_Shape_Centre_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("ANSHCEN2",Anim_Shape_Centre_Chunk,20)
 
 Anim_Shape_Centre_Chunk::Anim_Shape_Centre_Chunk(Chunk_With_Children* const parent,const char* data,size_t const /*datasize*/)
 :Chunk(parent,"ANSHCEN2")
@@ -2575,201 +3016,3 @@ void Anim_Shape_Centre_Chunk::fill_data_block(char* data_start)
 	data_start+=4;
 	*(int*)data_start=pad2;
 }
-
-
-
-/////////////////////////////////////////
-
-// Class Console_Shape_Chunk functions
-
-/*
-Children for Console_Shape_Chunk :
-
-"SHPPOLYS"		Shape_Polygon_Chunk
-"SHPUVCRD"		Shape_UV_Coord_Chunk
-"TEXTANIM"		Animation_Chunk
-
-"CONSTYPE"		Console_Type_Chunk
-*/
-
-
-Console_Shape_Chunk::Console_Shape_Chunk(Chunk_With_Children * const parent, const char *data, size_t  size)
-: Chunk_With_Children (parent, "CONSHAPE")
-{
-	shape_data_store=(ChunkShape*)&shape_data;
-	
-	const char * buffer_ptr = data;
-
-	while ((data-buffer_ptr)< (signed)size)
-	{
-		if (!ChildChunkFits(data, buffer_ptr, (signed)size))
-		{
-			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
-			break;
-
-		DynCreate(data);
-		data += *(int *)(data + 8);
-		}
-	}
-}
-
-void Console_Shape_Chunk::generate_console_chunkshape()
-{
-	//sort out the chunkshape
-	if(!strcmp(parent->identifier,"REBSHAPE"))
-	{
-		*shape_data_store=((Shape_Chunk*)parent)->shape_data;
-	}
-	else if(!strcmp(parent->identifier,"SUBSHAPE"))
-	{
-		*shape_data_store=((Shape_Sub_Shape_Chunk*)parent)->shape_data;
-	}
-	else
-	{
-		delete this;
-		return;
-	}
-	
-	Shape_Polygon_Chunk* spc=(Shape_Polygon_Chunk*)lookup_single_child("SHPPOLYS");
-	if(spc)
-	{
-		if(spc->num_polys!=shape_data_store->num_polys)
-		{
-			//console shape is no longer valid.kill it.
-			delete this;
-			return;
-		}
-		
-		ChunkPoly* poly_list=shape_data_store->poly_list;
-		shape_data_store->poly_list=(ChunkPoly*)spc->poly_data;
-		for(int i=0;i<shape_data_store->num_polys;i++)
-		{
-			for(int j=0;j<4;j++)
-			{
-				shape_data_store->poly_list[i].vert_ind[j]=poly_list[i].vert_ind[j];
-			}
-		}
-		delete[] poly_list;
-	}
-	Shape_UV_Coord_Chunk* succ=(Shape_UV_Coord_Chunk*)lookup_single_child("SHPUVCRD");
-	if(succ)
-	{
-		delete[] shape_data_store->uv_list;
-		shape_data_store->uv_list=(ChunkUV_List*)succ->uv_data;
-		shape_data_store->num_uvs=succ->num_uvs;
-	}
-}
-
-
-/////////////////////////////////////////
-
-// Class Console_Type_Chunk functions
-RIF_IMPLEMENT_DYNCREATE("CONSTYPE",Console_Type_Chunk)
-
-void Console_Type_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-	data_start += 8;
-	*((int *) data_start) = chunk_size;
-	data_start += 4;
-
-	*(int*)data_start=(int)console;
-}
-
-
-/////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("SHPPRPRO",Shape_Preprocessed_Data_Chunk)
-
-Shape_Preprocessed_Data_Chunk::Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent, const char * data, size_t )
-:Chunk(parent,"SHPPRPRO")
-{
-	block_size=*(int*)data;
-	data+=4;
-	first_pointer=*(int*)data;
-	data+=4;
-
-	if (block_size)
-	{
-		memory_block = new unsigned int[block_size];
-		memcpy(memory_block, data,block_size*4);
-		data += block_size*4;
-	}
-	else
-	{
-		memory_block = 0;
-	}
-	
-	num_extra_data = *(int*)data;
-	data += 4;
-	
-	if (num_extra_data)
-	{
-		extra_data = new int[num_extra_data];
-		memcpy(extra_data, data,num_extra_data*4);
-	}
-	else
-	{
-		extra_data = 0;
-	}
-}
-
-Shape_Preprocessed_Data_Chunk::Shape_Preprocessed_Data_Chunk (Chunk_With_Children * parent,int _block_size,int _first_pointer,unsigned int* _memory_block)
-:Chunk(parent,"SHPPRPRO")
-{
-	num_extra_data = 0;
-	extra_data = 0;
-	block_size = _block_size;
-	first_pointer = _first_pointer;
-	
-	if (block_size)
-	{
-		memory_block = new unsigned int[block_size];
-		memcpy(memory_block, _memory_block, block_size*4);
-	}
-	else
-	{
-		memory_block = 0;
-	}
-}
-
-void Shape_Preprocessed_Data_Chunk::fill_data_block(char* data_start)
-{
-	strncpy (data_start, identifier, 8);
-	data_start += 8;
-	*((int *) data_start) = chunk_size;
-	data_start += 4;
-
-	*(int*)data_start=block_size;
-	data_start+=4;
-	*(int*)data_start=first_pointer;
-	data_start+=4;
-
-	memcpy(data_start,memory_block,4*block_size);
-	data_start+=4*block_size;
-
-	*(int*)data_start=num_extra_data;
-	data_start+=4;
-	memcpy(data_start,extra_data,4*num_extra_data);
-}
-
-// bjd - FIXME
-void* Shape_Preprocessed_Data_Chunk::GetMemoryBlock()
-{
-	void* retval = memory_block;
-
-	unsigned int* current = (unsigned int*)&first_pointer;
-	unsigned int* next;
-
-	while((*current>>16) != 0xffff)
-	{
-		next = &memory_block[(*current)>>16];
-		*current = (unsigned int)&memory_block[(*current)&0xffff];
-		current = next;
-	}
-	*current = (unsigned int)&memory_block[(*current)&0xffff];
-
-	memory_block = 0;
-	block_size = 0;
-	return retval;
-}
-

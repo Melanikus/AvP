@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
+//   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
 
 #ifndef _included_enumchnk_hpp_
 #define _included_enumchnk_hpp_
@@ -21,8 +22,6 @@ public:
 
 	// functions for the locking functionality
 
-	BOOL file_equals (HANDLE &);
-	const char * get_head_id();
 	void set_lock_user(char *);
 	
 	void post_input_processing();

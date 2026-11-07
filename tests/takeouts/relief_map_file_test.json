@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "HEIGHT: red does not count",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)pixel[0] + pixel[1] + pixel[2]",
+					"to": "(uint32_t)pixel[0] + pixel[1] + pixel[1]"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: blue does not count",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)pixel[0] + pixel[1] + pixel[2]",
+					"to": "(uint32_t)pixel[2] + pixel[1] + pixel[2]"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: does not round",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint8_t)((sum + 1) / 3)",
+					"to": "(uint8_t)(sum / 3)"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: alpha is left as it was",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\tpixel[2] = height;\n\tpixel[3] = 255;\n}",
+					"to": "\tpixel[2] = height;\n}"
+				}
+			]
+		},
+		{
+			"name": "HEIGHT: only one colour holds it",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\tpixel[0] = height;\n\tpixel[1] = height;\n\tpixel[2] = height;\n\tpixel[3] = 255;\n}",
+					"to": "\tpixel[0] = height;\n\tpixel[3] = 255;\n}"
+				}
+			]
+		},
+		{
+			"name": "COPY: does not round",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint8_t)((sum + 2) / 4)",
+					"to": "(uint8_t)(sum / 4)"
+				}
+			]
+		},
+		{
+			"name": "COPY: takes three of four",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "(uint32_t)row0[0] + row0[4] + row1[0] + row1[4]",
+					"to": "(uint32_t)row0[0] + row0[4] + row1[0] + row1[0]"
+				}
+			]
+		},
+		{
+			"name": "COPY: copies are in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "uint8_t *pixel = to + ((size_t)y * toSide + x) * 4;\n\n\t\t\tpixel[0] = height;",
+					"to": "uint8_t *pixel = to + ((size_t)x * toSide + y) * 4;\n\n\t\t\tpixel[0] = height;"
+				}
+			]
+		},
+		{
+			"name": "COPY: only one colour holds it",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\t\t\tpixel[0] = height;\n\t\t\tpixel[1] = height;\n\t\t\tpixel[2] = height;\n",
+					"to": "\t\t\tpixel[0] = height;\n"
+				}
+			]
+		},
+		{
+			"name": "COPY: alpha is left as it was",
+			"changes": [
+				{
+					"file": "3dc/relief_map_file.h",
+					"from": "\t\t\tpixel[2] = height;\n\t\t\tpixel[3] = 255;\n",
+					"to": "\t\t\tpixel[2] = height;\n"
+				}
+			]
+		}
+	]
+}

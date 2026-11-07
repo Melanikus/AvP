@@ -1,3 +1,8 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a marine's weapon named by a level or save file is checked: a level's gets the ordinary marine's, a save's part is left out
+//   a marine or civilian whose model isn't loaded isn't made, and the log says which model, instead of the game reading
+//   through a model that isn't there (MODEL-NULL-1; found through Bobblen's avp-forever, commit 207704e, a civilian
+//   crash in skirmish; written fresh here)
 /*------------------------Patrick 2/7/97-----------------------------
   Source file for Marine and Seal AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -6,6 +11,10 @@
 //   deleted old alternative versions of seven if-statements that were switched off with #if 0 (or #if 1 / #else)
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
+//   a request can only send a marine along a path that exists
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a marine firing with no target no longer works out its aim from numbers nothing set;
+//   a target standing exactly on the marine no longer divides by nothing
 #include "3dc.h"
 
 #include "inline.h"
@@ -45,6 +54,8 @@
 #include "scream.h"
 #include "tables.h"
 #include "dxlog.h"
+#include "logString.h"
+#include "npc_file_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "sequences.h"
@@ -1170,6 +1181,30 @@ void Console_ZoneAlert(int input)
 
 /* Interface function - 15/12/97 */
 
+// A level or save file named something no NPC can have. What happens instead is in the words, and the log keeps them, so a
+// damaged or hostile file can be found.
+static void NoteRefusedFromAFile(char const *why)
+{
+	LogString(std::string("npc: refused: ") + why);
+}
+
+// A marine's model is in a file the level loads, and which files those are is worked out from the level's own lists
+// (InitNPCs in npcsetup.cpp). When the two don't agree, the model isn't there. Making him anyway would read through
+// nothing in Create_HModel, whose only check is an assert, and asserts aren't in the game people play. So he isn't
+// made, and the log names the model and its file, so the level can be found and put right.
+static bool MarineModelIsLoaded(SECTION *root, MARINE_WEAPON_DATA const *weapon, char const *who)
+{
+	if (root)
+	{
+		return true;
+	}
+
+	std::string const model = weapon->HierarchyName ? weapon->HierarchyName : "(no name)";
+	std::string const file = weapon->Riffname ? weapon->Riffname : "(no name)";
+	NoteRefusedFromAFile((std::string(who) + " needs the model " + model + " from " + file + ", which isn't loaded, so he isn't made").c_str());
+	return false;
+}
+
 MARINE_WEAPON_DATA *GetThisNPCMarineWeapon(MARINE_NPC_WEAPONS this_id)
 {
 	int a;
@@ -1733,6 +1768,14 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		marineStatus->My_Weapon=GetThisNPCMarineWeapon(toolsData->marine_type);
 		#endif
 
+		// The kind of marine comes from the level file, or from a save (LoadStrategy_Marine), and a number that isn't on the
+		// list finds nothing. Everything below reads his weapon, so he gets the ordinary marine's instead.
+		if (!marineStatus->My_Weapon)
+		{
+			NoteRefusedFromAFile("a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle");
+			marineStatus->My_Weapon=GetThisNPCMarineWeapon(MNPCW_PulseRifle);
+		}
+
 		/* Initialise marine's stats */
 		{
 			NPC_DATA *NpcData;
@@ -1817,7 +1860,17 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		GLOBALASSERT(marineStatus->My_Weapon->HierarchyName);
 
+		// Nothing of his model is made yet, so if he's taken out below, there's none of it to free
+		marineStatus->HModelController.section_data=NULL;
+		marineStatus->HModelController.Deltas=NULL;
+
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
+
+		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine the level places"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 
 		Create_HModel(&marineStatus->HModelController,root_section);
 		InitHModelSequence(&marineStatus->HModelController,(int)HMSQT_MarineRun,(int)MRSS_Standard,ONE_FIXED);
@@ -2149,7 +2202,18 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 
 		//InitShapeAnimationController(&marineStatus->ShpAnimCtrl, GetShapeData(sbPtr->shapeIndex));
 
+		// Nothing of his model is made yet, so if he's taken out below, there's none of it to free
+		marineStatus->HModelController.section_data=NULL;
+		marineStatus->HModelController.Deltas=NULL;
+
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
+
+		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine a generator makes"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
+
 		Create_HModel(&marineStatus->HModelController,root_section);
 		InitHModelSequence(&marineStatus->HModelController,(int)HMSQT_MarineRun,(int)MRSS_Standard,ONE_FIXED);
 
@@ -10639,7 +10703,8 @@ static void DischargeLOSWeapon_Core(STRATEGYBLOCK *sbPtr)
 
 	/* Now hit the target with volleyrounds bullets. */
 
-	mod=SpeedRangeMods(&relPos,&relPos2);
+	/* relPos and relPos2 are only set above when there's a target, so with none there's no aim to work out. */
+	mod = marineStatusPointer->Target ? SpeedRangeMods(&relPos,&relPos2) : 0;
 
 	hitroll=marineStatusPointer->Skill; /* Marine skill... */
 	if (marineStatusPointer->Target==Player->ObStrategyBlock) {
@@ -11047,6 +11112,9 @@ int SpeedRangeMods(VECTORCH *range,VECTORCH *speed) {
 	/* Should return between 0 and ONE_FIXED... */
 
 	magrange=Approximate3dMagnitude(range);
+
+	/* A target can be standing exactly here, and the sum below divides by this distance. */
+	if (magrange==0) return(0);
 	rmod=magrange>>2;
 
 	magspeed=Approximate3dMagnitude(speed);
@@ -17612,7 +17680,10 @@ void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data)
 				//need to cacluculate mission module from 'myspot' guard location
 				{
 					MODULE* module=ModuleFromPosition(&marineStatusPointer->my_spot,0);
-					GLOBALASSERT(module);
+
+					// a marine placed outside every module has nowhere to guard, so it carries on as it was
+					if(!module) return;
+
 					marineStatusPointer->missionmodule=module->m_aimodule;
 				}
 				break;
@@ -17628,6 +17699,10 @@ void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data)
 		{
 			//find the path and stepnumber
 			new_path=(extended_data>>15)&0xff;
+
+			// this number comes from a switch in the level file, so it may name no path at all, and then the marine carries on as it was
+			if(!PathCanBeFollowed(new_path)) return;
+
 			new_stepnumber=GetClosestStepInPath(new_path,sbPtr->containingModule);
 		}
 
@@ -18101,6 +18176,14 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	//check the size of the save block
 	if(header->size!=sizeof(*block)) return;
+
+	// His weapon decides his model, and everything below reads it, so a number that isn't on the list refuses his part of the
+	// save before anything is changed. He stays as the level made him, or isn't made, as when the block is the wrong size.
+	if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))
+	{
+		NoteRefusedFromAFile("a save named a marine weapon that isn't on the list, so that marine's part of the save is left out");
+		return;
+	}
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);

@@ -1,6 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
-//   removed code only the level editor used: the game itself never runs it
+//   removed code only the level editor used: the game itself never runs it; the count of baked colours in a
+//   level file is checked against the size of its chunk
+//   counted lists are measured against their chunks before they're made
+//   a light's times have to be ones that don't wrap round
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include "chunk.hpp"
 #include "chunk_light.hpp"
@@ -28,7 +32,7 @@ Children for Light_Set_Chunk :
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("LTSETHDR",Light_Set_Header_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("LTSETHDR",Light_Set_Header_Chunk,12)
 
 void Light_Set_Header_Chunk::fill_data_block ( char * data_start)
 {
@@ -60,7 +64,7 @@ Light_Set_Header_Chunk::Light_Set_Header_Chunk (Chunk_With_Children * parent, co
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("STDLIGHT",Light_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("STDLIGHT",Light_Chunk,84)
 
 
 void Light_Chunk::fill_data_block ( char * data_start)
@@ -188,17 +192,31 @@ void Shape_Vertex_Intensities_Chunk::fill_data_block ( char * data_start)
 	
 }
 
-Shape_Vertex_Intensities_Chunk::Shape_Vertex_Intensities_Chunk(Chunk_With_Children * parent, const char * data, size_t const /*size*/)
-: Chunk (parent, "SHPVTINT")
+Shape_Vertex_Intensities_Chunk::Shape_Vertex_Intensities_Chunk(Chunk_With_Children * parent, const char * data, size_t const size)
+: Chunk (parent, "SHPVTINT"), pad (0), num_vertices (0), intensity_array (0)
 {
+	memset (light_set_name, 0, sizeof(light_set_name));
+
+	// The chunk holds a name, a spare number and a count, then one number for each colour. The count comes from the file,
+	// so it's checked against the room the chunk really has. All 12963 chunks in the game's own levels fit exactly. If
+	// this one can't be right, the level is refused: load_rif sees the error and stops with its message.
+	size_t const fixed_part = 16;
+	int const count = size < fixed_part ? -1 : *((int *)(data + 12));
+
+	if (count < 0 || (size_t)count > (size - fixed_part) / sizeof(int))
+	{
+		Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		return;
+	}
+
 	strncpy (light_set_name, data, 8);
-	
+
 	data += 8;
-	
+
 	pad = *((int *)data);
 	data += 4;
-	
-	num_vertices = *((int *)data);
+
+	num_vertices = count;
 	data += 4;
 
 	intensity_array = new int [num_vertices];
@@ -219,7 +237,7 @@ Shape_Vertex_Intensities_Chunk::~Shape_Vertex_Intensities_Chunk()
 
 ///////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AMBIENCE",Lighting_Ambience_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("AMBIENCE",Lighting_Ambience_Chunk,4)
 
 
 void Lighting_Ambience_Chunk::fill_data_block ( char * data_start)
@@ -239,7 +257,7 @@ void Lighting_Ambience_Chunk::fill_data_block ( char * data_start)
 
 
 ///////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("LITSCALE",Light_Scale_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("LITSCALE",Light_Scale_Chunk,40)
 
 Light_Scale_Chunk::Light_Scale_Chunk(Light_Set_Chunk* parent,int mode)
 :Chunk(parent,"LITSCALE")
@@ -330,17 +348,30 @@ int Light_Scale_Chunk::ApplyRuntimeScale(int l)
 	return max(l,runtime_multiply_above);
 }
 ////////////////////////////////////////////////////////////////////////////////////
-RIF_IMPLEMENT_DYNCREATE("PLOBJLIT",Placed_Object_Light_Chunk)
+RIF_IMPLEMENT_DYNCREATE_HOLDING_AT_LEAST("PLOBJLIT",Placed_Object_Light_Chunk,60)
 
-Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const /*size*/)
+Placed_Object_Light_Chunk::Placed_Object_Light_Chunk(Chunk_With_Children * parent, const char * data, size_t const size)
 : Chunk (parent, "PLOBJLIT")
 {
+	char const * const start = data;
 	light=*(Placed_Object_Light_Data*) data;
 	data+=sizeof(Placed_Object_Light_Data);
 
-	num_extra_data=*(int*)data;
-	data+=4;
-	
+	// A light's times are in thousandths of a second, and the game multiplies each one by 65536. A bigger number than this wraps round, and a light whose times
+	// all came to nothing would change state for ever, which would hang the game. The largest in the game's own levels is 10,000.
+	int const most_light_time=32767;
+	int const light_times[]={light.fade_up_time,light.fade_down_time,light.up_time,light.down_time,light.start_time};
+
+	for(size_t time=0;time<sizeof(light_times)/sizeof(light_times[0]);time++)
+	{
+		if(light_times[time]<0 || light_times[time]>most_light_time)
+		{
+			Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		}
+	}
+
+	num_extra_data=ReadListCount(start,data,size,sizeof(int));
+
 	if(num_extra_data)
 	{
 		extra_data=new int[num_extra_data];

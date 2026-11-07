@@ -2,7 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every block of a save file is checked before it is read: its header, its size and the compressed data;
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
-//   saved, instead of overwriting another slot, and that does not cost the player a save
+//   saved, instead of overwriting another slot, and that does not cost the player a save; the buffer a save is
+//   built in grows through ReallocMem
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -309,8 +310,7 @@ void* GetPointerForSaveBlock(unsigned int size)
 		int newBufferSize = ((spaceNeeded /100000)+1)*100000;
 
 		//allocate the memory
-		SaveInfo.BufferStart = (char*) realloc(SaveInfo.BufferStart,newBufferSize);
-		assert(SaveInfo.BufferStart);
+		SaveInfo.BufferStart = (char*) ReallocMem(SaveInfo.BufferStart,newBufferSize);
 
 		//correct the position etc.
 		SaveInfo.BufferPos = SaveInfo.BufferStart + SaveInfo.BufferSpaceUsed;

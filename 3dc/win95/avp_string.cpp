@@ -1,7 +1,11 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   text memory comes from AllocateMem and ReallocMem, which stop the game with a message if there is none left
 #include <string.h>
 #include <ctype.h>
 #include <malloc.h>
 #include "avp_string.hpp"
+#include "mem3dc.h"
 
 String::String()
 : rep(0)
@@ -17,7 +21,7 @@ String::String(char const * str, size_t maxlen)
 {
 	if (len > maxlen) len = maxlen;
 	if (!len) return;
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	memcpy(rep,str,len*sizeof(char));
 }
 
@@ -29,7 +33,7 @@ String::String(String const & str, size_t start, size_t leng)
 	if (start>str.len) return;
 	if (start+len>str.len) len=str.len-start;
 	if (!len) return;
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	memcpy(rep,&str.rep[start],len*sizeof(char));
 }
 
@@ -40,7 +44,7 @@ String::String(char c, size_t n)
 {
 	if (len)
 	{
-		rep = (char *)malloc(len*sizeof(char));
+		rep = (char *)AllocateMem(len*sizeof(char));
 		for (size_t p=0; p<len; ++p)
 			rep[p]=c;
 	}
@@ -48,8 +52,8 @@ String::String(char c, size_t n)
 
 String::~String()
 {
-	if (cstring) free(cstring);
-	if (rep) free(rep);
+	if (cstring) DeallocateMem(cstring);
+	if (rep) DeallocateMem(rep);
 }
 
 char const * String::c_str() const
@@ -59,9 +63,9 @@ char const * String::c_str() const
 	{
 		if (strlen(cstring)==len && !strncmp(cstring,rep,len))
 			return cstring;
-		free(cstring);
+		DeallocateMem(cstring);
 	}
-	char * newcstr = (char *)malloc(len+1);
+	char * newcstr = (char *)AllocateMem(len+1);
 	memcpy(newcstr,rep,len*sizeof(char));
 	newcstr[len]=0;
 	*(char * *)&cstring = newcstr;
@@ -79,12 +83,12 @@ String & String::operator = (String const & str)
 {
 	if (&str != this)
 	{
-		if (rep) free(rep);
+		if (rep) DeallocateMem(rep);
 		rep = 0;
 		len = str.len;
 		if (len)
 		{
-			rep = (char *)malloc(len*sizeof(char));
+			rep = (char *)AllocateMem(len*sizeof(char));
 			memcpy(rep,str.rep,len*sizeof(char));
 		}
 	}
@@ -93,12 +97,12 @@ String & String::operator = (String const & str)
 
 String & String::operator = (char const * str)
 {
-	if (rep) free(rep);
+	if (rep) DeallocateMem(rep);
 	rep = 0;
 	len = strlen(str);
 	if (len)
 	{
-		rep = (char *)malloc(len*sizeof(char));
+		rep = (char *)AllocateMem(len*sizeof(char));
 		memcpy(rep,str,len*sizeof(char));
 	}
 	return *this;
@@ -110,14 +114,14 @@ String & String::operator += (String const & str)
 	{
 		if (str.len)
 		{
-			rep = (char *)realloc(rep,(len+str.len)*sizeof(char));
+			rep = (char *)ReallocMem(rep,(len+str.len)*sizeof(char));
 			memcpy(&rep[len],str.rep,str.len*sizeof(char));
 			len += str.len;
 		}
 	}
 	else if (len)
 	{
-		rep = (char *)realloc(rep,len*2*sizeof(char));
+		rep = (char *)ReallocMem(rep,len*2*sizeof(char));
 		memcpy(&rep[len],rep,len*sizeof(char));
 		len *= 2;
 	}
@@ -129,7 +133,7 @@ String & String::operator += (char const * str)
 	size_t clen = strlen(str);
 	if (clen)
 	{
-		rep = (char *)realloc(rep,(len+clen)*sizeof(char));
+		rep = (char *)ReallocMem(rep,(len+clen)*sizeof(char));
 		memcpy(&rep[len],str,clen*sizeof(char));
 		len += clen;
 	}
@@ -251,7 +255,7 @@ String::String(String const & str1, String const & str2)
 , cstring(0)
 {
 	if (!len) return;
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	if (str1.len) memcpy(rep,str1.rep,str1.len*sizeof(char));
 	if (str2.len) memcpy(&rep[str1.len],str2.rep,str2.len*sizeof(char));
 }
@@ -263,7 +267,7 @@ String::String(char const * str1, String const & str2)
 	size_t clen = strlen(str1);
 	len = clen + str2.len;
 	if (!len) return;
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	if (clen) memcpy(rep,str1,clen*sizeof(char));
 	if (str2.len) memcpy(&rep[clen],str2.rep,str2.len*sizeof(char));
 }
@@ -275,7 +279,7 @@ String::String(String const & str1, char const * str2)
 	size_t clen = strlen(str2);
 	len = str1.len + clen;
 	if (!len) return;
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	if (str1.len) memcpy(rep,str1.rep,str1.len*sizeof(char));
 	if (clen) memcpy(&rep[str1.len],str2,clen*sizeof(char));
 }
@@ -285,7 +289,7 @@ String::String(char c, String const & str2)
 , len(1 + str2.len)
 , cstring(0)
 {
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	rep[0]=c;
 	if (str2.len) memcpy(&rep[1],str2.rep,str2.len*sizeof(char));
 }
@@ -295,7 +299,7 @@ String::String(String const & str1, char c)
 , len(str1.len + 1)
 , cstring(0)
 {
-	rep = (char *)malloc(len*sizeof(char));
+	rep = (char *)AllocateMem(len*sizeof(char));
 	if (str1.len) memcpy(rep,str1.rep,str1.len*sizeof(char));
 	rep[str1.len]=c;
 }

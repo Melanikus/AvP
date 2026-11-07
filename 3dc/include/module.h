@@ -263,6 +263,8 @@ typedef struct module
 
 	float m_sound_reverb; /*settings for the way sound should */
 	int m_sound_env_index;/*be played in this module*/
+
+	float m_ball[4];      /* a ball round the module, in the world's numbers: x y z, then its size. Worked out once, at load */
 	
 } MODULE;
 

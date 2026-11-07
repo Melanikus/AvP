@@ -22,6 +22,8 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out avp_GetCommandLineArgs
 #ifndef _avp_utilities_h_
 #define _avp_utilities_h_
 
@@ -48,7 +50,6 @@ FILE *avp_open_userfile(const char *fileName, const char *mode);
 HANDLE avp_CreateFile(LPCTSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile);
 HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData);
 DWORD avp_GetFileAttributes(LPCTSTR lpFileName);
-void avp_GetCommandLineArgs(char *args, uint32_t size);
 char *GetSaveFolderPath();
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);

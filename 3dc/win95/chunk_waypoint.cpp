@@ -1,6 +1,13 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using its exact measured length, so it always fits
+//   a module's master and slave chunks are only made inside a module's data
+//   counted lists are measured against their chunks before they're made
+//   a waypoint's links have to lead to places in its own list
+//   a name is only read as far as the end of its chunk
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
+//   what comes after a name or a list is only read while it's still inside the chunk
+//   a waypoint chunk no longer reads two spare numbers after its list: the code that writes one never wrote them, so it was reading past its end, and nothing used them
 
 #include "chunk_waypoint.hpp"
 
@@ -29,12 +36,15 @@ ModuleLink::~ModuleLink()
 
 RIF_IMPLEMENT_DYNCREATE("WAYPOINT",Module_Waypoint_Chunk)
 
-Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const char* data,size_t datasize)
+Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const char* data,size_t size)
 :Chunk(parent,"WAYPOINT")
 {
-	NumWaypoints=*(int*)data;
-	data+=4;
-	
+	char const * const start = data;
+	// three corners, two numbers, and two counts: the least a waypoint can take
+	size_t const smallest_waypoint=3*sizeof(ChunkVectorInt)+4*sizeof(int);
+
+	NumWaypoints=ReadListCount(start,data,size,smallest_waypoint);
+
 	NumGroundWaypoints=0;
 	NumAlienWaypoints=0;
 	AlienWaypoints=0;
@@ -50,6 +60,13 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 		int first_ground_waypoint=-1;
 		for(int i=0;i<NumWaypoints;i++)
 		{
+			// a waypoint's own lists can use up the room that the count was measured against
+			if((size_t)(data - start) + smallest_waypoint > size)
+			{
+				Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				break;
+			}
+
 			ChunkWaypoint* cw=&Waypoints[i];
 			cw->index=i;
 
@@ -65,8 +82,7 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 			cw->spare2=*(int*)data;
 			data+=4;	
 			
-			cw->NumWPLinks=*(int*)data;
-			data+=4;
+			cw->NumWPLinks=ReadListCount(start,data,size,sizeof(WaypointLink));
 
 			if(cw->NumWPLinks)
 				cw->WayLinks=new WaypointLink[cw->NumWPLinks];
@@ -79,22 +95,24 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 				data+=sizeof(WaypointLink);
 			}
 				
-			cw->NumModLinks=*(int*)data;
-			data+=4;
+			// a module's name takes at least 4 bytes, and its flags 4
+			size_t const smallest_link=8;
+
+			cw->NumModLinks=ReadListCount(start,data,size,smallest_link);
 
 			if(cw->NumModLinks)
 				cw->ModLinks=new ModuleLink[cw->NumModLinks];
 			else
 				cw->ModLinks=0;
 
+			// Long names can use up the room that the count was measured against. Each read here looks for itself, so a list that runs out is refused, and the count stops it going on for long.
 			for(int j=0;j<cw->NumModLinks;j++)
 			{
 				ModuleLink* ml=&cw->ModLinks[j];
-				ml->module_name=new char[strlen(data)+1];
-				strcpy(ml->module_name,data);
-				data+=(strlen(data)+4)&~3;
-				ml->flags=*(int*)data;
-				data+=4;
+				size_t name_length=0;
+				ml->module_name=CopyNameFromChunk(start,size,data,&name_length);
+				data+=(name_length+4)&~3;
+				ml->flags=ReadFromChunk<int>(start,size,data);
 			}
 
 			if(cw->flags & WaypointFlag_FirstGroundWaypoint)
@@ -114,12 +132,23 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent,const c
 		{
 			AlienWaypoints=&Waypoints[0];
 		}
-	}
 
-	spare1=*(int*)data;
-	data+=4;
-	spare2=*(int*)data;
-	data+=4;
+		// A link says which waypoint it leads to, counted from the start of its own list, and an alien or a marine following it goes straight to that place
+		// in the list. So it has to be a place in the list.
+		for(int i=0;i<NumWaypoints;i++)
+		{
+			ChunkWaypoint const* cw=&Waypoints[i];
+			int const list_size=(i<NumAlienWaypoints) ? NumAlienWaypoints : NumGroundWaypoints;
+
+			for(int j=0;j<cw->NumWPLinks;j++)
+			{
+				if(cw->WayLinks[j].index<0 || cw->WayLinks[j].index>=list_size)
+				{
+					Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+				}
+			}
+		}
+	}
 }
 
 Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)
@@ -133,9 +162,6 @@ Module_Waypoint_Chunk::Module_Waypoint_Chunk(Chunk_With_Children* parent)
 	
 	NumGroundWaypoints=0;
 	GroundWaypoints=0;
-
-	spare1=0;
-	spare2=0;	
 }
 
 Module_Waypoint_Chunk::~Module_Waypoint_Chunk()
@@ -307,7 +333,9 @@ void Module_Waypoint_Chunk::TransferWaypointData(Module_Waypoint_Chunk* mwc_from
 }
 ///////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AIMODMAS",AI_Module_Master_Chunk)
+// Both of these treat their parent as a module's data, and its parent as an object, so they can only be made there. All 285 and all
+// 1711 in the game's own levels are.
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT("AIMODMAS",AI_Module_Master_Chunk,"MODULEDT",Object_Module_Data_Chunk)
 
 AI_Module_Master_Chunk::AI_Module_Master_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"AIMODMAS")
@@ -406,7 +434,7 @@ Object_Chunk* AI_Module_Master_Chunk::get_my_object_chunk()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RIF_IMPLEMENT_DYNCREATE("AIMODSLA",AI_Module_Slave_Chunk)
+RIF_IMPLEMENT_DYNCREATE_DECLARE_PARENT_HOLDING_AT_LEAST("AIMODSLA",AI_Module_Slave_Chunk,"MODULEDT",Object_Module_Data_Chunk,4)
 
 AI_Module_Slave_Chunk::AI_Module_Slave_Chunk(Chunk_With_Children* parent,const char* data,size_t)
 :Chunk(parent,"AIMODSLA")

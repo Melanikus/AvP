@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a way of blending that brightens what's already there, for the shoulder lamp
 #ifndef _RenderStates_h_
 #define _RenderStates_h_
 
@@ -14,6 +16,7 @@ enum TRANSLUCENCY_TYPE
 	TRANSLUCENCY_COLOUR,
 	TRANSLUCENCY_GLOWING,
 	TRANSLUCENCY_DARKENINGCOLOUR,
+	TRANSLUCENCY_BRIGHTEN,   // what's there times one and a bit: dark stays dark and black stays black
 //	TRANSLUCENCY_JUSTSETZ,
 	TRANSLUCENCY_NOT_SET,
 	NUM_TRANSLUCENCY_TYPES

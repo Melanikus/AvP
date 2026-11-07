@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   added a check on the shape set collection numbers a level file gives
+//   a hierarchy can say whether the game can build it
 
 #ifndef _hierchnk_hpp
 #define _hierchnk_hpp 1
@@ -35,11 +36,17 @@ public:
 	Object_Hierarchy_Data_Chunk * get_data ();
 	Object_Hierarchy_Name_Chunk * get_name ();
 
+	// Can the game build this hierarchy? Asked of a hierarchy's outermost chunk, once all the file's chunks have checked themselves. See the .cpp.
+	bool can_be_built();
+
 
 #ifdef MAXEXPORT
 	INode* node;
 #endif
 
+private:
+
+	bool section_can_be_built();
 
 };
 
