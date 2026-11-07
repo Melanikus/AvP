@@ -664,7 +664,8 @@ static PLAYER_STATUS WeaponStatisticsPlayer;
 
 static bool AllTheStatisticsAreZero()
 {
-	static AvP_GameStats const zero = {};
+	AvP_GameStats zero;
+	memset(&zero, 0, sizeof(zero));
 	return memcmp(&CurrentGameStatistics, &zero, sizeof(zero)) == 0;
 }
 
@@ -676,9 +677,9 @@ static void CheckWeaponStatistics()
 	PlayerStatusPtr = &WeaponStatisticsPlayer;
 	WeaponStatisticsPlayer.IsAlive = 1;
 
-	enum WEAPON_SLOT const last = (enum WEAPON_SLOT)(MAX_NO_OF_WEAPON_SLOTS - 1);
-	enum WEAPON_SLOT const pastTheEnd = MAX_NO_OF_WEAPON_SLOTS;
-	enum WEAPON_SLOT const belowTheStart = (enum WEAPON_SLOT)-1;
+	const WEAPON_SLOT last = static_cast<WEAPON_SLOT>(MAX_NO_OF_WEAPON_SLOTS - 1);
+	const WEAPON_SLOT pastTheEnd = MAX_NO_OF_WEAPON_SLOTS;
+	const WEAPON_SLOT belowTheStart = static_cast<WEAPON_SLOT>(-1);
 
 	LimitCheck(sizeof(CurrentGameStatistics.ShotsFired) / sizeof(CurrentGameStatistics.ShotsFired[0]) == MAX_NO_OF_WEAPON_SLOTS, "each list has a place for every slot");
 
