@@ -67,8 +67,12 @@ int Config_GetInt(const std::string &, const std::string &, int defaultValue)
 	return defaultValue;
 }
 
-void NewOnScreenMessage(char *)
+// What the game put on the screen, so a test can see it never shows an address
+static std::vector<std::string> screenLines;
+
+void NewOnScreenMessage(char *message)
 {
+	screenLines.push_back(message ? message : "");
 }
 
 void MinimalNetCollectMessages()
@@ -558,11 +562,12 @@ int enet_address_set_host_ip(ENetAddress *address, const char *)
 	return 0;
 }
 
-int enet_address_get_host_ip(const ENetAddress *, char *hostName, size_t nameLength)
+// Writes the address as ENet would, four numbers with dots, so that any line made from it would show it
+int enet_address_get_host_ip(const ENetAddress *address, char *hostName, size_t nameLength)
 {
 	if (nameLength > 0)
 	{
-		hostName[0] = 0;
+		snprintf(hostName, nameLength, "%u.%u.%u.%u", address->host & 0xFF, (address->host >> 8) & 0xFF, (address->host >> 16) & 0xFF, address->host >> 24);
 	}
 
 	return 0;
@@ -1546,6 +1551,36 @@ static void TestARealClientGetsIn()
 	EndTheGame();
 }
 
+// What the host's screen says when someone connects. Players stream and share pictures of their screens, so the other machine's address
+// and port are never shown there, only which connection it is (SCREENIP-1; the user's ruling: no IPs).
+static void TestNoAddressOnScreen()
+{
+	HostWithClients(0);
+	screenLines.clear();
+
+	peers[3].address.host = 0x1400A8C0;   // 192.168.0.20, as ENet keeps it: the first of the four numbers in the lowest byte
+	peers[3].address.port = 23513;
+	Connects(3);
+	TakeEverything();
+
+	bool saidWhichConnection = false;
+	bool showedTheAddress = false;
+
+	for (size_t i = 0; i < screenLines.size(); i++)
+	{
+		saidWhichConnection = saidWhichConnection || screenLines[i] == "A player is joining (connection 4)";
+		showedTheAddress = showedTheAddress || Has(screenLines[i], "192") || Has(screenLines[i], "168") || Has(screenLines[i], "23513");
+	}
+
+	Check(saidWhichConnection, "the host's screen says a player is joining, and as which connection");
+	Check(!showedTheAddress, "and never their address or port");
+	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "enet_address_get_host_ip("), "and the network code never turns an address into text at all");
+
+	peers[3].address.host = 0;
+	peers[3].address.port = 0;
+	EndTheGame();
+}
+
 static void TestLettingPeopleIn()
 {
 	playersInGame.clear();
@@ -2410,6 +2445,7 @@ int main()
 	TestJoiningWhileAPageIsSearching();
 	DirtyTheStack();
 	TestARealClientGetsIn();
+	TestNoAddressOnScreen();
 	TestWhatAClientCantAfford();
 	TestAnsweringWhileLoading();
 	TestConnectionsThatHoldAPlace();
