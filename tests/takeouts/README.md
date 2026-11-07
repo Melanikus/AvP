@@ -14,6 +14,10 @@ Visual Studio with the C++ tools, and PowerShell.
   the code does, that's worth knowing too: take out the row, or the code.
 - **it should match exactly once:** the code has moved on. Update the row in the list.
 
+**On GitHub,** the Take-outs check (`.github/workflows/takeouts.yml`) runs the lists a pull request can affect, each on a clean machine, and fails if
+any row isn't noticed or can't be run. A pull request that changes the check or `run.ps1` runs every list. Anyone who can run workflows can run any of them, or
+all, by hand: Actions, Take-outs, Run workflow.
+
 Each list is `<test>.json`: what to copy, and rows that each name a change, with the file, the exact text and what to put in its place. Lines end in `\n` here, whatever the file uses. The repository
 itself is never touched.
 
