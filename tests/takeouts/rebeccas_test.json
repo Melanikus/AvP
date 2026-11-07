@@ -534,6 +534,30 @@
 					"to": "while (*pdata)"
 				}
 			]
-		}
+		},
+		{"name":"ANIM: a long sequence can start below 0","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"signed long earliest = 0;\n\n\tfor (int i = 0;","to":"signed long earliest = -2147483647;\n\n\tfor (int i = 0;"}]},
+		{"name":"ANIM: a compact sequence can start below 0","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"signed long earliest = 0;\n\n\t\tfor (unsigned long frame","to":"signed long earliest = -2147483647;\n\n\t\tfor (unsigned long frame"}]},
+		{"name":"ANIM: two frames can start together","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"earliest = start + 1;","to":"earliest = start;"}]},
+		{"name":"ANIM: a frame can start before the one ahead of it","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (start < earliest || start > latest_start)","to":"if (start > latest_start)"}]},
+		{"name":"ANIM: a frame can start too late","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (start < earliest || start > latest_start)","to":"if (start < earliest)"}]},
+		{"name":"ANIM: the latest start is one too late","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"signed long const latest_start = 65535;","to":"signed long const latest_start = 65536;"}]},
+		{"name":"ANIM: the latest start is one too early","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"signed long const latest_start = 65535;","to":"signed long const latest_start = 65534;"}]},
+		{"name":"ANIM: a long sequence needs no header","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (!get_header())","to":"if (false)"}]},
+		{"name":"ANIM: a long sequence needs no frames","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (num_frames == 0)\n\t{\n\t\treturn false;","to":"if (false)\n\t{\n\t\treturn false;"}]},
+		{"name":"ANIM: a long sequence's places are ignored","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"starts[frame()->frame_ref_no] = frame()->at_frame_no;","to":"starts[num_frames - 1 - frame()->frame_ref_no] = frame()->at_frame_no;"}]},
+		{"name":"ANIM: a compact list needs no sequences","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (num_sequences == 0)\n\t{\n\t\treturn false;","to":"if (false)\n\t{\n\t\treturn false;"}]},
+		{"name":"ANIM: a compact sequence needs no frames","changes":[{"file":"3dc/win95/animation_objects.cpp","from":"if (sequence.num_frames == 0)","to":"if (false)"}]},
+		{"name":"ANIM: a section needs no name chunk","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!get_data())","to":"if (false)"}]},
+		{"name":"ANIM: a compact list isn't looked at","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!compact->sequences_can_be_played())","to":"if (false)"}]},
+		{"name":"ANIM: a section ignores its compact list","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (compact)\n","to":"if (false)\n"}]},
+		{"name":"ANIM: a section inside needs no sequences","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (sequences.size() == 0)\n\t\t{\n\t\t\treturn false;","to":"if (false)\n\t\t{\n\t\t\treturn false;"}]},
+		{"name":"ANIM: a long sequence isn't looked at","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!sequence()->can_be_played())","to":"if (false)"}]},
+		{"name":"ANIM: the sections inside aren't looked at","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!section()->section_can_be_built())","to":"if (false)"}]},
+		{"name":"ANIM: a hierarchy can hold two sections","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (inside.size() != 1)","to":"if (inside.size() < 1)"}]},
+		{"name":"ANIM: a hierarchy can hold no section","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (inside.size() != 1)","to":"if (inside.size() > 1)"}]},
+		{"name":"ANIM: a hierarchy the game leaves out is looked at anyway","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (sequences.size() == 0)\n\t\t{\n\t\t\treturn true;","to":"if (false)\n\t\t{\n\t\t\treturn true;"}]},
+		{"name":"ANIM: a compact list counts as nothing to build","changes":[{"file":"3dc/win95/hierarchy_chunk.cpp","from":"if (!Get_Object_Animation_All_Sequence_Chunk(first))","to":"if (true)"}]},
+		{"name":"ANIM: the level never asks about its hierarchies","changes":[{"file":"3dc/win95/mishchnk.cpp","from":"->can_be_built())\n","to":"->can_be_built() && false)\n"}]},
+		{"name":"ANIM: the rule runs even after a chunk has refused the level","changes":[{"file":"3dc/win95/mishchnk.cpp","from":"if (!error_code)\n\t{\n\t\tList<Chunk *> hierarchies;","to":"if (true)\n\t{\n\t\tList<Chunk *> hierarchies;"}]}
 	]
 }

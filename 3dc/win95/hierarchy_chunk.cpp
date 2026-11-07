@@ -6,10 +6,11 @@
 //   a name is only read as far as the end of its chunk
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 //   what comes after a name or a list is only read while it's still inside the chunk
+//   a hierarchy the game couldn't build refuses the level
 
 #include "hierarchy_chunk.hpp"
 #include "chunk_object.hpp"
-//#include "animation_objects.hpp"
+#include "animation_objects.hpp"
 
 //macro for helping to force inclusion of chunks when using libraries
 FORCE_CHUNK_INCLUDE_IMPLEMENT(hierarchy_chunk)
@@ -44,6 +45,96 @@ List <Object_Hierarchy_Chunk *> Object_Hierarchy_Chunk::list_h_children()
 	}
 	return(h_l);
 	
+}
+
+// The long list of a section's sequences, which the game uses if the section has no compact list
+static void ListLongSequences(Object_Hierarchy_Chunk * section, List <Object_Animation_Sequence_Chunk *> * sequences)
+{
+	Chunk * const list = section->lookup_single_child ("OBANSEQS");
+
+	if (list)
+	{
+		((Object_Animation_Sequences_Chunk *)list)->list_sequences(sequences);
+	}
+}
+
+// One section, and all the sections inside it. Each has to have the chunk with its name in, which is the first thing the game reads, and sequences it can play. The game looks up a sequence
+// in every section it animates, and a section with none gives it nothing to read. Sections can only go as deep as chunks can, so this can't run away.
+bool Object_Hierarchy_Chunk::section_can_be_built()
+{
+	if (!get_data())
+	{
+		return false;
+	}
+
+	Object_Animation_All_Sequence_Chunk * const compact = Get_Object_Animation_All_Sequence_Chunk(this);
+
+	if (compact)
+	{
+		if (!compact->sequences_can_be_played())
+		{
+			return false;
+		}
+	}
+	else
+	{
+		List <Object_Animation_Sequence_Chunk *> sequences;
+		ListLongSequences(this, &sequences);
+
+		if (sequences.size() == 0)
+		{
+			return false;
+		}
+
+		for (LIF<Object_Animation_Sequence_Chunk *> sequence(&sequences); !sequence.done(); sequence.next())
+		{
+			if (!sequence()->can_be_played())
+			{
+				return false;
+			}
+		}
+	}
+
+	List <Object_Hierarchy_Chunk *> inside = list_h_children();
+
+	for (LIF<Object_Hierarchy_Chunk *> section(&inside); !section.done(); section.next())
+	{
+		if (!section()->section_can_be_built())
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// A hierarchy is a model's skeleton and its animations. A file holds each one as an outermost chunk, with exactly one section inside it, and the rest of the skeleton inside that. The game
+// builds the model from that one section (add_hierarchy in projload.cpp), and it trusts what it finds there. The outermost chunk's own sequences are only names, so they aren't looked at.
+// All 91 hierarchies in the game's own files and one 2007 mod have one section there, and keep to all of this, in 2,872 sections.
+bool Object_Hierarchy_Chunk::can_be_built()
+{
+	List <Object_Hierarchy_Chunk *> inside = list_h_children();
+
+	if (inside.size() != 1)
+	{
+		return false;
+	}
+
+	Object_Hierarchy_Chunk * const first = inside.first_entry();
+
+	// The game leaves a hierarchy out altogether if its first section has no sequences of the long kind and no compact list, so nothing in it gets built. Two of the game's own are like that.
+	if (!Get_Object_Animation_All_Sequence_Chunk(first))
+	{
+		List <Object_Animation_Sequence_Chunk *> sequences;
+		ListLongSequences(first, &sequences);
+
+		if (sequences.size() == 0)
+		{
+			return true;
+		}
+	}
+
+	return first->section_can_be_built();
 }
 
 Object_Hierarchy_Data_Chunk * Object_Hierarchy_Chunk::get_data ()
