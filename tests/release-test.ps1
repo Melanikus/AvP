@@ -2,7 +2,7 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1 and tools/check-release-package.ps1 are run for real, on made-up folders with something wrong in each. Each one
+- tools/check-release.ps1, tools/check-no-hudson.ps1 and tools/check-release-package.ps1 are run for real, on made-up folders with something wrong in each. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
 - .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
 
@@ -162,6 +162,60 @@ Make-GoodRepository
 Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') '<Project></Project>'
 Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') "the game's project doesn't build it" 'code the project does not build is refused'
 
+# --- Hudson, the team's private test bot, never ships. Each way its code can show is refused, for its own reason, and the mentions of the word that
+# aren't its code are let through.
+$hudsonCases = @(
+    @{ File = '3dc/avp/hudson.cpp'; Text = "code`n"; Reason = 'Hudson is in this commit: a file named 3dc/avp/hudson.cpp'; What = 'a file named after Hudson is refused' },
+    @{ File = 'tools/hudson/run.ps1'; Text = "code`n"; Reason = 'Hudson is in this commit: a file named tools/hudson/run.ps1'; What = 'and one in a folder of its own' },
+    @{ File = '3dc/avp/game.cpp'; Text = "#include `"hudson.h`"`n"; Reason = 'Hudson is in this commit: 3dc/avp/game.cpp line 1 includes one of its files'; What = 'a line including one of its files is refused' },
+    @{ File = '3dc/avp/game.cpp'; Text = "int a;`n`tHudson_PlayInput(status);`n"; Reason = 'Hudson is in this commit: 3dc/avp/game.cpp line 2 uses its code'; What = 'a call into its code is refused' },
+    @{ File = '3dc/avp/pmove.cpp'; Text = "`tif (HudsonPlay_IsRunning()) { }`n"; Reason = 'Hudson is in this commit: 3dc/avp/pmove.cpp line 1 uses its code'; What = 'and one with a longer name, such as HudsonPlay_' },
+    @{ File = 'tests/net_test.cpp'; Text = "`tHudsonTest_AddRawPart(0);`n"; Reason = 'Hudson is in this commit: tests/net_test.cpp line 1 uses its code'; What = 'and in a test' }
+)
+
+foreach ($case in $hudsonCases)
+{
+    Make-GoodRepository
+    Write-File (Join-Path $work $case.File) $case.Text
+    Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) $case.Reason $case.What
+}
+
+Make-GoodRepository
+$projectWithHudson = (Get-Content -Raw (Join-Path $work 'win32/VS2026/AvP.vcxproj')) -replace '</Project>', "`n<ClCompile Include=`"..\..\3dc\avp\hudson.cpp`" />`n</Project>"
+Write-File (Join-Path $work 'win32/VS2026/AvP.vcxproj') $projectWithHudson
+Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) 'Hudson is in this commit: win32/VS2026/AvP.vcxproj line 2, in a project, names one of its files' 'a project line naming one of its files is refused, even with the file gone'
+
+# The two mentions main has always had: a comment about a profile called HUDSON, and a test's player called Hudson. Neither is Hudson's code.
+Make-GoodRepository
+Write-File (Join-Path $work '3dc/d3d_render.cpp') "// switched on, so without the test for menus, a profile called HUDSON would press H and turn the shadows off.`n"
+Write-File (Join-Path $work 'tests/net_start_test.cpp') "static char playerName[] = `"Hudson`";`n"
+$result = Run-Script 'check-no-hudson.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0) "the word Hudson in a comment, or as a test's player, is let through. It said: $($result.Text)"
+
+# Only the check and this test may name what it looks for: the same words anywhere else are refused
+Make-GoodRepository
+Write-File (Join-Path $work 'tools/check-other.ps1') "if (HudsonPlay_IsRunning) { }`n"
+Expect-Refused 'check-no-hudson.ps1' @('-Repository', $work) 'Hudson is in this commit: tools/check-other.ps1 line 1 uses its code' 'leaving out the check itself leaves out nothing else'
+
+# The real repository, as it is now: only what git tracks, so that nothing built beside it counts. If this is ever refused, Hudson has come
+# into the repository, or the check has started to catch something that isn't Hudson.
+Clear-Work
+
+foreach ($tracked in @(& git -C $repository ls-files))
+{
+    $from = Join-Path $repository $tracked
+
+    if (Test-Path -LiteralPath $from -PathType Leaf)
+    {
+        $to = Join-Path $work $tracked
+        New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+        Copy-Item -LiteralPath $from -Destination $to -Force
+    }
+}
+
+$result = Run-Script 'check-no-hudson.ps1' @('-Repository', $work)
+Check ($result.Code -eq 0) "the real repository has none of Hudson in it. It said: $($result.Text)"
+
 # --- The checks that ask GitHub. There's no network here, so all that can be tried is that it refuses to go on without being on avpx_main.
 Make-GoodRepository
 $savedRef = $env:GITHUB_REF
@@ -263,6 +317,10 @@ Expect-Refused 'check-release-package.ps1' (Package-Arguments) "names a file tha
 $result = Run-Script 'check-release.ps1' @('-Version', $good, '-WithoutGitHub')
 Check ($result.Text.Contains('RELEASE-BLOCKERS.md still lists') -or $result.Text.Contains('Everything that can be checked')) "check-release.ps1 finds the repository by itself. It said: $($result.Text)"
 
+# What it answers depends on what's been built beside the code, but it has to be one of the script's own answers.
+$result = Run-Script 'check-no-hudson.ps1' @()
+Check ($result.Text.Contains('None of Hudson is in this commit') -or $result.Text.Contains('Hudson is in this commit:')) "check-no-hudson.ps1 finds the repository by itself. It said: $($result.Text)"
+
 Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $package 'License.txt')
 $result = Run-Script 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit)
@@ -302,9 +360,14 @@ Remove-Item -LiteralPath (Join-Path $package 'D3DCompiler_43.dll')
 Write-Sums
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
 
+Clear-Work
+Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 0) 'as a step, check-no-hudson.ps1 passes when it should'
+Write-File (Join-Path $work '3dc/hudson.cpp') 'code'
+Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 1) 'and it fails when it should'
+
 Remove-Item -Force -LiteralPath $stepFile
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-release-package.ps1', 'tests/release-test.ps1')
+foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -331,6 +394,7 @@ Check ($top -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|r
 Check ($top -match '(?m)^permissions: \{\}$') 'by default no job can do anything'
 
 Check ($checkJob -match 'run: \./tools/check-release\.ps1 -Version \$env:VERSION\n') 'the first job runs the checks'
+Check ($checkJob -match 'run: \./tools/check-no-hudson\.ps1\n') 'and refuses any of Hudson'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
 Check ($buildJob -match '(?m)^    needs: check$') 'the build needs the checks to have passed'
 Check ($publishJob -match '(?m)^    needs: build$') 'and the draft needs the build, so it comes after the checks too'
@@ -371,6 +435,12 @@ $buildWorkflow = Get-Content -Raw (Join-Path $repository '.github/workflows/buil
 $listInBuild = [regex]::Match($buildWorkflow, '\$required = (.*)').Groups[1].Value.Trim()
 $listInCheck = [regex]::Match($checkScript, '\$requiredChecks = (.*)').Groups[1].Value.Trim()
 Check ($listInBuild.Length -gt 0 -and $listInBuild -ceq $listInCheck) 'a release asks for the same checks as a test build'
+
+# --- Every pull request refuses any of Hudson as well, in a check that's already required, so a hook left behind fails the pull request that brings it
+$testsWorkflow = (Get-Content -Raw (Join-Path $repository '.github/workflows/tests.yml')) -replace "`r", ''
+Check ($testsWorkflow -match '(?m)^  pull_request:\n') 'the tests run on every pull request'
+Check-Order $testsWorkflow 'name: Unit tests' './tools/check-no-hudson.ps1' 'and the required Unit tests check refuses any of Hudson'
+Check-Order $testsWorkflow './tools/check-no-hudson.ps1' './tests/build.ps1' 'before it builds anything'
 
 Clear-Work
 Remove-Item -Recurse -Force -LiteralPath $work

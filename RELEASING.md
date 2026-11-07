@@ -19,7 +19,7 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
 1. On GitHub, go to **Actions**, then **Release**, then **Run workflow**. Leave the branch on `avpx_main`, and type a version: three plain
    numbers, such as `1.0.0`.
 2. The first job checks whether this commit may be released. If it refuses, the last lines of its log say why, starting `REFUSED:`.
-   `tools/check-release.ps1` is the full list of what it checks. Nothing has been built or published at this point.
+   `tools/check-release.ps1` and `tools/check-no-hudson.ps1` are the full list of what it checks. Nothing has been built or published at this point.
 3. The second job builds the game and checks the package. `tools/check-release-package.ps1` is the list of what it looks for. The first
    build on a clean machine takes a while, because the libraries are built from source.
 4. The third job waits for you. GitHub shows **Review deployments**. Approve it, and it makes a draft release.
