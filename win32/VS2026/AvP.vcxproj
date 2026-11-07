@@ -395,7 +395,6 @@
     <ClCompile Include="..\..\3dc\avp\win95\vision.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\winmain.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\win_proj.cpp" />
-    <ClCompile Include="..\..\3dc\avp\win95\xa2_audio.cpp" />
     <ClCompile Include="..\..\3dc\ConfigFile.cpp" />
     <ClCompile Include="..\..\3dc\console.cpp" />
     <ClCompile Include="..\..\3dc\d3d_render.cpp" />
