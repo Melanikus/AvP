@@ -10,6 +10,9 @@
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this with the real texture_relief.cpp, and the program gives back a non-zero result if any check failed.
+//
+// Modified 2026-11-07 by Melanikus for the AvP port: built with the standard library's own bounds checks, and it walks to the end of the
+// relief list and one past it, so a look past the end is caught every time.
 
 #include <direct.h>
 #include <fstream>
@@ -25,6 +28,14 @@
 #include "FastFile.h"
 #include "FileStream.h"
 #include "utilities.h"
+
+// This test is built with the standard library's own bounds checks on (/D_MSVC_STL_HARDENING=1 in tests/texture_relief_test.args). With
+// them, looking past the end of a list stops the program at once. Without them, it reads whatever happens to be in memory there, and a
+// check such as "a texture nothing has heard of gets the flat picture" can pass by luck: memory that happens to be zero reads as "no
+// picture here". That is how take-out row 38 went unnoticed on GitHub's machine. So the test refuses to build without the checks.
+#if !defined(_MSVC_STL_HARDENING_VECTOR) || !_MSVC_STL_HARDENING_VECTOR
+#error "texture_relief_test needs the standard library's bounds checks: build it with /D_MSVC_STL_HARDENING=1"
+#endif
 
 static int checksFailed = 0;
 
@@ -1198,6 +1209,12 @@ static void CheckDepthMaps()
 		Check(relief.HeightFor(picture) == relief.PictureFor(picture) && !CopiesOf(relief.HeightFor(picture)), "with no depth map, a texture gets the flat picture");
 		Check(textureList[relief.HeightFor(picture)].pixels[3] == 0, "whose alpha of 0 is what says there's no depth");
 		Check(relief.HeightFor(picture + 1000) == relief.HeightFor(picture), "and so does a texture nothing has heard of");
+
+		// The list of what each texture has ends at the highest texture built, which is this one, because nothing else was built.
+		// Asking for the one after it, the first number past the end, has to find nothing there and give the flat picture.
+		texID_t const flat = relief.HeightFor(picture);
+		Check(relief.HeightFor(picture + 1) == flat, "the first texture past the end of the list gets the flat picture for its depth");
+		Check(relief.PictureFor(picture + 1) == flat, "and for its relief");
 	}
 
 	// A depth map with no relief map beside it. Its colours aren't grey, to show they're averaged.
