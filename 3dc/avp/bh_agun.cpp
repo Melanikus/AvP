@@ -239,8 +239,8 @@ void CreateSentrygun(VECTORCH *Position,int type)
 		}
 
 		// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each
-		// turn, but the host reads them to tell other machines where the gun points, and a gun can be read before it has had a
-		// turn: in a Hudson run that holds guns still, it never gets one.
+		// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last
+		// held. Single player never does; a network game that reports where each gun points can.
 		Autogun_VerifyDeltaControllers(sbPtr);
 
 		/* Containment test NOW! */
@@ -457,8 +457,8 @@ void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {
 		}
 
 		// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each
-		// turn, but the host reads them to tell other machines where the gun points, and a gun can be read before it has had a
-		// turn: in a Hudson run that holds guns still, it never gets one.
+		// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last
+		// held. Single player never does; a network game that reports where each gun points can.
 		Autogun_VerifyDeltaControllers(sbPtr);
 
 		/* Containment test NOW! */

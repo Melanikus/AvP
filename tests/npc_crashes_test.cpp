@@ -130,7 +130,8 @@ static void TestTheXenoborgJustMade()
 	}
 }
 
-// A sentry gun's state is read for the network as soon as it exists, and its pan and tilt pointers used to be set on its first turn
+// A sentry gun's pan and tilt pointers used to be set on its first turn, so anything that asked where it pointed before then read
+// whatever the memory last held
 static void TestTheSentryGunJustMade()
 {
 	puts("A sentry gun that has just been made:");
