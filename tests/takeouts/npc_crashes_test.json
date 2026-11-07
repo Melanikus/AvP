@@ -213,6 +213,76 @@
 					"to": "\t\t\t}\n\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n"
 				}
 			]
+		},
+		{
+			"name": "a level's unknown marine is read through",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tif (!marineStatus->My_Weapon)\n",
+					"to": "\t\tif (!marineStatus)\n"
+				}
+			]
+		},
+		{
+			"name": "a level's unknown marine is replaced without a word in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "NoteRefusedFromAFile(\"a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle\");",
+					"to": "NoteRefusedFromAFile(\"a marine was replaced\");"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown marine weapon is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (!GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))\n",
+					"to": "\tif (!block)\n"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown marine weapon is refused without a word in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "NoteRefusedFromAFile(\"a save named a marine weapon that isn't on the list, so that marine's part of the save is left out\");",
+					"to": "NoteRefusedFromAFile(\"a save was refused\");"
+				}
+			]
+		},
+		{
+			"name": "a level's unknown predator weapon is read through",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "                if (!predatorStatus->Selected_Weapon)\n",
+					"to": "                if (!predatorStatus)\n"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown predator weapon is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\tif (!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))\n",
+					"to": "\tif (!block)\n"
+				}
+			]
+		},
+		{
+			"name": "a refusal isn't marked as one in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "LogString(std::string(\"npc: refused: \") + why);",
+					"to": "LogString(why);"
+				}
+			]
 		}
 	]
 }

@@ -164,6 +164,34 @@ static void TestTheHalfMadeNpc()
 	Check(Has(cleanup, "\t\t\t\t//stop any sound the queen is making\n\t\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n\t\t\t}"), "and a queen's");
 }
 
+// NPC-WEAPON-NULL-1: a level or save file names an NPC's weapon by number, and a number that isn't on the list found nothing,
+// which the code then read through. A file is hostile input, so each place now checks, and says in the log what it did instead.
+static void TestTheWeaponFromAFile()
+{
+	puts("A marine's or predator's weapon named by a level or save file:");
+
+	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+	std::string const predator = ReadSourceFile("3dc/avp/bh_predator.cpp");
+	std::string const marineMade = Between(marine, "void InitMarineBehaviour(", "#if 0");
+	std::string const marineLoaded = Between(marine, "void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)", "void SaveStrategy_Marine(");
+	std::string const predatorMade = Between(predator, "void InitPredatorBehaviour(", "void InitDormantPredatorBehaviour(");
+	std::string const predatorLoaded = Between(predator, "void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)", "void SaveStrategy_Predator(");
+
+	Check(Has(marine, "LogString(std::string(\"npc: refused: \") + why);") && Has(predator, "LogString(std::string(\"npc: refused: \") + why);"), "a refusal is written in the log, with npc: refused: in front");
+
+	Check(ComesBefore(marineMade, "if (!marineStatus->My_Weapon)", "marineStatus->My_Weapon->Android"), "a level's marine with a kind that isn't on the list is caught before his weapon is read");
+	Check(Has(marineMade, "NoteRefusedFromAFile(\"a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle\");\n\t\t\tmarineStatus->My_Weapon=GetThisNPCMarineWeapon(MNPCW_PulseRifle);"), "and he's an ordinary marine, and the log says so in those words");
+
+	Check(ComesBefore(marineLoaded, "if (!GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's marine with a weapon that isn't on the list is refused before anything is changed");
+	Check(Has(marineLoaded, "NoteRefusedFromAFile(\"a save named a marine weapon that isn't on the list, so that marine's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
+
+	Check(ComesBefore(predatorMade, "if (!predatorStatus->Selected_Weapon)", "predatorStatus->Selected_Weapon->Riffname"), "a level's predator with a weapon that isn't on the list is caught before it's read");
+	Check(Has(predatorMade, "NoteRefusedFromAFile(\"a level named a predator weapon that isn't on the list, so he has his wristblade\");"), "and he has his wristblade, and the log says so in those words");
+
+	Check(ComesBefore(predatorLoaded, "if (!GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))", "sbPtr = FindSBWithName(header->SBname);"), "a save's predator with a weapon that isn't on the list is refused before anything is changed");
+	Check(Has(predatorLoaded, "NoteRefusedFromAFile(\"a save named a predator weapon that isn't on the list, so that predator's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -206,6 +234,7 @@ int main()
 	TestTheXenoborgJustMade();
 	TestTheSentryGunJustMade();
 	TestTheHalfMadeNpc();
+	TestTheWeaponFromAFile();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
