@@ -3865,6 +3865,14 @@ static void TestNamesStayInTheirChunks()
 // to be refused while the file is read. Each row below changes one thing about a real shape of hierarchy, built here from bytes, the same as a file's.
 static char hierarchyBytes[8192];
 
+// Each hierarchy is built from a clean start: every byte 0, so nothing an earlier one wrote is still there to be read
+static char * StartHierarchy()
+{
+	memset(hierarchyBytes, 0, sizeof(hierarchyBytes));
+
+	return hierarchyBytes;
+}
+
 // Starts a chunk whose size isn't known yet. The chunk's contents go after what this gives back.
 static char * OpenChunk(char * where, char const * name)
 {
@@ -3884,14 +3892,18 @@ static char * CloseChunk(char * chunk, char * end)
 	return end;
 }
 
-// The chunk with a section's name in it: a count of extra numbers, here 0, and then the name
+// The chunk with a section's name in it: a count of extra numbers, here 0, and then the name. The game reads the name
+// as text, up to a 0 byte, so the name's letters are copied and then its 0 is written, on a line of its own.
 static char * PutSectionName(char * where)
 {
-	char * const data = PutChunk(where, "OBJHIERD", 4 + 8);
+	static char const name[] = "section";
+	size_t const letters = sizeof(name) - 1;
+	char * const data = PutChunk(where, "OBJHIERD", 4 + letters + 1);
 
-	memcpy(data + 4, "section", 8);
+	memcpy(data + 4, name, letters);
+	data[4 + letters] = '\0';
 
-	return data + 4 + 8;
+	return data + 4 + letters + 1;
 }
 
 // A compact list with one sequence. Each frame is 36 bytes, with its start at 28.
@@ -4031,20 +4043,20 @@ static void TestHierarchyAnimations()
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
 	{
-		Check(HierarchyAccepted(PutSection(hierarchyBytes, rows[i].fill)) == rows[i].good, rows[i].says);
+		Check(HierarchyAccepted(PutSection(StartHierarchy(), rows[i].fill)) == rows[i].good, rows[i].says);
 	}
 
 	// How many sections the outermost chunk holds. The game reads the first with no check that there is one, and only ever builds that one.
-	Check(!HierarchyAccepted(PutSectionName(hierarchyBytes)), "a hierarchy with no section inside is refused");
-	Check(!HierarchyAccepted(PutSection(PutSection(hierarchyBytes, PutGoodCompact), PutGoodCompact)), "a hierarchy with two sections inside is refused");
+	Check(!HierarchyAccepted(PutSectionName(StartHierarchy())), "a hierarchy with no section inside is refused");
+	Check(!HierarchyAccepted(PutSection(PutSection(StartHierarchy(), PutGoodCompact), PutGoodCompact)), "a hierarchy with two sections inside is refused");
 
 	// The outermost chunk's own sequences are only names, in 61 of the game's own hierarchies, and the game never builds them
 	{
-		char * const after = PutSection(hierarchyBytes, PutGoodCompact);
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
 		Check(HierarchyAccepted(PutCompactSequence(after, 0, 0)), "an outermost chunk's sequence with no frames is left alone");
 	}
 	{
-		char * const after = PutSection(hierarchyBytes, PutGoodCompact);
+		char * const after = PutSection(StartHierarchy(), PutGoodCompact);
 		Check(HierarchyAccepted(PutLongSequence(after, false, 0, 0)), "and so is one with no header");
 	}
 }
