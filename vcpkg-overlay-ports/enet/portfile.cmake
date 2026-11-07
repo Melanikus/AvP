@@ -11,6 +11,8 @@ vcpkg_from_github(OUT_SOURCE_PATH SOURCE_PATH
         003-keep-send-lists-off-the-stack.patch
         # The game only sends reliable messages, so ENet refuses the other three kinds, and a missing size check goes in as well.
         004-refuse-what-this-game-never-sends.patch
+        # From our review of ENet as a reader of hostile packets: limits on what one peer can make it hold or do. tests/enet_hostile_test.cpp has a row for each.
+        005-limits-on-what-a-peer-can-make-enet-hold.patch
 )
 
 vcpkg_cmake_configure(

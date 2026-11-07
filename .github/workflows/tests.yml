@@ -29,13 +29,10 @@ jobs:
         shell: pwsh
         run: ./tests/compile-shaders.ps1
 
-      - name: Build the tests
-        shell: pwsh
-        run: ./tests/build.ps1
-
-      # The shader test compiles with the same library the game does, so it needs that library, and only that: this job doesn't
-      # build the game. The registry commit is the builtin-baseline in vcpkg.json, the same as a real build.
-      - name: Fetch the game's shader compiler
+      # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
+      # library the game does, and the network tests link the game's ENet, so both come before the tests are built. The registry
+      # commit is the builtin-baseline in vcpkg.json, the same as a real build, and our own patched ports are used where we have them.
+      - name: Fetch the game's shader compiler and ENet
         shell: pwsh
         run: |
           $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
@@ -46,8 +43,12 @@ jobs:
           if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
           & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & (Join-Path $root 'vcpkg.exe') install dxsdk-d3dx:x86-windows --classic --x-install-root=vcpkg_installed
+          & (Join-Path $root 'vcpkg.exe') install dxsdk-d3dx:x86-windows enet:x86-windows --classic --overlay-ports=vcpkg-overlay-ports --x-install-root=vcpkg_installed
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build the tests
+        shell: pwsh
+        run: ./tests/build.ps1
 
       # With no tests at all this fails, so a broken build script can't pass as "every test passed".
       - name: Run every test
