@@ -139,6 +139,38 @@ New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'D3DCompiler_43.dll')
 Expect-Refused (Run-Imports) "D3DCompiler_43.dll isn't in the package" 'the check that reads what links to what notices the compiler too, though nothing links to it'
 
+# --- No folder of the machine that built it. A copy of a library with one put after its end, which nothing else here notices: the end of the file isn't
+# part of what Windows loads, and this library isn't signed. First as plain text, then as UTF-16, the way a program keeps a wide string, then UTF-16 starting
+# on an odd byte, and last a /home/ folder from another system, which doesn't count on its own, so it has to pass.
+function Add-ToTheEnd([string]$name, [byte[]]$more)
+{
+    $file = Join-Path $work $name
+    $bytes = [System.IO.File]::ReadAllBytes($file)
+    [System.IO.File]::WriteAllBytes($file, [byte[]]($bytes + $more))
+}
+
+$folder = 'C:\Users\someone\source\AvP\3dc\utilities.cpp'
+
+New-Copy
+Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("$folder`0"))
+Expect-Refused (Run-Imports) 'libsmackerdec.dll, as plain text, names a folder: C:\Users\someone' 'a library naming the folder it was built in, as plain text, is refused'
+
+New-Copy
+Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::Unicode.GetBytes("$folder`0"))
+Expect-Refused (Run-Imports) 'libsmackerdec.dll, as UTF-16' 'and as UTF-16'
+
+New-Copy
+Add-ToTheEnd 'libsmackerdec.dll' ([byte[]](@(0x41) + [System.Text.Encoding]::Unicode.GetBytes("$folder`0")))
+Expect-Refused (Run-Imports) 'names a folder: C:\Users\someone' 'and as UTF-16 starting on an odd byte'
+
+New-Copy
+Add-ToTheEnd 'AvPx.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
+Expect-Refused (Run-Imports) 'AvPx.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
+
+New-Copy
+Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and ogg.pdb`0"))
+Expect-Passes (Run-Imports) 'none names a folder on the machine that built it' "a web address, and a .pdb's name with no folder, aren't refused"
+
 if (Test-Path -LiteralPath $work) { Remove-Item -Recurse -Force -LiteralPath $work }
 
 Write-Host "$($script:passes) passed, $($script:failures) failed"
