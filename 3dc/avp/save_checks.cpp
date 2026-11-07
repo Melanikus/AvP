@@ -291,8 +291,8 @@ void Save_RestoreDynamics(DYNAMICSBLOCK *live, const DYNAMICSBLOCK *saved)
 	}
 
 	int const ownMass = live->Mass;
-	enum DYN_TYPE const ownType = live->DynamicsType;
-	enum TOPPLE_FORCE const ownTopple = live->ToppleForce;
+	const DYN_TYPE ownType = live->DynamicsType;
+	const TOPPLE_FORCE ownTopple = live->ToppleForce;
 
 	*live = *saved;
 
