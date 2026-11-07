@@ -4,10 +4,12 @@
 tests/chunk_memory_test.cpp
 3dc/avp/win95/avp_chunk.cpp
 3dc/avp/win95/strategy_chunk.cpp
+3dc/win95/animation_objects.cpp
 3dc/win95/chunk.cpp
 3dc/win95/chunk_object.cpp
 3dc/win95/chunk_shape.cpp
 3dc/win95/chunk_type.cpp
+3dc/win95/hierarchy_chunk.cpp
 3dc/win95/huffman.cpp
 3dc/win95/list_tem.cpp
 3dc/win95/md5.c
