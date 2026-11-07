@@ -1,0 +1,5 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc /I3dc/win95 /I3dc/avp /I3dc/avp/win95 /I3dc/avp/win95/frontend /I3dc/include
+tests/circle_tables_test.cpp
+3dc/tables.cpp
