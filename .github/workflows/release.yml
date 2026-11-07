@@ -1,4 +1,5 @@
-# Makes a release of the game, only when the owner asks for it ("Run workflow", on avpx_main, with a version number).
+# Makes a release of the game, only when the owner asks for it ("Run workflow", on avpx_main, with a version number, or a beta's name
+# for a pre-release: see RELEASING.md).
 #
 # It stops before building anything unless this exact commit may be released: the first job's steps are the list of what it
 # checks, and RELEASE-BLOCKERS.md says what's still in the way. Nothing is released while we know about an open hole (AvP Tao #1),
@@ -19,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'The version, three numbers such as 1.0.0'
+        description: "The version: three numbers such as 1.0.0, or a beta's name such as betarelease20261107, which makes a pre-release"
         required: true
         type: string
 
@@ -40,6 +41,11 @@ jobs:
       contents: read          # to read the code, and which tags there are
       checks: read            # to read the scan results of this commit
       security-events: read   # to read whether any code scanning alert is open
+    # The tag and whether it's a pre-release, worked out by tools/check-release.ps1 once everything has passed, for the last job, which has
+    # no copy of the code to work them out from
+    outputs:
+      tag: ${{ steps.refuse.outputs.tag }}
+      prerelease: ${{ steps.refuse.outputs.prerelease }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,6 +56,7 @@ jobs:
       # The version comes in through a setting and not written into the command, because it's typed by a person, and written into
       # the command it would be run as part of it.
       - name: Refuse anything that may not be released
+        id: refuse
         shell: pwsh
         env:
           VERSION: ${{ inputs.version }}
@@ -129,7 +136,7 @@ jobs:
 
   publish:
     name: Make the draft release
-    needs: build
+    needs: [check, build]   # build for the package; check for the tag and whether it's a pre-release
     runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes the gate
     timeout-minutes: 15
     environment: release    # waits here until the owner approves. See RELEASING.md for how this is set up on GitHub
@@ -151,16 +158,25 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ inputs.version }}
+          TAG: ${{ needs.check.outputs.tag }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
         run: |
           $tip = gh api "repos/$env:GITHUB_REPOSITORY/commits/avpx_main" --jq .sha
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the tip of avpx_main' }
           if ($tip -cne $env:GITHUB_SHA) { throw "avpx_main has moved on to $tip since this was checked, so this commit is no longer its tip" }
 
-          # Only this job can see drafts, so this is the place to find one that's already using this version.
+          # The tag came from the first job. It's looked at again here, before anything uses it: it has to be the one the version makes,
+          # a beta's name as it is or v and three numbers, and only a beta is a pre-release.
+          $isBeta = $env:VERSION -cmatch '^betarelease[0-9]{8}\z'
+          if ($env:TAG -cnotmatch '^(v[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}|betarelease[0-9]{8})\z') { throw 'The tag from the checks is not a tag this workflow makes' }
+          if ($env:TAG -cne $(if ($isBeta) { $env:VERSION } else { "v$env:VERSION" })) { throw 'The tag from the checks is not the one this version makes' }
+          if ($env:PRERELEASE -cne $(if ($isBeta) { 'true' } else { 'false' })) { throw 'Whether this is a pre-release does not match the version' }
+
+          # Only this job can see drafts, so this is the place to find one that's already using this tag.
           $releases = gh release list --repo $env:GITHUB_REPOSITORY --limit 1000 --json tagName --jq '.[].tagName'
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the list of releases' }
-          if ($releases -ccontains "v$env:VERSION") { throw "There is already a release of v$env:VERSION, maybe a draft" }
+          if ($releases -ccontains $env:TAG) { throw "There is already a release of $env:TAG, maybe a draft" }
 
           $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
           $wanted, $name = $line -split '  ', 2
@@ -171,14 +187,17 @@ jobs:
         with:
           subject-checksums: release/SHA256SUMS
 
-      # --target says which commit the tag goes on when the owner publishes.
+      # --target says which commit the tag goes on when the owner publishes. A beta is made a pre-release, and it's still a draft that only
+      # the owner can publish.
       - name: Make the draft
         shell: pwsh
         env:
-          VERSION: ${{ inputs.version }}
+          TAG: ${{ needs.check.outputs.tag }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v$env:VERSION"
+          $tag = $env:TAG
+          $preRelease = $env:PRERELEASE -ceq 'true'
           $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
           $hash, $name = $line -split '  ', 2
           @(
@@ -191,10 +210,13 @@ jobs:
             'The owner writes what changed here before publishing. RELEASING.md says what to read first.'
           ) | Out-File -Encoding utf8 notes.md
 
-          gh release create $tag "release/$name" release/SHA256SUMS --repo $env:GITHUB_REPOSITORY --draft --target $env:GITHUB_SHA --title "AvP $tag" --notes-file notes.md
+          $alsoSay = @()
+          if ($preRelease) { $alsoSay += '--prerelease' }
+          gh release create $tag "release/$name" release/SHA256SUMS --repo $env:GITHUB_REPOSITORY --draft --target $env:GITHUB_SHA --title "AvP $tag" --notes-file notes.md @alsoSay
           if ($LASTEXITCODE -ne 0) { throw 'The draft could not be made' }
 
-          $made = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish | ConvertFrom-Json
+          $made = gh release view $tag --repo $env:GITHUB_REPOSITORY --json isDraft,isPrerelease,targetCommitish | ConvertFrom-Json
           if (-not $made.isDraft) { throw 'The release is not a draft' }
+          if ($made.isPrerelease -ne $preRelease) { throw "The draft's pre-release mark is $($made.isPrerelease), and it should be $preRelease" }
           if ($made.targetCommitish -cne $env:GITHUB_SHA) { throw "The draft points at $($made.targetCommitish), not at the commit that was checked" }
           "The draft of $tag is ready for the owner to read and publish."
