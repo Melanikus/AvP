@@ -564,6 +564,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "RELIEF: past the end of the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/texture_relief.cpp",
+					"from": "if (picture < reliefOf.size() && reliefOf[picture].relief != NO_TEXTURE && (autoGenerate || !reliefOf[picture].workedOut))",
+					"to": "if (reliefOf[picture].relief != NO_TEXTURE && (autoGenerate || !reliefOf[picture].workedOut))"
+				}
+			]
 		}
 	]
 }
