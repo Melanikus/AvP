@@ -16,7 +16,8 @@
 // - a CONNECT takes no place until it brings back the token the host sent to its address (patch 006): one with no token,
 //   a made-up one, one for another connection number, one sent from another port, or one kept 30 s takes no place, the
 //   right one does, and an older ENet without the token is told no at once, with the reason. The token is SipHash, the
-//   reference code kept as it is, and it gives all 64 answers its authors published.
+//   reference code kept as it is, and it gives all 64 answers its authors published. And a joiner's first CONNECT is one an
+//   older host (without the token) still reads as before.
 // And honest messages still work: a 3,000-byte message, which ENet sends in pieces, arrives whole, 500 small ones arrive in
 // order, and once the host has read them all, nothing is counted as waiting.
 //
@@ -951,6 +952,77 @@ static void TestTheTokenForAConnect()
 	enet_host_destroy(host);
 }
 
+// A joiner with this ENet, and a host with an older one (without the token). Two ENets can't be linked into one program, so
+// this reads the first packet a joining ENet sends, the way an older ENet would. That ENet reads a CONNECT 8 bytes shorter
+// than this one, and then reads on: the next byte is a command's kind, and kind 0 means "nothing", where it stops. This
+// ENet's first CONNECT ends with the token's 8 bytes, all 0, because it has no token yet. So an older host reads it as
+// before, answers, and the joiner never gets a token to add. The game's own version check then decides, in words.
+static void TestANewJoinerOnAnOlderHost()
+{
+	ENetSocket const olderHost = SocketHere("an older host's stand-in socket is on");
+	ENetAddress here = ThisMachine();
+	ENetHost *const joiner = enet_host_create(&here, 1, 0, 0, 0);
+	ENetAddress olderHostAddress;
+	bool const ready = olderHost != ENET_SOCKET_NULL && joiner != NULL && SocketIsOnThisMachine(joiner->socket, "the joiner's socket is on") && enet_socket_get_address(olderHost, &olderHostAddress) == 0;
+
+	Check(ready, "a joining ENet and a plain socket standing in for an older host, on 127.0.0.1 only");
+
+	if (!ready)
+	{
+		if (olderHost != ENET_SOCKET_NULL)
+		{
+			enet_socket_destroy(olderHost);
+		}
+
+		if (joiner)
+		{
+			enet_host_destroy(joiner);
+		}
+
+		return;
+	}
+
+	enet_address_set_host_ip(&olderHostAddress, "127.0.0.1");
+	joiner->checksum = enet_crc32;
+	enet_host_connect(joiner, &olderHostAddress, kNetChannels, 0);
+	enet_host_flush(joiner);
+
+	uint8_t bytes[4096];
+	int length = 0;
+	DWORD const startedAt = GetTickCount();
+
+	while (length <= 0 && GetTickCount() - startedAt < 500)
+	{
+		ENetBuffer buffer;
+		ENetAddress from;
+
+		buffer.data = bytes;
+		buffer.dataLength = sizeof(bytes);
+		length = enet_socket_receive(olderHost, &from, &buffer, 1);
+
+		if (length <= 0)
+		{
+			Sleep(1);
+		}
+	}
+
+	// The header: the connection number "none" with a flag saying a time follows, the time, and the checksum
+	size_t const header = sizeof(enet_uint16) + sizeof(enet_uint16) + sizeof(enet_uint32);
+	size_t const olderConnect = sizeof(ENetProtocolConnect) - ENET_PROTOCOL_COOKIE_SIZE;
+	bool isAConnect = length == (int)(header + sizeof(ENetProtocolConnect)) && (bytes[header] & ENET_PROTOCOL_COMMAND_MASK) == ENET_PROTOCOL_COMMAND_CONNECT;
+	bool endsInNothing = isAConnect;
+
+	for (size_t i = header + olderConnect; endsInNothing && i < (size_t)length; i++)
+	{
+		endsInNothing = bytes[i] == 0;
+	}
+
+	Check(isAConnect && endsInNothing, "a joining ENet's first packet is a CONNECT an older host reads as before: where an older CONNECT ends, the rest is all 0, which an older ENet reads as \"nothing\" and stops");
+
+	enet_socket_destroy(olderHost);
+	enet_host_destroy(joiner);
+}
+
 int main()
 {
 	ENetCallbacks callbacks = { FilledMalloc, PlainFree, OutOfMemory };
@@ -968,6 +1040,7 @@ int main()
 	TestAPacketShorterThanItsHeader();
 	TestHonestMessages();
 	TestTheTokensHash();
+	TestANewJoinerOnAnOlderHost();
 	// Last, because it moves ENet's clock on and back
 	TestTheTokenForAConnect();
 
