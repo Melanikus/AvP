@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   texts on the statistics screen that hold words from the language file, or the player's profile
 //   name, are written with a size limit, so they always fit
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the weapon statistics no longer write one past the end of their lists when given a slot number equal to their length
 /* KJL 99/2/12 - Statistics of current game */
 #include "3dc.h"
 #include "inline.h"
@@ -176,7 +178,7 @@ extern void CurrentGameStats_WeaponFired(enum WEAPON_SLOT slot, unsigned int rou
 		return;
 	}
 
-	if ((slot >= 0) && (slot <= MAX_NO_OF_WEAPON_SLOTS)) {
+	if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {
 		CurrentGameStatistics.ShotsFired[slot] += rounds;
 	}
 }
@@ -187,7 +189,7 @@ extern void CurrentGameStats_WeaponHit(enum WEAPON_SLOT slot, unsigned int round
 		return;
 	}
 
-	if ((slot >= 0) && (slot <= MAX_NO_OF_WEAPON_SLOTS)) {
+	if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {
 		CurrentGameStatistics.ShotsHit[slot] += rounds;
 	}
 }
@@ -198,7 +200,7 @@ extern void CurrentGameStats_UsingWeapon(enum WEAPON_SLOT slot)
 		return;
 	}
 
-	if ((slot >= 0) && (slot <= MAX_NO_OF_WEAPON_SLOTS)) {
+	if ((slot >= 0) && (slot < MAX_NO_OF_WEAPON_SLOTS)) {
 		CurrentGameStatistics.WeaponTimes[slot] += NormalFrameTime;
 	}
 }
