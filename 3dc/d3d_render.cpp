@@ -38,6 +38,9 @@
 //   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
 //   a frame with no light chosen has its world turned down like any other, so the screen doesn't jump brighter when the last light leaves the list
 
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
+//   it was built in, with the name of whoever built it, into the game
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -102,6 +105,10 @@
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
+
+// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
+// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
+static const char kThisFile[] = "3dc/d3d_render.cpp";
 
 bool frustumCull = false;
 bool gunLayer = false;
@@ -758,7 +765,7 @@ void DrawFmvFrame(uint32_t frameWidth, uint32_t frameHeight, const std::vector<t
 	LastError = d3d.lpD3DDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, &fmvVerts[0], sizeof(FMVVERTEX));
 	if (FAILED(LastError))
 	{
-		LogDxError(LastError, __LINE__, __FILE__);
+		LogDxError(LastError, __LINE__, kThisFile);
 		OutputDebugString("DrawPrimitiveUP failed\n");
 	}
 }
