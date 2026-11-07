@@ -21,7 +21,8 @@
 //   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
 //   the lights that get a place are the ones that put the most light on what's on screen, not the nearest. See light_choice.h
 // Modified 2026-11-07 by Melanikus for the AvP port:
-//   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in
+//   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
+//   Found while reading Bobblen's avp-forever fork
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
