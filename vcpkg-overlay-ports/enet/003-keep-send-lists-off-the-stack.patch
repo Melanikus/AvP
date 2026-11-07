@@ -1,0 +1,122 @@
+Keep the two short-lived send lists in the host and peer, not on the stack.
+
+Our own patch (AvP), from CodeQL's stack-address-escape rule. ENet's lists link
+their items to the list's own header, and enet_peer_send and the send function
+each kept a list on the stack, so items held stack addresses for a while. Both
+lists were emptied before use ended, so this wasn't a live bug, but a list that
+lives in the peer or host can't leave a stack address behind at all. They're
+cleared before each use, just as before. Neither function calls itself.
+
+diff --git a/include/enet/enet.h b/include/enet/enet.h
+index 1b8551f..c4e3c73 100644
+--- a/include/enet/enet.h
++++ b/include/enet/enet.h
+@@ -317,6 +317,7 @@ typedef struct _ENetPeer
+    ENetList      outgoingSendReliableCommands;
+    ENetList      outgoingCommands;
+    ENetList      dispatchedCommands;
++   ENetList      sendFragments;            /**< only in use while enet_peer_send splits a packet */
+    enet_uint16   flags;
+    enet_uint16   reserved;
+    enet_uint16   incomingUnsequencedGroup;
+@@ -377,6 +378,7 @@ typedef struct _ENetHost
+    size_t               channelLimit;                /**< maximum number of channels allowed for connected peers */
+    enet_uint32          serviceTime;
+    ENetList             dispatchQueue;
++   ENetList             sentUnreliableCommands;      /**< only in use while packets are being sent */
+    enet_uint32          totalQueued;
+    size_t               packetSize;
+    enet_uint16          headerFlags;
+diff --git a/peer.c b/peer.c
+index a7ac012..06b2d14 100644
+--- a/peer.c
++++ b/peer.c
+@@ -127,7 +127,7 @@ enet_peer_send (ENetPeer * peer, enet_uint8 channelID, ENetPacket * packet)
+              fragmentOffset;
+       enet_uint8 commandNumber;
+       enet_uint16 startSequenceNumber; 
+-      ENetList fragments;
++      ENetList * fragments = & peer -> sendFragments;
+       ENetOutgoingCommand * fragment;
+ 
+       if (fragmentCount > ENET_PROTOCOL_MAXIMUM_FRAGMENT_COUNT)
+@@ -145,7 +145,7 @@ enet_peer_send (ENetPeer * peer, enet_uint8 channelID, ENetPacket * packet)
+          startSequenceNumber = ENET_HOST_TO_NET_16 (channel -> outgoingReliableSequenceNumber + 1);
+       }
+         
+-      enet_list_clear (& fragments);
++      enet_list_clear (fragments);
+ 
+       for (fragmentNumber = 0,
+              fragmentOffset = 0;
+@@ -159,9 +159,9 @@ enet_peer_send (ENetPeer * peer, enet_uint8 channelID, ENetPacket * packet)
+          fragment = (ENetOutgoingCommand *) enet_malloc (sizeof (ENetOutgoingCommand));
+          if (fragment == NULL)
+          {
+-            while (! enet_list_empty (& fragments))
++            while (! enet_list_empty (fragments))
+             {
+-               fragment = (ENetOutgoingCommand *) enet_list_remove (enet_list_begin (& fragments));
++               fragment = (ENetOutgoingCommand *) enet_list_remove (enet_list_begin (fragments));
+                
+                enet_free (fragment);
+             }
+@@ -181,14 +181,14 @@ enet_peer_send (ENetPeer * peer, enet_uint8 channelID, ENetPacket * packet)
+          fragment -> command.sendFragment.totalLength = ENET_HOST_TO_NET_32 (packet -> dataLength);
+          fragment -> command.sendFragment.fragmentOffset = ENET_NET_TO_HOST_32 (fragmentOffset);
+         
+-         enet_list_insert (enet_list_end (& fragments), fragment);
++         enet_list_insert (enet_list_end (fragments), fragment);
+       }
+ 
+       packet -> referenceCount += fragmentNumber;
+ 
+-      while (! enet_list_empty (& fragments))
++      while (! enet_list_empty (fragments))
+       {
+-         fragment = (ENetOutgoingCommand *) enet_list_remove (enet_list_begin (& fragments));
++         fragment = (ENetOutgoingCommand *) enet_list_remove (enet_list_begin (fragments));
+  
+          enet_peer_setup_outgoing_command (peer, fragment);
+       }
+diff --git a/protocol.c b/protocol.c
+index 3c3b8d3..7616102 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -1603,9 +1603,9 @@ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int ch
+     ENetProtocolHeader * header = (ENetProtocolHeader *) headerData;
+     int sentLength = 0;
+     size_t shouldCompress = 0;
+-    ENetList sentUnreliableCommands;
++    ENetList * sentUnreliableCommands = & host -> sentUnreliableCommands;
+ 
+-    enet_list_clear (& sentUnreliableCommands);
++    enet_list_clear (sentUnreliableCommands);
+ 
+     for (int sendPass = 0, continueSending = 0; sendPass <= continueSending; ++ sendPass)
+     for (ENetPeer * currentPeer = host -> peers;
+@@ -1640,13 +1640,13 @@ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int ch
+ 
+         if (((enet_list_empty (& currentPeer -> outgoingCommands) &&
+               enet_list_empty (& currentPeer -> outgoingSendReliableCommands)) ||
+-             enet_protocol_check_outgoing_commands (host, currentPeer, & sentUnreliableCommands)) &&
++             enet_protocol_check_outgoing_commands (host, currentPeer, sentUnreliableCommands)) &&
+             enet_list_empty (& currentPeer -> sentReliableCommands) &&
+             ENET_TIME_DIFFERENCE (host -> serviceTime, currentPeer -> lastReceiveTime) >= currentPeer -> pingInterval &&
+             currentPeer -> mtu - host -> packetSize >= sizeof (ENetProtocolPing))
+         { 
+             enet_peer_ping (currentPeer);
+-            enet_protocol_check_outgoing_commands (host, currentPeer, & sentUnreliableCommands);
++            enet_protocol_check_outgoing_commands (host, currentPeer, sentUnreliableCommands);
+         }
+ 
+         if (host -> commandCount == 0)
+@@ -1726,7 +1726,7 @@ enet_protocol_send_outgoing_commands (ENetHost * host, ENetEvent * event, int ch
+ 
+         sentLength = enet_socket_send (host -> socket, & currentPeer -> address, host -> buffers, host -> bufferCount);
+ 
+-        enet_protocol_remove_sent_unreliable_commands (currentPeer, & sentUnreliableCommands);
++        enet_protocol_remove_sent_unreliable_commands (currentPeer, sentUnreliableCommands);
+ 
+         if (sentLength < 0)
+           return -1;

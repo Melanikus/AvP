@@ -2,6 +2,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 #define DB_LEVEL 3
@@ -3263,6 +3265,7 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 					if(ghostData->SoundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
 					if(ghostData->SoundHandle2!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle2);
 					if(ghostData->SoundHandle3!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle3);
+					if(ghostData->SoundHandle4!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle4);
 					Dispel_HModel(&ghostData->HModelController);
 				}
 			}
@@ -3456,6 +3459,9 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 				if(corpseData)
 				{
 					if(corpseData->SoundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle);
+					if(corpseData->SoundHandle2!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle2);
+					if(corpseData->SoundHandle3!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle3);
+					if(corpseData->SoundHandle4!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle4);
 					Dispel_HModel(&corpseData->HModelController);
 				}
 			}

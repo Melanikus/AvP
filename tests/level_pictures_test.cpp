@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a stand-in for what the memory code now tells the game's sounds
 // What happens to the pictures a level file names, going through the game's real level loader. No game files are needed: each test builds
 // the bytes of a small level file itself.
 //
@@ -69,6 +71,11 @@ void avp_MessageBox(const char *message, int)
 void avp_exit(int code)
 {
 	exit(code);
+}
+
+// The memory code tells the game's sounds about memory that's about to go. There are no sounds in this test.
+void Sound_ForgetAddressesInside(const void *, size_t)
+{
 }
 
 // The loader can do far more than these tests ask of it: it copies whole shapes and levels, and plays sounds. All of that needs these to exist,

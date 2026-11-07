@@ -22,10 +22,14 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the page of games found can stop the search, so that nothing stays open on the network
+//   a message's header says whether it's a system message in a byte, because any number can arrive from another machine
+//   a level load answers other machines all the way through
+//   the multiplayer version is 103, and the build now stops if a message changes without it: see net_version_check.h
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -58,10 +62,17 @@ void      Net_StopSearchingForSessions();
 int       Net_ConnectingToSession();
 NetID     Net_GetNextPlayerID();
 NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *messageData, size_t dataSize);
-NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold NET_MESSAGEBUFFERSIZE bytes
+NetResult Net_Receive(uint8_t *messageData, size_t &dataSize); // messageData must hold kMostMessageBytes bytes. Only game messages come out of this: see WHO IS WHO in networking.cpp
 NetResult Net_SendSystemMessage(uint32_t messageType, NetID fromID, NetID toID, const void *messageData, size_t dataSize);
 int       Net_InitLobbiedGame();
 void      Net_ServiceNetwork();
+
+// Called all the way through a level load. It answers the other machines, and leaves what they sent waiting for when the level is ready.
+void      Net_KeepAnsweringWhileLoading();
+
+// At the end of a load: says in the log how long the longest gap between answers was, because that's what the patience below has to be longer than.
+void      Net_SayLongestGapWhileLoading();
+
 uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
@@ -74,7 +85,7 @@ static const int kMarker = 'xPvA'; // AvPx
 struct MessageHeader
 {
 	int marker;
-	bool isSystemMessage;
+	uint8_t isSystemMessage; // 1 for a system message. A byte rather than a bool, because any number can arrive here from another machine
 	uint32_t messageType;
 	NetID fromID;
 	NetID toID;
@@ -83,11 +94,16 @@ struct MessageHeader
 /*
 Version 0 - Original multiplayer + save patch
 Version 100 - Added pistol,skeeter (and new levels)
+Version 102 - A host answers each client itself, and the game description has the players' names
+Version 103 - Every packet has a checksum, and ENet refuses the kinds of message the game never sends
 */
-const int kMultiplayerVersion = 101; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 103; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
+
+// The game fills a buffer of NET_MESSAGEBUFFERSIZE, and the header goes in front of that, so this is the most a message can be.
+const size_t kMostMessageBytes = NET_MESSAGEBUFFERSIZE + sizeof(MessageHeader);
 
 enum NetMessageTypes
 {
@@ -151,12 +167,7 @@ struct PlayerDetails
 	NetID	ID;
 	uint8_t	type;
 	char	name[kPlayerNameSize];
-};
-
-struct DestroyPlayerOrGroup
-{
-	NetID	ID;
-	uint8_t	type;
+	int		version;   // kMultiplayerVersion: a host won't let in a game that doesn't speak what it speaks
 };
 
 #pragma pack()
