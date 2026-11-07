@@ -29,11 +29,14 @@
 //   lines are written by a thread of their own, so a slow disk or a virus scanner can't hold up the game
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   if the save folder couldn't be found or made, the log says why as soon as it can write
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   every line is handed to the level's own log too, which keeps them only while a level is loading (level_log.h)
 
 #include "logString.h"
 #include "renderer.h"
 #include "utilities.h"
 #include "frame_timing.h"
+#include "level_log.h"
 
 #ifdef _XBOX
 	#include "D3dx8core.h"
@@ -415,6 +418,8 @@ void WriteToLog(const std::string &logLine)
 {
 	ProcessorStageClock clock(kProcessorLog);
 
+	LevelLog_NoteLine(logLine, false);
+
 	if (LogWriter *writer = TheLogWriter())
 	{
 		writer->Add(logLine, false);
@@ -424,6 +429,8 @@ void WriteToLog(const std::string &logLine)
 void WriteErrorToLog(const std::string &logLine)
 {
 	ProcessorStageClock clock(kProcessorLog);
+
+	LevelLog_NoteLine(logLine, true);
 
 	if (LogWriter *writer = TheLogWriter())
 	{

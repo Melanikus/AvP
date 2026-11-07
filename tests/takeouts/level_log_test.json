@@ -1,0 +1,293 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a name of any length can be used",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (length == 0 || length > kLevelLogLongestName || ",
+					"to": "if (length == 0 || "
+				}
+			]
+		},
+		{
+			"name": "a name can start with a space",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": " || name[0] == ' '",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name can end with a space or a dot",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": " || name[length - 1] == ' ' || name[length - 1] == '.')",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a name can hold the characters for a folder, a drive or a device",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "c == 127 || strchr(",
+					"to": "c == 127 || false && strchr("
+				}
+			]
+		},
+		{
+			"name": "a name can hold a character below a space",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (c < 32 || c == 127 || ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "a name can hold two dots together",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (strstr(name, \"..\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a device's name can be used",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (_stricmp(base, devices[i]) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "COM and LPT with a number can be used",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (baseLength == 4 && ",
+					"to": "if (false && "
+				}
+			]
+		},
+		{
+			"name": "a level's name isn't checked, so any folder goes",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (!LevelLog_NameIsSafe(fileName))",
+					"to": "if (!fileName)"
+				}
+			]
+		},
+		{
+			"name": "a file the game didn't write is written over",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": " || memcmp(start, kLevelLogFirstLine, firstLineLength) != 0)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a file that's there already isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "else if (what.nFileSizeHigh != 0 || what.nFileSizeLow != 0)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "LINKS, GitHub only: a second name for another file is written",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": " || what.nNumberOfLinks != 1)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "LINKS, GitHub only: a link is followed",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);",
+					"to": "FILE_ATTRIBUTE_NORMAL, NULL);"
+				},
+				{
+					"file": "3dc/level_log.h",
+					"from": "if ((what.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) != 0",
+					"to": "if ((what.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0"
+				}
+			]
+		},
+		{
+			"name": "a shorter log leaves the end of the one before",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "|| !::SetEndOfFile(file) ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a log has no cap",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "(DWORD)(text.size() < kLevelLogMostBytes ? text.size() : kLevelLogMostBytes)",
+					"to": "(DWORD)text.size()"
+				}
+			]
+		},
+		{
+			"name": "lines are kept before gathering starts",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (!gathering)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "errors aren't counted",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "errors++;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "there's no most lines",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": "if (lines >= kLevelLogMostLines || ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "there's no most bytes",
+			"changes": [
+				{
+					"file": "3dc/level_log.h",
+					"from": " || text.size() + line.size() > kLevelLogMostBytes - 2048)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "a level that loads cleanly writes a log",
+			"changes": [
+				{
+					"file": "3dc/level_log.cpp",
+					"from": "if (!failed && finished.errors == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a level that can't be loaded writes nothing if nothing was said",
+			"changes": [
+				{
+					"file": "3dc/level_log.cpp",
+					"from": "if (!failed && finished.errors == 0)",
+					"to": "if (finished.errors == 0)"
+				}
+			]
+		},
+		{
+			"name": "the game's folder isn't tried",
+			"changes": [
+				{
+					"file": "3dc/level_log.cpp",
+					"from": "std::string const fallback = LevelLog_PathInTheGamesFolder(GetSaveFolderPath(), levelName);",
+					"to": "std::string const fallback;"
+				}
+			]
+		},
+		{
+			"name": "a name that can't be used is written into the log",
+			"changes": [
+				{
+					"file": "3dc/level_log.cpp",
+					"from": "text += \"Level: \" + (nameIsSafe ? folder + file : std::string(\"one whose name can't be used as a file name\")) + \"\\r\\n\";",
+					"to": "text += \"Level: \" + std::string(levelName) + \"\\r\\n\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: loading a level doesn't start gathering",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "LevelLog_StartGathering();",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level that can't be loaded writes no log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : \"\", true);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level that loads writes no log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's lines aren't handed on",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "LevelLog_NoteLine(logLine, false);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's errors aren't handed on",
+			"changes": [
+				{
+					"file": "3dc/logString.cpp",
+					"from": "LevelLog_NoteLine(logLine, true);",
+					"to": ";"
+				}
+			]
+		}
+	]
+}
