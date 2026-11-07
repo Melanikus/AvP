@@ -61,7 +61,8 @@
  *   SM-P15: no memset over HuffContext objects (they hold std::vector members)
  *   SM-P19: LogError no longer writes one string from every film's thread (see LogError.cpp)
  *   SM-P18: a film's list of decoders has a fixed place for each, so one being opened can't move the list under another's thread, and a closed one's place is
- *           used again; the number of sound tracks says how many there are, and a track that isn't there holds zeros
+ *           used again; the number of sound tracks says how many there are, and a track that isn't there holds zeros; a decoder that finds the list full
+ *           is deleted and its pointer cleared, as one that fails to open is, so nothing can delete it a second time
  *   SM-P17: catch only std::bad_alloc at the DLL boundary; fail Open on a failed frame-0 probe
  */
 
@@ -115,6 +116,7 @@ SmackerHandle Smacker_Open(const char* fileName)
 		if (place == kMostOpenDecoders)
 		{
 			delete newDecoder;
+			newDecoder = 0;
 			return newHandle;
 		}
 
