@@ -636,19 +636,46 @@ inline size_t LogFiles_NetworkPathHere(const char *line, size_t length, size_t a
 	return i - at;
 }
 
-// The folders that hold every user's own: whatever follows one of these is a user's name
-static const char *const kLogFilesUsersFolders[] = { "\\Users\\", "\\Documents and Settings\\", "\\home\\" };
+// The folders that hold every user's own: whatever follows one of these, between slashes, is a user's name. They're kept without their
+// slashes, so the program itself never holds a folder's path: tools/check-package-imports.ps1 refuses a build whose program does.
+static const char *const kLogFilesUsersFolders[] = { "Users", "Documents and Settings", "home" };
 
-// Does one of the users' folders start at line[at]? Gives back how long it is, with any extra slashes after it, or 0.
+// Does one of the users' folders, with a slash before and after it, start at line[at]? Gives back how long it is, with any extra slashes
+// on either side, or 0. Capitals don't matter.
 inline size_t LogFiles_UsersFolderHere(const char *line, size_t length, size_t at)
 {
+	if (at >= length || !LogFiles_IsSlash(line[at]))
+	{
+		return 0;
+	}
+
+	size_t start = at;
+
+	while (start < length && LogFiles_IsSlash(line[start]))
+	{
+		start++;
+	}
+
 	for (size_t u = 0; u < sizeof(kLogFilesUsersFolders) / sizeof(kLogFilesUsersFolders[0]); u++)
 	{
-		size_t const found = LogFiles_FolderHere(line, length, at, kLogFilesUsersFolders[u], false);
+		size_t const nameLength = strlen(kLogFilesUsersFolders[u]);
+		size_t i = 0;
 
-		if (found)
+		while (i < nameLength && start + i < length && LogFiles_SameLetter(line[start + i], kLogFilesUsersFolders[u][i]))
 		{
-			return found;
+			i++;
+		}
+
+		if (i == nameLength && start + i < length && LogFiles_IsSlash(line[start + i]))
+		{
+			size_t end = start + i;
+
+			while (end < length && LogFiles_IsSlash(line[end]))
+			{
+				end++;
+			}
+
+			return end - at;
 		}
 	}
 
