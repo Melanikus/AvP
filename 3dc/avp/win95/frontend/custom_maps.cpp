@@ -229,9 +229,10 @@ int CustomMaps_Named(const char *name, size_t room)
 		return -1;
 	}
 
+	// In any case, because Windows takes Map.rif and map.rif for the same file
 	for (size_t i = 0; i < customMaps.size(); i++)
 	{
-		if (strcmp(customMaps[i].name, name) == 0)
+		if (_stricmp(customMaps[i].name, name) == 0)
 		{
 			return (int)i;
 		}
