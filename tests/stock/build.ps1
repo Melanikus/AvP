@@ -27,7 +27,12 @@ Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArgu
 function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [string]$saysTo)
 {
     $found = (Get-Command $program -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-    $process = Start-Process -FilePath $found -ArgumentList $arguments -WorkingDirectory $folder -NoNewWindow -PassThru -RedirectStandardOutput $saysTo -RedirectStandardError "$saysTo.errors"
+    $started = @{ FilePath = $found; WorkingDirectory = $folder; NoNewWindow = $true; PassThru = $true; RedirectStandardOutput = $saysTo; RedirectStandardError = "$saysTo.errors" }
+
+    # Start-Process refuses an empty list of arguments, and a program run on its own has none
+    if ($arguments) { $started.ArgumentList = $arguments }
+
+    $process = Start-Process @started
     $handle = $process.Handle    # without asking for this, Windows PowerShell can't read the exit code afterwards
     $process.WaitForExit()
     return $process.ExitCode
