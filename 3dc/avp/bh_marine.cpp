@@ -7,6 +7,9 @@
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a marine firing with no target no longer works out its aim from numbers nothing set;
+//   a target standing exactly on the marine no longer divides by nothing
 #include "3dc.h"
 
 #include "inline.h"
@@ -10640,7 +10643,8 @@ static void DischargeLOSWeapon_Core(STRATEGYBLOCK *sbPtr)
 
 	/* Now hit the target with volleyrounds bullets. */
 
-	mod=SpeedRangeMods(&relPos,&relPos2);
+	/* relPos and relPos2 are only set above when there's a target, so with none there's no aim to work out. */
+	mod = marineStatusPointer->Target ? SpeedRangeMods(&relPos,&relPos2) : 0;
 
 	hitroll=marineStatusPointer->Skill; /* Marine skill... */
 	if (marineStatusPointer->Target==Player->ObStrategyBlock) {
@@ -11048,6 +11052,9 @@ int SpeedRangeMods(VECTORCH *range,VECTORCH *speed) {
 	/* Should return between 0 and ONE_FIXED... */
 
 	magrange=Approximate3dMagnitude(range);
+
+	/* A target can be standing exactly here, and the sum below divides by this distance. */
+	if (magrange==0) return(0);
 	rmod=magrange>>2;
 
 	magspeed=Approximate3dMagnitude(speed);
