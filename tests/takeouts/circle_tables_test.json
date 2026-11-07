@@ -1,0 +1,98 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the sine table is read with no wrap",
+			"changes": [
+				{
+					"file": "3dc/win95/circle_tables.h",
+					"from": "#define GetSin(a) sine[(a) & kCircleStepMask]",
+					"to": "#define GetSin(a) sine[a]"
+				}
+			]
+		},
+		{
+			"name": "the cosine table is read with no wrap",
+			"changes": [
+				{
+					"file": "3dc/win95/circle_tables.h",
+					"from": "#define GetCos(a) cosine[(a) & kCircleStepMask]",
+					"to": "#define GetCos(a) cosine[a]"
+				}
+			]
+		},
+		{
+			"name": "the wrap keeps one step too few",
+			"changes": [
+				{
+					"file": "3dc/win95/circle_tables.h",
+					"from": "#define kCircleStepMask 4095",
+					"to": "#define kCircleStepMask 2047"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game goes back to its own reads of the tables",
+			"changes": [
+				{
+					"file": "3dc/win95/platform.h",
+					"from": "#include \"circle_tables.h\"",
+					"to": "#define GetSin(a) sine[a]\n#define GetCos(a) cosine[a]"
+				}
+			]
+		},
+		{
+			"name": "a frame may count as nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/frame_time.h",
+					"from": "return frameTime < 1 ? 1 : frameTime;",
+					"to": "return frameTime < 0 ? 1 : frameTime;"
+				}
+			]
+		},
+		{
+			"name": "a frame may count as below nothing",
+			"changes": [
+				{
+					"file": "3dc/win95/frame_time.h",
+					"from": "return frameTime < 1 ? 1 : frameTime;",
+					"to": "return frameTime == 0 ? 1 : frameTime;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame's length doesn't go through the rule",
+			"changes": [
+				{
+					"file": "3dc/win95/io.cpp",
+					"from": "NormalFrameTime = FrameTime_NeverNothing(NormalFrameTime);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine with no target works out its aim from numbers nothing set",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "mod = marineStatusPointer->Target ? SpeedRangeMods(&relPos,&relPos2) : 0;",
+					"to": "mod = SpeedRangeMods(&relPos,&relPos2);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a target standing exactly on the marine divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (magrange==0) return(0);",
+					"to": ""
+				}
+			]
+		}
+	]
+}

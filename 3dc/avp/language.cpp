@@ -7,6 +7,9 @@
 //   message about a bad language file has a size limit
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's text comes from here. A stock language.txt has no such strings, and a player's file stays as it is
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the name of the marine's shoulder lamp key comes from here too
+//   the text of the rendering page's lines for choosing a key
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -48,6 +51,17 @@ static char OurTextStrings[][200] =
 	"Auto-generate maps",
 	"Works out maps for textures that have none. Turning it on takes effect from the next level.",
 	"This does nothing with Gouraud or Per-pixel (flat): only Per-pixel + normals and Relief map read maps.",
+	"Shoulder lamp",
+	"Rendering key",
+	"Changes how the world is lit. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"Shadows key",
+	"Turns shadows on and off. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"Dev views key",
+	"It only works when the game was started with -dev, and never in a network game. Press Enter, then the key you want. Backspace means no key, and Escape leaves it as it is.",
+	"That key can't be used: the game keeps it for itself. This line still has its old key.",
+	"That key can't be used: another line here has it. This line still has its old key.",
+	"That key can't be used: it's one of your controls. This line still has its old key.",
+	"One of your controls has this key too. The control wins, so this line does nothing for that species. Choose another key here, or change the control.",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

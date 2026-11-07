@@ -1,0 +1,88 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a killed xenoborg's memory is read after all",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "/* KillXeno can free this xenoborg's block, so nothing below may read it */\n\t\t\treturn;",
+					"to": "/* the fix taken out */"
+				}
+			]
+		},
+		{
+			"name": "an empty room isn't checked for",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "\tint gotit;\n\n\tif ((source==NULL)||(target==NULL)) return(0);",
+					"to": "\tint gotit;\n\n"
+				}
+			]
+		},
+		{
+			"name": "a room is read before the check",
+			"changes": [
+				{
+					"file": "3dc/module.cpp",
+					"from": "\tMODULE *mptr;\n\tint gotit;\n\n\tif ((source==NULL)",
+					"to": "\tMODULE *mptr;\n\tint gotit = source->m_flags;\n\n\tif ((source==NULL)"
+				}
+			]
+		},
+		{
+			"name": "a queen is read as a predator-alien",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "QUEEN_STATUS_BLOCK *queenStatusPointer = (QUEEN_STATUS_BLOCK *)(sbPtr->SBdataptr);",
+					"to": "PAQ_STATUS_BLOCK *queenStatusPointer = (PAQ_STATUS_BLOCK *)(sbPtr->SBdataptr);"
+				}
+			]
+		},
+		{
+			"name": "her state isn't what says she's dead",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "if(queenStatusPointer->QueenState==QBS_Dead) return 1;",
+					"to": "if(queenStatusPointer->QueenState==QBS_Reconsider) return 1;"
+				}
+			]
+		},
+		{
+			"name": "a queen runs on into the predator-alien's lines",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "if(queenStatusPointer->QueenState==QBS_Dead) return 1;\n                        break;",
+					"to": "if(queenStatusPointer->QueenState==QBS_Dead) return 1;"
+				}
+			]
+		},
+		{
+			"name": "a queen with nowhere to be drawn writes through an empty pointer",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "if(dPtr==NULL) return;",
+					"to": "if(dPtr==NULL) { GLOBALASSERT(0); }"
+				}
+			]
+		},
+		{
+			"name": "the queen's check comes after the write",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "if(dPtr==NULL) return;\n\t\t\n\tsbPtr->SBdptr = dPtr;",
+					"to": "sbPtr->SBdptr = dPtr;\n\tif(dPtr==NULL) return;"
+				}
+			]
+		}
+	]
+}

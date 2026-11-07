@@ -99,6 +99,8 @@
       <MinimalRebuild>false</MinimalRebuild>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
       <SmallerTypeCheck>false</SmallerTypeCheck>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
@@ -138,9 +140,11 @@
       <HeapCommitSize>0</HeapCommitSize>
       <StackReserveSize>0</StackReserveSize>
       <StackCommitSize>0</StackCommitSize>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -174,6 +178,11 @@
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
+      <SDLCheck>true</SDLCheck>
+      <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
+           the Debug build uses Edit and Continue, which cannot be combined with it. -->
+      <ControlFlowGuard>Guard</ControlFlowGuard>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -211,9 +220,11 @@
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
-      <DataExecutionPrevention>
-      </DataExecutionPrevention>
+      <!-- Two defences the operating system gives a program that asks for them. RandomizedBaseAddress (ASLR) loads the
+           program at a different address each run, so an attacker cannot know where anything is. DataExecutionPrevention
+           (DEP) refuses to run memory that holds data. Neither changes what the game does. -->
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
       <TargetMachine>MachineX86</TargetMachine>
     </Link>
     <Bscmake>
@@ -386,6 +397,7 @@
     <ClCompile Include="..\..\3dc\frustum.cpp" />
     <ClCompile Include="..\..\3dc\IndexBuffer.cpp" />
     <ClCompile Include="..\..\3dc\kshape.cpp" />
+    <ClCompile Include="..\..\3dc\light_choice.cpp" />
     <ClCompile Include="..\..\3dc\logString.cpp" />
     <ClCompile Include="..\..\3dc\map.cpp" />
     <ClCompile Include="..\..\3dc\mathline.cpp" />
@@ -402,6 +414,7 @@
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
+    <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
@@ -414,6 +427,7 @@
     <ClCompile Include="..\..\3dc\flicker_meter.cpp" />
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
+    <ClCompile Include="..\..\3dc\view_keys.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -691,6 +705,7 @@
     <None Include="..\..\shaders\fmvVertex.vsh" />
     <None Include="..\..\shaders\orthoPixel.psh" />
     <None Include="..\..\shaders\orthoVertex.vsh" />
+    <None Include="..\..\shaders\shoulderLamp.psh" />
     <None Include="..\..\shaders\particle.psh" />
     <None Include="..\..\shaders\particle.vsh" />
     <None Include="..\..\shaders\pixel.psh" />

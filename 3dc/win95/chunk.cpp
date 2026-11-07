@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   chunks can only sit so deep inside chunks, so a level file can't run the game off the end of its stack
 //   the code that locked chunks inside a level file on disk is gone: nothing could reach it, and it read names onto the stack with no limit
+//   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 
 #include <string.h>
 
@@ -518,6 +519,19 @@ void Chunk::Register(const char* idChunk,const char* idParent, Chunk * (* pfnCre
 // nest deep enough to run off the end of the stack and crash the game. The deepest in the game's own levels is 15.
 static int const most_chunks_inside_chunks = 64;
 static int chunks_being_made = 0;
+
+Chunk * KeepIfItHoldsTooLittle(Chunk_With_Children * parent, const char * data, int leastBytes)
+{
+	int const holds = *(int *)(data + 8) - 12;
+
+	if (holds >= leastBytes)
+	{
+		return 0;
+	}
+
+	Parent_File->error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+	return new Miscellaneous_Chunk(parent, data, data + 12, holds);
+}
 
 Chunk* Chunk_With_Children::DynCreate(const char* data)
 {

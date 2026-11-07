@@ -24,7 +24,8 @@
 
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a music file that turns out not to be valid Ogg Vorbis is now closed, instead of being left open;
-//   a file that cannot be decoded, or that holds no audio, is refused instead of being read again
+//   a file that cannot be decoded, or that holds no audio, is refused instead of being read again; no memory for
+//   the audio stream counts as a stream that cannot start
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a music thread that can't start is noticed, and not waited for later
@@ -85,7 +86,7 @@ bool VorbisPlayback::Open(const std::string &fileName)
 
 	// create the streaming audio buffer
 	_audioStream = new(std::nothrow) AudioStream;
-	if (!_audioStream->Init(_vorbisInfo->channels, _vorbisInfo->rate, 16, kBufferSize, kBufferCount)) {
+	if (!_audioStream || !_audioStream->Init(_vorbisInfo->channels, _vorbisInfo->rate, 16, kBufferSize, kBufferCount)) {
 		Con_PrintError("Couldn't initialise audio stream for Vorbis playback");
 		return false;
 	}

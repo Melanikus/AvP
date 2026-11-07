@@ -180,7 +180,7 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_fragments.cpp",
-					"from": "size_t length = 0;\n\tfrag_type_name = CopyNameFromChunk(data, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
+					"from": "size_t length = 0;\n\tfrag_type_name = CopyNameFromChunk(start, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
 					"to": "size_t length = strlen(data)+1;\n\tfrag_type_name = new char[length];\n\tstrcpy(frag_type_name,data);\n\tdata += (length+3)&~3;"
 				}
 			]
@@ -190,7 +190,7 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_fragments.cpp",
-					"from": "size_t length = 0;\n\tname = CopyNameFromChunk(data, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
+					"from": "size_t length = 0;\n\tname = CopyNameFromChunk(start, chunk_bytes, data, &length);\n\tdata += (length+4)&~3;",
 					"to": "size_t length = strlen(data)+1;\n\tname = new char[length];\n\tstrcpy(name,data);\n\tdata += (length+3)&~3;"
 				}
 			]
@@ -330,7 +330,7 @@
 			"changes": [
 				{
 					"file": "3dc/win95/chunk_shape.cpp",
-					"from": "size_t length=0;\n\tfrag_type_name=CopyNameFromChunk(data,chunk_bytes,data,&length);\n\tdata+=(length+4)&~3;",
+					"from": "size_t length=0;\n\tfrag_type_name=CopyNameFromChunk(start,chunk_bytes,data,&length);\n\tdata+=(length+4)&~3;",
 					"to": "int length=strlen(data)+1;\n\tfrag_type_name=new char[length];\n\tstrcpy(frag_type_name,data);\n\tdata+=(length+3)&~3;"
 				}
 			]

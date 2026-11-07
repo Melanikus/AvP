@@ -1,7 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
-//   simply skipped
+//   simply skipped;
+//   a swipe the game does not know is skipped, instead of using a pointer that was never set
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -469,9 +470,9 @@ void MakeQueenNear(STRATEGYBLOCK *sbPtr)
 	tempModule.m_dptr=NULL;
 	AllocateModuleObject(&tempModule); 
 	dPtr = tempModule.m_dptr;
-	if(dPtr==NULL) {
-		GLOBALASSERT(0);
-	}
+
+	// The game can run out of room for things to draw. Like every other NPC, she stays far and it tries again next frame.
+	if(dPtr==NULL) return;
 		
 	sbPtr->SBdptr = dPtr;
 	dPtr->ObStrategyBlock = sbPtr;
@@ -2378,7 +2379,9 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 				break;
 
 			default :
+				// no other swipe has a hand to reach with
 				LOCALASSERT(1==0);
+				return;
 		}
 			
 

@@ -3,6 +3,8 @@
 //   no longer includes the DirectX SDK's error-text header (our own DxErrorToString replaces it)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   holds the shader for shadow prisms kept between frames
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   holds the shader for the shoulder lamp
 #ifdef _WIN32
 
 #ifndef _included_d3_func_h_
@@ -255,6 +257,7 @@ typedef struct D3DInfo
 	effectID_t				shadowBlurEffect;
 	effectID_t				decalEffect;
 	effectID_t				orthoEffect;
+	effectID_t				shoulderLampEffect;
 	effectID_t				tallTextEffect;
 	effectID_t				fmvEffect;
 	effectID_t				particleEffect;

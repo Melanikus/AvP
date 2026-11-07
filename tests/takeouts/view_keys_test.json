@@ -1,0 +1,619 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "no key is not allowed",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (key == rules.noKey)\n\t{\n\t\treturn kViewKeyTaken;",
+					"to": "if (false)\n\t{\n\t\treturn kViewKeyTaken;"
+				}
+			]
+		},
+		{
+			"name": "a number below any key is allowed",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (key < 0 || key > rules.lastRealKey)",
+					"to": "if (key > rules.lastRealKey)"
+				}
+			]
+		},
+		{
+			"name": "a number past the last key is allowed",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (key < 0 || key > rules.lastRealKey)",
+					"to": "if (key < 0)"
+				}
+			]
+		},
+		{
+			"name": "the last real key is refused",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "key > rules.lastRealKey",
+					"to": "key >= rules.lastRealKey"
+				}
+			]
+		},
+		{
+			"name": "the game keeps nothing",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (ViewKey_IsInList(key, rules.gameKeeps, rules.gameKeepsCount))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the wrong reason for a key the game keeps",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "return kViewKeyTheGameKeepsIt;",
+					"to": "return kViewKeyNotAKey;"
+				}
+			]
+		},
+		{
+			"name": "another line is not asked",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (other != line && keys[other] == key)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line clashes with itself",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (other != line && keys[other] == key)",
+					"to": "if (keys[other] == key)"
+				}
+			]
+		},
+		{
+			"name": "only the first other line is looked at",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "for (int other = 0; other < kViewKeyLines; other++)",
+					"to": "for (int other = 0; other < 2; other++)"
+				}
+			]
+		},
+		{
+			"name": "the wrong reason for another line",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "return kViewKeyIsOnAnotherLine;",
+					"to": "return kViewKeyIsAControl;"
+				}
+			]
+		},
+		{
+			"name": "controls are not asked",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (ViewKey_IsInList(key, rules.controls, rules.controlsCount))\n\t{",
+					"to": "if (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the wrong reason for a control",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "return kViewKeyIsAControl;",
+					"to": "return kViewKeyIsOnAnotherLine;"
+				}
+			]
+		},
+		{
+			"name": "the list search stops one short",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "for (int i = 0; i < count; i++)",
+					"to": "for (int i = 0; i < count - 1; i++)"
+				}
+			]
+		},
+		{
+			"name": "the list search goes one too far",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "for (int i = 0; i < count; i++)",
+					"to": "for (int i = 0; i <= count; i++)"
+				}
+			]
+		},
+		{
+			"name": "nothing at all is read as a word",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (!word || word[0] == 0)",
+					"to": "if (!word)"
+				}
+			]
+		},
+		{
+			"name": "a zero in front is read",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (word[0] == '0' && word[1] != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a word can be any length",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (i >= 3 || word[i] < '0' || word[i] > '9')",
+					"to": "if (word[i] < '0' || word[i] > '9')"
+				}
+			]
+		},
+		{
+			"name": "what comes before the digits is read",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (i >= 3 || word[i] < '0' || word[i] > '9')",
+					"to": "if (i >= 3 || word[i] > '9')"
+				}
+			]
+		},
+		{
+			"name": "what comes after the digits is read",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (i >= 3 || word[i] < '0' || word[i] > '9')",
+					"to": "if (i >= 3 || word[i] < '0')"
+				}
+			]
+		},
+		{
+			"name": "there is no highest number",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (number > 255)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "255 is refused",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (number > 255)",
+					"to": "if (number >= 255)"
+				}
+			]
+		},
+		{
+			"name": "a refused word changes the key anyway",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "number = number * 10 + (word[i] - '0');",
+					"to": "number = number * 10 + (word[i] - '0'); *key = number;"
+				}
+			]
+		},
+		{
+			"name": "settling starts with keys left over",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "keys[line] = rules.noKey;\n\t\twasRefused[line] = false;",
+					"to": "wasRefused[line] = false;"
+				}
+			]
+		},
+		{
+			"name": "settling does not ask the rules",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "if (ViewKey_FromSavedWord(words[line], &saved) && ViewKey_Judge(line, saved, keys, rules) == kViewKeyTaken)",
+					"to": "if (ViewKey_FromSavedWord(words[line], &saved))"
+				}
+			]
+		},
+		{
+			"name": "a line sent back is not said",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "wasRefused[line] = true;",
+					"to": "wasRefused[line] = false;"
+				}
+			]
+		},
+		{
+			"name": "a line sent back has no key",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "keys[line] = ViewKey_Judge(line, usual[line], keys, rules) == kViewKeyTaken ? usual[line] : rules.noKey;",
+					"to": "keys[line] = rules.noKey;"
+				}
+			]
+		},
+		{
+			"name": "a line sent back gets its usual key even if it is taken",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "keys[line] = ViewKey_Judge(line, usual[line], keys, rules) == kViewKeyTaken ? usual[line] : rules.noKey;",
+					"to": "keys[line] = usual[line];"
+				}
+			]
+		},
+		{
+			"name": "a key acts when it is not pressed",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "return pressed && key != rules.noKey &&",
+					"to": "return key != rules.noKey &&"
+				}
+			]
+		},
+		{
+			"name": "no key acts",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": "return pressed && key != rules.noKey &&",
+					"to": "return pressed &&"
+				}
+			]
+		},
+		{
+			"name": "the line beats a control",
+			"changes": [
+				{
+					"file": "3dc/view_keys.cpp",
+					"from": " && !ViewKey_IsInList(key, rules.controls, rules.controlsCount);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keys need -dev again",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (PlayerKeysCanAct())\n\t{\n\t\tif (ViewSettings_KeyPressed(kViewKeyRendering))",
+					"to": "if (DevKeysCanAct())\n\t{\n\t\tif (ViewSettings_KeyPressed(kViewKeyRendering))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dev views work for everyone",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))",
+					"to": "if (PlayerKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dev views work in a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();",
+					"to": "return DevMode && PlayerKeysCanAct();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dev views do not need -dev",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();",
+					"to": "return AvP.Network == I_No_Network && PlayerKeysCanAct();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keys act while typing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return AvP.MainLoopRunning && !InGameMenusAreRunning() && IOFOCUS_AcceptControls() && !(IOFOCUS_Get() & (IOFOCUS_NEWCONSOLE | IOFOCUS_OSK));",
+					"to": "return AvP.MainLoopRunning && !InGameMenusAreRunning();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the keys act in a menu",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "!InGameMenusAreRunning() && IOFOCUS_AcceptControls()",
+					"to": "IOFOCUS_AcceptControls()"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fixed letter is back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (ViewSettings_KeyPressed(kViewKeyRendering))",
+					"to": "if (DebouncedKeyboardInput[KEY_L])"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the file is not put through the rules",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "ViewKey_SettleSaved(wordsToRead, kUsualKeys, TheRules(0, 0), viewKeys, wasRefused);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a bad line in the file is not logged",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "LogErrorString(std::string(\"the settings file's \") + kKeySettings[line] + \" line isn't a key that line can have, so it has gone back\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a bad line in the file is not put right",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "Config_SetString(kHeading, kKeySettings[line], std::to_string(viewKeys[line]));",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused key is taken anyway",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "if (lastAnswer[line] == kViewKeyTaken)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a key taken is not saved",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "Config_SetString(kHeading, kKeySettings[line], std::to_string(key));\n\t\tConfig_Save();",
+					"to": "Config_SetString(kHeading, kKeySettings[line], std::to_string(key));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: only the marine controls count in the menu",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "memcpy(controls + kControlsInASet * 5, &AlienInputSecondaryConfig, kControlsInASet);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a control does not win during a level",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "ViewKey_Acts(key, DebouncedKeyboardInput[key] != 0, TheRules(controls, sizeof(controls)))",
+					"to": "ViewKey_Acts(key, DebouncedKeyboardInput[key] != 0, TheRules(0, 0))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line out of range is read during a level",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "bool ViewSettings_KeyPressed(int line)\n{\n\tif (line < 0 || line >= kViewKeyLines)",
+					"to": "bool ViewSettings_KeyPressed(int line)\n{\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a line out of range is written from the menu",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "void ViewSettings_PressedKeyForLine(int line, int key)\n{\n\tif (line < 0 || line >= kViewKeyLines)",
+					"to": "void ViewSettings_PressedKeyForLine(int line, int key)\n{\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page does not say what became of a key",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "RenderingPage_SayWhatKeyLineDoes(line, lastAnswer[line], ViewSettings_LineIsHeldByAControl(line));",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game no longer keeps its console key",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "KEY_GRAVE,",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game no longer keeps a developer tool key",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "KEY_F5, KEY_F7, ",
+					"to": "KEY_F7, "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Escape does not stop choosing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (DebouncedKeyboardInput[KEY_ESCAPE])\n\t\t{\n\t\t\tAvPMenus.UserChangingViewKey = 0;",
+					"to": "if (DebouncedKeyboardInput[KEY_ESCAPE])\n\t\t{\n\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: choosing reads past the real keys",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "for (int key = 0; key < KEY_VOID; key++)",
+					"to": "for (int key = 0; key <= KEY_VOID; key++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menu gives no key instead of the one pressed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": ".MaxValue, key);",
+					"to": ".MaxValue, KEY_VOID);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Backspace does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "ViewSettings_PressedKeyForLine(AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement].MaxValue, KEY_VOID);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: left and right start choosing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)\n\t\t\t{\n\t\t\t\tViewSettings_ChoosingKey(elementPtr->MaxValue);",
+					"to": "if (true)\n\t\t\t{\n\t\t\t\tViewSettings_ChoosingKey(elementPtr->MaxValue);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the controls page does not show a clash",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (ViewSettings_KeyIsOnALine((configPtr[column])[row]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a clash is not drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "else if (ViewSettings_LineIsHeldByAControl(line))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a key a control took says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "element.HelpString = heldByAControl ? TEXTSTRING_RENDERING_KEY_HELD : usualHelp[line];",
+					"to": "element.HelpString = usualHelp[line];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused key gets the wrong reason",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "element.HelpString = TEXTSTRING_RENDERING_KEY_REFUSED_LINE;",
+					"to": "element.HelpString = TEXTSTRING_RENDERING_KEY_REFUSED_GAME;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag always says J for the dev views",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "KEYS: %s VIEW, F7 TAG, F8 CAPTURE\", GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyDevViews))));",
+					"to": "KEYS: %s VIEW, F7 TAG, F8 CAPTURE\", \"J\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag loses the rendering key's name",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "strncpy(lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyRendering))), sizeof(lightingKey) - 1);",
+					"to": "strncpy(lightingKey, \"L\", sizeof(lightingKey) - 1);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tag always says H for the shadows",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "KEYS: %s LIGHTING, %s SHADOWS\", lightingKey, GetDescriptionOfKey(static_cast<unsigned char>(ViewSettings_KeyOnLine(kViewKeyShadows))));",
+					"to": "KEYS: %s LIGHTING, %s SHADOWS\", lightingKey, \"H\");"
+				}
+			]
+		}
+	]
+}
