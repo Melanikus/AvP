@@ -1,4 +1,5 @@
-// The test for four crash fixes in the NPC code. Written 2026-11-06 by Melanikus for the AvP port.
+// The test for four crash fixes in the NPC code. Written 2026-11-06 by Melanikus for the AvP port. More were added since,
+// each in its own Test... function below: the weapon a file names, and a marine whose model isn't loaded (2026-11-07).
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   it also checks how a marine's glow is chosen when you play the alien
 //
@@ -204,6 +205,30 @@ static void TestTheWeaponFromAFile()
 	Check(Has(predatorLoaded, "NoteRefusedFromAFile(\"a save named a predator weapon that isn't on the list, so that predator's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
 }
 
+// MODEL-NULL-1. A marine's model comes from a file the level loads. If the level's lists and the file it loads don't
+// agree, the model isn't there, and the old code made him anyway: Create_HModel read through nothing. Bobblen's fork of
+// this game, avp-forever, crashed that way, making civilians in skirmish (his commit 207704e), which is how this was found. Both places that make a marine from a level have to check,
+// and before they check, nothing of his model may be left for the clean-up to free.
+static void TestTheMarineWithNoModel()
+{
+	puts("A marine or civilian whose model isn't loaded:");
+
+	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+	std::string const placed = Between(marine, "void InitMarineBehaviour(", "void InitSealBehaviour(");
+	std::string const generated = Between(marine, "void CreateMarineDynamic(", "void SetMarineElevation(");
+	std::string const placedCheck = "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}";
+	std::string const generatedCheck = "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}";
+
+	Check(Has(marine, "if (root)\n\t{\n\t\treturn true;\n\t}"), "a model that's there passes");
+	Check(Has(marine, "NoteRefusedFromAFile((std::string(who) + \" needs the model \" + model + \" from \" + file + \", which isn't loaded, so he isn't made\").c_str());\n\treturn false;"), "and one that isn't is refused, and the log names the model and its file");
+
+	Check(ComesBefore(placed, placedCheck, "Create_HModel(&marineStatus->HModelController,root_section);"), "a marine the level places is taken out before his model is made");
+	Check(ComesBefore(placed, "marineStatus->HModelController.section_data=NULL;", placedCheck) && ComesBefore(placed, "marineStatus->HModelController.Deltas=NULL;", placedCheck), "and nothing of his model is left for the clean-up to free");
+
+	Check(ComesBefore(generated, generatedCheck, "Create_HModel(&marineStatus->HModelController,root_section);"), "a marine or civilian a generator makes is taken out before his model is made");
+	Check(ComesBefore(generated, "marineStatus->HModelController.section_data=NULL;", generatedCheck) && ComesBefore(generated, "marineStatus->HModelController.Deltas=NULL;", generatedCheck), "and nothing of his model is left for the clean-up to free");
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -265,6 +290,7 @@ int main()
 	TestTheSentryGunJustMade();
 	TestTheHalfMadeNpc();
 	TestTheWeaponFromAFile();
+	TestTheMarineWithNoModel();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();

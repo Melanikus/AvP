@@ -1,5 +1,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a marine's weapon named by a level or save file is checked: a level's gets the ordinary marine's, a save's part is left out
+//   a marine or civilian whose model isn't loaded isn't made, and the log says which model, instead of the game reading
+//   through a model that isn't there (MODEL-NULL-1; found through Bobblen's avp-forever, commit 207704e, a civilian
+//   crash in skirmish; written fresh here)
 /*------------------------Patrick 2/7/97-----------------------------
   Source file for Marine and Seal AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -1185,6 +1188,23 @@ static void NoteRefusedFromAFile(char const *why)
 	LogString(std::string("npc: refused: ") + why);
 }
 
+// A marine's model is in a file the level loads, and which files those are is worked out from the level's own lists
+// (InitNPCs in npcsetup.cpp). When the two don't agree, the model isn't there. Making him anyway would read through
+// nothing in Create_HModel, whose only check is an assert, and asserts aren't in the game people play. So he isn't
+// made, and the log names the model and its file, so the level can be found and put right.
+static bool MarineModelIsLoaded(SECTION *root, MARINE_WEAPON_DATA const *weapon, char const *who)
+{
+	if (root)
+	{
+		return true;
+	}
+
+	std::string const model = weapon->HierarchyName ? weapon->HierarchyName : "(no name)";
+	std::string const file = weapon->Riffname ? weapon->Riffname : "(no name)";
+	NoteRefusedFromAFile((std::string(who) + " needs the model " + model + " from " + file + ", which isn't loaded, so he isn't made").c_str());
+	return false;
+}
+
 MARINE_WEAPON_DATA *GetThisNPCMarineWeapon(MARINE_NPC_WEAPONS this_id)
 {
 	int a;
@@ -1840,7 +1860,17 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		GLOBALASSERT(marineStatus->My_Weapon->HierarchyName);
 
+		// Nothing of his model is made yet, so if he's taken out below, there's none of it to free
+		marineStatus->HModelController.section_data=NULL;
+		marineStatus->HModelController.Deltas=NULL;
+
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
+
+		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine the level places"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 
 		Create_HModel(&marineStatus->HModelController,root_section);
 		InitHModelSequence(&marineStatus->HModelController,(int)HMSQT_MarineRun,(int)MRSS_Standard,ONE_FIXED);
@@ -2172,7 +2202,18 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 
 		//InitShapeAnimationController(&marineStatus->ShpAnimCtrl, GetShapeData(sbPtr->shapeIndex));
 
+		// Nothing of his model is made yet, so if he's taken out below, there's none of it to free
+		marineStatus->HModelController.section_data=NULL;
+		marineStatus->HModelController.Deltas=NULL;
+
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
+
+		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine a generator makes"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
+
 		Create_HModel(&marineStatus->HModelController,root_section);
 		InitHModelSequence(&marineStatus->HModelController,(int)HMSQT_MarineRun,(int)MRSS_Standard,ONE_FIXED);
 
