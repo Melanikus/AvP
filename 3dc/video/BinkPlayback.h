@@ -22,6 +22,9 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a film's handle starts out as not open
+
 #ifndef _BinkPlayback_h_
 #define _BinkPlayback_h_
 
@@ -100,7 +103,10 @@ class BinkPlayback
 			_texturesReady(false),
 			_isLooped(false),
 			_frameRate(0)
-			{}
+			{
+				_handle.isValid = false;
+				_handle.instanceIndex = -1;
+			}
 		~BinkPlayback();
 
 		// functions
