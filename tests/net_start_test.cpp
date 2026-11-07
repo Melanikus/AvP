@@ -828,6 +828,8 @@ static void TestASearchAndItsAnswers()
 	Arrives(noEnds, 0x0500007F);
 	Net_UpdateSessionList(selection);
 	Check(NumberOfSessionsFound == 1 && strnlen(SessionData[0].Name, sizeof(SessionData[0].Name)) < sizeof(SessionData[0].Name), "names with no end still make a name that ends");
+	// A name with no end reads the same as one with its end, once it has been cut to fit the list, so the answer can't show this. The line has to be seen.
+	Check(Has(ReadSourceFile("3dc/networking.cpp"), "session.sessionName[kSessionNameSize - 1] = '\\0';"), "a game's name always gets an end before it's read");
 
 	// One address and many games. Each has its own number, so they're all different games.
 	freshSearch();
