@@ -83,6 +83,56 @@
 					"to": "sbPtr->SBdptr = dPtr;\n\tif(dPtr==NULL) return;"
 				}
 			]
+		},
+		{
+			"name": "a xenoborg made during play starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(xenoStatus, 0, sizeof(*xenoStatus));\n",
+					"to": "/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made when a level loads starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "/* create, initialise and attach a xeno data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(xenoStatus, 0, sizeof(*xenoStatus));\n",
+					"to": "/* create, initialise and attach a xeno data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made during play has its parts found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "\t\tVerifyDeltaControllers(sbPtr);\n\n\t\t/* Containment test NOW! */\n\t\tif(!(sbPtr->containingModule))",
+					"to": "\t\t/* Containment test NOW! */\n\t\tif(!(sbPtr->containingModule))"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made when a level loads has its parts found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "\t\tVerifyDeltaControllers(sbPtr);\n\n\t\t/* Containment test NOW! */\n\t\tGLOBALASSERT(sbPtr->containingModule);",
+					"to": "\t\t/* Containment test NOW! */\n\t\tGLOBALASSERT(sbPtr->containingModule);"
+				}
+			]
+		},
+		{
+			"name": "the finder can't be used before it's written out",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

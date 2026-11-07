@@ -104,6 +104,30 @@ static void TestTheXenoborg()
 	Check(Has(after, "return;"), "and stops straight after, so nothing reads the memory KillXeno has freed");
 }
 
+// A level's switch can wake a xenoborg through RequestState (bh_types.cpp), and a test can make one and wake it at once.
+// Either can come before the xenoborg's first turn, which is where the pointers to its moving parts used to be set.
+static void TestTheXenoborgJustMade()
+{
+	puts("A xenoborg that has just been made:");
+
+	std::string const xeno = ReadSourceFile("3dc/avp/bh_xeno.cpp");
+	std::string const ways[2][2] = {
+		{ "made during play", Between(xeno, "void CreateXenoborg(VECTORCH *Position,int type)\n{", "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr) {") },
+		{ "made when a level loads", Between(xeno, "void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)", "void XenoborgBehaviour(STRATEGYBLOCK *sbPtr)") },
+	};
+
+	Check(Has(xeno, "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);"), "the code that finds its moving parts can be used before it's written out");
+
+	for (auto const &way : ways)
+	{
+		std::string const &made = way[1];
+		std::string const name = way[0];
+
+		Check(ComesBefore(made, "memset(xenoStatus, 0, sizeof(*xenoStatus));", "NPC_InitMovementData(&(xenoStatus->moveData));"), name + ": its block starts cleared, before anything in it is set");
+		Check(ComesBefore(made, "\"TorsoTwist\"", "VerifyDeltaControllers(sbPtr);"), name + ": the pointers to its moving parts are set once the parts exist, not on its first turn");
+	}
+}
+
 static void TestTheEmptyModule()
 {
 	puts("An NPC outside every room:");
@@ -143,6 +167,7 @@ static void TestTheQueenWithNoRoomToBeDrawn()
 int main()
 {
 	TestTheXenoborg();
+	TestTheXenoborgJustMade();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
