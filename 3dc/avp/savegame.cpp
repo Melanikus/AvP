@@ -4,6 +4,8 @@
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save; the buffer a save is
 //   built in grows through ReallocMem
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -40,6 +42,7 @@
 #include <assert.h>
 #include "logString.h"
 #include "utilities.h"
+#include "custom_maps.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -353,6 +356,13 @@ static BOOL SaveGameAllowed()
 	//player must be alive , and not face hugged
 	if(!playerStatusPtr->IsAlive) return FALSE;
 	if(playerStatusPtr->MyFaceHugger) return FALSE;
+
+	// A save names its level by campaign and episode, so one made on a custom map would load a stock level instead
+	if (CustomMaps_Playing())
+	{
+		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));
+		return FALSE;
+	}
 
 	//cheating?
 	if(DebuggingCommandsActive || CheatMode_Active!=CHEATMODE_NONACTIVE)
