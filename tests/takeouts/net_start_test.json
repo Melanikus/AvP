@@ -1793,6 +1793,46 @@
 					"to": "(NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a decal can name any module",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex, ModuleArraySize)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal on no module is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex",
+					"to": "!NetNumberFitsTable(messagePtr->ModuleIndex"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a far alien's module is checked only against the AI modules",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!FALLP_AuxLocs || !NetNumberFitsTable((int)messagePtr->targetModuleIndex, ModuleArraySize)) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the unused decal cull is back",
+			"changes": [
+				{
+					"file": "3dc/frustum.cpp",
+					"from": "int QuadWithinFrustum(void)",
+					"to": "int DecalWithinFrustum(DECAL *decalPtr) { return 2; }\n\nint QuadWithinFrustum(void)"
+				}
+			]
 		}
 	]
 }

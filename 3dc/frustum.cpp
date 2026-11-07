@@ -6,6 +6,9 @@
  *
  */
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   DecalWithinFrustum is gone. Nothing called it, and it read a decal's module number, which can come from
+//   another player, as a place in a list
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the polygon clipping is one whole macro (Clip_Polygon) instead of a start and an end macro, so code scanners
 //   can read it; the compiled code is the same;
@@ -1258,49 +1261,6 @@ void TestVerticesWith_Wide_Frustum(void)
 }
 
 
-
-int DecalWithinFrustum(DECAL *decalPtr)
-{
-	char inFrustumFlag;
-	char noClippingFlag;
-
-#ifndef USE_FRUSTUM_CULL
-	return 2; // bjd
-#endif
-
-	if (ModuleCurrVisArray[decalPtr->ModuleIndex] != 2)
-		return 0;
-
-    inFrustumFlag=0;
-   	noClippingFlag=INSIDE_FRUSTUM;
-
-	{
-		int vertexFlag = VertexWithinFrustum(&VerticesBuffer[0]);
-		inFrustumFlag |= vertexFlag;
-		noClippingFlag &= vertexFlag;
-	}
-	{
-		int vertexFlag = VertexWithinFrustum(&VerticesBuffer[1]);
-		inFrustumFlag |= vertexFlag;
-		noClippingFlag &= vertexFlag;
-	}
-	{
-		int vertexFlag = VertexWithinFrustum(&VerticesBuffer[2]);
-		inFrustumFlag |= vertexFlag;
-		noClippingFlag &= vertexFlag;
-	}
-	{
-		int vertexFlag = VertexWithinFrustum(&VerticesBuffer[3]);
-		inFrustumFlag |= vertexFlag;
-		noClippingFlag &= vertexFlag;
-	}
-
-	if (inFrustumFlag != INSIDE_FRUSTUM) return 0;
-	if (noClippingFlag == INSIDE_FRUSTUM) return 2;
-
-	/* yes, we need to draw poly */
-	return 1;
-}
 
 int QuadWithinFrustum(void)
 {

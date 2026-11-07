@@ -2114,6 +2114,13 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "if (killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)) {"), "a dead alien has to be a kind there is");
 	Check(Has(pldnet, "if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {"), "and the end of a game doesn't look before the start of the list when this client isn't in it");
 	Check(Has(pldnet, "if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {\n\t\treturn;"), "a decal has to be one there is");
+	Check(Has(pldnet, "if (messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex, ModuleArraySize)) {\n\t\tNet_NoteRefused(\"a decal message named a module this level doesn't have\");\n\t\treturn;"), "and on one of the level's modules, or it's refused with that reason");
+	Check(Has(pldnet, "messagePtr->ModuleIndex != -1 && "), "but one on no module, which the game that made it gives as -1, is let in");
+	Check(Has(pldnet, "if (!FALLP_AuxLocs || !NetNumberFitsTable((int)messagePtr->targetModuleIndex, ModuleArraySize)) {\n\t\t\tNet_NoteRefused(\"a far alien message named a module with no far places\");\n\t\t\treturn;"), "an alien's far place is checked against the list of far places, which has one entry for each module, not each AI module");
+	{
+		std::string const frustum = ReadSourceFile("3dc/frustum.cpp");
+		Check(Has(frustum, "int QuadWithinFrustum(void)") && !Has(frustum, "int DecalWithinFrustum("), "the unused decal cull, which read a decal's module number as a place in a list, is gone");
+	}
 	Check(Has(pldnet, "(messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES))"), "an object that can be picked up as ammunition has to be ammunition there is");
 	Check(Has(pldnet, "(messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES))"), "and as a weapon, a weapon there is");
 	Check(Has(pldnet, "if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {\n\t\treturn;"), "and so does a weapon left behind");

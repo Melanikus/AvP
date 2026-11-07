@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
+//   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
+//   be in the list of far places as well as in the list of AI modules
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
@@ -7307,6 +7309,14 @@ static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
 		return;
 	}
 
+	// Which of the level's modules the decal is on. It's kept with the decal, so it's checked here, before anything
+	// can use it as a place in the module lists. The game that made the decal gives -1 when what it hit isn't one of
+	// the level's modules (ParticleDynamics in dynamics.cpp), so -1 is let in.
+	if (messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex, ModuleArraySize)) {
+		Net_NoteRefused("a decal message named a module this level doesn't have");
+		return;
+	}
+
 	AddDecal(messagePtr->DecalID, &(messagePtr->Direction), &(messagePtr->Position), messagePtr->ModuleIndex);
 }
 
@@ -7925,7 +7935,15 @@ static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messageP
 	}
 	else
 	{
-		// The alien is at one of the modules auxilary locations
+		// The alien is at one of the modules auxilary locations.
+		// The list of far places has one entry for each of the level's modules (InitFarLocDataAreas in pfarlocs.cpp),
+		// not one for each AI module. So the number checked above against the AI modules is checked against this
+		// list's own size too, and the list has to be there.
+		if (!FALLP_AuxLocs || !NetNumberFitsTable((int)messagePtr->targetModuleIndex, ModuleArraySize)) {
+			Net_NoteRefused("a far alien message named a module with no far places");
+			return;
+		}
+
 		int noOfAuxLocs = FALLP_AuxLocs[messagePtr->targetModuleIndex].numLocations;
 		VECTORCH *auxLocsList = FALLP_AuxLocs[messagePtr->targetModuleIndex].locationsList;
 
