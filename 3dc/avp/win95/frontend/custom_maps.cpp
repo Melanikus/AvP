@@ -39,18 +39,21 @@ struct CustomMapEntry
 static std::vector<CustomMapEntry> customMaps;
 static bool playingACustomMap = false;
 
-// Each map left out is said once, so a map that's broken stays one line in the log however often the menu opens
+// Each thing is said once, so a map that's broken stays one line in the log however often the menu opens
 static std::vector<std::string> mapsAlreadySaidLeftOut;
 
-static void SayLeftOut(const char *fileName, const char *why)
+static void SayOnce(std::string const &line)
 {
-	std::string const line = std::string("custom maps: ") + fileName + " isn't listed for single player: " + why;
-
 	if (std::find(mapsAlreadySaidLeftOut.begin(), mapsAlreadySaidLeftOut.end(), line) == mapsAlreadySaidLeftOut.end())
 	{
 		mapsAlreadySaidLeftOut.push_back(line);
 		LogString(line);
 	}
+}
+
+static void SayLeftOut(const char *fileName, const char *why)
+{
+	SayOnce(std::string("custom maps: ") + fileName + " isn't listed for single player: " + why);
 }
 
 static const char *RefusalWords(LevelKindRefusal why)
@@ -297,7 +300,7 @@ texID_t CustomMaps_Picture(int which)
 
 				if (width > kCustomMapPictureMostWide || height > kCustomMapPictureMostHigh)
 				{
-					SayLeftOut(places[p].c_str(), "the picture is bigger than 200 by 100, so it isn't shown");
+					SayOnce("custom maps: " + places[p] + " is bigger than 200 by 100, so it isn't shown. The map is still listed.");
 					Tex_Release(entry.picture);
 					entry.picture = MISSING_TEXTURE;
 				}
