@@ -17,6 +17,8 @@ permissions:
 jobs:
   unit-tests:
     name: Unit tests
+    # A test that hangs fails here. Without a limit, it would hold up a runner for 6 hours.
+    timeout-minutes: 30
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
     steps:
       - name: Check out the repository
@@ -24,13 +26,19 @@ jobs:
         with:
           persist-credentials: false
 
+      # Hudson is the team's private test bot, and its code never ships. This comes first, because it takes seconds, and a hook left behind
+      # should fail the pull request that brings it.
+      - name: Refuse any of Hudson
+        shell: pwsh
+        run: ./tools/check-no-hudson.ps1
+
       # Neither of our code scanners can read shaders, so this is the gate they get. A warning fails it, as an error does.
       - name: Compile every shader
         shell: pwsh
         run: ./tests/compile-shaders.ps1
 
-      # Two tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
-      # library the game does, and the closing test links the game's ENet, so both come before the tests are built. The registry
+      # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
+      # library the game does, and the network tests link the game's ENet, so both come before the tests are built. The registry
       # commit is the builtin-baseline in vcpkg.json, the same as a real build, and our own patched ports are used where we have them.
       - name: Fetch the game's shader compiler and ENet
         shell: pwsh

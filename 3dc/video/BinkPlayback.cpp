@@ -31,6 +31,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a Bink video with a frame rate below 1, no sound track or an odd sound buffer size can no longer crash
 //   the game or write past its sound buffers
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
 
 #include "BinkPlayback.h"
 #include "FmvPlayback.h"
@@ -409,9 +411,6 @@ void *BinkDecodeThread(void *args)
 
 void *BinkAudioThread(void *args)
 {
-	#ifdef USE_XAUDIO2
-		::CoInitializeEx(NULL, COINIT_MULTITHREADED);
-	#endif
 
 	BinkPlayback *fmv = static_cast<BinkPlayback*>(args);
 

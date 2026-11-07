@@ -1,0 +1,503 @@
+A host keeps no place for a CONNECT until the sender shows it is really at its address.
+
+Our own patch (AvP), from our review of ENet 1.3.18 as a reader of hostile packets
+(card ENET-E5 in our notes). A CONNECT needs no secret, so anyone could fill every
+place with CONNECTs from made-up addresses, and nobody else could join.
+
+- A first CONNECT gets a token back (a new COOKIE command) and nothing is kept. The
+  token is SipHash-2-4 of the sender's address, port and connection number and a
+  10-second slot, under a key from the system's secure random source, made fresh
+  for each slot with the one before still taken. Only a CONNECT that brings the
+  token back takes a place, so a token is good for 10 to 20 seconds, from that
+  address only. The answer is smaller than the CONNECT.
+- The client's ENet puts the token in its CONNECT and sends it again at once.
+- A CONNECT from an ENet without the token (8 bytes shorter) is told no at once,
+  with a DISCONNECT giving the reason, and the host counts it for the program.
+- SipHash is the reference code by Aumasson and Bernstein, copied in as it is by
+  portfile.cmake from siphash/ (siphash/README.md says where it came from).
+
+Two copies of this ENet connect as before, with one more round trip.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 63aef98..0ae738f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -79,7 +79,9 @@ set(SOURCE_FILES
+     peer.c
+     protocol.c
+     unix.c
+-    win32.c)
++    win32.c
++    # Our own (AvP): the reference SipHash, kept as it is, for the tokens a host gives a CONNECT. The port copies it in.
++    siphash.c)
+ 
+ source_group(include FILES ${INCLUDE_FILES})
+ source_group(source FILES ${SOURCE_FILES})
+diff --git a/host.c b/host.c
+index 19ff543..df80331 100644
+--- a/host.c
++++ b/host.c
+@@ -255,6 +255,9 @@ enet_host_connect (ENetHost * host, const ENetAddress * address, size_t channelC
+     command.connect.packetThrottleDeceleration = ENET_HOST_TO_NET_32 (currentPeer -> packetThrottleDeceleration);
+     command.connect.connectID = currentPeer -> connectID;
+     command.connect.data = ENET_HOST_TO_NET_32 (data);
++
++    /* Our own (AvP): no token yet. The host answers with one, and this CONNECT is sent again with it (see ENetProtocolCookie). */
++    memset (command.connect.cookie, 0, sizeof (command.connect.cookie));
+  
+     enet_peer_queue_outgoing_command (currentPeer, & command, NULL, 0, 0);
+ 
+diff --git a/include/enet/enet.h b/include/enet/enet.h
+index c4e3c73..bb39cef 100644
+--- a/include/enet/enet.h
++++ b/include/enet/enet.h
+@@ -372,6 +372,11 @@ typedef struct _ENetHost
+    enet_uint32          bandwidthThrottleEpoch;
+    enet_uint32          mtu;
+    enet_uint32          randomSeed;
++   enet_uint8           cookieKeys [2][16];          /**< Our own (AvP): the keys for this host's tokens for a CONNECT: this slot's, and the slot before's */
++   enet_uint32          cookieSlot;                  /**< Our own (AvP): the slot of time cookieKeys [0] is for */
++   enet_uint8           cookieKeysMade;              /**< Our own (AvP): whether cookieKeys [0] has been made */
++   enet_uint8           cookiePreviousKeyGood;       /**< Our own (AvP): whether cookieKeys [1] is the slot before's */
++   enet_uint32          olderConnectsRefused;        /**< Our own (AvP): how many CONNECTs from an ENet without the token were told no, for the program's log */
+    int                  recalculateBandwidthLimits;
+    ENetPeer *           peers;                       /**< array of peers allocated for this host */
+    size_t               peerCount;                   /**< number of peers allocated for this host */
+@@ -581,6 +586,9 @@ ENET_API void       enet_host_bandwidth_limit (ENetHost *, enet_uint32, enet_uin
+ extern   void       enet_host_bandwidth_throttle (ENetHost *);
+ extern  enet_uint32 enet_host_random_seed (void);
+ extern  enet_uint32 enet_host_random (ENetHost *);
++/* Our own (AvP): fills secret with size bytes from the system's secure random source, for the keys behind a host's
++   tokens. Gives back 0, or -1 if the system couldn't. */
++extern  int         enet_host_secret (enet_uint8 * secret, size_t size);
+ 
+ ENET_API int                 enet_peer_send (ENetPeer *, enet_uint8, ENetPacket *);
+ ENET_API ENetPacket *        enet_peer_receive (ENetPeer *, enet_uint8 * channelID);
+diff --git a/include/enet/protocol.h b/include/enet/protocol.h
+index f8c73d8..1717fb2 100644
+--- a/include/enet/protocol.h
++++ b/include/enet/protocol.h
+@@ -17,7 +17,11 @@ enum
+    ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT   = 1,
+    ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT   = 255,
+    ENET_PROTOCOL_MAXIMUM_PEER_ID         = 0xFFF,
+-   ENET_PROTOCOL_MAXIMUM_FRAGMENT_COUNT  = 1024 * 1024
++   ENET_PROTOCOL_MAXIMUM_FRAGMENT_COUNT  = 1024 * 1024,
++   /* Our own (AvP): the size of the token a host gives a CONNECT, in bytes (see ENetProtocolCookie) */
++   ENET_PROTOCOL_COOKIE_SIZE             = 8,
++   /* Our own (AvP): the reason in a DISCONNECT that tells a CONNECT from an ENet without the token no. In letters, "OLD!" */
++   ENET_PROTOCOL_REFUSED_OLDER_VERSION   = 0x4F4C4421
+ };
+ 
+ typedef enum _ENetProtocolCommand
+@@ -35,7 +39,9 @@ typedef enum _ENetProtocolCommand
+    ENET_PROTOCOL_COMMAND_BANDWIDTH_LIMIT    = 10,
+    ENET_PROTOCOL_COMMAND_THROTTLE_CONFIGURE = 11,
+    ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE_FRAGMENT = 12,
+-   ENET_PROTOCOL_COMMAND_COUNT              = 13,
++   /* Our own (AvP): a host's answer to a CONNECT that hasn't brought back its token yet (see ENetProtocolCookie) */
++   ENET_PROTOCOL_COMMAND_COOKIE             = 13,
++   ENET_PROTOCOL_COMMAND_COUNT              = 14,
+ 
+    ENET_PROTOCOL_COMMAND_MASK               = 0x0F
+ } ENetProtocolCommand;
+@@ -98,6 +104,8 @@ typedef struct _ENetProtocolConnect
+    enet_uint32 packetThrottleDeceleration;
+    enet_uint32 connectID;
+    enet_uint32 data;
++   /* Our own (AvP): the token the host gave back, all 0 the first time (see ENetProtocolCookie) */
++   enet_uint8  cookie [ENET_PROTOCOL_COOKIE_SIZE];
+ } ENET_PACKED ENetProtocolConnect;
+ 
+ typedef struct _ENetProtocolVerifyConnect
+@@ -174,6 +182,17 @@ typedef struct _ENetProtocolSendFragment
+    enet_uint32 fragmentOffset;
+ } ENET_PACKED ENetProtocolSendFragment;
+ 
++/* Our own (AvP): a host keeps no place for a CONNECT until the sender shows it really is at the address the CONNECT came
++   from. So a first CONNECT is answered with this, a token worked out from the sender's address, its connection number and a
++   secret only the host knows, and the host keeps nothing. The sender's ENet sends its CONNECT again with the token in it, and
++   only then is a place taken. A sender that made up its address never sees the token. */
++typedef struct _ENetProtocolCookie
++{
++   ENetProtocolCommandHeader header;
++   enet_uint32 connectID;
++   enet_uint8  cookie [ENET_PROTOCOL_COOKIE_SIZE];
++} ENET_PACKED ENetProtocolCookie;
++
+ typedef union _ENetProtocol
+ {
+    ENetProtocolCommandHeader header;
+@@ -188,6 +207,7 @@ typedef union _ENetProtocol
+    ENetProtocolSendFragment sendFragment;
+    ENetProtocolBandwidthLimit bandwidthLimit;
+    ENetProtocolThrottleConfigure throttleConfigure;
++   ENetProtocolCookie cookie;
+ } ENET_PACKED ENetProtocol;
+ 
+ #ifdef _MSC_VER
+diff --git a/protocol.c b/protocol.c
+index 7a10ac2..17e78f9 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -8,6 +8,8 @@
+ #include "enet/utility.h"
+ #include "enet/time.h"
+ #include "enet/enet.h"
++/* Our own (AvP): the reference SipHash, for the tokens a host gives a CONNECT (see ENetProtocolCookie) */
++#include "siphash.h"
+ 
+ static const size_t commandSizes [ENET_PROTOCOL_COMMAND_COUNT] =
+ {
+@@ -23,9 +25,171 @@ static const size_t commandSizes [ENET_PROTOCOL_COMMAND_COUNT] =
+     sizeof (ENetProtocolSendUnsequenced),
+     sizeof (ENetProtocolBandwidthLimit),
+     sizeof (ENetProtocolThrottleConfigure),
+-    sizeof (ENetProtocolSendFragment)
++    sizeof (ENetProtocolSendFragment),
++    sizeof (ENetProtocolCookie)
+ };
+ 
++/* Our own (AvP): how long one slot of time is for the tokens a host gives a CONNECT, in milliseconds. Each slot has a fresh
++   key, and the key of the slot before is kept, so a token is taken for between one and two slots: far longer than a CONNECT
++   takes to come back, and too short to be kept and used later. */
++#define ENET_PROTOCOL_COOKIE_SLOT 10000
++
++/* Our own (AvP): brings the host's keys up to this slot: a fresh key from the system's secure random source, and the key of
++   the slot before, if there was one, kept for tokens given just before the slot changed. Gives back -1 if the system
++   couldn't give a key, and then no token is given or taken. */
++static int
++enet_protocol_cookie_keys (ENetHost * host, enet_uint32 slot)
++{
++    if (host -> cookieKeysMade && slot == host -> cookieSlot)
++      return 0;
++
++    host -> cookiePreviousKeyGood = host -> cookieKeysMade && slot == host -> cookieSlot + 1;
++    if (host -> cookiePreviousKeyGood)
++      memcpy (host -> cookieKeys [1], host -> cookieKeys [0], sizeof (host -> cookieKeys [0]));
++
++    host -> cookieKeysMade = 0;
++    if (enet_host_secret (host -> cookieKeys [0], sizeof (host -> cookieKeys [0])) < 0)
++    {
++       host -> cookiePreviousKeyGood = 0;
++       return -1;
++    }
++
++    host -> cookieKeysMade = 1;
++    host -> cookieSlot = slot;
++    return 0;
++}
++
++/* Our own (AvP): the token for a CONNECT from the address and port the packet came from, with this connection number, in
++   this slot, under this key. It's SipHash-2-4 (siphash.c, the reference code by Jean-Philippe Aumasson and Daniel J.
++   Bernstein, kept as it is): nobody without the key can work it out, and it's no good from any other address or later on. */
++static void
++enet_protocol_make_cookie (ENetHost * host, const enet_uint8 * key, enet_uint32 connectID, enet_uint32 slot, enet_uint8 * cookie)
++{
++    enet_uint8 message [sizeof (enet_uint32) + sizeof (enet_uint16) + sizeof (enet_uint32) + sizeof (enet_uint32)];
++    enet_uint8 tag [8];
++    size_t at = 0;
++
++    memcpy (message + at, & host -> receivedAddress.host, sizeof (enet_uint32));
++    at += sizeof (enet_uint32);
++    memcpy (message + at, & host -> receivedAddress.port, sizeof (enet_uint16));
++    at += sizeof (enet_uint16);
++    memcpy (message + at, & connectID, sizeof (enet_uint32));
++    at += sizeof (enet_uint32);
++    memcpy (message + at, & slot, sizeof (enet_uint32));
++
++    siphash (message, sizeof (message), key, tag, sizeof (tag));
++    memcpy (cookie, tag, ENET_PROTOCOL_COOKIE_SIZE);
++}
++
++/* Our own (AvP): whether two tokens are the same. Every byte is compared whatever the ones before were, so the time this
++   takes tells nobody how close a guess was. */
++static int
++enet_protocol_cookies_match (const enet_uint8 * one, const enet_uint8 * other)
++{
++    enet_uint8 difference = 0;
++    int i;
++
++    for (i = 0; i < ENET_PROTOCOL_COOKIE_SIZE; ++ i)
++      difference |= one [i] ^ other [i];
++
++    return difference == 0;
++}
++
++/* Our own (AvP): whether a CONNECT brought back a token this host gave that address and port, in this slot or the one
++   before */
++static int
++enet_protocol_cookie_is_good (ENetHost * host, const ENetProtocol * command)
++{
++    enet_uint32 slot = host -> serviceTime / ENET_PROTOCOL_COOKIE_SLOT;
++    enet_uint8 expected [ENET_PROTOCOL_COOKIE_SIZE];
++
++    if (enet_protocol_cookie_keys (host, slot) < 0)
++      return 0;
++
++    enet_protocol_make_cookie (host, host -> cookieKeys [0], command -> connect.connectID, slot, expected);
++    if (enet_protocol_cookies_match (expected, command -> connect.cookie))
++      return 1;
++
++    if (! host -> cookiePreviousKeyGood)
++      return 0;
++
++    enet_protocol_make_cookie (host, host -> cookieKeys [1], command -> connect.connectID, slot - 1, expected);
++    return enet_protocol_cookies_match (expected, command -> connect.cookie);
++}
++
++/* Our own (AvP): sends a command straight back to the address the packet came from, outside any connection, with the
++   checksum worked out the way the other end will check it: from seed, in the checksum's place */
++static void
++enet_protocol_send_outside_a_connection (ENetHost * host, enet_uint16 peerID, enet_uint32 seed, const void * command, size_t commandSize)
++{
++    enet_uint8 packet [sizeof (enet_uint16) + sizeof (enet_uint32) + sizeof (ENetProtocol)];
++    ENetBuffer buffer;
++    size_t length = 0, checksumAt = 0;
++
++    memcpy (packet, & peerID, sizeof (peerID));
++    length += sizeof (peerID);
++
++    if (host -> checksum != NULL)
++    {
++        checksumAt = length;
++        memcpy (packet + length, & seed, sizeof (seed));
++        length += sizeof (seed);
++    }
++
++    memcpy (packet + length, command, commandSize);
++    length += commandSize;
++
++    buffer.data = packet;
++    buffer.dataLength = length;
++
++    if (host -> checksum != NULL)
++    {
++        enet_uint32 checksum = host -> checksum (& buffer, 1);
++
++        memcpy (packet + checksumAt, & checksum, sizeof (checksum));
++    }
++
++    enet_socket_send (host -> socket, & host -> receivedAddress, & buffer, 1);
++}
++
++/* Our own (AvP): answers a CONNECT that brought no good token with a token, and keeps nothing. The answer is smaller than the
++   CONNECT, so made-up CONNECTs can't use this host to flood someone else. With no connection yet, the checksum starts from 0,
++   as it does for the CONNECT. */
++static void
++enet_protocol_send_cookie (ENetHost * host, const ENetProtocol * command)
++{
++    enet_uint32 slot = host -> serviceTime / ENET_PROTOCOL_COOKIE_SLOT;
++    ENetProtocolCookie answer;
++
++    if (enet_protocol_cookie_keys (host, slot) < 0)
++      return;
++
++    answer.header.command = ENET_PROTOCOL_COMMAND_COOKIE;
++    answer.header.channelID = 0xFF;
++    answer.header.reliableSequenceNumber = 0;
++    answer.connectID = command -> connect.connectID;
++    enet_protocol_make_cookie (host, host -> cookieKeys [0], command -> connect.connectID, slot, answer.cookie);
++
++    enet_protocol_send_outside_a_connection (host, ENET_HOST_TO_NET_16 (ENET_PROTOCOL_MAXIMUM_PEER_ID), 0, & answer, sizeof (answer));
++}
++
++/* Our own (AvP): a CONNECT from an ENet without the token is told no at once, with a reason, rather than left waiting for an
++   answer that never comes. The answer is a DISCONNECT, which every ENet understands, addressed to the place the sender gave
++   in its CONNECT and checked with its connection number, so the sender takes it. The host counts these, for its log. */
++static void
++enet_protocol_refuse_older_connect (ENetHost * host, const ENetProtocol * command)
++{
++    ENetProtocolDisconnect refusal;
++
++    refusal.header.command = ENET_PROTOCOL_COMMAND_DISCONNECT;
++    refusal.header.channelID = 0xFF;
++    refusal.header.reliableSequenceNumber = 0;
++    refusal.data = ENET_HOST_TO_NET_32 (ENET_PROTOCOL_REFUSED_OLDER_VERSION);
++
++    enet_protocol_send_outside_a_connection (host, command -> connect.outgoingPeerID, command -> connect.connectID, & refusal, sizeof (refusal));
++    ++ host -> olderConnectsRefused;
++}
++
+ size_t
+ enet_protocol_command_size (enet_uint8 commandNumber)
+ {
+@@ -337,6 +501,14 @@ enet_protocol_handle_connect (ENetHost * host, ENetProtocolHeader * header, ENet
+     if (peer == NULL || duplicatePeers >= host -> duplicatePeers)
+       return NULL;
+ 
++    /* Our own (AvP): no place is taken until the sender shows it really is at this address, by bringing back the token
++       this host sent there. A CONNECT without it gets the token, and the host keeps nothing (see ENetProtocolCookie). */
++    if (! enet_protocol_cookie_is_good (host, command))
++    {
++        enet_protocol_send_cookie (host, command);
++        return NULL;
++    }
++
+     if (channelCount > host -> channelLimit)
+       channelCount = host -> channelLimit;
+     peer -> channels = (ENetChannel *) enet_malloc (channelCount * sizeof (ENetChannel));
+@@ -956,6 +1128,60 @@ enet_protocol_handle_acknowledge (ENetHost * host, ENetEvent * event, ENetPeer *
+     return 0;
+ }
+ 
++/* Our own (AvP): puts a host's token into a connection's CONNECT, if it's in this list, and has it sent again at the next
++   chance rather than when its usual wait runs out. Says whether it was there. */
++static int
++enet_protocol_put_cookie_in_connect (ENetList * list, const ENetProtocol * command)
++{
++    ENetListIterator currentCommand;
++
++    for (currentCommand = enet_list_begin (list);
++         currentCommand != enet_list_end (list);
++         currentCommand = enet_list_next (currentCommand))
++    {
++       ENetOutgoingCommand * outgoingCommand = (ENetOutgoingCommand *) currentCommand;
++
++       if ((outgoingCommand -> command.header.command & ENET_PROTOCOL_COMMAND_MASK) != ENET_PROTOCOL_COMMAND_CONNECT)
++         continue;
++
++       memcpy (outgoingCommand -> command.connect.cookie, command -> cookie.cookie, ENET_PROTOCOL_COOKIE_SIZE);
++       outgoingCommand -> roundTripTimeout = 0;
++
++       return 1;
++    }
++
++    return 0;
++}
++
++/* Our own (AvP): a host has answered this machine's CONNECT with a token (see ENetProtocolCookie). It's taken only for a
++   connection that is still connecting, to the address the token came from, with the same connection number, which only
++   the two ends know. The CONNECT is waiting for its answer in one of two lists: sent, or waiting to be sent again. */
++static int
++enet_protocol_handle_cookie (ENetHost * host, const ENetProtocol * command)
++{
++    ENetPeer * currentPeer;
++
++    for (currentPeer = host -> peers;
++         currentPeer < & host -> peers [host -> peerCount];
++         ++ currentPeer)
++    {
++       if (currentPeer -> state != ENET_PEER_STATE_CONNECTING ||
++           currentPeer -> connectID != command -> cookie.connectID ||
++           currentPeer -> address.host != host -> receivedAddress.host ||
++           currentPeer -> address.port != host -> receivedAddress.port)
++         continue;
++
++       if (enet_protocol_put_cookie_in_connect (& currentPeer -> sentReliableCommands, command))
++         currentPeer -> nextTimeout = host -> serviceTime;
++       else
++         enet_protocol_put_cookie_in_connect (& currentPeer -> outgoingCommands, command);
++
++       break;
++    }
++
++    return 0;
++}
++
+ static int
+ enet_protocol_handle_verify_connect (ENetHost * host, ENetEvent * event, ENetPeer * peer, const ENetProtocol * command)
+ {
+@@ -1143,12 +1369,23 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+          break;
+        
+        commandSize = commandSizes [commandNumber];
++
++       /* Our own (AvP): a CONNECT from an ENet without our token is exactly the token's size shorter. It's told no at once,
++          with a reason, rather than left waiting for an answer that will never come. */
++       if (commandNumber == ENET_PROTOCOL_COMMAND_CONNECT && peer == NULL &&
++           currentData + commandSize - ENET_PROTOCOL_COOKIE_SIZE == & host -> receivedData [host -> receivedDataLength])
++       {
++           enet_protocol_refuse_older_connect (host, command);
++           goto commandError;
++       }
++
+        if (commandSize == 0 || currentData + commandSize > & host -> receivedData [host -> receivedDataLength])
+          break;
+ 
+        currentData += commandSize;
+ 
+-       if (peer == NULL && commandNumber != ENET_PROTOCOL_COMMAND_CONNECT)
++       /* Our own (AvP): a token for a CONNECT comes before there's a connection, like the CONNECT itself */
++       if (peer == NULL && commandNumber != ENET_PROTOCOL_COMMAND_CONNECT && commandNumber != ENET_PROTOCOL_COMMAND_COOKIE)
+          break;
+          
+        command -> header.reliableSequenceNumber = ENET_NET_TO_HOST_16 (command -> header.reliableSequenceNumber);
+@@ -1168,6 +1405,11 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+             goto commandError;
+           break;
+ 
++       case ENET_PROTOCOL_COMMAND_COOKIE:
++          if (peer != NULL || enet_protocol_handle_cookie (host, command))
++            goto commandError;
++          break;
++
+        case ENET_PROTOCOL_COMMAND_VERIFY_CONNECT:
+           if (enet_protocol_handle_verify_connect (host, event, peer, command))
+             goto commandError;
+diff --git a/unix.c b/unix.c
+index 6669216..8ce41cf 100644
+--- a/unix.c
++++ b/unix.c
+@@ -14,6 +14,7 @@
+ #include <string.h>
+ #include <errno.h>
+ #include <time.h>
++#include <stdio.h>
+ 
+ #define ENET_BUILDING_LIB 1
+ #include "enet/enet.h"
+@@ -80,6 +81,23 @@ enet_host_random_seed (void)
+     return (enet_uint32) time (NULL);
+ }
+ 
++int
++enet_host_secret (enet_uint8 * secret, size_t size)
++{
++    /* Our own (AvP): the system's secure random source. Nobody can work these out from the outside, unlike
++       enet_host_random_seed above, which is only the time. */
++    FILE * source = fopen ("/dev/urandom", "rb");
++    size_t got;
++
++    if (source == NULL)
++      return -1;
++
++    got = fread (secret, 1, size, source);
++    fclose (source);
++
++    return got == size ? 0 : -1;
++}
++
+ enet_uint32
+ enet_time_get (void)
+ {
+diff --git a/win32.c b/win32.c
+index f395c09..3db1104 100644
+--- a/win32.c
++++ b/win32.c
+@@ -9,6 +9,10 @@
+ #include <windows.h>
+ #include <mmsystem.h>
+ #include <ws2tcpip.h>
++/* Our own (AvP): the system's secure random source, for the keys behind a host's tokens (see enet_host_secret). The
++   pragma links its library, bcrypt.lib, into whatever uses ENet, so nothing else has to name it. */
++#include <bcrypt.h>
++#pragma comment(lib, "bcrypt.lib")
+ 
+ static enet_uint32 timeBase = 0;
+ 
+@@ -48,6 +52,14 @@ enet_host_random_seed (void)
+     return (enet_uint32) timeGetTime ();
+ }
+ 
++int
++enet_host_secret (enet_uint8 * secret, size_t size)
++{
++    /* Our own (AvP): BCryptGenRandom is Windows' own secure random source. Nobody can work its numbers out from the
++       outside, unlike enet_host_random_seed above, which is only the time. ENet asks for 16 bytes at a time. */
++    return BCRYPT_SUCCESS (BCryptGenRandom (NULL, secret, (ULONG) size, BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ? 0 : -1;
++}
++
+ enet_uint32
+ enet_time_get (void)
+ {

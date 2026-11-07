@@ -27,6 +27,7 @@ vcpkg_from_github(
         0017-limit-codebook-memory-per-file.patch
         0018-keep-a-failed-decoder-setup-failed.patch
         0019-check-serial-list-and-read-buffer.patch
+        0020-stop-rescanning-and-limit-false-pages.patch
 )
 
 # Delete source files that are never built, so that they are not scanned as if we shipped them.

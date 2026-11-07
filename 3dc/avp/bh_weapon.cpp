@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   running out of dynamics blocks or lights no longer crashes, and a molotov with no strategy block gives back its display block
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
 //   so code scanners can read the file; the game runs the same code as before
@@ -419,7 +421,7 @@ STRATEGYBLOCK* CreateFrisbeeKernel(VECTORCH *position, MATRIXCH *orient, int fro
 	/* setup dynamics block */
 	dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
 
-	if (fromplayer==0) {
+	if (dynPtr && fromplayer==0) {
 		dynPtr->IgnoreThePlayer=0;
 	}
 
@@ -802,7 +804,7 @@ STRATEGYBLOCK* CreateRocketKernel(VECTORCH *position, MATRIXCH *orient, int from
 	/* setup dynamics block */
 	dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
 
-	if (fromplayer==0) {
+	if (dynPtr && fromplayer==0) {
 		dynPtr->IgnoreThePlayer=0;
 	}
 
@@ -1008,7 +1010,7 @@ STRATEGYBLOCK* CreateGrenadeKernel(AVP_BEHAVIOUR_TYPE behaviourID, VECTORCH *pos
 
 	dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_GRENADE);
 
-	if (fromplayer==0) {
+	if (dynPtr && fromplayer==0) {
 		dynPtr->IgnoreThePlayer=0;
 	}
 
@@ -1584,11 +1586,16 @@ extern void FlareGrenadeBehaviour(STRATEGYBLOCK *sbPtr)
 		{
 			LIGHTBLOCK *lightPtr = sbPtr->SBdptr->ObLights[0];
 			LOCALASSERT(sbPtr->SBdptr->ObNumLights==1);
-			lightPtr->LightBright = 1+MUL_FIXED
-									(
-										(ONE_FIXED*4-(FastRandom()&32767)),
-										bbPtr->LifeTimeRemaining/FLARE_LIFETIME
-									);
+
+			// The game can run out of lights to give
+			if (lightPtr)
+			{
+				lightPtr->LightBright = 1+MUL_FIXED
+										(
+											(ONE_FIXED*4-(FastRandom()&32767)),
+											bbPtr->LifeTimeRemaining/FLARE_LIFETIME
+										);
+			}
 		}
 
    		bbPtr->LifeTimeRemaining-=NormalFrameTime;
@@ -4215,7 +4222,13 @@ DISPLAYBLOCK *SpawnMolotovCocktail(SECTION_DATA *root, MATRIXCH *master_orient)
 
 	sbPtr = AttachNewStratBlock((MODULE*)NULL, mmbptr, dispPtr);
 
-	if (sbPtr == 0) return (DISPLAYBLOCK *)0; // Failed to allocate a strategy block
+	if (sbPtr == 0)
+	{
+		DestroyActiveObject(dispPtr);
+		return (DISPLAYBLOCK *)0;
+	}
+
+	// Failed to allocate a strategy block
 
 	// 2. NOW set up the strategyblock-specific fields for
 	// the new displayblock. We won't go through the "AttachNew

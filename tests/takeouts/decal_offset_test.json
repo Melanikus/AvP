@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the file's number isn't turned into pixels",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "int const offset = fileNumber / kDecalOffsetOnePixel;",
+					"to": "int const offset = fileNumber;"
+				}
+			]
+		},
+		{
+			"name": "a part of a pixel is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "\tif (fileNumber % kDecalOffsetOnePixel != 0)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a negative offset is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "if (pixels < 0 || step < 0 || lastPicture < 0)",
+					"to": "if (step < 0 || lastPicture < 0)"
+				}
+			]
+		},
+		{
+			"name": "a kind's negative step or last picture is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "if (pixels < 0 || step < 0 || lastPicture < 0)",
+					"to": "if (pixels < 0)"
+				}
+			]
+		},
+		{
+			"name": "a kind with one picture takes any offset",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "\t\treturn pixels == 0;",
+					"to": "\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "an offset past the kind's last picture is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "return pixels % step == 0 && pixels / step <= lastPicture;",
+					"to": "return pixels % step == 0;"
+				}
+			]
+		},
+		{
+			"name": "an offset between two pictures is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "return pixels % step == 0 && pixels / step <= lastPicture;",
+					"to": "return pixels / step <= lastPicture;"
+				}
+			]
+		},
+		{
+			"name": "a refused offset still changes the answer",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "\tint const offset = fileNumber / kDecalOffsetOnePixel;\n",
+					"to": "\tint const offset = fileNumber / kDecalOffsetOnePixel;\n\t*pixels = offset;\n"
+				}
+			]
+		},
+		{
+			"name": "the writer doesn't turn pixels back into the file's number",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "return pixels * kDecalOffsetOnePixel;",
+					"to": "return pixels;"
+				}
+			]
+		},
+		{
+			"name": "the writer writes an offset that isn't a picture",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": "if (!DecalOffset_IsAPicture(pixels, step, lastPicture) || pixels > 0x7fffffff / kDecalOffsetOnePixel)",
+					"to": "if (pixels > 0x7fffffff / kDecalOffsetOnePixel)"
+				}
+			]
+		},
+		{
+			"name": "the writer can overflow the file's number",
+			"changes": [
+				{
+					"file": "3dc/avp/decal_offset.h",
+					"from": " || pixels > 0x7fffffff / kDecalOffsetOnePixel)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader copies the file's number as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "fd->UOffset=offsetInPixels;",
+					"to": "fd->UOffset=ad->UOffset;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader keeps a decal whose offset was refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\t\t\toffsetsRefused++;\n\t\t\tcontinue;\n",
+					"to": "\t\t\toffsetsRefused++;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader looks a kind up before checking it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "\t\tif (ad->DecalID < 0 || ad->DecalID >= MAX_NO_OF_DECAL_IDS) continue;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the loader's log line goes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "LogErrorString(\"level file: \" + Util::IntToString(offsetsRefused) + \" placed decals left out, as their texture offset isn't one of their kind's pictures\");",
+					"to": "LogErrorString(\"level file: some decals were left out\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the writer copies the pixels as they are",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "? DecalOffset_ToLevelFile(fd->UOffset, DecalDescription[kindNumber].UOffsetForSubclass, DecalDescription[kindNumber].MaxSubclassNumber)",
+					"to": "? fd->UOffset"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the writer looks up a kind that isn't in the table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "ad->UOffset = (kindNumber >= 0 && kindNumber < MAX_NO_OF_DECAL_IDS)\n",
+					"to": "ad->UOffset = true\n"
+				}
+			]
+		},
+		{
+			"name": "a decal's offset is no longer added in pixels",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "VerticesBuffer[0].U = decalDescPtr->StartU + decalPtr->UOffset;",
+					"to": "VerticesBuffer[0].U = decalDescPtr->StartU + (decalPtr->UOffset >> 16);"
+				}
+			]
+		},
+		{
+			"name": "paintball picks a picture past the kind's last one",
+			"changes": [
+				{
+					"file": "3dc/avp/paintball.cpp",
+					"from": "if (PaintBallMode.CurrentDecalSubclass>decalDescPtr->MaxSubclassNumber)",
+					"to": "if (PaintBallMode.CurrentDecalSubclass>decalDescPtr->MaxSubclassNumber + 1)"
+				}
+			]
+		}
+	]
+}

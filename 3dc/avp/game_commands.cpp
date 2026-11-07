@@ -5,6 +5,8 @@
 //   the LAMPSPOTSIZE and LAMPINTENSITY commands
 //   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
 //   the SHADOWEVENGAP command, which says whether a shadow starts the same distance behind every part of its polygon
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only a host can restart a network game
 #include "3dc.h"
 #include "console_command.hpp"
 #include "strutil.h"
@@ -301,6 +303,9 @@ static void RestartMultiplayer(void)
 {
 	/* obviously have to be in a network game... */
 	if (AvP.Network==I_No_Network) return;
+
+	// Only the host can restart the game for everyone: nobody would believe it from anyone else
+	if (AvP.Network != I_Host) return;
 
 	int seed=FastRandom();
 	AddNetMsg_RestartNetworkGame(seed);

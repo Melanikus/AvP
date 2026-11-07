@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "LIST: anything is let through",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "if (kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LIST: the sum can wrap round",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes",
+					"to": "(uint32_t)(kMainHeaderSize + nHeaderBytes + dataOffset + fileLength) > archiveBytes"
+				}
+			]
+		},
+		{
+			"name": "LIST: its length is left out",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes",
+					"to": "kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset > archiveBytes"
+				}
+			]
+		},
+		{
+			"name": "LIST: its place is left out",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes",
+					"to": "kMainHeaderSize + (uint64_t)nHeaderBytes + fileLength > archiveBytes"
+				}
+			]
+		},
+		{
+			"name": "LIST: the list is left out",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "kMainHeaderSize + (uint64_t)nHeaderBytes + dataOffset + fileLength > archiveBytes",
+					"to": "kMainHeaderSize + (uint64_t)dataOffset + fileLength > archiveBytes"
+				}
+			]
+		},
+		{
+			"name": "LIST: the last in an archive is refused",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "dataOffset + fileLength > archiveBytes",
+					"to": "dataOffset + fileLength >= archiveBytes"
+				}
+			]
+		},
+		{
+			"name": "LIST: said every time",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "if (!saidSomeRunPast)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "LIST: never said",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "if (!saidSomeRunPast)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LIST: said once across all the archives",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "\tbool saidSomeRunPast = false;\n",
+					"to": "\tstatic bool saidSomeRunPast = false;\n"
+				}
+			]
+		},
+		{
+			"name": "LIST: the next name starts with the one left out",
+			"changes": [
+				{
+					"file": "3dc/FastFile.cpp",
+					"from": "\t\t\trequestedFile.clear();\n\t\t\tcontinue;\n",
+					"to": "\t\t\tcontinue;\n"
+				}
+			]
+		}
+	]
+}

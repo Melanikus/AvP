@@ -1,8 +1,11 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   how many times a hit counts comes from another machine, so a number below nothing can't run away, and a spear with no dynamics block doesn't use one
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   a request for a weapon slot that isn't there is ignored, where only an assert stood before
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -1771,10 +1774,9 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
     {
         enum WEAPON_SLOT requestedSlot = (enum WEAPON_SLOT)(playerStatusPtr->Mvt_InputRequests.Flags.Rqst_WeaponNo - 1);
 
-        LOCALASSERT(requestedSlot < MAX_NO_OF_WEAPON_SLOTS);
-        LOCALASSERT(requestedSlot >= 0);
-        
-        if( (requestedSlot != playerStatusPtr->SelectedWeaponSlot)
+        // The request can hold numbers up to 14, and the list of slots is shorter than that. A request for a slot that isn't there is ignored.
+        if( (requestedSlot < MAX_NO_OF_WEAPON_SLOTS)
+          &&(requestedSlot != playerStatusPtr->SelectedWeaponSlot)
           &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == 1) )
         { 
             // Disallow Gold version weapons with regular version
@@ -2041,10 +2043,9 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
     {
         enum WEAPON_SLOT requestedSlot = (enum WEAPON_SLOT)(playerStatusPtr->Mvt_InputRequests.Flags.Rqst_WeaponNo - 1);
 
-        LOCALASSERT(requestedSlot < MAX_NO_OF_WEAPON_SLOTS);
-        LOCALASSERT(requestedSlot >= 0);
-        
-        if ((requestedSlot != currentSlot)
+        // The request can hold numbers up to 14, and the list of slots is shorter than that. A request for a slot that isn't there is ignored.
+        if ((requestedSlot < MAX_NO_OF_WEAPON_SLOTS)
+          &&(requestedSlot != currentSlot)
           &&(playerStatusPtr->WeaponSlot[requestedSlot].Possessed == 1) )
         { 
             // Disallow Gold version weapons with regular version
@@ -4050,7 +4051,7 @@ static void DamageDamageBlock(DAMAGEBLOCK *DBPtr, DAMAGE_PROFILE *damage, int mu
 	
 	/* Now, the integer. */
 	
-	while (Integer) {
+	while (Integer > 0) {
 	
 		ArmourDamage=0;
 		HealthDamage=0;
@@ -10676,7 +10677,11 @@ void CreateSpearPossiblyWithFragment(DISPLAYBLOCK *dispPtr, VECTORCH *spearPosit
 
 		/* setup dynamics block */
 		dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
-		dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+
+		if (dynPtr)
+		{
+			dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+		}
 		
 		if (!dynPtr) 
 		{

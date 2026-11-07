@@ -1,3 +1,7 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a sequence or frame number a shape doesn't have is refused, where only an assert stood before, and an animation whose frames take no time, or a negative time, no longer hangs the game
+
 #include "3dc.h"
 #include "io.h"
 
@@ -11,8 +15,11 @@ void CopyAnimationFrameToShape (SHAPEANIMATIONCONTROLDATA *sacd, DISPLAYBLOCK * 
 {
 	SHAPEHEADER * shp = dptr->ObShapeData;
 
-	GLOBALASSERT (sacd->current_frame >= 0);
-	GLOBALASSERT (sacd->current_frame < (signed)sacd->sequence->num_frames);
+	// The frame number and how many frames there are both come from the shape's file. No such frame means the shape stays as it is.
+	if (sacd->current_frame < 0 || sacd->current_frame >= (signed)sacd->sequence->num_frames)
+	{
+		return;
+	}
 
 	shp->points[0] = sacd->sequence->anim_frames[sacd->current_frame].vertices;
 	shp->sh_normals[0] = sacd->sequence->anim_frames[sacd->current_frame].item_normals;
@@ -34,6 +41,14 @@ static void CopyAnimationSequenceDataToObject (SHAPEANIMATIONSEQUENCE *sas, DISP
 
 static void ChooseNextFrame(SHAPEANIMATIONCONTROLDATA *current)
 {
+	// The loop below adds this time until the next frame is due. With no time, that never happens. And a negative time, from
+	// a level, is stored here as a huge number that takes the sum the wrong way, so the loop runs for a very long time. Asking
+	// as a signed number catches both.
+	if ((signed long)current->seconds_per_frame <= 0)
+	{
+		return;
+	}
+
 	while (current->time_to_next_frame <= 0)
 	{
 		current->time_to_next_frame += current->seconds_per_frame;
@@ -192,7 +207,12 @@ unsigned int SetShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCONTROL
 
 	GLOBALASSERT(sac);
 	GLOBALASSERT(sacd);
-	GLOBALASSERT(sacd->sequence_no < sac->anim_header->num_sequences);
+	// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves
+	// the shape doing what it was doing.
+	if (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)
+	{
+		return 0;
+	}
 
 	sac->next.empty = 1;
 
@@ -246,7 +266,12 @@ unsigned int SetNextShapeAnimationSequence(DISPLAYBLOCK *dptr, SHAPEANIMATIONCON
 
 	GLOBALASSERT(sac);
 	GLOBALASSERT(sacd);
-	GLOBALASSERT(sacd->sequence_no < sac->anim_header->num_sequences);
+	// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves
+	// the shape doing what it was doing.
+	if (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)
+	{
+		return 0;
+	}
 
 	if (sac->current.empty) {
 		return(SetShapeAnimationSequence (dptr,sacd));
@@ -320,10 +345,9 @@ void SetCurrentShapeAnimationToStop(DISPLAYBLOCK *dptr, unsigned long stop_now, 
 		return;
 	}
 
-	if (end_frame != -1)
+	// -1 means no change to the last frame, and so does a frame the sequence doesn't have
+	if (end_frame >= 0 && end_frame < (signed)sac->current.sequence->num_frames)
 	{
-		GLOBALASSERT (end_frame >= 0);
-		GLOBALASSERT (end_frame < (signed)sac->current.sequence->num_frames);
 
 		sac->current.end_frame = end_frame;
 	}
@@ -371,10 +395,9 @@ void PauseCurrentShapeAnimation(DISPLAYBLOCK * dptr, unsigned long pause_now, si
 		return;
 	}
 
-	if (end_frame != -1)
+	// -1 means no change to the last frame, and so does a frame the sequence doesn't have
+	if (end_frame >= 0 && end_frame < (signed)sac->current.sequence->num_frames)
 	{
-		GLOBALASSERT (end_frame >= 0);
-		GLOBALASSERT (end_frame < (signed)sac->current.sequence->num_frames);
 
 		sac->current.end_frame = end_frame;
 	}
@@ -411,7 +434,12 @@ unsigned int SetOrphanedShapeAnimationSequence(SHAPEANIMATIONCONTROLLER * sac, S
 {
 	GLOBALASSERT(sac);
 	GLOBALASSERT(sacd);
-	GLOBALASSERT(sacd->sequence_no < sac->anim_header->num_sequences);
+	// Which sequence to play can come from a model file, and the shape may not have one by that number. Saying no leaves
+	// the shape doing what it was doing.
+	if (sacd->sequence_no >= (unsigned long)sac->anim_header->num_sequences)
+	{
+		return 0;
+	}
 
 	sac->next.empty = 1;
 

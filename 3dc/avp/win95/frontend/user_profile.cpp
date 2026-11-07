@@ -5,6 +5,8 @@
 //   the profile folder, its look speeds stay within the menu sliders' range; long folder paths are refused;
 //   deleting a profile skips a save file whose full name is too long, so it cannot overflow or hit another file;
 //   a profile file whose inner name is not its own file name is skipped, so it cannot delete another profile
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a profile's difficulties are limited as it's read, and its multiplayer name has an end
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a profile saved before the shoulder lamp gets its key without anything else changing
 #include "list_tem.hpp"
@@ -24,6 +26,7 @@
 #include "utilities.h"
 #include "shoulder_lamp.h"
 #include "logString.h"
+#include "profile_checks.h"
 
 static int LoadUserProfiles(void);
 
@@ -370,6 +373,12 @@ static int LoadUserProfiles(void)
 			// so we always put one in the last place. Without it, code that reads the
 			// name would run on past the end of the box.
 			profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
+
+			// The same goes for the multiplayer name, and the levels' difficulties are limited too. See profile_checks.h.
+			// These others go through a check where they're used: the cheat modes can't hang the menu (profile_checks.h), every key number has a place in the key lists, a volume is held to its table,
+			// a menu setting picks its text through GetTextString, which refuses a number off the end, and a personal best is only ever a number to print.
+			profilePtr->MultiplayerCallsign[sizeof(profilePtr->MultiplayerCallsign) - 1] = 0;
+			ProfileChecks_LimitLevels(profilePtr->LevelCompleted);
 
 			// a name that could reach outside the profile folder, or that is not this file's own name: skip the file,
 			// like an unreadable one

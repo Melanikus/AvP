@@ -123,6 +123,9 @@
     <ClCompile Include="..\..\3dc\net_close.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\net_host.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\object.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -556,9 +559,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\winmain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\3dc\avp\win95\xa2_audio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp">
@@ -1146,6 +1146,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_checks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_host.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\sound_address.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h">

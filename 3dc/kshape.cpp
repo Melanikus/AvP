@@ -2,6 +2,8 @@
 * kshape.c - replacement for all the pipeline stuff previously done in shape.c & clip.c *
 ************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   two commented-out calls to DecalWithinFrustum are gone, with the function (see frustum.cpp)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
 //   overflowed;
@@ -20,6 +22,7 @@
 //   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
 //   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
 //   the lights that get a place are the ones that put the most light on what's on screen, not the nearest. See light_choice.h
+//   the list of see-through polygons leaves out what doesn't fit, where only an assert stood before, and a texture animation sequence a shape doesn't have is no longer looked for past the end of its list
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
 //   Found while reading Bobblen's avp-forever fork
@@ -43,6 +46,7 @@
 #include "io.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
+#include "logString.h"
 #include "equipment.h"
 #include "bh_predator.h"
 #include "bh_marine.h"
@@ -2513,6 +2517,27 @@ int *GetTxAnimArrayZ(int shape, int item)
 	return 0;
 }
 
+// An animated polygon has a list of animation sequences, and an empty entry marks the end of the list. The game asks for
+// sequences by number, and a shape from a level file can have fewer than the game expects: a switch expects two, for
+// example. This finds one without looking past the end of the list, and gives back nothing if it isn't there.
+static TXANIMHEADER *FindTxAnimSequence(TXANIMHEADER **sequences, int sequence)
+{
+	if (sequence < 0)
+	{
+		return 0;
+	}
+
+	for (int i = 0; i < sequence; i++)
+	{
+		if (!sequences[i])
+		{
+			return 0;
+		}
+	}
+
+	return sequences[sequence];
+}
+
 TXANIMHEADER *GetTxAnimDataZ(int shape, int item, int sequence)
 {
 	TXANIMHEADER **txah_ptr;
@@ -2531,7 +2556,7 @@ TXANIMHEADER *GetTxAnimDataZ(int shape, int item, int sequence)
 		if (pheader->PolyFlags & iflag_txanim) {
 			txah_ptr = (TXANIMHEADER **) shape_textures[pheader->PolyColour >> TxDefn];
 			txah_ptr++;     /* Skip sequence shadow */
-			return txah_ptr[sequence];
+			return FindTxAnimSequence(txah_ptr, sequence);
 		}
 	}
 
@@ -2557,6 +2582,11 @@ TXANIMHEADER *GetTxAnimHeaderFromShape(TXACTRLBLK *taptr, int shape)
 		taptr->tac_txah.txa_currentframe = txah->txa_currentframe;
 		taptr->tac_txah.txa_maxframe     = txah->txa_maxframe;
 		taptr->tac_txah.txa_speed        = txah->txa_speed;
+	}
+	else
+	{
+		// There's no such sequence, so there's nothing to play. With no flags set, UpdateTxAnim leaves this alone.
+		taptr->tac_txah.txa_flags = 0;
 	}
 
 	return txah;
@@ -2626,12 +2656,17 @@ void ControlTextureAnimation(DISPLAYBLOCK *dptr)
 		UpdateTxAnim(&taptr->tac_txah);
 		/* Get the TXANIMHEADER from the shape data */
 		txah = taptr->tac_txah_s;
-		/* Copy across the current frame */
-		LOCALASSERT(txah);
-		txah->txa_currentframe = taptr->tac_txah.txa_currentframe;
 		iptr = taptr->tac_txarray;
-		LOCALASSERT(iptr);
-		*iptr = taptr->tac_sequence;
+
+		// If the shape has no such sequence, the polygon stays on the one it had. Telling it the new number would send
+		// CreateTxAnimUVArray looking for a sequence that isn't there.
+		if (txah && iptr)
+		{
+			/* Copy across the current frame */
+			txah->txa_currentframe = taptr->tac_txah.txa_currentframe;
+			*iptr = taptr->tac_sequence;
+		}
+
 		taptr = taptr->tac_next;
 	}
 }
@@ -2659,16 +2694,31 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	/* The sequence # will have been copied across by the control block */
 	int sequence = *txa_data++;
 	txah_ptr = (TXANIMHEADER **) txa_data;
-	txah = txah_ptr[sequence];
-	txaf = txah->txa_framedata;
+	txah = FindTxAnimSequence(txah_ptr, sequence);
 
-	/* Because the current frame can be set from outside, clamp it first */
-	if (txah->txa_currentframe < 0) {
-		txah->txa_currentframe = 0;
+	// A shape from a level file can have a polygon with no sequences at all, or a sequence with no frames, which has no list
+	// of frames to read. Its corners all get the same place in the image, so nothing looks right, but nothing goes wrong. All
+	// three callers give an array of this size.
+	if (!txah || txah->txa_numframes < 1)
+	{
+		for (i = 0; i < maxpolypts * 2; i++)
+		{
+			uv_array[i] = 0;
+		}
+
+		return;
 	}
 
+	txaf = txah->txa_framedata;
+
+	// Because the current frame can be set from outside, clamp it first. An animation with one frame has a last frame of
+	// 0, which makes the first test give -1, so the test for below 0 has to come second.
 	if (txah->txa_currentframe >= txah->txa_maxframe) {
 		txah->txa_currentframe = txah->txa_maxframe - 1;
+	}
+
+	if (txah->txa_currentframe < 0) {
+		txah->txa_currentframe = 0;
 	}
 
 	/* Frame # */
@@ -3563,8 +3613,6 @@ void RenderDecal(DECAL *decalPtr)
 	VerticesBuffer[3].Y = decalPtr->Vertices[3].vy;
 	VerticesBuffer[3].Z = decalPtr->Vertices[3].vz;
 #endif
-	//  int outcode = DecalWithinFrustum(decalPtr);
-	//  if (outcode) // bjd
 	{
 		switch (decalPtr->DecalID) {
 			default:
@@ -4003,8 +4051,6 @@ void RenderMirroredDecal(DECAL *decalPtr)
 	VerticesBuffer[3].Y = translatedPosition.vy;
 	VerticesBuffer[3].Z = translatedPosition.vz;
 
-	//  int outcode = DecalWithinFrustum(decalPtr);
-	//  if (outcode) // bjd
 	{
 		switch (decalPtr->DecalID) {
 			default:
@@ -4090,6 +4136,21 @@ void ClearTranslucentPolyList(void)
 
 void AddToTranslucentPolyList(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVerticesPtr)
 {
+	// The list has a fixed size, and a level decides how many see-through polygons are in view. One that doesn't fit is left
+	// out for this frame. Writing it would damage whatever is in memory after the list.
+	if (CurrentNumberOfTranslucentPolygons >= MAX_NO_OF_TRANSLUCENT_POLYGONS)
+	{
+		static bool logged = false;
+
+		if (!logged)
+		{
+			logged = true;
+			LogString("The list of see-through polygons is full, so some are being left out. This isn't logged again.");
+		}
+
+		return;
+	}
+
 	/* copy the data to the list for processing later */
 	int i = RenderPolygon.NumberOfVertices;
 	int maxZ = 0;
@@ -4122,7 +4183,6 @@ void AddToTranslucentPolyList(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVert
 	TranslucentPolygonHeaders[CurrentNumberOfTranslucentPolygons] = *inputPolyPtr;
 
 	CurrentNumberOfTranslucentPolygons++;
-	LOCALASSERT(CurrentNumberOfTranslucentPolygons < MAX_NO_OF_TRANSLUCENT_POLYGONS);
 }
 
 void OutputTranslucentPolyList(void)

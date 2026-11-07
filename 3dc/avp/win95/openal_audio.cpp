@@ -5,6 +5,7 @@
 //   a WAV file's size for its sound data is checked before the memory is asked for, and failing to
 //   get that memory now loses only that sound
 //   a WAV file with no sound data in it is refused; the search for it used to go round for ever
+//   an assert on the sound number that could never fail now tests what it says
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a level's room echo setting is checked against the list of echo settings before the list is read;
 //   a sound whose sample has been unloaded while it played counts as stopped, instead of being read through a pointer that's gone;
@@ -855,7 +856,7 @@ static sndSource* FindFreeSource()
 int PlatPlaySound(int activeIndex)
 {
 	// check bounds of active sound index
-	LOCALASSERT ((activeIndex >= 0) || (activeIndex < SOUND_MAXACTIVE));
+	LOCALASSERT ((activeIndex >= 0) && (activeIndex < SOUND_MAXACTIVE));
 	
 	SOUNDINDEX gameIndex = ActiveSounds[activeIndex].soundIndex;
 	LOCALASSERT ((gameIndex >= 0) && (gameIndex < SID_MAXIMUM));
