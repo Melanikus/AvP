@@ -27,7 +27,6 @@
 //   wrong file; reading the list of packed files stops at the end of the archive, whatever count it claims
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   FF_FileIsThere asks whether a file is there and writes nothing, for a file that's allowed not to be
-//   wrong file
 //   a packed file that says it runs past the end of its archive is left out
 
 #include "FastFile.h"
