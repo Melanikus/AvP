@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <string>
 
 #include "chunk.hpp"
 #include "chunk_type.hpp"
@@ -128,6 +129,16 @@ static int checksFailed = 0;
 static void Check(bool passed, char const * what)
 {
 	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
+	if (!passed)
+	{
+		checksFailed++;
+	}
+}
+
+// The same, for words kept as a string. They're written out with their own length, so no ending 0 is looked for.
+static void Check(bool passed, std::string const & what)
+{
+	printf("  %s  %.*s\n", passed ? "ok    " : "FAILED", static_cast<int>(what.size()), what.data());
 	if (!passed)
 	{
 		checksFailed++;
@@ -3997,7 +4008,9 @@ static void TestHierarchyAnimations()
 {
 	puts("38. hierarchy animations");
 
-	struct SectionRow { FillsSection fill; bool good; char const * says; };
+	// What a row says is kept as a string, apart from the bytes its fill writes, so the words handed to Check never come
+	// from the buffer a hierarchy is built in
+	struct SectionRow { FillsSection fill; bool good; std::string says; };
 	SectionRow const rows[] =
 	{
 		// What real files hold
