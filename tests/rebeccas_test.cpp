@@ -135,10 +135,11 @@ static void Check(bool passed, char const * what)
 	}
 }
 
-// The same, for words kept as a string. They're written out with their own length, so no ending 0 is looked for.
-static void Check(bool passed, std::string const & what)
+// The check for the hierarchy rows (38), with a name of its own, so a reader of the code can't take it for another test's
+// Check. Its words come from a list of literals, never from the bytes a row builds.
+static void CheckRow(bool passed, char const * what)
 {
-	printf("  %s  %.*s\n", passed ? "ok    " : "FAILED", static_cast<int>(what.size()), what.data());
+	printf("  %s  %s\n", passed ? "ok    " : "FAILED", what);
 	if (!passed)
 	{
 		checksFailed++;
@@ -4008,55 +4009,90 @@ static void TestHierarchyAnimations()
 {
 	puts("38. hierarchy animations");
 
-	// What a row says is kept as a string, apart from the bytes its fill writes, so the words handed to Check never come
-	// from the buffer a hierarchy is built in
-	struct SectionRow { FillsSection fill; bool good; std::string says; };
+	// What each row should give. Its words are in a list of their own below, apart from the fills that write the bytes,
+	// so nothing a fill wrote can be taken for them.
+	struct SectionRow { FillsSection fill; bool good; };
 	SectionRow const rows[] =
 	{
 		// What real files hold
-		{ PutGoodCompact, true, "a compact sequence whose frames go up is accepted" },
-		{ [](char * at) { LongFrame const frames[] = { { 0, 0 }, { 30000, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true, "a long sequence whose frames go up is accepted" },
-		{ [](char * at) { LongFrame const frames[] = { { 30000, 1 }, { 0, 0 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true, "a long sequence's frames go by their places, not by where they are in the file" },
-		{ [](char * at) { int const starts[] = { 65535 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, true, "a compact sequence can start its last frame as late as 65535" },
-		{ [](char * at) { LongFrame const frames[] = { { 65535, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, true, "and so can a long one" },
-		{ [](char * at) { int const starts[] = { 100, 200 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, true, "a sequence doesn't have to start at 0" },
+		{ PutGoodCompact, true },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 }, { 30000, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 30000, 1 }, { 0, 0 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, true },
+		{ [](char * at) { int const starts[] = { 65535 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, true },
+		{ [](char * at) { LongFrame const frames[] = { { 65535, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, true },
+		{ [](char * at) { int const starts[] = { 100, 200 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, true },
 
 		// One thing wrong, in the compact list. The first frame starting at 65536 is the one that hangs the game: the only frame, and it comes to a length of 0.
-		{ [](char * at) { int const starts[] = { 0 }; return PutCompactSequence(at, 1, starts); }, false, "a section with a compact list and no name chunk is refused" },
-		{ [](char * at) { return PutEmptyCompactList(PutSectionName(at)); }, false, "a compact list with no sequences is refused" },
-		{ [](char * at) { return PutCompactSequence(PutSectionName(at), 0, 0); }, false, "a compact sequence with no frames is refused" },
-		{ [](char * at) { int const starts[] = { 65536 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, false, "a compact sequence's only frame starting at 65536 is refused" },
-		{ [](char * at) { int const starts[] = { 0, 65536 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false, "a compact sequence's last frame starting at 65536 is refused" },
-		{ [](char * at) { int const starts[] = { -1, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false, "a compact sequence starting below 0 is refused" },
-		{ [](char * at) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false, "two compact frames starting together are refused" },
-		{ [](char * at) { int const starts[] = { 100, 50 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false, "a compact frame starting before the one ahead of it is refused" },
+		{ [](char * at) { int const starts[] = { 0 }; return PutCompactSequence(at, 1, starts); }, false },
+		{ [](char * at) { return PutEmptyCompactList(PutSectionName(at)); }, false },
+		{ [](char * at) { return PutCompactSequence(PutSectionName(at), 0, 0); }, false },
+		{ [](char * at) { int const starts[] = { 65536 }; return PutCompactSequence(PutSectionName(at), 1, starts); }, false },
+		{ [](char * at) { int const starts[] = { 0, 65536 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { -1, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
+		{ [](char * at) { int const starts[] = { 100, 50 }; return PutCompactSequence(PutSectionName(at), 2, starts); }, false },
 
 		// The same in the long list, and what only it can get wrong
-		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(at, true, 1, frames); }, false, "a section with a long list and no name chunk is refused" },
-		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutSectionName(at), false, 1, frames); }, false, "a long sequence with no header is refused" },
-		{ [](char * at) { return PutLongSequence(PutSectionName(at), true, 0, 0); }, false, "a long sequence with no frames is refused" },
-		{ [](char * at) { LongFrame const frames[] = { { 65536, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false, "a long sequence's only frame starting at 65536 is refused" },
-		{ [](char * at) { LongFrame const frames[] = { { -1, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false, "a long sequence starting below 0 is refused" },
-		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false, "two long frames starting together are refused" },
-		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 50, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false, "a long frame starting before the one ahead of it is refused" },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(at, true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0 } }; return PutLongSequence(PutSectionName(at), false, 1, frames); }, false },
+		{ [](char * at) { return PutLongSequence(PutSectionName(at), true, 0, 0); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 65536, 0 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { -1, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 100, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
+		{ [](char * at) { LongFrame const frames[] = { { 100, 0 }, { 50, 1 } }; return PutLongSequence(PutSectionName(at), true, 2, frames); }, false },
 
 		// A frame's place far outside its sequence. The chunk's own check refuses this, and the rule on starts mustn't go ahead and use the place anyway.
-		{ [](char * at) { LongFrame const frames[] = { { 0, 0x10000000 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false, "a frame's place far outside its sequence is refused, and goes no further" },
+		{ [](char * at) { LongFrame const frames[] = { { 0, 0x10000000 } }; return PutLongSequence(PutSectionName(at), true, 1, frames); }, false },
 
 		// A section inside the first section is held to the same, and it's refused for having no sequences, which only the first section can get away with
-		{ [](char * at) { return PutSection(PutGoodCompact(at), PutGoodCompact); }, true, "a good section inside a good section is accepted" },
-		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { return PutSectionName(inside); }); }, false, "a section inside with no sequences is refused" },
-		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, false, "a section inside with bad frames is refused" },
-		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 0 }; return PutCompactSequence(inside, 1, starts); }); }, false, "a section inside with no name chunk is refused" },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), PutGoodCompact); }, true },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { return PutSectionName(inside); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, false },
+		{ [](char * at) { return PutSection(PutGoodCompact(at), [](char * inside) { int const starts[] = { 0 }; return PutCompactSequence(inside, 1, starts); }); }, false },
 
 		// The game leaves a hierarchy out altogether if its first section has no sequences, so nothing in that one is built, and it can't refuse the level. Two of the game's own are like this.
-		{ [](char * at) { return PutSectionName(at); }, true, "a first section with no sequences at all is left alone" },
-		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true, "and so is whatever's inside it" },
+		{ [](char * at) { return PutSectionName(at); }, true },
+		{ [](char * at) { return PutSection(PutSectionName(at), [](char * inside) { int const starts[] = { 100, 100 }; return PutCompactSequence(PutSectionName(inside), 2, starts); }); }, true },
 	};
+
+	// What each row above checks, in the same order
+	char const * const rowWords[] =
+	{
+		"a compact sequence whose frames go up is accepted",
+		"a long sequence whose frames go up is accepted",
+		"a long sequence's frames go by their places, not by where they are in the file",
+		"a compact sequence can start its last frame as late as 65535",
+		"and so can a long one",
+		"a sequence doesn't have to start at 0",
+		"a section with a compact list and no name chunk is refused",
+		"a compact list with no sequences is refused",
+		"a compact sequence with no frames is refused",
+		"a compact sequence's only frame starting at 65536 is refused",
+		"a compact sequence's last frame starting at 65536 is refused",
+		"a compact sequence starting below 0 is refused",
+		"two compact frames starting together are refused",
+		"a compact frame starting before the one ahead of it is refused",
+		"a section with a long list and no name chunk is refused",
+		"a long sequence with no header is refused",
+		"a long sequence with no frames is refused",
+		"a long sequence's only frame starting at 65536 is refused",
+		"a long sequence starting below 0 is refused",
+		"two long frames starting together are refused",
+		"a long frame starting before the one ahead of it is refused",
+		"a frame's place far outside its sequence is refused, and goes no further",
+		"a good section inside a good section is accepted",
+		"a section inside with no sequences is refused",
+		"a section inside with bad frames is refused",
+		"a section inside with no name chunk is refused",
+		"a first section with no sequences at all is left alone",
+		"and so is whatever's inside it",
+	};
+
+	static_assert(sizeof(rowWords) / sizeof(rowWords[0]) == sizeof(rows) / sizeof(rows[0]), "every row has its words");
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
 	{
-		Check(HierarchyAccepted(PutSection(StartHierarchy(), rows[i].fill)) == rows[i].good, rows[i].says);
+		CheckRow(HierarchyAccepted(PutSection(StartHierarchy(), rows[i].fill)) == rows[i].good, rowWords[i]);
 	}
 
 	// How many sections the outermost chunk holds. The game reads the first with no check that there is one, and only ever builds that one.
