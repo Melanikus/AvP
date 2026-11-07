@@ -107,12 +107,13 @@ Version 105 - An NPC's voice is heard on every machine, for that mode (the co-op
 Version 106 - The host says where each platform lift's car is, for that mode (the co-op branch)
 Version 107 - Used by builds of the co-op lobby, before it landed. Not this code, and never to be used again
 Version 108 - Used by builds of the in-game pages, before they landed. Not this code, and never to be used again
-Version 109 - The co-op branch with main's network fixes: everything in 106, and main's 103
+Version 109 - Used by rehearsal builds of the co-op landing, before it landed: the co-op branch with main's network fixes. Never to be used again
+Version 110 - 109, and a search's question as big as its answer, so an answer is never bigger than its question
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 109; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 110; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;

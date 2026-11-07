@@ -1249,8 +1249,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 109;",
-					"to": "const int kMultiplayerVersion = 106;"
+					"from": "const int kMultiplayerVersion = 110;",
+					"to": "const int kMultiplayerVersion = 109;"
 				}
 			]
 		},
@@ -2086,6 +2086,36 @@
 					"file": "3dc/networking.cpp",
 					"from": "if (AvP.Network != I_Host && eEvent.peer == ServerPeer)",
 					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a search asks with a header alone again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tbuf.dataLength = sizeof(question);\n",
+					"to": "\tbuf.dataLength = sizeof(MessageHeader);\n"
+				}
+			]
+		},
+		{
+			"name": "a host answers a question smaller than the answer",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (len == (int)kSearchQuestionBytes)",
+					"to": "if (len >= (int)sizeof(MessageHeader))"
+				}
+			]
+		},
+		{
+			"name": "a search's question is the size it used to be",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader) + sizeof(SessionDescription);",
+					"to": "static const size_t kSearchQuestionBytes = sizeof(MessageHeader);"
 				}
 			]
 		}

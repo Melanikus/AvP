@@ -877,7 +877,8 @@ static void TestASearchAndItsAnswers()
 
 	std::vector<uint8_t> const question = lastDatagramSent;
 
-	Check(question.size() == sizeof(MessageHeader), "a search asks with a header and nothing else");
+	Check(question.size() == sizeof(MessageHeader) + sizeof(SessionDescription), "a search asks with as many bytes as the answer it wants, so no answer is bigger than its question");
+	Check(question.size() > sizeof(MessageHeader) && std::all_of(question.begin() + sizeof(MessageHeader), question.end(), [](uint8_t b) { return b == 0; }), "and after its header, nothing, so nothing left in memory goes with it");
 	fakeTime += 5000;
 	Net_UpdateSessionList(selection);
 
@@ -889,9 +890,28 @@ static void TestASearchAndItsAnswers()
 
 	Check(answer.size() == sizeof(MessageHeader) + sizeof(SessionDescription), "answers it");
 	Check(datagramsSentTo.back().host == 0x0200007F, "to whoever asked");
+	Check(answer.size() <= question.size(), "with no more than it was asked with");
+
+	// A question smaller than the answer gets nothing: an older game's, a header alone, and one a byte short. Each from its own address, so the
+	// limit on answers to one address isn't what stops it.
+	{
+		int const sentBefore = datagramsSent;
+		std::vector<uint8_t> const headerAlone(question.begin(), question.begin() + sizeof(MessageHeader));
+		std::vector<uint8_t> const aByteShort(question.begin(), question.end() - 1);
+
+		Arrives(headerAlone, 0x0A00007F);
+		Net_ServiceNetwork();
+		Check(datagramsSent == sentBefore, "a question that's only a header gets no answer");
+		Arrives(aByteShort, 0x0B00007F);
+		Net_ServiceNetwork();
+		Check(datagramsSent == sentBefore, "nor one a byte short of the answer");
+	}
 	EndTheGame();
 
 	Net_FindAvPSessions();
+	Arrives(question, 0x0400007F);
+	Net_UpdateSessionList(selection);
+	Check(NumberOfSessionsFound == 0, "a search's own question coming back, as big as an answer, isn't taken for a game");
 	Arrives(answer, 0x0300007F);
 	Net_UpdateSessionList(selection);
 	Check(NumberOfSessionsFound == 1, "a search takes a real host's answer");
@@ -2431,7 +2451,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 109;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 110;"), "and an older game can tell this one isn't what it speaks");
 }
 
 // Called last: every message from every test above has been looked at by now, and each of them had a stack under it
