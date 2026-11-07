@@ -1,3 +1,6 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a facehugger whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
+//   Bobblen's avp-forever, commit 207704e)
 /* Patrick 9/7/97 ----------------------------------------------------
   Source file for Facehugger AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -131,7 +134,21 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		facehuggerStatus->CurveTimeOut = 0;
 		facehuggerStatus->jumping = 0;
 
+		// Nothing of its model is made yet, and it makes no sound yet, so if it's taken out below, there's nothing to
+		// free or stop. (Its sounds are set again further down, the same way.)
+		facehuggerStatus->HModelController.section_data=NULL;
+		facehuggerStatus->HModelController.Deltas=NULL;
+		facehuggerStatus->soundHandle = SOUND_NOACTIVEINDEX;
+		facehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;
+
 		root_section=GetHierarchyFromLibrary("hnpchugger");
+
+		if (!NpcModelIsLoaded(root_section, "a facehugger the level places", "hnpchugger", "Template"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
+
 		Create_HModel(&facehuggerStatus->HModelController,root_section);
 		InitHModelSequence(&facehuggerStatus->HModelController,0,0,ONE_FIXED);
 		ProveHModel_Far(&facehuggerStatus->HModelController,sbPtr);
