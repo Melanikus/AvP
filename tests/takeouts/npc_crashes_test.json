@@ -83,6 +83,246 @@
 					"to": "sbPtr->SBdptr = dPtr;\n\tif(dPtr==NULL) return;"
 				}
 			]
+		},
+		{
+			"name": "a xenoborg made during play starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(xenoStatus, 0, sizeof(*xenoStatus));\n",
+					"to": "/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made when a level loads starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "/* create, initialise and attach a xeno data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(xenoStatus, 0, sizeof(*xenoStatus));\n",
+					"to": "/* create, initialise and attach a xeno data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tXENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made during play has its parts found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "\t\tVerifyDeltaControllers(sbPtr);\n\n\t\t/* Containment test NOW! */\n\t\tif(!(sbPtr->containingModule))",
+					"to": "\t\t/* Containment test NOW! */\n\t\tif(!(sbPtr->containingModule))"
+				}
+			]
+		},
+		{
+			"name": "a xenoborg made when a level loads has its parts found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "\t\tVerifyDeltaControllers(sbPtr);\n\n\t\t/* Containment test NOW! */\n\t\tGLOBALASSERT(sbPtr->containingModule);",
+					"to": "\t\t/* Containment test NOW! */\n\t\tGLOBALASSERT(sbPtr->containingModule);"
+				}
+			]
+		},
+		{
+			"name": "the finder can't be used before it's written out",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a sentry gun made during play starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "AILURE\");\n\t\treturn;\n\t}\n\n\tsbPtr->shapeIndex = 0;\n\n\tsbPtr->maintainVisibility = 1;\n\tsbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);\n\n\t/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(AUTOGUN_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tAUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(agunStatus, 0, sizeof(*agunStatus));\n",
+					"to": "AILURE\");\n\t\treturn;\n\t}\n\n\tsbPtr->shapeIndex = 0;\n\n\tsbPtr->maintainVisibility = 1;\n\tsbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);\n\n\t/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(AUTOGUN_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tAUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a sentry gun made during play has its pan and tilt found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": " NO HMODEL\");\n\t\t\treturn;\n\t\t}\n\t\tCreate_HModel(&agunStatus->HModelController,root_section);\n\t\tInitHModelSequence(&agunStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Up_Standard,ONE_FIXED);\n\n\t\t{\n\t\t\tDELTA_CONTROLLER *delta;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunTilt\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Vertical_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunPan\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Horizontal_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t}\n\n\t\t// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each\n\t\t// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last\n\t\t// held. Single player never does; a network game that reports where each gun points can.\n\t\tAutogun_VerifyDeltaControllers(sbPtr);\n",
+					"to": " NO HMODEL\");\n\t\t\treturn;\n\t\t}\n\t\tCreate_HModel(&agunStatus->HModelController,root_section);\n\t\tInitHModelSequence(&agunStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Up_Standard,ONE_FIXED);\n\n\t\t{\n\t\t\tDELTA_CONTROLLER *delta;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunTilt\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Vertical_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunPan\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Horizontal_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t}\n\n\t\t// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each\n\t\t// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last\n\t\t// held. Single player never does; a network game that reports where each gun points can.\n"
+				}
+			]
+		},
+		{
+			"name": "a sentry gun made when a level loads starts with whatever the memory held",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "\n\t\tRemoveBehaviourStrategy(sbPtr);\n\t\treturn;\n\t}\n\n\tsbPtr->maintainVisibility = 1;\n\tsbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);\n\n\t/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(AUTOGUN_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tAUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n\t\tmemset(agunStatus, 0, sizeof(*agunStatus));\n",
+					"to": "\n\t\tRemoveBehaviourStrategy(sbPtr);\n\t\treturn;\n\t}\n\n\tsbPtr->maintainVisibility = 1;\n\tsbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);\n\n\t/* create, initialise and attach an alien data block */\n\tsbPtr->SBdataptr = (void *)AllocateMem(sizeof(AUTOGUN_STATUS_BLOCK));\n\tif(sbPtr->SBdataptr)\n\t{\n\t\tSECTION *root_section;\n\t\tAUTOGUN_STATUS_BLOCK *agunStatus = (AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr;\n\n\t\t// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything\n\t\t// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.\n"
+				}
+			]
+		},
+		{
+			"name": "a sentry gun made when a level loads has its pan and tilt found on its first turn",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "ategy(sbPtr);\n\t\t\treturn;\n\t\t}\n\t\tCreate_HModel(&agunStatus->HModelController,root_section);\n\t\tInitHModelSequence(&agunStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Up_Standard,ONE_FIXED);\n\n\t\t{\n\t\t\tDELTA_CONTROLLER *delta;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunTilt\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Vertical_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunPan\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Horizontal_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t}\n\n\t\t// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each\n\t\t// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last\n\t\t// held. Single player never does; a network game that reports where each gun points can.\n\t\tAutogun_VerifyDeltaControllers(sbPtr);\n",
+					"to": "ategy(sbPtr);\n\t\t\treturn;\n\t\t}\n\t\tCreate_HModel(&agunStatus->HModelController,root_section);\n\t\tInitHModelSequence(&agunStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Up_Standard,ONE_FIXED);\n\n\t\t{\n\t\t\tDELTA_CONTROLLER *delta;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunTilt\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Vertical_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t\tdelta=Add_Delta_Sequence(&agunStatus->HModelController,\"GunPan\",(int)HMSQT_Xenoborg,(int)XBSS_Head_Horizontal_Delta,0);\n\t\t\tGLOBALASSERT(delta);\n\t\t\tdelta->timer=32767;\n\t\t\tdelta->Active=0;\n\n\t\t}\n\n\t\t// Keep the gun's pan and tilt where the rest of the code looks for them. AutoGunBehaveFun does this at the start of each\n\t\t// turn, but anything that asks where a gun points before its first turn would otherwise read whatever the memory last\n\t\t// held. Single player never does; a network game that reports where each gun points can.\n"
+				}
+			]
+		},
+		{
+			"name": "the gun's finder can't be used before it's written out",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "static void Autogun_VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a half-made alien's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tif (asb)\n\t\t\t\t{\n\t\t\t\t\tDispel_HModel(&asb->HModelController);\n\t\t\t\t}\n",
+					"to": "\t\t\t\tDispel_HModel(&asb->HModelController);\n"
+				}
+			]
+		},
+		{
+			"name": "a half-made facehugger's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n\t\t\t}\n",
+					"to": "\t\t\t}\n\t\t\tDispel_HModel(&fhugStatusPointer->HModelController);\n"
+				}
+			]
+		},
+		{
+			"name": "a half-made queen's missing block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n\t\t\t}\n",
+					"to": "\t\t\t}\n\t\t\tif(queenStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(queenStatusPointer->soundHandle);\n"
+				}
+			]
+		},
+		{
+			"name": "a level's unknown marine is read through",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tif (!marineStatus->My_Weapon)\n",
+					"to": "\t\tif (!marineStatus)\n"
+				}
+			]
+		},
+		{
+			"name": "a level's unknown marine is replaced without a word in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "NoteRefusedFromAFile(\"a level or save named a kind of marine that isn't on the list, so he's an ordinary marine with a pulse rifle\");",
+					"to": "NoteRefusedFromAFile(\"a marine was replaced\");"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown marine weapon is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id)))\n",
+					"to": "\tif (!block)\n"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown marine weapon is refused without a word in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "NoteRefusedFromAFile(\"a save named a marine weapon that isn't on the list, so that marine's part of the save is left out\");",
+					"to": "NoteRefusedFromAFile(\"a save was refused\");"
+				}
+			]
+		},
+		{
+			"name": "a level's unknown predator weapon is read through",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "                if (!predatorStatus->Selected_Weapon)\n",
+					"to": "                if (!predatorStatus)\n"
+				}
+			]
+		},
+		{
+			"name": "a save's unknown predator weapon is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\tif (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id)))\n",
+					"to": "\tif (!block)\n"
+				}
+			]
+		},
+		{
+			"name": "a refusal isn't marked as one in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "LogString(std::string(\"npc: refused: \") + why);",
+					"to": "LogString(why);"
+				}
+			]
+		},
+		{
+			"name": "a negative weapon number from a save is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_file_checks.h",
+					"from": "return number >= 0 && number < endOfList;",
+					"to": "return number < endOfList;"
+				}
+			]
+		},
+		{
+			"name": "a weapon number past the end of the list is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_file_checks.h",
+					"from": "return number >= 0 && number < endOfList;",
+					"to": "return number >= 0;"
+				}
+			]
+		},
+		{
+			"name": "a save's marine weapon number isn't checked as a number first",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, MNPCW_End) || !GetThisNPCMarineWeapon(",
+					"to": "if (!GetThisNPCMarineWeapon("
+				}
+			]
+		},
+		{
+			"name": "a save's predator weapon number isn't checked as a number first",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "if (!NpcFile_WeaponNumberIsOnList(block->weapon_id, PNPCW_End) || !GetThisNPCPredatorWeapon(",
+					"to": "if (!GetThisNPCPredatorWeapon("
+				}
+			]
 		}
 	]
 }

@@ -1,3 +1,6 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a xenoborg's block starts cleared, and the pointers to its moving parts are set as soon as it's made, not on its
+//   first turn, so waking it before then can't write through whatever the memory last held
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a xenoborg that has just been killed no longer has its freed block read and written
 /* Patrick 4/7/97 ----------------------------------------------------
@@ -83,6 +86,7 @@ void XenoborgHandleMovingAnimation(STRATEGYBLOCK *sbPtr);
 static void ComputeDeltaValues(STRATEGYBLOCK *sbPtr);
 static void KillXeno(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int multiple,VECTORCH *incoming);
 void CreateXenoborg(VECTORCH *Position,int type);
+static void VerifyDeltaControllers(STRATEGYBLOCK *sbPtr);
 void Xenoborg_ActivateAllDeltas(STRATEGYBLOCK *sbPtr);
 void Xenoborg_DeactivateAllDeltas(STRATEGYBLOCK *sbPtr);
 STRATEGYBLOCK *Xenoborg_GetNewTarget(VECTORCH *xenopos, STRATEGYBLOCK *me);
@@ -217,6 +221,10 @@ void CreateXenoborg(VECTORCH *Position,int type)
 	{
 		SECTION *root_section;
 		XENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything
+		// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.
+		memset(xenoStatus, 0, sizeof(*xenoStatus));
 
 		NPC_InitMovementData(&(xenoStatus->moveData));
 		NPC_InitWanderData(&(xenoStatus->wanderData));
@@ -394,6 +402,10 @@ void CreateXenoborg(VECTORCH *Position,int type)
 
 		}
 
+		// Keep the moving parts where the rest of the code looks for them. XenoborgBehaviour does this at the start of each
+		// turn, but something can wake a xenoborg before its first one, such as a level's switch, and waking it moves them.
+		VerifyDeltaControllers(sbPtr);
+
 		/* Containment test NOW! */
 		if(!(sbPtr->containingModule))
 		{
@@ -507,6 +519,10 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	{
 		SECTION *root_section;
 		XENO_STATUS_BLOCK *xenoStatus = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// The memory comes as it was last left, so every field starts at nothing before the ones below are set. Anything
+		// missed is then an empty pointer, which fails plainly, not an old one that writes over something else.
+		memset(xenoStatus, 0, sizeof(*xenoStatus));
 
 		NPC_InitMovementData(&(xenoStatus->moveData));
 		NPC_InitWanderData(&(xenoStatus->wanderData));
@@ -681,6 +697,10 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 			delta->Active=0;
 
 		}
+
+		// Keep the moving parts where the rest of the code looks for them. XenoborgBehaviour does this at the start of each
+		// turn, but something can wake a xenoborg before its first one, such as a level's switch, and waking it moves them.
+		VerifyDeltaControllers(sbPtr);
 
 		/* Containment test NOW! */
 		GLOBALASSERT(sbPtr->containingModule);
