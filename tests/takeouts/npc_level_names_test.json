@@ -173,6 +173,166 @@
 					"to": "\t// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).\n"
 				}
 			]
+		},
+		{
+			"name": "the lookup reads the list again for each new name",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\treturn newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName) : nothing;",
+					"to": "\treturn newName && !NpcLevelName_IsEmpty(newName) ? NpcLevelNames_FindByLevelName(list, newName, networkGame, findLive) : nothing;"
+				}
+			]
+		},
+		{
+			"name": "the lookup never reads the list in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\tif (found || !networkGame)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the lookup reads the list in single player too",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\tif (found || !networkGame)\n",
+					"to": "\tif (found)\n"
+				}
+			]
+		},
+		{
+			"name": "the lookup doesn't look among the live things first",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\tauto const found = findLive(name);",
+					"to": "\tauto const found = decltype(findLive(name))(0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: FindSBWithName doesn't make its lookup through npc_level_names.h",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\treturn NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, AvP.Network != I_No_Network, FindLiveSBWithName);",
+					"to": "\treturn FindLiveSBWithName(id_name);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: FindSBWithName calls itself for a new name",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\treturn NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, AvP.Network != I_No_Network, FindLiveSBWithName);",
+					"to": "\tif (AvP.Network != I_No_Network)\n\t{\n\t\tchar const *const newName = NpcLevelNames_NetworkNameFor(&TheNpcLevelNames, id_name);\n\n\t\tif (newName)\n\t\t{\n\t\t\treturn FindSBWithName(const_cast<char *>(newName));\n\t\t}\n\t}\n\n\treturn NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, AvP.Network != I_No_Network, FindLiveSBWithName);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what it looks among reads the list too",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\t\t\treturn sbptr;\n\t\t}\n\t}\n\n\treturn NULL;\n}\n",
+					"to": "\t\t\treturn sbptr;\n\t\t}\n\t}\n\n\treturn NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, true, FindLiveSBWithName);\n}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what it looks among isn't the live blocks",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\t\tSTRATEGYBLOCK* sbptr = ActiveStBlockList[stratblock];\n\t\tGLOBALASSERT(sbptr);\n\n\t\tif(NAME_ISEQUAL(sbptr->SBname, id_name))",
+					"to": "\t\tSTRATEGYBLOCK* sbptr = FreeStBlockList[stratblock];\n\t\tGLOBALASSERT(sbptr);\n\n\t\tif(NAME_ISEQUAL(sbptr->SBname, id_name))"
+				}
+			]
+		},
+		{
+			"name": "the id an object gets doesn't end in a 0 byte",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_object.cpp",
+					"from": "\tbuffer[7]=0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the id a sound gets doesn't end in a 0 byte",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_sound.cpp",
+					"from": "\tbuffer[7]=0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the id a generator, which is what a placed NPC comes from, gets doesn't end in a 0 byte",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/avp_chunk.cpp",
+					"from": "\tbuffer[7]=0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the id a virtual object gets doesn't end in a 0 byte",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/strategy_chunk.cpp",
+					"from": "\tbuffer[7]=0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new name in a network game can end in a 0 byte",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\t\tsbPtr->SBname[SB_NAME_LENGTH-1]=+10 + PlayerIdInPlayerList(AvPNetID);",
+					"to": "\t\tsbPtr->SBname[SB_NAME_LENGTH-1]=PlayerIdInPlayerList(AvPNetID);"
+				}
+			]
+		},
+		{
+			"name": "a player who isn't on the list has a place that makes a 0",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "#define NET_IDNOTINPLAYERLIST       (-1)",
+					"to": "#define NET_IDNOTINPLAYERLIST       (-10)"
+				}
+			]
+		},
+		{
+			"name": "a name of all zeros is looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\tif (NpcLevelName_IsEmpty(name))\n\t{\n\t\treturn nothing;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new name of all zeros in the list is looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName)",
+					"to": "newName ? findLive(newName)"
+				}
+			]
 		}
 	]
 }
