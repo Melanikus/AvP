@@ -36,6 +36,8 @@
 //   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the Room echo row on the sound pages is saved when it changes, the same way the rendering page's rows are (REVERB-TOGGLE-1)
+//   the credits roll shows with the menu's video on, and any key pressed stops it, whatever else is held (CREDITS-1). The fix follows
+//   Bobblen's avp-forever (ec6446f), rewritten
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -76,6 +78,7 @@
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
+#include "credits_roll.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -4881,17 +4884,13 @@ void CheckForCredits(void)
 #endif
 }
 
-extern bool MenuBackgroundFMV;
-
 void DoCredits(void)
 {
-	// HACK / FIXME: don't run credits when displaying the menu FMV as 
-	// we presently have a bug that means you can't exit early from
-	// the credits roll in a Release build when the video is playing..
-	if (MenuBackgroundFMV) {
-		return;
-	}
-
+	// The roll used to be skipped whenever the menu's video was on, which is always when fmvs/menubackground.bik is there, because in a
+	// Release build it couldn't be left early. That came from how the keyboard was read: DirectReadKeyboard asked DirectInput, and in a
+	// Release build a failed read gave up quietly, so no key was seen. The keyboard is read from the window's messages now, which this loop
+	// takes in itself each frame, and the video reads no keys, so the roll shows with the video too. CREDITS-1; found through Bobblen's
+	// avp-forever (ec6446f), whose fix this follows, rewritten.
 	int position = 300*2048;
 	BOOL FinishedCredits = FALSE;
 	
@@ -4951,7 +4950,8 @@ void DoCredits(void)
 
 		position -= RealFrameTime;
 	}
-	while (!DebouncedGotAnyKey && !FinishedCredits);
+	// Any key pressed this frame stops it, each looked at on its own, so one held all along can't keep the rest from counting (credits_roll.h)
+	while (!FinishedCredits && !CreditsRoll_AKeyWasJustPressed(DebouncedKeyboardInput, MAX_NUMBER_OF_INPUT_KEYS, KEY_F8));
 
 	UnloadTextFile("credits.txt", creditsPtr);
 }
