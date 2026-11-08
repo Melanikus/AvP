@@ -9,6 +9,8 @@
 //   a predator's weapon named by a level or save file is checked: a level's gets his wristblade, a save's part is left out
 //   a predator whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
 //   avp-forever, commit 207704e)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a dormant predator that wakes is still kept until the level ends, as everything placed in a level is
 /* Patrick 4/7/97 ---------------------------------------------------
 Source file for predator AI
 ---------------------------------------------------------------------*/
@@ -959,9 +961,15 @@ void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
         pred_bhv = (DORMANT_PREDATOR_STATUS_BLOCK*)sbPtr->SBdataptr;
         toolsData=pred_bhv->toolsData;
 
+        // Everything placed in a level is kept until the level ends, even after it's gone, because switches, tracks and other
+        // things in the level keep hold of it (create_strategies_from_list in object_setup.cpp marks it so). Starting this block
+        // afresh would forget that mark, so it's put back straight after.
+        bool const keptUntilTheLevelEnds = sbPtr->SBflags.preserve_until_end_of_level != 0;
+
         //convert this strategyblock to a predator
         DeallocateMem(pred_bhv);
         InitialiseSBValues(sbPtr);
+        sbPtr->SBflags.preserve_until_end_of_level = keptUntilTheLevelEnds ? 1 : 0;
         sbPtr->I_SBtype = I_BehaviourPredator;
         EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );
 
