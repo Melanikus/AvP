@@ -126,6 +126,34 @@ static void TestMovingAlong()
 	Check(ReadWholeFile(LogFiles_OldName(log, 5)) == "run 1\n", "old log 5 is five runs back");
 	Check(!LogFiles_SomethingIsThere(LogFiles_OldName(log, 6)), "and there's never a sixth, so they can't grow without end");
 
+	// Emptying has to work on a log that's still there. Moving the logs along usually leaves no log behind, so the seven starts above
+	// begin with a log that's empty because it's new, and can't show this. Here the log can't move, because something that isn't a plain
+	// file holds old log 1's place, so it's still there with the last run's lines in it when the new run starts.
+	std::string const firstOld = LogFiles_OldName(log, 1);
+	::DeleteFileA(firstOld.c_str());
+	::CreateDirectoryA(firstOld.c_str(), NULL);
+	LogFiles_MoveAlong(log);
+	Check(ReadWholeFile(log) == "run 6\n", "a log that can't move along stays where it is, with its lines");
+	Check(LogFiles_Empty(log) && ReadWholeFile(log).empty(), "and the new run still starts with it empty, never with the last run's lines");
+	::RemoveDirectoryA(firstOld.c_str());
+
+	// And emptying on its own: a log with lines in it is left with none
+	WriteWholeFile(log, "some lines\nand more\n");
+	Check(LogFiles_Empty(log) && ReadWholeFile(log).empty(), "emptying a log with lines in it leaves it with none");
+
+	// The logs as the seven starts left them, for what follows
+	for (int n = 1; n <= kLogFilesKept; n++)
+	{
+		::DeleteFileA(LogFiles_OldName(log, n).c_str());
+	}
+
+	for (int run = 1; run <= kLogFilesKept; run++)
+	{
+		WriteWholeFile(LogFiles_OldName(log, run), ("run " + std::to_string(6 - run) + "\n").c_str());
+	}
+
+	WriteWholeFile(log, "run 6\n");
+
 	// Something that isn't a plain file in one of the old logs' places
 	std::string const folder = LogFiles_OldName(log, 3);
 	::DeleteFileA(folder.c_str());
