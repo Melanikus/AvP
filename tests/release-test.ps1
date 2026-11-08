@@ -203,7 +203,10 @@ $result = Run-Script 'check-new-functions.ps1' @()
 $gaveAnAnswer = $result.Text.Contains('The game uses all') -or $result.Text.Contains('nothing in the game uses these new functions')
 $hasNoHistory = $result.Text.Contains("isn't here, so nothing can be compared")
 Check ($gaveAnAnswer -or ($hasNoHistory -and -not $OnlyNewFunctions)) "check-new-functions.ps1 finds the repository by itself. It said: $($result.Text)"
-Write-Host "On this commit's own code, it says: $($result.Text)"
+# A checkout without the history, as the Windows Unit tests job has, can only say the older commit isn't there. The job
+# release-checks-on-ubuntu fetches the history and runs these rows with -OnlyNewFunctions, where that answer fails.
+$why = if ($hasNoHistory) { ' (this checkout has no history to compare with: release-checks-on-ubuntu reads it with the history)' } else { '' }
+Write-Host "On this commit's own code, it says: $($result.Text)$why"
 
 Make-GameWithFiles @{ }
 Check ((Run-AsAStep 'check-new-functions.ps1' (New-Functions-Arguments)) -eq 0) 'as a step, check-new-functions.ps1 passes when it should'
@@ -591,7 +594,7 @@ Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $wor
 
 Make-GoodPackage
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 0) 'as a step, check-release-package.ps1 passes when it should'
-Remove-Item -LiteralPath (Join-Path $package 'D3DCompiler_43.dll')
+Remove-Item -LiteralPath (Join-Path $package 'bin/D3DCompiler_43.dll')
 Write-Sums
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
 
