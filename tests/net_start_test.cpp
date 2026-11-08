@@ -5,6 +5,7 @@
 // WHY THESE THREE: only a client has a server to send to, so anything else asking to send has to be told no. A game that isn't doing anything on a network has no reason to have anything open on one. And anyone who can reach a host can connect and send anything at all, so it believes nothing about who sent what except which connection it came on.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   every ENet host the game makes has the game's limits and one channel (3dc/net_host.cpp), and a message too short for a header is refused before it's copied
+//   leaving closes each connection after what's waiting, while the ENet host is still there (3dc/net_close.h), and a client says in the log when the host's connection closes
 
 #include "enet/enet.h"
 #include "networking.h"
@@ -542,8 +543,37 @@ enet_uint32 enet_time_get()
 	return enetClock;
 }
 
-void LogString(const std::string &)
+// The game's log. networking.cpp writes a few lines there, and the tests read them back.
+static std::vector<std::string> logLines;
+
+void LogString(const std::string &line)
 {
+	logLines.push_back(line);
+}
+
+static bool LogHas(const std::string &line)
+{
+	for (std::string const &said : logLines)
+	{
+		if (said == line)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Leaving closes each connection with net_close.cpp, which needs the real ENet and has its own test, tests/net_close_test.cpp. Here
+// it's only counted, with how many hosts had been let go when it was asked, so the order can be checked: a host that had already
+// been destroyed would have no connections left to close, and its memory would be gone.
+static int closesAsked = 0, hostsDestroyedWhenClosed = -1, connectionsThatDontAnswer = 0;
+
+int Net_CloseConnectionsAfterWhatsWaiting(ENetHost *, unsigned int)
+{
+	closesAsked++;
+	hostsDestroyedWhenClosed = hostsDestroyed;
+	return connectionsThatDontAnswer;
 }
 
 void enet_peer_timeout(ENetPeer *, enet_uint32, enet_uint32, enet_uint32)
@@ -2016,25 +2046,62 @@ static void TestLeavingClosesConnections()
 	TakeEverything();
 
 	int const closedBefore = closedAtOnce;
-	int const flushesBefore = flushes;
+	int const closesBefore = closesAsked;
 
 	Net_Disconnect();
-	Check(flushes == flushesBefore + 1, "a host leaving sends what it has first, because closing the connections throws away what's still waiting");
-	Check(closedAtOnce == closedBefore + 3, "and tells everyone connected straight away");
-	Check(flushesWhenLastClosed == flushes, "in that order");
+	Check(closesAsked == closesBefore + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1, "a host leaving closes its connections after what's waiting, before letting its ENet host go");
+	Check(closedAtOnce == closedBefore, "and closes none of them at once, which would throw away the last thing it said");
 	AvP.Network = I_No_Network;
 
 	Check(JoinAGame() == NET_OK, "and someone joining");
 	netGameData.needGameDescription = 1;
 
 	int const closedClient = closedAtOnce;
-	int const flushesClient = flushes;
+	int const closesClient = closesAsked;
 
 	sentMessages.clear();
 	Net_Disconnect();
-	Check(flushes == flushesClient + 1 && closedAtOnce == closedClient + 1, "does the same when they leave");
+	Check(closesAsked == closesClient + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1 && closedAtOnce == closedClient, "does the same when they leave");
 	Check(sentMessages.empty(), "and there's no message saying they've gone for anyone to have to believe");
 	AvP.Network = I_No_Network;
+}
+
+// A connection whose other end never answers is waited for only so long, and the log says how many there were
+static void TestLeavingWithoutAnAnswer()
+{
+	Check(JoinAGame() == NET_OK, "joining, to leave without an answer");
+
+	int const destroyed = hostsDestroyed;
+
+	logLines.clear();
+	connectionsThatDontAnswer = 1;
+	Net_Disconnect();
+	connectionsThatDontAnswer = 0;
+	Check(LogHas("net: left without hearing back from 1 connection(s), which may have gone already"), "leaving without an answer from a connection says so");
+	Check(hostsDestroyed == destroyed + 1, "and still lets its ENet host go");
+	AvP.Network = I_No_Network;
+}
+
+// A client's one connection is the host's, so its closing is the host gone, and the log says so. On a host, a connection closing is
+// a client gone, and that isn't this line.
+static void TestTheHostsConnectionClosing()
+{
+	uint8_t message[16];
+	size_t size = 0;
+
+	Check(JoinAGame() == NET_OK, "joining, for the host's connection to close");
+	logLines.clear();
+	eventsWaiting.push_back(ENetEvent{ ENET_EVENT_TYPE_DISCONNECT, &thePeer, NULL });
+	Net_Receive(message, size);
+	Check(LogHas("net: the host's connection closed"), "a client says when the host's connection closes");
+	EndTheGame();
+
+	Check(HostAGame() == NET_OK, "hosting, for a client's connection to close");
+	logLines.clear();
+	eventsWaiting.push_back(ENetEvent{ ENET_EVENT_TYPE_DISCONNECT, &peers[1], NULL });
+	Net_Receive(message, size);
+	Check(!LogHas("net: the host's connection closed"), "and a host doesn't say that when a client's connection closes");
+	EndTheGame();
 }
 
 static void TestPlayerIDs()
@@ -2396,6 +2463,8 @@ int main()
 	TestTheClientsSide();
 	TestWaitingToJoin();
 	TestLeavingClosesConnections();
+	TestLeavingWithoutAnAnswer();
+	TestTheHostsConnectionClosing();
 	TestPlayerIDs();
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();

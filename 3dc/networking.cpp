@@ -45,6 +45,8 @@
 //   every ENet host is made by Net_MakeENetHost (net_host.cpp) with the game's limits, and a connection gets the one channel the game uses
 //   a message too short to have a header is refused before it's copied
 //   the log says when our ENet has told an older version of the game no
+//   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
+//   all away (see net_close.h), and a client says in the log when the host's connection closes
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -56,6 +58,7 @@
 #include "networking.h"
 #include "net_checks.h"
 #include "net_host.h"
+#include "net_close.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -645,6 +648,10 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 	return NET_OK;
 }
 
+// How long leaving waits for the other ends to hear that this machine is closing. On a network that works, that takes a few
+// thousandths of a second. A machine that has gone already never answers, so this is the most that's ever spent on one.
+static unsigned int const kMostMillisecondsToClose = 1000;
+
 void Net_Disconnect()
 {
 	OutputDebugString("Net_Disconnect\n");
@@ -652,16 +659,13 @@ void Net_Disconnect()
 	// This also runs from the console's disconnect command, in a game that isn't on any network
 	if (host)
 	{
-		// What's been sent so far goes now, because closing the connections throws away anything still waiting
-		enet_host_flush(host);
+		// What's still waiting goes first, and then each connection closes with the other end told. That closing is how the others hear
+		// this machine has gone. Destroying the host straight away would throw all of that away: see net_close.h.
+		int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(host, kMostMillisecondsToClose);
 
-		// Tell whoever's at the other end straight away, instead of leaving them to work it out when nothing arrives for a while. Nobody has to believe a message saying who has left, because it's the connection itself that closes.
-		for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; ++peer)
+		if (stillClosing > 0)
 		{
-			if (peer->state == ENET_PEER_STATE_CONNECTED)
-			{
-				enet_peer_disconnect_now(peer, 0);
-			}
+			LogString("net: left without hearing back from " + std::to_string(stillClosing) + " connection(s), which may have gone already");
 		}
 
 		enet_host_destroy(host);
@@ -1266,6 +1270,13 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 				case ENET_EVENT_TYPE_DISCONNECT:
 				{
 					NewOnScreenMessage("ENet got a disconnection\n");
+
+					// A client has one connection, the host's, so on a client this is the host gone. The log says so, so that a
+					// run shows why its game ended.
+					if (AvP.Network != I_Host && eEvent.peer == ServerPeer)
+					{
+						LogString("net: the host's connection closed");
+					}
 
 					NetID const id = IDOfConnection(eEvent.peer);
 

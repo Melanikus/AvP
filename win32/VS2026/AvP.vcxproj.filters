@@ -120,6 +120,9 @@
     <ClCompile Include="..\..\3dc\networking.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\net_close.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\net_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1419,6 +1422,9 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\MemoryStream.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\net_close.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\os_header.h">
