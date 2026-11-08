@@ -366,6 +366,12 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 	double bestFar = static_cast<double>(within);
 	double const point[3] = { x, y, z };
 
+	// A point that isn't a number, or is endless, is nowhere: no test below could be trusted with it (Tao 3)
+	if (!(fabs(x) < 1e12 && fabs(y) < 1e12 && fabs(z) < 1e12) || !(bestFar >= 0.0))
+	{
+		return kNpcGridNoCell;
+	}
+
 	// How many cells either way the reach covers, at most kNpcGridMostLookRound: an alien's middle can be a metre off its surface, near the
 	// sheet's edge, or over a cell it doesn't fit on, so the cell under it isn't enough
 	int const round = std::min(kNpcGridMostLookRound, std::max(1, static_cast<int>(ceil(bestFar / kNpcGridCell))));
@@ -378,7 +384,7 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 		// as a floor seen from under it or the far face of a thin wall, is never its cell, however near
 		double const out = Dot(point, s.n) - s.d;
 
-		if (out < -kNpcGridSideSlack || out > bestFar)
+		if (!(out >= -kNpcGridSideSlack && out <= bestFar))
 		{
 			continue;
 		}
@@ -387,7 +393,7 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 		double const r[3] = { x - s.n[0] * s.d, y - s.n[1] * s.d, z - s.n[2] * s.d };
 		double const ci = floor(Dot(r, s.u) / kNpcGridCell) - s.i0, cj = floor(Dot(r, s.v) / kNpcGridCell) - s.j0;
 
-		if (ci < -round || cj < -round || ci >= s.w + round || cj >= s.h + round)
+		if (!(ci >= -round && cj >= -round && ci < s.w + round && cj < s.h + round))
 		{
 			continue;
 		}
