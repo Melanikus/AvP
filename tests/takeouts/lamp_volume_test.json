@@ -1,0 +1,639 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "a ray meets a triangle off to one side",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "\t\tif (u < 0.0f || u > 1.0f)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a ray meets past a triangle's far edge",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "if (v < 0.0f || u + v > 1.0f)",
+					"to": "if (v < 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "a meeting right at the lamp counts",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "if (along >= kLampVolumeNearestHit && along < nearest)",
+					"to": "if (along > 0.0f && along < nearest)"
+				}
+			]
+		},
+		{
+			"name": "a triangle reaching past the lamp counts as behind it",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": " || LampVolume_Dot(centre, aim) < -radius)",
+					"to": " || LampVolume_Dot(centre, aim) < 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "a triangle beyond the reach is kept",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "if (away - radius > reach || ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "a triangle outside the beam is kept",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "return toCentre - itsSize <= acosf(kLampVolumeConeCos);",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a triangle partly in the beam is left out",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "return toCentre - itsSize <= acosf(kLampVolumeConeCos);",
+					"to": "return toCentre <= acosf(kLampVolumeConeCos);"
+				}
+			]
+		},
+		{
+			"name": "the ends go into the wall",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "lengths[r] = reach > kLampVolumePullBack ? reach - kLampVolumePullBack : reach;",
+					"to": "lengths[r] = reach;"
+				}
+			]
+		},
+		{
+			"name": "the pool doesn't fade with how far the wall is",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "end.strength = kLampVolumeHaze * strength * LampVolume_AlongFade(lengths[r]) * ",
+					"to": "end.strength = kLampVolumeHaze * strength * "
+				}
+			]
+		},
+		{
+			"name": "a beam is as bright right by the camera",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "* facing * facing * LampVolume_CameraFade(sqrtf(LampVolume_Dot(corner.place, corner.place)));",
+					"to": "* facing * facing;"
+				}
+			]
+		},
+		{
+			"name": "a strength below nothing is used",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "float const strength = lampStrength < 0.0f ? 0.0f : lampStrength > 1.0f ? 1.0f : lampStrength;",
+					"to": "float const strength = lampStrength > 1.0f ? 1.0f : lampStrength;"
+				}
+			]
+		},
+		{
+			"name": "an aim that isn't a direction makes a shape",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "if (!vertices || !indices || !(aimLength > 0.5f && aimLength < 1.5f))",
+					"to": "if (!vertices || !indices)"
+				}
+			]
+		},
+		{
+			"name": "a band runs off the end of its ring",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "indices[made * 3 + 0] = (unsigned short)(firstA + i % countA);",
+					"to": "indices[made * 3 + 0] = (unsigned short)(firstA + i);"
+				}
+			]
+		},
+		{
+			"name": "the sides run off the end of the edge",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "int const next = kLampVolumeFirstSideCorner + ((i + 1) % kLampVolumeEdgeRays) * kLampVolumeSteps;",
+					"to": "int const next = kLampVolumeFirstSideCorner + (i + 1) * kLampVolumeSteps;"
+				}
+			]
+		},
+		{
+			"name": "the rings go past the beam's edge",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "float const outward = edge * (float)(ring + 1) / (float)kLampVolumeRingCount;",
+					"to": "float const outward = edge * (float)(ring + 2) / (float)kLampVolumeRingCount;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls are kept with no beam this frame",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (numLampBeams == 0 || !dptr->ObMyModule || gunLayer",
+					"to": "if (!dptr->ObMyModule || gunLayer"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: beams are drawn with none this frame",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (LampBeams_Count() == 0)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls are only kept when shadows are on",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t// The beams' walls first, in any view, before the shadows' own tests leave\n\tLampBeams_TakeWalls(dptr, shapePtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beams are never made for the frame",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tOtherLamps_Gather((float)NormalFrameTime / 65536.0f);\n\tLampBeams_ForThisFrame();\n",
+					"to": "\tOtherLamps_Gather((float)NormalFrameTime / 65536.0f);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: more walls are kept than there's room for",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (numLampBeamWalls >= kLampBeamMostWalls)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a beam writes depth",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);",
+					"to": "\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the card's settings aren't put back after the beams",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tsavedCardSettings->Apply();\n}\n\n// The mask is added to many times",
+					"to": "}\n\n// The mask is added to many times"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: beams are drawn after the gun",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (toyFinalFlush)\n\t{\n\t\tDrawLampBeams();\n\t}\n\n\t// draw player weapon",
+					"to": "\t// draw player weapon"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the menus go on drawing a level's beams",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tLampBeams_Forget();\n\n\t// The game goes on whether or not this frame could be drawn",
+					"to": "\t// The game goes on whether or not this frame could be drawn"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame starts with the last one's beams",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "static void LampBeams_ForThisFrame()\n{\n\tLampBeams_Forget();",
+					"to": "static void LampBeams_ForThisFrame()\n{"
+				}
+			]
+		},
+		{
+			"name": "a wall nowhere near stays on the list",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "if (LampVolume_MayBeHit(walls[t], from, aim, reach))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "more walls are kept than there is room for",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "for (int t = 0; walls && out && t < count && kept < most; t++)",
+					"to": "for (int t = 0; walls && out && t < count; t++)"
+				}
+			]
+		},
+		{
+			"name": "no list is read anyway",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "for (int t = 0; walls && out && t < count && kept < most; t++)",
+					"to": "for (int t = 0; out && t < count && kept < most && kept < 0; t++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: each beam's rays test every wall",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "int const triangles = LampVolume_Build(beam.from, beam.aim, beam.strength, lampBeamWallsNearOne, wallsNear, vertices, indices);",
+					"to": "int const triangles = LampVolume_Build(beam.from, beam.aim, beam.strength, lampBeamWalls, numLampBeamWalls, vertices, indices);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the cost goes unreported",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tFrameTiming_CountLampBeams(LampBeams_Count(), LampBeams_WallsKept(), LampBeams_WallsLeftOut());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a beam wider than 90 degrees each way",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "static const float kLampVolumeConeCos = 0.93f;",
+					"to": "static const float kLampVolumeConeCos = -0.1f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: other marines' lamps are never put forward",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tConsiderTheOtherLamps(steady, &numSteady, kLightChoiceMostCandidates);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lamp shines through walls with shadows off",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_RealLightIsWanted())",
+					"to": "if (!ToyShadowsLightsByPixel || !ShoulderLamp_RealLightIsWanted())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the setting is taken no notice of",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_RealLightIsWanted())",
+					"to": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: more lamps are real than are allowed",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "numOtherLampLights < kLampMostReal",
+					"to": "numOtherLampLights < kLampMostReal + 1"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lamps wait behind the level's",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": " || OtherLampLightNumber(light) >= 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a real lamp is aimed where the player is looking",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "out[kToyLightAim + 3] = 1.0f;",
+					"to": "out[kToyLightAim + 3] = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a real lamp lights the wall twice",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "bool const pool = !otherLampIsALight[beam.lamp];",
+					"to": "bool const pool = true;"
+				}
+			]
+		},
+		{
+			"name": "one too many triangles count as sides",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "return (air ? kLampVolumeSideTriangles : 0)",
+					"to": "return (air ? kLampVolumeSideTriangles + 1 : 0)"
+				}
+			]
+		},
+		{
+			"name": "one too few triangles count as sides",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "return (air ? kLampVolumeSideTriangles : 0)",
+					"to": "return (air ? kLampVolumeSideTriangles - 1 : 0)"
+				}
+			]
+		},
+		{
+			"name": "the beam starts at full strength at the lamp",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "float const in = along >= kLampVolumeFadeInTo ? 1.0f : along / kLampVolumeFadeInTo;",
+					"to": "float const in = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "the beam fades evenly all along it",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "return in * left * left;",
+					"to": "return in * left;"
+				}
+			]
+		},
+		{
+			"name": "the pool has all its light out to its rim",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "float const x = (cosFromMiddle - kLampVolumeConeCos) / (kLampVolumeFullInside - kLampVolumeConeCos);",
+					"to": "float const x = 1.0f;"
+				}
+			]
+		},
+		{
+			"name": "the pool's rim fade isn't used",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": " * LampVolume_RimFade(LampVolume_Dot(rays[r], aim))",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a side seen edge on is as bright as one seen square on",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "LampVolume_AlongFade(out) * facing * facing * ",
+					"to": "LampVolume_AlongFade(out) * "
+				}
+			]
+		},
+		{
+			"name": "a side facing away counts against the light",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "float const square = fabsf(LampVolume_Dot(side, place)) / distance;",
+					"to": "float const square = LampVolume_Dot(side, place) / distance;"
+				}
+			]
+		},
+		{
+			"name": "the sides stop short of the pool",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "? kLampVolumeStepAt[step] : lengths[ray];",
+					"to": "? kLampVolumeStepAt[step] : lengths[ray] * 0.5f;"
+				}
+			]
+		},
+		{
+			"name": "the pool starts where the sides do",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "*first = air ? 0 : kLampVolumeSideTriangles;",
+					"to": "*first = 0;"
+				}
+			]
+		},
+		{
+			"name": "a beam that wasn't made is drawn",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "\tif (made != kLampVolumeTriangles)\n\t{\n\t\treturn 0;\n\t}\n\n\treturn (air",
+					"to": "\treturn (air"
+				}
+			]
+		},
+		{
+			"name": "the most beams add together is less than one beam",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "static const float kLampVolumeMostTogether = 0.3f;",
+					"to": "static const float kLampVolumeMostTogether = 0.2f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pool's rim isn't the real light's",
+			"changes": [
+				{
+					"file": "3dc/lamp_volume.h",
+					"from": "static const float kLampVolumeFullInside = 0.99f;",
+					"to": "static const float kLampVolumeFullInside = 0.98f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beams in the air can't be turned off",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "bool const air = !ToyShadowsLightsByPixel || ShoulderLamp_BeamsAreWanted();",
+					"to": "bool const air = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Gouraud loses its beams when they are turned off",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "bool const air = !ToyShadowsLightsByPixel || ShoulderLamp_BeamsAreWanted();",
+					"to": "bool const air = ShoulderLamp_BeamsAreWanted();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: triangles past a beam's list are drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": " || first + triangles > kLampVolumeTriangles",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beams' picture outlives the device",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ToyRelease(toyDepthTexture);\n\tToyRelease(lampBeamSurface);\n\tToyRelease(lampBeamTexture);\n",
+					"to": "ToyRelease(toyDepthTexture);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture shares a smaller depth buffer",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "&& depthSize.Width >= screenSize.Width && depthSize.Height >= screenSize.Height",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture shares an anti-aliased depth buffer",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "&& depthSize.MultiSampleType == D3DMULTISAMPLE_NONE && screenSize.MultiSampleType == D3DMULTISAMPLE_NONE",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture the old size is kept",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": " || pictureSize.Width != screenSize.Width || pictureSize.Height != screenSize.Height",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: each beam adds its whole light to the picture",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "float const share = usingThePicture ? shape[i].strength / kLampVolumeMostTogether : shape[i].strength;",
+					"to": "float const share = shape[i].strength;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture goes on in the lamp's full colour",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int const most[3] = { (int)(red * kLampVolumeMostTogether + 0.5f), (int)(green * kLampVolumeMostTogether + 0.5f), (int)(blue * kLampVolumeMostTogether + 0.5f) };",
+					"to": "int const most[3] = { red, green, blue };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beams' picture stays what's drawn on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tdevice->SetRenderTarget(0, screen);\n\t\tdevice->SetViewport(&view);\n\t\tLampBeams_AddPictureToScreen",
+					"to": "\t\tdevice->SetViewport(&view);\n\t\tLampBeams_AddPictureToScreen"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen is never let go of",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tToyRelease(screen);\n\tsavedCardSettings->Apply();",
+					"to": "\tsavedCardSettings->Apply();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture starts with the last frame's beams",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tdevice->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

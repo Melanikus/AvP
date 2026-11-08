@@ -2,6 +2,8 @@
 //   the rendering page, and the way to it from both audio and video pages
 //   the marine's controls page has the shoulder lamp
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the rendering page's two lamp lines: whether lamps cast shadows, and whether their beams show in the air
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the multiplayer and skirmish pages have a row for a campaign's difficulty
 //   the class menus reach the new classes and have the sidearm, with limit and allow rows, and Allow Staff
@@ -10,6 +12,9 @@
 //   the co-op pause menu, its Players page, and the host's question before leaving
 //   the single player Custom maps page, and the way to it. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the co-op campaign pages, and the way to them from the multiplayer page. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   both sound pages have a Room echo row (REVERB-TOGGLE-1). Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
+//   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -21,6 +26,7 @@
 #include "user_io.h"
 #include "menu_data.h"
 #include "view_settings.h"
+#include "hud_scale.h"
 #include "menus.h"
 #include "user_profile.h"
 #include "gammacontrol.h"
@@ -61,6 +67,7 @@ extern CONTROL_METHODS PlayerControlMethods;
 extern JOYSTICK_CONTROL_METHODS PlayerJoystickControlMethods;
 extern int FmvSoundVolume;
 extern int EffectsSoundVolume;
+extern int ReverbIsOn;   // openal_audio.cpp: the Room echo setting, 1 on and 0 off (reverb_choice.h)
 extern int MoviesAreActive;
 extern int IntroOutroMoviesAreActive;
 
@@ -248,9 +255,13 @@ static AVPMENU_ELEMENT AvPMenu_Rendering[] =
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_MODE},			{3},	{&MenuRendering},		{TEXTSTRING_RENDERING_GOURAUD},	TEXTSTRING_RENDERING_MODE_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_SHADOWS},			{1},	{&MenuShadows},			{TEXTSTRING_NO},				TEXTSTRING_RENDERING_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_AUTOGENERATE},	{1},	{&MenuAutoGenerate},	{TEXTSTRING_NO},				TEXTSTRING_RENDERING_AUTOGENERATE_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_LAMPSREAL},		{1},	{&MenuLampsReal},		{TEXTSTRING_NO},				TEXTSTRING_RENDERING_LAMPSREAL_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_LAMPBEAMS},		{1},	{&MenuLampBeams},		{TEXTSTRING_NO},				TEXTSTRING_RENDERING_LAMPBEAMS_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_RENDERING},	{kViewKeyRendering},	{0},	{0},	TEXTSTRING_RENDERING_KEY_RENDERING_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_SHADOWS},	{kViewKeyShadows},	{0},	{0},	TEXTSTRING_RENDERING_KEY_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_DEVVIEWS},	{kViewKeyDevViews},	{0},	{0},	TEXTSTRING_RENDERING_KEY_DEVVIEWS_HELP},
+	// The HUD size: a slider with a place for each size, which left and right move one place at a time (hud_scale.h, view_settings.cpp)
+	{AVPMENU_ELEMENT_SLIDER,	{TEXTSTRING_RENDERING_HUDSIZE},	{kHUDSizeSliderPlaces},	{&MenuHUDSize},	{0},	TEXTSTRING_RENDERING_HUDSIZE_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -261,8 +272,18 @@ void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead)
 	AvPMenu_Rendering[2].HelpString = mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING;
 }
 
+void RenderingPage_SayWhatLampLineDoes(bool lampsCanBeReal)
+{
+	AvPMenu_Rendering[3].HelpString = lampsCanBeReal ? TEXTSTRING_RENDERING_LAMPSREAL_HELP : TEXTSTRING_RENDERING_LAMPSREAL_NOTHING;
+}
+
+void RenderingPage_SayWhatBeamLineDoes(bool beamsCanBeLeftOut)
+{
+	AvPMenu_Rendering[4].HelpString = beamsCanBeLeftOut ? TEXTSTRING_RENDERING_LAMPBEAMS_HELP : TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING;
+}
+
 // Where the key lines start in the table above
-static const int kFirstViewKeyElement = 3;
+static const int kFirstViewKeyElement = 5;
 
 // A key line says what became of the last key it was given, and otherwise what it's for, unless a control has its key too.
 void RenderingPage_SayWhatKeyLineDoes(int line, ViewKeyAnswer lastAnswer, bool heldByAControl)
@@ -305,6 +326,7 @@ static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] =
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_CDVOLUME},	 {CDDA_VOLUME_MAX},	{&musicVolume}},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_ROOMECHO}, {1}, {&ReverbIsOn},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INGAMEMOVIES}, {1}, {&MoviesAreActive},	{TEXTSTRING_NO}},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_DETAILLEVELS_TITLE},	{AVPMENU_DETAILLEVELS}},
 	{AVPMENU_ELEMENT_SAVESETTINGS,	{TEXTSTRING_AVOPTIONS_USETHESESETTINGS},{0},{0},{0},	TEXTSTRING_AVOPTIONS_USETHESESETTINGS_HELP},
@@ -318,6 +340,7 @@ static AVPMENU_ELEMENT AvPMenu_MainMenuAVOptions[] =
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_EFFECTSVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_MUSICVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_CDVOLUME},	 {CDDA_VOLUME_MAX},	{&musicVolume},		{0},	TEXTSTRING_AVOPTIONS_CDVOLUME_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_ROOMECHO}, {1}, {&ReverbIsOn},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INGAMEMOVIES}, {1}, {&MoviesAreActive},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_INGAMEMOVIES_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INTROOUTROMOVIES}, {1}, {&IntroOutroMoviesAreActive},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_INTROOUTROMOVIES_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_DETAILLEVELS_TITLE},	{AVPMENU_DETAILLEVELS},	{0},	{0},	TEXTSTRING_DETAILLEVELS_TITLE_HELP},

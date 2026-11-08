@@ -643,6 +643,66 @@
 					"to": "\t\tNETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));\n\t\tmemset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));\n\t\tif(!ghostData)\n\t\t{\n\t\t\t/* allocation failed */\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;\n\t\t}\n\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a facehugger glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "case I_BehaviourAlien:\n\t\t\t\tcase I_BehaviourFaceHugger:\n",
+					"to": "case I_BehaviourAlien:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the queen glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "case I_BehaviourFaceHugger:\n\t\t\t\tcase I_BehaviourQueenAlien: {",
+					"to": "case I_BehaviourFaceHugger: {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another machine's facehugger glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| ghostDataPtr->type == I_BehaviourFaceHugger || ghostDataPtr->type == I_BehaviourQueenAlien",
+					"to": "|| ghostDataPtr->type == I_BehaviourQueenAlien"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another machine's queen glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| ghostDataPtr->type == I_BehaviourFaceHugger || ghostDataPtr->type == I_BehaviourQueenAlien",
+					"to": "|| ghostDataPtr->type == I_BehaviourFaceHugger"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part blown off a facehugger is left dark",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": " || debrisDataPtr->Type == I_BehaviourFaceHugger",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part blown off the queen is left dark",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| debrisDataPtr->Type == I_BehaviourQueenAlien) {",
+					"to": ") {"
+				}
+			]
 		}
 	]
 }

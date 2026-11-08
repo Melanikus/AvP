@@ -1,6 +1,11 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   an angle from a save file is kept between 0 and 4095 before a sine or cosine lookup
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the HUD's size comes from the screen's height and the player's HUD size, for every species, and a change shows from the next frame
+//   (HUD-SCALE-1, see hud_scale.h); the alien's health bar is as wide as a 4:3 screen; the gunsight is drawn at the HUD's size;
+//   DrawPredatorEnergyBar is gone, because nothing ever called it; the log says each new size the HUD is drawn at. Reported by Bobblen;
+//   follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -21,6 +26,9 @@
 #include "ourasert.h"
 #include "vision.h"
 #include "kshape.h"
+#include "hud_scale.h"
+#include "view_settings.h"
+#include "logString.h"
 
 extern void D3D_RenderHUDString_Centred(char *stringPtr, uint32_t centreX, uint32_t y, uint32_t colour);
 extern void D3D_RenderHUDNumber_Centred(uint32_t number, uint32_t x, uint32_t y, uint32_t colour);
@@ -242,14 +250,53 @@ void D3D_InitialiseMarineHUD(void)
 	/* centre of motion tracker */
 	MotionTrackerCentreY = BlueBar.TopLeftY;
 	MotionTrackerCentreX = BlueBar.TopLeftX + (BlueBar.Width/2);
-	MotionTrackerScale  = ONE_FIXED;
 
-	HUDScaleFactor = DIV_FIXED(ScreenDescriptorBlock.SDB_Width, 640);
-//	HUDScaleFactor = DIV_FIXED(ScreenDescriptorBlock.SDB_Height, 480) - (13107);
+	// How big the HUD is drawn on this screen. See HUD_FollowTheScreen, below.
+	HUD_FollowTheScreen(true);
 
 	#if UseGadgets
 //	MotionTrackerGadget::SetCentre(r2pos(100,100));
 	#endif
+}
+
+// Works out how big the HUD is drawn, from the screen's height and the HUD size the player chose (the rules are in hud_scale.h), and
+// gives it to the game's two numbers for it: HUDScaleFactor, for the health, ammo, gunsight, the M79's list, the Predator's symbols and
+// the alien's bar, and MotionTrackerScale, for the motion tracker. They have always been the same number.
+//
+// In 1999 these were worked out once, when a level started, and only the marine's HUD set HUDScaleFactor, so the Predator worked out
+// its own. Now every species gets them: a level's start asks with evenIfUnchanged true (here, and StartGame in game.cpp), and MaintainHUD
+// asks on every frame with it false. Asked with false, nothing changes unless the screen's size or the HUD size has, so a new screen
+// size or HUD size shows from the next frame, and the debug build's MOTIONTRACKERSCALE command (gamevars.cpp) still holds until then.
+//
+// Each time the screen's size or the HUD size is new, the log says so, with the scale, in one line such as "HUD: 1920x1080 at 100% of
+// the usual size, scale 138240". So a tester's marked picture (the F2 key), or a report, can say what size the HUD was drawn at.
+void HUD_FollowTheScreen(bool evenIfUnchanged)
+{
+	static int widthBefore = -1;
+	static int heightBefore = -1;
+	static int sizeBefore = -1;
+
+	int const width = ScreenDescriptorBlock.SDB_Width;
+	int const height = ScreenDescriptorBlock.SDB_Height;
+	int const size = ViewSettings_HUDSize();
+	bool const somethingIsNew = width != widthBefore || height != heightBefore || size != sizeBefore;
+
+	if (!evenIfUnchanged && !somethingIsNew)
+	{
+		return;
+	}
+
+	widthBefore = width;
+	heightBefore = height;
+	sizeBefore = size;
+
+	HUDScaleFactor = HUDScale_ForScreen(height, size);
+	MotionTrackerScale = HUDScaleFactor;
+
+	if (somethingIsNew)
+	{
+		LogString("HUD: " + std::to_string(width) + "x" + std::to_string(height) + " at " + std::to_string(size) + "% of the usual size, scale " + std::to_string(HUDScaleFactor));
+	}
 }
 
 void LoadCommonTextures(void)
@@ -700,9 +747,13 @@ void D3D_BLTGunSightToHUD(int screenX, int screenY, enum GUNSIGHT_SHAPE gunsight
 	HUDImageDesc imageDesc;
 	int gunsightSize=13;
 
-	screenX = (screenX-(gunsightSize/2));
-	screenY = (screenY-(gunsightSize/2));
-	
+	// The gunsight is drawn at the HUD's size, as the rest of the HUD is, and centred on where it points. Draw_HUDImage makes it this big
+	// on the screen, with the same sum: 13 pixels at a scale of 1, 26 at 2.
+	int const sizeOnTheScreen = MUL_FIXED(HUDScaleFactor, gunsightSize);
+
+	screenX = (screenX-(sizeOnTheScreen/2));
+	screenY = (screenY-(sizeOnTheScreen/2));
+
 	imageDesc.ImageNumber = HUDImageNumber;
 	imageDesc.TopLeftX = screenX;
 	imageDesc.TopLeftY = screenY;
@@ -710,7 +761,7 @@ void D3D_BLTGunSightToHUD(int screenX, int screenY, enum GUNSIGHT_SHAPE gunsight
 	imageDesc.TopLeftV = 131+(gunsightShape*(gunsightSize+1));
 	imageDesc.Height = gunsightSize;
 	imageDesc.Width  = gunsightSize;
-	imageDesc.Scale  = ONE_FIXED;
+	imageDesc.Scale  = HUDScaleFactor;
 	imageDesc.Translucency = 128;
 	imageDesc.Red = 255;
 	imageDesc.Green = 255;
@@ -718,6 +769,23 @@ void D3D_BLTGunSightToHUD(int screenX, int screenY, enum GUNSIGHT_SHAPE gunsight
 	imageDesc.filterTexture = FALSE;
 
 	Draw_HUDImage(&imageDesc);
+}
+
+// Puts a quad's four corners on the corners of a bar, leaving where it reads its picture from as it is. The bar's top is moved up by the
+// safe zone, as the game always did for this bar (it used the width's safe zone, and both are 0 on a PC).
+static void PutQuadOnBar(struct VertexTag *quadVertices, const HUDBar &bar)
+{
+	int const left = bar.left;
+	int const top = bar.top - ScreenDescriptorBlock.SDB_SafeZoneWidthOffset;
+
+	quadVertices[0].X = left;
+	quadVertices[0].Y = top;
+	quadVertices[1].X = left + bar.length;
+	quadVertices[1].Y = top;
+	quadVertices[2].X = left + bar.length;
+	quadVertices[2].Y = top + bar.thickness;
+	quadVertices[3].X = left;
+	quadVertices[3].Y = top + bar.thickness;
 }
 
 void Render_HealthAndArmour(unsigned int health, unsigned int armour)
@@ -783,22 +851,6 @@ void Render_HealthAndArmour(unsigned int health, unsigned int armour)
 
 		{
 			struct VertexTag quadVertices[4];
-			int scaledWidth;
-			int scaledHeight;
-			int x,y;
-
-			if (health<100)
-			{
-				scaledWidth = WideMulNarrowDiv(ScreenDescriptorBlock.SDB_Width,health,100);
-				scaledHeight = scaledWidth/32;
-			}
-			else
-			{
-				scaledWidth = ScreenDescriptorBlock.SDB_Width;
-				scaledHeight = scaledWidth/32;
-			}
-			x = (ScreenDescriptorBlock.SDB_Width - scaledWidth)/2;
-			y = (ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_Width/32 + x/32) - ScreenDescriptorBlock.SDB_SafeZoneWidthOffset;
 
 			quadVertices[0].U = 8;
 			quadVertices[0].V = 5;
@@ -811,46 +863,13 @@ void Render_HealthAndArmour(unsigned int health, unsigned int armour)
 
 			quadVertices[3].U = 8;
 			quadVertices[3].V = 55;//255;
-			
-			quadVertices[0].X = x;
-			quadVertices[0].Y = y;
-			quadVertices[1].X = x + scaledWidth;
-			quadVertices[1].Y = y;
-			quadVertices[2].X = x + scaledWidth;
-			quadVertices[2].Y = y + scaledHeight;
-			quadVertices[3].X = x;
-			quadVertices[3].Y = y + scaledHeight;
 
+			// The alien's health is a blue bar at the bottom of the screen, and on top of it a white one half as long. Where each goes, and how
+			// they shrink as health goes down, is worked out in hud_scale.cpp (HUDAlienBar_Place).
+			PutQuadOnBar(quadVertices, HUDAlienBar_Place(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, HUDScaleFactor, health));
 			D3D_HUDQuad_Output(SpecialFXImageNumber, quadVertices, 0xff003fff, FILTERING_BILINEAR_ON);
 
-			health = (health / 2);
-/*
-			if (health < 0) 
-				health = 0;
-*/
-			if (health<100)
-			{
-				scaledWidth = WideMulNarrowDiv(ScreenDescriptorBlock.SDB_Width,health,100);
-				scaledHeight = scaledWidth/32;
-			}
-			else
-			{
-				scaledWidth = ScreenDescriptorBlock.SDB_Width;
-				scaledHeight = scaledWidth/32;
-			}
-
-			x = (ScreenDescriptorBlock.SDB_Width - scaledWidth)/2;
-			y = (ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_Width/32 + x/32) - ScreenDescriptorBlock.SDB_SafeZoneWidthOffset;
-
-			quadVertices[0].X = x;
-			quadVertices[0].Y = y;
-			quadVertices[1].X = x + scaledWidth;
-			quadVertices[1].Y = y;
-			quadVertices[2].X = x + scaledWidth;
-			quadVertices[2].Y = y + scaledHeight;
-			quadVertices[3].X = x;
-			quadVertices[3].Y = y + scaledHeight;
-
+			PutQuadOnBar(quadVertices, HUDAlienBar_Place(ScreenDescriptorBlock.SDB_Width, ScreenDescriptorBlock.SDB_Height, HUDScaleFactor, health / 2));
 			D3D_HUDQuad_Output(SpecialFXImageNumber, quadVertices, 0xffffffff, FILTERING_BILINEAR_ON);
 		}
 	}
@@ -899,52 +918,5 @@ void Render_MarineAmmo(enum TEXTSTRING_ID ammoText, enum TEXTSTRING_ID magazines
 		(ScreenDescriptorBlock.SDB_Height - MUL_FIXED(HUDScaleFactor,HUDLayout_Rounds_TopY - HUDLayout_Linespacing)) - ScreenDescriptorBlock.SDB_SafeZoneWidthOffset,
 		HUDLayout_Colour_MarineRed
 	);
-}
-
-void DrawPredatorEnergyBar(void)
-{
-	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
-	PLAYER_WEAPON_DATA *weaponPtr = &(playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot]);
-	int maxHeight = ScreenDescriptorBlock.SDB_Height*3/4;
-	int h;
-	{
-		h = MUL_FIXED(DIV_FIXED(playerStatusPtr->FieldCharge,PLAYERCLOAK_MAXENERGY),maxHeight);
-		
-		r2rect rectangle
-		(
-			ScreenDescriptorBlock.SDB_Width+HUDLayout_RightmostTextCentre*3/2,
-			ScreenDescriptorBlock.SDB_Height-h,
-			ScreenDescriptorBlock.SDB_Width+HUDLayout_RightmostTextCentre/2,
-			ScreenDescriptorBlock.SDB_Height
-		);
-
-		rectangle.AlphaFill
-		(
-			0xff, // unsigned char R,
-			0x00,// unsigned char G,
-			0x00,// unsigned char B,
-			128 // unsigned char translucency
-		);
-	}
-	if (weaponPtr->WeaponIDNumber == WEAPON_PRED_SHOULDERCANNON)
-	{
-		h = MUL_FIXED(playerStatusPtr->PlasmaCasterCharge,maxHeight);
-
-		r2rect rectangle
-		(
-			ScreenDescriptorBlock.SDB_Width+HUDLayout_RightmostTextCentre*3,
-			ScreenDescriptorBlock.SDB_Height-h,
-			ScreenDescriptorBlock.SDB_Width+HUDLayout_RightmostTextCentre*2,
-			ScreenDescriptorBlock.SDB_Height
-		);
-
-		rectangle.AlphaFill
-		(
-			0x00, // unsigned char R,
-			0xff,// unsigned char G,
-			0xff,// unsigned char B,
-			128 // unsigned char translucency
-		);
-	}
 }
 

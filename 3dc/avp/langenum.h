@@ -2,12 +2,17 @@
 //   the rendering page's text, after everything language.txt holds
 //   the name of the marine's shoulder lamp key
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the rendering page's two lamp lines: whether lamps cast shadows, and whether their beams show in the air
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the words for choosing a campaign and its difficulty
 //   the names for the new classes, Allow Staff and the sidearm
 //   the new guns' words
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the words a player sees during a co-op game
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the sound pages' Room echo row
+//   the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1484,7 +1489,17 @@ enum TEXTSTRING_ID
 	TEXTSTRING_COOP_HOST_QUITS,
 	TEXTSTRING_COOP_CAMPAIGN_COMPLETE,
 	TEXTSTRING_COOP_MAP_COMPLETE,
+	TEXTSTRING_AVOPTIONS_ROOMECHO,      // the sound pages' Room echo row, and its help line (REVERB-TOGGLE-1)
+	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP,
 
+	TEXTSTRING_RENDERING_LAMPSREAL,
+	TEXTSTRING_RENDERING_LAMPSREAL_HELP,
+	TEXTSTRING_RENDERING_LAMPSREAL_NOTHING,
+	TEXTSTRING_RENDERING_LAMPBEAMS,
+	TEXTSTRING_RENDERING_LAMPBEAMS_HELP,
+	TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING,
+	TEXTSTRING_RENDERING_HUDSIZE,
+	TEXTSTRING_RENDERING_HUDSIZE_HELP,
 	MAX_NO_OF_TEXTSTRINGS
 };
 

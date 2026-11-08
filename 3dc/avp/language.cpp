@@ -9,6 +9,8 @@
 //   the rendering page's text comes from here. A stock language.txt has no such strings, and a player's file stays as it is
 //   the name of the marine's shoulder lamp key comes from here too
 //   the text of the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the rendering page's two lamp lines: whether lamps cast shadows, and whether their beams show in the air
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the names for the new classes, Allow Staff and the sidearm
 //   the new guns' words come from here
@@ -16,7 +18,11 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the words a player sees during a co-op game
 //   the words of the single player Custom maps page. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the words of the sound pages' Room echo row. Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
 //   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the words of the rendering page's HUD size line (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -152,6 +158,16 @@ static char OurTextStrings[][200] =
 	"You're the host: leaving ends the game for everyone.",
 	"Campaign complete",
 	"Map complete",
+	"Room echo",
+	"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.",
+	"Lamps cast shadows",
+	"Whether marines' shoulder lamps are real lights that cast shadows, or painted on. Real ones cost more to draw.",
+	"This does nothing here: a lamp is only a real light with a Per-pixel or Relief map choice of Rendering, and Shadows on.",
+	"Lamp beams",
+	"Whether other marines' lamps show their beam in the air. Off, a lamp still lights what it points at.",
+	"This does nothing here: with Gouraud Rendering a lamp's beam is its only light, so it always shows.",
+	"HUD size",
+	"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

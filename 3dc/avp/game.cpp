@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game of the same-as-single-player mode, a level's end goes to the host, who moves everyone on
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a level's start asks d3d_hud.cpp how big the HUD is drawn, for every species, in place of the motion tracker's width / 640
+//   (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -54,7 +57,7 @@ extern int FrameRate;
 extern int FrameRate;
 extern int Resolution;
 extern int PlaySounds;
-extern int MotionTrackerScale;
+extern void HUD_FollowTheScreen(bool evenIfUnchanged);
 extern int LeanScale;
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 
@@ -291,8 +294,8 @@ void StartGame(void)
 		LeanScale=ONE_FIXED;
 	}
 	
-	MotionTrackerScale = DIV_FIXED(ScreenDescriptorBlock.SDB_Width, 640);
-//	MotionTrackerScale = DIV_FIXED(ScreenDescriptorBlock.SDB_Height, 480) - (13107);
+	// How big the HUD is drawn, for every species: see HUD_FollowTheScreen, in d3d_hud.cpp
+	HUD_FollowTheScreen(true);
 
 	InitialiseTriggeredFMVs();
 	CreateStarArray();

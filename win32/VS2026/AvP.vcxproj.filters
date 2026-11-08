@@ -141,6 +141,9 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\other_lamps.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\shoulder_lamp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -184,6 +187,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\view_keys.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\hud_scale.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\shadow_debug.cpp">
@@ -1545,6 +1551,9 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\custom_map_name.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\reverb_choice.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\level_switch.h">

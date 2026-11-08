@@ -1,6 +1,7 @@
 // The rendering page of the menus, and the settings it keeps. Written 2026-11-05 by Melanikus for the AvP port.
 //
-// WHAT THE PLAYER GETS: three lines in the menus: how the world is lit, whether things cast shadows, and whether maps are worked out for textures with none. A new player gets the
+// WHAT THE PLAYER GETS: five lines in the menus: how the world is lit, whether things cast shadows, whether maps are worked out for textures with none, whether marines' lamps cast shadows, and whether other
+// marines' lamps show their beam in the air. A new player gets the
 // game as it has always looked. All the new drawing is off, so none of it runs in a frame, and the pictures and prisms it needs aren't made. Loading a level still does a little for it,
 // working out each shape's normals, so that it can be turned on during a level. What they choose is kept in AliensVsPredator.cfg, not in their profile, because it belongs to this
 // computer and this graphics card, not to who's playing.
@@ -13,6 +14,12 @@
 //
 // THE KEYS: three more lines say which key changes the lighting (L), the shadows (H) and the developers' views (J). They're kept in the same file, as numbers. The rules for which key a line may have
 // are in view_keys.h, and this is what joins them to the game. A key already in use is refused, and the line's help says why. A control that gets one of these keys afterwards wins, and both pages show it.
+//
+// THE HUD SIZE: the last line is a slider for how big the HUD is drawn, 50% to 150% of the usual size, kept in the same file as HUDSize. The rules are in hud_scale.h. The HUD takes
+// a new size from the next frame of a level: HUD_FollowTheScreen, in d3d_hud.cpp, asks ViewSettings_HUDSize every frame.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the HUD size line, its slider and its word in the settings file (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 
 #include "3dc.h"
 #include "module.h"
@@ -26,6 +33,8 @@
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+#include "shoulder_lamp.h"
+#include "hud_scale.h"
 
 #include <string.h>
 #include <string>
@@ -39,21 +48,35 @@ void ViewSwitches_WhatsThere(bool *mapsThere, bool *perPixelThere, bool *marchTh
 int ViewSwitches_DrawnForTheMenu();
 bool ViewSwitches_ShadowsCanBeOn();
 void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead);   // menu_data.cpp
+void RenderingPage_SayWhatLampLineDoes(bool lampsCanBeReal);   // menu_data.cpp
+void RenderingPage_SayWhatBeamLineDoes(bool beamsCanBeLeftOut);   // menu_data.cpp
 void RenderingPage_SayWhatKeyLineDoes(int line, ViewKeyAnswer lastAnswer, bool heldByAControl);   // menu_data.cpp
 
 static const char kHeading[] = "[Video]";
 static const char kRendering[] = "Rendering";
 static const char kShadows[] = "Shadows";
 static const char kAutoGenerate[] = "AutoGenerateMaps";
+static const char kLampsReal[] = "LampsCastShadows";
+static const char kLampBeams[] = "LampBeams";
+static const char kHUDSizeSetting[] = "HUDSize";
+
+// The HUD size the player chose, a percentage of the usual size, and where the page's slider shows it, from 0 to kHUDSizeSliderPlaces
+static int hudSize = kHUDSizeUsual;
+int MenuHUDSize = kHUDSizeUsualPlace;
+static int lastHUDSize = kHUDSizeUsualPlace;
 
 int MenuRendering = kLightingGouraud;
 int MenuShadows = 0;
 int MenuAutoGenerate = 0;
+int MenuLampsReal = 1;
+int MenuLampBeams = 1;
 
 // What the page was showing at the end of the last menu frame. Anything different has been changed by the player.
 static int lastRendering = kLightingGouraud;
 static int lastShadows = 0;
 static int lastAutoGenerate = 0;
+static int lastLampsReal = 1;
+static int lastLampBeams = 1;
 
 // The three keys. Where each is kept in the settings file, and the one it has until the player says otherwise.
 static const char *const kKeySettings[kViewKeyLines] = { "RenderingKey", "ShadowsKey", "DevViewsKey" };
@@ -133,6 +156,13 @@ void ViewSettings_Load()
 	bool const shadows = Config_GetBool(kHeading, kShadows, false);
 	bool const autoGenerate = Config_GetBool(kHeading, kAutoGenerate, false);
 
+	// On unless the player has said otherwise. It only counts where lamps can be real lights, so it changes nothing on the view that draws as the original game did. Anything
+	// but true or false in the file is put right by Config_GetBool, which says so in the log.
+	bool const lampsReal = Config_GetBool(kHeading, kLampsReal, true);
+
+	// The same for the beams: on unless the player has said otherwise, and it only counts with lights per pixel. With Gouraud lights a beam is a lamp's only light.
+	bool const lampBeams = Config_GetBool(kHeading, kLampBeams, true);
+
 	int choice = kLightingGouraud;
 
 	if (!Lighting_FromSavedWord(rendering.c_str(), &choice))
@@ -145,7 +175,11 @@ void ViewSettings_Load()
 	// Everything off is the game as it has always been drawn, from the very first frame. See view_switches.h.
 	ViewSwitches_SetAtStart(choice, shadows ? 1 : 0);
 	textureRelief.SetAutoGenerate(autoGenerate);
+	ShoulderLamp_SetRealLightWanted(lampsReal);
+	ShoulderLamp_SetBeamsWanted(lampBeams);
 
+	MenuLampsReal = lastLampsReal = lampsReal ? 1 : 0;
+	MenuLampBeams = lastLampBeams = lampBeams ? 1 : 0;
 	MenuRendering = lastRendering = choice;
 	MenuShadows = lastShadows = shadows ? 1 : 0;
 	MenuAutoGenerate = lastAutoGenerate = autoGenerate ? 1 : 0;
@@ -172,6 +206,17 @@ void ViewSettings_Load()
 			Config_SetString(kHeading, kKeySettings[line], std::to_string(viewKeys[line]));
 		}
 	}
+
+	// The HUD size, read as a word for the same reason as the keys. A file from before this line gets the usual size, and gets the line.
+	std::string const hudSizeWord = Config_GetString(kHeading, kHUDSizeSetting, std::to_string(kHUDSizeUsual));
+
+	if (!HUDSize_FromSavedWord(hudSizeWord.c_str(), &hudSize))
+	{
+		LogErrorString("the settings file's HUDSize line isn't one of the HUD sizes, 50 to 150 in steps of 10, so it's " + std::to_string(hudSize));
+		Config_SetString(kHeading, kHUDSizeSetting, std::to_string(hudSize));
+	}
+
+	MenuHUDSize = lastHUDSize = HUDSize_SliderPlace(hudSize);
 }
 
 void ViewSettings_MenuFrame()
@@ -229,6 +274,8 @@ void ViewSettings_MenuFrame()
 	}
 
 	RenderingPage_SayWhatLinesDo(ViewSwitches_ShadowsCanBeOn(), Lighting_UsesMaps(MenuRendering));
+	RenderingPage_SayWhatLampLineDoes(MenuRendering != kLightingGouraud && MenuShadows != 0);
+	RenderingPage_SayWhatBeamLineDoes(MenuRendering != kLightingGouraud);
 
 	for (int line = 0; line < kViewKeyLines; line++)
 	{
@@ -244,10 +291,43 @@ void ViewSettings_MenuFrame()
 		changed = true;
 	}
 
+	// This one takes effect at once: it's looked at each frame as the lights are chosen
+	if (MenuLampsReal != lastLampsReal)
+	{
+		lastLampsReal = MenuLampsReal;
+		ShoulderLamp_SetRealLightWanted(lastLampsReal != 0);
+		Config_SetBool(kHeading, kLampsReal, lastLampsReal != 0);
+		changed = true;
+	}
+
+	// And so does this one: it's looked at each frame as the beams are drawn
+	if (MenuLampBeams != lastLampBeams)
+	{
+		lastLampBeams = MenuLampBeams;
+		ShoulderLamp_SetBeamsWanted(lastLampBeams != 0);
+		Config_SetBool(kHeading, kLampBeams, lastLampBeams != 0);
+		changed = true;
+	}
+
+	// The HUD size changes from the next frame of a level, which asks for it every frame. The slider only moves one place at a time between
+	// its ends, and the size is still worked out from its place through the rules, so it can only ever be one of the sizes there are.
+	if (MenuHUDSize != lastHUDSize)
+	{
+		hudSize = HUDSize_AtSliderPlace(MenuHUDSize);
+		MenuHUDSize = lastHUDSize = HUDSize_SliderPlace(hudSize);
+		Config_SetString(kHeading, kHUDSizeSetting, std::to_string(hudSize));
+		changed = true;
+	}
+
 	if (changed)
 	{
 		Config_Save();
 	}
+}
+
+int ViewSettings_HUDSize()
+{
+	return hudSize;
 }
 
 int ViewSettings_KeyOnLine(int line)

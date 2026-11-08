@@ -411,8 +411,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)",
-					"to": "if (!ShoulderLamp_CanBeALight() || !Player)"
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)",
+					"to": "if (!ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)"
 				}
 			]
 		},
@@ -870,9 +870,9 @@
 			"name": "SOURCE: the real lamp is not told where",
 			"changes": [
 				{
-					"file": "3dc/pixel_lights.cpp",
-					"from": "{ ShoulderLamp_AimAcross(), ShoulderLamp_AimDown(), 0.0f, 0.0f }",
-					"to": "{ 0.0f, 0.0f, 0.0f, 0.0f }"
+					"file": "3dc/kshape.cpp",
+					"from": "out[kToyLightAim] = ShoulderLamp_AimAcross();\n\t\t\t\tout[kToyLightAim + 1] = ShoulderLamp_AimDown();",
+					"to": "out[kToyLightAim] = 0.0f;\n\t\t\t\tout[kToyLightAim + 1] = 0.0f;"
 				}
 			]
 		},
@@ -1553,6 +1553,66 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "\tShoulderLamp_SpotNumbers(spot);\n",
 					"to": "\tShoulderLamp_SpotNumbers(spot); ShoulderLamp_PutSpotBack();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp stays chosen for good once it was",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tshoulderLampIsChosen = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player's lamp has no aim on the list",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\t\t\tout[kToyLightAim] = ShoulderLamp_AimAcross();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the total isn't told each lamp's aim",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\t\tif (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one light isn't told its lamp's aim",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\tSetLampAimConstant(device, light);\n\n\tReadPicture",
+					"to": "\n\tReadPicture"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader ignores another lamp's own aim",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": ", LampAim.xyz, LampAim.w))",
+					"to": ", LampAim.xyz, 0.0f))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lamp shines through walls with shadows off",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)",
+					"to": "if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)"
 				}
 			]
 		}

@@ -2,6 +2,8 @@
 // each in its own Test... function below: the weapon a file names, and a character whose model isn't loaded (2026-11-07).
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   it also checks how a marine's glow is chosen when you play the alien
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   and that facehuggers and the queen glow in the alien colour
 //
 // WHAT IT TESTS
 //
@@ -352,6 +354,32 @@ static void TestTheMarineSeenByAnAlien()
 	      "and stops there, so his details aren't read as another player's stand-in's");
 }
 
+// The same choice for the other aliens. The facehugger and the queen had no line in it, so they glowed in the colour every body
+// starts with, the marine's; the user's ruling, 2026-11-07, is that they get the alien colour. That holds for one another machine
+// runs in a network game, and for a part blown off either, the way it already did for the alien. The predator's own view that
+// picks out aliens has always counted both as aliens (kshape.cpp, VISION_MODE_PRED_SEEALIENS). Found through Bobblen's
+// avp-forever (commit 12e3cd1), rewritten. Only a running game with one in view reaches these lines, so this reads the source.
+static void TestTheAliensSeenByAnAlien()
+{
+	puts("A facehugger's and the queen's glow when you play the alien:");
+
+	std::string const choice = Between(ReadSourceFile("3dc/kshape.cpp"), "void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)\n{", "ProveHModel(controllerPtr, dispPtr);");
+	std::string const colour = "colour = ALIENS_LIFEFORCE_GLOW_COLOUR;";
+
+	// Each part runs from where it starts up to the first line that gives the alien colour, so what's in it leads there
+	std::string const creatures = Between(choice, "case I_BehaviourAlien:", "break;");
+	std::string const standIns = Between(choice, "case I_BehaviourNetGhost: {", colour);
+	std::string const parts = Between(choice, "case I_BehaviourHierarchicalFragment: {", colour);
+
+	Check(!choice.empty() && Has(creatures, colour), "the choice can be read, and an alien still gets the alien colour");
+	Check(Has(creatures, "case I_BehaviourFaceHugger:"), "so does a facehugger");
+	Check(Has(creatures, "case I_BehaviourQueenAlien:"), "and the queen");
+	Check(Has(standIns, "ghostDataPtr->type == I_BehaviourFaceHugger"), "and a facehugger another machine runs");
+	Check(Has(standIns, "ghostDataPtr->type == I_BehaviourQueenAlien"), "and a queen another machine runs");
+	Check(Has(parts, "debrisDataPtr->Type == I_BehaviourFaceHugger"), "and a part blown off a facehugger");
+	Check(Has(parts, "debrisDataPtr->Type == I_BehaviourQueenAlien"), "and a part blown off the queen");
+}
+
 // A ghost's data block is new memory: it's cleared so no field holds what was there before, and that has to wait until the block is
 // known to be there, or clearing it is the first thing to go wrong
 static void TestTheGhostJustMade()
@@ -378,6 +406,7 @@ int main()
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
 	TestTheMarineSeenByAnAlien();
+	TestTheAliensSeenByAnAlien();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;

@@ -691,9 +691,10 @@ static void TestJoiningTheGame()
 
 	Check(Has(painted, "float2 aim = (kAim + Swing.xy * kFollowing) * wide;"), "the spot goes where the lamp is aimed");
 	Check(Has(painted, "float2 beam = aim - start;"), "and the cone still starts at his shoulder and ends there, so the beam swings like an arm");
-	Check(Has(shapesOfLight, "float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt)"), "and the real light aims the same way");
+	Check(Has(shapesOfLight, "normalize(lerp(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz, LampAim.xyz, LampAim.w))"), "and the real light aims the same way, or another marine's lamp its own way");
 	Check(Has(render, "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f"), "and the painted lamp is told where, as a place on the screen");
-	Check(Has(ReadSourceFile("3dc/pixel_lights.cpp"), "{ ShoulderLamp_AimAcross(), ShoulderLamp_AimDown(), 0.0f, 0.0f }"), "and so is the real one");
+	Check(Has(shapes, "out[kToyLightAim] = ShoulderLamp_AimAcross();\n\t\t\t\tout[kToyLightAim + 1] = ShoulderLamp_AimDown();"), "and so is the real one, in its place on the light list");
+	Check(Has(ReadSourceFile("3dc/pixel_lights.cpp"), "device->SetPixelShaderConstantF(25, &light[kToyLightAim], 1);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "if (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "SetLampAimConstant(device, light);\n\n\tReadPicture"), "and each lamp's own aim goes to both shaders, as each is drawn");
 	Check(!Has(painted, "kSway") && !Has(shapesOfLight, "Sway") && !Has(ReadSourceFile("3dc/shoulder_lamp.h"), "Sway") && !Has(render, "ShoulderLamp_Sway"), "and the wiggle has gone altogether");
 	Check(Has(painted, "kSizeAtFarEnd * kMiddleSize"), "and the middle layer is a part of the whole size, so a smaller spot keeps its shape");
 
@@ -714,11 +715,12 @@ static void TestJoiningTheGame()
 	// The real light
 	std::string const considering = Between(shapes, "static void ConsiderTheShoulderLamp", "// Chooses this frame's lights.");
 
-	Check(Has(considering, "if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)"), "the real light only goes on the list when lights are added per pixel, or it would be a shadow with no light");
+	Check(Has(considering, "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)"), "the real light only goes on the list when lights are added per pixel, or it would be a shadow with no light");
 	Check(Has(considering, "ToyConsiderLight(&shoulderLampLight, Player, found, numFound, most, &lightsThisFrame.steadyInReach);"), "and as the player's, so it counts this close to the camera");
 	Check(Has(shapes, "ConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);"), "and it's put forward with the steady lights");
 	Check(Has(shapes, "if (light == &shoulderLampLight)\n\t\t\t{\n\t\t\t\tout[8] = 2.0f;\n\t\t\t\tshoulderLampIsChosen = true;"), "and it has its own look");
 	Check(Has(render, "isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame"), "and the painted version stands aside only when it really was a light this frame");
+	Check(ComesBefore(shapes, "\tshoulderLampIsChosen = false;\n", "shoulderLampIsChosen = true;") && Has(Between(shapes, "void ToyShadows_ChooseLights()", "ToyFoundLight steady[kLightChoiceMostCandidates];"), "shoulderLampIsChosen = false;"), "and whether it was is worked out again every frame, not kept from the first");
 }
 
 int main()

@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   each machine decides for itself whether the NPC marines it shows have their shoulder lamps on, by the user's rule: only in dark places
 // What the host says about the NPCs it runs, and how every other machine draws them. Written 2026-11-06 by Melanikus for the AvP port.
 //
 // WHY THIS IS HERE: in a network game that plays the same as single player, the host runs every marine, predator, xenoborg, queen and facehugger, and nobody else does. The others only
@@ -30,6 +32,7 @@
 #include "pldghost.h"
 #include "npc_kinds.h"
 #include "npc_ghosts.h"
+#include "lamp_pick.h"
 #include "los.h"
 
 extern NetID AvPNetID;
@@ -45,6 +48,7 @@ extern int Hugger_FaceVictimForTheNetwork(STRATEGYBLOCK *sbPtr);
 extern int Hugger_IsDyingForTheNetwork(STRATEGYBLOCK *sbPtr);
 extern void Extreme_Gibbing(STRATEGYBLOCK *sbPtr, SECTION_DATA *this_section_data, int intensity);
 extern void UpdateAlienAIGhostAnimSequence(STRATEGYBLOCK *sbPtr, HMODEL_SEQUENCE_TYPES type, int subtype, int length, int tweeningtime);
+extern int LightIntensityAtPoint(VECTORCH *pointPtr);   // kshape.cpp
 
 bool NpcGhosts_TypeIsAnNpc(AVP_BEHAVIOUR_TYPE type)
 {
@@ -730,6 +734,17 @@ void NpcGhosts_ApplyState(STRATEGYBLOCK *ghost, NETMESSAGE_NPCSTATE const *state
 	if (ghostData->type == I_BehaviourMarine)
 	{
 		ShowFiring(ghost, ghostData, (state->flags & kNpcFlagFiring) != 0);
+	}
+
+	// His lamp, by the user's rule for NPC marines: only in dark places. Each machine decides for the marines it shows, from the light where it shows
+	// him, so a joiner in a dark room far from the host sees them lit too. It's only a look, never game light, so two machines deciding differently
+	// harms nothing, and nothing about it comes over the network. Every couple of seconds by this machine's clock, and never for an android.
+	if (ghostData->type == I_BehaviourMarine && !NpcGhosts_MarineIsAnAndroid(state->model)
+		&& timeGetTime() - ghostData->lampDecidedAt >= (unsigned int)(kLampDecideEverySeconds * 1000.0f))
+	{
+		ghostData->lampDecidedAt = timeGetTime();
+		ghostData->lampOn = LampPick_MarineWantsItOn(ghostData->lampOn != 0, LightIntensityAtPoint(position), (state->flags & kNpcFlagFiring) != 0,
+			&ghostData->lampLightTimes) ? 1 : 0;
 	}
 
 	if (ghostData->type == I_BehaviourPredator)
