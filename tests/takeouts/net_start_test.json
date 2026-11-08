@@ -2120,6 +2120,96 @@
 			]
 		},
 		{
+			"name": "SOURCE: the NPCs' messages are left out of a full frame without a word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tNoteSendBufferFull(headerSize + size);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's switches that can't be matched aren't in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (NetLevelCount_One(switchSyncsNotMatched))",
+					"to": "if (false && NetLevelCount_One(switchSyncsNotMatched))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's end doesn't say how many",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "void EndAVPNetGame(void)\n{\n\tSwitchSyncs_LevelIsOver();\n",
+					"to": "void EndAVPNetGame(void)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the next level doesn't say how many",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();\n",
+					"to": "\tnetGameData.myGameState = NGS_Joining;\n"
+				}
+			]
+		},
+		{
+			"name": "a port of 0 is used",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "port >= 1 && port <= 65535 && port != (int)broadcastPort",
+					"to": "port <= 65535 && port != (int)broadcastPort"
+				}
+			]
+		},
+		{
+			"name": "the search's port is used for the game as well",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "port <= 65535 && port != (int)broadcastPort",
+					"to": "port <= 65535"
+				}
+			]
+		},
+		{
+			"name": "a speed below nothing is used coming in",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetSettingOrOwn(\"IncomingBandwidth\", incoming, incoming >= 0, 0)",
+					"to": "NetSettingOrOwn(\"IncomingBandwidth\", incoming, true, 0)"
+				}
+			]
+		},
+		{
+			"name": "a speed below nothing is used going out",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetSettingOrOwn(\"OutgoingBandwidth\", outgoing, outgoing >= 0, 0)",
+					"to": "NetSettingOrOwn(\"OutgoingBandwidth\", outgoing, true, 0)"
+				}
+			]
+		},
+		{
+			"name": "a setting the game can't use isn't in the log",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tLogString(std::string(\"net: the settings file's \") + name",
+					"to": "\t(void)(std::string(\"net: the settings file's \") + name"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: a player's class in the game's description is believed as it comes",
 			"changes": [
 				{

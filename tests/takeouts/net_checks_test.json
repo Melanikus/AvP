@@ -834,6 +834,26 @@
 					"to": "if (size <= mostThisFrame)"
 				}
 			]
+		},
+		{
+			"name": "the first in a level isn't the one the log hears of",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return ++level.count == 1;",
+					"to": "return ++level.count == 2;"
+				}
+			]
+		},
+		{
+			"name": "a level's end doesn't start the count again",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\tlevel.count = 0;\n\treturn howMany;",
+					"to": "\treturn howMany;"
+				}
+			]
 		}
 	]
 }
