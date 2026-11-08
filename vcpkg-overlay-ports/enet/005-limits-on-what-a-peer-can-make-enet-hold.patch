@@ -1,0 +1,195 @@
+Limits on what one peer can make ENet hold or do, and reads kept inside what arrived.
+
+Our own patch (AvP), from our review of ENet 1.3.18 as a reader of hostile packets
+(cards ENET-E1 to ENET-E4 in our notes). In order of how much each matters:
+
+- A held message counts its own records, not only its bytes, against the limit on
+  what is waiting (maximumWaitingData). Messages with no bytes counted nothing, so a
+  peer that skipped one number could make ENet hold millions of them.
+- A message that comes in pieces starts cleared. It counts as complete once every
+  piece number has arrived, whatever bytes the pieces covered, so the rest of it was
+  whatever was in memory before.
+- A packet is read up to ENET_PROTOCOL_MAXIMUM_PACKET_COMMANDS commands, the most an
+  honest ENet sends. One packet could hold a thousand commands, each asking for an
+  answer.
+- A packet shorter than its own header is dropped, a command is copied only as far
+  as its own size, and a command number past the known kinds has no size, so nothing
+  is read past what arrived or past the end of a list.
+
+Honest traffic between two copies of this ENet is unchanged.
+
+diff --git a/peer.c b/peer.c
+index 06b2d14..2e6265c 100644
+--- a/peer.c
++++ b/peer.c
+@@ -6,7 +6,34 @@
+ #define ENET_BUILDING_LIB 1
+ #include "enet/enet.h"
+ 
+-/** @defgroup peer ENet peer functions 
++/* Our own (AvP): copies a command that came in a packet. It owns only its own size there, not the whole union, so only
++   that much is copied and the rest is cleared, rather than read from whatever follows it in the packet. */
++static void
++enet_peer_copy_command (ENetProtocol * to, const ENetProtocol * from)
++{
++    size_t size = enet_protocol_command_size (from -> header.command);
++
++    if (size < sizeof (ENetProtocolCommandHeader))
++      size = sizeof (ENetProtocolCommandHeader);
++
++    memset (to, 0, sizeof (ENetProtocol));
++    memcpy (to, from, size);
++}
++
++/* Our own (AvP): what a message held for the program costs in memory: its bytes, and ENet's own records of it. The limit
++   on what's waiting (maximumWaitingData) counts all of this, so that messages with no bytes can't pile up for free. */
++static size_t
++enet_peer_incoming_command_cost (const ENetIncomingCommand * incomingCommand)
++{
++    size_t cost = sizeof (ENetIncomingCommand) + sizeof (ENetPacket) + incomingCommand -> packet -> dataLength;
++
++    if (incomingCommand -> fragments != NULL)
++      cost += (incomingCommand -> fragmentCount + 31) / 32 * sizeof (enet_uint32);
++
++    return cost;
++}
++
++/** @defgroup peer ENet peer functions
+     @{
+ */
+ 
+@@ -231,7 +258,8 @@ enet_peer_receive (ENetPeer * peer, enet_uint8 * channelID)
+ {
+    ENetIncomingCommand * incomingCommand;
+    ENetPacket * packet;
+-   
++   size_t cost;
++
+    if (enet_list_empty (& peer -> dispatchedCommands))
+      return NULL;
+ 
+@@ -242,6 +270,9 @@ enet_peer_receive (ENetPeer * peer, enet_uint8 * channelID)
+ 
+    packet = incomingCommand -> packet;
+ 
++   /* Our own (AvP): what this message cost while it was held, the same as was counted when it came in */
++   cost = enet_peer_incoming_command_cost (incomingCommand);
++
+    -- packet -> referenceCount;
+ 
+    if (incomingCommand -> fragments != NULL)
+@@ -249,7 +280,8 @@ enet_peer_receive (ENetPeer * peer, enet_uint8 * channelID)
+ 
+    enet_free (incomingCommand);
+ 
+-   peer -> totalWaitingData -= packet -> dataLength;
++   /* Our own (AvP): never below 0, in case the count was started again while this message was held */
++   peer -> totalWaitingData = peer -> totalWaitingData > cost ? peer -> totalWaitingData - cost : 0;
+ 
+    return packet;
+ }
+@@ -626,7 +658,7 @@ enet_peer_queue_acknowledgement (ENetPeer * peer, const ENetProtocol * command,
+     peer -> outgoingDataTotal += sizeof (ENetProtocolAcknowledge);
+ 
+     acknowledgement -> sentTime = sentTime;
+-    acknowledgement -> command = * command;
++    enet_peer_copy_command (& acknowledgement -> command, command);
+     
+     enet_list_insert (enet_list_end (& peer -> acknowledgements), acknowledgement);
+     
+@@ -966,7 +998,7 @@ enet_peer_queue_incoming_command (ENetPeer * peer, const ENetProtocol * command,
+ 
+     incomingCommand -> reliableSequenceNumber = command -> header.reliableSequenceNumber;
+     incomingCommand -> unreliableSequenceNumber = unreliableSequenceNumber & 0xFFFF;
+-    incomingCommand -> command = * command;
++    enet_peer_copy_command (& incomingCommand -> command, command);
+     incomingCommand -> fragmentCount = fragmentCount;
+     incomingCommand -> fragmentsRemaining = fragmentCount;
+     incomingCommand -> packet = packet;
+@@ -983,13 +1015,19 @@ enet_peer_queue_incoming_command (ENetPeer * peer, const ENetProtocol * command,
+           goto notifyError;
+        }
+        memset (incomingCommand -> fragments, 0, (fragmentCount + 31) / 32 * sizeof (enet_uint32));
++
++       /* Our own (AvP): a message that comes in pieces starts cleared. It counts as complete once every piece number has
++          arrived, whatever bytes the pieces covered, so without this the rest would be whatever was in memory before. */
++       if (packet -> data != NULL)
++         memset (packet -> data, 0, packet -> dataLength);
+     }
+ 
+     if (packet != NULL)
+     {
+        ++ packet -> referenceCount;
+-      
+-       peer -> totalWaitingData += packet -> dataLength;
++
++       /* Our own (AvP): the message's own records count too, not only its bytes (see enet_peer_incoming_command_cost) */
++       peer -> totalWaitingData += enet_peer_incoming_command_cost (incomingCommand);
+     }
+ 
+     enet_list_insert (enet_list_next (currentCommand), incomingCommand);
+diff --git a/protocol.c b/protocol.c
+index a5b9c04..7a10ac2 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -29,7 +29,13 @@ static const size_t commandSizes [ENET_PROTOCOL_COMMAND_COUNT] =
+ size_t
+ enet_protocol_command_size (enet_uint8 commandNumber)
+ {
+-    return commandSizes [commandNumber & ENET_PROTOCOL_COMMAND_MASK];
++    /* Our own (AvP): the mask leaves 16 possible numbers, but there are only ENET_PROTOCOL_COMMAND_COUNT kinds, so a
++       number past them has no size, rather than one read from past the end of the list. */
++    commandNumber &= ENET_PROTOCOL_COMMAND_MASK;
++    if (commandNumber >= ENET_PROTOCOL_COMMAND_COUNT)
++      return 0;
++
++    return commandSizes [commandNumber];
+ }
+ 
+ static void
+@@ -615,7 +621,11 @@ enet_protocol_handle_send_fragment (ENetHost * host, ENetPeer * peer, const ENet
+  
+     if (startCommand == NULL)
+     {
+-       ENetProtocol hostCommand = * command;
++       ENetProtocol hostCommand;
++
++       /* Our own (AvP): only the piece's own bytes are copied, not the whole union, which could run past the packet's end */
++       memset (& hostCommand, 0, sizeof (hostCommand));
++       memcpy (& hostCommand, command, sizeof (ENetProtocolSendFragment));
+ 
+        hostCommand.header.reliableSequenceNumber = startSequenceNumber;
+ 
+@@ -1018,6 +1028,7 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+     size_t headerSize;
+     enet_uint16 peerID, flags;
+     enet_uint8 sessionID;
++    size_t commandsRead = 0;
+ 
+     if (host -> receivedDataLength < (size_t) & ((ENetProtocolHeader *) 0) -> sentTime)
+       return 0;
+@@ -1033,6 +1044,11 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+     if (host -> checksum != NULL)
+       headerSize += sizeof (enet_uint32);
+ 
++    /* Our own (AvP): a packet shorter than its own header is dropped. Only the connection number was checked for above,
++       and the checksum would be read from, and written to, past the packet's end. */
++    if (host -> receivedDataLength < headerSize)
++      return 0;
++
+     if (peerID == ENET_PROTOCOL_MAXIMUM_PEER_ID)
+       peer = NULL;
+     else
+@@ -1108,6 +1124,12 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+        if (currentData + sizeof (ENetProtocolCommandHeader) > & host -> receivedData [host -> receivedDataLength])
+          break;
+ 
++       /* Our own (AvP): an honest ENet puts at most ENET_PROTOCOL_MAXIMUM_PACKET_COMMANDS commands in a packet (it builds
++          each one in host -> commands, which holds that many), so the rest of a packet with more is refused, like any
++          other bad command. Otherwise one packet could hold a thousand commands, each asking for an answer. */
++       if (++ commandsRead > ENET_PROTOCOL_MAXIMUM_PACKET_COMMANDS)
++         goto commandError;
++
+        commandNumber = command -> header.command & ENET_PROTOCOL_COMMAND_MASK;
+ 
+        /* Aliens versus Predator only ever sends reliable messages, so these three kinds

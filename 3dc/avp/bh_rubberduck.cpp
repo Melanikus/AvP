@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game, no flaming debris is made once the blocks are down to what's kept back for this machine's own player
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -195,9 +197,18 @@ void RubberDuckBehaviour(STRATEGYBLOCK *sbPtr)
 	#endif
 }
 
+// In pldnet.cpp
+extern bool Net_BlocksAreShort();
+
 extern void CreateFlamingDebris(VECTORCH *positionPtr, VECTORCH *dirPtr)
 {
 	STRATEGYBLOCK* sbPtr;
+
+	// It's only for show, and one message can ask for hundreds
+	if (Net_BlocksAreShort())
+	{
+		return;
+	}
 
 	/* create and initialise a strategy block */
 	sbPtr = CreateActiveStrategyBlock();

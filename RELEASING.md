@@ -17,7 +17,10 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
 ## Making one
 
 1. On GitHub, go to **Actions**, then **Release**, then **Run workflow**. Leave the branch on `avpx_main`, and type a version: three plain
-   numbers, such as `1.0.0`.
+   numbers, such as `1.0.0`, or for a beta, `betarelease` and today's date as year, month and day, such as `betarelease20261107`.
+   - A version's tag is `v` and its numbers, such as `v1.0.0`, and its download is `AvP-1.0.0-windows-x86.zip`.
+   - A beta's tag is its name with no `v`, its download is `AvP-betarelease20261107-windows-x86.zip`, and it's marked as a pre-release.
+   - Nothing else is taken, and a beta's date has to be a real day.
 2. The first job checks whether this commit may be released. If it refuses, the last lines of its log say why, starting `REFUSED:`.
    `tools/check-release.ps1`, `tools/check-no-hudson.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
    built or published at this point.

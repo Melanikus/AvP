@@ -1,0 +1,27 @@
+diff --git a/protocol.c b/protocol.c
+index 7616102..88f5a5d 100644
+--- a/protocol.c
++++ b/protocol.c
+@@ -695,6 +695,7 @@ enet_protocol_handle_send_unreliable_fragment (ENetHost * host, ENetPeer * peer,
+     if (fragmentCount > ENET_PROTOCOL_MAXIMUM_FRAGMENT_COUNT ||
+         fragmentNumber >= fragmentCount ||
+         totalLength > host -> maximumPacketSize ||
++        totalLength < fragmentCount ||
+         fragmentOffset >= totalLength ||
+         fragmentLength > totalLength - fragmentOffset)
+       return -1;
+@@ -1108,6 +1109,14 @@ enet_protocol_handle_incoming_commands (ENetHost * host, ENetEvent * event)
+          break;
+ 
+        commandNumber = command -> header.command & ENET_PROTOCOL_COMMAND_MASK;
++
++       /* Aliens versus Predator only ever sends reliable messages, so these three kinds
++          are never in an honest packet. */
++       if (commandNumber == ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE ||
++           commandNumber == ENET_PROTOCOL_COMMAND_SEND_UNSEQUENCED ||
++           commandNumber == ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE_FRAGMENT)
++         goto commandError;
++
+        if (commandNumber >= ENET_PROTOCOL_COMMAND_COUNT) 
+          break;
+        

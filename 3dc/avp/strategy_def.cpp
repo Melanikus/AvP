@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a level with no block left to carry something over goes on
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -393,6 +395,12 @@ void AddPreservedSBsToActiveList()
 	for(i = 0; i < Num_SB_Preserved; i++)
 		{
 			new_sbptr =	CreateActiveStrategyBlock();
+
+			// A level that has used nearly every block loses what was to be carried over, and goes on
+			if (!new_sbptr)
+			{
+				break;
+			}
 
 			*new_sbptr = SB_Preserved[i];
 

@@ -1,6 +1,8 @@
 /***** HModel.c *****/
 /***** CDF 21/10/97 *****/
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a part of a model that goes with a fragment is no longer freed twice
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
@@ -2736,7 +2738,10 @@ int Splice_HModels(HMODELCONTROLLER *new_controller, SECTION_DATA *top_section_d
 	GLOBALASSERT(new_top_section);
 	/* Now.  Copy the old top_section_data into the new top section. */
 	*new_top_section = *top_section_data;
+
+	// The new one owns these now. Left in the old one too, each would be freed twice.
 	top_section_data->tac_ptr = NULL;
+	top_section_data->sac_ptr = NULL;
 	/* Correct for new parentage. */
 	new_top_section->My_Parent = NULL;
 

@@ -32,6 +32,12 @@ declaration form is the problem.
 **How we found it:** in November 2026 one test file couldn't be read. Running the scan on copies with parts left out narrowed
 it down to one file, then one part of it, then this one form.
 
-**What enforces it:** the step "Fail if Snyk Code skipped any C/C++ file" in `.github/workflows/snyk.yml`. It counts the C and
-C++ files in the repository and the files Snyk Code read, and fails if they differ. So a file written this way fails that check
-and can't be merged. The check doesn't say which file it was, which is why this rule is written down.
+**What enforces it:** two checks, and a pull request has to pass both.
+
+- The step "Refuse "enum TYPE const name" (CODING-STANDARD.md, rule 1)", in the job "Release checks on Ubuntu" in
+  `.github/workflows/tests.yml`. It reads every C and C++ file in the repository, line by line, and names each line written
+  this way, with its file and line number. It reads lines, not code, so a comment written this way is refused too (say it
+  another way), and a declaration split over two lines isn't seen.
+- The step "Fail if Snyk Code skipped any C/C++ file" in `.github/workflows/snyk.yml`. It counts the C and C++ files in the
+  repository and the files Snyk Code read, and fails if they differ. It catches a file the first check misses, and anything
+  else Snyk Code can't read, but it doesn't say which file it was.

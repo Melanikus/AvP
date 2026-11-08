@@ -2,7 +2,8 @@
 Says whether this commit may be released. release.yml runs this before it builds anything, and a refusal stops the whole release.
 
 It refuses unless all of these are true:
-- The version is three plain numbers. It comes from a person typing it into a box, so nothing about it is believed.
+- The version is three plain numbers, such as 1.0.0, or a beta's name: betarelease and the day it's made, such as betarelease20261107, on
+  a day the calendar has. It comes from a person typing it into a box, so nothing about it is believed.
 - RELEASE-BLOCKERS.md says nothing is in the way.
 - Shadows & Shaders is really here, so that an old commit can't be released by mistake.
 - It's running from avpx_main, on the very tip of it.
@@ -12,6 +13,10 @@ It refuses unless all of these are true:
 
 -WithoutGitHub leaves out everything that has to ask GitHub, for tests/release-test.ps1, which runs with no network. release.yml
 never uses it, and that test fails if it ever does.
+
+THE TAG: a version's tag is v and its numbers, such as v1.0.0. A beta's tag is its name, with no v. A beta is a pre-release. Once the
+version is checked, this writes both into the file GitHub gives a step for its outputs, when there is one, so that release.yml's last
+job, which runs no code from the repository, uses the same tag without working it out again.
 #>
 param(
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Version,
@@ -55,11 +60,29 @@ function Stop-Release([string]$why)
 }
 
 # --- The version. \z and not $, because $ would let a line break through at the end. [0-9] and not \d, because \d takes digits from
-# every alphabet there is. It becomes a tag and part of a file name, so anything else in it could mean something to whatever reads those.
-if ($Version -cnotmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z')
+# every alphabet there is. -cnotmatch, so a capital letter is something else. It becomes a tag and part of a file name, so anything else
+# in it could mean something to whatever reads those.
+$isBeta = $Version -cmatch '^betarelease[0-9]{8}\z'
+
+if (-not $isBeta -and $Version -cnotmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z')
 {
-    Stop-Release 'the version has to be three plain numbers, such as 1.0.0'
+    Stop-Release "the version has to be three plain numbers, such as 1.0.0, or a beta's name, such as betarelease20261107"
 }
+
+# A beta's eight numbers are the day it's made, as year, month and day, so they have to be a day the calendar has: not the 32nd, not the
+# 13th month, and the 29th of February only in a leap year
+if ($isBeta)
+{
+    $day = [datetime]::MinValue
+
+    if (-not [datetime]::TryParseExact($Version.Substring('betarelease'.Length), 'yyyyMMdd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$day))
+    {
+        Stop-Release "a beta's name is betarelease and the day it's made, as year, month and day, and $($Version.Substring('betarelease'.Length)) isn't a day"
+    }
+}
+
+# Its tag, and whether it's a pre-release: see THE TAG at the top. They're only handed on at the end, once everything has passed.
+$tag = if ($isBeta) { $Version } else { "v$Version" }
 
 # --- What's still in the way. Anything at all under the heading counts, however it's written, except the one word that says there's
 # nothing. An empty list isn't taken to mean that, because a file cut short by a mistake would look the same.
@@ -178,19 +201,27 @@ if ($alerts.Count -gt 0)
     Stop-Release "$($alerts.Count) code scanning alerts are open"
 }
 
-$tags = @(gh api "repos/$repositoryName/git/matching-refs/tags/v$Version" --jq '.[].ref')
+$tags = @(gh api "repos/$repositoryName/git/matching-refs/tags/$tag" --jq '.[].ref')
 
 if ($LASTEXITCODE -ne 0)
 {
     Stop-Release 'GitHub would not say which tags there are'
 }
 
-if ($tags -ccontains "refs/tags/v$Version")
+if ($tags -ccontains "refs/tags/$tag")
 {
-    Stop-Release "v$Version has already been used"
+    Stop-Release "$tag has already been used"
 }
 
-Write-Host "$commit may be released as v$Version."
+# For release.yml's last job: the tag, and whether it's a pre-release. Written without a byte-order mark, which GitHub would read as part of
+# the first name, whichever PowerShell runs this.
+if ($env:GITHUB_OUTPUT)
+{
+    $noMark = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "tag=$tag`nprerelease=$(if ($isBeta) { 'true' } else { 'false' })`n", $noMark)
+}
+
+Write-Host "$commit may be released as $tag$(if ($isBeta) { ', a pre-release' })."
 
 # Said outright, because GitHub ends a step by exiting with whatever the last program to run left behind, whatever this script thought.
 exit 0
