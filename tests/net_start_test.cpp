@@ -7,6 +7,8 @@
 //   every ENet host the game makes has the game's limits and one channel (3dc/net_host.cpp), and a message too short for a header is refused before it's copied
 //   leaving closes each connection after what's waiting, while the ENet host is still there (3dc/net_close.h), and a client says in the log when the host's connection closes
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "enet/enet.h"
 #include "networking.h"
 #include "net_checks.h"
@@ -18,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include "source_slice.h"
 
 // menus.cpp says this for itself, and it isn't in networking.h
 extern bool Net_UpdateSessionList(int &SelectedItem);
@@ -783,12 +786,10 @@ static int CountOf(const std::string &text, const char *what)
 	return count;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
-
-	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static char playerName[] = "Ripley";

@@ -14,6 +14,8 @@
 // tests/build.ps1 compiles this with tests/debug_commands_test.args, and the program gives back a non-zero result if any check failed.
 // tests/takeouts/debug_commands_test.json proves each check can fail.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -24,6 +26,7 @@
 
 #include "beta_build.h"
 #include "console_value.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -83,12 +86,10 @@ static int TimesIn(const std::string &text, const char *what)
 	return count;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
-
-	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void TestWhatIsABeta()

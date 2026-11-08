@@ -11,6 +11,8 @@
 // tests/build.ps1 compiles this with the settings in tests/coop_in_game_test.args, and the program gives back a non-zero result if any check
 // failed. It reads some of the game's own source files too. tests/takeouts/coop_in_game_test.json proves each check can fail.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 #include <string.h>
 
@@ -20,6 +22,7 @@
 
 #include "coop_in_game.h"
 #include "memory_wall.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -174,19 +177,10 @@ static bool Has(const std::string &text, const std::string &what)
 	return text.find(what) != std::string::npos;
 }
 
-// The part of a file between two pieces of text, or nothing
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const std::string &from, const std::string &to)
 {
-	size_t const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	size_t const end = text.find(to, start + from.size());
-
-	return end == std::string::npos ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndAfterTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void TestTheGameUsesIt(void)

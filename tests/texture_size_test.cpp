@@ -6,7 +6,9 @@
 // end of the texture's memory. The check is in 3dc/texture_size_check.h, and this runs it on real sizes. The rest needs a graphics card, so this reads the game's source as text, to see the
 // check is where it has to be: after the helper has answered, and before the texture is made.
 //
-// What the helper really answers was measured on one card with AvP-docs\engine\relief-study\d3dx-size-check.cpp, and those numbers are the first rows here.
+// What the helper really answers was measured on 2026-11-04, on one graphics card with a limit of 16384 and the game's own d3dx9_43, by a small
+// program that only asked the helper, made the texture and read its pitch: asked for more than 16384 on a side, it answered 16384, smaller
+// than asked; asked for 0, it answered 1. Those answers are the first rows here.
 //
 // HOW IT RUNS
 //

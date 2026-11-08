@@ -459,6 +459,9 @@
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\near_wake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\targeting.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1368,6 +1371,18 @@
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\near_wake.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\near_wake_game.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\link_misses.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h">
