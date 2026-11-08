@@ -27,6 +27,7 @@
 #include <string.h>
 #include <windows.h>
 
+#include <exception>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -282,6 +283,7 @@ static void TestTheLoader(const std::string &folder)
 	Bytes changed = level;
 	changed.back() = 'y';
 	Bytes const packed = Packed(level);
+	printf("  (the level is packed: %u bytes)\n", (unsigned int)packed.size());
 	Bytes const tooShort(&"REBINFF2abc"[0], &"REBINFF2abc"[11]);
 
 	std::string const plainFile = folder + "Plain.rif";
@@ -295,6 +297,7 @@ static void TestTheLoader(const std::string &folder)
 	Write(packedFile, packed);
 	Write(shortFile, tooShort);
 	WriteLongLevel(longFile, (unsigned int)kLevelFileMostBytes + 1);
+	printf("  (the test's files are written, in %s)\n", folder.c_str());
 
 	LevelFileSum got;
 
@@ -358,8 +361,50 @@ static void TestTheGameUsesIt()
 		"the custom maps list never lists a file larger than the loader reads");
 }
 
+// Two ways a program can be stopped with no word of why, both with Windows' code 0xC0000409: an exception nobody catches (the C++
+// library then calls abort), and a C library function given an argument it can't take. Each of these says which it was, and what, then
+// ends the test as failed.
+static void SayAnExceptionStoppedIt()
+{
+	std::string what = "one that isn't a standard exception";
+
+	try
+	{
+		std::exception_ptr const thrown = std::current_exception();
+
+		if (thrown)
+		{
+			std::rethrow_exception(thrown);
+		}
+
+		what = "none: something called std::terminate";
+	}
+	catch (const std::exception &e)
+	{
+		what = e.what();
+	}
+	catch (...)
+	{
+	}
+
+	printf("  FAILED  the test was stopped by an exception nobody caught: %s\n", what.c_str());
+	_exit(1);
+}
+
+static void SayABadArgumentStoppedIt(const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t)
+{
+	printf("  FAILED  the test was stopped because a C library function was given an argument it can't take\n");
+	_exit(1);
+}
+
 int main(int argc, char **argv)
 {
+	// Every line goes out as soon as it's printed. The checks' output goes through a pipe, which would otherwise hold it back and lose it
+	// if the program were stopped by a crash, so the last line shown is always the last step reached.
+	setvbuf(stdout, NULL, _IONBF, 0);
+	std::set_terminate(SayAnExceptionStoppedIt);
+	_set_invalid_parameter_handler(SayABadArgumentStoppedIt);
+
 	// The test's files go in a folder of their own beside the program, wherever that is (its own path is the first thing it's given)
 	std::string here = argc > 0 && argv[0] ? argv[0] : "";
 	size_t const slash = here.find_last_of("\\/");
