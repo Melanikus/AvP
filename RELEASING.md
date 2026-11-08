@@ -17,22 +17,46 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
 ## Making one
 
 1. On GitHub, go to **Actions**, then **Release**, then **Run workflow**. Leave the branch on `avpx_main`, and type a version: three plain
-   numbers, such as `1.0.0`, or for a beta, `betarelease` and today's date as year, month and day, such as `betarelease20261107`.
+   numbers, such as `1.0.0`, or for a beta of a version, those, then `-beta.` and the beta's number, such as `1.0.0-beta.0`.
    - A version's tag is `v` and its numbers, such as `v1.0.0`, and its download is `AvP-1.0.0-windows-x86.zip`.
-   - A beta's tag is its name with no `v`, its download is `AvP-betarelease20261107-windows-x86.zip`, and it's marked as a pre-release.
-   - Nothing else is taken, and a beta's date has to be a real day.
+   - A beta's tag is `v` and its version too, such as `v1.0.0-beta.0`. Its download is `AvP-1.0.0-beta.0-windows-x86.zip`, and it's
+     marked as a pre-release.
+   - **A beta's number is the next one.** A version's first beta is `-beta.0`, then `-beta.1`, and so on, as many in a day as you need. The
+     check reads the tags and releases already on GitHub, and refuses a number that's been used, one below the highest, or one that skips
+     ahead (the user's ruling, 2026-11-08). Betas come before their version: once `v1.0.0` is out, the next betas are `1.0.1-beta.0` or
+     `1.1.0-beta.0`.
+   - A draft you delete doesn't count, so its number is free again. A draft that's still waiting holds its number: the run refuses to make
+     a second one, so publish or delete it before the next beta.
+   - Nothing else is taken: no `v` in front (the tag adds it), no `0` in front of a number (`1`, not `01`, so one version can't be written
+     two ways), at most 6 digits in each of the three numbers and 4 in a beta's, so `-beta.9999` is a version's last. Each wrong way is
+     refused with its own reason.
+   - The first beta was named `betarelease` and its day, `betarelease20261107`, which allowed one a day. That name isn't taken any more.
+     The one published that way stays as it is.
 2. The first job checks whether this commit may be released. If it refuses, the last lines of its log say why, starting `REFUSED:`.
    `tools/check-release.ps1`, `tools/check-no-hudson.ps1` and `tools/check-new-functions.ps1` are the full list of what it checks. Nothing has been
    built or published at this point.
 3. The second job builds the game and checks the package. `tools/check-release-package.ps1` is the list of what it looks for. The first
    build on a clean machine takes a while, because the libraries are built from source.
-4. The third job waits for you. GitHub shows **Review deployments**. Approve it, and it makes a draft release.
-5. Go to **Releases** and open the draft. Nobody without write access can see it. Check the commit it names, write what changed, and try the
+4. The third job sends the zip to VirusTotal, which runs about 70 virus scanners on a file, and waits for their answers. It waits for you
+   first: GitHub shows **Review deployments**, because the VirusTotal key is kept in the `release` environment. Approve it.
+   - If an answer can't be trusted (not the shape VirusTotal's answers are, about another file, or from fewer than 20 scanners), the run stops
+     there, red, and no draft is made. Its log says why, starting `REFUSED:`. `tools/check-virustotal.ps1` is the list of what it checks.
+   - If any scanner flags the zip, the run goes on to the draft, so that you can read what was found, and then ends red (the user's ruling,
+     2026-11-08).
+5. The fourth job waits for you too. Approve it, and it makes a draft release. Its text says what VirusTotal found, with the link to the
+   report. If any scanner flagged the zip, the text starts by saying so, in bold: don't publish it before reading the report.
+   - **Approve it within a day of the build.** The package the build made is kept for one day (`retention-days: 1` in `release.yml`), and
+     this job downloads it after you approve. A day later it's gone, and the job stops with no draft. Nothing is harmed: start the run
+     again.
+6. Go to **Releases** and open the draft. Nobody without write access can see it. Check the commit it names, write what changed, and try the
    zip if you can.
-6. Press **Publish release**. That's the moment it's public, and GitHub makes the tag then. If you've turned on immutable releases, as below,
+   - **For a beta, the text gives the install steps first, then a short list of what's fixed or added** (the user's ruling, 2026-11-08).
+     The install steps are the ones in `PLAYTEST.md`, which testers also get inside the zip.
+7. Press **Publish release**. That's the moment it's public, and GitHub makes the tag then. If you've turned on immutable releases, as below,
    it can't be changed after that, so a mistake means a new version number.
 
-If you decide against it, delete the draft. Nothing else was made, so the version number is still free.
+If you decide against it, delete the draft. Nothing else was made, so the version number is still free. VirusTotal keeps the zip it was
+sent: anyone with VirusTotal's paid access can download it. It's a build of open-source code, so that gives away nothing that isn't public.
 
 ## What it can't prove
 
@@ -91,8 +115,14 @@ carries it as `bin\AvP_Classic.exe`, the name Steam starts. A release keeps its 
 The workflow file can't set these up for itself, and each of them is something a commit can't remove. If this project ever moves, set them up
 again before the first release.
 
-- **An environment called `release`,** under Settings, Environments. Add the owner as a required reviewer, so that the last job waits for them.
-  Leave "Prevent self-review" off, because the owner is also who starts the run. Under deployment branches, allow only `avpx_main`.
+- **An environment called `release`,** under Settings, Environments. Add the owner as a required reviewer, so that the last two jobs wait for
+  them. Leave "Prevent self-review" off, because the owner is also who starts the run. Under deployment branches, allow only `avpx_main`.
+  **Turn "Allow administrators to bypass configured protection rules" off.** With it on, an admin could run the scan, which holds the
+  VirusTotal key, and the last job, which can write to the repository, without the review these rules are there for.
+- **The secret `VIRUSTOTAL_API_KEY`, in the `release` environment** (not the repository's own secrets), so that only a job under that
+  environment can read it: the scan job. It's a VirusTotal account's API key; a free one allows 4 questions a minute and 500 a day, and a
+  release asks a few dozen. GitHub never shows a secret again once it's saved, but anyone who can change the environment can replace it,
+  so keep that to the owner.
 - **A ruleset for tags matching `v*`,** that stops them being created, moved or deleted by anyone but a repository admin. The workflow never
   makes a tag. The owner's press of Publish does.
 - **Immutable releases,** under Settings, General, so that nothing can be swapped in after a release is published.
@@ -105,6 +135,7 @@ again before the first release.
   the checks taken out.
 - **A list of blockers in the repository.** A machine can't know what we know is wrong, so we write it down where the machine can read it. A
   pull request that takes a line out is a visible decision.
-- **Three jobs.** Building runs a great deal of other people's code, from the libraries' own build scripts. That job can't write to anything.
-  The job that can write has no copy of the code and no build tools.
+- **Four jobs.** Building runs a great deal of other people's code, from the libraries' own build scripts. That job can't write to anything.
+  The scan reads answers from outside, VirusTotal's, so it can't write either, and it's the only job with the VirusTotal key. The job that
+  can write has no copy of the code and no build tools, and reads nothing from outside but the numbers the scan checked.
 - **A draft.** So a person reads it before anyone else can see it.

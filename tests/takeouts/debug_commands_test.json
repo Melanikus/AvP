@@ -5,32 +5,102 @@
 	],
 	"rows": [
 		{
-			"name": "seven digits make a beta",
+			"name": "a 0 in front of a number is taken",
 			"changes": [
 				{
 					"file": "3dc/beta_build.h",
-					"from": "for (int digit = 0; digit < 8; digit++, at++)",
-					"to": "for (int digit = 0; digit < 7; digit++, at++)"
+					"from": "if (digits > most || (digits > 1 && version[at] == '0'))",
+					"to": "if (digits > most)"
 				}
 			]
 		},
 		{
-			"name": "anything after the digits still makes a beta",
+			"name": "too many digits are taken",
 			"changes": [
 				{
 					"file": "3dc/beta_build.h",
-					"from": "\treturn version[at] == 0;\n",
+					"from": "if (digits > most || (digits > 1 && version[at] == '0'))",
+					"to": "if (digits > 1 && version[at] == '0')"
+				}
+			]
+		},
+		{
+			"name": "seven digits make a release number",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "size_t const digits = BetaBuild_NumberHere(version, at, 6);",
+					"to": "size_t const digits = BetaBuild_NumberHere(version, at, 7);"
+				}
+			]
+		},
+		{
+			"name": "five digits make a beta's number",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "size_t const digits = BetaBuild_NumberHere(version, at, 4);",
+					"to": "size_t const digits = BetaBuild_NumberHere(version, at, 5);"
+				}
+			]
+		},
+		{
+			"name": "a missing release number is taken",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\tif (digits == 0)\n\t\t{\n\t\t\treturn false;\n\t\t}\n\n\t\tat += digits;\n",
+					"to": "\t\tat += digits;\n"
+				}
+			]
+		},
+		{
+			"name": "anything between the numbers is taken for a dot",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\t\tif (version[at] != '.')\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "anything in place of -beta. makes a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\tif (version[at] != kBeta[letter])\n",
+					"to": "\t\tif (version[at] == 0)\n"
+				}
+			]
+		},
+		{
+			"name": "a beta with no number is a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\tif (digits == 0)\n\t{\n\t\treturn false;\n\t}\n\n\treturn version[at + digits] == 0;\n",
+					"to": "\treturn version[at + digits] == 0;\n"
+				}
+			]
+		},
+		{
+			"name": "anything after the number still makes a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\treturn version[at + digits] == 0;\n",
 					"to": "\treturn true;\n"
 				}
 			]
 		},
 		{
-			"name": "any text starting the same way is a beta",
+			"name": "no version at all is read",
 			"changes": [
 				{
 					"file": "3dc/beta_build.h",
-					"from": "\t\tif (version[at] != kWord[at])\n\t\t{\n\t\t\treturn false;\n\t\t}\n",
-					"to": "\t\tif (version[at] == 0)\n\t\t{\n\t\t\treturn false;\n\t\t}\n"
+					"from": "\tif (version == 0)\n\t{\n\t\treturn false;\n\t}\n\n\tsize_t at = 0;\n",
+					"to": "\tsize_t at = 0;\n"
 				}
 			]
 		},

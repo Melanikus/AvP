@@ -14,7 +14,9 @@ DLL is missing, tell us which one, and don't download it from any site.
 **GOG:** we've never tried a GOG copy, so we can't tell you where its files go. If you try one, tell us what you find.
 
 ## 1. Check the download
-From the release page, download `AvP-<version>-windows-x86.zip` and `SHA256SUMS`, into the same folder.
+From the release page, download `AvP-<version>-windows-x86.zip` and `SHA256SUMS`, into the same folder. A beta's version ends in
+`-beta.` and its number, such as `AvP-1.0.0-beta.0-windows-x86.zip`, and the highest number is the newest. The release page also links
+VirusTotal's report on the zip.
 
 1. **The zip is what the release says.** In PowerShell, in that folder:
    ```powershell
