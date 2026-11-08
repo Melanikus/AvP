@@ -22,6 +22,7 @@
 //   a placed decal's texture offset is turned from the level file's 16.16 into pixels as it's read, and back as the
 //   debug decal save writes it, and a decal whose offset isn't one of its kind's pictures is left out (decal_offset.h).
 //   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
+//   a model's name is copied with the 0 that ends it written on a line of its own
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -669,9 +670,11 @@ void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp
 	Object_Hierarchy_Name_Chunk * ohnc = ohc->get_name();
 	if (ohnc)
 	{
-		size_t const hierarchy_name_size = strlen (ohnc->hierarchy_name) + 1;
-		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_size);
-		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_size);
+		// The name's letters, then the 0 that ends them on a line of its own, so the copy is always ended whatever was read
+		size_t const hierarchy_name_length = strlen (ohnc->hierarchy_name);
+		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_length + 1);
+		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_length);
+		hd->hierarchy_name[hierarchy_name_length] = 0;
 	}
 	else
 	{ // throw back from old system, no new hierarchies should be created with no name

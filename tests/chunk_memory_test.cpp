@@ -83,14 +83,22 @@ struct BlockNote
 static int blocksOut = 0;           // blocks taken and not yet given back
 static int blocksMixedUp = 0;       // blocks given back the wrong way
 
+// The blocks come from this space of the test's own, not from malloc, so nothing it hands out is left behind for the computer to
+// tidy up: the space goes with the program. A block given back isn't used again, which a test this short has no need of.
+alignas(16) static unsigned char blockSpace[32 * 1024 * 1024];
+static size_t blockSpaceUsed = 0;
+
 static void *TakeBlock(size_t size, AskedWith askedWith)
 {
-	BlockNote *note = (BlockNote *)malloc(sizeof(BlockNote) + size);
-	if (!note)
+	// Each block with its note in front, rounded up to 16 bytes so the next one is lined up too
+	if (size > sizeof(blockSpace) - sizeof(BlockNote) - 15 || ((sizeof(BlockNote) + size + 15) & ~(size_t)15) > sizeof(blockSpace) - blockSpaceUsed)
 	{
-		puts("FAILED: the computer has no memory left for the test");
+		puts("FAILED: the test's own space for memory is full");
 		exit(1);
 	}
+
+	BlockNote *note = (BlockNote *)(blockSpace + blockSpaceUsed);
+	blockSpaceUsed += (sizeof(BlockNote) + size + 15) & ~(size_t)15;
 	note->askedWith = askedWith;
 	blocksOut++;
 	return note + 1;
@@ -109,7 +117,6 @@ static void GiveBackBlock(void *block, AskedWith givenBackWith)
 		blocksMixedUp++;
 	}
 	blocksOut--;
-	free(note);
 }
 
 void *operator new(size_t size) { return TakeBlock(size, AskedWithNew); }
