@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   how many marine classes there are (NUM_PC_SUBTYPES) is checked against the list of them when the game is built
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the new guns' settings are in the game description, so a joiner uses the host's
 //   in the same-as-single-player mode, a level starts for everyone together, with two new messages
@@ -173,6 +175,10 @@ typedef enum netgame_specialistcharactertype
 	NGSCT_Revolver,
 	NGSCT_M79
 } NETGAME_SPECIALISTCHARACTERTYPE;
+
+// NUM_PC_SUBTYPES above is how many classes there are. It sizes the lists kept for each class, and a class number that comes over the
+// network has to be below it. This stops the build if a class is added to the list without it.
+static_assert(NUM_PC_SUBTYPES == NGSCT_M79 + 1, "NUM_PC_SUBTYPES has to be how many classes NETGAME_SPECIALISTCHARACTERTYPE has");
 
 /* ---------------------------------------------------------------------
   Player data structure, and game description data structure

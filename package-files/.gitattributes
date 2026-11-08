@@ -1,0 +1,7 @@
+# Everything in this folder goes into the package byte for byte, and SHA256SUMS.txt pins each file's hash. So git must never
+# change a line ending in one of them. Written 2026-11-07 by Melanikus for the AvP port.
+*.rif -text
+*.RIF -text
+*.rim -text
+*.RIM -text
+*.ffl -text
