@@ -89,7 +89,7 @@
     { "name": "the short form of the player's own folder isn't found",
       "changes": [{ "file": "3dc/log_files.h", "from": "\t\t\tLogFiles_PrivateAddFolder(p, shortForm, \"%USERPROFILE%\");\n", "to": "" }] },
     { "name": "the game's own folder isn't found",
-      "changes": [{ "file": "3dc/log_files.h", "from": "LogFiles_PrivateAddFolder(p, found, \"<game folder>\");", "to": "(void)found;" }] },
+      "changes": [{ "file": "3dc/log_files.h", "from": "LogFiles_PrivateAddGameFolder(p, found);", "to": "(void)found;" }] },
     { "name": "the user's name isn't found",
       "changes": [
         { "file": "3dc/log_files.h", "from": "\t\tLogFiles_PrivateAddWord(p, LogFiles_LastPart(found), \"<user>\");\n", "to": "" },
@@ -125,6 +125,8 @@
     { "name": "the first line doesn't say it's the version",
       "changes": [{ "file": "3dc/build_identity.cpp", "from": "std::string(\"build: version \")", "to": "std::string(\"build: \")" }] },
     { "name": "SOURCE: a beta's name isn't written as the version",
-      "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'", "to": "" }] }
+      "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'", "to": "" }] },
+    { "name": "a program in bin doesn't make the folder above it the game folder",
+      "changes": [{ "file": "3dc/log_files.h", "from": "if (last > parent && _stricmp(last, \"bin\") == 0)", "to": "if (false)" }] }
   ]
 }

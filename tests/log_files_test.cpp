@@ -424,6 +424,21 @@ static void TestLeavingOutThePlayer()
 	CheckLeftOut(p, "temp C:\\Users\\TesterName\\AppData\\Local\\Temp\\avp.tmp", "temp %TEMP%\\avp.tmp", "the longest folder that fits wins");
 	CheckLeftOut(p, "loading D:\\Games\\AvP\\fastfile\\common.ffl", "loading <game folder>\\fastfile\\common.ffl", "the game's own folder is written <game folder>");
 	CheckKept(p, "loading D:\\Games\\AvPx\\common.ffl", "but not a different folder whose name starts the same");
+
+	// A program in the release's bin folder, as the Steam game has it: the game's own folder, one up, counts too
+	LogFiles_Private steam;
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\bin");
+	Check(steam.folderCount == 2, "a program in a folder called bin gives the game folder and the one above it");
+	CheckLeftOut(steam, "shaders D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\shaders\\a.fx, program D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\bin\\AvP_Classic.exe", "shaders <game folder>\\shaders\\a.fx, program <game folder>\\AvP_Classic.exe", "so the shaders and levels beside bin are written <game folder> too");
+
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Games\\AvP\\BIN\\");
+	Check(steam.folderCount == 2, "in any capitals, with a slash on the end too");
+
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Games\\AvP");
+	Check(steam.folderCount == 1, "and a program anywhere else gives only its own folder");
 	CheckLeftOut(p, "\"C:\\Users\\TesterName\" is the folder", "\"%USERPROFILE%\" is the folder", "a folder in quotes ends at the quote");
 	CheckLeftOut(p, "old C:\\Users\\TesterNameOld\\x.txt", "old C:\\Users\\<user>\\x.txt", "a folder that only starts with the player's folder's name doesn't count as theirs, and is someone's own");
 
