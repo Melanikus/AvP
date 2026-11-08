@@ -1,5 +1,6 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
+//   the failed level screen tells a campaign's other players to wait for the host (added 2026-11-06)
 //   texts on the statistics screen that hold words from the language file, or the player's profile
 //   name, are written with a size limit, so they always fit
 // Modified 2026-11-06 by Melanikus for the AvP port:
@@ -790,7 +791,8 @@ void DoFailedLevelStatisticsScreen(void)
 	DoStatisticsScreen(0);
 
 	if (!deathFadeLevel) {
-		RenderStringCentred(GetTextString(TEXTSTRING_MULTIPLAYER_PRESSKEYTORESTARTGAME), ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height - 20, 0xffffffff);
+		// In a campaign only the host's machine restarts the level, so the others are told to wait
+		RenderStringCentred(GetTextString(AvP.Network == I_Peer ? TEXTSTRING_MULTIPLAYER_WAITFORRESTARTGAME : TEXTSTRING_MULTIPLAYER_PRESSKEYTORESTARTGAME), ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height - 20, 0xffffffff);
 	}
 }
 

@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a marine, predator or xenoborg dying on the host tells the other machines
 /* bh_corpse.c 19/8/98 */
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -287,6 +289,9 @@ void Convert_Predator_To_Corpse(STRATEGYBLOCK *sbPtr,DEATH_DATA *this_death) {
 		Sound_Stop(predatorStatusPointer->soundHandle);
 	}
 	Dispel_HModel(&predatorStatusPointer->HModelController);
+	// The new block's timer isn't set until further down, so this sends the number it's about to be set to
+	AddNetMsg_NpcKilled(sbPtr, this_death->Multiplayer_Code, PRED_DIETIME, corpseDataPtr->GibbFactor);
+
 	DeallocateMem(sbPtr->SBdataptr);
 	/* Turn into the corpse. */
 	sbPtr->SBdataptr=corpseDataPtr;
@@ -398,6 +403,9 @@ void Convert_Marine_To_Corpse(STRATEGYBLOCK *sbPtr,DEATH_DATA *this_death) {
 		ActiveSounds[marineStatusPointer->soundHandle2].externalRef = &corpseDataPtr->SoundHandle2;
 	}
 	Dispel_HModel(&marineStatusPointer->HModelController);
+	// The new block's timer isn't set until further down, so this sends the number it's about to be set to
+	AddNetMsg_NpcKilled(sbPtr, this_death->Multiplayer_Code, MARINE_DYINGTIME, corpseDataPtr->GibbFactor);
+
 	DeallocateMem(sbPtr->SBdataptr);
 	/* Turn into the corpse. */
 	sbPtr->SBdataptr=corpseDataPtr;
@@ -484,6 +492,9 @@ void Convert_Xenoborg_To_Corpse(STRATEGYBLOCK *sbPtr,DEATH_DATA *this_death) {
 	
 	/* Heh... now bin the old data block! */
 	Dispel_HModel(&xenoStatusPointer->HModelController);
+	// The new block's timer isn't set until further down, so this sends the number it's about to be set to
+	AddNetMsg_NpcKilled(sbPtr, this_death->Multiplayer_Code, XENO_DYINGTIME, corpseDataPtr->GibbFactor);
+
 	DeallocateMem(sbPtr->SBdataptr);
 	/* Turn into the corpse. */
 	sbPtr->SBdataptr=corpseDataPtr;
@@ -968,6 +979,13 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 					 
 	//copy strategy block stuff
+	// A saved game is loaded into a fresh level, so this shouldn't run out, and it costs nothing to be sure
+	if (!sbPtr->DynPtr)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
+
 	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;

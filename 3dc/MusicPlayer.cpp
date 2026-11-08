@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in the mode that plays as single player does, the music is the level's own
 
 #include "MusicPlayer.h"
 #include "FileStream.h"
@@ -8,6 +10,8 @@
 #include "env_info.h"
 #include "list_tem.hpp"
 #include "ConfigFile.h"
+
+extern bool SameAsSinglePlayer(void); // pldnet.cpp
 
 static void Music_EmptyCDTrackList();
 static void ExtractTracksForLevel(char* &buffer, List<int> &track_list);
@@ -125,7 +129,7 @@ void Music_Check()
 	if (IsVorbisPlaying())
 	{
 		// if in a multiplayer game see if we have changed character type
-		if (AvP.Network == I_No_Network || AvP.PlayerType == lastPlayerType) {
+		if (SameAsSinglePlayer() || AvP.PlayerType == lastPlayerType) {
 			return;
 		}
 
@@ -137,7 +141,7 @@ void Music_Check()
 		// Lets choose a new track then
 	}
 
-	if (AvP.Network == I_No_Network)
+	if (SameAsSinglePlayer())
 	{
 		int level = NumberForCurrentLevel();
 		if (level >= 0 && level < AVP_ENVIRONMENT_END_OF_LIST)

@@ -1,4 +1,6 @@
 // Which way each point of a polygon faces, on its way to the graphics card. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   can keep a copy of what it writes, for the NORMAL LINES view
 // See surface_normals.cpp for how it works.
 
 #ifndef SURFACE_NORMALS_H
@@ -23,6 +25,11 @@ void SurfaceNormals_Release();
 
 // Whether the list exists. If it doesn't, nothing can use it, and the game draws as it always has.
 bool SurfaceNormals_Ready();
+
+// For the NORMAL LINES view: whether to keep a copy of the list, from the next time it's opened. The card's own list can't be read back. TheCopy gives back four numbers for each vertex, the same ones
+// the card was given, in the same places, and how many vertices that is. It gives back nothing if the list that's current wasn't copied.
+void SurfaceNormals_KeepACopy(bool wanted);
+const float *SurfaceNormals_TheCopy(uint32_t *vertices);
 
 // Opens and closes the list, at the same moments as the game's own vertices.
 void SurfaceNormals_Lock();

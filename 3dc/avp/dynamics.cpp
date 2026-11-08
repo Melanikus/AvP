@@ -1,6 +1,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the collision list leaves out what doesn't fit, where only an assert stood before
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in the same-as-single-player mode, friendly fire off doesn't stop an NPC's flames hurting a Predator
+//   a ghost of an NPC the host runs has that kind's size
+//   falling hurts in a game that plays as single player, whatever the host's setting
 
 /* KJL 12:42:43 29/12/98 - this is effectively Dynamics V4.0. If you think this code looks bad,
 you should have seen the previous versions. */
@@ -12,6 +16,7 @@ you should have seen the previous versions. */
 #include "gamedef.h"
 #include "dynblock.h"
 #include "dynamics.h"					
+#include "net_checks.h"
 #include "io.h"
 #include "bh_types.h"
 #include "compiled_shapes.h"
@@ -577,7 +582,7 @@ extern void ObjectDynamics(void)
 			
 			}
 			//falling damage may be turned off in network games
-			BOOL fallingDamageDisabled = (!netGameData.fallingDamage && AvP.Network!=I_No_Network);
+			BOOL fallingDamageDisabled = (!netGameData.fallingDamage && !SameAsSinglePlayer());
 			int damage = ((dynPtr->Position.vy - PlayersMaxHeightWhilstNotInContactWithGround - 4000))*256
 			;
 			if (damage>0 && !fallingDamageDisabled)
@@ -595,7 +600,7 @@ extern void ObjectDynamics(void)
 				}
 			}
 			#endif
-			BOOL fallingDamageDisabled = (!netGameData.fallingDamage && AvP.Network!=I_No_Network);
+			BOOL fallingDamageDisabled = (!netGameData.fallingDamage && !SameAsSinglePlayer());
 			int damage = (PlayersFallingSpeed-15000)*256;
 			int distanceFallen = (dynPtr->Position.vy - PlayersMaxHeightWhilstNotInContactWithGround);
 
@@ -5517,7 +5522,24 @@ static void CreateNRBBForObject(const STRATEGYBLOCK *sbPtr)
 				}
 
 				case I_BehaviourNetCorpse:
+				case I_BehaviourMarine:
 					extentsPtr = &CollisionExtents[CE_MARINE];
+					sbPtr->SBdptr->ObRadius = 700;
+					break;
+				case I_BehaviourPredator:
+					extentsPtr = &CollisionExtents[CE_PREDATOR];
+					sbPtr->SBdptr->ObRadius = 700;
+					break;
+				case I_BehaviourXenoborg:
+					extentsPtr = &CollisionExtents[CE_XENOBORG];
+					sbPtr->SBdptr->ObRadius = 1200;
+					break;
+				case I_BehaviourQueenAlien:
+					extentsPtr = &CollisionExtents[CE_QUEEN];
+					sbPtr->SBdptr->ObRadius = 1000;
+					break;
+				case I_BehaviourFaceHugger:
+					extentsPtr = &CollisionExtents[CE_FACEHUGGER];
 					sbPtr->SBdptr->ObRadius = 700;
 					break;
 				default:
@@ -5972,11 +5994,11 @@ int ParticleDynamics(PARTICLE *particlePtr, VECTORCH *obstacleNormalPtr, int *mo
 									{
 										NETGHOSTDATABLOCK *ghostData=(NETGHOSTDATABLOCK *) sbPtr->SBdataptr;
 										GLOBALASSERT(ghostData);
-										if (ghostData->type==I_BehaviourMarinePlayer) 
+										if (ghostData->type==I_BehaviourMarinePlayer)
 										{
 											ignoreDamage = TRUE;
 										}
-										else if (ghostData->type==I_BehaviourPredatorPlayer && netGameData.gameType==NGT_Coop) 
+										else if (ghostData->type==I_BehaviourPredatorPlayer && NetOtherSpeciesCanBeAFriend(netGameData.gameType==NGT_Coop, SameAsSinglePlayer()))
 										{
 											ignoreDamage = TRUE;
 										}
@@ -5987,7 +6009,7 @@ int ParticleDynamics(PARTICLE *particlePtr, VECTORCH *obstacleNormalPtr, int *mo
 										{
 											ignoreDamage = TRUE;
 										}
-										else if (AvP.PlayerType == I_Predator && netGameData.gameType==NGT_Coop)
+										else if (AvP.PlayerType == I_Predator && NetOtherSpeciesCanBeAFriend(netGameData.gameType==NGT_Coop, SameAsSinglePlayer()))
 										{
 											ignoreDamage = TRUE;
 										}

@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the name of what the queen is after
 /* ChrisF 17/3/98 ------------------------------------------------
   Header file for alien queen support functions
   -----------------------------------------------------------------*/
@@ -93,6 +95,7 @@ typedef struct queenStatusBlock
 	VECTORCH LastVelocity;
 	SECTION_DATA* QueenRightHand;
 	STRATEGYBLOCK* QueenTargetSB;
+	char QueenTarget_SBname[SB_NAME_LENGTH];	/* the name it had when she chose it: a block that's gone doesn't have it any more */
 
 	BOOL BeenInAirlock;
 	BOOL QueenActivated; //queen is inactive until seen

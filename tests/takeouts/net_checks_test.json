@@ -286,6 +286,76 @@
 			]
 		},
 		{
+			"name": "a campaign's next place may be any place",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return campaignNow != 0 && campaign == campaignNow && place > placeNow && place <= levelsInCampaign;",
+					"to": "return campaignNow != 0 && campaign == campaignNow && place <= levelsInCampaign;"
+				}
+			]
+		},
+		{
+			"name": "a campaign's next place may be past its end",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return campaignNow != 0 && campaign == campaignNow && place > placeNow && place <= levelsInCampaign;",
+					"to": "return campaignNow != 0 && campaign == campaignNow && place > placeNow;"
+				}
+			]
+		},
+		{
+			"name": "another campaign's place is believed",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return campaignNow != 0 && campaign == campaignNow && place > placeNow && place <= levelsInCampaign;",
+					"to": "return campaignNow != 0 && place > placeNow && place <= levelsInCampaign;"
+				}
+			]
+		},
+		{
+			"name": "a game with no campaign can be moved on",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return campaignNow != 0 && campaign == campaignNow && place > placeNow && place <= levelsInCampaign;",
+					"to": "return campaign == campaignNow && place > placeNow && place <= levelsInCampaign;"
+				}
+			]
+		},
+		{
+			"name": "a joiner's place may be anything",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return campaign == 0 ? place == 0 : (place >= 0 && place < levelsInCampaign);",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a joiner's place may be past the end",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "(place >= 0 && place < levelsInCampaign)",
+					"to": "(place >= 0 && place <= levelsInCampaign)"
+				}
+			]
+		},
+		{
+			"name": "a joiner's place may be below the start",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "(place >= 0 && place < levelsInCampaign)",
+					"to": "(place < levelsInCampaign)"
+				}
+			]
+		},
+		{
 			"name": "a number below the table fits",
 			"changes": [
 				{
@@ -442,6 +512,326 @@
 					"file": "3dc/net_checks.h",
 					"from": "return i + 1;",
 					"to": "return i;"
+				}
+			]
+		},
+		{
+			"name": "a campaign difficulty below the tables is let through",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return difficulty >= 0 && difficulty <= 2;",
+					"to": "return difficulty <= 2;"
+				}
+			]
+		},
+		{
+			"name": "a campaign difficulty above what the page offers is let through",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return difficulty >= 0 && difficulty <= 2;",
+					"to": "return difficulty >= 0 && difficulty <= 3;"
+				}
+			]
+		},
+		{
+			"name": "the hardest campaign difficulty is refused",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return difficulty >= 0 && difficulty <= 2;",
+					"to": "return difficulty >= 0 && difficulty < 2;"
+				}
+			]
+		},
+		{
+			"name": "the easiest campaign difficulty is refused",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return difficulty >= 0 && difficulty <= 2;",
+					"to": "return difficulty > 0 && difficulty <= 2;"
+				}
+			]
+		},
+		{
+			"name": "PRESS: a plain switch can't be pressed",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return kind == plainSwitchKind || kind == linkSwitchKind;",
+					"to": "return kind == linkSwitchKind;"
+				}
+			]
+		},
+		{
+			"name": "PRESS: a switch with a link group can't be pressed",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return kind == plainSwitchKind || kind == linkSwitchKind;",
+					"to": "return kind == plainSwitchKind;"
+				}
+			]
+		},
+		{
+			"name": "PRESS: anything can be pressed",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return kind == plainSwitchKind || kind == linkSwitchKind;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "READY: your own place counts",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (place != myPlace && placeHasPlayer[place] && !placeIsReady[place])",
+					"to": "if (placeHasPlayer[place] && !placeIsReady[place])"
+				}
+			]
+		},
+		{
+			"name": "READY: an empty place is waited for",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (place != myPlace && placeHasPlayer[place] && !placeIsReady[place])",
+					"to": "if (place != myPlace && !placeIsReady[place])"
+				}
+			]
+		},
+		{
+			"name": "READY: nobody is waited for",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (place != myPlace && placeHasPlayer[place] && !placeIsReady[place])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the wider call works outside the mode too",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
+					"to": "if (liftRadius <= 0)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the wider call never works",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a size below nothing is used",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!sameAsSinglePlayer || liftRadius <= 0)",
+					"to": "if (!sameAsSinglePlayer)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the 5 m changes",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "int const fromTheMiddle = 5000;",
+					"to": "int const fromTheMiddle = 5001;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: any size is used, so the sum can overflow",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "liftRadius < widestRealLift ? liftRadius : widestRealLift",
+					"to": "liftRadius"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the limit is off by one",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "liftRadius < widestRealLift ? liftRadius : widestRealLift",
+					"to": "liftRadius < widestRealLift - 1 ? liftRadius : widestRealLift"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the limit is lower",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "int const widestRealLift = 100000;",
+					"to": "int const widestRealLift = 99999;"
+				}
+			]
+		},
+		{
+			"name": "BREAK: single player ignores a hit",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!inNetworkGame)\n\t{\n\t\treturn kNetHitCounts;",
+					"to": "if (!inNetworkGame)\n\t{\n\t\treturn kNetHitIsIgnored;"
+				}
+			]
+		},
+		{
+			"name": "BREAK: the mode ignores a hit",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!sameAsSinglePlayer)\n\t{\n\t\treturn kNetHitIsIgnored;\n\t}\n\n\treturn isAClient",
+					"to": "if (true)\n\t{\n\t\treturn kNetHitIsIgnored;\n\t}\n\n\treturn isAClient"
+				}
+			]
+		},
+		{
+			"name": "BREAK: a game outside the mode can break one",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if (!sameAsSinglePlayer)\n\t{\n\t\treturn kNetHitIsIgnored;\n\t}\n\n\treturn isAClient",
+					"to": "return isAClient"
+				}
+			]
+		},
+		{
+			"name": "BREAK: a client's hit counts by itself",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return isAClient && !cameFromTheHost ? kNetHitGoesToTheHost : kNetHitCounts;",
+					"to": "return kNetHitCounts;"
+				}
+			]
+		},
+		{
+			"name": "BREAK: the host sends its own hit to itself",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return isAClient && !cameFromTheHost ? kNetHitGoesToTheHost : kNetHitCounts;",
+					"to": "return !cameFromTheHost ? kNetHitGoesToTheHost : kNetHitCounts;"
+				}
+			]
+		},
+		{
+			"name": "BREAK: the host's word goes back to the host",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return isAClient && !cameFromTheHost ? kNetHitGoesToTheHost : kNetHitCounts;",
+					"to": "return isAClient ? kNetHitGoesToTheHost : kNetHitCounts;"
+				}
+			]
+		},
+		{
+			"name": "FF: the other species is a friend in the mode too",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return coopGame && !sameAsSinglePlayer;",
+					"to": "return coopGame;"
+				}
+			]
+		},
+		{
+			"name": "FF: the other species is a friend in every game",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return coopGame && !sameAsSinglePlayer;",
+					"to": "return !sameAsSinglePlayer;"
+				}
+			]
+		},
+		{
+			"name": "FF: the other species is never a friend",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return coopGame && !sameAsSinglePlayer;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: any end is known",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return end == 0 || end == 1;",
+					"to": "return end >= 0;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: no margin past either end of the track",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "return (long long)height >= (long long)topHeight - margin && (long long)height <= (long long)bottomHeight + margin;",
+					"to": "return height >= topHeight && height <= bottomHeight;"
+				}
+			]
+		},
+		{
+			"name": "LIFT: the host's car is never thought to be moving",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\tif (!moving || msSinceSent <= 0)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a moving car goes past its end",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\treturn (int)(at < endHeight ? endHeight : at);\n",
+					"to": "\t\treturn (int)at;\n"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a car with someone on it jumps",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if ((!someoneOnIt && size > stepHeight) || size <= mostThisFrame)",
+					"to": "if (size > stepHeight || size <= mostThisFrame)"
+				}
+			]
+		},
+		{
+			"name": "LIFT: a car never goes straight there",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "if ((!someoneOnIt && size > stepHeight) || size <= mostThisFrame)",
+					"to": "if (size <= mostThisFrame)"
 				}
 			]
 		}

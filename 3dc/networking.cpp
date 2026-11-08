@@ -29,6 +29,7 @@
 //   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
 //   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a connection may stay silent for a named time, because nothing answers while a level loads
 //   a connection that never says who it is is dropped, answers to anyone asking about a game are limited, a second game found in one look is read properly, and a joiner must speak this version
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   a message with no network game running fails, where it used to hand ENet an empty pointer
@@ -70,6 +71,7 @@ static ENetPeer     *ServerPeer = NULL;
 static bool net_IsInitialised = false;
 
 static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
+
 
 // How long a machine that's stopped answering may go before ENet drops it. Nothing answers ENet while a level loads, and one machine can take much longer than another. ENet's own number was about 5 seconds, which a joiner on a big level can't meet. A machine that never comes back is still dropped when this runs out.
 static const enet_uint32 kConnectionPatienceMilliseconds = 15000;
@@ -585,6 +587,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		if (!LobbiedGame)
 		{
 			ServerAddress.host = ENET_HOST_ANY;
+
 			ServerAddress.port = netPortNumber;
 
 			// The game's limits, a checksum on every packet and one channel: see net_host.h
@@ -922,6 +925,11 @@ void Net_ServiceNetwork()
 // only messages the rest of the game ever sees are game messages, whole ones.
 // On a client, who the host is: whoever gave it its ID. A host passes on what the others say, each saying who it's from, and only the host's own word counts as the host's.
 static NetID hostPlayerID = 0;
+
+NetID Net_HostPlayerID()
+{
+	return hostPlayerID;
+}
 
 static NetID IDOfConnection(const ENetPeer *peer)
 {

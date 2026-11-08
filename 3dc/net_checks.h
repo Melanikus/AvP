@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the difficulty a host says a campaign is at is checked
 // Checks on what arrives from other players' machines. Written 2026-11-06 by Melanikus for the AvP port.
 //
 // Anyone on the network can send anything, so what's in a message is only something someone said until it's been checked. These are kept apart from the game's network code, and need none of its headers, so that a test can run them on their own.
@@ -7,6 +9,27 @@
 
 #include <stddef.h>
 #include <string.h>
+
+// Can a press message from another machine press this kind of thing? Only the two kinds of switch can be pressed. A switch with a link group is a different kind of object from a plain one, and the
+// machine that sends the message sends it for both. The caller says which numbers those kinds have, so that this file needs nothing from the game.
+inline bool NetPressMessageCanPress(int kind, int plainSwitchKind, int linkSwitchKind)
+{
+	return kind == plainSwitchKind || kind == linkSwitchKind;
+}
+
+// Has everyone else in the player list said they're ready? Each place in the list holds a player or it's empty. Your own place doesn't count, because you know about yourself.
+inline bool NetEveryoneElseIsReady(const bool *placeHasPlayer, const bool *placeIsReady, int places, int myPlace)
+{
+	for (int place = 0; place < places; place++)
+	{
+		if (place != myPlace && placeHasPlayer[place] && !placeIsReady[place])
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
 
 // Is this number a place in a table with this many places? The first place is 0.
 inline bool NetNumberFitsTable(int number, int places)
@@ -443,6 +466,124 @@ inline bool NetMakeNameUnique(char *name, size_t size, Used used, int most)
 	}
 
 	return false;
+}
+
+// The host saying which level of the campaign comes next. A campaign only goes forward, and the place just past its last level means it's over. Anything else is refused, because the place is used to look up a level in a list.
+inline bool NetCampaignMoveIsGood(int campaign, int place, int campaignNow, int placeNow, int levelsInCampaign)
+{
+	return campaignNow != 0 && campaign == campaignNow && place > placeNow && place <= levelsInCampaign;
+}
+
+// What happens to a hit on a breakable track object. Single player: it counts. A network game outside the mode that plays as
+// single player does: it's ignored, as the game always did. In that mode: on the host it counts, and on another machine it goes
+// to the host, unless it came from the host in the first place.
+enum NetBreakableHit { kNetHitIsIgnored, kNetHitGoesToTheHost, kNetHitCounts };
+
+inline NetBreakableHit NetBreakableHitGoes(bool inNetworkGame, bool sameAsSinglePlayer, bool isAClient, bool cameFromTheHost)
+{
+	if (!inNetworkGame)
+	{
+		return kNetHitCounts;
+	}
+
+	if (!sameAsSinglePlayer)
+	{
+		return kNetHitIsIgnored;
+	}
+
+	return isAClient && !cameFromTheHost ? kNetHitGoesToTheHost : kNetHitCounts;
+}
+
+// With friendly fire off, can the weapons of the other kind of player be a friend's? In a co-op game the game says yes, because a
+// marine and a Predator can be on one side there, so neither's weapons hurt the other. In the mode that plays as single player
+// does, everyone plays the same species. So the other species' weapons can only be in an NPC's hands, and they have to hurt, or
+// turning friendly fire off would take some of the level's dangers away. Only weapons the filter names are affected: most of an
+// NPC marine's guns have ammunition of their own, which it doesn't name, and those always hurt.
+inline bool NetOtherSpeciesCanBeAFriend(bool coopGame, bool sameAsSinglePlayer)
+{
+	return coopGame && !sameAsSinglePlayer;
+}
+
+// How near the middle of a platform lift's far end someone has to be, for a network game to send the lift to them. The game
+// always said 5 m. But five lifts in the campaigns are wider than that, so someone standing beside one is further than 5 m from
+// its middle and could never call it. So in the mode that plays as single player does, it's 5 m from the lift's edge. The size
+// comes from the level's file, so one below nothing counts as nothing, and one past any real lift counts as that limit, which
+// also means the sum can't overflow.
+inline int NetLiftCallReach(int liftRadius, bool sameAsSinglePlayer)
+{
+	int const fromTheMiddle = 5000;
+	int const widestRealLift = 100000;
+
+	if (!sameAsSinglePlayer || liftRadius <= 0)
+	{
+		return fromTheMiddle;
+	}
+
+	return fromTheMiddle + (liftRadius < widestRealLift ? liftRadius : widestRealLift);
+}
+
+// A lift's sync message, in the mode that plays as single player (NETMESSAGE_LIFTSTATE): which end it names. 0 is the top, the
+// lift's upHeight, which is the smaller height; 1 is the bottom, its downHeight. Anything else is refused.
+inline bool NetLiftEndIsKnown(int end)
+{
+	return end == 0 || end == 1;
+}
+
+// Whether a height a lift's sync message gives is on that lift's own track, between its two ends, give or take the margin. It
+// comes from another machine, and a car put far off its track could carry a player out of the level.
+inline bool NetLiftHeightIsOnItsTrack(int height, int topHeight, int bottomHeight, int margin)
+{
+	return (long long)height >= (long long)topHeight - margin && (long long)height <= (long long)bottomHeight + margin;
+}
+
+// Where the host's car should be by now. Its message said the car's height, whether it was moving, and to which end. A moving car
+// goes towards that end at speed, in mm a second, and stops there.
+inline int NetLiftHostHeightNow(int heightSent, bool moving, int endHeight, int speed, int msSinceSent)
+{
+	if (!moving || msSinceSent <= 0)
+	{
+		return heightSent;
+	}
+
+	long long const gone = (long long)speed * msSinceSent / 1000;
+
+	if (endHeight < heightSent)
+	{
+		long long const at = heightSent - gone;
+		return (int)(at < endHeight ? endHeight : at);
+	}
+
+	long long const at = heightSent + gone;
+	return (int)(at > endHeight ? endHeight : at);
+}
+
+// One frame of a joiner's car following the host's: the car's new height. With nobody on it and more than a step away, it goes
+// straight there. Otherwise it moves towards it by at most mostThisFrame, so someone riding it is carried, never dropped or passed
+// through, however far it has to go.
+inline int NetLiftFollowStep(int ownHeight, int hostHeight, int mostThisFrame, bool someoneOnIt, int stepHeight)
+{
+	long long const gap = (long long)hostHeight - ownHeight;
+	long long const size = gap < 0 ? -gap : gap;
+
+	if ((!someoneOnIt && size > stepHeight) || size <= mostThisFrame)
+	{
+		return hostHeight;
+	}
+
+	return gap > 0 ? ownHeight + mostThisFrame : ownHeight - mostThisFrame;
+}
+
+// The difficulty a host says a campaign is at: 0, 1 or 2, the three the host's page offers. It picks a row in
+// the game's tables of damage and health, so anything else from another machine can't be let through.
+inline bool NetCampaignDifficultyIsGood(int difficulty)
+{
+	return difficulty >= 0 && difficulty <= 2;
+}
+
+// The same place when a joiner is told where the game has got to. It has to be a level, and "no campaign" comes with place 0.
+inline bool NetCampaignPlaceIsGood(int campaign, int place, int levelsInCampaign)
+{
+	return campaign == 0 ? place == 0 : (place >= 0 && place < levelsInCampaign);
 }
 
 #endif

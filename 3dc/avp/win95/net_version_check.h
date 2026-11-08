@@ -22,8 +22,8 @@
 #ifndef _net_version_check_h_
 #define _net_version_check_h_ 1
 
-static const int kVersionTheseSizesBelongTo = 103;
-static const unsigned int kSizesAtThatVersion = 37592;
+static const int kVersionTheseSizesBelongTo = 109;
+static const unsigned int kSizesAtThatVersion = 49510;
 
 static const unsigned int kSizesNow =
 	1 * sizeof(NETMESSAGEHEADER) +
@@ -49,41 +49,50 @@ static const unsigned int kSizesNow =
 	21 * sizeof(NETMESSAGE_DAMAGE_SECTION) +
 	22 * sizeof(NETMESSAGE_DAMAGE_DELTA) +
 	23 * sizeof(NETMESSAGE_DAMAGE_DIRECTION) +
-	24 * sizeof(NETMESSAGE_LOBDESTROYED_REQUEST) +
-	25 * sizeof(NETMESSAGE_LOBDESTROYED) +
-	26 * sizeof(NETMESSAGE_OBJECTPICKEDUP) +
-	27 * sizeof(NETMESSAGE_INANIMATEDAMAGED) +
-	28 * sizeof(NETMESSAGE_INANIMATEDESTROYED) +
-	29 * sizeof(NETMESSAGE_LOSREQUESTBINARYSWITCH) +
-	30 * sizeof(NETMESSAGE_PLATFORMLIFTSTATE) +
-	31 * sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE) +
-	32 * sizeof(NETMESSAGE_AGUNSTATE) +
-	33 * sizeof(NETMESSAGE_MAKEDECAL) +
-	34 * sizeof(NETMESSAGE_MAKEEXPLOSION) +
-	35 * sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION) +
-	36 * sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION) +
-	37 * sizeof(NETMESSAGE_PREDATORSIGHTS) +
-	38 * sizeof(NETMESSAGE_LOBONFIRE) +
-	39 * sizeof(NETMESSAGE_ALIENAISTATE) +
-	40 * sizeof(NETMESSAGE_ALIENSEQUENCECHANGE) +
-	41 * sizeof(NETMESSAGE_ALIENAIKILLED) +
-	42 * sizeof(NETMESSAGE_FARALIENPOSITION) +
-	43 * sizeof(NETMESSAGE_GIBBING) +
-	44 * sizeof(NETMESSAGE_SPOTALIENSOUND) +
-	45 * sizeof(NETMESSAGE_CREATEWEAPON) +
-	46 * sizeof(NETMESSAGE_FRAGMENTALOBJECTSSTATUS) +
-	47 * sizeof(NETMESSAGE_STRATEGYSYNCH) +
-	48 * sizeof(NETMESSAGE_PLAYERID) +
-	49 * sizeof(NETMESSAGE_LMS_RESTART) +
-	50 * sizeof(NETMESSAGE_RESTARTGAME) +
-	51 * sizeof(NETMESSAGE_LMS_RESTARTTIMER) +
-	52 * sizeof(NETMESSAGE_SPOTOTHERSOUND) +
-	53 * sizeof(SessionDescription) +
-	54 * sizeof(PlayerDetails) +
-	55 * sizeof(MessageHeader) +
-	56 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) + // how many kinds of message there are: each has a row in that table, or it's refused
-	57 * MAX_NO_OF_MULTIPLAYER_EPISODES +
-	58 * MAX_NO_OF_COOPERATIVE_EPISODES;
+	24 * sizeof(NETMESSAGE_LEVELEVENT) +
+	25 * sizeof(NETMESSAGE_COOPNEXTLEVEL) +
+	26 * sizeof(NETMESSAGE_LOBDESTROYED_REQUEST) +
+	27 * sizeof(NETMESSAGE_LOBDESTROYED) +
+	28 * sizeof(NETMESSAGE_OBJECTPICKEDUP) +
+	29 * sizeof(NETMESSAGE_INANIMATEDAMAGED) +
+	30 * sizeof(NETMESSAGE_INANIMATEDESTROYED) +
+	31 * sizeof(NETMESSAGE_LOSREQUESTBINARYSWITCH) +
+	32 * sizeof(NETMESSAGE_PLATFORMLIFTSTATE) +
+	33 * sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE) +
+	34 * sizeof(NETMESSAGE_AGUNSTATE) +
+	35 * sizeof(NETMESSAGE_MAKEDECAL) +
+	36 * sizeof(NETMESSAGE_MAKEEXPLOSION) +
+	37 * sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION) +
+	38 * sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION) +
+	39 * sizeof(NETMESSAGE_PREDATORSIGHTS) +
+	40 * sizeof(NETMESSAGE_LOBONFIRE) +
+	41 * sizeof(NETMESSAGE_ALIENAISTATE) +
+	42 * sizeof(NETMESSAGE_ALIENSEQUENCECHANGE) +
+	43 * sizeof(NETMESSAGE_ALIENAIKILLED) +
+	44 * sizeof(NETMESSAGE_FARALIENPOSITION) +
+	45 * sizeof(NETMESSAGE_GIBBING) +
+	46 * sizeof(NETMESSAGE_SPOTALIENSOUND) +
+	47 * sizeof(NETMESSAGE_CREATEWEAPON) +
+	48 * sizeof(NETMESSAGE_FRAGMENTALOBJECTSSTATUS) +
+	49 * sizeof(NETMESSAGE_STRATEGYSYNCH) +
+	50 * sizeof(NETMESSAGE_PLAYERID) +
+	51 * sizeof(NETMESSAGE_LMS_RESTART) +
+	52 * sizeof(NETMESSAGE_RESTARTGAME) +
+	53 * sizeof(NETMESSAGE_LMS_RESTARTTIMER) +
+	54 * sizeof(NETMESSAGE_SPOTOTHERSOUND) +
+	55 * sizeof(SessionDescription) +
+	56 * sizeof(PlayerDetails) +
+	57 * sizeof(MessageHeader) +
+	58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) + // how many kinds of message there are: each has a row in that table, or it's refused
+	62 * sizeof(NETMESSAGE_NPCSTATE) +
+	63 * sizeof(NETMESSAGE_NPCXENODELTAS) +
+	64 * sizeof(NETMESSAGE_NPCKILLED) +
+	65 * sizeof(NETMESSAGE_NPCSOUND) +
+	66 * sizeof(NETMESSAGE_NPCTHROWNOBJECT) +
+	67 * sizeof(NETMESSAGE_LIFTSTATE) +
+	59 * MAX_NO_OF_MULTIPLAYER_EPISODES +
+	60 * MAX_NO_OF_COOPERATIVE_EPISODES +
+	61 * kLevelListCampaignLevels;
 
 // If this stops the build, the steps are at the top of this file. The number in the error is the new one.
 template <unsigned int theSizesNow, bool sizesAreAsWrittenDown>

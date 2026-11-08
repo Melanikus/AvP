@@ -349,6 +349,14 @@
     <ClCompile Include="..\..\3dc\avp\triggers.cpp" />
     <ClCompile Include="..\..\3dc\avp\view.cpp" />
     <ClCompile Include="..\..\3dc\avp\weapons.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_hooks.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_shotgun.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_sniper.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_pulse_counter.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_revolver.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_m79.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_staff.cpp" />
+    <ClCompile Include="..\..\3dc\avp\weapon_scope.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\avp_chunk.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\cheat.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\cheat_codes.cpp" />
@@ -386,6 +394,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\path_chunk.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\platsup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldghost.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\npc_ghosts.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldnet.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\progress_bar.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\projload.cpp" />
@@ -434,6 +443,7 @@
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
     <ClCompile Include="..\..\3dc\texture_relief.cpp" />
     <ClCompile Include="..\..\3dc\pixel_lights.cpp" />
+    <ClCompile Include="..\..\3dc\pixel_look.cpp" />
     <ClCompile Include="..\..\3dc\shadow_reach.cpp" />
     <ClCompile Include="..\..\3dc\static_level.cpp" />
     <ClCompile Include="..\..\3dc\static_level_card.cpp" />
@@ -505,6 +515,9 @@
   <ItemGroup>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
+    <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
+    <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\npc_ghosts.h" />
     <ClInclude Include="..\..\3dc\avp\bh_ais.h" />
     <ClInclude Include="..\..\3dc\avp\bh_alien.h" />
     <ClInclude Include="..\..\3dc\avp\bh_binary_switch.h" />
@@ -581,6 +594,7 @@
     <ClInclude Include="..\..\3dc\avp\projtext.h" />
     <ClInclude Include="..\..\3dc\avp\psnd.h" />
     <ClInclude Include="..\..\3dc\avp\psndproj.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_sound_bank.h" />
     <ClInclude Include="..\..\3dc\avp\pvisible.h" />
     <ClInclude Include="..\..\3dc\avp\savegame.h" />
     <ClInclude Include="..\..\3dc\avp\scream.h" />
@@ -610,6 +624,25 @@
     <ClInclude Include="..\..\3dc\avp\triggers.h" />
     <ClInclude Include="..\..\3dc\avp\view.h" />
     <ClInclude Include="..\..\3dc\avp\weapons.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_hooks.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_shotgun.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_sniper.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_pulse_counter.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_pulse_counter_sums.h" />
+    <ClInclude Include="..\..\3dc\avp\hud_rounds_number.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_sniper_sums.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_revolver.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_m79.h" />
+    <ClInclude Include="..\..\3dc\avp\m79.h" />
+    <ClInclude Include="..\..\3dc\avp\staff.h" />
+    <ClInclude Include="..\..\3dc\avp\marine_classes.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_pickups.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_staff.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_scope.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_slots.h" />
+    <ClInclude Include="..\..\3dc\avp\weapon_reload.h" />
+    <ClInclude Include="..\..\3dc\avp\revolver.h" />
+    <ClInclude Include="..\..\3dc\avp\shotgun.h" />
     <ClInclude Include="..\..\3dc\avp\win95\avp_chunk.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\cheat.h" />
     <ClInclude Include="..\..\3dc\avp\win95\d3d_hud.h" />

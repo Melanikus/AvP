@@ -1,3 +1,10 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a predator's self-destruct reaches players on other machines;
+//   an NPC's voice is heard on other machines in a game that plays as single player;
+//   a network game that plays the same as single player has predators, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   a predator targets a player on another machine by his species
+//   a far predator goes after a player on another machine as he does the one on this machine, and can be hit by one
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a predator's weapon named by a level or save file is checked: a level's gets his wristblade, a save's part is left out
 //   a predator whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
@@ -54,6 +61,8 @@ Source file for predator AI
 #include "bh_dummy.h"
 #include "bh_agun.h"
 #include "scream.h"
+#include "npc_kinds.h"
+#include "pldnet.h"
 #include "io.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -159,6 +168,18 @@ void DoPredatorDeathSound(STRATEGYBLOCK *sbPtr);
 void DoPredatorAISwipeSound(STRATEGYBLOCK *sbPtr);
 
 void CreatePredoBot(VECTORCH *position, int weapon);
+
+// One of his voice's sounds, here and, in a game that plays as single player, on every other machine, where only a ghost of him is.
+// A sound already playing on this handle isn't played again, so it isn't told again either.
+static void PredatorSoundOnEveryMachine(int voice, int category, int pitch, int *handle, VECTORCH *place)
+{
+	if (!handle || *handle == SOUND_NOACTIVEINDEX)
+	{
+		AddNetMsg_NpcSound(kNpcSoundPredator, voice, category, pitch, place);
+	}
+
+	PlayPredatorSound(voice, category, pitch, handle, place);
+}
 void Predator_Enter_SelfDestruct_State(STRATEGYBLOCK *sbPtr);
 /* Patrick 21/8/97 --------------------------------------------------
 Predator personalisation parameters:
@@ -733,8 +754,8 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         LOCALASSERT(bhdata);
         toolsData = (TOOLS_DATA_PREDATOR *)bhdata;
 
-        /* check we're not in a net game */
-        if(AvP.Network != I_No_Network)
+        /* A network game has no predators, unless it plays the same as single player */
+        if(!SameAsSinglePlayer())
         {
                 RemoveBehaviourStrategy(sbPtr);
                 return;
@@ -744,7 +765,7 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         block sensibly...
         so just set the shapeIndex from the tools data & copy the name id*/
         sbPtr->shapeIndex = toolsData->shapeIndex;
-        for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+        NameFromTheLevel(sbPtr, toolsData->nameID);
 
         /* create, initialise and attach a dynamics block */
         sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -943,6 +964,12 @@ void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
         InitialiseSBValues(sbPtr);
         sbPtr->I_SBtype = I_BehaviourPredator;
         EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );
+
+        // A game with no predators has just removed this one
+        if(!sbPtr->SBdataptr)
+        {
+                return;
+        }
 
         //find strategyblock of death target
         {
@@ -1749,7 +1776,8 @@ void PredatorIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
                 return;
         }
 
-        if(!(sbPtr->SBdptr))
+        /* In a network game a far predator can be hit by a player who's near him, and he has a corpse and a death target like any other */
+        if((!(sbPtr->SBdptr))&&(AvP.Network==I_No_Network))
         {
                 DestroyAnyStrategyBlock(sbPtr);
                 return;
@@ -1830,6 +1858,7 @@ void PredatorIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
                 if(predatorStatusPointer->death_target_sbptr)
                 {
                         RequestState(predatorStatusPointer->death_target_sbptr,predatorStatusPointer->death_target_request, 0);
+                        LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
                 }
 
                 #if 0
@@ -2165,7 +2194,8 @@ static PRED_RETURN_CONDITION Execute_PFS_Hunt(STRATEGYBLOCK *sbPtr)
         }
 
         if ((!PredatorIsAwareOfTarget(sbPtr))
-                ||(predatorStatusPointer->Target!=Player->ObStrategyBlock))
+                ||(!predatorStatusPointer->Target)
+                ||(!NPC_IsAPlayer(predatorStatusPointer->Target)))
         {
                 /* I have a bad feeling about this. */
                 return(PRC_Request_Wander);
@@ -2805,7 +2835,7 @@ static PRED_RETURN_CONDITION Execute_PNS_Avoidance(STRATEGYBLOCK *sbPtr)
         LOCALASSERT(predatorStatusPointer);
 
         /* first check for a close attack... */
-        if(VectorDistance((&Player->ObStrategyBlock->DynPtr->Position),(&sbPtr->DynPtr->Position)) < PRED_CLOSE_ATTACK_RANGE)
+        if(NPC_DistanceToNearestPlayer(&sbPtr->DynPtr->Position) < PRED_CLOSE_ATTACK_RANGE)
         {
                 return(PRC_Request_Attack);
         }
@@ -5111,6 +5141,11 @@ int Predator_TargetFilter(STRATEGYBLOCK *candidate) {
                                         return(0);
                                 }
 
+                                // In a network game the player on this machine can be waiting to come back, and a predator shouldn't stay after him
+                                if (AvP.Network != I_No_Network && NPC_IsDead(candidate)) {
+                                        return(0);
+                                }
+
                                 switch(AvP.PlayerType)
                                 {
                                         case I_Alien:
@@ -5197,11 +5232,14 @@ int Predator_TargetFilter(STRATEGYBLOCK *candidate) {
                 case I_BehaviourNetGhost:
                         {
                         NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+                        // A player on another machine goes by his own species, as the player on this one does above.
+                        // A dead one's ghost has already turned into a corpse, so it isn't one of these.
                         switch (dataptr->type) {
                                 case I_BehaviourMarinePlayer:
                                 case I_BehaviourAlienPlayer:
+                                        return(1);
+                                        break;
                                 case I_BehaviourPredatorPlayer:
-                                        //return(1);
                                         return(0);
                                         break;
                                 default:
@@ -6869,7 +6907,9 @@ void StartPredatorSelfDestructExplosion(STRATEGYBLOCK *sbPtr) {
 		   SbPtr->I_SBtype==I_BehaviourPredatorAlien ||
 		   SbPtr->I_SBtype==I_BehaviourMarinePlayer ||
 		   SbPtr->I_SBtype==I_BehaviourPredatorPlayer ||
-		   SbPtr->I_SBtype==I_BehaviourAlienPlayer)
+		   SbPtr->I_SBtype==I_BehaviourAlienPlayer ||
+		   // A player on another machine: hurting his ghost sends the damage on to him
+		   (SbPtr->I_SBtype==I_BehaviourNetGhost && NPC_IsAPlayer(SbPtr)))
 		{
 	 		{
 	 			//kill the creature/player
@@ -6902,7 +6942,7 @@ void DoPredatorHitSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR DAMAGE SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_Hurt,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_Hurt,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6928,7 +6968,7 @@ void DoPredatorAcidSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR ACID DAMAGE SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Acid,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Acid,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6954,7 +6994,7 @@ void DoPredatorDeathSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR DEATH SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_Dying,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_Dying,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6980,7 +7020,7 @@ void DoPredatorRandomSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR GENERAL SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_General,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_General,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -7006,7 +7046,7 @@ void DoPredatorTauntSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR TAUNT. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Taunt,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Taunt,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -7025,7 +7065,7 @@ void DoPredatorAISwipeSound(STRATEGYBLOCK *sbPtr) {
 
 	/* This one is for PREDATOR SWIPE SOUND. */
 
-	PlayPredatorSound(0,PSC_Swipe,0,NULL,&sbPtr->DynPtr->Position);
+	PredatorSoundOnEveryMachine(0,PSC_Swipe,0,NULL,&sbPtr->DynPtr->Position);
 
 }
 

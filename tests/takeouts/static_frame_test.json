@@ -1,0 +1,390 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "the largest step is never kept",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "differences->largestColourStep = colourStep;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "blue is left out of the step",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "return (std::max)(Difference(a[0], b[0]), (std::max)(Difference(a[1], b[1]), Difference(a[2], b[2])));",
+					"to": "return (std::max)(Difference(a[1], b[1]), Difference(a[2], b[2]));"
+				}
+			]
+		},
+		{
+			"name": "red is left out of the step",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "(std::max)(Difference(a[1], b[1]), Difference(a[2], b[2])));",
+					"to": "Difference(a[1], b[1]));"
+				}
+			]
+		},
+		{
+			"name": "a surface in only one route doesn't differ",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "if (surfaceInA != surfaceInB)\n\t{\n\t\treturn true;",
+					"to": "if (surfaceInA != surfaceInB)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "no surface in either still gets compared",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "if (!surfaceInA)\n\t{\n\t\treturn false;\n\t}\n\n\treturn ColoursDiffer",
+					"to": "return ColoursDiffer"
+				}
+			]
+		},
+		{
+			"name": "colour isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "return ColoursDiffer(ColourAt(a, x, y), ColourAt(b, x, y))\n\t\t|| NormalsDiffer",
+					"to": "return NormalsDiffer"
+				}
+			]
+		},
+		{
+			"name": "which way it faces isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "\t\t|| NormalsDiffer(a.normal + y * a.normalPitch + x * 4, b.normal + y * b.normalPitch + x * 4, normalIsTenBit)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "how far away isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "\n\t\t|| fabsf(DistanceAt(a, x, y) - DistanceAt(b, x, y)) > kDistanceRounding;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a normal is always read as eight bits",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "b.normal + y * b.normalPitch + x * 4, normalIsTenBit)",
+					"to": "b.normal + y * b.normalPitch + x * 4, false)"
+				}
+			]
+		},
+		{
+			"name": "the first pixel keeps moving",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "if (!where->pixels)\n\t{\n\t\twhere->left = where->right = (int)x;",
+					"to": "if (true)\n\t{\n\t\twhere->left = where->right = (int)x;"
+				}
+			]
+		},
+		{
+			"name": "pixels aren't counted",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->pixels++;",
+					"to": "where->pixels = 1;"
+				}
+			]
+		},
+		{
+			"name": "the box doesn't grow left",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->left = (std::min)(where->left, (int)x);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the box doesn't grow right",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->right = (std::max)(where->right, (int)x);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the box doesn't grow down",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->bottom = (std::max)(where->bottom, (int)y);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the left side doesn't matter to being solid",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "&& PicturesDifferAt(a, b, x - 1, y, normalIsTenBit) && PicturesDifferAt(a, b, x + 1, y, normalIsTenBit)",
+					"to": "&& PicturesDifferAt(a, b, x + 1, y, normalIsTenBit)"
+				}
+			]
+		},
+		{
+			"name": "the right side doesn't matter",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "&& PicturesDifferAt(a, b, x - 1, y, normalIsTenBit) && PicturesDifferAt(a, b, x + 1, y, normalIsTenBit)",
+					"to": "&& PicturesDifferAt(a, b, x - 1, y, normalIsTenBit)"
+				}
+			]
+		},
+		{
+			"name": "above doesn't matter",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "&& PicturesDifferAt(a, b, x, y - 1, normalIsTenBit) && PicturesDifferAt(a, b, x, y + 1, normalIsTenBit)",
+					"to": "&& PicturesDifferAt(a, b, x, y + 1, normalIsTenBit)"
+				}
+			]
+		},
+		{
+			"name": "below doesn't matter",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "&& PicturesDifferAt(a, b, x, y - 1, normalIsTenBit) && PicturesDifferAt(a, b, x, y + 1, normalIsTenBit)",
+					"to": "&& PicturesDifferAt(a, b, x, y - 1, normalIsTenBit)"
+				}
+			]
+		},
+		{
+			"name": "solid is never counted",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->solidPixels++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the colours are the wrong way round in a web colour",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "((uint32_t)colour[2] << 16) | ((uint32_t)colour[1] << 8) | (uint32_t)colour[0]",
+					"to": "((uint32_t)colour[0] << 16) | ((uint32_t)colour[1] << 8) | (uint32_t)colour[2]"
+				}
+			]
+		},
+		{
+			"name": "the colour after comes from the wrong picture",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->firstColourAfter = WebColour(ColourAt(b, x, y));",
+					"to": "where->firstColourAfter = WebColour(ColourAt(a, x, y));"
+				}
+			]
+		},
+		{
+			"name": "the distance after comes from the wrong picture",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "where->firstDistanceAfter = DistanceAt(b, x, y);",
+					"to": "where->firstDistanceAfter = DistanceAt(a, x, y);"
+				}
+			]
+		},
+		{
+			"name": "ties aren't counted",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "ties->pixelsThatTie++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ties are looked for between the routes and not the old route's two orders",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "bool const aTie = PicturesDifferAt(oldRoute, oldRouteBackwards, x, y, normalIsTenBit);",
+					"to": "bool const aTie = PicturesDifferAt(oldRoute, newRoute, x, y, normalIsTenBit);"
+				}
+			]
+		},
+		{
+			"name": "a tie forgets how normals are read",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "bool const aTie = PicturesDifferAt(oldRoute, oldRouteBackwards, x, y, normalIsTenBit);",
+					"to": "bool const aTie = PicturesDifferAt(oldRoute, oldRouteBackwards, x, y, false);"
+				}
+			]
+		},
+		{
+			"name": "the routes are compared by the wrong reading of a normal",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "if (PicturesDifferAt(oldRoute, newRoute, x, y, normalIsTenBit))",
+					"to": "if (PicturesDifferAt(oldRoute, newRoute, x, y, false))"
+				}
+			]
+		},
+		{
+			"name": "ties and no ties are the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/static_frame.cpp",
+					"from": "aTie ? &ties->onATie : &ties->notOnATie",
+					"to": "aTie ? &ties->notOnATie : &ties->onATie"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the third drawing isn't backwards",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "ToyDrawPictures(device, worldAxes, false, true)",
+					"to": "ToyDrawPictures(device, worldAxes, false, false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the third drawing is left in the pictures",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "bool const drawn = ToyDrawPictures(device, worldAxes, false, true) && backwards.Read(device, toyDepthSurface);\n\n\tdevice->SetRenderTarget(0, toyDepthSurface);\n\tdevice->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);",
+					"to": "bool const drawn = ToyDrawPictures(device, worldAxes, false, true) && backwards.Read(device, toyDepthSurface);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log leaves out differences on a tie",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SayWhereTheyDiffer(\"static compare\", frame, \"on a tie\", ties.onATie);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log leaves out differences off a tie",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SayWhereTheyDiffer(\"static compare\", frame, \"off a tie\", ties.notOnATie);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the compare doesn't ask about ties",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SayWhetherTheRoutesDifferOnTies(device, worldAxes, frame, oldRoute, newRoute);\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hole doesn't ask about ties",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (differences.holesInNew || differences.extraInNew || differences.colourChanged",
+					"to": "if (differences.extraInNew || differences.colourChanged"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: backwards stops at the pictures",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "useStatic, MainDrawUsesHeights(), backwards);",
+					"to": "useStatic, MainDrawUsesHeights());"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pictures ignore backwards",
+			"changes": [
+				{
+					"file": "3dc/surface_pictures.cpp",
+					"from": "mainList->DrawOpaqueAgain(d3d.surfaceDecl, false, false, backwards);",
+					"to": "mainList->DrawOpaqueAgain(d3d.surfaceDecl);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: relief pictures ignore backwards",
+			"changes": [
+				{
+					"file": "3dc/surface_pictures.cpp",
+					"from": "mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true, march, backwards);",
+					"to": "mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true, march);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list goes forwards anyway",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "RenderItem *it = &Items[backwards ? listIndex - 1 - i : i];",
+					"to": "RenderItem *it = &Items[i];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: each item's triangles go forwards",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "for (uint32_t triangle = numPrimitives; triangle-- > 0;)",
+					"to": "for (uint32_t triangle = 0; triangle < numPrimitives; triangle++)"
+				}
+			]
+		}
+	]
+}

@@ -1,5 +1,6 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game, no debris is made once the blocks are down to what's kept back for this machine's own player
+//   a spent case thrown out of a gun, which is debris like any other
 /* KJL 15:01:53 02/25/97 - bh_debri.c */
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
@@ -290,6 +291,74 @@ DISPLAYBLOCK *MakeDebris(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 }
 
 
+
+// A spent case thrown out of a gun: a small piece of debris of the shape named, which falls, lands and melts away like any other. If that shape isn't loaded, or the game has no room for one more thing, nothing happens.
+DISPLAYBLOCK *MakeThrownCase(char *shapeName, VECTORCH *positionPtr, MATRIXCH *turnPtr, VECTORCH *impulsePtr)
+{
+	enum { kCaseLastsThisLong = ONE_FIXED * 5 };
+
+	if ((NumActiveBlocks > maxobjects - 5) || (NumActiveStBlocks > maxstblocks - 5) || Net_BlocksAreShort() || GetLoadedShapeMSL(shapeName) <= 0)
+	{
+		return NULL;
+	}
+
+	MODULEMAPBLOCK *const mmbptr = &TempModuleMap;
+	MODULE m_temp;
+
+	CreateShapeInstance(mmbptr, shapeName);
+
+	m_temp.m_numlights = 0;
+	m_temp.m_lightarray = NULL;
+	m_temp.m_mapptr = mmbptr;
+	m_temp.m_sbptr = (STRATEGYBLOCK *)NULL;
+	m_temp.m_dptr = NULL;
+	AllocateModuleObject(&m_temp);
+
+	DISPLAYBLOCK *const dispPtr = m_temp.m_dptr;
+
+	if (dispPtr == NULL)
+	{
+		return NULL;
+	}
+
+	dispPtr->ObMyModule = NULL;
+	dispPtr->ObWorld = *positionPtr;
+
+	STRATEGYBLOCK *const sbPtr = AttachNewStratBlock((MODULE *)NULL, mmbptr, dispPtr);
+
+	if (sbPtr == 0)
+	{
+		return NULL;
+	}
+
+	sbPtr->I_SBtype = I_BehaviourFragment;
+	sbPtr->SBdataptr = (ONE_SHOT_BEHAV_BLOCK *)AllocateMem(sizeof(ONE_SHOT_BEHAV_BLOCK));
+
+	if (sbPtr->SBdataptr == 0)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return NULL;
+	}
+
+	((ONE_SHOT_BEHAV_BLOCK *)sbPtr->SBdataptr)->counter = kCaseLastsThisLong;
+
+	DYNAMICSBLOCK *const dynPtr = sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_DEBRIS);
+
+	if (dynPtr == 0)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return NULL;
+	}
+
+	dynPtr->Position = *positionPtr;
+	dynPtr->OrientMat = *turnPtr;
+	dynPtr->LinImpulse = *impulsePtr;
+	dynPtr->AngVelocity.EulerX = (FastRandom() & 2047) - 1024;
+	dynPtr->AngVelocity.EulerY = (FastRandom() & 2047) - 1024;
+	dynPtr->AngVelocity.EulerZ = (FastRandom() & 2047) - 1024;
+
+	return dispPtr;
+}
 
 void CreateShapeInstance(MODULEMAPBLOCK *mmbptr, char *shapeNamePtr)
 {

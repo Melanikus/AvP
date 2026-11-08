@@ -2,11 +2,14 @@
 
 // The marine's shoulder lamp, like the small spotlights the marines wear on the shoulder in the film Aliens. Written 2026-11-05 by Melanikus for the AvP port.
 //
-// WHAT IT IS: a picture effect, in two parts. shaders/shoulderLamp.psh lights a soft round spot in the middle of the finished picture. It brightens what's there, and adds each wall's own colour from the surface pictures, so that it lights a dark room. And a long
+// WHAT IT IS, WITH LIGHTS ADDED PER PIXEL: a real light, on the list of the frame's chosen lights, beside his eyes at his right shoulder and aimed at the middle of the screen. It lights each wall's real colour in a cone, so a pitch-dark room lights up, and it throws real
+// shadows, through the same shadow volumes as any other light. ConsiderTheShoulderLamp in kshape.cpp puts it on the list, and its shape is at the top of shaders/lightShapes.fxh. It only shows where it lands, so there's no beam to see in the air.
+//
+// WHAT IT IS OTHERWISE, AND FOR NOW BY DEFAULT: a picture effect, in two parts. shaders/shoulderLamp.psh lights a soft round spot in the middle of the finished picture. It brightens what's there, and adds each wall's own colour from the surface pictures, so that it lights a dark room. And a long
 // soft cone leads into the spot from the right of the screen, which is only a faint haze and lights nothing, or looking through it would be night vision. In the three per-pixel modes the game has drawn the surface pictures anyway. In Gouraud nothing else does, so while the lamp is on they're drawn just
 // for it, which costs one more drawing of the solid polygons, off the screen, and nothing with the lamp off. That shader says why the cone looks the way it does.
 //
-// Nothing else in the game knows about it, and for now other players can't see it. It flickers a little, by itself, and it works in network games too, even though it can help you see in the dark.
+// Either way nothing else in the game knows about it, and for now other players can't see it. It flickers a little, by itself, and it works in network games too, even though it can help you see in the dark.
 //
 // WHEN IT'S ON: only when it's switched on, and only for a marine who's alive, on a frame of the game itself. MaintainHUD asks for it each frame, and menus and films never come through there, so they can't be lit by it.
 //
@@ -32,8 +35,14 @@ bool ShoulderLamp_TakeThisFramesAnswer();
 // How many frames have had it drawn so far
 long ShoulderLamp_FramesDrawn();
 
+// Could it be a real light on the coming frame? It's chosen before the frame is lit, and asked for after, so this goes by what the last frame was told about who the player is.
+bool ShoulderLamp_CanBeALight();
+
+// Where the real lamp is from his eyes, in millimetres: across to his right, up, and ahead. See kShoulderLampAcross.
+const float *ShoulderLamp_PlaceFromEyes();
+
 // THE ROBOT ARM. The lamp is on a little robot arm, like the ones in the game's universe, and it centres on what he's looking at, a moment behind him. So it has an aim of its own, which stays where it was in the world when he turns, and then catches up on a smooth curve, starting
-// and stopping gently. This is told every frame, whether the lamp is on or not, so that it's never behind when it's switched on. Everything else about the lamp's aim comes from here, so the spot and the cone follow the same way.
+// and stopping gently. This is told every frame, whether the lamp is on or not, so that it's never behind when it's switched on. Everything else about the lamp's aim comes from here, so the painted lamp and the real one follow the same way.
 //
 // How far behind it can get is limited, so a fast spin can't throw it off the screen: it stays at that limit, trailing him, until he stops, and then catches up in the same time. If he's been put somewhere new there's no chase, and it's simply there: on the first frame, after a long
 // frame such as a level loading, when the camera moves further in one frame than anyone can walk, or when the view turns further in one frame than anyone can turn. seconds is how long the frame took, so it takes the same time at any frame rate.
@@ -47,9 +56,9 @@ void ShoulderLamp_SetFollowSeconds(double seconds);
 // like "1e9", "inf" and "nan", and what it makes of a dot depends on the computer's language. Anything else gives back false and leaves seconds alone.
 bool ShoulderLamp_FollowSecondsFromWords(const char *words, unsigned int length, double *seconds);
 
-// THE SPOT. How big and how strong the lamp's spot is, for this run of the game: nothing keeps them for the next one. The LAMPSPOTSIZE and LAMPINTENSITY commands say.
+// THE SPOT. How big and how strong the painted lamp's spot is, for this run of the game: nothing keeps them for the next one. The LAMPSPOTSIZE and LAMPINTENSITY commands say.
 // A bigger or brighter lamp than the other players have would be cheating, so a network game keeps both as built. Both have limits that keep it a lamp, even playing alone. Setting one outside
-// its limits brings it to the nearest limit.
+// its limits brings it to the nearest limit. These don't reach the lamp as a real light, which isn't what a player has yet: that's at the top of shaders/lightShapes.fxh.
 double ShoulderLamp_SpotSize();
 void ShoulderLamp_SetSpotSize(double size);
 double ShoulderLamp_Intensity();
@@ -64,6 +73,9 @@ bool ShoulderLamp_PutSpotBack();
 
 // What shaders/shoulderLamp.psh reads as Spot: the size, the size as built over the size, the strength, and a spare 0.
 void ShoulderLamp_SpotNumbers(float *four);
+
+// A plain number, typed by a person: only digits, with one dot at most. pixel_look.cpp uses it too.
+bool ReadPlainNumber(const char *words, unsigned int length, double *out);
 
 // How far its aim is from where he's looking, across to the right and down, for each unit ahead. Both are 0 when he's been still for a moment.
 float ShoulderLamp_AimAcross();
@@ -85,10 +97,18 @@ double const kShoulderLampIntensity = 1.0;
 double const kShoulderLampFewestIntensity = 0.25;
 double const kShoulderLampMostIntensity = 2.0;
 
-// How far he can move in one frame and still be walking
+// WHERE THE REAL LAMP SITS. A light right at the eye throws every shadow straight away from the eye, where it can't be seen, so the further out this is, the more of its shadows show. A real shoulder is about this far from the eye.
+// How strong it is, and how wide, are at the top of shaders/lightShapes.fxh, where changing them needs no rebuild.
 enum
 {
-	kShoulderLampMostStep = 1000      // moving further than this in one frame, in millimetres, isn't walking: he's been put somewhere
+	kShoulderLampAcross = 300,
+	kShoulderLampUp = -100,
+	kShoulderLampAhead = 0,
+	kShoulderLampMostStep = 1000,     // moving further than this in one frame, in millimetres, isn't walking: he's been put somewhere
+	kShoulderLampRange = 20000,       // in millimetres, beyond which it lights nothing and throws no shadow. A longer reach means more shadow to work out each frame
+	kShoulderLampRed = 65536,         // its colour: 65536 is all of that colour
+	kShoulderLampGreen = 61000,
+	kShoulderLampBlue = 53000
 };
 
 // What a saved key really is. A profile saved before the lamp holds neverSet in the lamp's byte, because nothing ever wrote to it. The menu refuses to give that key to anything, so it can only mean this profile has never heard of the lamp, and

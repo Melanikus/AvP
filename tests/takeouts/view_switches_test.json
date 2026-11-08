@@ -127,6 +127,16 @@
 			]
 		},
 		{
+			"name": "SOURCE: the comparison that breaks half the walls works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-staticcomparedrop\"))",
+					"to": "if (strstr(command_line, \"-staticcomparedrop\"))"
+				}
+			]
+		},
+		{
 			"name": "a level light casts with SHADOWAMBIENT off",
 			"changes": [
 				{

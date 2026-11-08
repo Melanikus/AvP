@@ -12,10 +12,13 @@
 //   how the world is drawn comes from the settings file, and those two switches change it for this run only
 //   from the command line is limited to its buffer; a plain new that fails now stops the game with a message
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a level called off while it was still loading does not start
+//   a network game going on to the next level of a campaign keeps its connection
 //   -shadowambient starts with the map's lights that show no corona casting shadows
 //   a new level starts with nothing noted about what was on screen
 //   -shadownearest chooses lights by distance, as the game used to, to compare with what replaced it
 //   -shadowlights goes up to 20 and -shadowbrief up to 12, and -shadownofloatblend tries what a card that can't add to a float picture gets
+//   -shadowambient starts with the map's lights that show no corona casting shadows
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the log starts with which build this is: its version and commit, the program file's size and fingerprint, and which Windows
 //   it runs on (build_identity.h)
@@ -379,6 +382,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (devSwitch("-staticcompare"))
 		{
 			StaticSurfaceCompare = 1;
+		}
+		extern int StaticCompareDropsHalf;
+		if (devSwitch("-staticcomparedrop"))
+		{
+			StaticCompareDropsHalf = 1;
 		}
 		extern int KeptPrismsOff;
 		// not -nokeptprisms, for the same reason as -shadowsoff
@@ -787,7 +795,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		/*********** Play the game ***************/
 
 		/* KJL 15:43:25 03/11/97 - run until this boolean is set to 0 */
-		AvP.MainLoopRunning = 1;
+		// (Not if the next level was called for while this one was still loading. Without this, he'd stay here alone.)
+		AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;
 
 		ScanImagesForFMVs();
 
@@ -982,7 +991,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		Vorbis_CloseSystem(); // stop ogg vorbis player
 
 		// netgame support
-		if (AvP.Network != I_No_Network)
+		if (AvP.Network != I_No_Network && !Coop_LevelChangeIsDue())
 		{
 			/* we cleanup and reset our game mode here, at the end of the game loop, as other 
 			clean-up functions need to know if we've just exited a netgame */

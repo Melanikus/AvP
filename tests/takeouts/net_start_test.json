@@ -59,7 +59,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/net_version_check.h",
-					"from": "57 * MAX_NO_OF_MULTIPLAYER_EPISODES +\n",
+					"from": "59 * MAX_NO_OF_MULTIPLAYER_EPISODES +\n",
 					"to": ""
 				}
 			]
@@ -69,8 +69,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/net_version_check.h",
-					"from": "58 * MAX_NO_OF_COOPERATIVE_EPISODES;",
-					"to": "0;"
+					"from": "60 * MAX_NO_OF_COOPERATIVE_EPISODES +\n",
+					"to": ""
 				}
 			]
 		},
@@ -79,7 +79,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/net_version_check.h",
-					"from": "56 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +",
+					"from": "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +",
 					"to": ""
 				}
 			]
@@ -225,22 +225,22 @@
 			]
 		},
 		{
-			"name": "SOURCE: an autogun message is not refused",
+			"name": "SOURCE: an autogun message is let in outside the campaign mode",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "\t\t\t\tNet_NoteRefused(\"an autogun message came, and no network game has autoguns\");\n",
-					"to": ""
+					"from": "if (!SameAsSinglePlayer() || objectId == GHOST_PLAYEROBJECTID",
+					"to": "if (objectId == GHOST_PLAYEROBJECTID"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a level keeps its autoguns in a network game",
+			"name": "SOURCE: a level keeps its autoguns in every network game",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_agun.cpp",
-					"from": "/* check we're not in a net game */\n\tif(AvP.Network != I_No_Network)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);\n\t\treturn;\n\t}\n",
-					"to": ""
+					"from": "if(!SameAsSinglePlayer())\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);",
+					"to": "if(false)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"
 				}
 			]
 		},
@@ -955,16 +955,6 @@
 			]
 		},
 		{
-			"name": "a client has a fixed port",
-			"changes": [
-				{
-					"file": "3dc/networking.cpp",
-					"from": "host = Net_MakeENetHost(NULL,",
-					"to": "host = Net_MakeENetHost(&ServerAddress,"
-				}
-			]
-		},
-		{
 			"name": "a host takes more connections than players",
 			"changes": [
 				{
@@ -1259,8 +1249,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 103;",
-					"to": "const int kMultiplayerVersion = 102;"
+					"from": "const int kMultiplayerVersion = 109;",
+					"to": "const int kMultiplayerVersion = 106;"
 				}
 			]
 		},
@@ -1831,6 +1821,121 @@
 					"file": "3dc/networking.cpp",
 					"from": "\t\tif (LogThisDrop(noGameToSendIn))",
 					"to": "\t\tnoGameToSendIn++;\n\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "leaving with no server is an error",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "// This also runs from the console's disconnect command, in a game that isn't on any network\n\tif (host)",
+					"to": "// This also runs from the console's disconnect command, in a game that isn't on any network\n\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun's sending is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)\n{",
+					"to": "void AddNetMsg_PlayerAutoGunState_Gone(STRATEGYBLOCK *sbPtr)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun handler's declaration is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun ghost's flash is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing)\n{",
+					"to": "void HandleGhostAutoGunMuzzleFlash_Gone(STRATEGYBLOCK *sbPtr, int firing)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: where the autogun ghost's flash goes is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)\n{",
+					"to": "static void CalculatePosnForGhostAutoGunMuzzleFlash_Gone(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)\n{"
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun ghost's sound isn't declared",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.h",
+					"from": "extern void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the handler no longer plays the autogun's sound",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n\t\t\tHandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);\n",
+					"to": "\t\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n"
+				},
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "UpdateGhost(sbPtr, &position, &orientation, 0, 0);\n\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n\t\tHandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);\n",
+					"to": "UpdateGhost(sbPtr, &position, &orientation, 0, 0);\n\t\tHandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);\n"
+				}
+			]
+		},
+		{
+			"name": "GUARD: an autogun message is refused by name again, as net-fixes had it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\t\tProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);\n",
+					"to": "\t\t\t\tNet_NoteRefused(\"an autogun message came, and no network game has autoguns\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the campaign's level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "61 * kLevelListCampaignLevels;",
+					"to": "0;"
+				}
+			]
+		},
+		{
+			"name": "GUARD: pldnet.cpp loses the autogun's header",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "#include \"bh_agun.h\"\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "GUARD: the autogun's sending isn't declared",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "extern void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr);\n",
+					"to": ""
 				}
 			]
 		},

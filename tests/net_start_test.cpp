@@ -2152,7 +2152,7 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(names.size() == 52, "there are 52 kinds of part: " + std::to_string(names.size()));
+	Check(names.size() == 63, "there are 63 kinds of part: " + std::to_string(names.size()));
 
 	int inTheTable = 0, sameLength = 0, inOrder = 0;
 	std::string::size_type place = 0;
@@ -2207,10 +2207,10 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(inTheTable == 52, "every one of them is in the table");
-	Check(inOrder == 52, "in the game's order");
-	Check(sameLength == 52, "and each has the length the code that reads it steps by:" + mismatched);
-	Check(CountOf(table, "{ NetMT_") == 52, "and there's nothing else in it");
+	Check(inTheTable == 63, "every one of them is in the table");
+	Check(inOrder == 63, "in the game's order");
+	Check(sameLength == 63, "and each has the length the code that reads it steps by:" + mismatched);
+	Check(CountOf(table, "{ NetMT_") == 63, "and there's nothing else in it");
 
 	// What a message can make. The kind and the weapon are its own numbers, and a shape this level didn't load comes back as -1.
 	std::string const makeGhost = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
@@ -2250,8 +2250,8 @@ static void TestTheTableOfMessageParts()
 	Check(Has(versionCheck, "static_assert(kMultiplayerVersion == kVersionTheseSizesBelongTo,"), "the version has to be the one the sizes were written down for");
 	Check(Has(versionCheck, "kSizesNow == kSizesAtThatVersion"), "and the sizes have to be those");
 	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
-	Check(Has(versionCheck, "57 * MAX_NO_OF_MULTIPLAYER_EPISODES +") && Has(versionCheck, "58 * MAX_NO_OF_COOPERATIVE_EPISODES;"), "and so are the level lists");
-	Check(Has(versionCheck, "56 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
+	Check(Has(versionCheck, "59 * MAX_NO_OF_MULTIPLAYER_EPISODES +") && Has(versionCheck, "60 * MAX_NO_OF_COOPERATIVE_EPISODES +") && Has(versionCheck, "61 * kLevelListCampaignLevels;"), "and so are the level lists, the campaign's too");
+	Check(Has(versionCheck, "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
 
 	// What has to go out before a machine stops playing can't wait for the next turn of the send clock
 	Check(Has(pldnet, "static void NetSendMessagesNow(void)\n{\n\tnetGameData.sendTimer = 0;\n\tNetSendMessages();"), "something urgent doesn't wait for the turn of the clock");
@@ -2269,14 +2269,32 @@ static void TestTheTableOfMessageParts()
 	Check(CountOf(pldnet, "netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;") == 2, "both a host and a joiner send a fixed number of times a second");
 	Check(Has(pldnet, "static const int kSendsEachSecond = 60;"), "and that's 60");
 
-	// No network game has an autogun, so a message about one is refused by name, and nothing in the game makes or sends one
-	Check(Has(Between(reading, "case (NetMT_PlayerAutoGunState):", "subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);"), "Net_NoteRefused("), "an autogun message is refused");
-	Check(Has(Between(ReadSourceFile("3dc/avp/bh_agun.cpp"), "void AutoGunBehaveInit(", "sbPtr->shapeIndex = toolsData->shapenum;"), "if(AvP.Network != I_No_Network)\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"), "a level's own autoguns are taken away in a network game");
-	Check(Has(Between(ReadSourceFile("3dc/avp/bh_agun.cpp"), "void CastSentrygun(void) {", "CreateSentrygun(&position, 0);"), "if (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO SENTRYGUNS IN MULTIPLAYER MODE\");\n\t\treturn;"), "and a player can't place one in a network game");
-	Check(!Has(pldnet, "AddNetMsg_PlayerAutoGunState"), "so nothing sends one");
+	// Autoguns on the network: only the campaign mode, which plays as single player does, has them. A level's own stay there, run by the host, and in
+	// any other network game they're taken away as it starts, and a player can't place one. So an autogun message from any other game is refused by name.
+	std::string const agun = ReadSourceFile("3dc/avp/bh_agun.cpp");
+	std::string const autogunHandler = Between(pldnet, "static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *messagePtr, NetID senderId)\n{", "static void ProcessNetMsg_MakeDecal(");
+
+	Check(Has(Between(agun, "void AutoGunBehaveInit(", "sbPtr->shapeIndex = toolsData->shapenum;"), "if(!SameAsSinglePlayer())\n\t{\n\t\tRemoveBehaviourStrategy(sbPtr);"), "a level's own autoguns are taken away as a network game starts, unless it plays as single player");
+	Check(Has(Between(agun, "void CastSentrygun(void) {", "CreateSentrygun(&position, 0);"), "if (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO SENTRYGUNS IN MULTIPLAYER MODE\""), "and a player can't place one in any network game");
+	Check(Has(Between(reading, "case (NetMT_PlayerAutoGunState):", "subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);"), "ProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);"), "an autogun message goes to its handler");
+	Check(Has(autogunHandler, "if (!SameAsSinglePlayer() || objectId == GHOST_PLAYEROBJECTID") && Has(autogunHandler, "Net_NoteRefused(\"an autogun message named something that isn't an autogun\");"), "which refuses it by name outside the campaign mode, or when it names a player");
+
+	// THE GUARD. A merge of main into the co-op branch once dropped all of the autogun's network code without git marking a conflict, so every part of it
+	// is checked to be here: its sending, its handler and that handler's declaration, its ghost's flash and sound, and what the handler uses of them.
+	std::string const ghosts = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
+	std::string const ghostsHeader = ReadSourceFile("3dc/avp/win95/pldghost.h");
+
+	Check(Has(pldnet, "void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)\n{"), "GUARD: the autogun's sending is there");
+	Check(Has(pldnet, "static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);") && !autogunHandler.empty(), "GUARD: and its handler, declared and written");
+	Check(Has(ghosts, "void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing)\n{") && Has(ghosts, "void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing)\n{")
+		&& Has(ghosts, "static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)\n{"), "GUARD: and its ghost's flash and sound");
+	Check(Has(ghostsHeader, "extern void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing);") && Has(ghostsHeader, "extern void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing);"), "GUARD: declared where the handler can see them");
+	Check(Has(autogunHandler, "HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);") && Has(autogunHandler, "HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);"), "GUARD: and the handler uses them");
+	Check(Has(pldnet, "#include \"bh_agun.h\"") && Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "extern void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr);"), "GUARD: and what they need: the autogun's own header, and its sending declared for the rest of the game");
 
 	// Who may say what. These are the ones whoever hears them just believes.
-	std::vector<std::string> const onlyTheHost = { "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores" };
+	std::vector<std::string> const onlyTheHost = { "NetMT_CoopGo", "NetMT_CoopNextLevel", "NetMT_LevelEvent", "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores",
+		"NetMT_NpcState", "NetMT_NpcXenoDeltas", "NetMT_NpcKilled", "NetMT_NpcSound", "NetMT_NpcThrownObject", "NetMT_LiftState" };
 	int rightOnes = 0;
 
 	for (std::string const &name : onlyTheHost)
@@ -2286,8 +2304,8 @@ static void TestTheTableOfMessageParts()
 		rightOnes += (at != std::string::npos && Has(table.substr(at, table.find('\n', at) - at), ", true }")) ? 1 : 0;
 	}
 
-	Check(rightOnes == 24, "24 kinds can only come from the host");
-	Check(CountOf(table, ", true }") == 24, "and no others");
+	Check(rightOnes == 33, "33 kinds can only come from the host");
+	Check(CountOf(table, ", true }") == 33, "and no others");
 
 	// Numbers in a message that are used as places in memory. Whichever machine sent them, they could be anything.
 	Check(Has(Between(pldnet, "static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)\n{", "static void ProcessNetMsg_ScoreChange("), "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))\n\t{\n\t\treturn;"), "a player's scores have to name a place in the list");
@@ -2413,7 +2431,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 103;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 109;"), "and an older game can tell this one isn't what it speaks");
 }
 
 // Called last: every message from every test above has been looked at by now, and each of them had a stack under it

@@ -3,6 +3,9 @@
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a saved curve of no length is worked out again, because the game divides by its length
 //   a value a save has refused is counted for the log
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game a placed alien can still be found by the name it has in the level
+//   when this dies on the host, its death target reaches the other machines
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -655,15 +658,8 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* strategy block initialisation */
 	sbPtr->shapeIndex =	toolsData->shapeIndex;
 
-	if(AvP.Network==I_No_Network)
-	{
-		for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
-	}
-	else
-	{
-		//in a network game , generate a new sb name (so that it gets a reasonably low value)
-		AssignNewSBName(sbPtr);
-	}
+	// In a network game this generates a new name, and a switch aimed at this alien still finds it by the name it has in the level
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ALIEN_NPC);
@@ -1111,7 +1107,7 @@ void MakeAlienNear(STRATEGYBLOCK *sbPtr)
 
 	/* first of all, see how many aliens are currently near: if there are too many,
 	destroy this alien, and try to force a generator to make a replacement */
-	if(NumGeneratorNPCsVisible() >= MAX_VISIBLEGENERATORNPCS)
+	if(NumGeneratorNPCsVisible() >= NearNpcLimit())
 	{
 		DestroyAnyStrategyBlock(sbPtr);
 		ForceAGenerator();
@@ -1566,6 +1562,7 @@ void KillAlien(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int multi
 	if(alienStatusPointer->death_target_sbptr)
 	{
 		RequestState(alienStatusPointer->death_target_sbptr,1, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 	/* Set up gibb factor. */

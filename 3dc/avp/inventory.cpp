@@ -1,3 +1,12 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a game that plays as single player, the guns and ammunition a player can pick up are single player's
+//   three more marine classes start with their guns, specialists have a sidearm, a Predator has the staff if it's allowed, and the sniper rifle stays out of network games
+//   the M79 takes its three kinds of ammunition, each to its own count
+//   a box for a gun that counts its spares as single rounds holds a full magazine of them, as in MelPyth M5
+//   the shotgun, sniper rifle and revolver can pick up their ammunition
+//   a new gun's slot stays empty when its model isn't there, and every gun starts afresh with the player
+//   filling up a gun whose spares are single rounds takes as many as it holds, and an empty slot isn't looked up in the table
+//   a slot's leftover rounds start at none
 /* Maintains the equipmnt the player has, 
 rounds fired etc etc etc*/
 // AvP port by Barry Duncan.
@@ -33,6 +42,10 @@ void MaintainPlayersInventory(void);
 void SetPlayerSecurityClearance(STRATEGYBLOCK *sbPtr, unsigned int securityLevel);
 int SlotForThisWeapon(enum WEAPON_ID weaponID);
 
+#include "weapon_hooks.h"
+#include "weapon_m79.h"
+#include "marine_classes.h"
+
 static int AbleToPickupAmmo(enum AMMO_ID ammoID);
 static int AbleToPickupWeapon(enum WEAPON_ID weaponID);
 static int AbleToPickupHealth(int healthID);
@@ -48,7 +61,92 @@ int RecallDisc_Charge=400000;
 
 #define MEDICOMP_MAX_AMMO	(ONE_FIXED*4)
 
-#define SPECIALIST_PISTOLS	(netGameData.specialistPistols)
+extern int MP_Sidearm;
+
+// Which sidearm this player has. See Sidearm_Choose.
+static int MySidearm(void)
+{
+	return Sidearm_Choose(netGameData.myCharacterType == NGCT_Marine, (int)netGameData.myCharacterSubType, netGameData.specialistPistols != 0, netGameData.allowRevolver != 0, MP_Sidearm);
+}
+
+static int IsMySidearm(enum WEAPON_ID weaponID)
+{
+	int const sidearm = MySidearm();
+
+	return (sidearm == kSidearmPistol && weaponID == WEAPON_MARINE_PISTOL) || (sidearm == kSidearmRevolver && weaponID == WEAPON_BEAMCANNON);
+}
+
+static int IsMySidearmsAmmo(enum AMMO_ID ammoID)
+{
+	int const sidearm = MySidearm();
+
+	return (sidearm == kSidearmPistol && ammoID == AMMO_MARINE_PISTOL_PC) || (sidearm == kSidearmRevolver && ammoID == AMMO_REVOLVER);
+}
+
+// The sniper rifle stays in single player for now, so no network game has it, skirmish included.
+static int IsKeptOutOfNetworkGames(enum WEAPON_ID weaponID)
+{
+	return !SameAsSinglePlayer() && weaponID == WEAPON_SONICCANNON;
+}
+
+// Gives him the revolver as his sidearm, if that's what he has. These guns' spares are single rounds.
+static int StartWithSidearmRevolver(PLAYER_STATUS *playerStatusPtr)
+{
+	int const slot = SlotForThisWeapon(WEAPON_BEAMCANNON);
+
+	if (MySidearm() != kSidearmRevolver || slot == -1)
+	{
+		return 0;
+	}
+
+	playerStatusPtr->WeaponSlot[slot].Possessed = 1;
+	playerStatusPtr->WeaponSlot[slot].PrimaryMagazinesRemaining += kSidearmRevolverStartRounds;
+	return 1;
+}
+
+// Gives him his sidearm, if he has one, and says whether he has.
+static int StartWithSidearm(PLAYER_STATUS *playerStatusPtr)
+{
+	int const pistol = SlotForThisWeapon(WEAPON_MARINE_PISTOL);
+
+	if (MySidearm() == kSidearmPistol && pistol != -1)
+	{
+		playerStatusPtr->WeaponSlot[pistol].Possessed = 1;
+		playerStatusPtr->WeaponSlot[pistol].PrimaryMagazinesRemaining = kSidearmPistolStartMagazines;
+		return 1;
+	}
+
+	return StartWithSidearmRevolver(playerStatusPtr);
+}
+
+// Gives him his sidearm, or else the cudgel, which a marine with a sidearm doesn't carry.
+static void StartWithSidearmOrCudgel(PLAYER_STATUS *playerStatusPtr)
+{
+	int const cudgel = SlotForThisWeapon(WEAPON_CUDGEL);
+	int const hasSidearm = StartWithSidearm(playerStatusPtr);
+
+	if (cudgel != -1)
+	{
+		playerStatusPtr->WeaponSlot[cudgel].Possessed = hasSidearm ? 0 : 1;
+	}
+}
+
+// Gives him his class's gun, with these spares, and says which slot it's in, to start with it in his hands. A gun whose model
+// file is missing has no slot, so then he has the pulse rifle instead, rather than the game writing outside its list of slots.
+static int StartWithClassGun(PLAYER_STATUS *playerStatusPtr, enum WEAPON_ID weaponID, int spares)
+{
+	int slot = SlotForThisWeapon(weaponID);
+
+	if (slot == -1)
+	{
+		slot = SlotForThisWeapon(WEAPON_PULSERIFLE);
+		spares = 5;
+	}
+
+	playerStatusPtr->WeaponSlot[slot].Possessed = 1;
+	playerStatusPtr->WeaponSlot[slot].PrimaryMagazinesRemaining += spares;
+	return slot;
+}
 
 void MaintainPlayersInventory(void)
 {
@@ -208,14 +306,30 @@ void LoadAllWeapons(PLAYER_STATUS *playerStatusPtr) {
 		TEMPLATE_AMMO_DATA *templateAmmoPtr;
 
 		wdPtr = &playerStatusPtr->WeaponSlot[--slot];
+
+		// An empty slot has no row in the table to look at
+		if (wdPtr->WeaponIDNumber == NULL_WEAPON) {
+			continue;
+		}
+
 	    twPtr = &TemplateWeapon[wdPtr->WeaponIDNumber];
-		templateAmmoPtr = &TemplateAmmo[twPtr->PrimaryAmmoID];
 
 		if ((wdPtr->PrimaryRoundsRemaining==0)
 			&&(wdPtr->PrimaryMagazinesRemaining>0)
 			&&(twPtr->PrimaryAmmoID!=AMMO_NONE)) {
-			wdPtr->PrimaryRoundsRemaining = templateAmmoPtr->AmmoPerMagazine;
-			wdPtr->PrimaryMagazinesRemaining--;
+			templateAmmoPtr = &TemplateAmmo[twPtr->PrimaryAmmoID];
+
+			if (twPtr->Hooks && twPtr->Hooks->SparesAreSingleRounds) {
+				// Takes as many as it holds, or as many as he has
+				int const holds = templateAmmoPtr->AmmoPerMagazine >> ONE_FIXED_SHIFT;
+				int const taken = holds < wdPtr->PrimaryMagazinesRemaining ? holds : wdPtr->PrimaryMagazinesRemaining;
+
+				wdPtr->PrimaryRoundsRemaining = taken << ONE_FIXED_SHIFT;
+				wdPtr->PrimaryMagazinesRemaining -= taken;
+			} else {
+				wdPtr->PrimaryRoundsRemaining = templateAmmoPtr->AmmoPerMagazine;
+				wdPtr->PrimaryMagazinesRemaining--;
+			}
 		}
 
 		if ((wdPtr->SecondaryRoundsRemaining==0)
@@ -262,10 +376,11 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
     		PLAYER_WEAPON_DATA *wdPtr = &playerStatusPtr->WeaponSlot[--slot];
 
    			//wdPtr->WeaponIDNumber = NULL_WEAPON;
-   			wdPtr->WeaponIDNumber = PlayerWeaponKey[slot];
+   			wdPtr->WeaponIDNumber = Weapon_ForSlot(PlayerWeaponKey[slot]);
 
  		   	wdPtr->PrimaryRoundsRemaining=0;
             wdPtr->PrimaryMagazinesRemaining=0;
+            wdPtr->PrimaryLeftoverRounds=0;
  		   	wdPtr->SecondaryRoundsRemaining=0;
             wdPtr->SecondaryMagazinesRemaining=0;
  			wdPtr->CurrentState = WEAPONSTATE_IDLE;
@@ -282,6 +397,8 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 		while(slot);
 	}
 	
+	Guns_AtPlayerStart();
+
 	GrenadeLauncherData.StandardRoundsRemaining=0;	
 	GrenadeLauncherData.StandardMagazinesRemaining=0;
 	GrenadeLauncherData.FlareRoundsRemaining=0;
@@ -322,29 +439,14 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 		case I_Marine:
 		{
 			/*if in a multiplayer game , check to see if player is a specialist marine*/
-			if(AvP.Network != I_No_Network)
+			// The class kit. A game that plays as single player does has single player's kit instead.
+			if(!SameAsSinglePlayer())
 			{
 				switch(netGameData.myCharacterSubType)
 				{
 
 					case NGSCT_Smartgun :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_SMARTGUN);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=5;
@@ -352,23 +454,7 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 						break;
 
 					case NGSCT_Flamer :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_FLAMETHROWER);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=5;
@@ -376,23 +462,7 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 						break;
 
 					case NGSCT_Sadar :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_SADAR);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
@@ -400,23 +470,7 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 						break;
 	
 					case NGSCT_GrenadeLauncher :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_GRENADELAUNCHER);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=4;
@@ -428,23 +482,7 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 						break;
 
 					case NGSCT_Minigun :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_MINIGUN);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=5;
@@ -452,14 +490,7 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 						break;
 					
 					case NGSCT_PulseRifle :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-						}
+						StartWithSidearm(playerStatusPtr);
 						/* Conditional cudgel! */
 						a=SlotForThisWeapon(WEAPON_CUDGEL);
 						if (a!=-1) {
@@ -475,29 +506,29 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 
 						break;
 					case NGSCT_Frisbee :
-						if (SPECIALIST_PISTOLS) {
-							/* Conditional pistol! */
-							a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-		            			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=10;
-							}
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=0;
-							}
-						} else {
-							a=SlotForThisWeapon(WEAPON_CUDGEL);
-							if (a!=-1) {
-		            			playerStatusPtr->WeaponSlot[a].Possessed=1;
-							}
-						}
+						StartWithSidearmOrCudgel(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_FRISBEE_LAUNCHER);
 						assert(a != -1);
             			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=5;
             			playerStatusPtr->WeaponSlot[a].Possessed=1;
 						break;
+					case NGSCT_Shotgun :
+						StartWithSidearmOrCudgel(playerStatusPtr);
+						a=StartWithClassGun(playerStatusPtr, WEAPON_AUTOSHOTGUN, kClassShotgunStartRounds);
+						break;
+					case NGSCT_Revolver :
+						StartWithSidearmOrCudgel(playerStatusPtr);
+						a=StartWithClassGun(playerStatusPtr, WEAPON_BEAMCANNON, kClassRevolverStartRounds);
+						break;
+					case NGSCT_M79 :
+						StartWithSidearmOrCudgel(playerStatusPtr);
+						a=StartWithClassGun(playerStatusPtr, WEAPON_MYSTERYGUN, 0);
+						if (playerStatusPtr->WeaponSlot[a].WeaponIDNumber==WEAPON_MYSTERYGUN) {
+							M79_SetEveryKind(&playerStatusPtr->WeaponSlot[a], kClassM79StartEachKind);
+						}
+						break;
 					case NGSCT_Pistols :
+						StartWithSidearmRevolver(playerStatusPtr);
 						a=SlotForThisWeapon(WEAPON_MARINE_PISTOL);
 						if (a!=-1) {
 	            			playerStatusPtr->WeaponSlot[a].Possessed=1;
@@ -565,12 +596,6 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
             playerStatusPtr->WeaponSlot[a].Possessed=-1;
 			#endif
 
-			a=SlotForThisWeapon(WEAPON_BEAMCANNON);
-			//assert(a != -1);
-			if (a != -1) 
-			{
-           		playerStatusPtr->WeaponSlot[a].Possessed = 0;
-			}
 
     		break;	
     	}
@@ -624,6 +649,13 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 			playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=0;
 			playerStatusPtr->WeaponSlot[a].Possessed=0;
 
+			// In a network game, the host may allow the staff, and then every Predator has it. One holds it and one is spare.
+			if (!SameAsSinglePlayer() && netGameData.allowStaff)
+			{
+				playerStatusPtr->WeaponSlot[a].PrimaryMagazinesRemaining=2;
+				playerStatusPtr->WeaponSlot[a].Possessed=1;
+			}
+
 			break;
 		}
 		case I_Alien:
@@ -661,12 +693,17 @@ static int AbleToPickupAmmo(enum AMMO_ID ammoID)
 	LOCALASSERT(ammoID>=0);
 	LOCALASSERT(ammoID<MAX_NO_OF_AMMO_TEMPLATES);
 
+	if (!SameAsSinglePlayer() && ammoID == AMMO_SNIPER)
+	{
+		return 0;
+	}
+
 	switch(AvP.PlayerType)
 	{
 		case I_Marine:
        	{
 			
-			if(AvP.Network != I_No_Network)
+			if(!SameAsSinglePlayer())
 			{
 				/*if in a multiplayer game , check to see if player is a specialist marine*/
 				switch(netGameData.myCharacterSubType)
@@ -674,84 +711,81 @@ static int AbleToPickupAmmo(enum AMMO_ID ammoID)
 					case NGSCT_PulseRifle :
 						if (ammoID!=AMMO_10MM_CULW && 
 						   ammoID!=AMMO_PULSE_GRENADE
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 						   ) {
 						   	return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
-							return 0;
 						}
 
 						break;
 
 					case NGSCT_Smartgun :
 						if (ammoID!=AMMO_SMARTGUN
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Flamer :
 						if (ammoID!=AMMO_FLAMETHROWER
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Sadar :
 						if (ammoID!=AMMO_SADAR_TOW
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
 							return 0;
 						}
 						break;
 	
 					case NGSCT_GrenadeLauncher :
 						if (ammoID!=AMMO_GRENADE
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Minigun :
 						if (ammoID!=AMMO_MINIGUN
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Frisbee :
 						if (ammoID!=AMMO_FRISBEE
-						   && (ammoID!=AMMO_MARINE_PISTOL_PC)
+						   && !IsMySidearmsAmmo(ammoID)
 							) {
 							return 0;
 						}
-						if ((!(SPECIALIST_PISTOLS))&&(ammoID==AMMO_MARINE_PISTOL_PC)) {
+						break;
+
+					case NGSCT_Shotgun :
+						if (ammoID!=AMMO_PLAYER_SHOTGUN && !IsMySidearmsAmmo(ammoID)) {
+							return 0;
+						}
+						break;
+
+					case NGSCT_Revolver :
+						if (ammoID!=AMMO_REVOLVER && !IsMySidearmsAmmo(ammoID)) {
+							return 0;
+						}
+						break;
+
+					case NGSCT_M79 :
+						if (ammoID!=AMMO_M79_STANDARD && ammoID!=AMMO_M79_FIRE && ammoID!=AMMO_M79_FRAG && !IsMySidearmsAmmo(ammoID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Pistols :
-						if (ammoID!=AMMO_MARINE_PISTOL_PC) {
+						if (ammoID!=AMMO_MARINE_PISTOL_PC && !IsMySidearmsAmmo(ammoID)) {
 							return 0;
 						}
 						break;
@@ -777,8 +811,19 @@ static int AbleToPickupAmmo(enum AMMO_ID ammoID)
 					break;
 				}
 				case AMMO_SHOTGUN:
+				case AMMO_PLAYER_SHOTGUN:
 				{
 					weaponSlot = SlotForThisWeapon(WEAPON_AUTOSHOTGUN);
+					break;
+				}
+				case AMMO_SNIPER:
+				{
+					weaponSlot = SlotForThisWeapon(WEAPON_SONICCANNON);
+					break;
+				}
+				case AMMO_REVOLVER:
+				{
+					weaponSlot = SlotForThisWeapon(WEAPON_BEAMCANNON);
 					break;
 				}
 				case AMMO_SMARTGUN:
@@ -810,6 +855,17 @@ static int AbleToPickupAmmo(enum AMMO_ID ammoID)
 				{
 					weaponSlot = SlotForThisWeapon(WEAPON_MARINE_PISTOL);
 					break;
+				}
+				case AMMO_M79_STANDARD:
+				case AMMO_M79_FIRE:
+				case AMMO_M79_FRAG:
+				{
+					weaponSlot = SlotForThisWeapon(WEAPON_MYSTERYGUN);
+					if (weaponSlot == -1)
+					{
+						return 0;
+					}
+					return M79_TakeAmmo(ammoID, &(((PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr))->WeaponSlot[weaponSlot]));
 				}
 				case AMMO_GRENADE: 
 				{
@@ -994,6 +1050,9 @@ static int AbleToPickupAmmo(enum AMMO_ID ammoID)
 				} else {
 					weaponPtr->PrimaryMagazinesRemaining+=1;
 				}
+			} else if (TemplateWeapon[weaponPtr->WeaponIDNumber].Hooks && TemplateWeapon[weaponPtr->WeaponIDNumber].Hooks->SparesAreSingleRounds) {
+				// The cap below is 99, and a magazine is far smaller than the room left in this number
+				weaponPtr->PrimaryMagazinesRemaining+=(TemplateAmmo[ammoID].AmmoPerMagazine>>ONE_FIXED_SHIFT);
 			} else {
 				weaponPtr->PrimaryMagazinesRemaining+=1; /* KJL 12:54:37 03/10/97 - need extra data field in ammo templates */
 			}
@@ -1021,6 +1080,11 @@ static int AbleToPickupWeapon(enum WEAPON_ID weaponID)
     GLOBALASSERT(playerStatusPtr);
 
 	LOCALASSERT(weaponID>=0);
+
+	if (IsKeptOutOfNetworkGames(weaponID))
+	{
+		return 0;
+	}
 	LOCALASSERT(weaponID<MAX_NO_OF_WEAPON_TEMPLATES);
 	
 	switch(AvP.PlayerType)
@@ -1028,83 +1092,80 @@ static int AbleToPickupWeapon(enum WEAPON_ID weaponID)
 		case I_Marine:
        	{
 			
-			if(AvP.Network != I_No_Network)
+			if(!SameAsSinglePlayer())
 			{
 				/*if in a multiplayer game , check to see if player is a specialist marine*/
 				switch(netGameData.myCharacterSubType)
 				{
 					case NGSCT_PulseRifle :
 						if ((weaponID!=WEAPON_PULSERIFLE)
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Smartgun :
 						if ((weaponID!=WEAPON_SMARTGUN) 
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Flamer :
 						if ((weaponID!=WEAPON_FLAMETHROWER) 
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Sadar :
 						if ((weaponID!=WEAPON_SADAR)
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 	
 					case NGSCT_GrenadeLauncher :
 						if ((weaponID!=WEAPON_GRENADELAUNCHER) 
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Minigun :
 						if ((weaponID!=WEAPON_MINIGUN)
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
-							return 0;
-						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 					
 					case NGSCT_Frisbee :
 						if ((weaponID!=WEAPON_FRISBEE_LAUNCHER) 
-							&&(weaponID!=WEAPON_MARINE_PISTOL)) {
+							&& !IsMySidearm(weaponID)) {
 							return 0;
 						}
-						if ((!(SPECIALIST_PISTOLS))&&(weaponID==WEAPON_MARINE_PISTOL)) {
+						break;
+
+					case NGSCT_Shotgun :
+						if (weaponID!=WEAPON_AUTOSHOTGUN && !IsMySidearm(weaponID)) {
+							return 0;
+						}
+						break;
+
+					case NGSCT_Revolver :
+						if (weaponID!=WEAPON_BEAMCANNON && !IsMySidearm(weaponID)) {
+							return 0;
+						}
+						break;
+
+					case NGSCT_M79 :
+						if (weaponID!=WEAPON_MYSTERYGUN && !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
 
 					case NGSCT_Pistols :
-						if (weaponID!=WEAPON_MARINE_PISTOL) {
+						if (weaponID!=WEAPON_MARINE_PISTOL && !IsMySidearm(weaponID)) {
 							return 0;
 						}
 						break;
@@ -1536,6 +1597,7 @@ extern void RemovePickedUpObject(STRATEGYBLOCK *objectPtr)
 	{
 		if(objStatPtr->event_target->triggering_event & ObjectEventFlag_PickedUp)
 		{
+			LevelEvents_Happened(&objectPtr->SBname[0]);
 			RequestState(objStatPtr->event_target->event_target_sbptr,objStatPtr->event_target->request,0);
 		}
 	}
