@@ -124,6 +124,7 @@ param(
     [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it. Several, with / between them, are -Together's aliens
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
+    [string]$AlienWaysSwitches = '', # more of the game's own -alienways... developer switches, like -alienwaysgrid or -alienwaysgrid=1, as the build names them. Only -alienways switches, letters and an optional =number. Needs -AlienWays
     [int]$AlienWaysWatch = -1, # the game's -alienwayswatch=N, 0 to 63: the alien with the guide's place N gets a log line every frame, where that's in the build. Needs -AlienWays
     [int]$AlienWaysAim = -1, # the game's -alienwaysaim=N, 0 to 10000 mm: how far along its way an alien aims, where that's in the build. Left out, the build's own. Needs -AlienWays
     [string]$UserCopy = '', # the folder of a copy of the game the user is playing at the same time. A game running from there, or from inside it, doesn't stop this run; any other still does. Needs -WhileInUse
@@ -269,6 +270,8 @@ if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000)) { St
 if ($AlienWaysAim -ge 0) { $alienWaysSwitch += " -alienwaysaim=$AlienWaysAim" }
 if ($AlienWaysWatch -ge 0 -and (-not $AlienWays -or $AlienWaysWatch -gt 63)) { Stop-Here "-AlienWaysWatch is 0 to 63, a place in the guide's list, and it needs -AlienWays" }
 if ($AlienWaysWatch -ge 0) { $alienWaysSwitch += " -alienwayswatch=$AlienWaysWatch" }
+if ($AlienWaysSwitches -and (-not $AlienWays -or $AlienWaysSwitches -notmatch '^-alienways[a-z]+(=\d+)?( -alienways[a-z]+(=\d+)?)*$')) { Stop-Here "-AlienWaysSwitches only takes the game's -alienways... switches, each letters with an optional =number, and it needs -AlienWays" }
+if ($AlienWaysSwitches) { $alienWaysSwitch += " $AlienWaysSwitches" }
 
 $arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }

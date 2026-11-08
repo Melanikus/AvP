@@ -8575,6 +8575,26 @@
 					"to": "if ($false)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the script cannot pass other -alienways switches",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($AlienWaysSwitches) { $alienWaysSwitch += \" $AlienWaysSwitches\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script passes anything as an -alienways switch",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$AlienWaysSwitches -notmatch '^-alienways[a-z]+(=\\d+)?( -alienways[a-z]+(=\\d+)?)*$'",
+					"to": "$false"
+				}
+			]
 		}
 	]
 }
