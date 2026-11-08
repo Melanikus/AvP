@@ -1122,6 +1122,7 @@ static void TestTheRealGame()
 		std::string const marineCode = ReadSourceFile("3dc/avp/bh_marine.cpp");
 
 		Check(Has(marineCode, "if (HudsonMarineIsOn && (!HudsonWorldIsLive || HudsonMarineHoldsFire)) {"), "SOURCE: a marine holding his fire takes nothing as a target");
+		Check(Has(Between(marineCode, "void WarnMarineOfAttack(STRATEGYBLOCK *marine,STRATEGYBLOCK *attacker) {", "/* Test? */"), "if (HudsonMarineIsOn && HudsonMarineHoldsFire) {\n\t\treturn;"), "SOURCE: not even an alien charging him, which would make it his target without the filter");
 		Check(Has(watchCode, "HudsonMarineHoldsFire = plan.holdFire;"), "SOURCE: and holdfire= is what tells him to");
 		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "spot.vy = plan.alienAtY - kAlienStartsAboveTheFloor;"), "SOURCE: alienat= makes the alien just above the place");
 		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "alienat= isn't in any of this level's rooms"), "SOURCE: and refuses a place in no room");

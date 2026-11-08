@@ -10343,6 +10343,12 @@ void WarnMarineOfAttack(STRATEGYBLOCK *marine,STRATEGYBLOCK *attacker) {
 
 	GLOBALASSERT(attacker);
 
+	// A watched fight with holdfire=yes (see Marine_TargetFilter): an alien that starts to charge him warns him here, and this would make it his target
+	// without asking the filter. On 2026-11-08 that had him shoot the watched alien dead, once it charged where he could see it.
+	if (HudsonMarineIsOn && HudsonMarineHoldsFire) {
+		return;
+	}
+
 	/* Test? */
 
 	if(MarineCanSeeObject(marine,attacker)) {

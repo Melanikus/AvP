@@ -7695,6 +7695,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a charging alien still becomes his target when he holds his fire",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tif (HudsonMarineIsOn && HudsonMarineHoldsFire) {\n\t\treturn;\n\t}\n\n\t/* Test? */",
+					"to": "\tif (false) {\n\t\treturn;\n\t}\n\n\t/* Test? */"
+				}
+			]
 		}
 	]
 }
