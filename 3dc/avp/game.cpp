@@ -362,7 +362,8 @@ void UpdateGame(void)
 	PlayerPheromoneSystem();
 	AiPheromoneSystem();
 
-	// Once the alien ways map has finished building, the log hears how it went. It does nothing otherwise.
+	// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual
+	// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.
 	AlienWays_Frame();
 
 	/*-------------- Patrick 11/1/97 ----------------

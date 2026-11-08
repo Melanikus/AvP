@@ -208,6 +208,7 @@ void AlienWaysMap::LetGo()
 	GiveBack(&mapNumber);
 	GiveBack(&middleX); GiveBack(&middleY); GiveBack(&middleZ);
 	GiveBack(&kind);
+	GiveBack(&boxLow); GiveBack(&boxHigh);
 	GiveBack(&firstJoin);
 	GiveBack(&joinOther); GiveBack(&joinStretch);
 	GiveBack(&stretchA); GiveBack(&stretchB);
@@ -283,6 +284,60 @@ bool AlienWaysMap::Joined(int a, int b, AlienWaysXYZ *from, AlienWaysXYZ *to) co
 	}
 
 	return false;
+}
+
+int AlienWaysMap::NearestPolygon(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar) const
+{
+	if (!ready || within < 0)
+	{
+		return -1;
+	}
+
+	endGiven = std::min(endGiven, mapNumber.size());
+	int best = -1;
+	double bestDistance = static_cast<double>(within), bestToMiddle = 0.0;
+
+	for (size_t given = firstGiven; given < endGiven; given++)
+	{
+		int const polygon = mapNumber[given];
+
+		if (polygon < 0)
+		{
+			continue;
+		}
+
+		// How far the point is outside the box along each axis, 0 if it's within the box's span there
+		AlienWaysXYZ const low = boxLow[polygon], high = boxHigh[polygon];
+		double const dx = point.x < low.x ? static_cast<double>(low.x) - point.x : (point.x > high.x ? static_cast<double>(point.x) - high.x : 0.0);
+		double const dy = point.y < low.y ? static_cast<double>(low.y) - point.y : (point.y > high.y ? static_cast<double>(point.y) - high.y : 0.0);
+		double const dz = point.z < low.z ? static_cast<double>(low.z) - point.z : (point.z > high.z ? static_cast<double>(point.z) - high.z : 0.0);
+		double const distance = sqrt(dx * dx + dy * dy + dz * dz);
+
+		if (distance > bestDistance)
+		{
+			continue;
+		}
+
+		// A sloping polygon's box can hold a point that's well off the polygon itself. So when two boxes are as near, the nearer middle wins.
+		double const mx = static_cast<double>(middleX[polygon]) - point.x;
+		double const my = static_cast<double>(middleY[polygon]) - point.y;
+		double const mz = static_cast<double>(middleZ[polygon]) - point.z;
+		double const toMiddle = mx * mx + my * my + mz * mz;
+
+		if (best < 0 || distance < bestDistance || toMiddle < bestToMiddle)
+		{
+			best = polygon;
+			bestDistance = distance;
+			bestToMiddle = toMiddle;
+		}
+	}
+
+	if (howFar && best >= 0)
+	{
+		*howFar = bestDistance;
+	}
+
+	return best;
 }
 
 const char *AlienWaysMap::Build(const std::vector<AlienWaysPolygon> &polygons)
@@ -378,8 +433,8 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	}
 
 	// --- 2. Copy the polygons kept, and sort their corners into boxes. Everything is counted against its ceiling before it's made. Kept: which
-	// number each given polygon became, and each polygon's middle and kind. Only while building: the corners, and the boxes.
-	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t));
+	// number each given polygon became, and each polygon's middle, kind and box. Only while building: the corners, and the boxes they're sorted into.
+	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t) + 2 * sizeof(AlienWaysXYZ));
 	size_t const buildBytes = corners * 3 * sizeof(int) + (kept + 1) * sizeof(int) + corners * sizeof(Corner);
 
 	if (!Count(keptBytes, &bytesKept, limits.mostBytesKept))
@@ -395,6 +450,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	mapNumber.assign(polygons.size(), -1);
 	middleX.reserve(kept); middleY.reserve(kept); middleZ.reserve(kept);
 	kind.reserve(kept);
+	boxLow.reserve(kept); boxHigh.reserve(kept);
 	cornerX.reserve(corners); cornerY.reserve(corners); cornerZ.reserve(corners);
 	firstCorner.reserve(kept + 1);
 	buckets.reserve(corners);
@@ -414,10 +470,13 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 
 		// The middle is the average of the corners. The sums can't overflow: each corner is at most 64 km out, and there are at most 8.
 		long long sx = 0, sy = 0, sz = 0;
+		AlienWaysXYZ low = { p.x[0], p.y[0], p.z[0] }, high = low;
 
 		for (int c = 0; c < p.corners; c++)
 		{
 			sx += p.x[c]; sy += p.y[c]; sz += p.z[c];
+			low.x = std::min(low.x, p.x[c]); low.y = std::min(low.y, p.y[c]); low.z = std::min(low.z, p.z[c]);
+			high.x = std::max(high.x, p.x[c]); high.y = std::max(high.y, p.y[c]); high.z = std::max(high.z, p.z[c]);
 			cornerX.push_back(p.x[c]); cornerY.push_back(p.y[c]); cornerZ.push_back(p.z[c]);
 			Corner corner = { KeyOf(BoxOf(p.x[c]), BoxOf(p.y[c]), BoxOf(p.z[c])), number, p.x[c], p.y[c], p.z[c] };
 			buckets.push_back(corner);
@@ -426,6 +485,8 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 		middleX.push_back(static_cast<int>(sx / p.corners));
 		middleY.push_back(static_cast<int>(sy / p.corners));
 		middleZ.push_back(static_cast<int>(sz / p.corners));
+		boxLow.push_back(low);
+		boxHigh.push_back(high);
 	}
 
 	firstCorner.push_back(static_cast<int>(cornerX.size()));

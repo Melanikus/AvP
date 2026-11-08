@@ -12,12 +12,16 @@
 //      level start (StartGame, game.cpp; or a lift into another environment, IntegrateNewEnvironment, system.cpp)
 //        AlienWays_LevelStart: list the level's polygons here, on the game's thread (alien_ways_level.h), and start the build on its own
 //        |                      thread (alien_ways_build.h). Aliens move as they always have.
-//      each frame (game.cpp, with the other AI systems)
-//        AlienWays_Frame: once the build has finished, one line in the log says how: ready, with its size and time, or why there's no map
+//      each frame (game.cpp, with the other AI systems, before any alien moves)
+//        AlienWays_Frame: once the build has finished, one line in the log says how: ready, with its size and time, or why there's no map.
+//        |                Then the guide (alien_ways_guide.h): aliens no longer guided get their usual gravity back, the searches carry on, and
+//        |                each search that ends is one line in the log.
+//      each standard alien coming for its target (AlienNearState_Approach, bh_near.cpp)
+//        AlienWays_Steer: the direction of its way, if it has one, and then it climbs. If not, the game steers it as it always has.
 //      level end (Destroy_CurrentEnvironment, system.cpp)
-//        AlienWays_LevelEnd: ask the build to stop if it's still going, wait for its thread, let go of the map
+//        AlienWays_LevelEnd: ask the build to stop if it's still going, wait for its thread, let go of the map and every way
 //
-// NOTHING USES THE MAP YET. The aliens' side, finding a way and following it, is the next step.
+// ONLY APPROACH, FOR NOW: Hunt and Wander get the same call once Approach has been played.
 #ifndef ALIEN_WAYS_H
 #define ALIEN_WAYS_H
 
@@ -44,5 +48,17 @@ struct AlienWaysShown
 // Fills out with up to most of the ways aliens are following now, and gives back how many. Only on the game's thread. The points are good until
 // the next AlienWays_Frame, so they're drawn in the same frame and never kept. Gives back 0 while there's no map.
 size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);
+
+// The game's own types, named here so this file needs none of the game's headers
+struct strategyblock;
+struct vectorch;
+
+// For an alien that's coming for its target (AlienNearState_Approach, bh_near.cpp), heading for goal, the point the game's own code picked:
+// the target itself, or the way into the next module towards it. Gives back true, and the direction to go in, a length of 65536, when the
+// alien has a way to follow across the walls and ceilings now. False means: steer it the way the game always has. Only on the game's thread.
+bool AlienWays_Steer(struct strategyblock *alien, struct strategyblock *target, const struct vectorch *goal, struct vectorch *direction);
+
+// Whether this alien's last AlienWays_Steer gave back true. An alien on a way crawls (AlienShouldBeCrawling, bh_near.cpp).
+bool AlienWays_Following(struct strategyblock *alien);
 
 #endif

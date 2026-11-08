@@ -4,6 +4,9 @@
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
 //   the same code as before;
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a standard alien coming for its target follows its way up the walls and along the ceilings, when the alien ways map
+//   has one for it (alien_ways.h), and crawls while it does; without one it moves as it always has (#109)
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -34,6 +37,7 @@
 #include "pldnet.h"
 #include "particle.h"
 #include "scream.h"
+#include "alien_ways.h"
 
 extern int ShowHiveState;
 extern ACTIVESOUNDSAMPLE ActiveSounds[];
@@ -855,7 +859,21 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		curveToPlayer=0;
 	}
 
-	if(curveToPlayer)
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further away than it attacks from, follows its way across the walls and ceilings
+	//   to the point picked above, when the alien ways map has one for it. The floor is dear on that map, so the way keeps off it.
+	//   Without one, it's steered below as it always was. The last stretch, the attack and the pounce stay as they were.
+	VECTORCH wayDirection;
+
+	if ((alienStatusPointer->Type == AT_Standard) && (distanceToPlayer > ALIEN_ATTACKDISTANCE_MIN) && AlienIsAbleToClimb(sbPtr)
+		&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &targetPos, &wayDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+		NPCSetVelocity(sbPtr, &wayDirection, alienStatusPointer->MaxSpeed);
+		alienStatusPointer->CurveTimeOut=0; /* forces curve init next time curving is used */
+	}
+	else if(curveToPlayer)
 	{
 		/* curve to the player... */
 		/* translate target into alien's local space */
@@ -2028,6 +2046,12 @@ int AlienShouldBeCrawling(STRATEGYBLOCK *sbPtr)
 	if (AlienHasNoArms(sbPtr)) {
 		/* This just looks silly. */
 		return(0);
+	}
+
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   an alien following its way across the walls and ceilings crawls all the way along it (alien_ways.h)
+	if (AlienWays_Following(sbPtr)) {
+		return(1);
 	}
 
 	if ((AlienIsEncouragedToCrawl())&&(alienStatus->EnableWaypoints)) {

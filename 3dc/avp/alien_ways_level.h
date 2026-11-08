@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "alien_ways_map.h"
+#include "alien_ways_guide.h"
 
 // The most polygons listed from one level, before the map's own limits. A level with more is refused here, so the list can't grow without end.
 // Twice the map's own most, because some of a level's polygons are left out by the map as scenery.
@@ -43,6 +44,8 @@ struct AlienWaysLevelCounts
 };
 
 // Fills polygons and counts from the level that's loaded. Gives back nothing, or why there's no list, in words, and then the list is empty.
-const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, AlienWaysLevelCounts *counts);
+// modules gets one range for each of the level's modules, by the module's own number (its m_index): the polygons of the list that are that
+// module's. A module that isn't listed, a lift's say, has an empty range, so no alien in it is ever guided.
+const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::vector<AlienWaysRange> *modules, AlienWaysLevelCounts *counts);
 
 #endif

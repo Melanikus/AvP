@@ -257,8 +257,9 @@ static void SourceOfTheGame()
 	Check(Has(destroy, "AlienWays_LevelEnd();\n\tKillFarModuleLocs();"), "SOURCE: a level's end stops the build and lets the map go, with the other AI's");
 	Check(CountOf(game, "AlienWays_LevelStart();") + CountOf(system, "AlienWays_LevelStart();") == 2, "SOURCE: and the build is started from those two places only");
 
-	Check(Has(game, "AiPheromoneSystem();\n\n\t// Once the alien ways map has finished building, the log hears how it went. It does nothing otherwise.\n\tAlienWays_Frame();"),
-		"SOURCE: each frame, with the other AI systems, the log can hear how the build went");
+	Check(Has(game, "AiPheromoneSystem();\n\n\t// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual\n"
+		"\t// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.\n\tAlienWays_Frame();"),
+		"SOURCE: each frame, with the other AI systems and before any alien moves, the alien ways have their turn");
 
 	Check(Has(winmain, "if (devSwitch(\"-alienways\"))\n\t\t{\n\t\t\tAlienWaysSwitchedOn = 1;"), "SOURCE: -alienways needs -dev");
 	Check(!Has(winmain, "CommandLineHasWord(command_line, \"-alienways\")") && !Has(winmain, "CommandLineFindSwitch(command_line, \"-alienways\")"),

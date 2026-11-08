@@ -180,6 +180,12 @@ public:
 	// Whether two polygons of the map touch, and if so the stretch where they do.
 	bool Joined(int a, int b, AlienWaysXYZ *from, AlienWaysXYZ *to) const;
 
+	// The map polygon nearest to a point, among the polygons handed to Build from firstGiven up to endGiven (one module's, say), and no further
+	// away than within millimetres. Near means the distance to the polygon's box, which is 0 for a point inside it, so for a floor it's how far
+	// above it the point is. Of two as near, the one whose middle is nearer wins. Gives back -1 if there's none that near. howFar, if it's
+	// given, is set to how near the one found is.
+	int NearestPolygon(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar) const;
+
 	// Starts a search for a way from start, on polygon fromPolygon, to goal, on polygon toPolygon, with the floor at floorPrice times a wall's
 	// price. It gives back nothing if it started, or why not, in words. A search that's running is dropped.
 	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice);
@@ -224,6 +230,7 @@ private:
 	// Kept for searching. Polygon p's joins are joinOther and joinStretch from firstJoin[p] up to firstJoin[p + 1].
 	std::vector<int> middleX, middleY, middleZ;
 	std::vector<uint8_t> kind;
+	std::vector<AlienWaysXYZ> boxLow, boxHigh;   // each polygon's box: its lowest and highest x, y and z
 	std::vector<int> firstJoin;
 	std::vector<int> joinOther, joinStretch;
 	std::vector<AlienWaysXYZ> stretchA, stretchB;

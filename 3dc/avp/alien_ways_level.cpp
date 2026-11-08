@@ -12,12 +12,16 @@
 
 #include <new>
 
-// The list being made, the counts, and whether it's grown past kAlienWaysMostListed
+// Which scene of the level is loaded. No header says so: the game's own files say it where they use it, as pfarlocs.cpp does.
+extern SCENE Global_Scene;
+
+// The list being made, each module's part of it, the counts, and whether it's grown past kAlienWaysMostListed
 namespace
 {
 	struct Listing
 	{
 		std::vector<AlienWaysPolygon> *polygons;
+		std::vector<AlienWaysRange> *modules;
 		AlienWaysLevelCounts *counts;
 		bool tooMany;
 	};
@@ -167,6 +171,9 @@ static void AddModules(Listing *listing)
 		return;
 	}
 
+	// One range for each module, by its own number, all empty to start with
+	listing->modules->assign(ModuleArraySize > 0 ? static_cast<size_t>(ModuleArraySize) : 0, AlienWaysRange{ 0, 0 });
+
 	for (int i = 0; i < ModuleArraySize && !listing->tooMany; i++)
 	{
 		MODULE const *const module = scene->sm_marray[i];
@@ -187,8 +194,15 @@ static void AddModules(Listing *listing)
 			}
 		}
 
+		size_t const first = listing->polygons->size();
 		AddShape(GetShapeData(module->m_mapptr->MapShape), module->m_mapptr->MapWorld, 0, listing);
 		listing->counts->modules++;
+
+		// A module whose number is outside the game's own list of modules gets no range, so no alien in it is guided
+		if (module->m_index >= 0 && static_cast<size_t>(module->m_index) < listing->modules->size())
+		{
+			(*listing->modules)[module->m_index] = AlienWaysRange{ first, listing->polygons->size() };
+		}
 	}
 }
 
@@ -235,12 +249,13 @@ static void AddStillObjects(Listing *listing)
 	}
 }
 
-const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, AlienWaysLevelCounts *counts)
+const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::vector<AlienWaysRange> *modules, AlienWaysLevelCounts *counts)
 {
 	AlienWaysLevelCounts const none = { 0, 0, 0, 0, 0, 0, 0 };
 	*counts = none;
 	polygons->clear();
-	Listing listing = { polygons, counts, false };
+	modules->clear();
+	Listing listing = { polygons, modules, counts, false };
 
 	try
 	{
@@ -250,12 +265,14 @@ const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, AlienWa
 	catch (const std::bad_alloc &)
 	{
 		std::vector<AlienWaysPolygon>().swap(*polygons);
+		std::vector<AlienWaysRange>().swap(*modules);
 		return kWhyNoMemory;
 	}
 
 	if (listing.tooMany)
 	{
 		std::vector<AlienWaysPolygon>().swap(*polygons);
+		std::vector<AlienWaysRange>().swap(*modules);
 		return kWhyTooMany;
 	}
 
