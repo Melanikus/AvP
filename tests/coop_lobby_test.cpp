@@ -271,6 +271,7 @@ static void TestTheWalk()
 	Check(!AllOnTheList({ 1, 2 }, {}), "an empty list takes nothing");
 	Check(!AllOnTheList({ 0, 0, 3, 3, 9, 9, 1, 0 }, { 0, 3 }), "a part whose length varies is stepped over properly, to the bad one after it");
 	Check(AllOnTheList({ 0, 1, 3, 3, 1, 1 }, { 0, 3 }), "and what's inside it isn't taken for another part");
+	Check(AllOnTheList({ 0, 9 }, { 0, 0 }), "a kind named twice on the list still counts its part once");
 
 	size_t count = 0;
 	size_t onTheList = 0;
@@ -284,6 +285,11 @@ static void TestTheWalk()
 	Check(!NetCountPartsOnTheList(tooShort, sizeof(tooShort), kRules, 4, LengthOfTestPart, list2, 1, &count, &onTheList), "nor a part cut short");
 	Check(!NetCountPartsOnTheList(tooLong, sizeof(tooLong), kRules, 4, LengthOfTestPart, list2, 1, &count, &onTheList), "nor one saying it's longer than the message");
 	Check(!NetCountPartsOnTheList(noLength, sizeof(noLength), kRules, 4, LengthOfTestPart, list2, 1, &count, &onTheList), "nor one saying it has no length");
+
+	// A table with a row past the count it's given: without the check on the kind, that row would be read, and the part would pass
+	NetPartRule const rulesWithOneMore[] = { kRules[0], kRules[1], kRules[2], kRules[3], { 4, 1, false, false, 0 } };
+
+	Check(!NetCountPartsOnTheList(unknownKind, sizeof(unknownKind), rulesWithOneMore, 4, LengthOfTestPart, list2, 1, &count, &onTheList), "a kind past the count it's given isn't walked, even when the table has a row there");
 }
 
 static void TestTheRemovedList()
@@ -728,6 +734,11 @@ static void TestTheLayout()
 	int const justClear = (centre - (episodePictureEnds + kCoopRowsUnderPicture)) * 2;
 
 	Check(CoopPage_Layout(justClear, centre, episodePictureEnds).rowsTop == centre - justClear / 2, "rows just clear of the picture don't move");
+
+	// Rows that would start in the gap under the picture, one unit below its bottom, move down to leave the whole gap
+	int const inTheGap = (centre - (episodePictureEnds + 1)) * 2;
+
+	Check(CoopPage_Layout(inTheGap, centre, episodePictureEnds).rowsTop == episodePictureEnds + kCoopRowsUnderPicture, "rows that would start in the gap under the picture move down under it");
 }
 
 static void TestThePages()
