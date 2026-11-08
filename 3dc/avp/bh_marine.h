@@ -240,6 +240,12 @@
 		NPC_AVOIDANCEMANAGER avoidanceManager;
 		WAYPOINT_MANAGER waypointManager;
 
+		// Whether his shoulder lamp is on. It isn't saved, so a loaded game starts with it off. It isn't sent either: every machine decides it
+		// for the marines it shows, from the light where it shows them (LampPick_MarineWantsItOn in lamp_pick.h).
+		int lampOn;
+		int lampDecideIn;   // how long until he next decides whether it's dark enough for his lamp, with 65536 for a second
+		int lampLightTimes; // how many times in a row he's found it clearly light: see LampPick_MarineWantsItOn
+
  	}MARINE_STATUS_BLOCK;
 
 	typedef enum marine_npc_weapons 

@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   whether a marine's shoulder lamp is on goes to the other machines in a bit the message already had free
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   an NPC ghost remembers its clothes and its beams
 /*---------------------------Patrick 28/3/97----------------------------
@@ -54,9 +56,13 @@ typedef struct netghostdatablock
 	
 	int CloakingEffectiveness;
 
+	unsigned int lampDecidedAt;  // when this machine last decided whether an NPC marine's lamp is on, by timeGetTime: 0 until it first does
+	int lampLightTimes;           // how many times in a row it has found it clearly light where he is: see LampPick_MarineWantsItOn
+
 	unsigned int IgnitionHandshaking :1;
 
 	unsigned int invulnerable :1; //for netghost's of players
+	unsigned int lampOn :1;       // a marine's shoulder lamp is on: a player's as his own machine says, an NPC marine's as this one decides. Drawing chooses the nearest few
 	unsigned int onlyValidFar:1; //set for alien ai that are far from everyone
 	unsigned int soundStartFlag:1;
 

@@ -1,3 +1,4 @@
+// Modified 2026-11-07 by Melanikus for the AvP port: another marine's lamp can be aimed its own way, by the 1 in LampAim.w.
 // What the three light shaders share: lightTotal.psh, lightShare.psh and lightOne.psh. Each light has to be worked out in exactly the
 // same way everywhere, because lightShare and lightOne divide one light by the total that lightTotal added up. So the sums live here, once.
 
@@ -41,7 +42,8 @@ static const float kLampStrength = 1.2f;
 // How far away, in millimetres, it has fallen to half. This is a big part of what makes it look like light in a room, rather than a shape on the screen: a near wall is bright and a far one dim.
 static const float kLampHalfDistance = 7000.0f;
 
-// .xy is how far the lamp's aim is from where he's looking, across and down, for each unit ahead. It's on a little robot arm that follows him: see ShoulderLamp_FollowTheView in 3dc/shoulder_lamp.h.
+// The lamp's aim. For the player's own lamp, .w is 0, and .xy is how far its aim is from where he's looking, across and down, for each unit ahead: it's on a little robot arm
+// that follows him (see ShoulderLamp_FollowTheView in 3dc/shoulder_lamp.h). For any other marine's lamp, .w is 1, and .xyz is the way it points, in the same numbers as the light list.
 float4 LampAim : register(c25);
 
 
@@ -124,7 +126,7 @@ float LightShape(float4 light, float shape, float3 position, float3 normal)
     if (shape > 2.5f)
     {
         // The middle of the cone goes from the lamp to the place it's aimed at, and this says how close to that this spot is. A surface with no direction of its own gets the same eighth as above.
-        float along = dot(normalize(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz), -toLight / max(howFar, 1.0f));
+        float along = dot(normalize(lerp(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz, LampAim.xyz, LampAim.w)), -toLight / max(howFar, 1.0f));
         float inCone = smoothstep(kLampSpillOutside, kLampFullInside, along) * kLampSpillStrength + smoothstep(kLampNothingOutside, kLampFullInside, along);
         float facing = (turned == 0.0f) ? 0.125f : saturate(turned);
 

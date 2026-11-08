@@ -2,6 +2,8 @@
 //   the rendering page, and the way to it from both audio and video pages
 //   the marine's controls page has the shoulder lamp
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the rendering page's two lamp lines: whether lamps cast shadows, and whether their beams show in the air
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the multiplayer and skirmish pages have a row for a campaign's difficulty
 //   the class menus reach the new classes and have the sidearm, with limit and allow rows, and Allow Staff
@@ -248,6 +250,8 @@ static AVPMENU_ELEMENT AvPMenu_Rendering[] =
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_MODE},			{3},	{&MenuRendering},		{TEXTSTRING_RENDERING_GOURAUD},	TEXTSTRING_RENDERING_MODE_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_SHADOWS},			{1},	{&MenuShadows},			{TEXTSTRING_NO},				TEXTSTRING_RENDERING_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_AUTOGENERATE},	{1},	{&MenuAutoGenerate},	{TEXTSTRING_NO},				TEXTSTRING_RENDERING_AUTOGENERATE_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_LAMPSREAL},		{1},	{&MenuLampsReal},		{TEXTSTRING_NO},				TEXTSTRING_RENDERING_LAMPSREAL_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_RENDERING_LAMPBEAMS},		{1},	{&MenuLampBeams},		{TEXTSTRING_NO},				TEXTSTRING_RENDERING_LAMPBEAMS_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_RENDERING},	{kViewKeyRendering},	{0},	{0},	TEXTSTRING_RENDERING_KEY_RENDERING_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_SHADOWS},	{kViewKeyShadows},	{0},	{0},	TEXTSTRING_RENDERING_KEY_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_DEVVIEWS},	{kViewKeyDevViews},	{0},	{0},	TEXTSTRING_RENDERING_KEY_DEVVIEWS_HELP},
@@ -261,8 +265,18 @@ void RenderingPage_SayWhatLinesDo(bool shadowsCanBeOn, bool mapsAreRead)
 	AvPMenu_Rendering[2].HelpString = mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING;
 }
 
+void RenderingPage_SayWhatLampLineDoes(bool lampsCanBeReal)
+{
+	AvPMenu_Rendering[3].HelpString = lampsCanBeReal ? TEXTSTRING_RENDERING_LAMPSREAL_HELP : TEXTSTRING_RENDERING_LAMPSREAL_NOTHING;
+}
+
+void RenderingPage_SayWhatBeamLineDoes(bool beamsCanBeLeftOut)
+{
+	AvPMenu_Rendering[4].HelpString = beamsCanBeLeftOut ? TEXTSTRING_RENDERING_LAMPBEAMS_HELP : TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING;
+}
+
 // Where the key lines start in the table above
-static const int kFirstViewKeyElement = 3;
+static const int kFirstViewKeyElement = 5;
 
 // A key line says what became of the last key it was given, and otherwise what it's for, unless a control has its key too.
 void RenderingPage_SayWhatKeyLineDoes(int line, ViewKeyAnswer lastAnswer, bool heldByAControl)

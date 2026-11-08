@@ -1,4 +1,6 @@
 // The test for 3dc/light_choice.cpp, which works out how much of a light reaches what's on screen. Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   other marines' lamps that are real lights come first too, with the player's own lights and flares
 //
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It uses no graphics card and none of the game: a made-up room of polygons, and made-up lights.
 // The last rows read the game's source, to check it uses these the way the header says it does. What they do on a card needs a run of the game.
@@ -480,7 +482,8 @@ static void TheRealGame()
 
 	std::string const considering = Between(shapes, "static void ToyConsiderLight(", "// A fixed point number as a fraction");
 
-	Check(Has(considering, "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));"), "what comes first is the player's own lights and flares");
+	Check(Has(considering, "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block)) || OtherLampLightNumber(light) >= 0;"),
+		"what comes first is the player's own lights, flares, and other marines' lamps that are real lights");
 
 	// The strength
 	std::string const strength = Between(shapes, "static float LightStrength(", "static int KeepTheLightsThatShowMost(");

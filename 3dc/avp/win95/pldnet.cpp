@@ -43,6 +43,8 @@
 //   a machine sends 60 times a second, not every frame, and what has to go out before it stops playing goes at once
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
+//   whether a player's shoulder lamp is on goes to the other machines in a bit the message already had free, and an NPC message that sets a flag
+//   this version doesn't know is refused
 //   a game description that comes after the word to go on to the next level can't put a campaign's place back, so a joiner
 //   loads the level the host loads, and the log says when one tried
 //   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
@@ -117,6 +119,7 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "bh_facehugger.h"
 #include "hmodel.h"
 #include "npc_kinds.h"
+#include "shoulder_lamp.h"
 #include "npc_ghosts.h"
 #include "coop_in_game.h"
 #include "coop_menu.h"
@@ -2594,6 +2597,14 @@ void AddNetMsg_StartGame(void)
 }
 
 extern int UseExtrapolation;
+// Whether others should see this player's shoulder lamp: only in the mode that plays as single player, only a live marine, and only if it's on
+static bool ThisPlayersLampShows()
+{
+	PLAYER_STATUS const *const status = Player && Player->ObStrategyBlock ? (PLAYER_STATUS const *)Player->ObStrategyBlock->SBdataptr : 0;
+
+	return SameAsSinglePlayer() && AvP.PlayerType == I_Marine && status && status->IsAlive && ShoulderLamp_IsOn();
+}
+
 void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 {
 	NETMESSAGEHEADER *headerPtr;
@@ -2669,6 +2680,15 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 				previousWeapon = weaponPtr->WeaponIDNumber;
 				sendMinimalState = FALSE;
 			}
+		}
+
+		// A lamp switched on or off goes at once, in a full update, because only that has its bit
+		static bool lampShowedLastTime = false;
+
+		if (ThisPlayersLampShows() != lampShowedLastTime)
+		{
+			lampShowedLastTime = !lampShowedLastTime;
+			sendMinimalState = FALSE;
 		}
 
 		if (sendMinimalState)
@@ -3060,6 +3080,9 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 	messagePtr->landingNoise = netGameData.landingNoise;
 	//reset that too!
 	netGameData.landingNoise = 0;
+
+	// Always written, because this part of the message isn't cleared first: a bit left out would send whatever was in the buffer
+	messagePtr->lampOn = ThisPlayersLampShows() ? 1 : 0;
 }
 
 void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
@@ -6346,6 +6369,13 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 	}
 
 #endif
+	// A message that says something impossible isn't trusted for anything else in it. Only a live marine, in the mode that plays as single player, has a lamp others see.
+	if (messagePtr->lampOn && !(SameAsSinglePlayer() && messagePtr->characterType == NGCT_Marine && messagePtr->IAmAlive))
+	{
+		Net_NoteRefused("a player's message said his lamp is on, and he can't have one, so none of it was used");
+		return;
+	}
+
 	VECTORCH position;
 	position.vx = messagePtr->xPos;
 	position.vy = messagePtr->yPos;
@@ -6531,6 +6561,9 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 			NETGHOSTDATABLOCK *ghostData;
 			ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
 			ghostData->invulnerable = messagePtr->IAmInvulnerable;
+
+			// Only stored. A message from anyone who can't have a lamp, saying it's on, was refused whole at the top.
+			ghostData->lampOn = (messagePtr->lampOn && ghostData->type == I_BehaviourMarinePlayer) ? 1 : 0;
 #if EXTRAPOLATION_TEST
 			{
 				VECTORCH velocity, diff;
@@ -8852,6 +8885,12 @@ static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID sender
 	if (!NpcSequenceLength_IsGood(messagePtr->sequence_length))
 	{
 		Net_NoteRefused("an NPC message with an animation length that can't be right");
+		return;
+	}
+
+	if (!NpcFlags_AreKnown(messagePtr->flags))
+	{
+		Net_NoteRefused("an NPC message set a flag this version doesn't know");
 		return;
 	}
 
