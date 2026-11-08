@@ -14,7 +14,8 @@
 // Loss and resends are what ENet has counted in its own count of about 10 seconds, which it starts again after each one: a resend is a
 // packet that had to go again because no answer came. Bytes are the whole machine's, since the last line.
 //
-// Words a log reader looks for (Sixth's): "net: connection N round trip N ms loss N% resends N". Anything more comes after those.
+// Words a log reader can look for: "net: connection N round trip N ms loss N% resends N". Anything more comes after those, so a reader that
+// knows only those still matches.
 //
 // tests/net_stats_test.cpp tries these. networking.cpp calls them about once a second while a network game runs.
 #ifndef NET_STATS_H

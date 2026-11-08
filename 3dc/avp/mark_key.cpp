@@ -116,7 +116,9 @@ void Mark_ReadKey()
 	moment.z = Player->ObWorld.vz;
 	moment.facing = Player->ObEuler.EulerY & 4095;
 	moment.health = status ? status->Health >> 16 : 0;
-	moment.weapon = status ? (int)status->WeaponSlot[status->SelectedWeaponSlot].WeaponIDNumber : 0;
+	// The slot is checked before it picks from the list, whatever else keeps it in range: -1 means the mark couldn't say
+	int const slot = status ? (int)status->SelectedWeaponSlot : -1;
+	moment.weapon = (slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS) ? (int)status->WeaponSlot[slot].WeaponIDNumber : -1;
 	moment.network = momentNetwork[0] ? momentNetwork : NULL;
 	momentWaiting = true;
 }
