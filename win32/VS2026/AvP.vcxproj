@@ -255,6 +255,7 @@
     <ClCompile Include="..\..\3dc\avp\alien_ways_guide.cpp" />
     <ClCompile Include="..\..\3dc\avp\alien_ways_level.cpp" />
     <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_view.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_agun.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_ais.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_alien.cpp" />
@@ -535,6 +536,7 @@
     <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_level.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_map.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_view.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
