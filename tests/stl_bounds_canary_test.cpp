@@ -4,9 +4,9 @@
 //
 // Every test is built with the standard library's own bounds checks (/D_MSVC_STL_HARDENING=1 in its .args), and
 // tests/every_test/every_test.h refuses to compile a test without them. This one proves, by running, that the checks really do stop a
-// program: it starts a copy of itself that looks one place past the end of a std::vector, and that copy has to stop at once with the code
-// the standard library's checks stop a program with, 0xC0000409 (a "fail-fast"). If the copy prints what was there and ends normally,
-// the checks aren't working, and every other test's "past the end" checks could be passing by luck.
+// program: it starts a copy of itself that asks an empty std::vector for its first item, one place past its end, and that copy has to stop
+// at once with the code the standard library's checks stop a program with, 0xC0000409 (a "fail-fast"). If the copy prints what was there
+// and ends normally, the checks aren't working, and every other test's "past the end" checks could be passing by luck.
 //
 // It runs the copy with _spawnl and waits for it, so it needs nothing from the script that runs the tests.
 #include <windows.h>
@@ -24,12 +24,17 @@ static void Check(bool good, const char *what)
 	checksFailed += good ? 0 : 1;
 }
 
-// What the copy does: looks one place past the end of a list of three. The place is worked out while it runs, so the compiler can't see it.
+// What the copy does: asks an empty list for its first item. An empty list has none. Where its first item would be is its end, so this
+// looks one place past the end, on purpose, which is what the bounds checks are there to stop. The standard library checks front() with
+// the same switch as a look at a place by number (_MSVC_STL_HARDENING_VECTOR), and stops the program the same way.
+//
+// It used to look at place 3 of a list of 3, by number. A code scanner reads a list's size used as a place in it as a mistake, as it
+// should, because in real code it nearly always is one. This copy's mistake is meant, and asking a list that is plainly empty for its first item
+// says so to anyone reading.
 static int LookPastTheEnd()
 {
-	std::vector<int> three(3, 7);
-	volatile size_t place = three.size();
-	printf("one past the end holds %d\n", three[place]);
+	std::vector<int> const empty;
+	printf("an empty list's first item is %d\n", empty.front());
 	return 0;   // only reached if nothing stopped it
 }
 

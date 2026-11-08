@@ -4,12 +4,12 @@
 	],
 	"rows": [
 		{
-			"name": "the copy looks inside the list, not past its end",
+			"name": "the copy's list has an item, so its first is there to read and nothing looks past the end",
 			"changes": [
 				{
 					"file": "tests/stl_bounds_canary_test.cpp",
-					"from": "printf(\"one past the end holds %d\\n\", three[place]);",
-					"to": "printf(\"one past the end holds %d\\n\", three[0]);"
+					"from": "std::vector<int> const empty;",
+					"to": "std::vector<int> const empty(1, 7);"
 				}
 			]
 		},
