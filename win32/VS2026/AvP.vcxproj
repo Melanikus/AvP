@@ -539,6 +539,7 @@
     <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_stuck.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_level.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_lookahead.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_map.h" />
     <ClInclude Include="..\..\3dc\avp\alien_ways_view.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />

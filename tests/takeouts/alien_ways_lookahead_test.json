@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the aim is always the point it is heading for, corner to corner",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "if (aheadMm <= 0)",
+					"to": "if (aheadMm <= 0 || aheadMm > 0)"
+				}
+			]
+		},
+		{
+			"name": "0 ahead looks on from the alien, instead of aiming at the point it is heading for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "if (aheadMm <= 0)",
+					"to": "if (aheadMm < 0)"
+				}
+			]
+		},
+		{
+			"name": "there is no most it looks ahead",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "double left = aheadMm < kAlienWaysAimMostAheadMm ? static_cast<double>(aheadMm) : static_cast<double>(kAlienWaysAimMostAheadMm);",
+					"to": "double left = static_cast<double>(aheadMm);"
+				}
+			]
+		},
+		{
+			"name": "an alien behind its stretch looks on from behind it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "part = part < 0.0 ? 0.0 : (part > 1.0 ? 1.0 : part);",
+					"to": "part = part > 1.0 ? 1.0 : part;"
+				}
+			]
+		},
+		{
+			"name": "an alien past the end of its stretch looks on from past it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "part = part < 0.0 ? 0.0 : (part > 1.0 ? 1.0 : part);",
+					"to": "part = part < 0.0 ? 0.0 : part;"
+				}
+			]
+		},
+		{
+			"name": "the way running out gives the point before the goal",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "*aim = AlienWaysXYZ{ points[count - 1].x, points[count - 1].y, points[count - 1].z };",
+					"to": "*aim = AlienWaysXYZ{ points[count - 2].x, points[count - 2].y, points[count - 2].z };"
+				}
+			]
+		},
+		{
+			"name": "a step onto another surface is not waited at",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "bool const step = points[point].kind != points[point - 1].kind;",
+					"to": "bool const step = false;"
+				}
+			]
+		},
+		{
+			"name": "a step is looked for one point late",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "bool const step = points[point].kind != points[point - 1].kind;",
+					"to": "bool const step = points[point + 1].kind != points[point].kind;"
+				}
+			]
+		},
+		{
+			"name": "bends are not waited at",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "if (step || turned > kAlienWaysAimMostTurnDegrees)",
+					"to": "if (step)"
+				}
+			]
+		},
+		{
+			"name": "every bend is waited at, however gentle",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "if (step || turned > kAlienWaysAimMostTurnDegrees)",
+					"to": "if (step || turned > 0.0)"
+				}
+			]
+		},
+		{
+			"name": "the bends are not added up",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "turned += TurnAt(cameFrom, to, next);",
+					"to": "turned = TurnAt(cameFrom, to, next);"
+				}
+			]
+		},
+		{
+			"name": "a stretch of no length counts as the way coming from there",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "\t\tif (Length(to, next) > 0.0)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the nearest place on a stretch of no length is worked out anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "\t\tif (uu <= 0.0)\n\t\t{\n\t\t\treturn a;\n\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the turn at a stretch of no length is worked out anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "\t\tif (inLength <= 0.0 || outLength <= 0.0)\n\t\t{\n\t\t\treturn 0.0;\n\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the aim is looked for from the stretch start, not from the alien",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "Place from = NearestOn(PlaceOf(points[heading - 1]), PlaceOf(points[heading]), PlaceOf(at));",
+					"to": "Place from = PlaceOf(points[heading - 1]);"
+				}
+			]
+		},
+		{
+			"name": "a heading of 0 is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "heading < 1 ||",
+					"to": "heading < 0 ||"
+				}
+			]
+		},
+		{
+			"name": "a heading past the last point is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "heading >= count)",
+					"to": "heading > count)"
+				}
+			]
+		},
+		{
+			"name": "nowhere to put the answer is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "!aim || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "no points is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "!points || ",
+					"to": ""
+				}
+			]
+		}
+	]
+}
