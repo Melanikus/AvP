@@ -31,6 +31,9 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
 //   Found while reading Bobblen's avp-forever fork
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   when you play the alien, facehuggers and the queen glow in the alien colour, in a network game too, and so do parts
+//   blown off them. Found through Bobblen's avp-forever (commit 12e3cd1), rewritten
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
@@ -3095,7 +3098,13 @@ void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)
 
 		if (sbPtr) {
 			switch (sbPtr->I_SBtype) {
-				case I_BehaviourAlien: {
+				// Every kind of alien glows in the alien colour: the alien itself (which is also the predalien and the praetorian),
+				// the facehugger and the queen. The facehugger and the queen used to have no line here, so they got the colour every
+				// body starts with, the marine's. The user's ruling, 2026-11-07: "they get the alien colour". Found through
+				// Bobblen's avp-forever (commit 12e3cd1), rewritten.
+				case I_BehaviourAlien:
+				case I_BehaviourFaceHugger:
+				case I_BehaviourQueenAlien: {
 					colour = ALIENS_LIFEFORCE_GLOW_COLOUR;
 					break;
 				}
@@ -3125,7 +3134,9 @@ void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)
 				case I_BehaviourNetGhost: {
 					NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)Global_ODB_Ptr->ObStrategyBlock->SBdataptr;
 
+					// A facehugger or the queen that another machine runs is a stand-in here too, and glows as it does there
 					if (ghostDataPtr->type == I_BehaviourAlienPlayer || ghostDataPtr->type == I_BehaviourAlien
+					    || ghostDataPtr->type == I_BehaviourFaceHugger || ghostDataPtr->type == I_BehaviourQueenAlien
 					    || (ghostDataPtr->type == I_BehaviourNetCorpse && ghostDataPtr->subtype == I_BehaviourAlienPlayer)) {
 						colour = ALIENS_LIFEFORCE_GLOW_COLOUR;
 					} else if (ghostDataPtr->type == I_BehaviourPredatorPlayer || ghostDataPtr->type == I_BehaviourPredator
@@ -3155,9 +3166,12 @@ void DoAlienEnergyView(DISPLAYBLOCK *dispPtr)
 				case I_BehaviourHierarchicalFragment: {
 					HDEBRIS_BEHAV_BLOCK *debrisDataPtr = (HDEBRIS_BEHAV_BLOCK *)sbPtr->SBdataptr;
 
+					// A part blown off a body remembers what it came from (MakeHierarchicalDebris in bh_debris.cpp), and glows as that
+					// did. A facehugger's or the queen's used to be left dark, though an alien's glowed.
 					if (debrisDataPtr->Type == I_BehaviourAutoGun || debrisDataPtr->Android) {
 						return;
-					} else if (debrisDataPtr->Type == I_BehaviourAlien) {
+					} else if (debrisDataPtr->Type == I_BehaviourAlien || debrisDataPtr->Type == I_BehaviourFaceHugger
+					           || debrisDataPtr->Type == I_BehaviourQueenAlien) {
 						colour = ALIENS_LIFEFORCE_GLOW_COLOUR;
 					} else if (debrisDataPtr->Type == I_BehaviourPredator) {
 						colour = PREDATORS_LIFEFORCE_GLOW_COLOUR;
