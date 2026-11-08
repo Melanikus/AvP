@@ -3,6 +3,13 @@
 //   text is copied using the exact length measured when its space was made, so it always fits
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out the unused way of making a LoadedNPC from a name in a level file
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a marine holding one of M5's guns, and a new gun someone has dropped, come from M5's files when they're there
+//   the Predator's staff loads its two models when they're there
+//   the file the marine's new guns are drawn from is loaded when it's there
+//   a network game that plays the same as single player loads every model the level asks for, because each machine has to draw them
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   so is our own file of the MelPyth guns' versions of four stock marine guns
 #include "npcsetup.h"
 #include "ourasert.h"
 #include "list_tem.hpp"
@@ -340,27 +347,27 @@ void InitNPCs(RIFFHANDLE h)
 							Load_HNPC[HNPC_Alien]=TRUE;
 							break;
 						case 2:
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 								Load_HNPC[HNPC_Predator]=TRUE;
 							break;
 						
 						case 3:
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 								Load_HNPC[HNPC_Hugger]=TRUE;
 							break;
 						case 4:
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 								Load_HNPC[HNPC_Xenoborg]=TRUE;
 							break;
 						case 5:
 							Load_HNPC[HNPC_PredAlien] =TRUE;
 							break;
 						case 6:
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 								Load_HNPC[HNPC_AlienQueen]=TRUE;
 							break;
 						case 7:	//marine or variant of marine
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 							{
 								switch (agc->sub_type)
 								{
@@ -408,7 +415,7 @@ void InitNPCs(RIFFHANDLE h)
 							Load_HNPC[HNPC_Pretorian]=TRUE;
 							break;
 						case 9:
-							if(AvP.Network == I_No_Network)
+							if(SameAsSinglePlayer())
 								Load_HNPC[HNPC_SentryGun]=TRUE;
 							break;
 						default:
@@ -429,7 +436,7 @@ void InitNPCs(RIFFHANDLE h)
 				if(setting)
 				{
 					BOOL all_zero=TRUE;
-					if(AvP.Network == I_No_Network)
+					if(SameAsSinglePlayer())
 					{
 						if(setting->weights->PulseMarine_Wt ||
 						   setting->weights->PistolMarine_Wt ||
@@ -531,8 +538,109 @@ void InitNPCs(RIFFHANDLE h)
 				newnpcs.add_entry(tempnpc);
 			}
 		}
+
+		// The marine's new guns are drawn from this file, when it's there. Weapon_CanBeDrawn in weapon_hooks.cpp says what happens when it isn't.
+		FILE * marineHud = avp_fopen("avp_huds/MelPyth_MarHUD.rif", "r");
+
+		if (marineHud != NULL)
+		{
+			fclose(marineHud);
+			LoadedNPC tempnpc("MelPyth_MarHUD.rif");
+			if (tempnpc.IsValid())
+			{
+				newnpcs.add_entry(tempnpc);
+			}
+		}
+
+		// The MelPyth versions of the pulse rifle (with its ammo counter), the cudgel and the pistols, when this file is there.
+		// Without it, those guns come from the player's own marwep.rif, as they always did: see Weapon_ModelFileFor in weapon_hooks.cpp.
+		FILE * ownMarineGuns = avp_fopen("avp_huds/MelPyth_MarWep.rif", "r");
+
+		if (ownMarineGuns != NULL)
+		{
+			fclose(ownMarineGuns);
+			LoadedNPC tempnpc("MelPyth_MarWep.rif");
+			if (tempnpc.IsValid())
+			{
+				newnpcs.add_entry(tempnpc);
+			}
+		}
 	}
 	
+	// A marine holding one of M5's guns is drawn from these two files, when they're there. Inside, both call themselves hnpcmarine,
+	// the same as the stock marine. The game looks through every file of that name for a model, and none of theirs is in stock's,
+	// so the stock marine doesn't change. What it stops at the first file for, his alternate looks, it finds in stock's, which is
+	// first in this list because the loop above added it.
+	if (Load_HNPC[HNPC_Marine])
+	{
+		const char *const marinesWithNewGuns[] = { "ShotgunBot.rif", "MelPyth_hnpcmarine.rif" };
+
+		for (const char *const name : marinesWithNewGuns)
+		{
+			char file[64];
+
+			_snprintf(file, sizeof(file) - 1, "avp_huds/%s", name);
+			file[sizeof(file) - 1] = 0;
+
+			FILE *const there = avp_fopen(file, "r");
+
+			if (there != NULL)
+			{
+				fclose(there);
+				LoadedNPC tempnpc(name);
+				if (tempnpc.IsValid())
+				{
+					newnpcs.add_entry(tempnpc);
+				}
+			}
+		}
+	}
+
+	// A new gun someone has dropped in a network game looks like this, whichever gun it is. M5 did the same, and has no other model for them.
+	if (AvP.Network != I_No_Network)
+	{
+		FILE *const droppedGun = avp_fopen("avp_huds/ShotgunPickup.rif", "r");
+
+		if (droppedGun != NULL)
+		{
+			fclose(droppedGun);
+			LoadedNPC tempnpc("ShotgunPickup.rif");
+			if (tempnpc.IsValid())
+			{
+				newnpcs.add_entry(tempnpc);
+			}
+		}
+	}
+
+	// The Predator's staff is drawn from these two files, when they're there. Weapon_CanBeDrawn in weapon_hooks.cpp leaves
+	// its slot empty otherwise. In a network game anybody can be a Predator.
+	if (AvP.PlayerType == I_Predator || AvP.Network != I_No_Network)
+	{
+		FILE * staffHud = avp_fopen("avp_huds/Staff_Hud.rif", "r");
+
+		if (staffHud != NULL)
+		{
+			fclose(staffHud);
+			LoadedNPC tempnpc("Staff_Hud.rif");
+			if (tempnpc.IsValid())
+			{
+				newnpcs.add_entry(tempnpc);
+			}
+		}
+
+		FILE * thrownStaff = avp_fopen("avp_huds/StaffPickup.rif", "r");
+
+		if (thrownStaff != NULL)
+		{
+			fclose(thrownStaff);
+			LoadedNPC tempnpc("StaffPickup.rif");
+			if (tempnpc.IsValid())
+			{
+				newnpcs.add_entry(tempnpc);
+			}
+		}
+	}
+
 	// see what we already have, unloading what we don't need, and ensuring we don't load a npc twice
 	for (LIF<LoadedNPC> i_loaded_npc(&loaded_npcs); !i_loaded_npc.done(); )
 	{

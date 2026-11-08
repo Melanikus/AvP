@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a variable can be refused in some games, such as TIMESCALE in a network game
 /*
 	
 	consvar.hpp
@@ -76,6 +79,10 @@
 			// hook to create all the console variables
 			// (to make it easy to add new ones)
 
+		// A variable that some games mustn't change, such as TIMESCALE in a network game. refusedNow says whether it's refused at this
+		// moment, and the words say why, on the screen, when someone tries. Its value stays as it was.
+		void RefuseWhen(bool (*refusedNow)(void), ProjChar* pProjCh_Why);
+
 	protected:
 		ConsoleVariable
 		(
@@ -103,6 +110,9 @@
 
 		void OutputResultOfSetValue( int OldVal );
 
+		// Says why, and gives back true, when RefuseWhen's test says no
+		bool IsRefusedNow(void);
+
 		virtual SCString* MakeRangeString(void) = 0;
 		virtual SCString* MakeValueString(int Val) = 0;
 
@@ -114,6 +124,9 @@
 
 	private:		
 		SCString* pSCString_Description;
+
+		bool (*pRefusedNow)(void);
+		ProjChar* pProjCh_RefusedWhy;
 
 		static List <ConsoleVariable*> List_pConsoleVar;
 	};	// suggested naming: "ConsoleVar"

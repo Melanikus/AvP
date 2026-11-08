@@ -1,3 +1,6 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a game that plays as single player keeps the level's own numbers, not a network game's balance;
+//   an NPC placed in the level doesn't count against the generators' limit in a network game, and the number that may be near goes up with the number of players
 /*----------------Patrick 15/11/96-------------------
  Source for NPC generator behavior
  ----------------------------------------------------*/
@@ -5,6 +8,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
 //   a generator copes with times of nothing and with being placed outside every module
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved generation rate has to be one the game could have reached
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -25,6 +30,7 @@
 #include "ourasert.h"
 #include "huddefs.h"
 #include "showcmds.h"
+#include "pldnet.h"
 
 /* externs for this file */
 extern char *ModuleCurrVisArray;
@@ -160,7 +166,7 @@ void GeneratorBehaviour(STRATEGYBLOCK *sbPtr)
 	}
 		
 	/* check the timer */
-	if(UseGeneratorBalance && AvP.Network != I_No_Network)
+	if(UseGeneratorBalance && AvP.Network != I_No_Network && !SameAsSinglePlayer())
 	{
 		genBlock->Timer -= MUL_FIXED(NormalFrameTime,GeneratorBalance.RateMultiplier);
 	}
@@ -225,7 +231,7 @@ void GeneratorBehaviour(STRATEGYBLOCK *sbPtr)
 		return;
 	}
 	/* if there are too many npcs in the env, do not create a new one */
-	if(UseGeneratorBalance && AvP.Network != I_No_Network)
+	if(UseGeneratorBalance && AvP.Network != I_No_Network && !SameAsSinglePlayer())
 	{
 		if(genBlock->use_own_max_npc)
 		{
@@ -539,9 +545,9 @@ void DoHive(void)
 	if(AvP.Network != I_No_Network && AvP.NetworkAIServer==0) return;
 //	if(AvP.Network != I_No_Network)	return;
 
-	if(AvP.Network != I_No_Network)
+	if(AvP.Network != I_No_Network && !SameAsSinglePlayer())
 	{
-		GeneratorBalance_PerFrameMaintenance();	
+		GeneratorBalance_PerFrameMaintenance();
 	}
 	
 	NearAliens=Alt_NearAliens;
@@ -687,7 +693,8 @@ int NumGeneratorNPCsInEnv(void)
 		{
 			//All placed bad guys will have the last character of the sbname as 0
 			//generated badguys shoud have a non-zero last character.
-			if(sbPtr->SBname[SB_NAME_LENGTH-1])
+			//In a network game a placed one has a new name too, so it says what it is
+			if(sbPtr->SBname[SB_NAME_LENGTH-1] && !sbPtr->SBflags.placed_in_the_level)
 			{
 				numOfNPCs++;
 			}
@@ -741,6 +748,31 @@ int NumNPCsFromThisGenerator(STRATEGYBLOCK* gen_sbptr)
 	return numOfNPCs;
 }
 
+
+int NearNpcLimit(void)
+{
+	int players = 1;
+
+	if (AvP.Network != I_No_Network && SameAsSinglePlayer())
+	{
+		players = 0;
+
+		for (int i = 0; i < NET_MAXPLAYERS; i++)
+		{
+			if (netGameData.playerData[i].playerId)
+			{
+				players++;
+			}
+		}
+
+		if (players < 1)
+		{
+			players = 1;
+		}
+	}
+
+	return MAX_VISIBLEGENERATORNPCS * players;
+}
 
 int NumGeneratorNPCsVisible(void)
 {
@@ -804,6 +836,7 @@ void SetHiveParamaters(int enemytype,int max,int genpermin,int deltagenpermin,in
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct generator_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -842,7 +875,14 @@ void LoadStrategy_Generator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	COPYELEMENT_LOAD(Timer)
 	COPYELEMENT_LOAD(Active)
-	COPYELEMENT_LOAD(GenerationRate)
+
+	//ResetGeneratorTimer divides by the rate, and then by a quarter of the answer, so it can't be 0 and can't be so big that the answer is
+	//under 4. That sum is the largest that's safe, and it's far above any rate the game reaches.
+	if(Save_NumberIsInRange(block->GenerationRate, 1, (60 * ONE_FIXED * 100) / 4))
+	{
+		COPYELEMENT_LOAD(GenerationRate)
+	}
+
 	COPYELEMENT_LOAD(RateIncreaseTimer)
 }
 
@@ -895,7 +935,12 @@ void LoadHiveSettings(SAVE_BLOCK_HEADER* header)
 	COPYELEMENT_LOAD(currentState)
 	COPYELEMENT_LOAD(hiveStateTimer)
 	COPYELEMENT_LOAD(genRateTimer)
-	COPYELEMENT_LOAD(generatorNPCsPerMinute)
+
+	//the game keeps this between these limits, and ResetGeneratorTimer divides by it and then by a quarter of the answer
+	if(Save_NumberIsInRange(block->generatorNPCsPerMinute, GENSPERMINUTE_MIN, GENSPERMINUTE_MAX))
+	{
+		COPYELEMENT_LOAD(generatorNPCsPerMinute)
+	}
 }
 
 void SaveHiveSettings()

@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the queue of lines waiting to go on the screen has a limit, because anyone can send chat as fast as they like
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed two switched-off blocks of placeholder code that could never run
 /*******************************************************************
@@ -23,6 +25,12 @@
 #include "inline.h"
 #include "iofocus.h"
 #include "consoleLog.hpp"
+
+// In pldnet.cpp
+extern void Net_NoteRefused(const char *why);
+
+static const int kMostLinesWaitingForTheScreen = 64;
+
 
 	#include "root_gadget.hpp"
 	#include "hud_gadget.hpp"
@@ -576,6 +584,13 @@ void TextReportGadget :: AddTeletypeLine
 			{
 				// Can't add a new teletype object yet; there's an existing one which
 				// hasn't finished yet; add to queue:
+
+				// The lines already waiting were sent first, so it's the new one that goes
+				if (RefList_SCString_ToAppear . NumEntries() >= kMostLinesWaitingForTheScreen)
+				{
+					Net_NoteRefused("too many lines are waiting to go on the screen");
+					return;
+				}
 
 				RefList_SCString_ToAppear . AddToEnd
 				(

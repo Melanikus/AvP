@@ -1,0 +1,168 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "no data at all is read anyway (this one crashes on purpose: it counts double)",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (!data)\n\t{\n\t\trefusal = kLevelRefusedNoData;\n\t}\n\telse if (size < kLevelKindHeading)",
+					"to": "if (size < kLevelKindHeading)"
+				}
+			]
+		},
+		{
+			"name": "a file shorter than its heading is read anyway",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "else if (size < kLevelKindHeading)\n\t{\n\t\trefusal = kLevelRefusedTooShort;\n\t}\n\t",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a heading that isn't REBINFF2 is let through",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "else if (memcmp(data, \"REBINFF2\", 8) != 0)\n\t{\n\t\trefusal = kLevelRefusedNotALevel;\n\t}\n\t",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a heading whose size isn't the file's is let through",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "else if (LevelKind_Number(data + 8) != size)\n\t{\n\t\trefusal = kLevelRefusedWrongSize;\n\t}\n\telse",
+					"to": "else"
+				}
+			]
+		},
+		{
+			"name": "bytes left over at the end are read as a heading",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (end - at < kLevelKindHeading)\n\t\t{\n\t\t\treturn kLevelRefusedChunkPastTheEnd;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a chunk smaller than its own heading is let through",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (size < kLevelKindHeading)\n\t\t{\n\t\t\treturn kLevelRefusedChunkTooSmall;",
+					"to": "if (size < 4)\n\t\t{\n\t\t\treturn kLevelRefusedChunkTooSmall;"
+				}
+			]
+		},
+		{
+			"name": "a chunk going past the end of what holds it is let through",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (size > end - at)\n\t\t{\n\t\t\treturn kLevelRefusedChunkPastTheEnd;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refusal from inside a chunk is forgotten",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (inside != kLevelRefusedNot)\n\t\t{\n\t\t\treturn inside;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every chunk at the top is walked into, not just the environment",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (!LevelKind_Named(name, \"REBENVDT\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "every chunk in the environment is walked into, not just the special objects",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (!LevelKind_Named(name, \"SPECLOBJ\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a file with no environment counts as a level",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (refusal == kLevelRefusedNot && !sawEnvironment)\n\t\t{\n\t\t\trefusal = kLevelRefusedNoEnvironment;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a generator too short for its flags is read anyway",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (bodySize < kLevelKindGeneratorLeastBody)\n\t\t\t\t\t{\n\t\t\t\t\t\treturn kLevelRefusedShortGenerator;\n\t\t\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a generator of another type counts as a start",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (type == 0 && (flags & kLevelKindMultiplayerStartFlag))",
+					"to": "if (flags & kLevelKindMultiplayerStartFlag)"
+				}
+			]
+		},
+		{
+			"name": "a generator without the flag counts as a start",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "if (type == 0 && (flags & kLevelKindMultiplayerStartFlag))",
+					"to": "if (type == 0)"
+				}
+			]
+		},
+		{
+			"name": "a refused file still reports the starts it counted",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "*multiplayerStarts = refusal == kLevelRefusedNot ? starts : 0;",
+					"to": "*multiplayerStarts = starts;"
+				}
+			]
+		},
+		{
+			"name": "the flags are read from the wrong place",
+			"changes": [
+				{
+					"file": "3dc/level_kind.h",
+					"from": "static const size_t kLevelKindGeneratorFlagsAt = 20;",
+					"to": "static const size_t kLevelKindGeneratorFlagsAt = 16;"
+				}
+			]
+		}
+	]
+}

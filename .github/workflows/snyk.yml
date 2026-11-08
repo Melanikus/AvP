@@ -216,11 +216,13 @@ jobs:
         shell: pwsh
         run: |
           $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          # It goes to git, so it has to be a commit's full hash first: a value starting with a dash would be read by git as an option
+          if ("$baseline" -cnotmatch '^[0-9a-f]{40}$') { throw "vcpkg.json's builtin-baseline isn't a commit's full hash: $baseline" }
           $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
           git init -q $root
           git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
           git -C $root checkout -q FETCH_HEAD
-          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+          if ((git -C $root rev-parse HEAD) -cne $baseline) { throw 'vcpkg is not at the manifest baseline' }
           & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
@@ -230,7 +232,7 @@ jobs:
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
           # --binarysource=clear: always build from source. A library restored from a cache has no sources to scan.
-          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows --binarysource=clear `
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows-static --binarysource=clear `
             --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

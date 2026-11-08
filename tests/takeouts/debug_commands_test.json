@@ -1,0 +1,278 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a 0 in front of a number is taken",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "if (digits > most || (digits > 1 && version[at] == '0'))",
+					"to": "if (digits > most)"
+				}
+			]
+		},
+		{
+			"name": "too many digits are taken",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "if (digits > most || (digits > 1 && version[at] == '0'))",
+					"to": "if (digits > 1 && version[at] == '0')"
+				}
+			]
+		},
+		{
+			"name": "seven digits make a release number",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "size_t const digits = BetaBuild_NumberHere(version, at, 6);",
+					"to": "size_t const digits = BetaBuild_NumberHere(version, at, 7);"
+				}
+			]
+		},
+		{
+			"name": "five digits make a beta's number",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "size_t const digits = BetaBuild_NumberHere(version, at, 4);",
+					"to": "size_t const digits = BetaBuild_NumberHere(version, at, 5);"
+				}
+			]
+		},
+		{
+			"name": "a missing release number is taken",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\tif (digits == 0)\n\t\t{\n\t\t\treturn false;\n\t\t}\n\n\t\tat += digits;\n",
+					"to": "\t\tat += digits;\n"
+				}
+			]
+		},
+		{
+			"name": "anything between the numbers is taken for a dot",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\t\tif (version[at] != '.')\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "anything in place of -beta. makes a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\t\tif (version[at] != kBeta[letter])\n",
+					"to": "\t\tif (version[at] == 0)\n"
+				}
+			]
+		},
+		{
+			"name": "a beta with no number is a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\tif (digits == 0)\n\t{\n\t\treturn false;\n\t}\n\n\treturn version[at + digits] == 0;\n",
+					"to": "\treturn version[at + digits] == 0;\n"
+				}
+			]
+		},
+		{
+			"name": "anything after the number still makes a beta",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\treturn version[at + digits] == 0;\n",
+					"to": "\treturn true;\n"
+				}
+			]
+		},
+		{
+			"name": "no version at all is read",
+			"changes": [
+				{
+					"file": "3dc/beta_build.h",
+					"from": "\tif (version == 0)\n\t{\n\t\treturn false;\n\t}\n\n\tsize_t at = 0;\n",
+					"to": "\tsize_t at = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "digits that go on too long become the wrong end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "\tif (typed > INT_MAX)\n\t{\n\t\treturn INT_MAX;\n\t}\n",
+					"to": "\tif (typed > INT_MAX)\n\t{\n\t\treturn INT_MIN;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "the fixed-point sum is done in an int",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "return ConsoleValue_InRange((long long)typed * 65536, minVal, maxVal);",
+					"to": "return ConsoleValue_InRange((long long)(int)((unsigned int)typed * 65536u), minVal, maxVal);"
+				}
+			]
+		},
+		{
+			"name": "not a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "\tif (typed != typed)\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a decimal too big is made whole without being kept in range",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_value.h",
+					"from": "\tif (scaled > (double)maxVal)\n\t{\n\t\tscaled = (double)maxVal;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the beta is told by something else",
+			"changes": [
+				{
+					"file": "3dc/build_identity.cpp",
+					"from": "return BetaBuild_VersionIsABeta(AVP_RELEASE_VERSION);",
+					"to": "return BetaBuild_VersionIsABeta(\"1.0.0\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the commands stay off in a beta",
+			"changes": [
+				{
+					"file": "3dc/avp/game_commands.cpp",
+					"from": "\tif (DebuggingCommandsActive || BuildIdentity_IsABeta())\n",
+					"to": "\tif (DebuggingCommandsActive)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the variables stay off in a beta",
+			"changes": [
+				{
+					"file": "3dc/avp/gamevars.cpp",
+					"from": "\tif (DebuggingCommandsActive || BuildIdentity_IsABeta())\n",
+					"to": "\tif (DebuggingCommandsActive)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: GOD stays off in a beta",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/cheat_codes.cpp",
+					"from": "\tif (DebuggingCommandsActive || BuildIdentity_IsABeta())\n",
+					"to": "\tif (DebuggingCommandsActive)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a beta sets the cheating flag",
+			"changes": [
+				{
+					"file": "3dc/build_identity.cpp",
+					"from": "\treturn BetaBuild_VersionIsABeta(AVP_RELEASE_VERSION);\n",
+					"to": "\textern int DebuggingCommandsActive;\n\tDebuggingCommandsActive = BetaBuild_VersionIsABeta(AVP_RELEASE_VERSION);\n\treturn DebuggingCommandsActive != 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: ALIENBOT works in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "void CastAlienBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n\t// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game\n\tif (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO ALIENBOTS IN MULTIPLAYER MODE\");\n\t\treturn;\n\t}\n",
+					"to": "void CastAlienBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: PREDALIENBOT works in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "void CastPredAlienBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n\t// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game\n\tif (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO ALIENBOTS IN MULTIPLAYER MODE\");\n\t\treturn;\n\t}\n",
+					"to": "void CastPredAlienBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: PRAETORIANBOT works in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "void CastPraetorianBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n\t// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game\n\tif (AvP.Network!=I_No_Network) {\n\t\tNewOnScreenMessage(\"NO ALIENBOTS IN MULTIPLAYER MODE\");\n\t\treturn;\n\t}\n",
+					"to": "void CastPraetorianBot(void) {\n\n\t#define BOTRANGE 2000\n\n\tVECTORCH position;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: TIMESCALE works in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/gamevars.cpp",
+					"from": "\t\ttimeScale -> RefuseWhen(GameVars_InANetworkGame, \"NO TIMESCALE IN MULTIPLAYER MODE\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused whole number is set anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_variable.cpp",
+					"from": "\tif (IsRefusedNow())\n\t{\n\t\treturn;\n\t}\n\n\tint OldValue = GetValue();\n\n\tSetValue( Val_New );\n\n\tOutputResultOfSetValue( OldValue );\n}\n\nvoid ConsoleVariable :: ProcessSetValue\n(\n\tfloat Val_New\n)\n",
+					"to": "\tint OldValue = GetValue();\n\n\tSetValue( Val_New );\n\n\tOutputResultOfSetValue( OldValue );\n}\n\nvoid ConsoleVariable :: ProcessSetValue\n(\n\tfloat Val_New\n)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a variable reads its digits with atoi",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_variable.cpp",
+					"from": "int NewValue = ConsoleValue_ToInt(strtoll(pProjCh_Search, NULL, 10));",
+					"to": "int NewValue = atoi(pProjCh_Search);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a command reads its digits with atoi",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_command.cpp",
+					"from": "return ConsoleValue_ToInt(strtoll(pProjCh_Arg, NULL, 10));",
+					"to": "return atoi(pProjCh_Arg);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the fixed-point sum goes back to the old way",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/gadgets/console_variable.cpp",
+					"from": "\ttheValue = ConsoleValue_WholeAsFixed(Val_New, MinVal, MaxVal);\n",
+					"to": "\tVal_New *= ONE_FIXED;\n\ttheValue = ConsoleValue_InRange(Val_New, MinVal, MaxVal);\n"
+				}
+			]
+		}
+	]
+}

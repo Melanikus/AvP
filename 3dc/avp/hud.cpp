@@ -1,12 +1,25 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the ghost of an alien lying in wait doesn't show on the motion tracker, as the real one doesn't;
+//   a campaign with everyone dead shows the failed level screen, as single player does
 /*KJL****************************************************************************************
 *                                         	hud.c                                           *
 ****************************************************************************************KJL*/
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a gun can draw its own ammunition panel in place of the usual one
+//   the number of rounds climbs at the same speed at any frame rate (see hud_rounds_number.h), and the
+//   pulse rifle's digits can ask what it says, so that they climb with it
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles read from a save file are kept between 0 and 4095 before a sine or cosine lookup, and the
 //   zoom-level search stops at the last zoom level
 // Modified 2026-11-05 by Melanikus for the AvP port:
+//   an Observer's world isn't drawn as if it were the gun
 //   asks for the marine's shoulder lamp on each frame of the game, and tells it where he's looking
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a gun can say not to draw it, and draw over the screen. See weapon_hooks.h
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   every frame asks how big the HUD is drawn, so a new screen size or HUD size shows at once, and the Predator's symbols are drawn at
+//   that size (HUD-SCALE-1, see hud_scale.h). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 
 
 /*
@@ -16,6 +29,7 @@
 	to copy Weapon data into the HUD
 */
 #include "3dc.h"
+#include "weapon_hooks.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -54,6 +68,8 @@
 #include "tables.h"
 #include "assert.h"
 #include "shoulder_lamp.h"
+#include "hud_rounds_number.h"
+#include "hud_scale.h"
 
 #define DO_PREDATOR_OVERLAY FALSE
 #define DO_ALIEN_OVERLAY FALSE
@@ -99,6 +115,8 @@ int predHUDSoundHandle=SOUND_NOACTIVEINDEX;
 
 static int HUD_PrimaryRounds;
 static int HUD_SecondaryRounds;
+static int HUD_PrimaryRoundsTimeLeftOver;
+static int HUD_SecondaryRoundsTimeLeftOver;
 /* numerics buffer - the marine has more digits on his HUD than the other species */
 char ValueOfHUDDigit[MAX_NO_OF_COMMON_HUD_DIGITS];
 
@@ -224,6 +242,8 @@ void InitMarineHUD(void)
 
 	HUD_PrimaryRounds = 0;
 	HUD_SecondaryRounds = 0;
+	HUD_PrimaryRoundsTimeLeftOver = 0;
+	HUD_SecondaryRoundsTimeLeftOver = 0;
 }
 
 
@@ -254,6 +274,8 @@ void ReInitHUD(void)
 
 	HUD_PrimaryRounds = 0;
 	HUD_SecondaryRounds = 0;
+	HUD_PrimaryRoundsTimeLeftOver = 0;
+	HUD_SecondaryRoundsTimeLeftOver = 0;
 
 	/* KJL 14:21:54 17/11/98 - Predator */
 	InitialiseGrapplingHook();
@@ -264,6 +286,9 @@ void MaintainHUD(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
 	GLOBALASSERT(playerStatusPtr);
+
+	// Before anything is drawn: if the screen's size or the player's HUD size has changed, the HUD is drawn at the new size from this frame
+	HUD_FollowTheScreen(false);
 
 	HandleParticleSystem();
 	HandleDecalSystem();
@@ -319,6 +344,9 @@ void MaintainHUD(void)
 		#if 1 || !PREDATOR_DEMO
 			GADGET_Render();
 		#endif
+
+		// This goes back off at the end of the usual way through here, and an Observer leaves early. Left on, the whole of the next frame would be drawn as if it were the gun, with no shadows.
+		gunLayer = false;
 
 		return;
 	}
@@ -536,7 +564,8 @@ void MaintainHUD(void)
 	
 	if (!playerStatusPtr->IsAlive)
 	{
-		if (AvP.Network == I_No_Network)
+		// When everyone in a campaign is dead, that's the same thing as dying in single player
+		if (AvP.Network == I_No_Network || Coop_EveryoneIsDead())
 		{
 			DoFailedLevelStatisticsScreen();
 		}
@@ -756,6 +785,12 @@ int ObjectShouldAppearOnMotionTracker(STRATEGYBLOCK *sbPtr)
 		ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
 		LOCALASSERT(ghostData);
 
+		// A real alien lying in wait doesn't show (below). Its ghost is told the same animation, and that's all this machine knows about it.
+		if((ghostData->type == I_BehaviourAlien)
+		 &&(ghostData->HModelController.Sequence_Type == HMSQT_AlienStand)
+		 &&(ghostData->HModelController.Sub_Sequence == ASSS_Dormant))
+			return 0;
+
 		if((ghostData->type == I_BehaviourAlienPlayer)
 		 &&(objectDynPtr->Position.vx == objectDynPtr->PrevPosition.vx)
 		 &&(objectDynPtr->Position.vy == objectDynPtr->PrevPosition.vy)
@@ -937,6 +972,12 @@ static void DisplayHealthAndArmour(void)
 	Render_HealthAndArmour(health,armour);
 }
 
+// What the number of rounds on the screen says right now, which can be less than the gun holds while it's climbing
+int HUD_PrimaryRoundsShown(void)
+{
+	return HUD_PrimaryRounds;
+}
+
 static void DisplayMarinesAmmo(void)
 {
 	PLAYER_STATUS *playerStatusPtr= (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
@@ -948,27 +989,19 @@ static void DisplayMarinesAmmo(void)
     weaponPtr = &(playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot]);
     twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
 
+	if (twPtr->Hooks && twPtr->Hooks->DrawAmmoPanel)
+	{
+		twPtr->Hooks->DrawAmmoPanel(playerStatusPtr, weaponPtr);
+		return;
+	}
+
 	primaryRounds=weaponPtr->PrimaryRoundsRemaining>>16;
     if ( (weaponPtr->PrimaryRoundsRemaining&0xffff) ) primaryRounds+=1;
 	secondaryRounds=weaponPtr->SecondaryRoundsRemaining>>16;
     if ( (weaponPtr->SecondaryRoundsRemaining&0xffff) ) secondaryRounds+=1;
 
-	if (primaryRounds > HUD_PrimaryRounds)
-	{
-		HUD_PrimaryRounds += NormalFrameTime/512;
-	}
-	if (primaryRounds < HUD_PrimaryRounds)
-	{
-		HUD_PrimaryRounds = primaryRounds;
-	}
-	if (secondaryRounds > HUD_SecondaryRounds)
-	{
-		HUD_SecondaryRounds += NormalFrameTime/512;
-	}
-	if (secondaryRounds < HUD_SecondaryRounds)
-	{
-		HUD_SecondaryRounds = secondaryRounds;
-	}
+	HudRounds_Move(&HUD_PrimaryRounds, &HUD_PrimaryRoundsTimeLeftOver, primaryRounds, NormalFrameTime);
+	HudRounds_Move(&HUD_SecondaryRounds, &HUD_SecondaryRoundsTimeLeftOver, secondaryRounds, NormalFrameTime);
 
 	{
 		enum AMMO_ID ammo;
@@ -1042,7 +1075,11 @@ static void HandleMarineWeapon(void)
 		return;
 	}
 
-	RenderThisDisplayblock(&PlayersWeapon);
+	// A gun can say not to draw it, as when looking through a scope
+	if (!twPtr->Hooks || !twPtr->Hooks->DrawGun || twPtr->Hooks->DrawGun(playerStatusPtr, weaponPtr))
+	{
+		RenderThisDisplayblock(&PlayersWeapon);
+	}
 
 	if ((twPtr->MuzzleFlashShapeName != NULL)
 	  && (!twPtr->PrimaryIsMeleeWeapon)
@@ -1089,10 +1126,28 @@ static void HandleMarineWeapon(void)
 	// aim gun sight
 	int aimingSpeed = twPtr->GunCrosshairSpeed * NormalFrameTime;
 	AimGunSight(aimingSpeed, twPtr);
+
+	// A gun can draw over the screen, like a scope's picture or a list of grenades
+	if (twPtr->Hooks && twPtr->Hooks->DrawOverHud)
+	{
+		twPtr->Hooks->DrawOverHud(playerStatusPtr, weaponPtr);
+	}
 }
 
 static void DrawMarineSights(void)
 {
+	// A gun that's not drawn, because he's looking through its scope, has no crosshair either
+	{
+		PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
+		PLAYER_WEAPON_DATA *weaponPtr = &(playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot]);
+		TEMPLATE_WEAPON_DATA *twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
+
+		if (twPtr->Hooks && twPtr->Hooks->DrawGun && !twPtr->Hooks->DrawGun(playerStatusPtr, weaponPtr))
+		{
+			return;
+		}
+	}
+
 	/* draw standard crosshairs */
 	if (MIRROR_CHEATMODE)
 	{
@@ -1295,8 +1350,12 @@ void DisplayPredatorHealthAndEnergy(void)
 	PLAYER_WEAPON_DATA *weaponPtr = &(PlayerStatusPtr->WeaponSlot[PlayerStatusPtr->SelectedWeaponSlot]);
 	int value;
 	int i;
-	int scale = DIV_FIXED(ScreenDescriptorBlock.SDB_Width,640);
-	int size = MUL_FIXED(51,scale);
+
+	// The symbols are drawn at the HUD's size (HUD_FollowTheScreen, d3d_hud.cpp), which in 1999 was worked out here from the screen's
+	// width. Each column is kPredatorColumnSymbols symbols of kPredatorSymbolRows rows (hud_scale.h), and the test checks that a column
+	// fits on the screen at the largest HUD size.
+	int scale = HUDScaleFactor;
+	int size = MUL_FIXED(kPredatorSymbolRows,scale);
 	{
 		NPC_DATA *NpcData = NULL;
 		switch (AvP.Difficulty) {
@@ -1317,7 +1376,7 @@ void DisplayPredatorHealthAndEnergy(void)
 		LOCALASSERT(NpcData);
 		value=MUL_FIXED(PlayerStatusPtr->Health/NpcData->StartingStats.Health,59);
 	}
-	for (i=0; i<6; i++)
+	for (i=0; i<kPredatorColumnSymbols; i++)
 	{
 		HUDCharDesc charDesc;
 		charDesc.X = 0;
@@ -1338,7 +1397,7 @@ void DisplayPredatorHealthAndEnergy(void)
 		D3D_DrawHUDPredatorDigit(&charDesc,scale);
 	}
 	value= MUL_FIXED(DIV_FIXED(PlayerStatusPtr->FieldCharge,PLAYERCLOAK_MAXENERGY),59);
-	for (i=0; i<6; i++)
+	for (i=0; i<kPredatorColumnSymbols; i++)
 	{
 		HUDCharDesc charDesc;
 		charDesc.X = ScreenDescriptorBlock.SDB_Width-size;

@@ -5,6 +5,8 @@
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the marine's shoulder lamp key, G by default
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine has a reload key, R by default
 /*------------------------------- Patrick 21/10/96 ------------------------------
   Source for reading player inputs.
   Note that whilst ReadUserInput() reads raw input data, the functions in this
@@ -25,10 +27,12 @@
 #include "pmove.h"
 #include "user_io.h"
 #include "shoulder_lamp.h"
+#include "weapon_hooks.h"
 #include <stddef.h>
 
 // The menu goes through these keys by counting bytes, so the lamp's byte has to be the one straight after the marine's others, and a saved profile holds these whole, so they can't change size.
-static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 1, "the menu would change the wrong key");
+static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 2, "the menu would change the wrong key");
+static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_Reload) == NUMBER_OF_MARINE_INPUTS - 1, "the menu would change the wrong key");
 static_assert(sizeof(PLAYER_INPUT_CONFIGURATION) == 32, "saved profiles wouldn't load");
 #include "iofocus.h"
 #include "paintball.h"
@@ -133,6 +137,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_VOID,
 	KEY_VOID,
 	KEY_VOID,			// ShoulderLamp
+	KEY_VOID,			// Reload
 #else
 	KEY_UP,				// Forward;
 	KEY_DOWN,			// Backward;
@@ -169,6 +174,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_F12,
 	KEY_TAB,
 	KEY_G,			// ShoulderLamp
+	KEY_R,			// Reload
 #endif
 };
 PLAYER_INPUT_CONFIGURATION DefaultPredatorInputPrimaryConfig =
@@ -352,6 +358,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_F12,
 	KEY_TAB,
 	KEY_G,			// ShoulderLamp
+	KEY_R,			// Reload
 };
 PLAYER_INPUT_CONFIGURATION DefaultPredatorInputPrimaryConfig =
 {
@@ -463,6 +470,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_F12,
 	KEY_TAB,
 	KEY_G,			// ShoulderLamp
+	KEY_R,			// Reload
 };
 PLAYER_INPUT_CONFIGURATION DefaultPredatorInputPrimaryConfig =
 {
@@ -574,6 +582,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_F12,
 	KEY_TAB,
 	KEY_G,			// ShoulderLamp
+	KEY_R,			// Reload
 };
 PLAYER_INPUT_CONFIGURATION DefaultPredatorInputPrimaryConfig =
 {
@@ -685,6 +694,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputPrimaryConfig =
 	KEY_F12,
 	KEY_TAB,
 	KEY_G,			// ShoulderLamp
+	KEY_R,			// Reload
 };
 PLAYER_INPUT_CONFIGURATION DefaultPredatorInputPrimaryConfig =
 {
@@ -798,6 +808,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputSecondaryConfig =
 	KEY_VOID,
 	KEY_VOID,
 	KEY_VOID,			// ShoulderLamp
+	KEY_VOID,			// Reload
 #else
 	KEY_VOID,			// Forward;
 	KEY_VOID,			// Backward;
@@ -835,6 +846,7 @@ PLAYER_INPUT_CONFIGURATION DefaultMarineInputSecondaryConfig =
 	KEY_VOID,
 	KEY_VOID,
 	KEY_VOID,			// ShoulderLamp
+	KEY_VOID,			// Reload
 #endif
 };
 
@@ -1192,6 +1204,10 @@ void ReadPlayerGameInput(STRATEGYBLOCK* sbPtr)
 				if (DebouncedKeyboardInput[primaryInput->Marine_ShoulderLamp]
 				 ||DebouncedKeyboardInput[secondaryInput->Marine_ShoulderLamp])
 					ShoulderLamp_Toggle();
+
+				if (DebouncedKeyboardInput[primaryInput->Marine_Reload]
+				 ||DebouncedKeyboardInput[secondaryInput->Marine_Reload])
+					Weapon_ReloadKeyPressed(playerStatusPtr);
 
 				#if !(MARINE_DEMO||DEATHMATCH_DEMO)
 				if (KeyboardInput[primaryInput->Jetpack]

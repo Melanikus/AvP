@@ -93,6 +93,13 @@ static bool effectSeen[kEffectsKept];
 
 static int64_t processorTotal[kNumProcessorStages];
 static int64_t mainVerticesTotal = 0;
+
+// Only frames with a beam count, so a game with no lamps says nothing about them
+static int lampBeamFrames = 0;
+static int64_t lampBeamsTotal = 0;
+static int64_t lampBeamWallsTotal = 0;
+static int lampBeamMostWalls = 0;
+static int64_t lampBeamWallsLeftOutTotal = 0;
 static int64_t drawsTotal = 0;
 static int texturesFirstUsedTotal = 0;
 static int64_t textureBytesFirstUsedTotal = 0;
@@ -390,6 +397,15 @@ void FrameTiming_CountDraw()
 	drawsTotal++;
 }
 
+void FrameTiming_CountLampBeams(int beams, int wallsKept, int wallsLeftOut)
+{
+	lampBeamFrames++;
+	lampBeamsTotal += beams;
+	lampBeamWallsTotal += wallsKept;
+	lampBeamMostWalls = wallsKept > lampBeamMostWalls ? wallsKept : lampBeamMostWalls;
+	lampBeamWallsLeftOutTotal += wallsLeftOut;
+}
+
 // What the clocks that don't overlap add up to. Anything left of a frame is in none of them.
 static double ClockedPartsOf(double const *stage)
 {
@@ -469,11 +485,26 @@ static void ReportProcessorTimes()
 		_snprintf(line, sizeof(line) - 1, "log: %d writes to the disk, the slowest %.1f ms, and only an error is written on the game's thread; %d lines lost", writes, slowest, linesLost);
 		line[sizeof(line) - 1] = 0;
 		LogString(line);
+
+		if (lampBeamFrames > 0)
+		{
+			double const beamFrames = (double)lampBeamFrames;
+
+			_snprintf(line, sizeof(line) - 1, "lamp beams: %d frames had any: %.1f beams a frame, %.0f walls kept a frame, the most %d, %.0f left out a frame, %.2f ms a frame on the processor",
+				lampBeamFrames, (double)lampBeamsTotal / beamFrames, (double)lampBeamWallsTotal / beamFrames, lampBeamMostWalls, (double)lampBeamWallsLeftOutTotal / beamFrames, ClockMilliseconds(processorTotal[kProcessorLampBeams]) / beamFrames);
+			line[sizeof(line) - 1] = 0;
+			LogString(line);
+		}
 	}
 
 	lastReportClock = now;
 	memset(processorTotal, 0, sizeof(processorTotal));
 	mainVerticesTotal = 0;
+	lampBeamFrames = 0;
+	lampBeamsTotal = 0;
+	lampBeamWallsTotal = 0;
+	lampBeamMostWalls = 0;
+	lampBeamWallsLeftOutTotal = 0;
 	drawsTotal = 0;
 	texturesFirstUsedTotal = 0;
 	textureBytesFirstUsedTotal = 0;

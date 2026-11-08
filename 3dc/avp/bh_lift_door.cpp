@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved door has to be on a frame of its own morph
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -26,6 +29,7 @@
 #include "bh_lift.h"
 #include "psnd.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "pldghost.h"
 
 void* LiftDoorBehaveInit(void* bhdata, STRATEGYBLOCK* sbptr)
@@ -282,7 +286,7 @@ void LoadStrategy_LiftDoor(SAVE_BLOCK_STRATEGY_HEADER* header)
 	doorbhv->door_state = block->door_state;
 	
 	
-	doorbhv->PDmctrl->ObMorphCurrFrame = block->ObMorphCurrFrame;
+	doorbhv->PDmctrl->ObMorphCurrFrame = Save_MorphFrameOrOwn(block->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphHeader->mph_maxframes);
 	doorbhv->PDmctrl->ObMorphFlags = block->ObMorphFlags;
 	doorbhv->PDmctrl->ObMorphSpeed = block->ObMorphSpeed;
 

@@ -63,6 +63,9 @@ void FrameTiming_CountMainVertices(int vertices);
 // Counts one indexed draw of the game's own lists. The scene and the surface pictures each make their own, and shadow draws aren't counted here.
 void FrameTiming_CountDraw();
 
+// A frame with other marines' lamp beams: how many, how many walls were kept for them, and how many there wasn't room for. See kshape.cpp.
+void FrameTiming_CountLampBeams(int beams, int wallsKept, int wallsLeftOut);
+
 // Gives back what's held on the graphics card, which has to go whenever the device resets.
 void FrameTiming_Release();
 
@@ -82,6 +85,7 @@ enum ProcessorStage
 	kProcessorHud,          // the display, and looking after the music
 	kProcessorMenus,        // the menus, which are asked every frame
 	kProcessorEndScene,     // finishing a frame
+	kProcessorLampBeams,    // the beams of other marines' lamps: working out their shapes, and handing them to the card. Part of the drawing
 	kProcessorLog,          // handing lines to the log. It should never be more than a moment: see logString.cpp
 	kNumProcessorStages
 };

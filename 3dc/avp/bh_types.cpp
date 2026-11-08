@@ -2,8 +2,15 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
+//   a saved door has to be on a frame of its own morph
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
+//   the M79's three grenades join the list of things the game can make and run, and so does a thrown staff
+//   a sentry gun's ghost doesn't hold a door open
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
+//   NpcModelIsLoaded: a character whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1;
+//   found through Bobblen's avp-forever, commit 207704e); a placed hierarchy whose model isn't there is taken out
 #define DB_LEVEL 3
 
 #include "3dc.h"
@@ -61,8 +68,13 @@
 #include "psnd.h"
 #include "plat_shp.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "pldghost.h"
 #include "bh_corpse.h"
+#include "logString.h"
+
+extern void M79GrenadeBehaviour(STRATEGYBLOCK *sbPtr);
+extern void ThrownStaffBehaviour(STRATEGYBLOCK *sbPtr);
 
 /*
 	our functions for doing stuff to objects
@@ -761,6 +773,14 @@ void EnableBehaviourType(STRATEGYBLOCK* sbptr, AVP_BEHAVIOUR_TYPE sb_type, void 
 		{
 			sbptr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_STATIC);
 			sbptr->SBdataptr = PlacedHierarchyBehaveInit(bhdata, sbptr);
+
+			// One whose model isn't loaded comes back with nothing, and is taken out here, because everything that
+			// works it reads its block (MODEL-NULL-1). Running out of memory comes back with nothing too, and that
+			// stops the level on its own.
+			if (!sbptr->SBdataptr && !memoryInitialisationFailure)
+			{
+				RemoveBehaviourStrategy(sbptr);
+			}
 			break;
 		}
 
@@ -1475,6 +1495,11 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 		case I_BehaviourGrenade:
 			GrenadeBehaviour(sbptr);
 			break;
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
+			M79GrenadeBehaviour(sbptr);
+			break;
 		case I_BehaviourMolotov:
 			MolotovBehaviour(sbptr);
 			break;
@@ -1567,6 +1592,10 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 
 		case I_BehaviourSpeargunBolt:
 			SpeargunBoltBehaviour(sbptr);
+			break;
+
+		case I_BehaviourThrownStaff:
+			ThrownStaffBehaviour(sbptr);
 			break;
 
 		case I_BehaviourPredatorEnergyBolt:
@@ -2006,11 +2035,15 @@ static int AnythingNearProxDoor(MODULE *doorModulePtr,PROXDOOR_BEHAV_BLOCK *door
 			(sbPtr->I_SBtype ==	I_BehaviourPredatorAlien)||
 			(sbPtr->I_SBtype ==	I_BehaviourFaceHugger)||
 			(sbPtr->I_SBtype == I_BehaviourGrenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79Grenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79FireGrenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79FragGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourRocket)||
 			(sbPtr->I_SBtype == I_BehaviourFrisbee)||
 			(sbPtr->I_SBtype == I_BehaviourPulseGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourProximityGrenade)||
-			(sbPtr->I_SBtype == I_BehaviourNetGhost)||
+			/* A sentry gun's ghost stands still, and a real one doesn't open doors */
+			(sbPtr->I_SBtype == I_BehaviourNetGhost && ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type != I_BehaviourAutoGun)||
 //			(sbPtr->I_SBtype == I_BehaviourFlareGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourFragmentationGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourPredatorDisc_SeekTrack)||
@@ -2717,6 +2750,9 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 
 		case I_BehaviourPulseGrenade: /* need a new shape */
 		case I_BehaviourGrenade:
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
 		{
 			CreateShapeInstance(mmbptr,"Shell");
 			break;
@@ -2747,6 +2783,12 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 		case I_BehaviourSpeargunBolt:
 		{
 			CreateShapeInstance(mmbptr,"spear");
+			break;
+		}
+		case I_BehaviourThrownStaff:
+		{
+			// If the staff's model isn't there, it flies looking like a spear, and nothing else changes.
+			CreateShapeInstance(mmbptr,GetLoadedShapeMSL("StaffPickup") >= 0 ? "StaffPickup" : "spear");
 			break;
 		}
 		case I_BehaviourPPPlasmaBolt:
@@ -2842,11 +2884,15 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 		case I_BehaviourRocket:
 		case I_BehaviourPulseGrenade:
 		case I_BehaviourGrenade:
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
 		case I_BehaviourFlareGrenade:
 		case I_BehaviourFragmentationGrenade:
 		case I_BehaviourClusterGrenade:
 		case I_BehaviourProximityGrenade:
 		case I_BehaviourSpeargunBolt:
+		case I_BehaviourThrownStaff:
 		case I_BehaviourPPPlasmaBolt:
 		case I_BehaviourFrisbeeEnergyBolt:
 		case I_BehaviourPredatorEnergyBolt:
@@ -2873,6 +2919,24 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
   return dptr;
 }
 
+
+// A character's model is in a file the level loads, and which files those are is worked out from the level's own lists
+// (InitNPCs in npcsetup.cpp). When the two don't agree, GetNamedHierarchyFromLibrary finds nothing. Making the
+// character anyway would read through nothing in Create_HModel, whose only check is an assert, and asserts aren't in
+// the game people play. So the caller doesn't make it, and the log names the model and its file, so the level can be
+// found and put right.
+bool NpcModelIsLoaded(struct section const *root, char const *who, char const *file, char const *model)
+{
+	if (root)
+	{
+		return true;
+	}
+
+	std::string const modelName = model ? model : "(no name)";
+	std::string const fileName = file ? file : "(no name)";
+	LogString(std::string("npc: refused: ") + who + " needs the model " + modelName + " from " + fileName + ", which isn't loaded, so it isn't made");
+	return false;
+}
 
 // this is seperate so that it can be called during env changes
 void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
@@ -3263,6 +3327,8 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 					if(ghostData->SoundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
 					if(ghostData->SoundHandle2!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle2);
 					if(ghostData->SoundHandle3!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle3);
+					// A playing sound remembers where this number lives and writes to it when it ends. If the block were freed first, that write would land in freed memory.
+					if(ghostData->SoundHandle4!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle4);
 					Dispel_HModel(&ghostData->HModelController);
 				}
 			}
@@ -3456,6 +3522,9 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 				if(corpseData)
 				{
 					if(corpseData->SoundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle);
+					if(corpseData->SoundHandle2!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle2);
+					if(corpseData->SoundHandle3!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle3);
+					if(corpseData->SoundHandle4!=SOUND_NOACTIVEINDEX) Sound_Stop(corpseData->SoundHandle4);
 					Dispel_HModel(&corpseData->HModelController);
 				}
 			}
@@ -3619,7 +3688,7 @@ void LoadStrategy_ProxDoor(SAVE_BLOCK_STRATEGY_HEADER* header)
 	doorbhv->door_state = block->door_state;
 	doorbhv->door_locked = block->door_locked;
 	doorbhv->triggeredByMarine = block->triggeredByMarine;
-	doorbhv->PDmctrl->ObMorphCurrFrame = block->ObMorphCurrFrame;
+	doorbhv->PDmctrl->ObMorphCurrFrame = Save_MorphFrameOrOwn(block->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphHeader->mph_maxframes);
 	doorbhv->PDmctrl->ObMorphFlags = block->ObMorphFlags;
 	doorbhv->PDmctrl->ObMorphSpeed = block->ObMorphSpeed;
 

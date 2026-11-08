@@ -1,8 +1,16 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   in the mode that plays as single player does, a host waits for a key too, and a level starts for everyone together
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a level load answers other machines all the way through
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   in a co-op campaign the loading screen says which level was finished, and who it's waiting for
 #include "3dc.h"
 #include "module.h"
 #include "platform.h"
 #include "kshape.h"
 #include "progress_bar.h"
+#include "networking.h"
 #include "chunk_textures.h"
 #include "inline.h"
 #include "gamedef.h"
@@ -19,6 +27,13 @@ extern int FadingGameInAfterLoading;
 
 extern void MinimalNetCollectMessages(void);
 extern void NetSendMessages(void);
+extern bool SameAsSinglePlayer(void);
+
+// In pldnet.cpp. Begins is called once when the screen comes up, and MayStartLevel each frame after that.
+extern void Coop_WaitOnLoadingScreenBegins(void);
+extern bool Coop_MayStartLevel(bool keyHasBeenPressed);
+extern bool Coop_LevelCompleteLine(char *line, size_t room);
+extern bool Coop_WaitingForLine(char *line, size_t room);
 extern void RenderGrabbedScreen(void);
 extern void ThisFramesRenderingHasBegun(void);
 extern void ThisFramesRenderingHasFinished(void);
@@ -105,6 +120,9 @@ void Start_Progress_Bar()
 
 void Set_Progress_Bar_Position(int pos)
 {
+	// Other machines think this one has gone if it stops answering, and a level can take a long time to load.
+	Net_KeepAnsweringWhileLoading();
+
 	uint32_t NewPosition = DIV_FIXED(pos, PBAR_LENGTH);
 
 	if (NewPosition > CurrentPosition)
@@ -151,39 +169,42 @@ void Set_Progress_Bar_Position(int pos)
 		ThisFramesRenderingHasFinished();
 		
 		FlipBuffers();
-		/*
-		If this is a network game , then check the received network messages from 
-		time to time (~every second).
-		Has nothing to do with the progress bar , but this is a convenient place to
-		do the check.
-		*/
-	
-#if 0
-		if (AvP.Network != I_No_Network)
-		{
-			static uint32_t LastSendTime;
-			uint32_t time = timeGetTime();
-			if (time - LastSendTime > 1000 || time < LastSendTime)
-			{
-				//time to check our messages 
-				LastSendTime = time;
-				MinimalNetCollectMessages();
-				//send messages , mainly  needed so that the host will send the game description
-				//allowing people to join while the host is loading
-				NetSendMessages();
-			}
-		}
-#endif
 	}
+}
+
+// Has the time come to leave the loading screen? In the mode that plays as single player does, everyone waits for a key, the host too, and then for everyone else. Otherwise a key is enough, and a host never waited. A test run counts as having pressed a key.
+static bool LoadingScreenIsDone(bool startsTogether, bool *keyHasBeenPressed)
+{
+	if (DebouncedGotAnyKey)
+	{
+		*keyHasBeenPressed = true;
+	}
+
+	if (startsTogether)
+	{
+		return Coop_MayStartLevel(*keyHasBeenPressed);
+	}
+
+	return *keyHasBeenPressed || AvP.Network == I_Host;
 }
 
 void Game_Has_Loaded()
 {
+	Net_SayLongestGapWhileLoading();
+
 	SoundSys_StopAll();
 	SoundSys_Management();
 
 	int32_t f = 65536;
 	ResetFrameCounter();
+
+	bool const startsTogether = AvP.Network != I_No_Network && SameAsSinglePlayer();
+	bool keyHasBeenPressed = false;
+
+	if (startsTogether)
+	{
+		Coop_WaitOnLoadingScreenBegins();
+	}
 
 	do
 	{
@@ -233,6 +254,22 @@ void Game_Has_Loaded()
 			RenderStringCentred(GetTextString(TEXTSTRING_INGAME_PRESSANYKEYTOCONTINUE), ScreenDescriptorBlock.SDB_Width/2, ((ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_SafeZoneHeightOffset)*23)/24-9, 0xffffffff);
 		}
 
+		// In a co-op campaign: the level just finished, above the next one's name, and who's still to press a key, above the bar
+		if (startsTogether)
+		{
+			char line[160];
+
+			if (Coop_LevelCompleteLine(line, sizeof(line)))
+			{
+				RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width/2, ScreenDescriptorBlock.SDB_Height/2 - 100, 0xffffffff);
+			}
+
+			if (Coop_WaitingForLine(line, sizeof(line)))
+			{
+				RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width/2, ((ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_SafeZoneHeightOffset)*11)/12 - 25, 0xffffffff);
+			}
+		}
+
 		ThisFramesRenderingHasFinished();
 		FlipBuffers();
 		FrameCounterHandler();
@@ -247,7 +284,7 @@ void Game_Has_Loaded()
 		}
 	}
 
-	while (!DebouncedGotAnyKey && AvP.Network != I_Host /*&& LoadingBarFull != NULL*/); // TODO - check me
+	while (!LoadingScreenIsDone(startsTogether, &keyHasBeenPressed));   // a run has nobody to press a key // TODO - check me
 
 	FadingGameInAfterLoading = ONE_FIXED;
 

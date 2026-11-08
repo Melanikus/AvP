@@ -1,0 +1,36 @@
+Remove a check that can never be true.
+
+Our own patch (AvP), from CodeQL's constant-comparison rule. When the channel
+limit isn't 0, it's at least 1, and the lowest allowed limit is 1, so the else
+branch can never run. Nothing changes when the game runs.
+
+diff --git a/host.c b/host.c
+index fff946a..19ff543 100644
+--- a/host.c
++++ b/host.c
+@@ -68,11 +68,9 @@ enet_host_create (const ENetAddress * address, size_t peerCount, size_t channelL
+     if (address != NULL && enet_socket_get_address (host -> socket, & host -> address) < 0)   
+       host -> address = * address;
+ 
++    /* a limit of 0 means "as many as allowed". ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT is 1, so no other limit can be too low */
+     if (! channelLimit || channelLimit > ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT)
+       channelLimit = ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT;
+-    else
+-    if (channelLimit < ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT)
+-      channelLimit = ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT;
+ 
+     host -> randomSeed = (enet_uint32) (size_t) host;
+     host -> randomSeed += enet_host_random_seed ();
+@@ -310,11 +308,9 @@ enet_host_compress (ENetHost * host, const ENetCompressor * compressor)
+ void
+ enet_host_channel_limit (ENetHost * host, size_t channelLimit)
+ {
++    /* a limit of 0 means "as many as allowed". ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT is 1, so no other limit can be too low */
+     if (! channelLimit || channelLimit > ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT)
+       channelLimit = ENET_PROTOCOL_MAXIMUM_CHANNEL_COUNT;
+-    else
+-    if (channelLimit < ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT)
+-      channelLimit = ENET_PROTOCOL_MINIMUM_CHANNEL_COUNT;
+ 
+     host -> channelLimit = channelLimit;
+ }

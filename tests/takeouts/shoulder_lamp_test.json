@@ -107,6 +107,16 @@
 			]
 		},
 		{
+			"name": "it starts in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/shoulder_lamp.cpp",
+					"from": "{ (float)kShoulderLampAcross, (float)kShoulderLampUp, (float)kShoulderLampAhead }",
+					"to": "{ 0.0f, 0.0f, 0.0f }"
+				}
+			]
+		},
+		{
 			"name": "the flicker goes too low",
 			"changes": [
 				{
@@ -191,8 +201,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/user_io.h",
-					"from": "#define NUMBER_OF_MARINE_INPUTS\t28\n#else",
-					"to": "#define NUMBER_OF_MARINE_INPUTS\t27\n#else"
+					"from": "#define NUMBER_OF_MARINE_INPUTS\t29\n#else",
+					"to": "#define NUMBER_OF_MARINE_INPUTS\t28\n#else"
 				}
 			]
 		},
@@ -211,7 +221,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/user_io.cpp",
-					"from": "static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 1, \"the menu would change the wrong key\");",
+					"from": "static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 2, \"the menu would change the wrong key\");",
 					"to": ""
 				}
 			]
@@ -261,7 +271,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/user_profile.cpp",
-					"from": "\tSettleShoulderLampKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);\n",
+					"from": "\tSettleMarineNewKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);\n",
 					"to": ""
 				}
 			]
@@ -271,8 +281,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/user_profile.cpp",
-					"from": "primaryKeys[i] == KEY_G || secondaryKeys[i] == KEY_G",
-					"to": "primaryKeys[i] == KEY_G"
+					"from": "primaryKeys[i] == key || secondaryKeys[i] == key",
+					"to": "primaryKeys[i] == key"
 				}
 			]
 		},
@@ -281,8 +291,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/user_profile.cpp",
-					"from": "i < NUMBER_OF_MARINE_INPUTS - 1",
-					"to": "i < NUMBER_OF_MARINE_INPUTS"
+					"from": "MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 2, KEY_G)",
+					"to": "MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 1, KEY_G)"
 				}
 			]
 		},
@@ -291,8 +301,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/user_profile.cpp",
-					"from": "KEY_ESCAPE, KEY_VOID, false, KEY_VOID)",
-					"to": "KEY_ESCAPE, KEY_G, false, KEY_VOID)"
+					"from": "ShoulderLamp_KeyFromProfile(secondary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_VOID, false, KEY_VOID)",
+					"to": "ShoulderLamp_KeyFromProfile(secondary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, false, KEY_VOID)"
 				}
 			]
 		},
@@ -301,7 +311,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "(j == NUMBER_OF_MARINE_INPUTS - 1) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j",
+					"from": "(j == NUMBER_OF_MARINE_INPUTS - 2) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j",
 					"to": "TEXTSTRING_MARINE_KEY_FORWARD+j"
 				}
 			]
@@ -381,8 +391,8 @@
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
-					"from": "if (d3d.shoulderLampEffect == kNullEffectID)",
-					"to": "if (AvP.Network != I_No_Network) { return; }\n\tif (d3d.shoulderLampEffect == kNullEffectID)"
+					"from": "bool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;",
+					"to": "if (AvP.Network != I_No_Network) { return; }\n\tbool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;"
 				}
 			]
 		},
@@ -393,6 +403,46 @@
 					"file": "win32/d3_func.cpp",
 					"from": "(d3d.orthoEffect == kNullShaderID)    ||",
 					"to": "(d3d.orthoEffect == kNullShaderID)    || (d3d.shoulderLampEffect == kNullShaderID) ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real light goes on with no lights per pixel",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)",
+					"to": "if (!ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real light is never put forward",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real light is too close to count",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "ToyConsiderLight(&shoulderLampLight, Player, found, numFound, most, &lightsThisFrame.steadyInReach);",
+					"to": "ToyConsiderLight(&shoulderLampLight, 0, found, numFound, most, &lightsThisFrame.steadyInReach);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the painted lamp stands aside for no reason",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "bool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;",
+					"to": "bool const isARealLight = ToyShadows_ShoulderLampIsChosen();"
 				}
 			]
 		},
@@ -797,12 +847,42 @@
 			]
 		},
 		{
+			"name": "SOURCE: the real light does not follow",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt)",
+					"to": "float3(0.0f, 0.0f, kLampAimsAt)"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: the painted lamp is not told where",
 			"changes": [
 				{
 					"file": "3dc/d3d_render.cpp",
 					"from": "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f",
 					"to": "0.0f, 0.0f, 0.0f"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real lamp is not told where",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "out[kToyLightAim] = ShoulderLamp_AimAcross();\n\t\t\t\tout[kToyLightAim + 1] = ShoulderLamp_AimDown();",
+					"to": "out[kToyLightAim] = 0.0f;\n\t\t\t\tout[kToyLightAim + 1] = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: something painted goes over the real light",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (isARealLight)\n\t{\n\t\treturn;\n\t}",
+					"to": "\tif (isARealLight)\n\t{\n\t}"
 				}
 			]
 		},
@@ -1473,6 +1553,66 @@
 					"file": "3dc/d3d_render.cpp",
 					"from": "\tShoulderLamp_SpotNumbers(spot);\n",
 					"to": "\tShoulderLamp_SpotNumbers(spot); ShoulderLamp_PutSpotBack();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp stays chosen for good once it was",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tshoulderLampIsChosen = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player's lamp has no aim on the list",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\t\t\t\tout[kToyLightAim] = ShoulderLamp_AimAcross();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the total isn't told each lamp's aim",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\t\tif (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one light isn't told its lamp's aim",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "\tSetLampAimConstant(device, light);\n\n\tReadPicture",
+					"to": "\n\tReadPicture"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shader ignores another lamp's own aim",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": ", LampAim.xyz, LampAim.w))",
+					"to": ", LampAim.xyz, 0.0f))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lamp shines through walls with shadows off",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)",
+					"to": "if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)"
 				}
 			]
 		}

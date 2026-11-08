@@ -1,0 +1,338 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "more lamps are shown than the most ever shown",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (most > kLampMostShown)\n\t{\n\t\tmost = kLampMostShown;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a very long list is read past what's looked at",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (count > kLampMostCandidates)\n\t{\n\t\tcount = kLampMostCandidates;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the furthest are looked at first",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "while (at > 0 && sorted[at - 1].distance > candidates[i].distance)",
+					"to": "while (at > 0 && sorted[at - 1].distance < candidates[i].distance)"
+				}
+			]
+		},
+		{
+			"name": "a lamp shown last frame doesn't keep its place",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "if (!already && LampPick_Has(shownBefore, countBefore, sorted[i].owner))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a nearer lamp pushes one out by any amount",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "if ((long long)sorted[i].distance + kLampKeepsItsPlaceBy < (long long)chosen[furthest].distance)",
+					"to": "if ((long long)sorted[i].distance < (long long)chosen[furthest].distance)"
+				}
+			]
+		},
+		{
+			"name": "an owner listed twice is shown twice",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\t\tif (already)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a frame time below nothing moves a lamp",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (!(seconds > 0.0f))\n\t{\n\t\tseconds = 0.0f;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a strength that isn't a number stays one",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (!(strength >= 0.0f))\n\t{\n\t\tstrength = 0.0f;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lamp fades past on or off",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "return moved < 0.0f ? 0.0f : moved > 1.0f ? 1.0f : moved;",
+					"to": "return moved;"
+				}
+			]
+		},
+		{
+			"name": "the line itself counts as dark",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "return light < kLampDarkBelow;",
+					"to": "return light <= kLampDarkBelow;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lamps are gathered in any network game",
+			"changes": [
+				{
+					"file": "3dc/avp/other_lamps.cpp",
+					"from": "bool const allowed = Global_VDB_Ptr && (AvP.Network == I_No_Network || SameAsSinglePlayer());",
+					"to": "bool const allowed = Global_VDB_Ptr != 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead marine's lamp is gathered",
+			"changes": [
+				{
+					"file": "3dc/avp/other_lamps.cpp",
+					"from": "return (marine->lampOn && block->SBDamageBlock.Health > 0) ? &marine->HModelController : 0;",
+					"to": "return marine->lampOn ? &marine->HModelController : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watched player's lamp is gathered",
+			"changes": [
+				{
+					"file": "3dc/avp/other_lamps.cpp",
+					"from": "if (ghost->type == I_BehaviourMarinePlayer && MultiplayerObservedPlayer && ghost->playerId == MultiplayerObservedPlayer)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every lamp is shown",
+			"changes": [
+				{
+					"file": "3dc/avp/other_lamps.cpp",
+					"from": "LampPick_Choose(candidates, numCandidates, shownLastFrame, numShownLastFrame, kLampMostShown, shown)",
+					"to": "LampPick_Choose(candidates, numCandidates, shownLastFrame, numShownLastFrame, numCandidates, shown)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: more are looked at than the rule allows for",
+			"changes": [
+				{
+					"file": "3dc/avp/other_lamps.cpp",
+					"from": "if (numCandidates < kLampMostCandidates)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lamps are only gathered when shadows are drawn",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tOtherLamps_Gather((float)NormalFrameTime / 65536.0f);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "more can be real than are shown",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "static const int kLampMostReal = 4;",
+					"to": "static const int kLampMostReal = 7;"
+				}
+			]
+		},
+		{
+			"name": "a marine never turns his lamp off",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "return onNow ? *timesLight < kLampLightTimesToTurnOff : LampPick_IsDark(light);",
+					"to": "return onNow ? true : LampPick_IsDark(light);"
+				}
+			]
+		},
+		{
+			"name": "a marine switches his lamp on the line",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "return onNow ? *timesLight < kLampLightTimesToTurnOff : LampPick_IsDark(light);",
+					"to": "return LampPick_IsDark(light);"
+				}
+			]
+		},
+		{
+			"name": "a marine's own flash turns his lamp off",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (firing)\n\t{\n\t\treturn onNow;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the off line is below the on line",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "static const int kLampLightAbove = 6500;",
+					"to": "static const int kLampLightAbove = 4000;"
+				}
+			]
+		},
+		{
+			"name": "a marine decides every frame",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "static const float kLampDecideEverySeconds = 2.0f;",
+					"to": "static const float kLampDecideEverySeconds = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner decides for itself",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\t&& (AvP.Network == I_No_Network || AvP.NetworkAIServer))",
+					"to": "\t\t)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead marine decides",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": " && marineStatusPointer->behaviourState != MBS_Dying\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp is decided every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatusPointer->lampDecideIn = (int)(kLampDecideEverySeconds * ONE_FIXED);",
+					"to": "marineStatusPointer->lampDecideIn = 0;"
+				}
+			]
+		},
+		{
+			"name": "one clearly light decision turns his lamp off",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "static const int kLampLightTimesToTurnOff = 2;",
+					"to": "static const int kLampLightTimesToTurnOff = 1;"
+				}
+			]
+		},
+		{
+			"name": "a dark decision doesn't start the count again",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "\tif (light < kLampLightAbove)\n\t{\n\t\t*timesLight = 0;\n\t}\n\telse if",
+					"to": "\tif (false)\n\t{\n\t\t*timesLight = 0;\n\t}\n\telse if"
+				}
+			]
+		},
+		{
+			"name": "the count grows without end",
+			"changes": [
+				{
+					"file": "3dc/lamp_pick.h",
+					"from": "else if (*timesLight < kLampLightTimesToTurnOff)",
+					"to": "else if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: firing is his state, which panic fire isn't",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatusPointer->myGunFlash != NULL, &marineStatusPointer->lampLightTimes",
+					"to": "marineStatusPointer->behaviourState == MBS_Firing, &marineStatusPointer->lampLightTimes"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner never decides for its copies of NPC marines",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "if (ghostData->type == I_BehaviourMarine && !NpcGhosts_MarineIsAnAndroid(state->model)",
+					"to": "if (false && !NpcGhosts_MarineIsAnAndroid(state->model)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner lights an android's lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "&& !NpcGhosts_MarineIsAnAndroid(state->model)\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner decides on every message",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "(unsigned int)(kLampDecideEverySeconds * 1000.0f))",
+					"to": "0u)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner decides in the dark, wherever the marine is",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "LightIntensityAtPoint(position), (state->flags & kNpcFlagFiring) != 0,",
+					"to": "0, (state->flags & kNpcFlagFiring) != 0,"
+				}
+			]
+		}
+	]
+}

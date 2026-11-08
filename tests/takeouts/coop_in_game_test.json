@@ -1,0 +1,358 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a player not in the level yet is out",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tif (!hasPressedIn && !isTheHost)\n\t{\n\t\treturn kCoopPlayerJoining;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a dead player is alive",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "return isAlive ? kCoopPlayerAlive : kCoopPlayerOut;",
+					"to": "return kCoopPlayerAlive;"
+				}
+			]
+		},
+		{
+			"name": "the host is never waited for",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "bool const isReady = place == hostPlace ? hostHasPressed : placeIsReady[place];",
+					"to": "bool const isReady = place == hostPlace ? true : placeIsReady[place];"
+				}
+			]
+		},
+		{
+			"name": "an empty place is waited for",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\t\tif (placeHasPlayer[place] && !isReady)\n",
+					"to": "\t\tif (!isReady)\n"
+				}
+			]
+		},
+		{
+			"name": "the list runs past its last bit",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "for (int place = 0; place < places && place < kCoopMostPlayers; place++)\n\t{\n\t\tbool const isReady",
+					"to": "for (int place = 0; place < places; place++)\n\t{\n\t\tbool const isReady"
+				}
+			]
+		},
+		{
+			"name": "a name is read past its room",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "for (size_t i = 0; i < mostLetters && piece[i] != 0 && *used + 1 < room; i++)",
+					"to": "for (size_t i = 0; piece[i] != 0 && *used + 1 < room; i++)"
+				}
+			]
+		},
+		{
+			"name": "a line runs past its room",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "for (size_t i = 0; i < mostLetters && piece[i] != 0 && *used + 1 < room; i++)",
+					"to": "for (size_t i = 0; i < mostLetters && piece[i] != 0; i++)"
+				}
+			]
+		},
+		{
+			"name": "a player waits for themselves",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "if ((places & (1u << place)) == 0 || place == myPlace || names[place] == NULL)",
+					"to": "if ((places & (1u << place)) == 0 || names[place] == NULL)"
+				}
+			]
+		},
+		{
+			"name": "an empty place is named",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "if ((places & (1u << place)) == 0 || place == myPlace || names[place] == NULL)",
+					"to": "if ((places & (1u << place)) == 0 || place == myPlace)"
+				}
+			]
+		},
+		{
+			"name": "no names still makes a line",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tline[named ? used : 0] = 0;\n\treturn named;\n",
+					"to": "\tline[used] = 0;\n\treturn true;\n"
+				}
+			]
+		},
+		{
+			"name": "no room is written to anyway",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tif (room == 0)\n\t{\n\t\treturn false;\n\t}\n\n\tsize_t used = 0;\n\tbool named = false;\n",
+					"to": "\tsize_t used = 0;\n\tbool named = false;\n"
+				}
+			]
+		},
+		{
+			"name": "no comma between names",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "named ? \", \" : \" \", 2);",
+					"to": "\" \", 1);"
+				}
+			]
+		},
+		{
+			"name": "any other game gets a last word",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tif (!wasInACampaign)\n\t{\n\t\treturn kCoopLastWordNone;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a removed player is told the host left",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tif (wasRemoved)\n\t{\n\t\treturn kCoopLastWordRemoved;\n\t}\n\n\tif (theLastLevelHasBeenFinished)",
+					"to": "\tif (theLastLevelHasBeenFinished)"
+				}
+			]
+		},
+		{
+			"name": "a finished campaign is the host leaving",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "\tif (theLastLevelHasBeenFinished)\n\t{\n\t\treturn isACustomMap ? kCoopLastWordMapComplete : kCoopLastWordCampaignComplete;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a custom map is a campaign",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "return isACustomMap ? kCoopLastWordMapComplete : kCoopLastWordCampaignComplete;",
+					"to": "return kCoopLastWordCampaignComplete;"
+				}
+			]
+		},
+		{
+			"name": "leaving by yourself is the host leaving",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "return hostHasGone ? kCoopLastWordHostLeft : kCoopLastWordNone;",
+					"to": "return kCoopLastWordHostLeft;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host doesn't count its own key",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "PlayerIdInPlayerList(AvPNetID), coopThisPlayerPressed);",
+					"to": "PlayerIdInPlayerList(AvPNetID), true);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host never says who it waits for",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tmessagePtr->coopWaitingFor = netGameData.coopWaitingFor;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner takes the list inside the lobby too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\t// Any list is safe too: it only picks which names go on a line of text, and a place with nobody in it is passed over\n\t\t\tnetGameData.coopWaitingFor = messagePtr->coopWaitingFor;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line waits before the key is pressed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (!coopThisPlayerPressed)\n\t{\n\t\treturn false;\n\t}\n\n\tconst char *names[NET_MAXPLAYERS];",
+					"to": "\tconst char *names[NET_MAXPLAYERS];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every loading screen says Level complete",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "coopFinishedPlace = place == netGameData.coopCampaignLevel + 1 ? netGameData.coopCampaignLevel : -1;",
+					"to": "coopFinishedPlace = netGameData.coopCampaignLevel;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a campaign's score key shows scores",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (SameAsSinglePlayer() && netGameData.myGameState != NGS_EndGameScreen)\n\t\t{\n\t\t\tCoop_ShowWhoIsAlive();",
+					"to": "if (false)\n\t\t{\n\t\t\tCoop_ShowWhoIsAlive();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a name is printed as a format",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "_snprintf(line, room - 1, \"%s: %s\", name, GetTextString(words));",
+					"to": "_snprintf(line, room - 1, name);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a name is read past its room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tmemcpy(name, player.name, NET_PLAYERNAMELENGTH);\n\tname[NET_PLAYERNAMELENGTH] = 0;\n",
+					"to": "\tstrcpy(name, player.name);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the last word is said every time",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\t// Said once: the next game starts with nothing to say\n\tlastWord = kCoopLastWordNone;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host leaves without being asked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\t\tquit->ElementID = AVPMENU_ELEMENT_GOTOMENU;\n\t\tquit->MenuToGoTo = AVPMENU_COOP_HOSTQUITS;\n",
+					"to": "\t\tquit->ElementID = AVPMENU_ELEMENT_QUITGAME;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's Players page can remove",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tif (AvP.Network == I_Host)\n\t{\n\t\tchanged = HostRemoveRows(&AvPMenu_CoopPlayers[rows], playerRemoveRowsShown);\n\t}\n",
+					"to": "\t{\n\t\tchanged = HostRemoveRows(&AvPMenu_CoopPlayers[rows], playerRemoveRowsShown);\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game is wiped before its ending is noted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tCoopMenu_TheGameIsEnding();\n\n\t\t\t/* we cleanup and reset our game mode here, at the end of the game loop, as other \n\t\t\tclean-up functions need to know if we've just exited a netgame */\n\t\t\tEndAVPNetGame();\n",
+					"to": "\t\t\t/* we cleanup and reset our game mode here, at the end of the game loop, as other \n\t\t\tclean-up functions need to know if we've just exited a netgame */\n\t\t\tEndAVPNetGame();\n\t\t\tCoopMenu_TheGameIsEnding();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page after the game comes second",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\tif (CoopMenu_HasALastWord())\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every network game gets the campaign's pause menu",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "menuID = SameAsSinglePlayer() ? AVPMENU_INCOOPGAME : AVPMENU_INNETGAME;",
+					"to": "menuID = AVPMENU_INCOOPGAME;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Yes comes first on the host's question",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_NO},\t{AVPMENU_INGAME},\t{0},\t{0},\tTEXTSTRING_COOP_HOST_QUITS},\n\t{AVPMENU_ELEMENT_QUITGAME,\t{TEXTSTRING_YES},\t{0},\t{0},\t{0},\tTEXTSTRING_COOP_HOST_QUITS},\n",
+					"to": "\t{AVPMENU_ELEMENT_QUITGAME,\t{TEXTSTRING_YES},\t{0},\t{0},\t{0},\tTEXTSTRING_COOP_HOST_QUITS},\n\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_NO},\t{AVPMENU_INGAME},\t{0},\t{0},\tTEXTSTRING_COOP_HOST_QUITS},\n"
+				}
+			]
+		},
+		{
+			"name": "the host is joining",
+			"changes": [
+				{
+					"file": "3dc/coop_in_game.h",
+					"from": "if (!hasPressedIn && !isTheHost)",
+					"to": "if (!hasPressedIn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list doesn't know the host",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "CoopPlayer_State(player.startFlag != 0, player.playerId == host, player.playerAlive != 0);",
+					"to": "CoopPlayer_State(player.startFlag != 0, false, player.playerAlive != 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner takes itself for the host",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "NetID const host = AvP.Network == I_Host ? AvPNetID : Net_HostPlayerID();",
+					"to": "NetID const host = AvPNetID;"
+				}
+			]
+		}
+	]
+}

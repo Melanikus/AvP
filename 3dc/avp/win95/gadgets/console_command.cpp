@@ -2,6 +2,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   temporary text objects are let go automatically when the code using them ends, instead of by hand;
 //   console commands are made by a small function that hands them back (it works the same as before)
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a command's typed number is read with strtoll and kept to an int, so digits that go on too long can't go wrong
 /*******************************************************************
  *
  *    DESCRIPTION: 	conscmnd.cpp
@@ -15,6 +17,9 @@
 /* Includes ********************************************************/
 #include "3dc.h"
 #include "console_command.hpp"
+#include "console_value.h"
+
+#include <stdlib.h>
 #include "strutil.h"
 
 	#define UseLocalAssert TRUE
@@ -351,7 +356,8 @@ int ConsoleCommand :: GetArg(ProjChar* pProjCh_Arg)
 {
 	GLOBALASSERT( pProjCh_Arg );
 
-	return atoi(pProjCh_Arg);
+	// strtoll stops at the largest or smallest number it can hold, where atoi's answer for digits that go on too long isn't defined
+	return ConsoleValue_ToInt(strtoll(pProjCh_Arg, NULL, 10));
 }
 
 

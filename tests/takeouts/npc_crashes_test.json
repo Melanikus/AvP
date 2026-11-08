@@ -335,62 +335,282 @@
 			]
 		},
 		{
-			"name": "MODEL: a marine the level places is made without his model",
+			"name": "MODEL: a marine the level places is made without its model",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"))",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a marine the level places\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))",
 					"to": "if (false)"
 				}
 			]
 		},
 		{
-			"name": "MODEL: a marine a generator makes is made without his model",
+			"name": "MODEL: a marine the level places, refused, is kept anyway",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"))",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a marine the level places\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a marine the level places\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\treturn;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a marine the level places, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a marine the level places\"",
+					"to": "\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a marine the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a marine or civilian a generator makes is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))",
 					"to": "if (false)"
 				}
 			]
 		},
 		{
-			"name": "MODEL: a placed marine taken out leaves his model's parts as they were",
+			"name": "MODEL: a marine or civilian a generator makes, refused, is kept anyway",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"",
-					"to": "\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\""
+					"from": "if (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\treturn;\n\t\t}"
 				}
 			]
 		},
 		{
-			"name": "MODEL: a generated marine taken out leaves his model's parts as they were",
+			"name": "MODEL: a marine or civilian a generator makes, taken out, leaves its model's parts as old memory",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"",
-					"to": "\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\""
+					"from": "\t\tmarineStatus->HModelController.section_data=NULL;\n\t\tmarineStatus->HModelController.Deltas=NULL;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\"",
+					"to": "\n\t\troot_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\""
 				}
 			]
 		},
 		{
-			"name": "MODEL: a placed marine refused is kept anyway",
+			"name": "MODEL: an alien a generator makes is made without its model",
 			"changes": [
 				{
-					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\"a marine the level places\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;",
-					"to": "\"a marine the level places\"))\n\t\t{\n\t\t\treturn;"
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"an alien a generator makes\", modelFile, modelName))",
+					"to": "if (false)"
 				}
 			]
 		},
 		{
-			"name": "MODEL: a generated marine refused is kept anyway",
+			"name": "MODEL: an alien a generator makes, refused, is kept anyway",
 			"changes": [
 				{
-					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\"a marine a generator makes\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;",
-					"to": "\"a marine a generator makes\"))\n\t\t{\n\t\t\treturn;"
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"an alien a generator makes\", modelFile, modelName))\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\t\treturn;\n\t\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"an alien a generator makes\", modelFile, modelName))\n\t\t\t{\n\t\t\t\treturn;\n\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: an alien a generator makes, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "\t\talienStatus->HModelController.section_data=NULL;\n\t\talienStatus->HModelController.Deltas=NULL;\n\n\t\t{\n\t\t\tchar const *modelFile;\n\t\t\tchar const *modelName;\n\t\t\tAlienModel(alienStatus->Type, &modelFile, &modelName);\n\t\t\troot_section=GetNamedHierarchyFromLibrary(modelFile,modelName);\n\n\t\t\tif (!NpcModelIsLoaded(root_section, \"an alien a generator makes\"",
+					"to": "\n\t\t{\n\t\t\tchar const *modelFile;\n\t\t\tchar const *modelName;\n\t\t\tAlienModel(alienStatus->Type, &modelFile, &modelName);\n\t\t\troot_section=GetNamedHierarchyFromLibrary(modelFile,modelName);\n\n\t\t\tif (!NpcModelIsLoaded(root_section, \"an alien a generator makes\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: an alien the level places is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"an alien the level places\", modelFile, modelName))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: an alien the level places, refused, is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"an alien the level places\", modelFile, modelName))\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\t\treturn;\n\t\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"an alien the level places\", modelFile, modelName))\n\t\t\t{\n\t\t\t\treturn;\n\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: an alien the level places, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "\t\talienStatus->HModelController.section_data=NULL;\n\t\talienStatus->HModelController.Deltas=NULL;\n\n\t\t{\n\t\t\tchar const *modelFile;\n\t\t\tchar const *modelName;\n\t\t\tAlienModel(alienStatus->Type, &modelFile, &modelName);\n\t\t\troot_section=GetNamedHierarchyFromLibrary(modelFile,modelName);\n\n\t\t\tif (!NpcModelIsLoaded(root_section, \"an alien the level places\"",
+					"to": "\n\t\t{\n\t\t\tchar const *modelFile;\n\t\t\tchar const *modelName;\n\t\t\tAlienModel(alienStatus->Type, &modelFile, &modelName);\n\t\t\troot_section=GetNamedHierarchyFromLibrary(modelFile,modelName);\n\n\t\t\tif (!NpcModelIsLoaded(root_section, \"an alien the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a facehugger the level places is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a facehugger the level places\", \"hnpchugger\", \"Template\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a facehugger the level places, refused, is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a facehugger the level places\", \"hnpchugger\", \"Template\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a facehugger the level places\", \"hnpchugger\", \"Template\"))\n\t\t{\n\t\t\treturn;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a facehugger the level places, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "\t\tfacehuggerStatus->HModelController.section_data=NULL;\n\t\tfacehuggerStatus->HModelController.Deltas=NULL;\n\t\tfacehuggerStatus->soundHandle = SOUND_NOACTIVEINDEX;\n\t\tfacehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetHierarchyFromLibrary(\"hnpchugger\");\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a facehugger the level places\"",
+					"to": "\t\tfacehuggerStatus->soundHandle = SOUND_NOACTIVEINDEX;\n\t\tfacehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetHierarchyFromLibrary(\"hnpchugger\");\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a facehugger the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a facehugger the level places, taken out, leaves a sound as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "facehuggerStatus->soundHandle = SOUND_NOACTIVEINDEX;\n\t\tfacehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetHierarchyFromLibrary",
+					"to": "\t\tfacehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetHierarchyFromLibrary"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a predator the level places is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a predator the level places\", predatorStatus->Selected_Weapon->Riffname, predatorStatus->Selected_Weapon->HierarchyName))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a predator the level places, refused, is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a predator the level places\", predatorStatus->Selected_Weapon->Riffname, predatorStatus->Selected_Weapon->HierarchyName))\n                {\n                        RemoveBehaviourStrategy(sbPtr);\n                        return;\n                }",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a predator the level places\", predatorStatus->Selected_Weapon->Riffname, predatorStatus->Selected_Weapon->HierarchyName))\n                {\n                        return;\n                }"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a predator the level places, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "                predatorStatus->HModelController.section_data=NULL;\n                predatorStatus->HModelController.Deltas=NULL;\n\n                root_section=GetNamedHierarchyFromLibrary(predatorStatus->Selected_Weapon->Riffname,predatorStatus->Selected_Weapon->HierarchyName);\n\n                if (!NpcModelIsLoaded(root_section, \"a predator the level places\"",
+					"to": "\n                root_section=GetNamedHierarchyFromLibrary(predatorStatus->Selected_Weapon->Riffname,predatorStatus->Selected_Weapon->HierarchyName);\n\n                if (!NpcModelIsLoaded(root_section, \"a predator the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a queen the level places is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a queen the level places\", \"queen\", \"Template\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a queen the level places, refused, is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a queen the level places\", \"queen\", \"Template\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a queen the level places\", \"queen\", \"Template\"))\n\t\t{\n\t\t\treturn;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a queen the level places, taken out, leaves its model's parts as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "\t\tqueenStatus->HModelController.section_data=NULL;\n\t\tqueenStatus->HModelController.Deltas=NULL;\n\t\tqueenStatus->soundHandle=SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(\"queen\",\"Template\");\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a queen the level places\"",
+					"to": "\t\tqueenStatus->soundHandle=SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(\"queen\",\"Template\");\n\n\t\tif (!NpcModelIsLoaded(root_section, \"a queen the level places\""
+				}
+			]
+		},
+		{
+			"name": "MODEL: a queen the level places, taken out, leaves a sound as old memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "queenStatus->soundHandle=SOUND_NOACTIVEINDEX;\n\n\t\troot_section=GetNamedHierarchyFromLibrary(\"queen\",\"Template\");",
+					"to": "\n\t\troot_section=GetNamedHierarchyFromLibrary(\"queen\",\"Template\");"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a xenoborg the level places is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a xenoborg the level places\", \"hnpc_xenoborg\", \"xenobasic\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a xenoborg the level places, refused, is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a xenoborg the level places\", \"hnpc_xenoborg\", \"xenobasic\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a xenoborg the level places\", \"hnpc_xenoborg\", \"xenobasic\"))\n\t\t{\n\t\t\treturn;\n\t\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a placed hierarchy is made without its model",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_placed_hierarchy.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a placed hierarchy the level names\", ph_tt->file_name, ph_tt->hier_name))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a placed hierarchy refused keeps its block",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_placed_hierarchy.cpp",
+					"from": "if (!NpcModelIsLoaded(root_section, \"a placed hierarchy the level names\", ph_tt->file_name, ph_tt->hier_name))\n\t{\n\t\tDeallocateMem(ph_bhv);\n\t\treturn ((void *)NULL);\n\t}",
+					"to": "if (!NpcModelIsLoaded(root_section, \"a placed hierarchy the level names\", ph_tt->file_name, ph_tt->hier_name))\n\t{\n\t\treturn ((void *)NULL);\n\t}"
+				}
+			]
+		},
+		{
+			"name": "MODEL: a placed hierarchy that comes back with nothing is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "if (!sbptr->SBdataptr && !memoryInitialisationFailure)\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbptr);\n\t\t\t}",
+					"to": "if (!sbptr->SBdataptr && !memoryInitialisationFailure)\n\t\t\t{\n\t\t\t}"
 				}
 			]
 		},
@@ -398,7 +618,7 @@
 			"name": "MODEL: a missing model passes the check",
 			"changes": [
 				{
-					"file": "3dc/avp/bh_marine.cpp",
+					"file": "3dc/avp/bh_types.cpp",
 					"from": "if (root)\n\t{\n\t\treturn true;\n\t}",
 					"to": "{\n\t\treturn true;\n\t}"
 				}
@@ -408,9 +628,80 @@
 			"name": "MODEL: the log doesn't say which model",
 			"changes": [
 				{
-					"file": "3dc/avp/bh_marine.cpp",
-					"from": "\" needs the model \" + model + \" from \" + file + \", which",
-					"to": "\" needs a model, which"				}
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\" needs the model \" + modelName + \" from \" + fileName + \", which",
+					"to": "\" needs a model, which"
+				}
+			]
+		},
+		{
+			"name": "a ghost's block is cleared before it's checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "\t\tNETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));\n\t\tif(!ghostData)\n\t\t{\n\t\t\t/* allocation failed */\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;\n\t\t}\n\n\t\t// New memory holds whatever was there before, and not every kind of ghost sets every field. It's cleared only once it's\n\t\t// known to be there: AllocateMem is meant to stop the game rather than give back nothing, but this doesn't count on it.\n\t\tmemset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));\n",
+					"to": "\t\tNETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));\n\t\tmemset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));\n\t\tif(!ghostData)\n\t\t{\n\t\t\t/* allocation failed */\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;\n\t\t}\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "case I_BehaviourAlien:\n\t\t\t\tcase I_BehaviourFaceHugger:\n",
+					"to": "case I_BehaviourAlien:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the queen glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "case I_BehaviourFaceHugger:\n\t\t\t\tcase I_BehaviourQueenAlien: {",
+					"to": "case I_BehaviourFaceHugger: {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another machine's facehugger glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| ghostDataPtr->type == I_BehaviourFaceHugger || ghostDataPtr->type == I_BehaviourQueenAlien",
+					"to": "|| ghostDataPtr->type == I_BehaviourQueenAlien"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another machine's queen glows in the marine colour",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| ghostDataPtr->type == I_BehaviourFaceHugger || ghostDataPtr->type == I_BehaviourQueenAlien",
+					"to": "|| ghostDataPtr->type == I_BehaviourFaceHugger"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part blown off a facehugger is left dark",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": " || debrisDataPtr->Type == I_BehaviourFaceHugger",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a part blown off the queen is left dark",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "|| debrisDataPtr->Type == I_BehaviourQueenAlien) {",
+					"to": ") {"
+				}
 			]
 		}
 	]

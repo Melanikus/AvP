@@ -1,12 +1,21 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the debug and cheat commands are there in a beta, for testers, and using them doesn't count as cheating (see beta_build.h)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS commands
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only a host can restart a network game
 //   the LAMPFOLLOW command
 //   the LAMPSPOTSIZE and LAMPINTENSITY commands
+// Modified 2026-11-06 by Melanikus for the AvP port:
 //   the SHADOWAMBIENT command, which says whether the map's lights that show no corona cast shadows
 //   the SHADOWEVENGAP command, which says whether a shadow starts the same distance behind every part of its polygon
+//   the PIXELGLOW, PIXELCURVE and PIXELLEVEL commands, which change how a lamp's light looks per pixel
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   only a host can restart a network game
 #include "3dc.h"
 #include "console_command.hpp"
+#include "build_identity.h"
 #include "strutil.h"
 #include "fmvCutscenes.h"
 #include "view_switches.h"
@@ -302,6 +311,9 @@ static void RestartMultiplayer(void)
 	/* obviously have to be in a network game... */
 	if (AvP.Network==I_No_Network) return;
 
+	// Only the host can restart the game for everyone: nobody would believe it from anyone else
+	if (AvP.Network != I_Host) return;
+
 	int seed=FastRandom();
 	AddNetMsg_RestartNetworkGame(seed);
 	RestartNetworkGame(seed);
@@ -342,13 +354,6 @@ void CreateGameSpecificConsoleCommands(void)
 
 	ConsoleCommand::Make
 	(
-		"SHADOWAMBIENT",
-		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
-		ShadowAmbientCommand
-	);
-
-	ConsoleCommand::Make
-	(
 		"LAMPFOLLOW",
 		"HOW MANY SECONDS THE SHOULDER LAMP TAKES TO CATCH UP WITH THE VIEW, FROM 0 TO 5. 0 STICKS IT TO THE VIEW. ON ITS OWN, SAYS WHAT IT IS",
 		LampFollowCommand
@@ -368,11 +373,21 @@ void CreateGameSpecificConsoleCommands(void)
 		LampIntensityCommand
 	);
 
+	ConsoleCommand::Make
+	(
+		"SHADOWAMBIENT",
+		"WHETHER THE MAP'S LIGHTS THAT SHOW NO CORONA CAST SHADOWS: ON OR OFF. ON ITS OWN, SWITCHES IT",
+		ShadowAmbientCommand
+	);
+
 	// Only do anything with -dev, and they say so without it. See view_switches.h.
 	ConsoleCommand::Make("RELIEFFLIP", "SWAPS WHICH OF BLACK AND WHITE IS THE POLYGON'S LEVEL IN A DEPTH MAP, LIVE", ReliefFlipCommand);
 	ConsoleCommand::Make("TILTFLIP", "SWAPS BUMPS AND DENTS IN A NORMAL MAP, LIVE", TiltFlipCommand);
 	ConsoleCommand::Make("SHADOWEVENGAP", "WHETHER A SHADOW STARTS THE SAME DISTANCE BEHIND EVERY PART OF ITS POLYGON: ON OR OFF. ON ITS OWN, SWITCHES IT", ShadowEvenGapCommand);
 	ConsoleCommand::Make("RELIEFDEPTH", "HOW DEEP A DEPTH MAP GOES, AS A FRACTION OF A PICTURE'S WIDTH, FROM 0 TO 0.2", ReliefDepthCommand);
+	ConsoleCommand::Make("PIXELGLOW", "HOW MUCH OF A LAMP'S LIGHT GOES ON TOP WITH NO TEXTURE, FROM 0 TO 1. 0.25 IS AS BUILT", PixelGlowCommand);
+	ConsoleCommand::Make("PIXELCURVE", "HOW DEEP A LAMP'S DIM TONES GO PER PIXEL, FROM 0.25 TO 4. 1 IS AS BUILT, AND HIGHER IS DARKER", PixelCurveCommand);
+	ConsoleCommand::Make("PIXELLEVEL", "HOW STRONG A LAMP'S LIGHT LOOKS PER PIXEL, FROM 0 TO 2. 1 IS AS BUILT", PixelLevelCommand);
 
 	#ifndef AVP_DEBUG_VERSION 
 	bool IsACheat = true;
@@ -380,9 +395,11 @@ void CreateGameSpecificConsoleCommands(void)
 	bool IsACheat = false;
 	#endif
 	
+	// In a beta these are there for testers, without DebuggingCommandsActive, which would also stop saving, statistics and the next
+	// level's unlock: see beta_build.h. The 11 commands.
 	#ifndef AVP_DEBUG_VERSION // allow debug commands without -debug
 	#ifndef AVP_DEBUG_FOR_FOX // allow debug commands without -debug
-	if (DebuggingCommandsActive)
+	if (DebuggingCommandsActive || BuildIdentity_IsABeta())
 	#endif
 	#endif
 	{

@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed the declarations of unused code for making new level files
+//   the environment settings keep hold of the block of bytes they live in
 
 #ifndef _avpchunk_hpp_
 #define _avpchunk_hpp_
@@ -290,6 +291,11 @@ public :
 	size_t size_chunk();
 
 	AVP_Environment_Settings *  settings;
+
+private :
+	// The memory settings points at. A level from a newer version can hold more than the struct above knows about, so
+	// this is a block of bytes as long as the data. This is the only pointer to give back.
+	unsigned char * settings_block;
 
 };
 

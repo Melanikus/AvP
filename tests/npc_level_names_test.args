@@ -1,0 +1,1 @@
+/std:c++17 /EHsc /MT /J /W3 /sdl /FC /DNDEBUG /I3dc/avp tests/npc_level_names_test.cpp

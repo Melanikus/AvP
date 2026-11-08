@@ -1,0 +1,129 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "capitals do not count in a part",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "if (strcmp(root->Section_Name, name) == 0)",
+					"to": "if (_stricmp(root->Section_Name, name) == 0)"
+				}
+			]
+		},
+		{
+			"name": "part of a name is a match",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "if (strcmp(root->Section_Name, name) == 0)",
+					"to": "if (strncmp(root->Section_Name, name, strlen(name)) == 0)"
+				}
+			]
+		},
+		{
+			"name": "children are not looked in",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "if (Model_Has_Part(*child, name))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an empty list of children is read",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "if (root->Children)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "capitals count in a file",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "_stricmp(needs->file, file) != 0",
+					"to": "strcmp(needs->file, file) != 0"
+				}
+			]
+		},
+		{
+			"name": "capitals do not count in a model",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "strcmp(needs->hierarchy, hierarchy) != 0",
+					"to": "_stricmp(needs->hierarchy, hierarchy) != 0"
+				}
+			]
+		},
+		{
+			"name": "any model of the file will do",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": " || strcmp(needs->hierarchy, hierarchy) != 0",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "any file will do",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "_stricmp(needs->file, file) != 0 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the last part of a row is not asked about",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "part < MODEL_NEEDS_MOST_PARTS && needs->parts[part]",
+					"to": "part < MODEL_NEEDS_MOST_PARTS - 1 && needs->parts[part]"
+				}
+			]
+		},
+		{
+			"name": "a missing part is not noticed",
+			"changes": [
+				{
+					"file": "3dc/avp/model_needs.cpp",
+					"from": "if (!Model_Has_Part(root, needs->parts[part]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game does not ask about a model",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "Model_First_Missing_Part(hd->hierarchy_root, riffname, hd->hierarchy_name)",
+					"to": "NULL"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game goes on with a part missing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "Stop_On_Bad_Model(riffname, hd->hierarchy_name, missing_part);",
+					"to": ";"
+				}
+			]
+		}
+	]
+}

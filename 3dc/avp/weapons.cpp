@@ -1,13 +1,35 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79's grenades can be set off by damage, like other grenades
+//   an alien can bite, and a Predator take a trophy from, a copy of an NPC the host runs, as they can from the real one
+//   in the same-as-single-player mode, friendly fire off only stops your own species' weapons, so NPC fire always hurts
+//   the Predator's staff lives in weapon_staff.cpp now, so its old code here is gone
+//   how many times a hit counts comes from another machine, so a number below nothing can't run away, and a spear with no dynamics block doesn't use one
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   declarations written so the security scanner can read this file (CODING-STANDARD.md, rule 1)
+//   a gun's model can come from our own file of the MelPyth guns' versions: see Weapon_ModelFileFor in weapon_hooks.cpp
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   the alien tail copes with a model missing its aiming animations
+//   the disc and an alien's chest are checked before use, because a save file can leave them out
 //   a request for a weapon slot that isn't there is ignored, where only an assert stood before
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a weapon being put away with no slot to go to stays in the hands, and nothing is written past the list of slots
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a gun with a file of its own can join in the common weapon code. See weapon_hooks.h
+//   and a gun that's busy can ask whether another weapon was asked for, and start the change itself
+//   Next Weapon and Previous Weapon use one search, in weapon_slots.h, in place of four copies of it
+//   a marine out of ammunition falls back to the new guns too
+//   the reload key loses nothing: see weapon_reload.h
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
 #include "3dc.h"
+#include "weapon_hooks.h"
+#include "weapon_reload.h"
+#include "weapon_slots.h"
 #include "module.h"
 #include "inline.h"
 #include "io.h"
@@ -51,6 +73,8 @@
 #include "showcmds.h"
 #include "pldghost.h"
 #include "pldnet.h"
+#include "npc_ghosts.h"
+#include "net_checks.h"
 #include "los.h"
 #include "kshape.h"
 #include "targeting.h"
@@ -131,9 +155,6 @@ EULER Minigun_MaxHeadJolt;
 EULER Minigun_HeadJolt;
 int Flamethrower_Timer;
 
-SECTION_DATA *PlayerStaff1=NULL;
-SECTION_DATA *PlayerStaff2=NULL;
-SECTION_DATA *PlayerStaff3=NULL;
 int StaffAttack=-1;
 STRATEGYBLOCK *Biting;
 char Biting_SBname[SB_NAME_LENGTH];
@@ -212,6 +233,10 @@ enum WEAPON_ID MarineWeaponHierarchy[] = {
 	WEAPON_GRENADELAUNCHER,
 	WEAPON_SADAR,
 	WEAPON_FRISBEE_LAUNCHER,
+	WEAPON_AUTOSHOTGUN,
+	WEAPON_SONICCANNON, // the sniper rifle
+	WEAPON_BEAMCANNON, // the revolver
+	WEAPON_MYSTERYGUN, // the M79
 	WEAPON_CUDGEL,
 	NULL_WEAPON
 
@@ -268,6 +293,9 @@ void UpdateWeaponStateMachine(void);
 void HandleSpearImpact(VECTORCH *positionPtr, STRATEGYBLOCK *sbPtr, enum AMMO_ID AmmoID, VECTORCH *directionPtr, int multiple, SECTION_DATA *this_section_data);
 static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *weaponPtr,TEMPLATE_WEAPON_DATA *twPtr, int justfiredp,int justfireds, int ps);
 static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *weaponPtr);
+// Whether he's pressed the reload key since the state machine last looked
+static bool ReloadKeyIsWaiting = false;
+static void Weapon_StartReloadFromTheKey(void *playerStatus);
 void ChangeHUDToAlternateShapeSet(char *riffname,char *setname);
 
 
@@ -444,7 +472,7 @@ int WeaponHasAmmo(int slot) {
 	    this_weaponPtr = &(PlayerStatusPtr->WeaponSlot[slot]);
 
 		if ((this_weaponPtr->SecondaryRoundsRemaining!=0 || this_weaponPtr->SecondaryMagazinesRemaining!=0)
-			|| (this_weaponPtr->PrimaryRoundsRemaining!=0 || this_weaponPtr->PrimaryMagazinesRemaining!=0)
+			|| (this_weaponPtr->PrimaryRoundsRemaining!=0 || this_weaponPtr->PrimaryMagazinesRemaining!=0 || this_weaponPtr->PrimaryLeftoverRounds!=0)
 			||	(this_weaponPtr->WeaponIDNumber==WEAPON_CUDGEL)
 			|| (
 				(this_weaponPtr->WeaponIDNumber==WEAPON_GRENADELAUNCHER)
@@ -735,9 +763,22 @@ void UpdateWeaponStateMachine(void)
             	weaponPtr->StateTimeOutCounter-=MUL_FIXED(timeOutRate,NormalFrameTime);
             }
         }
+
+		// A gun can keep a state going, for as long as a key is held
+		if (weaponPtr->StateTimeOutCounter<=0 && twPtr->Hooks && twPtr->Hooks->MayLeaveState && !twPtr->Hooks->MayLeaveState(playerStatusPtr,weaponPtr))
+		{
+			weaponPtr->StateTimeOutCounter=1;
+		}
+
         if(weaponPtr->StateTimeOutCounter<=0)
         {
 			WeaponFidgetPlaying=0;
+
+			// A gun with its own states says what comes next, and otherwise it's the same as for any gun
+			if (twPtr->Hooks && twPtr->Hooks->StateEnded && twPtr->Hooks->StateEnded(playerStatusPtr,weaponPtr))
+			{
+			}
+			else
 			/* It's the only way to be sure. */
         	switch(weaponPtr->CurrentState)
 			{
@@ -813,21 +854,14 @@ void UpdateWeaponStateMachine(void)
 			    {
 			    	/* load a new magazine */
                     TEMPLATE_AMMO_DATA *templateAmmoPtr = &TemplateAmmo[twPtr->PrimaryAmmoID];
-					if (weaponPtr->PrimaryRoundsRemaining==0) {
+					// With rounds still in it, this can only be the reload key, and they aren't lost. See weapon_reload.h.
+					if (weaponPtr->PrimaryRoundsRemaining < (unsigned int)templateAmmoPtr->AmmoPerMagazine
+						|| (weaponPtr->WeaponIDNumber==WEAPON_TWO_PISTOLS && weaponPtr->SecondaryRoundsRemaining < (unsigned int)templateAmmoPtr->AmmoPerMagazine)) {
+						Reload_FillGun(&weaponPtr->PrimaryRoundsRemaining, &weaponPtr->PrimaryLeftoverRounds, &weaponPtr->PrimaryMagazinesRemaining, templateAmmoPtr->AmmoPerMagazine);
+
 						if (weaponPtr->WeaponIDNumber==WEAPON_TWO_PISTOLS) {
 							/* Two pistols reloads BOTH primary and secondary. */
-							if (weaponPtr->PrimaryMagazinesRemaining) {
-			                	weaponPtr->PrimaryRoundsRemaining = templateAmmoPtr->AmmoPerMagazine;
-			                	weaponPtr->PrimaryMagazinesRemaining--;
-							}
-							if (weaponPtr->SecondaryMagazinesRemaining) {
-			                	weaponPtr->SecondaryRoundsRemaining = templateAmmoPtr->AmmoPerMagazine;
-			                	weaponPtr->SecondaryMagazinesRemaining--;
-							}
-						} else {
-							/* Grenade launcher has already reloaded at this point. */
-		                	weaponPtr->PrimaryRoundsRemaining = templateAmmoPtr->AmmoPerMagazine;
-		                	weaponPtr->PrimaryMagazinesRemaining--;
+							Reload_FillGun(&weaponPtr->SecondaryRoundsRemaining, &weaponPtr->PrimaryLeftoverRounds, &weaponPtr->SecondaryMagazinesRemaining, templateAmmoPtr->AmmoPerMagazine);
 						}
 					}
                		weaponPtr->CurrentState = WEAPONSTATE_IDLE;
@@ -958,6 +992,16 @@ void UpdateWeaponStateMachine(void)
 		        
 				case WEAPONSTATE_UNREADYING:
 		        {
+					// The game always chooses the next slot before it starts putting a weapon away, so this needs one. The number that means "no swap" isn't a place in the list of slots,
+					// and the sums below write through what they find there. The swapping states above ask this same question.
+					if (playerStatusPtr->SwapToWeaponSlot == WEAPON_FINISHED_SWAPPING)
+					{
+						weaponPtr->CurrentState = WEAPONSTATE_IDLE;
+						weaponPtr->StateTimeOutCounter = 0;
+						playerStatusPtr->Encumberance = twPtr->Encum_Idle;
+						break;
+					}
+
 					if (SimilarPredWeapons(weaponPtr,&playerStatusPtr->WeaponSlot[playerStatusPtr->SwapToWeaponSlot])) {
            		       	
            		       	PLAYER_WEAPON_DATA *newWeaponPtr;
@@ -1022,6 +1066,20 @@ void UpdateWeaponStateMachine(void)
     	//weaponPtr->StateTimeOutCounter=0;
 	}
     
+	// Asked for once, and forgotten if the gun's busy, so that a press doesn't wait and fire off later
+	if (ReloadKeyIsWaiting)
+	{
+		ReloadKeyIsWaiting = false;
+		Weapon_StartReloadFromTheKey(playerStatusPtr);
+	}
+
+	Weapon_TellOfNewState(playerStatusPtr,weaponPtr);
+
+	// A gun can deal with the frame itself, and then the common code leaves the keys alone
+	if (twPtr->Hooks && twPtr->Hooks->EveryFrame && twPtr->Hooks->EveryFrame(playerStatusPtr,weaponPtr))
+	{
+	}
+	else
 	switch(weaponPtr->CurrentState)
 	{
 	    case WEAPONSTATE_JAMMED:
@@ -1353,19 +1411,9 @@ static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *w
 				weaponPtr->StateTimeOutCounter = WEAPONSTATE_INITIALTIMEOUTCOUNT;
 			}
 		}
-    } else if ((RequestChangeOfWeapon(playerStatusPtr,weaponPtr))
-    	||((playerStatusPtr->SelectedWeaponSlot!=playerStatusPtr->SwapToWeaponSlot)
-    		&&(playerStatusPtr->SwapToWeaponSlot!=WEAPON_FINISHED_SWAPPING))) {
-		weaponPtr->CurrentState = WEAPONSTATE_UNREADYING;
-	    weaponPtr->StateTimeOutCounter = WEAPONSTATE_INITIALTIMEOUTCOUNT;
-		NewOnScreenMessage
-		(
-			GetTextString
-			(
-				TemplateWeapon[playerStatusPtr->WeaponSlot[playerStatusPtr->SwapToWeaponSlot].WeaponIDNumber].Name
-			)
-		);
-	} else if (weaponPtr->PrimaryRoundsRemaining==0 && weaponPtr->PrimaryMagazinesRemaining!=0)	{
+    } else if (Weapon_AskedForAnotherWeapon(playerStatusPtr,weaponPtr)) {
+		Weapon_StartChangingGun(playerStatusPtr,weaponPtr);
+	} else if (weaponPtr->PrimaryRoundsRemaining==0 && (weaponPtr->PrimaryMagazinesRemaining!=0 || weaponPtr->PrimaryLeftoverRounds!=0))	{
     	/* if you've ran out of ammo, but you've got some magazines, reload. */
     	if (weaponPtr->WeaponIDNumber==WEAPON_TWO_PISTOLS) {
 			/* Two pistols ammo handling! */
@@ -1552,9 +1600,10 @@ static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *w
 
 		/* You should have a disc. */
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Force Appear Disc. */
-		disc_section->flags&=~section_data_notreal;
+		if (disc_section) {
+			disc_section->flags&=~section_data_notreal;
+		}
 
 	} else {
 		/* Wow, genuinely idle! */
@@ -1569,6 +1618,27 @@ static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *w
 	}
 }
 
+// Next Weapon and Previous Weapon. weapon_slots.h has the search and says how it chooses. This tells it about the player's slots.
+static int Weapon_NextSlotToChangeTo(PLAYER_STATUS *playerStatusPtr, int from, int step)
+{
+	SlotForChanging slots[MAX_NO_OF_WEAPON_SLOTS];
+
+	for (int slot = 0; slot < MAX_NO_OF_WEAPON_SLOTS; slot++)
+	{
+		PLAYER_WEAPON_DATA const *const weapon = &playerStatusPtr->WeaponSlot[slot];
+		const WEAPON_ID id = weapon->WeaponIDNumber;
+		bool const discLauncherWithNoDiscs = id == WEAPON_PRED_DISC && weapon->PrimaryRoundsRemaining == 0 && weapon->PrimaryMagazinesRemaining == 0;
+		bool const goldWeaponNotAllowed = !AllowGoldWeapons && (id == WEAPON_FRISBEE_LAUNCHER || id == WEAPON_MARINE_PISTOL || id == WEAPON_TWO_PISTOLS);
+
+		slots[slot].possessed = id != NULL_WEAPON && weapon->Possessed == 1;
+		slots[slot].mayBeChosen = !discLauncherWithNoDiscs && !goldWeaponNotAllowed;
+		slots[slot].isCudgel = id == WEAPON_CUDGEL;
+		slots[slot].hasAmmo = WeaponHasAmmo(slot) != 0;
+	}
+
+	return Slots_NextToChangeTo(slots, MAX_NO_OF_WEAPON_SLOTS, from, step, AvP.PlayerType == I_Marine);
+}
+
 static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *weaponPtr)
 {
 	playerStatusPtr->SwappingIsDebounced = 0;
@@ -1579,192 +1649,24 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 
     /* else if you wish to change to the previous weapon */
     if (playerStatusPtr->Mvt_InputRequests.Flags.Rqst_PreviousWeapon)
-   	{
-    	enum WEAPON_SLOT newSlot = playerStatusPtr->SelectedWeaponSlot;
+    {
+		int const newSlot = Weapon_NextSlotToChangeTo(playerStatusPtr, playerStatusPtr->SelectedWeaponSlot, -1);
 
-		// bjd - int version of above..
-		unsigned int newSlotInt = newSlot;
-
-		int slotValidity;
-       	
-		slotValidity = 0;
-
-        do {
-	   		//if (newSlot-- == WEAPON_SLOT_1)
-			if (newSlotInt-- == WEAPON_SLOT_1) 
-			{
-     			newSlotInt = MAX_NO_OF_WEAPON_SLOTS-1;
-			}
-
-			if (playerStatusPtr->WeaponSlot[newSlotInt].Possessed == 1) 
-			{
-				slotValidity=1;
-			}
-			/* But not if you're a disk launcher with no disks. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PRED_DISC) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].PrimaryRoundsRemaining==0 
-					&& playerStatusPtr->WeaponSlot[newSlotInt].PrimaryMagazinesRemaining==0) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* And not if you're the cudgel. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->SelectedWeaponSlot != newSlotInt) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* But, if you are the cudgel, ignore the pulserifle unless it has ammo. */
-			if (playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PULSERIFLE) 
-				{
-					if (!WeaponHasAmmo(newSlotInt)) 
-					{
-						slotValidity=0;
-					}
-				}
-			} 
-			else 
-			{
-				/* If you're not the cudgel... if it exists, and the PR has no ammo, select cudgel. */
-				int pulserifle_slot;
-				int cudgel_slot;
-
-				cudgel_slot=SlotForThisWeapon(WEAPON_CUDGEL);
-
-				if (cudgel_slot!=-1) 
-				{
-					if (playerStatusPtr->WeaponSlot[cudgel_slot].Possessed!=1) 
-					{
-						cudgel_slot=-1;
-					}
-				}
-
-				if (cudgel_slot != -1) 
-				{
-					pulserifle_slot = SlotForThisWeapon(WEAPON_PULSERIFLE);
-					
-					if (pulserifle_slot != -1) 
-					{					
-						if (!WeaponHasAmmo(pulserifle_slot)) 
-						{
-							newSlotInt = cudgel_slot;
-							slotValidity=1;		
-						}
-					}
-				}
-			}
-            // Disallow Gold version weapons with regular version
-			if (!AllowGoldWeapons && ((playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_FRISBEE_LAUNCHER) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_MARINE_PISTOL) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_TWO_PISTOLS))) {
-                slotValidity=0;
-            }
-		} while(slotValidity==0);
-
-		if (newSlotInt != playerStatusPtr->SelectedWeaponSlot)
+		if (newSlot != playerStatusPtr->SelectedWeaponSlot)
 		{
-		    playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlotInt);
-		  	return 1;
+			playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlot);
+			return 1;
 		}
     }
     /* else if you wish to change to the next weapon */
     else if (playerStatusPtr->Mvt_InputRequests.Flags.Rqst_NextWeapon)
     {
-		enum WEAPON_SLOT newSlot = playerStatusPtr->SelectedWeaponSlot;
+		int const newSlot = Weapon_NextSlotToChangeTo(playerStatusPtr, playerStatusPtr->SelectedWeaponSlot, 1);
 
-		// bjd - int version of above..
-		unsigned int newSlotInt = newSlot;
-
-		int slotValidity;
-       	
-		slotValidity=0;
-
-        do {
-	   		if (++newSlotInt == MAX_NO_OF_WEAPON_SLOTS) 
-			{
-     			newSlotInt = WEAPON_SLOT_1;
-			}
-			if (playerStatusPtr->WeaponSlot[newSlotInt].Possessed==1) 
-			{
-				slotValidity=1;
-			}
-			/* But not if you're a disk launcher with no disks. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PRED_DISC)
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].PrimaryRoundsRemaining==0 
-					&& playerStatusPtr->WeaponSlot[newSlotInt].PrimaryMagazinesRemaining==0) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* And not if you're the cudgel. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->SelectedWeaponSlot != newSlotInt) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* But, if you are the cudgel, ignore the pulserifle unless it has ammo. */
-			if (playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PULSERIFLE) 
-				{
-					if (!WeaponHasAmmo(newSlotInt)) 
-					{
-						slotValidity=0;
-					}
-				}
-			} 
-			else 
-			{
-				/* If you're not the cudgel... if it exists, and the PR has no ammo, select cudgel. */
-				int pulserifle_slot;
-				int cudgel_slot;
-
-				cudgel_slot=SlotForThisWeapon(WEAPON_CUDGEL);
-
-				if (cudgel_slot!=-1) 
-				{
-					if (playerStatusPtr->WeaponSlot[cudgel_slot].Possessed!=1) 
-					{
-						cudgel_slot=-1;
-					}
-				}
-
-				if (cudgel_slot!=-1) 
-				{
-					pulserifle_slot = SlotForThisWeapon(WEAPON_PULSERIFLE);
-					
-					if (pulserifle_slot!=-1) 
-					{					
-						if (!WeaponHasAmmo(pulserifle_slot)) 
-						{
-							newSlotInt = cudgel_slot;
-							slotValidity=1;		
-						}
-					}
-				}
-			}
-
-            // Disallow Gold version weapons with regular version
-			if (!AllowGoldWeapons && ((playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_FRISBEE_LAUNCHER) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_MARINE_PISTOL) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_TWO_PISTOLS))) 
-			{
-                slotValidity=0;
-            }
-		} while (slotValidity==0);
-        
-		if (newSlotInt != playerStatusPtr->SelectedWeaponSlot)
+		if (newSlot != playerStatusPtr->SelectedWeaponSlot)
 		{
-		    playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlotInt);
-		  	return 1;
+			playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlot);
+			return 1;
 		}
     }
 	/* else pick a weapon, any weapon */
@@ -1836,6 +1738,91 @@ static int RequestChangeOfWeapon(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DA
 
    	return 0;
 }
+void Weapon_ReloadKeyPressed(void *playerStatus)
+{
+	ReloadKeyIsWaiting = true;
+}
+
+// The reload itself. It has to happen after the state machine's timers for this frame, and before a state's function runs. Each function starts its move on seeing the whole of its time still left, so if the timer had already moved on, the move would never play: the gun would just wait, and then have its rounds back.
+static void Weapon_StartReloadFromTheKey(void *playerStatus)
+{
+	PLAYER_STATUS *const playerStatusPtr = (PLAYER_STATUS *)playerStatus;
+
+	if (!playerStatusPtr->IsAlive)
+	{
+		return;
+	}
+
+	PLAYER_WEAPON_DATA *const weaponPtr = &playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot];
+
+	if (weaponPtr->WeaponIDNumber == NULL_WEAPON || weaponPtr->CurrentState != WEAPONSTATE_IDLE)
+	{
+		return;
+	}
+
+	TEMPLATE_WEAPON_DATA const *const twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
+
+	if (twPtr->PrimaryAmmoID == AMMO_NONE || twPtr->PrimaryIsMeleeWeapon)
+	{
+		return;
+	}
+
+	unsigned int const full = TemplateAmmo[twPtr->PrimaryAmmoID].AmmoPerMagazine;
+	bool const hasSpares = weaponPtr->PrimaryMagazinesRemaining != 0 || weaponPtr->PrimaryLeftoverRounds != 0;
+
+	if (twPtr->Hooks && twPtr->Hooks->SparesAreSingleRounds)
+	{
+		if (weaponPtr->PrimaryRoundsRemaining >= full || !hasSpares)
+		{
+			return;
+		}
+	}
+	else if (weaponPtr->WeaponIDNumber == WEAPON_GRENADELAUNCHER)
+	{
+		// It holds several kinds of grenade, and a pile can't say which kind each was, so it only ever reloads when it's empty, by itself
+		return;
+	}
+	else if (weaponPtr->WeaponIDNumber == WEAPON_TWO_PISTOLS)
+	{
+		// One reload is for both hands
+		bool const notFull = weaponPtr->PrimaryRoundsRemaining < full || weaponPtr->SecondaryRoundsRemaining < full;
+
+		if (!notFull || (!hasSpares && weaponPtr->SecondaryMagazinesRemaining == 0))
+		{
+			return;
+		}
+	}
+	else if (weaponPtr->PrimaryRoundsRemaining >= full || !hasSpares)
+	{
+		return;
+	}
+
+	weaponPtr->CurrentState = WEAPONSTATE_RELOAD_PRIMARY;
+	weaponPtr->StateTimeOutCounter = WEAPONSTATE_INITIALTIMEOUTCOUNT;
+}
+
+int Weapon_AskedForAnotherWeapon(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr)
+{
+	PLAYER_STATUS *const playerStatusPtr = (PLAYER_STATUS *)playerStatus;
+
+	if (RequestChangeOfWeapon(playerStatusPtr, weaponPtr))
+	{
+		return 1;
+	}
+
+	// An earlier press leaves the slot it asked for here until the swap has happened
+	return playerStatusPtr->SwapToWeaponSlot != WEAPON_FINISHED_SWAPPING && playerStatusPtr->SwapToWeaponSlot != playerStatusPtr->SelectedWeaponSlot;
+}
+
+void Weapon_StartChangingGun(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr)
+{
+	PLAYER_STATUS *const playerStatusPtr = (PLAYER_STATUS *)playerStatus;
+
+	weaponPtr->CurrentState = WEAPONSTATE_UNREADYING;
+	weaponPtr->StateTimeOutCounter = WEAPONSTATE_INITIALTIMEOUTCOUNT;
+	NewOnScreenMessage(GetTextString(TemplateWeapon[playerStatusPtr->WeaponSlot[playerStatusPtr->SwapToWeaponSlot].WeaponIDNumber].Name));
+}
+
 static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *weaponPtr)
 {
     enum WEAPON_SLOT currentSlot;
@@ -1856,184 +1843,14 @@ static int RequestChangeOfWeaponWhilstSwapping(PLAYER_STATUS *playerStatusPtr,PL
     
     /* else if you wish to change to the previous weapon */
     if (playerStatusPtr->Mvt_InputRequests.Flags.Rqst_PreviousWeapon)
-   	{
-    	enum WEAPON_SLOT newSlot = currentSlot;
-       	int slotValidity=0;
-
-		// bjd - int version of above..
-		unsigned int newSlotInt = newSlot;
-
-        do
-		{
-	   		if (newSlotInt-- == WEAPON_SLOT_1) 
-			{
-     			newSlotInt = MAX_NO_OF_WEAPON_SLOTS-1;
-			}
-			if (playerStatusPtr->WeaponSlot[newSlotInt].Possessed==1) 
-			{
-				slotValidity=1;
-			}
-
-			/* But not if you're a disk launcher with no disks. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PRED_DISC) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].PrimaryRoundsRemaining==0 
-					&& playerStatusPtr->WeaponSlot[newSlotInt].PrimaryMagazinesRemaining==0) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* And not if you're the cudgel. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->SelectedWeaponSlot != newSlotInt) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* But, if you are the cudgel, ignore the pulserifle unless it has ammo. */
-			if (playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PULSERIFLE) 
-				{
-					if (!WeaponHasAmmo(newSlotInt)) 
-					{
-						slotValidity=0;
-					}
-				}
-			} 
-			else 
-			{
-				/* If you're not the cudgel... if it exists, and the PR has no ammo, select cudgel. */
-				int pulserifle_slot;
-				int cudgel_slot;
-
-				cudgel_slot = SlotForThisWeapon(WEAPON_CUDGEL);
-
-				if (cudgel_slot!=-1) 
-				{
-					if (playerStatusPtr->WeaponSlot[cudgel_slot].Possessed!=1) 
-					{
-						cudgel_slot=-1;
-					}
-				}
-
-				if (cudgel_slot!=-1) 
-				{
-					pulserifle_slot = SlotForThisWeapon(WEAPON_PULSERIFLE);
-					
-					if (pulserifle_slot!=-1) 
-					{					
-						if (!WeaponHasAmmo(pulserifle_slot)) 
-						{
-							newSlotInt = cudgel_slot;
-							slotValidity=1;		
-						}
-					}
-				}
-			}
-
-            // Disallow Gold version weapons with regular version
-			if (!AllowGoldWeapons && ((playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_FRISBEE_LAUNCHER) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_MARINE_PISTOL) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_TWO_PISTOLS))) {
-                slotValidity=0;
-            }
-		}
-		while(slotValidity==0);
-
-		playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlotInt);
+    {
+		playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(Weapon_NextSlotToChangeTo(playerStatusPtr, currentSlot, -1));
 		return 1;
-	}
+    }
     /* else if you wish to change to the next weapon */
     else if (playerStatusPtr->Mvt_InputRequests.Flags.Rqst_NextWeapon)
     {
-		enum WEAPON_SLOT newSlot = currentSlot;
-				
-		// bjd - int version of above..
-		unsigned int newSlotInt = newSlot;
-
-		int slotValidity=0;
-	
-        do
-		{
-	   		if (++newSlotInt == MAX_NO_OF_WEAPON_SLOTS) 
-			{
-     			newSlotInt = WEAPON_SLOT_1;
-			}
-			if (playerStatusPtr->WeaponSlot[newSlotInt].Possessed==1) 
-			{
-				slotValidity = 1;
-			}
-			/* But not if you're a disk launcher with no disks. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PRED_DISC) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].PrimaryRoundsRemaining==0 
-					&& playerStatusPtr->WeaponSlot[newSlotInt].PrimaryMagazinesRemaining==0) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* And not if you're the cudgel. */
-			if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->SelectedWeaponSlot != newSlotInt) 
-				{
-					slotValidity=0;
-				}
-			}
-			/* But, if you are the cudgel, ignore the pulserifle unless it has ammo. */
-			if (playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot].WeaponIDNumber==WEAPON_CUDGEL) 
-			{
-				if (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_PULSERIFLE) 
-				{
-					if (!WeaponHasAmmo(newSlotInt)) 
-					{
-						slotValidity=0;
-					}
-				}
-			} 
-			else 
-			{
-				/* If you're not the cudgel... if it exists, and the PR has no ammo, select cudgel. */
-				int pulserifle_slot;
-				int cudgel_slot;
-
-				cudgel_slot = SlotForThisWeapon(WEAPON_CUDGEL);
-
-				if (cudgel_slot!=-1) 
-				{
-					if (playerStatusPtr->WeaponSlot[cudgel_slot].Possessed!=1) 
-					{
-						cudgel_slot=-1;
-					}
-				}
-
-				if (cudgel_slot!=-1) 
-				{
-					pulserifle_slot=SlotForThisWeapon(WEAPON_PULSERIFLE);
-					
-					if (pulserifle_slot!=-1) 
-					{					
-						if (!WeaponHasAmmo(pulserifle_slot)) 
-						{
-							newSlotInt = cudgel_slot;
-							slotValidity=1;		
-						}
-					}
-				}
-			}
-            // Disallow Gold version weapons with regular version
-			if (!AllowGoldWeapons && ((playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_FRISBEE_LAUNCHER) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_MARINE_PISTOL) || 
-			   (playerStatusPtr->WeaponSlot[newSlotInt].WeaponIDNumber==WEAPON_TWO_PISTOLS))) 
-			{
-                slotValidity=0;
-            }
-		}
-		while (slotValidity==0);
-        
-	    playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(newSlotInt);
+		playerStatusPtr->SwapToWeaponSlot = static_cast<enum WEAPON_SLOT>(Weapon_NextSlotToChangeTo(playerStatusPtr, currentSlot, 1));
 		return 1;
     }
 	/* else pick a weapon, any weapon */
@@ -2597,6 +2414,9 @@ void CauseDamageToObject(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multi
 			break;
 		}	    
 	  case I_BehaviourGrenade:
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
 		case I_BehaviourFlareGrenade:
 		case I_BehaviourFragmentationGrenade:
 		case I_BehaviourProximityGrenade:
@@ -3280,7 +3100,12 @@ void GetHierarchicalWeapon(char *riffname, char *hierarchyname, int sequence_typ
 
 	root_section = GetNamedHierarchyFromLibrary(riffname,hierarchyname);
 
-	GLOBALASSERT(root_section);
+	// the weapon table names one model the game's files don't have (the Predator's staff), and a save file can select it.
+	// The player then keeps the weapon model they have
+	if (!root_section)
+	{
+		return;
+	}
 
 	Dispel_HModel(&PlayersWeaponHModelController);
 	Create_HModel(&PlayersWeaponHModelController, root_section);
@@ -3347,10 +3172,10 @@ void GrabWeaponShape(PLAYER_WEAPON_DATA *weaponPtr)
 	//WeaponSetStartFrame(NULL,NULL);
 	FindEndOfShape(&CentreOfMuzzleOffset,PlayersWeapon.ObShape);
 
-	if (twPtr->HierarchyName) 
+	if (twPtr->HierarchyName && Weapon_CanBeDrawn(weaponPtr->WeaponIDNumber)) 
 	{
 		/* Bit of a cheap test, I know. */
-		GetHierarchicalWeapon(twPtr->RiffName,twPtr->HierarchyName,twPtr->InitialSequenceType,twPtr->InitialSubSequence);
+		GetHierarchicalWeapon(Weapon_ModelFileFor(twPtr),twPtr->HierarchyName,twPtr->InitialSequenceType,twPtr->InitialSubSequence);
 	} 
 	else 
 	{
@@ -4049,7 +3874,7 @@ static void DamageDamageBlock(DAMAGEBLOCK *DBPtr, DAMAGE_PROFILE *damage, int mu
 	
 	/* Now, the integer. */
 	
-	while (Integer) {
+	while (Integer > 0) {
 	
 		ArmourDamage=0;
 		HealthDamage=0;
@@ -5124,8 +4949,12 @@ int MeleeWeapon_90Degree_Front_Core(DAMAGE_PROFILE *damage,int multiple,int rang
 											if (sbPtr->I_SBtype==I_BehaviourAlien) {
 												SECTION_DATA *chest;
 												chest=GetThisSectionData(sbPtr->SBdptr->HModelControlBlock->section_data,"chest");
-												GLOBALASSERT(chest);
-												CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												/* A part can be gone. The blow then lands like any other. */
+												if (chest) {
+													CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												} else {
+													HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
+												}
 											} else {
 												HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
 											}
@@ -7112,6 +6941,14 @@ void AlienClaw_SwapOut(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	/* ...Nothing? */
 }
 
+/* Centres one of the tail's two aiming animations, which are looked up by name and may be missing from the model. */
+static void CentreTailDelta(DELTA_CONTROLLER *delta)
+{
+	if (delta) {
+		delta->timer=32767;
+	}
+}
+
 void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 	/* ...Nothing? */
@@ -7133,8 +6970,8 @@ void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7182,8 +7019,8 @@ void AlienClaw_Recoil(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7514,8 +7351,8 @@ void AlienTail_Poise(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 		}
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 
 		InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>4),HMSQT_AlienHUD,
 			(int)AHSS_TailCome,ONE_FIXED,0);
@@ -7572,6 +7409,11 @@ void ComputeTailDeltaValues(DELTA_CONTROLLER *XDelta,DELTA_CONTROLLER *YDelta)
 {
 	int temp_timer,screenX,screenY;
 	VECTORCH target_pos;
+
+	/* both are looked up by name and may be missing from the model */
+	if (!XDelta || !YDelta) {
+		return;
+	}
 
 	VIEWDESCRIPTORBLOCK *VDBPtr = ActiveVDBList[0];
 
@@ -7640,8 +7482,8 @@ void AlienTail_Strike(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr)
 		}
 		else
 		{
-			XDelta->timer=32767;
-			YDelta->timer=32767;
+			CentreTailDelta(XDelta);
+			CentreTailDelta(YDelta);
 		}
 		
 		/* Don't bother with the next bit. */
@@ -9301,9 +9143,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9333,9 +9174,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9472,9 +9312,10 @@ void PredatorDisc_Reload(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 			weaponPtr->StateTimeOutCounter = 0;
 		} else {
 			disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-			GLOBALASSERT(disc_section);
 			/* Appear Disc. */
-			disc_section->flags&=~section_data_notreal;
+			if (disc_section) {
+				disc_section->flags&=~section_data_notreal;
+			}
 
 			time=DIV_FIXED(ONE_FIXED,(twPtr->TimeOutRateForState[WEAPONSTATE_RELOAD_PRIMARY]<<1));
 			time-=(ONE_FIXED>>4);
@@ -9721,122 +9562,6 @@ int FireExtinguisher(PLAYER_WEAPON_DATA *weaponPtr) {
 	InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>4),HMSQT_PredatorHUD,(int)PHSS_Attack_Primary,-1,0);
 
 	return 1;
-}
-
-void Staff_SwapIn(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
-
-	TEMPLATE_WEAPON_DATA *twPtr;
-
-	twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
-
-	if (weaponPtr->StateTimeOutCounter == WEAPONSTATE_INITIALTIMEOUTCOUNT) {
-		int time;
-
-		time=DIV_FIXED(ONE_FIXED,twPtr->TimeOutRateForState[WEAPONSTATE_SWAPPING_IN]);
-
-		GLOBALASSERT(time!=0);
-
-		InitHModelSequence(&PlayersWeaponHModelController,HMSQT_PredatorHUD,(int)PHSS_Come,time);
-		PlayersWeaponHModelController.Looped=0;
-	}
-	/* Handle staff sections. */
-	PlayerStaff1=GetThisSectionData(PlayersWeaponHModelController.section_data,"Staff R blade");
-	PlayerStaff2=GetThisSectionData(PlayersWeaponHModelController.section_data,"Staff ROOT");
-	PlayerStaff3=GetThisSectionData(PlayersWeaponHModelController.section_data,"Staff L blade");
-	StaffAttack=-1;
-}
-
-void Staff_SwapOut(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
-
-	TEMPLATE_WEAPON_DATA *twPtr;
-
-	twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
-
-	if (weaponPtr->StateTimeOutCounter == WEAPONSTATE_INITIALTIMEOUTCOUNT) {
-		int time;
-
-		time=DIV_FIXED(ONE_FIXED,twPtr->TimeOutRateForState[WEAPONSTATE_SWAPPING_OUT]);
-		time-=(ONE_FIXED>>4);
-
-		InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>4),HMSQT_PredatorHUD,(int)PHSS_Go,time,0);
-		PlayersWeaponHModelController.Looped=0;
-	}
-	/* Handle staff sections. */
-	PlayerStaff1=NULL;
-	PlayerStaff2=NULL;
-	PlayerStaff3=NULL;
-	StaffAttack=-1;
-}
-
-void Staff_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
-
-	TEMPLATE_WEAPON_DATA *twPtr;
-
-	twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
-
-	/* Are we running? */
-
-	if ( (Player->ObStrategyBlock->DynPtr->LinVelocity.vx!=0)
-		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vy!=0)
-		|| (Player->ObStrategyBlock->DynPtr->LinVelocity.vz!=0) ) {
-
-		/* Were we running? */
-
-		if (PlayersWeaponHModelController.Sub_Sequence!=(int)PHSS_Run) {
-			InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>3),HMSQT_PredatorHUD,(int)PHSS_Run,ONE_FIXED,1);
-		}
-	} else {
-	
-		if ((PlayersWeaponHModelController.Sub_Sequence!=(int)PHSS_Stand)&&(PlayersWeaponHModelController.Sub_Sequence!=MHSS_Fidget)) {
-			InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>3),HMSQT_PredatorHUD,(int)PHSS_Stand,ONE_FIXED,1);
-		}
-		
-		if (weaponPtr->StateTimeOutCounter > ONE_FIXED) {
-		
-			if (WeaponFidgetPlaying) {
-				if (PlayersWeaponHModelController.sequence_timer==(ONE_FIXED-1)) {
-					InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>3),HMSQT_PredatorHUD,(int)PHSS_Stand,ONE_FIXED,1);
-					WeaponFidgetPlaying=0;
-				}
-			} else if ((FastRandom()&255)==0) {
-				/* Start animation. */
-
-				if (HModelSequence_Exists(&PlayersWeaponHModelController,HMSQT_PredatorHUD,(int)PHSS_Fidget)) {
-					InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>2),HMSQT_PredatorHUD,(int)PHSS_Fidget,-1,0);
-					weaponPtr->StateTimeOutCounter=0;
-					WeaponFidgetPlaying=1;
-				}
-			}
-		}
-	}
-}
-
-void StaffAttack_Basic(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
-
-	TEMPLATE_WEAPON_DATA *twPtr;
-
-	twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
-
-	if (weaponPtr->StateTimeOutCounter == WEAPONSTATE_INITIALTIMEOUTCOUNT) {
-
-		InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>3),HMSQT_PredatorHUD,(int)PHSS_Attack_Primary,-1,0);
-		if (PlayerStatusPtr->ShapeState!=PMph_Standing) {
-			StaffAttack=1;
-		} else {
-			StaffAttack=0;
-		}	
-	} else if (HModelAnimation_IsFinished(&PlayersWeaponHModelController)) {
-		/* End state. */
-		weaponPtr->StateTimeOutCounter = 0;
-		StaffAttack=-1;
-	} else {
-		enum AMMO_ID AmmoID=TemplateWeapon[weaponPtr->WeaponIDNumber].PrimaryAmmoID;
-		/*  In the middle. */
-		weaponPtr->StateTimeOutCounter = (WEAPONSTATE_INITIALTIMEOUTCOUNT>>1);
-
-		Staff_Manager(&TemplateAmmo[AmmoID].MaxDamage[AvP.Difficulty],PlayerStaff1,PlayerStaff2,PlayerStaff3,
-			Player->ObStrategyBlock);
-	}
 }
 
 int PointIsInPlayer(VECTORCH *point) {
@@ -10119,13 +9844,27 @@ int AlienBite_TargetFilter(STRATEGYBLOCK *sbPtr)
 		//check for opponent in network game
 		if(ghostData->type==I_BehaviourNetCorpse)
 		{
+			// The corpse of an NPC the host ran follows single player's rules: not one that's fading, and not an android's. The ghost keeps his model in IOType once he's dead.
+			if ((ghostData->subtype==I_BehaviourMarine || ghostData->subtype==I_BehaviourPredator) && (ghostData->timer/2)<ONE_FIXED)
+			{
+				return 0;
+			}
+
+			if (ghostData->subtype==I_BehaviourMarine && NpcGhosts_MarineIsAnAndroid((int)ghostData->IOType))
+			{
+				return 0;
+			}
+
+			// The last two are the corpse of an NPC the host ran. The same two kinds can be bitten in single player.
 			if(ghostData->subtype==I_BehaviourMarinePlayer ||
-			   ghostData->subtype==I_BehaviourPredatorPlayer)
+			   ghostData->subtype==I_BehaviourPredatorPlayer ||
+			   ghostData->subtype==I_BehaviourMarine ||
+			   ghostData->subtype==I_BehaviourPredator)
 			{
 				return 1;
 			}
 		}
-		else if (ghostData->type==I_BehaviourMarinePlayer || 
+		else if (ghostData->type==I_BehaviourMarinePlayer ||
 				 ghostData->type==I_BehaviourPredatorPlayer)
 		{
 			// We don't want to allow bite attacks against players
@@ -10134,6 +9873,12 @@ int AlienBite_TargetFilter(STRATEGYBLOCK *sbPtr)
 			{
 				return 1;
 			}
+		}
+		else if (ghostData->type==I_BehaviourMarine ||
+				 ghostData->type==I_BehaviourPredator)
+		{
+			// A copy of an NPC the host runs. The bite's damage goes to the host, as a bite on another player goes to their machine. As in single player, an android can't be bitten.
+			return (ghostData->type==I_BehaviourMarine && NpcGhosts_MarineIsAnAndroid(ghostData->subtype)) ? 0 : 1;
 		}
 	} else if (sbPtr->I_SBtype==I_BehaviourPredator) {
 
@@ -10278,9 +10023,13 @@ int Trophy_TargetFilter(STRATEGYBLOCK *sbPtr) {
 		//check for opponent in network game
 		if(ghostData->type==I_BehaviourNetCorpse)
 		{
+			// The last three are the corpse of an NPC the host ran. The same kinds give a trophy in single player.
 			if(ghostData->subtype==I_BehaviourMarinePlayer ||
 			   ghostData->subtype==I_BehaviourPredatorPlayer ||
-			   ghostData->subtype==I_BehaviourAlienPlayer)
+			   ghostData->subtype==I_BehaviourAlienPlayer ||
+			   ghostData->subtype==I_BehaviourMarine ||
+			   ghostData->subtype==I_BehaviourPredator ||
+			   ghostData->subtype==I_BehaviourAlien)
 			{
 				return 1;
 			}
@@ -10675,7 +10424,11 @@ void CreateSpearPossiblyWithFragment(DISPLAYBLOCK *dispPtr, VECTORCH *spearPosit
 
 		/* setup dynamics block */
 		dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ROCKET);
-		dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+
+		if (dynPtr)
+		{
+			dynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;
+		}
 		
 		if (!dynPtr) 
 		{
@@ -10776,6 +10529,17 @@ void BiteAttack_AwardHealth(STRATEGYBLOCK *sbPtr,AVP_BEHAVIOUR_TYPE pre_bite_typ
 	NpcData=GetThisNpcData(I_PC_Alien_MaxStats);
 	LOCALASSERT(NpcData);
 
+	// A copy of an NPC the host runs gives what the real one gives, and not the bigger award for beating another player
+	if (pre_bite_type==I_BehaviourNetGhost)
+	{
+		NETGHOSTDATABLOCK const *const bittenGhost = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
+
+		if (bittenGhost->type==I_BehaviourMarine || bittenGhost->type==I_BehaviourPredator)
+		{
+			pre_bite_type=bittenGhost->type;
+		}
+	}
+
 	if ((pre_bite_type==I_BehaviourMarine)
 		||(pre_bite_type==I_BehaviourSeal)
 		||(pre_bite_type==I_BehaviourPredator)) {
@@ -10865,6 +10629,16 @@ void BiteAttack_AwardHealth(STRATEGYBLOCK *sbPtr,AVP_BEHAVIOUR_TYPE pre_bite_typ
 					Player->ObStrategyBlock->SBDamageBlock.Health=StartingHealth->StartingStats.Health<<ONE_FIXED_SHIFT;
 				}
 
+				PlayerStatusPtr->Health=Player->ObStrategyBlock->SBDamageBlock.Health;
+			}
+			else if(ghostData->subtype==I_BehaviourMarine ||
+					ghostData->subtype==I_BehaviourPredator)
+			{
+				// The corpse of an NPC the host ran gives what the real corpse gives: no armour, just a bit of health
+				Player->ObStrategyBlock->SBDamageBlock.Health+=(20<<ONE_FIXED_SHIFT);
+				if (Player->ObStrategyBlock->SBDamageBlock.Health>(NpcData->StartingStats.Health<<ONE_FIXED_SHIFT)) {
+					Player->ObStrategyBlock->SBDamageBlock.Health=NpcData->StartingStats.Health<<ONE_FIXED_SHIFT;
+				}
 				PlayerStatusPtr->Health=Player->ObStrategyBlock->SBDamageBlock.Health;
 			}
 		}
@@ -11038,6 +10812,9 @@ int AccuracyStats_TargetFilter(STRATEGYBLOCK *sbPtr) {
 					case I_BehaviourAlienPlayer:
 					case I_BehaviourRocket:
 					case I_BehaviourGrenade:
+					case I_BehaviourM79Grenade:
+					case I_BehaviourM79FireGrenade:
+					case I_BehaviourM79FragGrenade:
 					case I_BehaviourFlareGrenade:
 					case I_BehaviourFragmentationGrenade:
 					case I_BehaviourClusterGrenade:
@@ -11073,7 +10850,7 @@ int FriendlyFireDamageFilter(DAMAGE_PROFILE *damage) {
 	else if(AvP.PlayerType == I_Marine)
 	{
 		VulnerableToMarineDamage = FALSE;
-		if(netGameData.gameType==NGT_Coop)
+		if(NetOtherSpeciesCanBeAFriend(netGameData.gameType==NGT_Coop, SameAsSinglePlayer()))
 		{
 			VulnerableToPredatorDamage = FALSE;
 		}
@@ -11081,7 +10858,7 @@ int FriendlyFireDamageFilter(DAMAGE_PROFILE *damage) {
 	else if(AvP.PlayerType == I_Predator)
 	{
 		VulnerableToPredatorDamage = FALSE;
-		if(netGameData.gameType==NGT_Coop)
+		if(NetOtherSpeciesCanBeAFriend(netGameData.gameType==NGT_Coop, SameAsSinglePlayer()))
 		{
 			VulnerableToMarineDamage = FALSE;
 		}

@@ -1,6 +1,9 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   stopping a sound that isn't there does nothing
 
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved track has to be on one of its own sections
 #define DB_LEVEL 1
 #include "3dc.h"
 #include "inline.h"
@@ -16,6 +19,7 @@
 #include "io.h"
 #include "tables.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include <math.h>
 
 /*--------------------**
@@ -881,7 +885,9 @@ void LoadTrackPosition(SAVE_BLOCK_HEADER* header,TRACK_CONTROLLER* tc)
 
 	COPYELEMENT_LOAD(timer)
 	COPYELEMENT_LOAD(speed_mult)
-	COPYELEMENT_LOAD(current_section)
+	//this picks an entry in the track's list of sections, so a number that isn't one of them goes back to the first
+	tc->current_section = Save_PlaceInListOrNone(block->current_section, tc->num_sections);
+	if (tc->current_section < 0) tc->current_section = 0;
 
 	COPYELEMENT_LOAD(playing)
 	COPYELEMENT_LOAD(reverse)

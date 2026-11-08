@@ -10,6 +10,12 @@
 //   a level's room echo setting is checked against the list of echo settings before the list is read;
 //   a sound whose sample has been unloaded while it played counts as stopped, instead of being read through a pointer that's gone;
 //   a sound stream that failed to start can be let go of, and waiting on one that's stopping ends
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a room's echo is as loud as its level says (reverb_choice.h); the amount used to be kept and never used, so every room had its full echo
+//   the Room echo setting turns the echo off, and is read from and written to the settings file ([Audio] Reverb). Reported by Bobblen;
+//   the setting follows the idea in his avp-forever (commit ccb453b), rewritten
+//   the log says when the player goes into a room with a different echo, and a room's amount is compared as it's kept, so one out of
+//   range isn't taken for a new room on every frame
 
 #ifdef USE_OPENAL
 
@@ -31,6 +37,7 @@
 #include <math.h>
 #include <new>
 #include "wav_chunks.h"
+#include "reverb_choice.h"
 #include <AL\al.h>
 #include <AL\alc.h>
 #include <AL\alext.h>
@@ -502,13 +509,24 @@ static Environment Sound_Enviroments[] =
 };
 
 const int kMaxReverbPresets = sizeof(Sound_Enviroments) / sizeof(Sound_Enviroments[0]);
+static_assert(kMaxReverbPresets == kReverbRoomKinds, "reverb_choice.h has a name for each kind of room in this list");
 
 LPALGENAUXILIARYEFFECTSLOTS    alGenAuxiliaryEffectSlots;
 LPALDELETEEFFECTS              alDeleteEffects;
 LPALAUXILIARYEFFECTSLOTI       alAuxiliaryEffectSloti;
 LPALDELETEAUXILIARYEFFECTSLOTS alDeleteAuxiliaryEffectSlots;
+LPALAUXILIARYEFFECTSLOTF       alAuxiliaryEffectSlotf;
 
 ALuint effectSlot;
+
+// The Room echo setting, as the row on the sound pages holds it: 1 on, 0 off. It's read from the settings file as sound starts.
+int ReverbIsOn = 1;
+
+// What the settings file was last told, so that a change on the page is written once
+static int reverbSaved = 1;
+
+// The gain the effect slot has now, so it's only set again when it changes. -1 until it has been set.
+static float reverbSlotGainNow = -1.0f;
 
 static int SoundMaxHW = 128;
 extern int GlobalFrameCounter;
@@ -546,6 +564,41 @@ ALenum AlCheckError()
 	return error;
 }
 
+// Every sound's echo goes through the one effect slot, so its gain is how loud the echo is. This sets it from the Room echo setting
+// and the amount the room the player is in asks for (reverb_choice.h says how), and only when that changes.
+static void Reverb_ApplyGain()
+{
+	if (!efxAvailable || !alAuxiliaryEffectSlotf)
+	{
+		return;
+	}
+
+	float const gain = Reverb_SlotGain(ReverbIsOn != 0, SoundConfig.reverb_mix);
+
+	if (gain != reverbSlotGainNow)
+	{
+		alAuxiliaryEffectSlotf(effectSlot, AL_EFFECTSLOT_GAIN, gain);
+		AlCheckError();
+		reverbSlotGainNow = gain;
+	}
+}
+
+// Called on every frame of the menus (menus.cpp, beside ViewSettings_MenuFrame). When the Room echo row has been changed, the settings
+// file is told at once, the way the rendering page's rows are saved. The sound itself changes on the next frame of play, through
+// Reverb_ApplyGain.
+void Reverb_MenuFrame()
+{
+	int const now = ReverbIsOn ? 1 : 0;
+
+	if (now != reverbSaved)
+	{
+		reverbSaved = now;
+		Config_SetBool(kReverbHeading, kReverbName, now != 0);
+		Config_Save();
+		LogString(now ? "sound: the room echo was turned on" : "sound: the room echo was turned off");
+	}
+}
+
 /* ----------------------------------------------------------------------------
   int PlatStartSoundSys
   return 0 on failure, 1 for success
@@ -557,6 +610,11 @@ int PlatStartSoundSys()
 	Con_PrintMessage("Starting to initialise OpenAL");
 
 	uint32_t sampleRate = Config_GetInt("[Audio]", "SampleRate", 44100);
+
+	// The Room echo setting. Config_GetBool takes only true or false: anything else is said in the log, and counts as on. A file with
+	// no such line gets one, saying on.
+	ReverbIsOn = reverbSaved = Config_GetBool(kReverbHeading, kReverbName, true) ? 1 : 0;
+	reverbSlotGainNow = -1.0f;
 
 	// Set the globals.
 	SoundConfig.reverb_changed	= true;
@@ -622,6 +680,7 @@ int PlatStartSoundSys()
 		alAuxiliaryEffectSloti = (LPALAUXILIARYEFFECTSLOTI)alGetProcAddress("alAuxiliaryEffectSloti");
 		alDeleteEffects = (LPALDELETEEFFECTS)alGetProcAddress("alDeleteEffects");
 		alDeleteAuxiliaryEffectSlots = (LPALDELETEAUXILIARYEFFECTSLOTS)alGetProcAddress("alDeleteAuxiliaryEffectSlots");
+		alAuxiliaryEffectSlotf = (LPALAUXILIARYEFFECTSLOTF)alGetProcAddress("alAuxiliaryEffectSlotf");
 
 		alGetError(); // clear error stack
 
@@ -689,6 +748,9 @@ int PlatStartSoundSys()
 		alGenAuxiliaryEffectSlots(1, &effectSlot);
 		AlCheckError();
 	}
+
+	LogString(std::string("sound: the room echo (reverb) is ") + (ReverbIsOn ? "on" : "off") + ", from [Audio] Reverb in the settings file"
+		+ (efxAvailable ? "" : ", but this sound device can't make an echo (it has no ALC_EXT_EFX), so there is none"));
 
 	alGetError(); // clear error stack
 
@@ -1627,6 +1689,9 @@ void PlatSetEnviroment(unsigned int env_index, float reverb_mix)
 		return;
 	}
 
+	// Whether the player has gone into a room with a different echo, for the log
+	bool roomChanged = false;
+
 	// This number comes from the level file, so it could be anything. The stock levels use 0 to 25, which is all of the list. With
 	// any other, the room keeps the echo it has now.
 	if (env_index >= (unsigned int)kMaxReverbPresets)
@@ -1647,24 +1712,28 @@ void PlatSetEnviroment(unsigned int env_index, float reverb_mix)
 		AlCheckError();
 
 		SoundConfig.env_index = env_index;
+		roomChanged = true;
 	}
 
-	if (reverb_mix == SoundConfig.reverb_mix) {
-		return;
-	}
+	// The room's amount of echo: from 0 to 1, or -1, which leaves it to distance (EAX_REVERBMIX_USEDISTANCE). It's compared as it's kept
+	// (reverb_choice.h), so a room whose number is out of range isn't taken for a new room on every frame.
+	float const amount = Reverb_RoomAmount(reverb_mix);
 
-	if ((reverb_mix < 0.0f) || (reverb_mix > 1.0f))
+	if (amount != SoundConfig.reverb_mix)
 	{
-//		db_log3("Using EAX,");
-		SoundConfig.reverb_mix = -1.0f; //EAX_REVERBMIX_USEDISTANCE;	
-	}
-	else
-	{
-//		db_log3("Using reverb_mix,");
-		SoundConfig.reverb_mix = reverb_mix;
+		SoundConfig.reverb_mix = amount;
+		SoundConfig.reverb_changed = true;
+		roomChanged = true;
 	}
 
-	SoundConfig.reverb_changed = true;
+	if (roomChanged)
+	{
+		LogString(Reverb_RoomLine(SoundConfig.env_index, SoundConfig.reverb_mix, ReverbIsOn != 0));
+	}
+
+	// How loud the echo comes out follows the room's amount and the Room echo setting. It's asked on every frame of play, so a change to
+	// either is heard on the next frame.
+	Reverb_ApplyGain();
 }
 
 void ResetEaxEnvironment()

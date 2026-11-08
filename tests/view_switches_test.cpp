@@ -486,24 +486,32 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-staticcomparedrop", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
+
+	// A switch read any of these ways, and not through devSwitch or devNumber, would get round -dev
+	auto const readWithoutDev = [&](char const *name)
+	{
+		return Has(switches, (std::string("strstr(command_line, \"") + name + "\")").c_str())
+			|| Has(switches, (std::string("CommandLineHasWord(command_line, \"") + name + "\")").c_str())
+			|| Has(switches, (std::string("CommandLineFindSwitch(command_line, \"") + name + "\")").c_str());
+	};
 
 	for (char const *const name : devToggles)
 	{
 		Check(Has(switches, (std::string("devSwitch(\"") + name + "\")").c_str()), std::string(name) + " needs -dev");
-		Check(!Has(switches, (std::string("strstr(command_line, \"") + name + "\")").c_str()), std::string(name) + " has no way round that");
+		Check(!readWithoutDev(name), std::string(name) + " has no way round that");
 	}
 
 	for (char const *const name : devNumbers)
 	{
 		Check(Has(switches, (std::string("devNumber(\"") + name + "\")").c_str()), std::string(name) + " needs -dev");
-		Check(!Has(switches, (std::string("strstr(command_line, \"") + name + "\")").c_str()), std::string(name) + " has no way round that");
+		Check(!readWithoutDev(name), std::string(name) + " has no way round that");
 	}
 
 	Check(Has(switches, "LogString(std::string(\"shadows: \") + name + \" needs -dev, so it's off\");"), "asking without -dev says why it's off");
 	Check(Has(Between(switches, "auto const devNumber", "};"), "devSwitch(name)"), "and one with a number goes through the same door");
-	Check(Has(switches, "strstr(command_line, \"-shadowsoff\")") && Has(switches, "strstr(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
+	Check(Has(switches, "CommandLineHasWord(command_line, \"-shadowsoff\")") && Has(switches, "CommandLineHasWord(command_line, \"-reliefoff\")"), "turning the new look off is still for anyone");
 
 	char const *const tuned[] = { "ShadowsEvenGap", "StaticSurfaceOn", "StaticSceneOn", "StaticSceneNoLiveLights", "StaticSurfaceCompare", "KeptPrismsOff", "ShadowsDepthGap", "ShadowBiasSteps", "KeptSnap", "ToyShadowsDarkness", "ToyShadowsSoft", "ToyShadowsPositions", "ToyShadowsNearLights", "ToyShadowsLampSize", "ToyShadowsFlareSize", "ToyShadowsModelGap", "ToyShadowsFlareReach", "ToyShadowsFlareCap", "ToyShadowsWorld", "ToyShadowsTest", "ToyShadowsMaxLights", "ToyShadowsMaxBrief", "ShadowsPretendNoFloatBlend", "ToyShadowsCasters" };
 
@@ -548,7 +556,7 @@ static void TheRealGame()
 
 	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
 	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
-	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights())"), "the surface pass only asks for the maps when the choice reads them");
+	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights(), backwards)"), "the surface pass only asks for the maps when the choice reads them");
 	Check(Has(render, "ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "J goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");
@@ -684,6 +692,23 @@ static void TheRealGame()
 	Check(Has(menuFrame, "RenderingPage_SayWhatLinesDo(ViewSwitches_ShadowsCanBeOn(), Lighting_UsesMaps(MenuRendering));"), "and a line says when it does nothing");
 	Check(Has(menuData, "shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT"), "for shadows");
 	Check(Has(menuData, "mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING"), "and for maps");
+
+	// Whether lamps cast shadows: the user's choice, a line on this page, on by default
+	Check(Has(settings, "bool const lampsReal = Config_GetBool(kHeading, kLampsReal, true);"), "lamps are real lights unless the player has said otherwise");
+	Check(Has(settings, "ShoulderLamp_SetRealLightWanted(lampsReal);"), "what's saved is what the game starts with");
+	Check(Has(menuFrame, "ShoulderLamp_SetRealLightWanted(lastLampsReal != 0);\n\t\tConfig_SetBool(kHeading, kLampsReal, lastLampsReal != 0);\n\t\tchanged = true;"), "the line takes effect, and it's saved");
+	Check(Has(menuFrame, "RenderingPage_SayWhatLampLineDoes(MenuRendering != kLightingGouraud && MenuShadows != 0);"), "and it says when it does nothing");
+	Check(Has(menuData, "AvPMenu_Rendering[3].HelpString = lampsCanBeReal ? TEXTSTRING_RENDERING_LAMPSREAL_HELP : TEXTSTRING_RENDERING_LAMPSREAL_NOTHING;"), "on its own line");
+	Check(Has(menuData, "{&MenuLampsReal},") && Has(menuData, "static const int kFirstViewKeyElement = 5;"), "which comes before the key lines");
+
+	// Whether other marines' lamps show their beam in the air: the user's choice, the next line, on by default
+	Check(Has(settings, "bool const lampBeams = Config_GetBool(kHeading, kLampBeams, true);"), "beams show unless the player has said otherwise");
+	Check(Has(settings, "static const char kLampBeams[] = \"LampBeams\";"), "under their own word in the settings file");
+	Check(Has(settings, "ShoulderLamp_SetBeamsWanted(lampBeams);"), "what's saved is what the game starts with");
+	Check(Has(menuFrame, "ShoulderLamp_SetBeamsWanted(lastLampBeams != 0);\n\t\tConfig_SetBool(kHeading, kLampBeams, lastLampBeams != 0);\n\t\tchanged = true;"), "the line takes effect, and it's saved");
+	Check(Has(menuFrame, "RenderingPage_SayWhatBeamLineDoes(MenuRendering != kLightingGouraud);"), "and it says when it does nothing: with Gouraud lights the beam always shows");
+	Check(Has(menuData, "AvPMenu_Rendering[4].HelpString = beamsCanBeLeftOut ? TEXTSTRING_RENDERING_LAMPBEAMS_HELP : TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING;"), "on its own line");
+	Check(Has(menuData, "{&MenuLampsReal},\t\t{TEXTSTRING_NO},\t\t\t\tTEXTSTRING_RENDERING_LAMPSREAL_HELP},\n\t{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_RENDERING_LAMPBEAMS},\t\t{1},\t{&MenuLampBeams},"), "right after the lamps' shadows");
 
 	// the user's names, in the language table's order
 	char const *const labels[] = { "\"Gouraud\"", "\"Per-pixel (flat)\"", "\"Per-pixel + normals\"", "\"Relief map\"" };
@@ -845,7 +870,7 @@ static void TheMapLightsInTheGame()
 
 	std::string const atStart = Between(launch, "\"-shadowambient\"", "}");
 
-	Check(Has(launch, "strstr(command_line, \"-shadowambient\")"), "-shadowambient is there without -dev, because it only changes this player's own screen");
+	Check(Has(launch, "CommandLineHasWord(command_line, \"-shadowambient\")"), "-shadowambient is there without -dev, because it only changes this player's own screen");
 	Check(Has(atStart, "ShadowAmbientOn = 1;"), "and it turns it on");
 
 	// A network game leaves it alone, because all it changes is what one player's own screen draws

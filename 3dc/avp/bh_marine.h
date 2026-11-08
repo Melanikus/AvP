@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   CreateMarineBot can be called from other files
 /*--------------Patrick 14/2/97----------------
   Header file for marine support functions
   ---------------------------------------------*/
@@ -222,6 +224,7 @@
 		int roundsForThisTarget;
 
 		int Female;
+		int ClothesSet;		/* which of his model's sets of clothes and faces he has, to tell other machines */
 		int Android;
 		int Skill;
 		int Courage;
@@ -236,6 +239,12 @@
 
 		NPC_AVOIDANCEMANAGER avoidanceManager;
 		WAYPOINT_MANAGER waypointManager;
+
+		// Whether his shoulder lamp is on. It isn't saved, so a loaded game starts with it off. It isn't sent either: every machine decides it
+		// for the marines it shows, from the light where it shows them (LampPick_MarineWantsItOn in lamp_pick.h).
+		int lampOn;
+		int lampDecideIn;   // how long until he next decides whether it's dark enough for his lamp, with 65536 for a second
+		int lampLightTimes; // how many times in a row he's found it clearly light: see LampPick_MarineWantsItOn
 
  	}MARINE_STATUS_BLOCK;
 
@@ -377,6 +386,7 @@
 	void InitSealBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr);
 	void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data);
 	void MarineBehaviour(STRATEGYBLOCK *sbPtr);
+	STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon);
 	void MakeMarineNear(STRATEGYBLOCK *sbPtr);
 	void MakeMarineFar(STRATEGYBLOCK *sbPtr);
 	void MarineIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple, int wounds,SECTION_DATA *Section, VECTORCH *incoming);

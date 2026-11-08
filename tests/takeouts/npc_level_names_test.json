@@ -1,0 +1,168 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "an empty name is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "if (NpcLevelName_IsEmpty(level))\n\t{\n\t\treturn true;\n\t}",
+					"to": "if (false)\n\t{\n\t\treturn true;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "asking for no name is answered",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "if (NpcLevelName_IsEmpty(level))\n\t{\n\t\treturn 0;\n\t}",
+					"to": "if (false)\n\t{\n\t\treturn 0;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "the list has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "if (list->count >= kMostNpcLevelNames)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the list stops one too late",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "list->count >= kMostNpcLevelNames",
+					"to": "list->count > kMostNpcLevelNames"
+				}
+			]
+		},
+		{
+			"name": "the list stops one too soon",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "list->count >= kMostNpcLevelNames",
+					"to": "list->count >= kMostNpcLevelNames - 1"
+				}
+			]
+		},
+		{
+			"name": "too many says so every time",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "return !firstTime;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "too many never says so",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "return !firstTime;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the new name isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "memcpy(list->names[list->count].network, network, kNpcNameLength);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the level's name isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "memcpy(list->names[list->count].level, level, kNpcNameLength);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the count doesn't go up",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "list->count++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "it finds the last one, not the first",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "for (int i = 0; i < list->count; i++)\n\t{\n\t\tif (memcmp(list->names[i].level, level, kNpcNameLength) == 0)",
+					"to": "for (int i = list->count - 1; i >= 0; i--)\n\t{\n\t\tif (memcmp(list->names[i].level, level, kNpcNameLength) == 0)"
+				}
+			]
+		},
+		{
+			"name": "a name the same as its new one is an answer",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "return memcmp(list->names[i].network, level, kNpcNameLength) == 0 ? 0 : list->names[i].network;",
+					"to": "return list->names[i].network;"
+				}
+			]
+		},
+		{
+			"name": "clearing leaves the count",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "list->count = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "clearing leaves the note that it was full",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "list->saidItIsFull = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the level's name is looked for among the level's names",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "if (memcmp(list->names[i].network, network, kNpcNameLength) == 0)",
+					"to": "if (memcmp(list->names[i].level, network, kNpcNameLength) == 0)"
+				}
+			]
+		},
+		{
+			"name": "the new name leads to itself",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "return list->names[i].level;",
+					"to": "return list->names[i].network;"
+				}
+			]
+		}
+	]
+}

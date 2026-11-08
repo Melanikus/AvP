@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a facehugger keeps which player it is after
 /* Patrick 27/2/97 --------------------------------------------
   Header file for facehugger support functions
   -------------------------------------------------------------*/
@@ -55,6 +57,8 @@ typedef struct facehuggerStatusBlock
   	unsigned int jumping :1;
 	NPC_MOVEMENTDATA moveData;
 	HMODELCONTROLLER HModelController;
+	STRATEGYBLOCK *Target;					/* the player it's after */
+	char Target_SBname[SB_NAME_LENGTH];		/* the name it had when it chose them: a block that's gone doesn't have it any more */
 	int soundHandle;
 	int soundHandle2;
 

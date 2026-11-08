@@ -127,6 +127,21 @@ static void TestAsking()
 	Check(!ShoulderLamp_TakeThisFramesAnswer(), "the last thing asked is what counts");
 }
 
+static void TestRealLight()
+{
+	// Nothing in this build asks for the real light: the setting that does comes with the lamp work. So it's always the painted version.
+	ShoulderLamp_TurnOff();
+	ShoulderLamp_Toggle();
+	ShoulderLamp_AskForThisFrame(true);
+	Check(!ShoulderLamp_CanBeALight(), "on, for a marine, it's still the painted version, because nothing asks for the real light");
+
+	float const *const place = ShoulderLamp_PlaceFromEyes();
+
+	Check(place[0] == (float)kShoulderLampAcross && place[1] == (float)kShoulderLampUp && place[2] == (float)kShoulderLampAhead, "it starts at his shoulder");
+
+	ShoulderLamp_TurnOff();
+}
+
 static void TestFlicker()
 {
 	float lowest = 2.0f, highest = -1.0f, biggestStep = 0.0f, last = ShoulderLamp_Flicker(0.0);
@@ -605,12 +620,13 @@ static void TestJoiningTheGame()
 	std::string const player = ReadSourceFile("3dc/avp/player.cpp");
 	std::string const hud = ReadSourceFile("3dc/avp/hud.cpp");
 	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
 	std::string const device = ReadSourceFile("win32/d3_func.cpp");
 
 	// The byte, and what's kept the file the same
 	Check(Has(inputHeader, "unsigned char Predator_Say;        // Predator\n\t\tunsigned char Marine_ShoulderLamp;"), "the key shares a byte with one the marine doesn't use, so a profile stays the same size");
-	Check(CountOf(inputHeader, "#define NUMBER_OF_MARINE_INPUTS\t28") == 2, "and the marine has one more key");
-	Check(Has(input, "static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 1,"), "the compiler checks that the menu, which counts bytes, reaches that byte");
+	Check(CountOf(inputHeader, "#define NUMBER_OF_MARINE_INPUTS\t29") == 2, "and the marine has one more key");
+	Check(Has(input, "static_assert(offsetof(PLAYER_INPUT_CONFIGURATION, Marine_ShoulderLamp) == NUMBER_OF_MARINE_INPUTS - 2,"), "the compiler checks that the menu, which counts bytes, reaches that byte");
 	Check(Has(input, "static_assert(sizeof(PLAYER_INPUT_CONFIGURATION) == 32,"), "and that saved profiles still fit");
 
 	// The defaults
@@ -626,19 +642,22 @@ static void TestJoiningTheGame()
 	Check(CountOf(input, "ShoulderLamp_Toggle();") == 1, "and nowhere else in the keys");
 
 	// An old profile
-	std::string const settling = Between(profile, "static void SettleShoulderLampKeys", "extern int SaveUserProfile");
+	std::string const settling = Between(profile, "static void SettleMarineNewKeys", "extern int SaveUserProfile");
 
-	Check(ComesBefore(profile, "MarineInputSecondaryConfig    = UserProfilePtr->MarineInputSecondaryConfig;", "SettleShoulderLampKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);"), "a profile's keys are settled once they've been read");
-	Check(Has(settling, "i < NUMBER_OF_MARINE_INPUTS - 1"), "and looking for G takes in all his other keys, and not the lamp's own");
-	Check(Has(settling, "primaryKeys[i] == KEY_G || secondaryKeys[i] == KEY_G"), "on either side");
-	Check(Has(settling, "ShoulderLamp_KeyFromProfile(primary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, defaultIsTaken, KEY_VOID)"), "the first key becomes G");
+	Check(ComesBefore(profile, "MarineInputSecondaryConfig    = UserProfilePtr->MarineInputSecondaryConfig;", "SettleMarineNewKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);"), "a profile's keys are settled once they've been read");
+	Check(Has(settling, "MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 2, KEY_G)"), "and looking for G takes in all his other keys, and not the lamp's own");
+	Check(Has(profile, "primaryKeys[i] == key || secondaryKeys[i] == key"), "on either side");
+	Check(Has(settling, "MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 1, KEY_R)"), "and the reload key looks for R in all his others, the lamp's too");
+	Check(Has(settling, "ShoulderLamp_KeyFromProfile(primary->Marine_Reload, KEY_ESCAPE, KEY_R, reloadDefaultIsTaken, KEY_VOID)"), "a profile from before it gets R, or no key if R is taken");
+	Check(Has(settling, "ShoulderLamp_KeyFromProfile(secondary->Marine_Reload, KEY_ESCAPE, KEY_VOID, false, KEY_VOID)"), "and nothing on the second list");
+	Check(Has(settling, "ShoulderLamp_KeyFromProfile(primary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, lampDefaultIsTaken, KEY_VOID)"), "the first key becomes G");
 	Check(Has(settling, "ShoulderLamp_KeyFromProfile(secondary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_VOID, false, KEY_VOID)"), "and the second becomes no key");
 	Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menus.cpp"), "!(key == KEY_ESCAPE) &&"), "the menu refuses Escape, which is why it can only mean a profile that's never heard of the lamp");
 	Check(Has(ReadSourceFile("3dc/win95/platform.h"), "enum KEY_ID\n{\n\tKEY_ESCAPE,"), "and Escape is key 0, which is what's in that byte in an old profile");
 	Check(Has(ReadSourceFile("3dc/win95/platform.h"), "KEY_VOID=255,") && Has(ReadSourceFile("3dc/win95/platform.h"), "MAX_NUMBER_OF_INPUT_KEYS,"), "and the key arrays have a place for all 256 values a byte can hold, so no value in a file can read past them");
 
 	// Its place on the page
-	Check(Has(menu, "(j == NUMBER_OF_MARINE_INPUTS - 1) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j"), "the page gives it its own name");
+	Check(Has(menu, "(j == NUMBER_OF_MARINE_INPUTS - 2) ? TEXTSTRING_MARINE_KEY_SHOULDER_LAMP : TEXTSTRING_MARINE_KEY_FORWARD+j"), "the page gives it its own name");
 	Check(Has(words, "TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING,\n\tTEXTSTRING_MARINE_KEY_SHOULDER_LAMP,"), "which comes after everything in the language file");
 	Check(Has(language, "read maps.\",\n\t\"Shoulder lamp\",\n"), "and it's in the same place in our own text");
 
@@ -661,23 +680,28 @@ static void TestJoiningTheGame()
 	Check(!Has(Between(device, "// we should bail out if the shaders can't be loaded", "return false;"), "shoulderLampEffect"), "and that doesn't stop the game starting");
 	// The only thing a network game changes here is that the spot's size and strength go back as built. The lamp itself stays on, whichever game it is.
 	Check(Has(drawing, "// A network game keeps these as built.") && !Has(Between(drawing, "static void DrawShoulderLamp()", "// A network game keeps these as built."), "Network") && !Has(Between(drawing, "// How big and how strong the spot is.", "ChangeZWriteEnable(ZWRITE_ENABLED);"), "Network"), "the user's ruling: it isn't turned off in a network game");
-	Check(Has(drawing, "onWalls = surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture"), "walls are only lit from surface pictures of this frame");
+	Check(Has(drawing, "onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture"), "walls are only lit from surface pictures of this frame");
 	Check(Has(render, "void ThisFramesRenderingHasBegun()\n{\n\tsurfacePicturesAreFromThisFrame = false;"), "which is forgotten at the start of each frame");
 	Check(Has(render, "surfacePicturesAreFromThisFrame = true;\n\t\t\tFrameTiming_Mark(kStageSurfacePictures);"), "and only set when they've been drawn");
-	Check(Has(drawing, "device->SetTexture(3 + i, pictures[i]);") && Has(drawing, "if (onWalls)\n\t{\n\t\tdevice->SetTexture(3, NULL);\n\t\tdevice->SetTexture(4, NULL);\n\t}"), "and it gives back the textures it borrows");
+	Check(Has(drawing, "device->SetTexture(3 + i, pictures[i]);") && Has(drawing, "if (onWalls)\n\t{\n\t\tdevice->SetTexture(3, NULL);\n\t\tdevice->SetTexture(4, NULL);\n"), "and it gives back the textures it borrows");
 
 	// The user's ruling: it follows where he's looking, on a robot arm, and doesn't wiggle
 	std::string const painted = ReadSourceFile("shaders/shoulderLamp.psh");
+	std::string const shapesOfLight = ReadSourceFile("shaders/lightShapes.fxh");
 
 	Check(Has(painted, "float2 aim = (kAim + Swing.xy * kFollowing) * wide;"), "the spot goes where the lamp is aimed");
 	Check(Has(painted, "float2 beam = aim - start;"), "and the cone still starts at his shoulder and ends there, so the beam swings like an arm");
+	Check(Has(shapesOfLight, "normalize(lerp(float3(LampAim.x * kLampAimsAt, -LampAim.y * kLampAimsAt, kLampAimsAt) - light.xyz, LampAim.xyz, LampAim.w))"), "and the real light aims the same way, or another marine's lamp its own way");
 	Check(Has(render, "ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f"), "and the painted lamp is told where, as a place on the screen");
-	Check(!Has(painted, "kSway") && !Has(ReadSourceFile("3dc/shoulder_lamp.h"), "Sway") && !Has(render, "ShoulderLamp_Sway"), "and the wiggle has gone altogether");
+	Check(Has(shapes, "out[kToyLightAim] = ShoulderLamp_AimAcross();\n\t\t\t\tout[kToyLightAim + 1] = ShoulderLamp_AimDown();"), "and so is the real one, in its place on the light list");
+	Check(Has(ReadSourceFile("3dc/pixel_lights.cpp"), "device->SetPixelShaderConstantF(25, &light[kToyLightAim], 1);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "if (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);") && Has(ReadSourceFile("3dc/pixel_lights.cpp"), "SetLampAimConstant(device, light);\n\n\tReadPicture"), "and each lamp's own aim goes to both shaders, as each is drawn");
+	Check(!Has(painted, "kSway") && !Has(shapesOfLight, "Sway") && !Has(ReadSourceFile("3dc/shoulder_lamp.h"), "Sway") && !Has(render, "ShoulderLamp_Sway"), "and the wiggle has gone altogether");
 	Check(Has(painted, "kSizeAtFarEnd * kMiddleSize"), "and the middle layer is a part of the whole size, so a smaller spot keeps its shape");
 
 	// The user's ruling: only the spot lights anything, or looking through the cone is night vision
 	Check(Has(painted, "lerp(kBrighten * spot, (kGlow + onWall) * spot + haze, Lamp.y)"), "only the spot brightens or shows a wall's colour, and the cone only adds its haze");
 	Check(Has(painted, "float3 haze = kHaze * cone;"), "and the haze is a colour of its own, with nothing of the wall in it");
+	Check(Has(render, "if (isARealLight)\n\t{\n\t\treturn;"), "and nothing painted goes over the real light");
 
 	// The pictures it reads, in Gouraud
 	std::string const forTheLamp = Between(render, "static void DrawSurfacePicturesForTheLamp()\n{", "// The stencil now marks the pixels");
@@ -687,12 +711,23 @@ static void TestJoiningTheGame()
 	Check(ComesBefore(forTheLamp, "savedCardSettings->Capture()", "ToyDrawPictures(device, worldAxes, false)") && ComesBefore(forTheLamp, "ToyDrawPictures(device, worldAxes, false)", "savedCardSettings->Apply();"), "and the card's settings are put back afterwards, because the game caches them");
 	Check(Has(forTheLamp, "device->SetRenderTarget(0, screen);") && Has(forTheLamp, "screen->Release();"), "and the screen is drawn on again");
 	Check(ComesBefore(render, "ToyShadows_Draw();\n\t\tViewSwitches_ApplyAsked();\n\t\tDrawSurfacePicturesForTheLamp();", "// The marine's shoulder lamp, on the finished picture"), "and it comes after the shadow pass, which may have drawn them already, and before the lamp reads them");
+
+	// The real light
+	std::string const considering = Between(shapes, "static void ConsiderTheShoulderLamp", "// Chooses this frame's lights.");
+
+	Check(Has(considering, "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)"), "the real light only goes on the list when lights are added per pixel, or it would be a shadow with no light");
+	Check(Has(considering, "ToyConsiderLight(&shoulderLampLight, Player, found, numFound, most, &lightsThisFrame.steadyInReach);"), "and as the player's, so it counts this close to the camera");
+	Check(Has(shapes, "ConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);"), "and it's put forward with the steady lights");
+	Check(Has(shapes, "if (light == &shoulderLampLight)\n\t\t\t{\n\t\t\t\tout[8] = 2.0f;\n\t\t\t\tshoulderLampIsChosen = true;"), "and it has its own look");
+	Check(Has(render, "isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame"), "and the painted version stands aside only when it really was a light this frame");
+	Check(ComesBefore(shapes, "\tshoulderLampIsChosen = false;\n", "shoulderLampIsChosen = true;") && Has(Between(shapes, "void ToyShadows_ChooseLights()", "ToyFoundLight steady[kLightChoiceMostCandidates];"), "shoulderLampIsChosen = false;"), "and whether it was is worked out again every frame, not kept from the first");
 }
 
 int main()
 {
 	TestSwitching();
 	TestAsking();
+	TestRealLight();
 	TestFlicker();
 	TestKeysFromProfiles();
 	TestTheRobotArm();
