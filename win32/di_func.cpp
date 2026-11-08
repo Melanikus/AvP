@@ -1,9 +1,13 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a game pad doesn't reach a Hudson run
 // Interface  functions (written in C++) for
 // Direct3D immediate mode system
 
 #define DIRECTINPUT_VERSION 0x0800
 
 #include "logString.h"
+#include "hudson.h"
 #include <dinput.h>
 #include <XInput.h> // XInput API
 #include "io.h"
@@ -1306,7 +1310,8 @@ void ReadJoysticks(void)
 	GotJoystick = 0;//= ReadJoystick();
 
 	// check XInput pads
-	GotXPad = UpdateControllerState();
+	// A pad can be read whether the game has the focus or not, and a run isn't anyone playing
+	GotXPad = HudsonRunIsOn ? 0 : UpdateControllerState();
 
 	memset(&GamePadButtons[0], 0, NUMPADBUTTONS);
 
