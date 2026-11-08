@@ -11,6 +11,8 @@
 // tests/build.ps1 compiles this with the settings in tests/lift_checks_test.args, and the program gives back a non-zero result if
 // any check failed. It needs no game files. /FC in its settings is how the source files are found.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 
 #include <fstream>
@@ -18,6 +20,7 @@
 #include <string>
 
 #include "lift_checks.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -60,19 +63,10 @@ static std::string ReadSourceFile(char const *name)
 	return plain;
 }
 
-// The text from one mark up to the next, or nothing if either isn't there.
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, std::string const &from, std::string const &to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + from.size());
-
-	return end == std::string::npos ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndAfterTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Has(std::string const &text, std::string const &part)
