@@ -21,6 +21,7 @@
 #include "bh_far.h"
 #include "pheromone.h"
 #include "huddefs.h"
+#include "hudson.h"
 #include "hud_gfx.h"
 #include "bh_generator.h"
 #include "pvisible.h"
@@ -216,6 +217,15 @@ void InitCharacter()
 
 void RestartLevel()
 {
+	// A test run may be pretending the blocks have run out. A restart really does give every block back, so that stops here.
+	extern bool HudsonTest_NoStrategyBlocks;
+	extern bool HudsonTest_NoDisplayBlocks;
+	extern bool HudsonTest_NoLightBlocks;
+
+	HudsonTest_NoStrategyBlocks = false;
+	HudsonTest_NoDisplayBlocks = false;
+	HudsonTest_NoLightBlocks = false;
+
 	//get the music to start again at the beginning of the play list.
 	Music_ResetForLevel();
 
@@ -300,6 +310,11 @@ void RestartLevel()
 
 	CurrentGameStats_Initialise();
 	MessageHistory_Initialise();
+
+	if (HudsonRunIsOn)
+	{
+		Hudson_TheLevelStartedAgain();
+	}
 
 	if (AvP.Network!=I_No_Network)
 	{
