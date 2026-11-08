@@ -53,6 +53,22 @@ So:
 
 Until that new release is out, the old one counts as having an open hole, and `RELEASE-BLOCKERS.md` says so (AvP Tao #1).
 
+## Building on a machine without vcpkg
+
+The game's libraries are normally built by vcpkg from our pinned ports, as part of the build. A machine where vcpkg can't download sources
+can't do that, so it takes the libraries GitHub built, once, and checks them before using them:
+
+1. The owner starts **Game build** by hand (Actions, "Run workflow"), on the commit the libraries are wanted for. Started by hand, it keeps the
+   libraries it built as the artifact **static-libraries**, for a week. The run's log lists a SHA-256 for every file ("List the libraries'
+   hashes"), the hash of that list ("The list itself: ..."), and the artifact's own hash ("Say the libraries' artifact hash").
+2. Whoever is allowed to go online downloads it: `gh run download <run number> --repo Melanikus/AvP -n static-libraries -D
+   <folder>\vcpkg_installed\x86-windows-static`.
+3. Before anything uses it, check it: the hash of the downloaded `SHA256SUMS.txt` must be the run log's "The list itself", and every file
+   must have the hash `SHA256SUMS.txt` gives it, with no file missing and none extra. If anything differs, delete it all and don't use it.
+4. Build against it with `/p:VcpkgManifestInstall=false /p:VcpkgApplocalDeps=false "/p:VcpkgInstalledDir=<folder>\vcpkg_installed\\"`.
+5. It's never committed. Fetch it again when `vcpkg.json`'s baseline, an overlay port or the triplet changes, because then it's no longer
+   what the game is built against.
+
 ## How someone checks a copy they downloaded
 
 - `SHA256SUMS` beside the zip has the zip's hash, and `SHA256SUMS.txt` inside the zip has the hash of every file in it.
