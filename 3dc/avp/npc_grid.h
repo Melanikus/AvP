@@ -253,6 +253,7 @@ private:
 	};
 
 	bool StopNow();
+	void LetGo();
 	const char *Fail(const char *why);
 	bool CountBuilding(size_t bytes);
 

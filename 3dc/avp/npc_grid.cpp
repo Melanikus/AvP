@@ -185,6 +185,15 @@ NpcGrid::NpcGrid()
 
 void NpcGrid::Clear()
 {
+	LetGo();
+	stopAsked.store(false);
+	looksAtStop = 0;
+}
+
+// Lets go of everything the grid keeps, but not of a stop that was asked for: another thread can ask for one at any moment, and a build
+// mustn't lose it by reading the stop, clearing, and putting back what it read.
+void NpcGrid::LetGo()
+{
 	ready = false;
 	GiveBack(&sheets);
 	GiveBack(&flags);
@@ -207,8 +216,6 @@ void NpcGrid::Clear()
 	GiveBack(&fallTo);
 	surfaceCells = steps = rayTests = squareTests = boxEntries = 0;
 	bytesKept = bytesBuilding = bytesBuildingUsed = 0;
-	stopAsked.store(false);
-	looksAtStop = 0;
 }
 
 // Every loop of the build asks this. It also counts the asking, so a test can make the build stop at a chosen point.
@@ -227,11 +234,7 @@ bool NpcGrid::StopNow()
 // Gives up: keeps nothing, and gives back why
 const char *NpcGrid::Fail(const char *why)
 {
-	bool const stop = stopAsked.load();
-	size_t const looks = looksAtStop;
-	Clear();
-	stopAsked.store(stop);
-	looksAtStop = looks;
+	LetGo();
 	return why;
 }
 
@@ -436,11 +439,7 @@ const uint32_t *NpcGrid::FallsOf(uint32_t cell, size_t *count) const
 
 const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const AlienWaysMap &map)
 {
-	bool const stop = stopAsked.load();
-	size_t const looks = looksAtStop;
-	Clear();
-	stopAsked.store(stop);
-	looksAtStop = looks;
+	LetGo();
 
 	if (!map.Ready())
 	{
