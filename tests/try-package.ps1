@@ -115,33 +115,13 @@ Expect-Refused (Run-Test '--her') 'the only thing this takes is --here' 'a word 
 New-Copy
 Expect-Passes (Run-Imports) 'Every library the package links to is accounted for' 'the whole package accounts for every library'
 
-# OpenAL Soft is one of the few libraries still beside the game rather than inside it (card STATIC-1), so it's the one taken out
 New-Copy
-Remove-Item -LiteralPath (Join-Path $work 'OpenAL32.dll')
-Expect-Refused (Run-Imports) 'needs OpenAL32.dll' 'with a library taken out, that library is named'
+Remove-Item -LiteralPath (Join-Path $work 'ogg.dll')
+Expect-Refused (Run-Imports) 'needs ogg.dll' 'with a library taken out, that library is named'
 
 New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'd3dx9_43.dll')
 Expect-Refused (Run-Imports) 'AvP_Classic.exe needs d3dx9_43.dll' "with D3DX taken out, it's named, whatever this machine has"
-
-# --- Microsoft's Visual C++ runtime, which nothing in the package may need or carry any more: the game and its libraries have it inside them
-# (card STATIC-1). The files tried here are Microsoft's own, from Visual Studio's copy of the runtime, as a stray one would be. vcruntime140.dll
-# in the package is refused for being there, though nothing in the package needs it. msvcp140.dll is refused for what it needs as well: the
-# C++ runtime's vcruntime140.dll, and the C runtime's api-ms-win-crt-* names.
-$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-$visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Redist\MSVC\*\x86\Microsoft.VC*.CRT') | Select-Object -Last 1
-if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime (VC\Redist\MSVC\<version>\x86) wasn't found, so the runtime's rows can't be tried" }
-
-New-Copy
-Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'vcruntime140.dll') $work
-Expect-Refused (Run-Imports) 'the package carries vcruntime140.dll' "Microsoft's runtime in the package is refused, though nothing in the package needs it"
-
-New-Copy
-Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'msvcp140.dll') $work
-$result = Run-Imports
-Expect-Refused $result 'msvcp140.dll needs vcruntime140.dll' 'a library that needs the C++ runtime is refused, and what it needs is named'
-Expect-Refused $result 'msvcp140.dll needs api-ms-win-crt-' "and so is one that needs the C runtime under Windows' names for it"
 
 # --- Microsoft's two files, which we can't build from source, so all we can check is Microsoft's signature on them
 New-Copy
@@ -152,12 +132,62 @@ $bytes[$bytes.Length / 2] = $bytes[$bytes.Length / 2] -bxor 1
 Expect-Refused (Run-Imports) "D3DCompiler_43.dll doesn't carry Microsoft's signature" 'one changed bit in the compiler is refused'
 
 New-Copy
-Copy-Item -Force -LiteralPath (Join-Path $work 'OpenAL32.dll') (Join-Path $work 'd3dx9_43.dll')
+Copy-Item -Force -LiteralPath (Join-Path $work 'ogg.dll') (Join-Path $work 'd3dx9_43.dll')
 Expect-Refused (Run-Imports) "d3dx9_43.dll doesn't carry Microsoft's signature" "another library under D3DX's name is refused"
 
 New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'D3DCompiler_43.dll')
 Expect-Refused (Run-Imports) "D3DCompiler_43.dll isn't in the package" 'the check that reads what links to what notices the compiler too, though nothing links to it'
+
+# --- Microsoft's Visual C++ runtime, which the package carries beside the game (card STATIC-UNDO-1, #125): only the DLLs it needs, each the very
+# copy in Visual Studio's redistributable folder, signed by Microsoft. Each way of getting that wrong is tried by itself. The extra files tried
+# here are Microsoft's own, from Visual Studio's copy of the runtime and from Windows, as a stray one would be.
+New-Copy
+Expect-Passes (Run-Imports) "Microsoft's runtime is only the" 'the whole package carries only the runtime it needs, each one checked'
+
+New-Copy
+Remove-Item -LiteralPath (Join-Path $work 'vcruntime140.dll')
+Expect-Refused (Run-Imports) 'needs vcruntime140.dll' "with the runtime's vcruntime140.dll taken out, it's named, whatever this machine has"
+
+New-Copy
+$file = Join-Path $work 'vcruntime140.dll'
+$bytes = [System.IO.File]::ReadAllBytes($file)
+$bytes[$bytes.Length / 2] = $bytes[$bytes.Length / 2] -bxor 1
+[System.IO.File]::WriteAllBytes($file, $bytes)
+Expect-Refused (Run-Imports) "vcruntime140.dll doesn't carry Microsoft's signature" 'one changed bit in the runtime is refused'
+
+New-Copy
+Copy-Item -Force -LiteralPath (Join-Path $work 'ogg.dll') (Join-Path $work 'vcruntime140.dll')
+Expect-Refused (Run-Imports) "vcruntime140.dll doesn't carry Microsoft's signature" "another library under the runtime's name is refused"
+
+# Signed by Microsoft, and not Visual Studio's copy: the check doesn't stop at the signature
+New-Copy
+Copy-Item -Force -LiteralPath (Join-Path $work 'D3DCompiler_43.dll') (Join-Path $work 'msvcp140.dll')
+Expect-Refused (Run-Imports) "msvcp140.dll isn't the copy in Visual Studio's redistributable folder" "another file Microsoft signed, under the runtime's name, is refused"
+
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Redist\MSVC\*\x86\Microsoft.VC*.CRT') | Select-Object -Last 1
+if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime (VC\Redist\MSVC\<version>\x86) wasn't found, so the runtime's rows can't be tried" }
+
+# A piece the package may carry, but which nothing in it needs
+$unneeded = @('msvcp140_codecvt_ids.dll', 'msvcp140_2.dll', 'msvcp140_1.dll' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Package $_)) }) | Select-Object -First 1
+if (-not $unneeded) { throw "every piece of the runtime the package may carry is in it, so none is left to try as one nothing needs" }
+New-Copy
+Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName $unneeded) $work
+Expect-Refused (Run-Imports) "the package carries $unneeded, and nothing in it needs it" 'a piece of the runtime that nothing needs is refused'
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'concrt140.dll') $work
+Expect-Refused (Run-Imports) "the package carries concrt140.dll, which isn't one of the runtime DLLs it may carry" "a piece of the runtime that isn't on the list is refused, though it's Microsoft's"
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path "$env:windir\SysWOW64" 'ucrtbase.dll') $work
+Expect-Refused (Run-Imports) "the package carries ucrtbase.dll, which isn't one of the runtime DLLs it may carry" "Windows' own C runtime in the package is refused: Windows 10 and 11 use theirs"
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path $work 'vcruntime140.dll') (Join-Path $work 'vcruntime140d.dll')
+Expect-Refused (Run-Imports) "the package carries vcruntime140d.dll, which isn't one of the runtime DLLs it may carry" 'a debug runtime, which no player has, is refused by its name'
 
 # --- No folder of the machine that built it. A copy of a library with one put after its end, which nothing else here notices: the end of the file isn't
 # part of what Windows loads, and this library isn't signed. First as plain text, then as UTF-16, the way a program keeps a wide string, then UTF-16 starting
@@ -184,11 +214,24 @@ Add-ToTheEnd 'libsmackerdec.dll' ([byte[]](@(0x41) + [System.Text.Encoding]::Uni
 Expect-Refused (Run-Imports) 'names a folder: C:\Users\someone' 'and as UTF-16 starting on an odd byte'
 
 New-Copy
-Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows-static\bin\OpenAL32.pdb`0"))
+Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
 Expect-Refused (Run-Imports) 'AvP_Classic.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
 
+# Microsoft's runtime DLLs are left out of this, but only once proven Microsoft's own, byte for byte Visual Studio's copy (card STATIC-UNDO-1).
+# So a library of ours naming a folder is still refused, Microsoft's build machine's kind of folder included, and a runtime DLL with one put on
+# its end is refused by the proof before it's read at all.
 New-Copy
-Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and OpenAL32.pdb`0"))
+Add-ToTheEnd 'ogg.dll' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\_work\1\s\binaries\x86ret\bin\i386\ogg.i386.pdb`0"))
+Expect-Refused (Run-Imports) 'ogg.dll, as plain text, names a folder: D:\a\_work' "a library of ours naming a folder is refused, even one like Microsoft's build machine's"
+
+New-Copy
+Add-ToTheEnd 'vcruntime140.dll' ([System.Text.Encoding]::ASCII.GetBytes("$folder`0"))
+$result = Run-Imports
+$caughtByTheProof = $result.Text.Contains("vcruntime140.dll doesn't carry Microsoft's signature") -or $result.Text.Contains("vcruntime140.dll isn't the copy in Visual Studio's redistributable folder")
+Check ($result.Code -ne 0 -and $caughtByTheProof -and -not $result.Text.Contains('names a folder')) "a runtime DLL with a folder put on its end is refused as not Microsoft's own copy, before the folders are read" $result.Text
+
+New-Copy
+Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and ogg.pdb`0"))
 Expect-Passes (Run-Imports) 'none names a folder on the machine that built it' "a web address, and a .pdb's name with no folder, aren't refused"
 
 if (Test-Path -LiteralPath $work) { Remove-Item -Recurse -Force -LiteralPath $work }

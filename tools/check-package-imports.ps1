@@ -1,14 +1,15 @@
 <#
-Checks that a package has every library it needs, or that Windows itself will supply it; that nothing in it needs Microsoft's Visual C++
-runtime, which a player no longer installs; and that the two files we can't build from source are really Microsoft's. Goes online for nothing.
+Checks that a package has every library it needs, or that Windows itself will supply it; that the parts of Microsoft's Visual C++ runtime it
+carries are exactly the ones it needs, each the very file Visual Studio hands on and signed by Microsoft; and that the two D3DX files we can't
+build from source are really Microsoft's. Goes online for nothing.
 
 A program can't start if a library it links to is missing, and the same goes for each library it brings along. A machine that has built the
 game before tends to have copies of everything, so a missing file wouldn't show there, and a tester would be the first to find out. So this
 reads the list of libraries inside each program and library in the package, and doesn't look at what's installed on this machine at all.
 
-Each name has to be in the package, or on the list of Windows' own libraries below. A new one fails until someone has decided where it comes from, and added
-it to the package or to a list, on purpose. That's the point: a file from an old DirectX runtime, which a clean Windows doesn't have, can't
-slip through because a developer's machine happens to have it.
+Each name has to be in the package, or on the list of Windows' own libraries below. A new one fails until someone has decided where it comes
+from, and added it to the package or to the list, on purpose. That's the point: a file from an old DirectX runtime, which a clean Windows
+doesn't have, can't slip through because a developer's machine happens to have it.
 
 It also refuses a program or library that names a folder on the machine that built it, such as C:\Users\<name>\..., because that would go out
 with the game for anyone to read. See the end of this script.
@@ -31,13 +32,22 @@ $partOfWindows = @(
     'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
-# Microsoft's Visual C++ runtime. The game and every library built for it have the runtime inside them (/MT, and the x86-windows-static
-# triplet: card STATIC-1), so a player installs nothing for it. A name from it means a piece was still built the old way (/MD), and on a
-# machine without Microsoft's runtime installed the game wouldn't start. So it's refused by name, wherever it turns up: as a library
-# something needs, or as a file in the package, even with a copy right there, because a copy shipped means something still needs it.
-# - vcruntime*, msvcp*, concrt* and vccorlib*: the runtime's C++ parts, such as vcruntime140.dll and msvcp140_atomic_wait.dll
-# - ucrtbase.dll and api-ms-win-crt-*: its C part, the Universal CRT, under its own name and under the names Windows gives it
-# msvcrt.dll is a different, much older library that is part of Windows, and Microsoft's own D3DX files use it, so it isn't one of these.
+# Microsoft's Visual C++ runtime. The game and every library built for it take it from DLLs (the /MD switch). It was built into them (/MT)
+# for a day, until Bitdefender flagged the game built that way (#111) and the user ruled it out (card STATIC-UNDO-1, #125). It has two parts:
+# - The C part, the Universal C runtime: ucrtbase.dll, and the api-ms-win-crt-* names Windows gives it. It's part of Windows 10 and 11, the
+#   Windows PLAYTEST.md asks for, and Microsoft's page "Universal CRT deployment" says that there the copy in Windows' own folder is used even
+#   when a program brings one. So the package doesn't carry it, and refuses a copy.
+# - The C++ part: vcruntime140.dll, and the C++ standard library, msvcp140.dll and its smaller pieces. Windows doesn't have that, so the package
+#   carries it, beside the game, and a tester installs nothing. These are the only ones it may carry, and only those something in it needs.
+#   tools/build-and-package.ps1 copies exactly those, from the place below.
+# Any other name from the runtime is refused wherever it turns up, as a file or as something a file needs: the debug ones, such as
+# vcruntime140d.dll and ucrtbased.dll, which no player has; concrt140.dll and vccorlib140.dll, which nothing of ours uses; and any newer
+# piece, until someone has looked at it and added it here on purpose.
+$runtimeThePackageMayCarry = @('vcruntime140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll')
+
+# Whether a name is any part of Microsoft's Visual C++ runtime: vcruntime*, msvcp*, concrt* and vccorlib* are its C++ parts, and ucrtbase* and
+# api-ms-win-crt-* its C part. msvcrt.dll is a different, much older library that is part of Windows, and Microsoft's own D3DX files use it,
+# so it isn't one of these.
 function Test-MicrosoftRuntime([string]$name) {
     $lower = $name.ToLowerInvariant()
 
@@ -45,12 +55,30 @@ function Test-MicrosoftRuntime([string]$name) {
         ($lower -like 'ucrtbase*.dll') -or ($lower -like 'api-ms-win-crt-*')
 }
 
+# The Universal C runtime as a program asks for it, which Windows 10 and 11 supply. Not ucrtbased.dll, the debug one.
+function Test-UniversalCRuntime([string]$name) {
+    $lower = $name.ToLowerInvariant()
+
+    return ($lower -ceq 'ucrtbase.dll') -or ($lower -like 'api-ms-win-crt-*')
+}
+
 function Test-SuppliedElsewhere([string]$name) {
     $lower = $name.ToLowerInvariant()
 
-    # The other api-ms-win-* names (api-ms-win-core-* and the like) are Windows' own names for parts of itself, so Windows supplies them.
-    # The C runtime's (api-ms-win-crt-*) are refused before this is asked: see Test-MicrosoftRuntime.
+    # The other api-ms-win-* names (api-ms-win-core-* and the like) are Windows' own names for parts of itself, so Windows supplies them
     return ($partOfWindows -contains $lower) -or ($lower -like 'api-ms-win-*')
+}
+
+# Whether a file carries a signature Windows accepts, made with a certificate held by Microsoft and given out by Microsoft. Windows checks that
+# the signature covers every byte of the file and that its certificate leads to a root it trusts. Both names are read from the certificate the
+# file carries, so nothing goes online.
+function Assert-MicrosoftSignature([string]$path, [string]$name) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $path
+    $signedBy = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'nobody' }
+    $givenBy = if ($signature.SignerCertificate) { $signature.SignerCertificate.Issuer } else { 'nobody' }
+    if ($signature.Status -ne 'Valid' -or $signedBy -notmatch '(^|, )O=Microsoft Corporation(,|$)' -or $givenBy -notmatch '(^|, )O=Microsoft Corporation(,|$)') {
+        throw "$name doesn't carry Microsoft's signature: its signature is $($signature.Status), by $signedBy, given out by $givenBy"
+    }
 }
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -58,15 +86,25 @@ $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.
 $dumpbin = Get-ChildItem (Join-Path $visualStudio 'VC\Tools\MSVC\*\bin\Hostx64\x86\dumpbin.exe') | Select-Object -Last 1
 if (-not $dumpbin) { throw 'dumpbin was not found' }
 
+# Where Visual Studio keeps the runtime DLLs it lets a program carry: VC\Redist\MSVC\<version>\x86\Microsoft.VC<toolset>.CRT, at the version its
+# own file Microsoft.VCRedistVersion.default.txt names, which goes with the compiler it builds with. tools/build-and-package.ps1 finds it the
+# same way, in the same lines.
+$redistVersion = "$(Get-Content -LiteralPath (Join-Path $visualStudio 'VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt') -TotalCount 1)".Trim()
+if ($redistVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "Visual Studio's Microsoft.VCRedistVersion.default.txt doesn't name a version: $redistVersion" }
+$runtimeFolders = @(Get-ChildItem -Directory -LiteralPath (Join-Path $visualStudio "VC\Redist\MSVC\$redistVersion\x86") -Filter 'Microsoft.VC*.CRT')
+if ($runtimeFolders.Count -ne 1) { throw "Visual Studio's redistributable folder for $redistVersion doesn't have exactly one Microsoft.VC*.CRT folder for x86" }
+$runtimeFolder = $runtimeFolders[0].FullName
+
 $files = @(Get-ChildItem $Package -File | Where-Object { $_.Extension -in '.exe', '.dll' })
 $inPackage = $files | ForEach-Object { $_.Name.ToLowerInvariant() }
 $missing = @()
-$runtime = @()
+$runtimeRefused = @()
+$runtimeNeeded = @{}
 $namesRead = 0
 
 foreach ($file in $files) {
-    if (Test-MicrosoftRuntime $file.Name) {
-        $runtime += "the package carries $($file.Name.ToLowerInvariant())"
+    if ((Test-MicrosoftRuntime $file.Name) -and ($runtimeThePackageMayCarry -notcontains $file.Name.ToLowerInvariant())) {
+        $runtimeRefused += "the package carries $($file.Name.ToLowerInvariant()), which isn't one of the runtime DLLs it may carry"
     }
 
     $output = & $dumpbin.FullName /nologo /dependents $file.FullName
@@ -78,10 +116,21 @@ foreach ($file in $files) {
 
     foreach ($name in $names) {
         # Written in small letters, so what's said is the same whichever way a file spells it
-        if (Test-MicrosoftRuntime $name) {
-            $runtime += "$($file.Name) needs $($name.ToLowerInvariant())"
+        $lower = $name.ToLowerInvariant()
+
+        if (Test-UniversalCRuntime $name) {
+            continue
         }
-        elseif (($inPackage -notcontains $name.ToLowerInvariant()) -and -not (Test-SuppliedElsewhere $name)) {
+        elseif (Test-MicrosoftRuntime $name) {
+            if ($runtimeThePackageMayCarry -notcontains $lower) {
+                $runtimeRefused += "$($file.Name) needs $lower, which isn't one of the runtime DLLs the package may carry"
+            }
+            else {
+                $runtimeNeeded[$lower] = $true
+                if ($inPackage -notcontains $lower) { $missing += "$($file.Name) needs $lower" }
+            }
+        }
+        elseif (($inPackage -notcontains $lower) -and -not (Test-SuppliedElsewhere $name)) {
             $missing += "$($file.Name) needs $name"
         }
     }
@@ -92,9 +141,16 @@ if ($files.Count -lt 2 -or $inPackage -notcontains 'avp_classic.exe' -or $namesR
     throw "This doesn't look like a package: $($files.Count) programs and libraries, $namesRead names read in $Package"
 }
 
-if ($runtime.Count -gt 0) {
-    $runtime | ForEach-Object { "MICROSOFT'S RUNTIME: $_" }
-    throw "$($runtime.Count) times the package needs or carries Microsoft's Visual C++ runtime, which a player no longer installs. Something was built with /MD: build it with /MT, as the game and the x86-windows-static triplet are."
+# A runtime DLL that nothing in the package needs is one more file that could be anything, so it's refused too
+foreach ($name in $inPackage) {
+    if (($runtimeThePackageMayCarry -contains $name) -and -not $runtimeNeeded.ContainsKey($name)) {
+        $runtimeRefused += "the package carries $name, and nothing in it needs it"
+    }
+}
+
+if ($runtimeRefused.Count -gt 0) {
+    $runtimeRefused | ForEach-Object { "MICROSOFT'S RUNTIME: $_" }
+    throw "$($runtimeRefused.Count) times the package carries or needs a part of Microsoft's Visual C++ runtime it mustn't. It may carry only $($runtimeThePackageMayCarry -join ', '), each only if something in it needs it."
 }
 
 if ($missing.Count -gt 0) {
@@ -108,11 +164,27 @@ foreach ($name in 'D3DCompiler_43.dll', 'd3dx9_43.dll') {
     $path = Join-Path $Package $name
     if (-not (Test-Path -LiteralPath $path)) { throw "$name isn't in the package" }
 
-    $signature = Get-AuthenticodeSignature -LiteralPath $path
-    $signedBy = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'nobody' }
-    if ($signature.Status -ne 'Valid' -or $signedBy -notmatch '(^|, )O=Microsoft Corporation(,|$)') {
-        throw "$name doesn't carry Microsoft's signature: its signature is $($signature.Status), by $signedBy"
+    Assert-MicrosoftSignature $path $name
+}
+
+# The runtime DLLs the package carries are Microsoft's too, and carry Microsoft's signature. But the certificate Microsoft signs them with, its
+# "Windows Software Compatibility Publisher", comes from a part of Microsoft that signs other companies' files as well. So each one also has to
+# be, byte for byte, the copy in the redistributable folder of the Visual Studio here, the one that built the game: a file signed by Microsoft
+# for anyone else, under a runtime DLL's name, is refused.
+$provenMicrosofts = @()
+
+foreach ($name in @($inPackage | Where-Object { $runtimeThePackageMayCarry -contains $_ })) {
+    $path = Join-Path $Package $name
+    Assert-MicrosoftSignature $path $name
+
+    $visualStudiosCopy = Join-Path $runtimeFolder $name
+    if (-not (Test-Path -LiteralPath $visualStudiosCopy -PathType Leaf)) { throw "$name isn't in Visual Studio's redistributable folder, $runtimeFolder" }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash -cne (Get-FileHash -Algorithm SHA256 -LiteralPath $visualStudiosCopy).Hash) {
+        throw "$name isn't the copy in Visual Studio's redistributable folder, $runtimeFolder"
     }
+
+    # Proven Microsoft's own, as it came from Visual Studio: the next check leaves it out (see there)
+    $provenMicrosofts += $name
 }
 
 # --- No folder of the machine that built it. A program can keep the folders it was built in: an error message given __FILE__ does, and so does a library
@@ -127,6 +199,12 @@ $utf16 = [System.Text.Encoding]::Unicode
 $folderNamed = @()
 
 foreach ($file in $files) {
+    # Microsoft's runtime DLLs are left out of this, and only those proven above to be Microsoft's, byte for byte Visual Studio's own copy. They
+    # name the folders of Microsoft's own build machine, such as D:\a\_work\1\s\binaries\x86ret\bin\i386\ for where their symbols are, which
+    # GitHub's Visual Studio has in them (its build of #133 found three). Those are Microsoft's folders, not ours, and the files can't be changed
+    # without failing the proof. Every other program and library is read, a file only named like a runtime DLL included, since it never gets here.
+    if ($provenMicrosofts -contains $file.Name.ToLowerInvariant()) { continue }
+
     $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
     $evenLength = $bytes.Length - ($bytes.Length % 2)
     $oddLength = if ($bytes.Length -gt 1) { ($bytes.Length - 1) - (($bytes.Length - 1) % 2) } else { 0 }
@@ -156,4 +234,4 @@ if ($folderNamed.Count -gt 0) {
     throw "$($folderNamed.Count) places in the package name a folder on the machine that built it. Name the file by hand rather than with __FILE__, and link with /PDBALTPATH:%_PDB% so that only a .pdb's name is kept."
 }
 
-"Every library the package links to is accounted for: $($files.Count) files, $namesRead names read, none is Microsoft's Visual C++ runtime, and none names a folder on the machine that built it"
+"Every library the package links to is accounted for: $($files.Count) files, $namesRead names read, Microsoft's runtime is only the $($runtimeNeeded.Count) DLLs it needs, each Visual Studio's own $redistVersion copy with Microsoft's signature, and none names a folder on the machine that built it (those $($provenMicrosofts.Count) runtime DLLs aside, whose folders are Microsoft's)"

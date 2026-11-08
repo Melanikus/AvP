@@ -66,9 +66,18 @@ each release, with the zip from the draft, before you press Publish.
 
 ## When Microsoft fixes its C runtime
 
-The game has Microsoft's C and C++ runtime built in, so a player needs no Visual C++ install: see `vcpkg-overlay-triplets/x86-windows-static.cmake`.
-OpenAL Soft's DLL has it built in too. The other side of that is that Windows Update can't fix it for us. When Microsoft announces a security fix in
-the Visual C++ runtime (MSVC's C runtime, C++ standard library or vcruntime), the copy inside our release still has the hole until we build again.
+The game and every library built for it take Microsoft's C and C++ runtime from Microsoft's own DLLs: the /MD switch, and
+`vcpkg-overlay-triplets/x86-windows.cmake`. (It was built into them for a day, as /MT, until Bitdefender flagged the game built that way and the
+user ruled it out: issue #111, card STATIC-UNDO-1, #125.) The runtime has two parts, and Microsoft fixes them in two different ways:
+
+- **The Universal C runtime** (`ucrtbase.dll`) is part of Windows 10 and 11, so Windows Update fixes it, and the release has nothing to do.
+- **The C++ part**, `vcruntime140.dll` and the C++ standard library's `msvcp140*.dll`, goes out in the release, beside the game in `bin`, so that
+  a tester installs nothing. `tools/build-and-package.ps1` copies it from the redistributable folder of the Visual Studio that built the
+  game, and `licences/README.txt` in the package names its version. Windows looks in the game's own folder first, so those copies are the
+  ones the game uses, and Windows Update can't fix them: it only fixes the copies Microsoft installed itself.
+
+So when Microsoft announces a security fix in the Visual C++ runtime (vcruntime, the C++ standard library, or the start-up code that every
+program built with it carries inside itself), our release still has the hole until we build again with a Visual Studio that has the fix.
 So:
 
 1. Update GitHub's runner image, or the pinned Visual Studio version, to one with the fixed runtime.
@@ -83,13 +92,13 @@ The game's libraries are normally built by vcpkg from our pinned ports, as part 
 can't do that, so it takes the libraries GitHub built, once, and checks them before using them:
 
 1. The owner starts **Build** by hand (Actions, "Run workflow", on avpx_main). It builds only scanned code on avpx_main, and it keeps the
-   libraries it built as the artifact **static-libraries**, for a week. The run's log lists a SHA-256 for every file ("List the libraries'
+   libraries it built as the artifact **libraries**, for a week. The run's log lists a SHA-256 for every file ("List the libraries'
    hashes"), the hash of that list ("The list itself: ..."), and the artifact's own hash ("Say the libraries' artifact hash"). It also records
    how the list was made, so that GitHub can vouch for it later ("Record how the libraries were built").
-2. Whoever is allowed to go online downloads it: `gh run download <run number> --repo Melanikus/AvP -n static-libraries -D
-   <folder>\vcpkg_installed\x86-windows-static`.
+2. Whoever is allowed to go online downloads it: `gh run download <run number> --repo Melanikus/AvP -n libraries -D
+   <folder>\vcpkg_installed\x86-windows`.
 3. Before anything uses it, check it. If any of these fails, delete it all and don't use it.
-   - `gh attestation verify <folder>\vcpkg_installed\x86-windows-static\SHA256SUMS.txt --repo Melanikus/AvP` must say the list was made by
+   - `gh attestation verify <folder>\vcpkg_installed\x86-windows\SHA256SUMS.txt --repo Melanikus/AvP` must say the list was made by
      this repository's Build workflow.
    - The list's own hash must be the run log's "The list itself".
    - Every file must have the hash the list gives it, with no file missing and none extra.
