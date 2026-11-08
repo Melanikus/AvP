@@ -281,6 +281,26 @@ foreach ($fine in '1.0.0', '0.0.1', '10.20.30')
     Check ((Check-Release $fine).Code -eq 0) "the version $fine is taken"
 }
 
+# --- A beta's name: betarelease and the day it's made, as year, month and day. Anything else is refused, and each refusal says which rule.
+$otherDigits = 'betarelease' + (-join [char[]](0x0662, 0x0660, 0x0662, 0x0666, 0x0661, 0x0661, 0x0660, 0x0667))
+
+foreach ($bad in '20261107', '20261332', 'betarelease2026110', 'betarelease202611070', 'betarelease20261107x', 'betarelease20261107; x', 'betarelease20261107;x',
+    'BetaRelease20261107', 'BETARELEASE20261107', 'betaRelease20261107', ' betarelease20261107', 'betarelease20261107 ', "betarelease20261107`n",
+    'betarelease', 'beta20261107', 'betarelease-20261107', 'vbetarelease20261107', '../betarelease20261107', $otherDigits)
+{
+    Expect-Refused 'check-release.ps1' @('-Version', $bad, '-Repository', $work, '-WithoutGitHub') 'the version has to be three plain numbers' "the beta name [$bad] is refused for its shape"
+}
+
+foreach ($notADay in 'betarelease20261332', 'betarelease20261301', 'betarelease20261100', 'betarelease20261131', 'betarelease20230229', 'betarelease00000101')
+{
+    Expect-Refused 'check-release.ps1' @('-Version', $notADay, '-Repository', $work, '-WithoutGitHub') "isn't a day" "the beta name [$notADay] is refused, because its day isn't one"
+}
+
+foreach ($fine in 'betarelease20261107', 'betarelease20240229', 'betarelease20261231', 'betarelease20270101')
+{
+    Check ((Check-Release $fine).Code -eq 0) "the beta name $fine is taken"
+}
+
 # --- The list of what's in the way
 function Write-Blockers([string]$text) { Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') $text }
 
@@ -571,7 +591,7 @@ Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses
 Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
 Check ($buildJob -match '(?m)^    needs: check$') 'the build needs the checks to have passed'
-Check ($publishJob -match '(?m)^    needs: build$') 'and the draft needs the build, so it comes after the checks too'
+Check ($publishJob -match '(?m)^    needs: \[check, build\](\s+#[^\n]*)?$') 'and the draft needs the build, so it comes after the checks too, and the checks for its tag'
 Check-Order $buildJob 'tools/build-and-package.ps1' 'tools/check-release-package.ps1' 'the package is checked after it is made'
 Check-Order $buildJob 'tools/check-release-package.ps1' 'actions/upload-artifact' 'and before it goes anywhere'
 Check ($publishJob -match '(?m)^    environment: release\s') 'the draft waits for the owner'
@@ -583,6 +603,16 @@ Check ($publishJob.Contains('--draft') -and $publishJob.Contains('--target $env:
 Check (-not ($withoutComments -match '--draft=false|gh release edit|git push|git tag|/git/refs')) 'nothing here publishes it, or makes a tag'
 Check ($publishJob.Contains('-not $made.isDraft')) 'and it checks that what it made is a draft'
 Check (-not $publishJob.Contains('actions/checkout') -and -not $publishJob.Contains('./tools/')) 'the job that can write has no copy of the code'
+
+# A beta: its tag comes from the checks, is looked at again before it's used, and makes a pre-release that's still a draft
+Check ($checkJob -match '(?m)^        id: refuse$' -and $checkJob.Contains('tag: ${{ steps.refuse.outputs.tag }}') -and $checkJob.Contains('prerelease: ${{ steps.refuse.outputs.prerelease }}')) 'the checks hand on the tag and whether it is a pre-release'
+Check ($checkScript.Contains('$tag = if ($isBeta) { $Version } else { "v$Version" }')) "a beta's tag is its name, and a version's is v and its numbers"
+Check ($checkScript.Contains('[datetime]::TryParseExact(') -and $checkScript.Contains("'yyyyMMdd'")) "a beta's day has to be one the calendar has"
+Check ($publishJob.Contains('TAG: ${{ needs.check.outputs.tag }}') -and -not $publishJob.Contains('$tag = "v$env:VERSION"')) 'the draft uses the tag the checks made, through the environment'
+Check ($publishJob.Contains("if (`$env:TAG -cne `$(if (`$isBeta) { `$env:VERSION } else { `"v`$env:VERSION`" })) { throw")) 'and looks at it again before anything uses it'
+Check ($publishJob.Contains("if (`$preRelease) { `$alsoSay += '--prerelease' }") -and $publishJob.Contains('@alsoSay')) 'only a beta is made a pre-release'
+Check ($publishJob.Contains('if ($made.isPrerelease -ne $preRelease) { throw')) 'and the draft is checked for it'
+Check ($publishJob.Contains('if ($releases -ccontains $env:TAG) { throw')) 'a tag already used, even by a draft, is refused'
 
 Check ($publishJob -match '(?m)^      contents: write\s') 'the last job can write'
 Check (-not $checkJob.Contains('write') -and -not $buildJob.Contains(': write')) 'and the other two can not'

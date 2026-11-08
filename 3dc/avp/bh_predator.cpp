@@ -1,5 +1,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a predator's weapon named by a level or save file is checked: a level's gets his wristblade, a save's part is left out
+//   a predator whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
+//   avp-forever, commit 207704e)
 /* Patrick 4/7/97 ---------------------------------------------------
 Source file for predator AI
 ---------------------------------------------------------------------*/
@@ -859,8 +861,18 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
                 predatorStatus->death_target_sbptr=0;
 
 
+                // Nothing of his model is made yet, so if he's taken out below, there's none of it to free
+                predatorStatus->HModelController.section_data=NULL;
+                predatorStatus->HModelController.Deltas=NULL;
+
                 root_section=GetNamedHierarchyFromLibrary(predatorStatus->Selected_Weapon->Riffname,predatorStatus->Selected_Weapon->HierarchyName);
-                GLOBALASSERT(root_section);
+
+                if (!NpcModelIsLoaded(root_section, "a predator the level places", predatorStatus->Selected_Weapon->Riffname, predatorStatus->Selected_Weapon->HierarchyName))
+                {
+                        RemoveBehaviourStrategy(sbPtr);
+                        return;
+                }
+
                 Create_HModel(&predatorStatus->HModelController,root_section);
                 InitHModelSequence(&predatorStatus->HModelController,0,0,ONE_FIXED);
 
