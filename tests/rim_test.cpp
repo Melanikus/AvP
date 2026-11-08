@@ -26,6 +26,16 @@
 #include "utilities.h"
 #include "font_checks.h"
 
+// Modified 2026-11-08 by Melanikus for the AvP port: built with the standard library's own bounds checks.
+// This test is built with them on (/D_MSVC_STL_HARDENING=1 in tests/rim_test.args). The loader keeps a picture's colour table in a list
+// that knows its size, and with the checks on, looking a colour up past the end of that list stops the program at once. Without them, it
+// would read whatever happened to be in memory there, and "a colour past the end of the table comes out black" could pass by luck, because
+// memory that happens to be zero reads as black. Until 2026-11-08 the test made up for that by looking for the check's own words in the
+// loader's source; the picture now shows it every time instead. So the test refuses to build without the checks.
+#if !defined(_MSVC_STL_HARDENING_VECTOR) || !_MSVC_STL_HARDENING_VECTOR
+#error "rim_test needs the standard library's bounds checks: build it with /D_MSVC_STL_HARDENING=1"
+#endif
+
 static int checksFailed = 0;
 
 static void Check(bool passed, std::string const &what)
@@ -1198,9 +1208,6 @@ static void CheckFontSum()
 
 	// The game's side of a picture that can't be finished
 	Check(textures.find("if (!decoded)") != std::string::npos && textures.find("R_ReleaseTexture(newTexture);", textures.find("if (!decoded)")) != std::string::npos, "the game doesn't keep a picture that couldn't be finished");
-
-	// What's past the end of a table is whatever memory holds, which can happen to be zero, so a picture alone can't always show this.
-	Check(loader.find("if (index < numColours)") != std::string::npos, "a colour is only looked up if it's in the table");
 
 	std::string const menu = ReadSourceFile("3dc/avp/win95/frontend/menu_gfx.cpp");
 	size_t const function = menu.rfind("void CalculateWidthsOfAAFont()");

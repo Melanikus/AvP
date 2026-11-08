@@ -4,6 +4,8 @@
 //   a map can place pickups of the new guns and their ammunition: see weapon_pickups.h
 //   a network game that plays the same as single player sets up all the level's NPCs on the host, and none on the others
 //   every machine notes each NPC's death target, for when the host says that NPC has died
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   LevelNameIsAPlacedNpc, so a machine that doesn't make the level's NPCs can tell a link to one from a broken link (#130)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
@@ -572,6 +574,22 @@ void create_strategies_from_list ()
 	}
 	//get rid of stored list of rolls for quantum object groups
 	clear_location_group_die_roll_list();
+}
+
+bool LevelNameIsAPlacedNpc(const char *name)
+{
+	// The level's list keeps every NPC it places, including those this machine leaves out in a network game
+	for(LIF<BehaviourBlockData*> blif(&Behav_List);!blif.done();blif.next())
+	{
+		BehaviourBlockData* bbd=blif();
+
+		if (BehaviourIsAnNpcTheHostRuns(bbd->sb_type) && memcmp(&bbd->id, name, sizeof(bbd->id)) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void AddToBehaviourList(const char* name,const ObjectID &ID,AVP_BEHAVIOUR_TYPE sb_type,void* bhdata,int shapeindex=-1,Object_Alternate_Locations_Chunk* loc_chunk=0,int flags=0)

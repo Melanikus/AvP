@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   LinkMisses_LevelEnds and LinkMisses_SwitchWentOnOrOff, for the log's lines about links that find nothing (#130)
 #ifndef _bhtypes_h_
 #define _bhtypes_h_ 1
 
@@ -449,6 +451,12 @@ extern void DatabaseMenus(DATABASE_BLOCK* db);
 /* functions*/
 
 extern void AssignAllSBNames();
+
+// The log's lines for a link that finds nothing (link_misses.h): what's been written is forgotten when a level's blocks are all destroyed,
+// and a switch that goes on or off says which of its targets it couldn't reach
+extern void LinkMisses_LevelEnds(void);
+extern void LinkMisses_SwitchWentOnOrOff(STRATEGYBLOCK *source, char const *targetName);
+
 extern void AssignRunTimeBehaviours(STRATEGYBLOCK* sbptr);
 extern void EnableBehaviourType(STRATEGYBLOCK* sbptr, AVP_BEHAVIOUR_TYPE sb_type, void *bhdata);
 extern void ExecuteBehaviour(STRATEGYBLOCK* sbptr);

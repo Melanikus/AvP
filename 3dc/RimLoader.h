@@ -27,6 +27,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   says the most planes a picture can have, the largest a picture can be, the most parts it can have, and why one was refused;
 //   says the most bytes of pictures one level can open, and the least any picture costs of them
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
 
 #pragma once
 
@@ -140,7 +142,6 @@ class RimLoader
 {
 	public:
 		RimLoader::RimLoader();
-		RimLoader::~RimLoader();
 		bool Open(const std::string &fileName);
 		bool Decode(uint8_t *dest, uint32_t destPitch);
 		void GetDimensions(uint32_t &width, uint32_t &height);
@@ -168,8 +169,9 @@ class RimLoader
 		uint32_t chunkID;
 
 		BitMapHeader header;
-		ColourRegister *colourMap;
-		uint32_t numColours;             // how many colours colourMap holds
+		// The picture's colour table. It frees itself, and a copy of the loader gets a copy of it, where a plain block of memory
+		// would have been freed twice. It knows how many colours it holds, so no separate count can disagree with it.
+		std::vector<ColourRegister> colourMap;
 		uint8_t  *src;
 		uint8_t  *destRowStart;
 		uint32_t rowBytes;

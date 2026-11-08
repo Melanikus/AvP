@@ -3,6 +3,9 @@
 //   a switch copes with a link, a resting sequence or a track that the level file got wrong
 
 //   a saved switch has to be on a sequence of its own texture animation
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a walk-in box is also set off by a player near a sleeping NPC it wakes (near_wake.h), and a switch that goes on or off with a target
+//   that isn't in the level says so in the log (link_misses.h) (#130)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -22,6 +25,7 @@
 #include "plat_shp.h"
 #include "psnd.h"
 #include "inventory.h"
+#include "near_wake_game.h"
 
 static BOOL check_link_switch_states (LINK_SWITCH_BEHAV_BLOCK * lsbb)
 {
@@ -343,8 +347,23 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		return;
 	}
 
-	if(ls_bhv->switch_flags && SwitchFlag_UseTriggerVolume)
+	// A walk-in box is also set off by a player who comes near a sleeping NPC it wakes, as if walked into (near_wake.h). These say which one
+	// did, for the log.
+	bool setOffByNearness = false;
+	NearWakeSleeper nearSleeper;
+	double nearDistance = 0;
+
+	// switch_flags holds this one flag, and the test was written with && in 1999, which only worked because it's the only one
+	if(ls_bhv->switch_flags & SwitchFlag_UseTriggerVolume)
 	{
+		// The sleeping NPCs this box wakes
+		NearWakeSleepers sleepers;
+
+		if (NearWake_ThisMachineRunsNpcs())
+		{
+			NearWake_FindSleepers(sbptr, &ls_bhv->trigger_volume_min, &ls_bhv->trigger_volume_max, &sleepers);
+		}
+
 		/*See if switch has been set off*/
 		int i;
 		for (i=0; i<NumActiveStBlocks; i++)
@@ -368,17 +387,47 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 				}
 			}
 
-			if(needToTest&&
-				sbPtr->DynPtr->Position.vx > ls_bhv->trigger_volume_min.vx &&
-				sbPtr->DynPtr->Position.vx < ls_bhv->trigger_volume_max.vx &&
-				sbPtr->DynPtr->Position.vy > ls_bhv->trigger_volume_min.vy &&
-				sbPtr->DynPtr->Position.vy < ls_bhv->trigger_volume_max.vy &&
-				sbPtr->DynPtr->Position.vz > ls_bhv->trigger_volume_min.vz &&
-				sbPtr->DynPtr->Position.vz < ls_bhv->trigger_volume_max.vz)
+			if (!needToTest)
+			{
+				continue;
+			}
+
+			VECTORCH const &at = sbPtr->DynPtr->Position;
+			bool const inTheBox =
+				at.vx > ls_bhv->trigger_volume_min.vx &&
+				at.vx < ls_bhv->trigger_volume_max.vx &&
+				at.vy > ls_bhv->trigger_volume_min.vy &&
+				at.vy < ls_bhv->trigger_volume_max.vy &&
+				at.vz > ls_bhv->trigger_volume_min.vz &&
+				at.vz < ls_bhv->trigger_volume_max.vz;
+			// Near a sleeper, and in its room or in view of it: the user's "same room or in view", so nothing wakes through a floor
+			MODULE *const playerModule = sbPtr->containingModule;
+			int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance,
+				[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); });
+
+			if (inTheBox)
 	    	{
 	    		ls_bhv->request = linkswitch_request_on;//I_request_on;
 				break;
 	    	}
+
+			if (sleeperNearBy >= 0)
+			{
+				// The whole box only if all else it does is open the way to the sleeper, the user's "only safe jobs"; otherwise the
+				// sleeper alone, and the box waits for the player as before
+				if (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))
+				{
+					ls_bhv->request = linkswitch_request_on;//I_request_on;
+					setOffByNearness = true;
+					nearSleeper = sleepers.list[sleeperNearBy];
+				}
+				else
+				{
+					NearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);
+				}
+
+				break;
+			}
     	}
 	}
 
@@ -391,6 +440,12 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 		else
 		{
 			ls_bhv->triggered_last = TRUE;
+
+			// Only when it really is set off, not on each frame the player stays near
+			if (setOffByNearness)
+			{
+				NearWake_SayBoxSetOff(nearSleeper, nearDistance);
+			}
 		}
 	}
 	else
@@ -658,6 +713,9 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 
 	//check to see if the system state has changed
 
+	// What it was, so that a change can be seen below, for the log's line about a target that isn't there
+	BOOL const wasOn = ls_bhv->system_state;
+
 	if (ls_bhv->system_state)
 	{
 		if (!check_link_switch_states(ls_bhv))
@@ -688,7 +746,17 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 
 	}
 
-
+	// It has just gone on or off and sent its requests. A target that isn't in the level got nothing, and the log says so (link_misses.h).
+	if (ls_bhv->system_state != wasOn)
+	{
+		for(i=0;i<ls_bhv->num_targets;i++)
+		{
+			if (!ls_bhv->ls_targets[i].sbptr)
+			{
+				LinkMisses_SwitchWentOnOrOff(sbptr, ls_bhv->ls_targets[i].name);
+			}
+		}
+	}
 }
 
 

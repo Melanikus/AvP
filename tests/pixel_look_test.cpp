@@ -1,5 +1,7 @@
 // Tests for the three numbers that change how a lamp's light looks per pixel. The first half tries pixel_look.cpp. The second half reads the source, because what a word does on a card needs a run
 // of the game. Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "pixel_look.h"
 
 #include <fstream>
@@ -7,6 +9,7 @@
 #include <string.h>
 #include <sstream>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -49,18 +52,10 @@ static bool Has(const std::string &text, const char *what)
 	return text.find(what) != std::string::npos;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + strlen(from));
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndAfterTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Reads(PixelLookNumber which, char const *words, double wanted)

@@ -4,6 +4,8 @@
 // ray with a wall, the quick check that leaves most walls out, and the finished shape: that it's closed, that every corner number is one it has,
 // and that its light fades the way the comments say.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +17,7 @@
 #include <utility>
 
 #include "lamp_volume.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -447,13 +450,10 @@ static bool Has(const std::string &text, const char *words)
 	return text.find(words) != std::string::npos;
 }
 
-// The text from one piece of words up to the next, or nothing if either is missing
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = (start == std::string::npos) ? std::string::npos : text.find(to, start);
-
-	return (end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 // A wall a beam could meet, as one big triangle across its way, this far along it

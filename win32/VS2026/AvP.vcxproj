@@ -339,6 +339,7 @@
     <ClCompile Include="..\..\3dc\avp\sfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\shapes\cube.cpp" />
     <ClCompile Include="..\..\3dc\avp\strategy_def.cpp" />
+    <ClCompile Include="..\..\3dc\avp\near_wake.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_batch.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\console_bind.cpp" />
     <ClCompile Include="..\..\3dc\avp\support\coord_strategies.cpp" />
@@ -531,6 +532,10 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake.h" />
+    <ClInclude Include="..\..\3dc\avp\near_wake_game.h" />
+    <ClInclude Include="..\..\3dc\avp\link_misses.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
     <ClInclude Include="..\..\3dc\avp\win95\npc_ghosts.h" />
     <ClInclude Include="..\..\3dc\avp\bh_ais.h" />

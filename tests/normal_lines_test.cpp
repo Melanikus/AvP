@@ -2,6 +2,8 @@
 //
 // Nothing here needs a graphics card or the game's data. What the lines look like in the game, and whether they say anything about the dark patches, needs a person looking at it.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "normal_lines.h"
 
 #include <math.h>
@@ -12,6 +14,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -50,18 +53,10 @@ static std::string ReadSourceFile(char const *name)
 	return text;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Has(std::string const &text, char const *words)
