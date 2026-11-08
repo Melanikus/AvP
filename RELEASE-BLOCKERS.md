@@ -14,5 +14,4 @@ RELEASING.md says how a release is made.
 
 ## What's in the way
 
-- Save files and the network still have known issues to fix or to rule out.
-- Nobody has started the package on a clean Windows. No check here can prove it starts there, because the machines that run the checks have files a player's may not. A person has to try it, and then take this line out.
+Nothing.
