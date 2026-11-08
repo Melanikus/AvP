@@ -267,12 +267,15 @@ static void TestTheGameUsesIt()
 	std::string const add = Between(wake, "static void AddSleepersFrom(", "\nvoid NearWake_FindSleepers(");
 	Check(ComesBefore(add, "NearWakeSleepers_Add(sleepers, where, kind, box, target, target->containingModule);\n\t\treturn;",
 		"switchesBetween >= kNearWakeMostSwitchesBetween)\n\t{\n\t\treturn;"), "a sleeper a box wakes goes on its list, with its block and module");
-	Check(Has(add, "AddSleepersFrom(between->bs_targets[i], box, sleepers, switchesBetween + 1);") && Has(add, "AddSleepersFrom(between->ls_targets[i].sbptr, box, sleepers, switchesBetween + 1);"),
-		"and so do the ones a switch it sets off wakes, through either kind of switch, one switch more each time");
+	Check(ComesBefore(add, "if ((message & 1) == 0)\n\t\t{\n\t\t\treturn;", "NearWakeSleepers_Add(sleepers,"), "but not one the box asks off, which it doesn't wake");
+	Check(Has(add, "AddSleepersFrom(between->bs_targets[i], between->request_messages[i], box, sleepers, switchesBetween + 1);")
+		&& Has(add, "AddSleepersFrom(between->ls_targets[i].sbptr, between->ls_targets[i].request_message, box, sleepers, switchesBetween + 1);"),
+		"and so do the ones a switch it sets off wakes, through either kind of switch, with that switch's own request, one switch more each time");
 
 	std::string const find = Between(wake, "void NearWake_FindSleepers(", "\n// The module a sleeper is in.");
-	Check(ComesBefore(find, "NearWakeSleepers_Clear(sleepers);", "AddSleepersFrom(own->bs_targets[i], box, sleepers, 0);")
-		&& Has(find, "AddSleepersFrom(own->ls_targets[i].sbptr, box, sleepers, 0);"), "a box's own targets are looked at first, from an empty list");
+	Check(ComesBefore(find, "NearWakeSleepers_Clear(sleepers);", "AddSleepersFrom(own->bs_targets[i], own->request_messages[i], box, sleepers, 0);")
+		&& Has(find, "AddSleepersFrom(own->ls_targets[i].sbptr, own->ls_targets[i].request_message, box, sleepers, 0);"),
+		"a box's own targets are looked at first, from an empty list, with the box's own requests");
 	Check(Has(find, "if (sleepers->full && !saidABoxWakesTooMany)\n\t{\n\t\tsaidABoxWakesTooMany = true;\n\t\tLogString(NearWake_FullLine());"), "a box that wakes too many is said once a level");
 
 	// The user's "same room or in view"
@@ -286,8 +289,8 @@ static void TestTheGameUsesIt()
 	// The user's "only safe jobs"
 	std::string const job = Between(wake, "static void SortJob(", "\nbool NearWake_BoxOnlyOpensTheWay(");
 	Check(ComesBefore(job, "if (Gone(target))\n\t{\n\t\treturn;", "switch (target->I_SBtype)"), "a target that's gone does nothing, and isn't read");
-	Check(Has(job, "case I_BehaviourAlien:\n\t\tcase I_BehaviourFaceHugger:\n\t\tcase I_BehaviourDormantPredator:\n\t\tcase I_BehaviourPredator:\n\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);"),
-		"waking an NPC is the box's own job");
+	Check(Has(job, "case I_BehaviourAlien:\n\t\tcase I_BehaviourFaceHugger:\n\t\tcase I_BehaviourDormantPredator:\n\t\tcase I_BehaviourPredator:\n\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, on ? kNearWakeJobWakesASleeper : kNearWakeJobAnythingElse);"),
+		"waking an NPC is the box's own job, but asking one off (a sentry gun switched off) is something else");
 	Check(Has(job, "case I_BehaviourProximityDoor:\n\t\tcase I_BehaviourSwitchDoor:\n\t\tcase I_BehaviourLiftDoor:\n\t\tcase I_BehaviourTrackObject:\n\t\t\tNote(jobs, on && DistanceFrom(sleeper, target) <= kNearWakeMostJobDistance ? kNearWakeJobOpensTheWay : kNearWakeJobAnythingElse);"),
 		"a door or track opens the way only when it's asked on and is near the sleeper: shut, locked, or far off, it's something else");
 	Check(Has(job, "bool const on = (message & 1) != 0;"), "on is the request's own on-or-off");

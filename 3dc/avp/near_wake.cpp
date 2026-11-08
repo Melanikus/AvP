@@ -106,15 +106,21 @@ static bool SleeperFrom(STRATEGYBLOCK *target, NearWakePoint *where, int *kind)
 	}
 }
 
-// Adds what this target is to the list: a sleeping NPC, or, through a switch, the sleeping NPCs that switch wakes. switchesBetween is how
-// many switches there are already between the box and this target.
-static void AddSleepersFrom(STRATEGYBLOCK *target, NearWakeBox const &box, NearWakeSleepers *sleepers, int switchesBetween)
+// Adds what this target is to the list: a sleeping NPC, or, through a switch, the sleeping NPCs that switch wakes. message is the request
+// that reaches it, and switchesBetween is how many switches there are already between the box and this target.
+static void AddSleepersFrom(STRATEGYBLOCK *target, int message, NearWakeBox const &box, NearWakeSleepers *sleepers, int switchesBetween)
 {
 	NearWakePoint where;
 	int kind = kNearWakeAlien;
 
 	if (SleeperFrom(target, &where, &kind))
 	{
+		// A sleeper this box asks off isn't one it wakes (a dormant predator or a sentry gun doesn't wake on off), so it's left alone
+		if ((message & 1) == 0)
+		{
+			return;
+		}
+
 		// Its block, to wake it by itself, and the module the game has it in. A dormant predator has none yet: RoomOf finds it later.
 		NearWakeSleepers_Add(sleepers, where, kind, box, target, target->containingModule);
 		return;
@@ -131,7 +137,7 @@ static void AddSleepersFrom(STRATEGYBLOCK *target, NearWakeBox const &box, NearW
 
 		for (int i = 0; i < between->num_targets; i++)
 		{
-			AddSleepersFrom(between->bs_targets[i], box, sleepers, switchesBetween + 1);
+			AddSleepersFrom(between->bs_targets[i], between->request_messages[i], box, sleepers, switchesBetween + 1);
 		}
 	}
 	else if (target->I_SBtype == I_BehaviourLinkSwitch)
@@ -140,7 +146,7 @@ static void AddSleepersFrom(STRATEGYBLOCK *target, NearWakeBox const &box, NearW
 
 		for (int i = 0; i < between->num_targets; i++)
 		{
-			AddSleepersFrom(between->ls_targets[i].sbptr, box, sleepers, switchesBetween + 1);
+			AddSleepersFrom(between->ls_targets[i].sbptr, between->ls_targets[i].request_message, box, sleepers, switchesBetween + 1);
 		}
 	}
 }
@@ -166,7 +172,7 @@ void NearWake_FindSleepers(STRATEGYBLOCK *areaSwitch, VECTORCH const *boxLeast, 
 
 		for (int i = 0; i < own->num_targets; i++)
 		{
-			AddSleepersFrom(own->bs_targets[i], box, sleepers, 0);
+			AddSleepersFrom(own->bs_targets[i], own->request_messages[i], box, sleepers, 0);
 		}
 	}
 	else if (areaSwitch->I_SBtype == I_BehaviourLinkSwitch)
@@ -175,7 +181,7 @@ void NearWake_FindSleepers(STRATEGYBLOCK *areaSwitch, VECTORCH const *boxLeast, 
 
 		for (int i = 0; i < own->num_targets; i++)
 		{
-			AddSleepersFrom(own->ls_targets[i].sbptr, box, sleepers, 0);
+			AddSleepersFrom(own->ls_targets[i].sbptr, own->ls_targets[i].request_message, box, sleepers, 0);
 		}
 	}
 
@@ -272,13 +278,14 @@ static void SortJob(STRATEGYBLOCK *target, int message, NearWakeSleeper const &s
 
 	switch (target->I_SBtype)
 	{
-		// The NPCs a box wakes. One that's awake already does nothing more when it's asked.
+		// The NPCs a box wakes, asked on. One that's awake already does nothing more when it's asked. Asked off is something else: off
+		// switches an active sentry gun off.
 		case I_BehaviourAlien:
 		case I_BehaviourFaceHugger:
 		case I_BehaviourDormantPredator:
 		case I_BehaviourPredator:
 		case I_BehaviourAutoGun:
-			Note(jobs, kNearWakeJobWakesASleeper);
+			Note(jobs, on ? kNearWakeJobWakesASleeper : kNearWakeJobAnythingElse);
 			return;
 
 		// A door, where "on" opens it or unlocks a proximity door and "off" shuts or locks it; or something on a track, where "on" starts it.

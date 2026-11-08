@@ -205,10 +205,10 @@ static inline int NearWakeSleepers_NearOne(NearWakeSleepers const &sleepers, Nea
 // or shutting a door (Invasion_P's quantum alien).
 enum NearWakeJob
 {
-	kNearWakeJobWakesASleeper,     // wakes an NPC: another sleeper, or one that's awake already and does nothing more
+	kNearWakeJobWakesASleeper,     // an NPC asked on: another sleeper, or one that's awake already and does nothing more
 	kNearWakeJobOpensTheWay,       // a door or a track asked on (opened, unlocked, started) within kNearWakeMostJobDistance of the sleeper
-	kNearWakeJobAnythingElse       // anything asked off (a door shut or locked), any other kind (a lift, a generator, a message, a
-	                               // self-destruct), anything farther off, or a switch beyond kNearWakeMostSwitchesBetween
+	kNearWakeJobAnythingElse       // anything asked off (a door shut or locked, a sentry gun switched off), any other kind (a lift, a
+	                               // generator, a message, a self-destruct), anything farther off, or a switch beyond kNearWakeMostSwitchesBetween
 };
 
 enum
