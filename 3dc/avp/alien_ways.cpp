@@ -23,6 +23,7 @@
 #include "bh_ais.h"
 #include "bh_alien.h"
 #include "pheromone.h"
+#include "pfarlocs.h"
 
 #include "alien_ways.h"
 #include "alien_ways_build.h"
@@ -41,6 +42,11 @@
 #include <vector>
 
 extern int NormalFrameTime;
+
+// The game's lists of AI modules and of modules (pfarlocs.cpp), for the mover's scent (StrongestScent)
+extern AIMODULE *AIModuleArray;
+extern int AIModuleArraySize;
+extern int ModuleArraySize;
 
 int AlienWaysSwitchedOn = 0;
 int AlienWaysGridSwitchedOn = 0;
@@ -81,6 +87,12 @@ namespace
 		VECTORCH goal = {};
 		unsigned int lastAsked = 0;   // the frame it last asked, by frameNumber
 		long long lastWouldHaveMs = -1000000;   // when the log last said a test would have sent it off (AlienWays_WouldHaveAvoided)
+
+		// The mover (#149): the last time it saw its target, where, and which target that was
+		bool seen = false;
+		AlienWaysXYZ seenAt = {};
+		long long seenMs = 0;   // in the level's time, clockMs
+		AlienWaysWho seenWho = {};
 	};
 
 	Watched watched[kAlienWaysMostFollowers];
@@ -106,6 +118,20 @@ namespace
 	// The watch on one alien (-alienwayswatch): how many lines it has written this level, and this frame's notes for it
 	int watchLines = 0;
 	std::string watchNotes;
+
+	// The mover's goals (#149, MoverGoal), counted for the once-a-second line: what each ask was given to head for, and how many asks had
+	// no way and were sent straight for the goal
+	enum AlienWaysMoverGoal
+	{
+		kMoverTarget,      // its target, which it can see
+		kMoverLastSeen,    // where it last saw its target
+		kMoverScent,       // where the marines' scent is strongest in the level
+		kMoverStatesOwn,   // the point the game's own state picked
+		kMoverGoalKinds
+	};
+
+	int moverGoals[kMoverGoalKinds] = {};
+	int moverStraight = 0;
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -627,6 +653,17 @@ void AlienWays_Frame()
 			missedFrames = 0;
 			std::fill(missedByState, missedByState + kAlienWaysStateKinds, 0);
 		}
+
+		// What the mover sent the aliens for in the second before (#149), so a film can tell which goal it was
+		if (moverGoals[kMoverTarget] + moverGoals[kMoverLastSeen] + moverGoals[kMoverScent] + moverGoals[kMoverStatesOwn] > 0)
+		{
+			LogString("alien ways: second " + std::to_string(placesSecond) + ": the mover's asks were for the target " + std::to_string(moverGoals[kMoverTarget])
+				+ ", where it was last seen " + std::to_string(moverGoals[kMoverLastSeen]) + ", the strongest scent " + std::to_string(moverGoals[kMoverScent])
+				+ ", the game's own point " + std::to_string(moverGoals[kMoverStatesOwn]) + "; with no way to follow, straight for the goal "
+				+ std::to_string(moverStraight));
+			std::fill(moverGoals, moverGoals + kMoverGoalKinds, 0);
+			moverStraight = 0;
+		}
 	}
 
 	if (!toldTurnedAway && theGuide.TurnedAway() > 0)
@@ -652,6 +689,138 @@ static bool DirectionTo(AlienWaysXYZ from, AlienWaysXYZ to, VECTORCH *direction)
 	direction->vy = static_cast<int>(dy / length * 65536.0);
 	direction->vz = static_cast<int>(dz / length * 65536.0);
 	return true;
+}
+
+// Modified 2026-11-08 by Melanikus for the AvP port: THE MOVER (#149), an MVP, only with -alienwaysgrid.
+//
+// The user's rulings, through PO: the 1999 near AI's own movement is to be replaced by "pure pathfinding", and a hunting alien plans "a
+// way straight to the freshest, strongest scent it can reach", or to where the target was last seen, "whichever is fresher", rather than
+// following the trail one room at a time. So where an alien heads is picked here, the same whatever its state is, and the game's own Hunt
+// and Wander can't pull it two ways (at Third's 5-alien spot they swapped every frame). Freshest first:
+//   1. its target, while the target's module can be seen from the alien's (InView): the way goes to the target itself, as it already did;
+//   2. where it last saw that target, for kAlienWaysMoverMemoryMs, until it gets within kAlienWaysMoverThere of that place;
+//   3. the AI module where the marines' scent is strongest in the whole level (PherAls_ReadBuf: every marine, and the player, adds to it
+//      where they are, each frame, and it spreads out from there a room at a time; the game's own Hunt follows it one room at a time), when
+//      it's stronger there than where the alien is: the way goes to a place on that module's floor (StrongestScent);
+//   4. otherwise the point the game's own state picked, as before (Wander's, say).
+// With no way to follow yet, or none at all, it heads straight for that goal, holding on to whatever it's on, instead of being steered by
+// the game's own code; except in the kAlienWaysRestAfterStuck after it's found stuck, when the game's own code has it, as before.
+//
+// NOT DONE YET (debt, for after the films): being heard; the scent says where a marine is, not which one, so an alien may smell another
+// marine than its target; the scent's point is its module's first place on the floor, not the nearest one; the states' own gates (Hunt's
+// 2 m, Wander's attack distance) still decide whether it asks at all; nothing keeps aliens from touching in the last metres; the 1999
+// tests that would send an alien off to avoid something are still held back only while it's guided or sent straight, and say so in the log.
+int const kAlienWaysMoverMemoryMs = 10000;   // how long it heads for where it last saw its target
+int const kAlienWaysMoverThere = 2000;       // mm: this near the place it last saw it, it has got there
+
+// The distance between two points, in mm, worked out in doubles so no two points of the level can overflow it
+static double DistanceBetween(AlienWaysXYZ a, AlienWaysXYZ b)
+{
+	double const dx = static_cast<double>(a.x) - b.x, dy = static_cast<double>(a.y) - b.y, dz = static_cast<double>(a.z) - b.z;
+	return sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+// The goal is a point the mover picked: not the target itself, and in the module the game's own search finds it in (ModuleFromPosition,
+// pvisible.cpp), whose polygons the map looks through first
+static void MoverGoalAt(STRATEGYBLOCK *alien, AlienWaysXYZ point, AlienWaysAsk *ask)
+{
+	ask->goal = point;
+	ask->goalIsTheTarget = false;
+	VECTORCH where = { point.x, point.y, point.z };
+	ask->goalPolygons[1] = PolygonsOf(ModuleFromPosition(&where, alien->containingModule));
+}
+
+// A place on the floor of the AI module where the marines' scent is strongest in the level, if it's stronger there than in the alien's own
+// module: the first place the game's far AI keeps for that module's first part (FALLP_AuxLocs, pfarlocs.cpp), 10 mm above its floor. False
+// if there's none stronger, or that module has no such place. Each number is checked against the size of its list before it's used, as the
+// lists are made from the level file (AvP Tao #3).
+static bool StrongestScent(const STRATEGYBLOCK *alien, VECTORCH *out)
+{
+	if (!PherAls_ReadBuf || !AIModuleArray || AIModuleArraySize <= 0 || !alien->containingModule || !alien->containingModule->m_aimodule)
+	{
+		return false;
+	}
+
+	int const here = alien->containingModule->m_aimodule->m_index;
+
+	if (here < 0 || here >= AIModuleArraySize)
+	{
+		return false;
+	}
+
+	unsigned int strongest = PherAls_ReadBuf[here];
+	int strongestModule = -1;
+
+	for (int m = 0; m < AIModuleArraySize; m++)
+	{
+		if (PherAls_ReadBuf[m] > strongest)
+		{
+			strongest = PherAls_ReadBuf[m];
+			strongestModule = m;
+		}
+	}
+
+	if (strongestModule < 0)
+	{
+		return false;
+	}
+
+	MODULE *const *const parts = AIModuleArray[strongestModule].m_module_ptrs;
+	MODULE const *const first = parts ? parts[0] : 0;
+
+	if (!first || !FALLP_AuxLocs || first->m_index < 0 || first->m_index >= ModuleArraySize)
+	{
+		return false;
+	}
+
+	FARLOCATIONSHEADER const &places = FALLP_AuxLocs[first->m_index];
+
+	if (places.numLocations <= 0 || !places.locationsList)
+	{
+		return false;
+	}
+
+	*out = places.locationsList[0];
+	return true;
+}
+
+// The mover's goal for this ask (see above), put into ask, and which of the four it was
+static int MoverGoal(STRATEGYBLOCK *alien, Watched *w, AlienWaysAsk *ask)
+{
+	// 1. It can see its target, so the way already goes to the target itself: it remembers where, when, and which target
+	if (ask->goalIsTheTarget)
+	{
+		w->seen = true;
+		w->seenAt = ask->goal;
+		w->seenMs = clockMs;
+		w->seenWho = ask->target;
+		return kMoverTarget;
+	}
+
+	// 2. Where it last saw the same target, lately, until it's there. There, with the target gone, that memory is used up.
+	if (w->seen && ask->hasTarget && w->seenWho.place == ask->target.place && w->seenWho.name == ask->target.name
+		&& clockMs - w->seenMs <= kAlienWaysMoverMemoryMs)
+	{
+		if (DistanceBetween(ask->at, w->seenAt) > kAlienWaysMoverThere)
+		{
+			MoverGoalAt(alien, w->seenAt, ask);
+			return kMoverLastSeen;
+		}
+
+		w->seen = false;
+	}
+
+	// 3. The strongest scent of the marines in the level
+	VECTORCH scent;
+
+	if (StrongestScent(alien, &scent))
+	{
+		MoverGoalAt(alien, AlienWaysXYZ{ scent.vx, scent.vy, scent.vz }, ask);
+		return kMoverScent;
+	}
+
+	// 4. The point the game's own state picked
+	return kMoverStatesOwn;
 }
 
 bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH *goal, VECTORCH *direction)
@@ -700,14 +869,29 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	w->goal = *goal;
 	w->lastAsked = frameNumber;
 
+	// The mover, with -alienwaysgrid: where it heads is picked here, the same whatever its state (MoverGoal, above)
+	if (AlienWaysGridSwitchedOn)
+	{
+		moverGoals[MoverGoal(alien, w, &ask)]++;
+	}
+
 	AlienWaysXYZ towards;
 
-	if (!theGuide.Steer(map, ask, &towards))
+	if (theGuide.Steer(map, ask, &towards))
+	{
+		return DirectionTo(ask.at, towards, direction);
+	}
+
+	// No way to follow yet, or none at all. Without the mover, the game's own code steers it, as before. With it, it heads straight for its
+	// goal, holding on to whatever it's on, while the guide asks for a way as it always does; but in the rest after it was found stuck, the
+	// game's own code has it, as before, to get it free.
+	if (!AlienWaysGridSwitchedOn || theGuide.RestingAfterStuck(ask.who))
 	{
 		return false;
 	}
 
-	return DirectionTo(ask.at, towards, direction);
+	moverStraight++;
+	return DirectionTo(ask.at, ask.goal, direction);
 }
 
 void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)
@@ -904,6 +1088,8 @@ void AlienWays_LevelEnd()
 	placesSecond = -1;
 	missedFrames = 0;
 	std::fill(missedByState, missedByState + kAlienWaysStateKinds, 0);
+	std::fill(moverGoals, moverGoals + kMoverGoalKinds, 0);
+	moverStraight = 0;
 }
 
 void AlienWays_LevelRestarts()
