@@ -313,6 +313,26 @@
 					"to": "\tLetGo();"
 				}
 			]
+		},
+		{
+			"name": "a game polygon of 9 corners is added",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (corners > kAlienWaysMostCorners)\n\t{\n\t\treturn kAlienWaysLeftOutTooManyCorners;",
+					"to": "\tif (corners > kAlienWaysMostCorners + 1)\n\t{\n\t\treturn kAlienWaysLeftOutTooManyCorners;"
+				}
+			]
+		},
+		{
+			"name": "a game polygon of 2 corners is added",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (corners < 3)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;",
+					"to": "\tif (corners < 2)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;"
+				}
+			]
 		}
 	]
 }

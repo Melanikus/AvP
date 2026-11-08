@@ -250,6 +250,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\3dc\avp\ai_sight.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_build.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_level.cpp" />
+    <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_agun.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_ais.cpp" />
     <ClCompile Include="..\..\3dc\avp\bh_alien.cpp" />
@@ -525,6 +529,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_build.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_level.h" />
+    <ClInclude Include="..\..\3dc\avp\alien_ways_map.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />

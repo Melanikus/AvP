@@ -1,0 +1,139 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "Stop keeps the map",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\t// Clear also forgets the stop, ready for the next build\n\tmap.Clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the build always takes a thread, even when told it can't have one",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\tif (!noThreadForATest)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "a build on its own thread says it wasn't",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\t\t\townThread = true;",
+					"to": "\t\t\townThread = false;"
+				}
+			]
+		},
+		{
+			"name": "a refused build says it's ready",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "state.store(said ? kAlienWaysRefused : kAlienWaysReady, std::memory_order_release);",
+					"to": "state.store(kAlienWaysReady, std::memory_order_release);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game's start doesn't build the map",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tAlienWays_LevelStart();\n\tInitHive();",
+					"to": "\tInitHive();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift into another environment doesn't build the map",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tBuildFarModuleLocs();\n\tAlienWays_LevelStart();\n",
+					"to": "\tBuildFarModuleLocs();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's end doesn't stop the build",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tAlienWays_LevelEnd();\n\tKillFarModuleLocs();",
+					"to": "\tKillFarModuleLocs();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never hears how the build went",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tAlienWays_Frame();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -alienways works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-alienways\"))",
+					"to": "if (CommandLineHasWord(command_line, \"-alienways\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map is built on a machine that doesn't run the aliens",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "return AvP.Network == I_No_Network || AvP.NetworkAIServer;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map is built with the switch off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (!AlienWaysSwitchedOn)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's start keeps what the last level left",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t// Whatever was left of the last level goes first\n\tAlienWays_LevelEnd();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's project leaves out the build",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "    <ClCompile Include=\"..\\..\\3dc\\avp\\alien_ways_build.cpp\" />\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

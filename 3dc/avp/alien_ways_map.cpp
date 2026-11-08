@@ -27,6 +27,12 @@ namespace
 	// can never come anywhere near the largest number a double holds, and a search can't overflow, whatever the level says.
 	static_assert(kLongestStretch * kAlienWaysMostFloorPrice * 1000000.0 < DBL_MAX / 1e6, "a way's cost could overflow");
 
+	// THE SAME ANSWER EVERY TIME. Costs are doubles. The game's 32-bit build does its sums with SSE2 (EnableEnhancedInstructionSet in
+	// win32/VS2026/AvP.vcxproj), not the old x87 unit whose extra precision could change from one moment to the next, so a given build
+	// finds the same way for the same question on every run. Release also has /fp:fast, which lets the compiler order sums its own way, so
+	// two different builds could round differently in the last place. That doesn't matter here: only the machine that runs the AI searches,
+	// so no two machines ever have to agree on a way.
+
 	// The reasons, word for word. tests/alien_ways_map_test.cpp checks each one.
 	const char *const kWhyCorners = "a polygon has fewer than 3 corners, or more than 8";
 	const char *const kWhyFacing = "a polygon's facing isn't a number from -1 to 1";
@@ -101,21 +107,6 @@ namespace
 	}
 }
 
-// One corner, by the box it's in, while building
-struct AlienWaysMap::Corner
-{
-	long long box;
-	int polygon;
-	int x, y, z;
-};
-
-// One place where a corner of one polygon lies on another, while building. low and high are the two polygons, the smaller number first.
-struct AlienWaysMap::Touch
-{
-	int low, high;
-	int x, y, z;
-};
-
 AlienWaysLimits AlienWays_UsualLimits()
 {
 	AlienWaysLimits limits;
@@ -167,6 +158,33 @@ float AlienWays_HowMuchItFacesUp(const AlienWaysPolygon &polygon)
 	}
 
 	return static_cast<float>(-ny / size);
+}
+
+AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, int corners, float up, std::vector<AlienWaysPolygon> *list)
+{
+	if (corners < 3)
+	{
+		return kAlienWaysLeftOutTooFewCorners;
+	}
+
+	if (corners > kAlienWaysMostCorners)
+	{
+		return kAlienWaysLeftOutTooManyCorners;
+	}
+
+	AlienWaysPolygon p;
+	p.corners = corners;
+
+	for (int c = 0; c < kAlienWaysMostCorners; c++)
+	{
+		p.x[c] = c < corners ? x[c] : 0;
+		p.y[c] = c < corners ? y[c] : 0;
+		p.z[c] = c < corners ? z[c] : 0;
+	}
+
+	p.up = up;
+	list->push_back(p);
+	return kAlienWaysAddedAsItIs;
 }
 
 AlienWaysMap::AlienWaysMap()

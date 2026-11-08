@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game of the same-as-single-player mode, a level's end goes to the host, who moves everyone on
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   at a game's start the alien ways map is built for the level, and each frame the log hears once how that went (alien_ways.h)
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -10,6 +12,7 @@
 #include "gamedef.h"
 #include "dynblock.h"
 #include "dynamics.h"
+#include "alien_ways.h"
 #include "tables.h"
 #include "bh_types.h"
 #include "bh_alien.h"
@@ -252,6 +255,8 @@ void StartGame(void)
 	InitObjectVisibilities();
 	InitPheromoneSystem();
 	BuildFarModuleLocs();
+	// The map of walls and ceilings an alien can find its way along. Only with -alienways for now, and it's built on a thread of its own.
+	AlienWays_LevelStart();
 	InitHive();
 //	InitSquad();
 
@@ -356,6 +361,9 @@ void UpdateGame(void)
 	-------------------------------------------------*/
 	PlayerPheromoneSystem();
 	AiPheromoneSystem();
+
+	// Once the alien ways map has finished building, the log hears how it went. It does nothing otherwise.
+	AlienWays_Frame();
 
 	/*-------------- Patrick 11/1/97 ----------------
 	Call the alien hive management function

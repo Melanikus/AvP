@@ -104,6 +104,18 @@ enum AlienWaysKind
 // Which kind a polygon is, by how much it faces up
 AlienWaysKind AlienWays_KindOf(float up);
 
+// A game polygon's list of corners ends at a negative number. This adds one to a list for the map, and never cuts one down: with 3 to
+// kAlienWaysMostCorners corners it goes in as it is, and with fewer or more it's left out, and the answer says which. A level file's polygons
+// have at most 4 corners (its polygon records have room for 4), so one with more than 8 can only be a broken file.
+enum AlienWaysAdded
+{
+	kAlienWaysAddedAsItIs,
+	kAlienWaysLeftOutTooFewCorners,
+	kAlienWaysLeftOutTooManyCorners
+};
+
+AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, int corners, float up, std::vector<AlienWaysPolygon> *list);
+
 // How much a polygon faces up, worked out from all its corners, for a polygon with no normal stored with it. It has to be all of them: a level's
 // polygon can begin with three corners in a line. Which way round the corners go was measured on the stock levels, not worked out from first
 // principles (AvP-docs, engine/pathfinding-study/level.js). The game's own stored normal is better, where a polygon has one.
@@ -216,9 +228,22 @@ private:
 	std::vector<int> joinOther, joinStretch;
 	std::vector<AlienWaysXYZ> stretchA, stretchB;
 
-	// Only while building: every corner of every polygon kept, and where each polygon's start in that list, and what touches what
-	struct Corner;
-	struct Touch;
+	// Only while building: every corner of every polygon kept, and where each polygon's start in that list, and what touches what.
+	// A corner, by the metre box it's in:
+	struct Corner
+	{
+		long long box;
+		int polygon;
+		int x, y, z;
+	};
+
+	// One place where a corner of one polygon lies on another. low and high are the two polygons, the smaller number first.
+	struct Touch
+	{
+		int low, high;
+		int x, y, z;
+	};
+
 	std::vector<int> cornerX, cornerY, cornerZ;
 	std::vector<int> firstCorner;
 	std::vector<Corner> buckets;

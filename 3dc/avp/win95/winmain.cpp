@@ -31,8 +31,10 @@
 //   same letters in it isn't taken for a switch; -ip refuses a word too long to be an address, instead of cutting it short
 //   -staticcomparedrop turns the comparing on itself, as it did when -staticcompare was found inside it
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
+//   -alienways, with -dev, builds the alien ways map at each level's start, while that's being made and filmed (alien_ways.h)
 
 #include "3dc.h"
+#include "alien_ways.h"
 #include "build_identity.h"
 #include "mark_key.h"
 #include "texture_relief.h"
@@ -341,6 +343,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (devSwitch("-shadownearest"))
 		{
 			ShadowLightsByNearest = 1;
+		}
+		// The map aliens will find their way along walls and ceilings by ("For Aliens, Floor is lava", #109). A developer's switch while it's
+		// being built and filmed; when it ships it's always on, with no setting (alien_ways.h).
+		if (devSwitch("-alienways"))
+		{
+			AlienWaysSwitchedOn = 1;
+			LogString("alien ways: the map is built at each level's start (-alienways)");
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))

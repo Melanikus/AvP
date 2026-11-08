@@ -1,0 +1,48 @@
+// Lists the polygons of the level that's loaded, for the alien ways map (alien_ways_map.h). Written 2026-11-08 by Melanikus for the AvP port
+// (#109, #118).
+//
+// The map knows nothing of the game. This is the one place that does: it goes through every module of the level and every object that stands
+// still, and makes a plain list of their polygons, in the world's numbers.
+//
+// WHAT COUNTS:
+// - A room's polygons, and a door's: a door is in its open shape in the level, and its frame is a real wall, so it counts the same.
+// - An object that stands still, like a crate, a lamp, a switch or a screen, where it stands, turned the way it's turned. Things picked up don't.
+// - Left out: a lift's car, a platform and anything on a track, which won't be where the level has them; and anything the game says nothing
+//   collides with.
+//
+// WHICH WAY A POLYGON FACES comes from the normal stored with its shape, which is what the game's own collisions test (FLOOR_THRESHOLD, in
+// dynamics.cpp). Only a polygon with none stored has it worked out from its corners. A polygon drawn from both sides counts as facing up
+// whichever way it's stored, because an alien can stand on its top.
+//
+// A POLYGON'S CORNERS: a list that ends at a negative number. Each one has to be one of its shape's points, or the polygon can't be trusted and
+// is left out. One with more corners than the map takes is left out too, never cut down (AlienWays_AddPolygon), and no more than one corner past
+// that is ever read. The counts say how many of each, for the log.
+//
+// It runs on the game's thread, at a level's start, because it reads the game's own shapes and objects. It's quick: a few thousand polygons a
+// millisecond. The joining up is the slow part, and that's done on a thread of its own (alien_ways_build.h).
+#ifndef ALIEN_WAYS_LEVEL_H
+#define ALIEN_WAYS_LEVEL_H
+
+#include <vector>
+
+#include "alien_ways_map.h"
+
+// The most polygons listed from one level, before the map's own limits. A level with more is refused here, so the list can't grow without end.
+// Twice the map's own most, because some of a level's polygons are left out by the map as scenery.
+size_t const kAlienWaysMostListed = 400000;
+
+struct AlienWaysLevelCounts
+{
+	int modules;              // modules listed
+	int objects;              // still objects listed
+	int polygons;             // polygons put on the list
+	int tooFewCorners;        // left out: fewer than 3 corners
+	int tooManyCorners;       // left out: more corners than the map takes
+	int badCorner;            // left out: a corner that isn't one of its shape's points
+	int noStoredFacing;       // facing worked out from the corners, because none was stored
+};
+
+// Fills polygons and counts from the level that's loaded. Gives back nothing, or why there's no list, in words, and then the list is empty.
+const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, AlienWaysLevelCounts *counts);
+
+#endif

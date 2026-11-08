@@ -508,6 +508,26 @@ static void Stopping()
 	Check(map.Build(world) == nullptr && map.Ready(), "once cleared, it builds");
 }
 
+static void Adding()
+{
+	printf("Adding a game polygon to the list\n");
+
+	// Nine corners round a square, to hand over as many of them as each check wants
+	int const x[9] = { 0, 500, 1000, 1000, 1000, 500, 0, 0, 250 };
+	int const y[9] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	int const z[9] = { 0, 0, 0, 500, 1000, 1000, 1000, 500, 250 };
+	std::vector<AlienWaysPolygon> list;
+
+	Check(AlienWays_AddPolygon(x, y, z, 4, 0.5f, &list) == kAlienWaysAddedAsItIs && list.size() == 1, "a polygon of 4 corners goes in as it is");
+	Check(list.size() == 1 && list[0].corners == 4 && list[0].x[2] == 1000 && list[0].z[3] == 500 && list[0].up == 0.5f, "with its own corners and facing");
+	Check(list.size() == 1 && list[0].x[4] == 0 && list[0].x[7] == 0, "and the places it doesn't use are 0");
+	Check(AlienWays_AddPolygon(x, y, z, 3, 1.0f, &list) == kAlienWaysAddedAsItIs && list.size() == 2, "3 corners goes in");
+	Check(AlienWays_AddPolygon(x, y, z, 8, 1.0f, &list) == kAlienWaysAddedAsItIs && list.size() == 3 && list[2].corners == 8, "8 corners goes in, all of them");
+	Check(AlienWays_AddPolygon(x, y, z, 9, 1.0f, &list) == kAlienWaysLeftOutTooManyCorners && list.size() == 3, "9 corners is left out, not cut down to 8");
+	Check(AlienWays_AddPolygon(x, y, z, 2, 1.0f, &list) == kAlienWaysLeftOutTooFewCorners && list.size() == 3, "2 corners is left out");
+	Check(AlienWays_AddPolygon(x, y, z, 0, 1.0f, &list) == kAlienWaysLeftOutTooFewCorners && list.size() == 3, "and so is none");
+}
+
 static void BuiltAgain()
 {
 	printf("Building again\n");
@@ -535,6 +555,7 @@ int main()
 	AtTheEdgeOfTheWorld();
 	Limits();
 	Stopping();
+	Adding();
 	BuiltAgain();
 
 	if (checksFailed)
