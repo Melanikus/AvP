@@ -88,11 +88,15 @@ namespace
 	}
 }
 
-// Whether the alien is on the kind of surface a point needs. Where a way steps up, from the floor onto a wall or from a wall onto the ceiling,
-// the step counts as made only once the alien is on the new surface, by its down. Until then it keeps heading for the foot of the wall,
-// runs into it, and the game's own climbing takes it up. Without this, an alien on the floor heads straight for a point up the wall, the
-// game steers it only along the floor, and it walks beside the wall without ever touching it. Stepping down needs nothing: the game
-// lets an alien down off a wall by itself.
+// Whether the alien is on the kind of surface a point needs. Where a way steps from one kind of surface to another, up or down, the step
+// counts as made only once the alien is on the new surface, by its down. Until then it keeps heading for the point where the two meet, which
+// is on the surface it's on, so it goes along that surface to the corner, touches the new one, and the game's own climbing turns it onto it.
+// Without this:
+// - stepping up, an alien on the floor heads straight for a point up the wall, the game steers it only along the floor, and it walks beside
+//   the wall without ever touching it;
+// - stepping down, an alien on a wall heads straight for a point out across the floor. The game steers it only along the wall, so if that
+//   point is straight out from it, nothing of the direction is left: the film on Genshd1 found one stuck on a leaning wall, 0.9 m up, heading
+//   for a goal 3 m out from it.
 static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWaysXYZ down)
 {
 	if (heading < 1)
@@ -101,8 +105,7 @@ static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWays
 	}
 
 	AlienWaysKind const before = points[heading - 1].kind, after = points[heading].kind;
-	bool const steppingUp = (before == kAlienWaysFloor && after == kAlienWaysWall) || (before == kAlienWaysWall && after == kAlienWaysCeiling);
-	return !steppingUp || KindUnder(down) == static_cast<int>(after);
+	return before == after || KindUnder(down) == static_cast<int>(after);
 }
 
 AlienWaysGuide::AlienWaysGuide()

@@ -564,6 +564,16 @@
 					"to": ")"
 				}
 			]
+		},
+		{
+			"name": "a step down off a wall counts as made while the alien is still on the wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return before == after || KindUnder(down) == static_cast<int>(after);",
+					"to": "return before == after || after == kAlienWaysFloor || KindUnder(down) == static_cast<int>(after);"
+				}
+			]
 		}
 	]
 }

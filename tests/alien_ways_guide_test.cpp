@@ -234,15 +234,25 @@ static void Reaching()
 	upTheWall.down = IntoTheWall();
 	Check(guide.Steer(&map, upTheWall, &towards) && Same(towards, kUpTheWall), "on the wall, 300 mm off it and 500 mm up, it is: the next point is 1.5 m up the wall");
 
-	// Coming off the wall needs nothing of the kind. Along the wall's foot, 650 mm from where the way comes off it isn't reached, and 550 mm is.
+	// Where the way comes off the wall, 650 mm across from it isn't reached; 550 mm is, once the alien is on the floor.
 	const std::unique_ptr<AlienWaysGuide> acrossRoom(new AlienWaysGuide);
 	AlienWaysGuide &across = *acrossRoom;
 	GuidedAlien(across, Alien(1));
 	AlienWaysAsk alongTheWall = Ask(Alien(1), Beside(0, 0, 8350), kGoal, 13);
 	alongTheWall.down = IntoTheWall();
 	Check(across.Steer(&map, alongTheWall, &towards) && Same(towards, kOffTheWall), "650 mm across isn't reached yet");
-	alongTheWall.at = Beside(0, 0, 8450);
-	Check(across.Steer(&map, alongTheWall, &towards) && Same(towards, kGoal), "550 mm across is");
+	Check(across.Steer(&map, Ask(Alien(1), Beside(0, 0, 8450), kGoal, 13), &towards) && Same(towards, kGoal), "550 mm across, on the floor, is");
+
+	// Coming off a wall is a step too. Near where the way comes off it, an alien still on the wall keeps heading for the wall's foot, so it
+	// comes down the wall to it; on the floor, it heads for the goal. (The film on Genshd1: an alien on a leaning wall, heading straight out
+	// from it for a goal 3 m away, had nothing of that direction left along the wall, and was found stuck.)
+	const std::unique_ptr<AlienWaysGuide> stepDownRoom(new AlienWaysGuide);
+	AlienWaysGuide &stepDown = *stepDownRoom;
+	GuidedAlien(stepDown, Alien(1));
+	AlienWaysAsk stillOnTheWall = Ask(Alien(1), Beside(0, -100, 8900), kGoal, 13);
+	stillOnTheWall.down = IntoTheWall();
+	Check(stepDown.Steer(&map, stillOnTheWall, &towards) && Same(towards, kOffTheWall), "still on the wall, near its foot, it heads for the foot, not the goal");
+	Check(stepDown.Steer(&map, Ask(Alien(1), Beside(0, -100, 8900), kGoal, 13), &towards) && Same(towards, kGoal), "on the floor there, it heads for the goal");
 
 	// Up from the surface it's on, an alien may be as far as 1.5 m from a point on it. The goal is on the floor of tile 9: first the alien is
 	// put on the way's last stretch, near the goal.
