@@ -9,11 +9,12 @@
 // pistol. We don't change the player's marwep.rif. Instead, the changed models go into a file of our own
 // (avp_huds\MelPyth_MarWep.rif), and the game draws those guns from it when it's there. The player's marwep.rif stays as it is.
 //
-// How to run it, with node, from the folder that holds the files. Both file names have to be inside that folder (see
-// pathInside below), and the tool itself can be anywhere:
-//   node <the repository>/tools/m5-files/rif-pick.js <the bigger file> <the new file> <the new internal name> <model name> [<model name> ...]
+// How to run it, with node, from the folder that holds the file it reads (see the names' check below). The new file goes in that
+// folder's "out" folder, which it makes if it isn't there. The tool itself can be anywhere:
+//   node <the repository>/tools/m5-files/rif-pick.js <the bigger file's name> <the new file's name> <the new internal name> <model name> [<model name> ...]
 // For example:
-//   node <the repository>/tools/m5-files/rif-pick.js M5\marwep.rif out\MelPyth_MarWep.rif MelPyth_MarWep "Pulse Rifle" Cudgel Pistol "Two pistol"
+//   node <the repository>/tools/m5-files/rif-pick.js marwep MelPyth_MarWep MelPyth_MarWep "Pulse Rifle" Cudgel Pistol "Two pistol"
+//   reads marwep.rif and writes out\MelPyth_MarWep.rif
 //
 // It only reads the bigger file and never changes it. It won't write over a file that's already there. It stops, writing
 // nothing, if a model isn't found, if anything in the file isn't laid out as expected, or if the file holds a kind of piece it
@@ -41,33 +42,26 @@ const { stop, setToolName, chunksIn, textIn, chunkHeading, readModelFile } = req
 
 setToolName('rif-pick');
 
-// Every file name on the command line comes through here first, before any file is looked at. A name has to be a plain path
-// inside the folder the tool is run from: not one that starts from a drive or a share, not one that climbs out with "..", and
-// not one that names one of Windows' devices (CON, NUL, COM1 and so on, with or without an ending). Anything else stops the
-// tool before it touches a file, so a mistyped or hostile name can't make it read or write somewhere else. It's the same rule
-// as tests/takeouts/find-moved-row.js. Each tool keeps its own copy, because the security scanner is only known to follow a
-// check made in the same file.
-const kDeviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|conin\$|conout\$)(\..*)?$/i;
-function pathInside(name, what) {
-  if (typeof name !== 'string' || name === '' || name.includes('\0')) stop(`${what} has to be a file name`);
-  // A drive (C:), a share (\\server), a device path (\\.\ or \\?\) or a path from the top of a drive (\name) starts somewhere else
-  if (path.isAbsolute(name) || name.includes(':') || name.startsWith('\\') || name.startsWith('/')) {
-    stop(`${what} "${name}" has to be a path inside the folder this is run from, not one that starts somewhere else`);
-  }
-  const parts = name.split(/[\\/]/);
-  if (parts.includes('..') || parts.some((part) => kDeviceName.test(part.trim()))) stop(`${what} "${name}" climbs out of this folder or names a device`);
-  const here = path.resolve(process.cwd());
-  const whole = path.resolve(here, name);
-  if (!whole.startsWith(here + path.sep)) stop(`${what} "${name}" isn't inside the folder this is run from`);
-  return whole;
-}
+// Each file is named, not given as a path: letters, digits and _ only, and the tool adds its ending. The file it reads is in the
+// folder it's run from, and the new file goes in that folder's "out" folder. That's the same check tests/takeouts/find-moved-row.js
+// makes on the name of the list it's given, so no name can reach a file anywhere else. Windows' device names (CON, NUL, COM1 and
+// so on) are refused too, because Windows takes CON.rif for the screen, in any folder.
+const kDeviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+const here = path.resolve(process.cwd());
 
 // ---- What to keep ----
 const [fromName, toName, newName, ...wanted] = process.argv.slice(2);
 if (!fromName || !toName || !newName || wanted.length === 0) stop('give it the bigger file, the new file, the new internal name and at least one model name');
 // Both names are checked before any file is touched
-const from = pathInside(fromName, 'the bigger file');
-const to = pathInside(toName, 'the new file');
+if (!/^[A-Za-z0-9_]+$/.test(fromName) || kDeviceName.test(fromName)) {
+  stop(`the bigger file is named with letters, digits and _ only, without .rif, and not as a device: "${fromName}" isn't`);
+}
+if (!/^[A-Za-z0-9_]+$/.test(toName) || kDeviceName.test(toName)) {
+  stop(`the new file is named with letters, digits and _ only, without .rif, and not as a device: "${toName}" isn't`);
+}
+const from = path.join(here, `${fromName}.rif`);
+const outFolder = path.join(here, 'out');
+const to = path.join(outFolder, `${toName}.rif`);
 if (fs.existsSync(to)) stop(`${to} is already there, and this never writes over a file`);
 // The internal name is printed in the game's log and compared as text, so only plain letters, and short
 if (!/^[A-Za-z0-9_]{1,31}$/.test(newName)) stop('the new internal name has to be 1 to 31 letters, digits or _');
@@ -196,6 +190,7 @@ if (back.length !== 1) stop('the new file didn\'t read back as one chunk');
 chunksIn(file, back[0].body, back[0].end, 'the new file');
 
 // 'wx' makes the write itself refuse a file that appeared since the check above
+if (!fs.existsSync(outFolder)) fs.mkdirSync(outFolder);
 fs.writeFileSync(to, file, { flag: 'wx' });
 
 const sha = crypto.createHash('sha256').update(file).digest('hex');
