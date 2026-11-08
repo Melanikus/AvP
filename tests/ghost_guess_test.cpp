@@ -3,7 +3,8 @@
 //
 // WHAT IT DOES: part 1 checks the guess's sums one at a time. Part 2 runs them the way a network game does. A sender moves 60 times a
 // second and sends a message each time; a model of ENet's channel delivers them, late or lost as each case says; and a receiver draws the
-// sender's figure 60 times a second, twice: as another player (guessed between messages) and as an NPC (not guessed). It measures how far
+// sender's figure 60 times a second, twice: as another player or an alien (guessed between messages), and as one of the other NPCs, whose
+// shared message has no speed (not guessed). It measures how far
 // each drawn figure is from where the real one is, how long it stands still, and how far it moves in one frame. The table it prints is the
 // baseline #88's smoothing has to beat. Its checks are only what reading the code says must happen today.
 //
@@ -468,7 +469,7 @@ static void TheGameUsesIt()
 	Check(Has(net, "GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, Approximate3dMagnitude(&diff) > 1000, playerTimer);"),
 		"SOURCE: a player's full message changes the clock through ghost_guess.h, with a change of speed of more than 1000");
 	Check(Has(net, "GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, diff > 1500 || -diff > 1500, playerTimer);"),
-		"SOURCE: so does an alien's in the old alien games, with its own rule for a change");
+		"SOURCE: so does the message about an alien the host's AI runs, with its own rule for a change");
 
 	// The model's numbers are still the game's
 	Check(Has(net, "static const int kSendsEachSecond = 60;"), "SOURCE: the game sends 60 times a second, as the model does");

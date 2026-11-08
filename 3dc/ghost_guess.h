@@ -1,12 +1,15 @@
-// How another player's figure is guessed between messages. Written 2026-11-08 by Melanikus for the AvP port (issue #88). The sums are
-// the game's own, moved here without a change from pldghost.cpp (PlayerGhostExtrapolation) and pldnet.cpp (where a player's full state
-// arrives, and an alien's in the old alien games), so that tests/ghost_guess_test.cpp can run them without the game.
+// How another player's figure, or an alien the host runs, is guessed between messages. Written 2026-11-08 by Melanikus for the AvP port
+// (issue #88). The sums are the game's own, moved here without a change from pldghost.cpp (PlayerGhostExtrapolation) and pldnet.cpp (where
+// a player's full state arrives, and where an alien's arrives: the aliens the host's AI runs in co-op and skirmish), so that
+// tests/ghost_guess_test.cpp can run them without the game.
 //
 // HOW IT WORKS: a full message about another player says where they are and how fast they're going. Between messages, the game moves
 // their figure on at that speed, so it doesn't stand still. A clock says how far into the gap the figure is: it runs on with this machine's
 // frames, and each full message takes off the time the sender says has passed since the last one. When messages come steadily, that keeps
 // the guess to the gap between two of them. The clock stops at half a second, so a figure with no news for longer stands still. A sharp
-// change of speed starts the clock again. NPCs aren't guessed: their messages carry no speed (see engine/coop-lag-plan.md).
+// change of speed starts the clock again. An alien's message carries its speed too, so aliens are guessed the same way. The other NPCs the
+// host runs in co-op (marines, predators, xenoborgs, the queen, facehuggers) share a message with no speed, so they aren't guessed: they
+// step from one message to the next (see engine/coop-lag-plan.md).
 //
 // The clock counts 65536 to a second, as the game's frame time does (ONE_FIXED).
 
