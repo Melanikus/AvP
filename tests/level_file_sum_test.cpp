@@ -93,6 +93,14 @@ void Sound_ForgetAddressesInside(const void *, size_t)
 
 typedef std::vector<unsigned char> Bytes;
 
+// The first count bytes of some text. Both ends of the range come from the one pointer: two copies of the same words in quotes needn't
+// be the same place in memory, so a range from the start of one copy to the end of another can be any length, even running backwards.
+// (The test's first run on GitHub stopped with "vector too long" that way.)
+static Bytes BytesOf(const char *text, size_t count)
+{
+	return Bytes(text, text + count);
+}
+
 static void PutNumber(Bytes &out, unsigned int value)
 {
 	for (int i = 0; i < 4; i++)
@@ -143,10 +151,11 @@ static void Write(const std::string &name, const Bytes &data)
 // bytes, filling the rest. Only the two headings are written. Then the file is made longer, and Windows fills what's added with zeros.
 static void WriteLongLevel(const std::string &name, unsigned int size)
 {
-	Bytes start(&"REBINFF2"[0], &"REBINFF2"[8]);
+	Bytes start = BytesOf("REBINFF2", 8);
 
 	PutNumber(start, size);
-	start.insert(start.end(), &"LONGPART"[0], &"LONGPART"[8]);
+	Bytes const partName = BytesOf("LONGPART", 8);
+	start.insert(start.end(), partName.begin(), partName.end());
 	PutNumber(start, size - 12);
 
 	FILE *const file = fopen(name.c_str(), "wb");
@@ -256,7 +265,7 @@ static void TestTheRule()
 	// The MD5 standard's own example (RFC 1321, appendix A.5): the sum of the three letters "abc"
 	LevelFileSum abc;
 	abc.bytes = 3;
-	memcpy(abc.md5, SumOf(Bytes(&"abc"[0], &"abc"[3])).md5, 16);
+	memcpy(abc.md5, SumOf(BytesOf("abc", 3)).md5, 16);
 	Check(LevelFileSum_Line("avp_rifs/Test.rif", abc) == "level: avp_rifs/Test.rif is 3 bytes, MD5 900150983cd24fb0d6963f7d28e17f72",
 		"the line names the file, its size and its sum, written as md5sum writes a sum");
 
@@ -284,7 +293,7 @@ static void TestTheLoader(const std::string &folder)
 	changed.back() = 'y';
 	Bytes const packed = Packed(level);
 	printf("  (the level is packed: %u bytes)\n", (unsigned int)packed.size());
-	Bytes const tooShort(&"REBINFF2abc"[0], &"REBINFF2abc"[11]);
+	Bytes const tooShort = BytesOf("REBINFF2abc", 11);
 
 	std::string const plainFile = folder + "Plain.rif";
 	std::string const changedFile = folder + "Changed.rif";
