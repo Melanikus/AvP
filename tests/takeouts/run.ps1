@@ -57,15 +57,17 @@ if (Test-Path -LiteralPath $settings) {
         if ($named -cnotmatch '^vcpkg_installed[\\/]') { continue }
         if (($named -split '[\\/]') -contains '..' -or $named.Contains(':')) { throw "tests\$Test.args names $named, which isn't inside vcpkg_installed" }
 
-        $from = Join-Path $repository $named
-        $to = Join-Path $tree $named
-        if (Test-Path -LiteralPath $from -PathType Container) {
-            & robocopy $from $to /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        # Not $from and $to: PowerShell reads a name the same in capitals or small letters, so those would be -From and -To above,
+        # which hold whole numbers, and a path can't go in one.
+        $libraryFrom = Join-Path $repository $named
+        $libraryTo = Join-Path $tree $named
+        if (Test-Path -LiteralPath $libraryFrom -PathType Container) {
+            & robocopy $libraryFrom $libraryTo /E /NFL /NDL /NJH /NJS /NP | Out-Null
             if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $named" }
         }
-        elseif (Test-Path -LiteralPath $from -PathType Leaf) {
-            New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
-            Copy-Item -LiteralPath $from -Destination $to
+        elseif (Test-Path -LiteralPath $libraryFrom -PathType Leaf) {
+            New-Item -ItemType Directory -Force (Split-Path -Parent $libraryTo) | Out-Null
+            Copy-Item -LiteralPath $libraryFrom -Destination $libraryTo
         }
         else {
             throw "tests\$Test.args names $named, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed."
