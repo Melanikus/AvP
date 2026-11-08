@@ -9,12 +9,14 @@
 # The program lands in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks.
 #
 # Modified 2026-11-08 by Melanikus for the AvP port:
-#   the test is built with the C runtime inside it (/MT), the same as every test, and refused if it comes out asking Windows for it as a DLL (STATIC-1)
 #   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
 #   the test's name is checked before its folder is emptied, and anything that isn't one of the repository's tests is refused (AvP Tao 3)
 #   a test that doesn't pass shows everything it and the sanitizer said, because in the automatic checks the folder that keeps it is gone once the check ends
 #   every object and library a test's settings name has to have been compiled with the sanitizer, or its code would run unwatched, and the
-#   libraries vcpkg builds are taken from their copy built with it, in vcpkg_installed/x86-windows-static-asan
+#   libraries vcpkg builds are taken from their copy built with it, in vcpkg_installed/x86-windows-asan
+#   for a day the test was built with the C runtime inside it (/MT) and refused if it asked Windows for the runtime's DLLs (STATIC-1). That's
+#   undone, with the rest of STATIC-1: Bitdefender flagged the game built that way (#111), and the user ruled static linking out
+#   (STATIC-UNDO-1, #125). A test is built with /MD again, as the game is
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -160,25 +162,6 @@ function Copy-SanitizerLibrary([string]$to)
     Copy-Item -LiteralPath $library -Destination $to -Force
 }
 
-# STATIC-1: the tests are built with the C runtime inside them (/MT), the same as the game, so a test needs no Visual C++ install to run,
-# and can't pass only because the machine it runs on happens to have one. This asks Visual Studio's dumpbin which DLLs a program asks
-# Windows for, and gives back those that are the C runtime's: vcruntime, msvcp, ucrtbase, and the api-ms-win-crt- names Windows uses for
-# ucrtbase. An empty answer means the program carries its own. The same function is in tests/build.ps1 and tests/takeouts/run.ps1.
-function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysTo)
-{
-    if ((Invoke-Tool 'dumpbin.exe' "/nologo /dependents `"$program`"" $folder $saysTo) -ne 0)
-    {
-        # What dumpbin said goes into the message, because the folder can be emptied before anyone looks, by the next build or by an
-        # antivirus program holding the new program
-        $said = @(Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ' / '
-        throw "dumpbin couldn't read $program`: $said"
-    }
-
-    # dumpbin writes each DLL's name on a line of its own, under "Image has the following dependencies", and the same for any it loads later
-    return @(Get-Content -LiteralPath $saysTo | ForEach-Object { $_.Trim() } |
-        Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|concrt|vccorlib)[0-9a-z_]*\.dll$' -or $_ -match '^api-ms-win-crt-[0-9a-z-]*\.dll$' })
-}
-
 # SANITIZE-RUN-1: is every part of the test watched? The sanitizer only watches code compiled with it. Code can come in unwatched two ways:
 # - compiled somewhere else: an object (.obj) or a library (.lib) the settings name. Each of those is read before anything is built.
 # - compiled here, with the sanitizer turned off. Every source is compiled by the line below with /fsanitize=address, but the test's
@@ -244,12 +227,13 @@ function Get-UnwatchedMembers([string]$library, [string]$folder)
     return $unwatched.ToArray()
 }
 
-# The libraries vcpkg builds, which a test's settings name in vcpkg_installed/x86-windows-static, are taken from their copy built with the
-# sanitizer: vcpkg-overlay-triplets/x86-windows-static-asan.cmake says how it's made, and the automatic checks make it (fetch-test-libraries,
+# The libraries vcpkg builds, which a test's settings name in vcpkg_installed/x86-windows, are taken from their copy built with the
+# sanitizer: vcpkg-overlay-triplets/x86-windows-asan.cmake says how it's made, and the automatic checks make it (fetch-test-libraries,
 # sanitized-ports). So the settings are copied into the test's folder, with that one folder changed, and the copy is what's built from.
-# Settings are written with / and no quotes (tests/build.ps1 says how), so the folder's name is found as it's written.
-$ordinaryLibraries = 'vcpkg_installed/x86-windows-static/'
-$sanitizedLibraries = 'vcpkg_installed/x86-windows-static-asan/'
+# Settings are written with / and no quotes (tests/build.ps1 says how), so the folder's name is found as it's written. The trailing / is
+# what tells the two apart: vcpkg_installed/x86-windows/ isn't the start of vcpkg_installed/x86-windows-asan/.
+$ordinaryLibraries = 'vcpkg_installed/x86-windows/'
+$sanitizedLibraries = 'vcpkg_installed/x86-windows-asan/'
 $settings = [System.IO.File]::ReadAllText((Join-Path $repository "tests\$Test.args"))
 
 if ($settings.Contains($ordinaryLibraries))
@@ -351,20 +335,8 @@ if ($unwatchedHere.Count -gt 0) {
     exit 1
 }
 
-# STATIC-1: built the same as every test, with the C runtime inside it. The sanitizer's own library is a DLL, and that one is allowed:
-# it's Microsoft's, it's only for this check, and it never goes out with the game.
-#
-# That library itself asks Windows for the C runtime's DLLs: VCRUNTIME140.dll and six api-ms-win-crt- names, read with dumpbin from Visual
-# Studio 18's compiler 14.51.36231 (SANITIZE-RUN-1's probe, 2026-11-08). So while a test built for the sanitizer runs, the runtime IS
-# loaded as DLLs, through the sanitizer's library. What this check shows is only that the test's own code has the runtime built in. A
-# pass here never means a program runs without the Visual C++ runtime installed. tests/build.ps1's same check, on the ordinary build of
-# each test, is the one that shows that.
-$runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $repository (Join-Path $out 'imports.txt'))
-if ($runtime.Count -gt 0) {
-    Write-Host "$Test, built for the sanitizer, asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)"
-    exit 1
-}
-
+# The sanitizer's own library is a DLL the test needs beside it to run. It's Microsoft's, it's only for this check, and it never goes out
+# with the game.
 Copy-SanitizerLibrary $out
 
 # The sanitizer writes what it found to the program's error stream, so both streams are read

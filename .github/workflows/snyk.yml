@@ -232,7 +232,7 @@ jobs:
         run: |
           $bt = Join-Path $env:RUNNER_TEMP 'bt'
           # --binarysource=clear: always build from source. A library restored from a cache has no sources to scan.
-          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows-static --binarysource=clear `
+          & (Join-Path $env:VCPKG_ROOT 'vcpkg.exe') install --triplet x86-windows --binarysource=clear `
             --x-install-root="$env:RUNNER_TEMP\installed" --x-buildtrees-root="$bt" --disable-metrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
