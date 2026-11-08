@@ -6881,8 +6881,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "plan->height = 1440;",
-					"to": "plan->height = 1080;"
+					"from": "plan->width = 2560;\n\t\t\t\tplan->height = 1440;",
+					"to": "plan->width = 2560;\n\t\t\t\tplan->height = 1080;"
 				}
 			]
 		},
@@ -6893,6 +6893,76 @@
 					"file": "3dc/avp/hudson_plan.cpp",
 					"from": "else if (WordIs(value, valueLength, \"2560x1440\"))",
 					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "640x480 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->height = 480;",
+					"to": "plan->height = 720;"
+				}
+			]
+		},
+		{
+			"name": "640x480 is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"640x480\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "1024x768 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->width = 1024;",
+					"to": "plan->width = 1280;"
+				}
+			]
+		},
+		{
+			"name": "1024x768 is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"1024x768\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "3440x1440 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->width = 3440;",
+					"to": "plan->width = 2560;"
+				}
+			]
+		},
+		{
+			"name": "3440x1440 is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"3440x1440\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a size word is read as a word that only starts the same",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"640x480\"))",
+					"to": "else if (valueLength >= 7 && strncmp(value, \"640x480\", 7) == 0)"
 				}
 			]
 		},

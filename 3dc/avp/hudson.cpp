@@ -93,7 +93,7 @@
 // SHOWING THE WINDOW. A run's window stays out of the way: it can't be activated and has no taskbar button. show=yes is for someone watching or recording: it opens as a normal game's window does and comes to the front, and Alt+F4 closes it.
 // It writes where the window is to hudson-window.txt as it goes, for someone who can't see it.
 //
-// THE SIZE. A run is 1280x720, so that one run compares with the last. size= can ask for 1600x900, 1920x1080 or 2560x1440. A run sharing the machine is 1920x1080 unless it says otherwise or saves pictures, because someone may be watching, and it gives way
+// THE SIZE. A run is 1280x720, so that one run compares with the last. size= can ask for 1600x900, 1920x1080 or 2560x1440, and for the HUD's pictures 640x480, 1024x768 or 3440x1440. A run sharing the machine is 1920x1080 unless it says otherwise or saves pictures, because someone may be watching, and it gives way
 // to 1280x720 if that doesn't fit the main screen. The result line says what size it really was.
 //
 // READING WHAT HE SEES. vision=check reads the frame's three surface pictures once in each hold, and says in the log what's missing, with the polygon it's on. hudson_vision.h says what it counts. It stops the game for a moment each view, so such a run says nothing about timings.

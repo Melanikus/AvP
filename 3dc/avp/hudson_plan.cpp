@@ -166,7 +166,7 @@ const char *const kHudsonRefusedVisionUnknown = "vision= isn't check";
 const char *const kHudsonRefusedVisionWithoutRooms = "vision= means nothing without rooms=";
 const char *const kHudsonRefusedVisionWithoutPictures = "vision= reads the pictures only perpixel, normals and relief draw, so it needs lighting= to say one of them";
 const char *const kHudsonRefusedVisionWithoutViews = "vision= looks once in each view he holds still for, so it doesn't go with compare=, strategy=, combat=, nav= or route=";
-const char *const kHudsonRefusedSizeUnknown = "size= isn't 1280x720, 1600x900, 1920x1080 or 2560x1440";
+const char *const kHudsonRefusedSizeUnknown = "size= isn't 640x480, 1024x768, 1280x720, 1600x900, 1920x1080, 2560x1440 or 3440x1440";
 const char *const kHudsonRefusedShowNotYes = "show= can only be yes";
 const char *const kHudsonRefusedShowWithoutSharing = "show=yes takes the focus, so it needs machine=shared, or the first touch would end the run";
 const char *const kHudsonRefusedMachineUnknown = "machine= isn't alone or shared";
@@ -1838,7 +1838,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			seenSize = true;
 			plan->sizeAsked = true;
 
-			// A short list of whole words, and not two numbers to read, because nothing on the command line is believed, and these are the only sizes anyone has a use for
+			// A short list of whole words, and not two numbers to read, because nothing on the command line is believed, and these are the only sizes anyone has a use for.
+			// 640x480, 1024x768 and 3440x1440 are for the HUD's pictures: the screen it was made for, the one whose look the HUD keeps, and an ultrawide.
 			if (WordIs(value, valueLength, "1280x720"))
 			{
 				plan->width = 1280;
@@ -1857,6 +1858,21 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			else if (WordIs(value, valueLength, "2560x1440"))
 			{
 				plan->width = 2560;
+				plan->height = 1440;
+			}
+			else if (WordIs(value, valueLength, "640x480"))
+			{
+				plan->width = 640;
+				plan->height = 480;
+			}
+			else if (WordIs(value, valueLength, "1024x768"))
+			{
+				plan->width = 1024;
+				plan->height = 768;
+			}
+			else if (WordIs(value, valueLength, "3440x1440"))
+			{
+				plan->width = 3440;
 				plan->height = 1440;
 			}
 			else

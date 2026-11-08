@@ -1379,6 +1379,11 @@ static void TestTourAndSharedMachine()
 	Check(HudsonPlan_Read("-hudson level=a frames=1 size=1600x900", &plan) == 0 && plan.width == 1600 && plan.height == 900 && plan.sizeAsked, "1600x900 can be asked for");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 size=1920x1080", &plan) == 0 && plan.width == 1920 && plan.height == 1080, "and 1920x1080");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 size=2560x1440", &plan) == 0 && plan.width == 2560 && plan.height == 1440, "and 2560x1440");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 size=640x480", &plan) == 0 && plan.width == 640 && plan.height == 480 && plan.sizeAsked, "and, for the HUD's pictures, 640x480");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 size=1024x768", &plan) == 0 && plan.width == 1024 && plan.height == 768, "and 1024x768");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 size=3440x1440", &plan) == 0 && plan.width == 3440 && plan.height == 1440, "and 3440x1440");
+	Refused("-hudson level=a frames=1 size=3440x1080", kHudsonRefusedSizeUnknown);
+	Refused("-hudson level=a frames=1 size=640x4800", kHudsonRefusedSizeUnknown);
 	Check(HudsonPlan_SizeFits(1920, 1080, 2560, 1440), "1920x1080 fits on a 2560x1440 screen");
 	Check(HudsonPlan_SizeFits(1920, 1080, 1920, 1160), "with exactly enough room for the window's frame");
 	Check(!HudsonPlan_SizeFits(1920, 1080, 1920, 1159), "and not with one row less");
