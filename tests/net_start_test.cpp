@@ -2503,6 +2503,10 @@ static void TestTheGameUsesThis()
 	size_t const sizeChecked = networking.find("if (eEvent.packet->dataLength < kMessageHeaderSize)");
 	size_t const copied = networking.find("memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);");
 	Check(sizeChecked != std::string::npos && copied != std::string::npos && sizeChecked < copied, "a message too short to have a header is refused before it's copied");
+	// Each reader checks for itself that a message is long enough to have a header before it copies the header out (ReadTheHeader), so
+	// either is safe whoever hands it a message. The check above refuses a message that short before either reader sees it, so nothing
+	// sent from outside reaches this one today, and a test that sends a short message can't tell whether it's there. So it's read here.
+	Check(Has(networking, "static bool ReadTheHeader(const uint8_t *data, size_t size, MessageHeader &header)\n{\n\tif (size < sizeof(MessageHeader))\n\t{\n\t\tLogDroppedMessage(\"it's too short to have a header\");\n\t\treturn false;\n\t}\n\n\tmemcpy(&header, data, sizeof(MessageHeader));"), "and each reader checks again before it copies the header, whoever hands it the message");
 
 	// Everything about who's who is tested above, in the real file, and these are where the rest of the game joins on
 	Check(!Has(pldnet, "ProcessSystemMessage") && !Has(pldnet, "isSystemMessage"), "the rest of the game has no way to act on a system message, so only what's been checked reaches it");
