@@ -47,9 +47,9 @@ struct SaveTestAsk
 	const char *name;          // the word after it, or nothing
 	size_t nameRoom;           // how many bytes name may be read up to, its end marker included
 	bool make;                 // -savetest-make was given
-	int species;               // the numbers after it: which species (0 marine, 1 alien, 2 predator, as the game numbers them)
+	int species;               // the numbers after it: which species, as the game numbers them (I_PLAYER_TYPE: 0 marine, 1 predator, 2 alien)
 	int episode;               // and which of its levels, from 0
-	int episodesOf[3];         // how many levels each species has: the game's own counts
+	int episodesOf[3];         // how many levels each species has, in that order: the game's own counts
 };
 
 // What the harness is to do, and for a load, the file it may read: "SaveTest\<name>.sav", into path (pathRoom bytes)
@@ -126,7 +126,7 @@ static inline const char *SaveTest_Why(SaveTestAnswer answer)
 	case kSaveTestNetworkGame: return "save test: not in a network game";
 	case kSaveTestNoName: return "save test: -savetest needs the name of a save in the SaveTest folder";
 	case kSaveTestBadName: return "save test: that name isn't one this can read: letters, digits, spaces, _, -, ( and ), up to 39";
-	case kSaveTestBadSpecies: return "save test: -savetest-make's species is 0 (marine), 1 (alien) or 2 (predator)";
+	case kSaveTestBadSpecies: return "save test: -savetest-make's species is 0 (marine), 1 (predator) or 2 (alien)";
 	case kSaveTestBadEpisode: return "save test: -savetest-make's episode isn't one of that species' levels";
 	case kSaveTestBoth: return "save test: -savetest or -savetest-make, not both";
 	case kSaveTestPathTooLong: return "save test: the save's path doesn't fit";

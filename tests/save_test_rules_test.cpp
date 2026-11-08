@@ -32,6 +32,7 @@ static SaveTestAsk Load(const char *name)
 	ask.load = true;
 	ask.name = name;
 	ask.nameRoom = name ? strlen(name) + 1 : 0;
+	// Made-up counts, in the game's order: marines, predators, aliens
 	ask.episodesOf[0] = 11;
 	ask.episodesOf[1] = 9;
 	ask.episodesOf[2] = 10;
@@ -108,8 +109,9 @@ static void Making()
 	std::string path;
 
 	Check(Decide(Make(0, 0), &path) == kSaveTestMake, "a marine's first level is made");
-	Check(Decide(Make(2, 9), &path) == kSaveTestMake, "and a predator's last, its 10th");
+	Check(Decide(Make(2, 9), &path) == kSaveTestMake, "and an alien's last, its 10th (species 2 is the alien, as the game numbers them)");
 	Check(Decide(Make(2, 10), &path) == kSaveTestBadEpisode, "but not one past its last");
+	Check(Decide(Make(1, 8), &path) == kSaveTestMake && Decide(Make(1, 9), &path) == kSaveTestBadEpisode, "a predator's 9 levels: the 9th made, a 10th refused");
 	Check(Decide(Make(1, -1), &path) == kSaveTestBadEpisode, "nor a level before the first");
 	Check(Decide(Make(3, 0), &path) == kSaveTestBadSpecies && Decide(Make(-1, 0), &path) == kSaveTestBadSpecies, "a species that isn't one of the three is refused");
 
