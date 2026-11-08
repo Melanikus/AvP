@@ -33,6 +33,8 @@
 //   the pictures one level opens have a limit in bytes
 //   every picture costs at least 64 KB of that limit, even one that's no use; one with no size is refused; and once the
 //   limit is reached, no more pictures are even opened
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the colour table is a list that frees itself and knows its own size, so a copy of a loader can't free it twice
 
 #include "RimLoader.h"
 #include <algorithm>
@@ -68,8 +70,6 @@ RimLoader::RimLoader()
 	// a file can leave out the part that sets these, so they need a safe value: no size at all, which Open refuses
 	memset(&header, 0, sizeof(header));
 
-	colourMap = 0;
-	numColours = 0;
 	destRowStart = 0;
 	rowBytes = 0;
 	destRowIndex = 0;
@@ -80,12 +80,6 @@ RimLoader::RimLoader()
 	// change this when code works
 	dest = 0;
 	destPitch = 0;
-}
-
-// Destructor
-RimLoader::~RimLoader()
-{
-	delete[] colourMap;
 }
 
 const char *RimLoader_ProblemWords(RimProblem problem)
@@ -228,10 +222,9 @@ bool RimLoader::HandleCMAP()
 		return Refuse(kRimColourTablePastEnd);
 	}
 
-	// a file can hold more than one table: the last one counts, and the one before it is freed
-	delete[] colourMap;
-	colourMap = new ColourRegister[nEntries];
-	numColours = nEntries;
+	// a file can hold more than one table: the last one counts, and takes the place of the one before it
+	ColourRegister const black = { 0, 0, 0 };
+	colourMap.assign(nEntries, black);
 
 	// read the values in
 	for (uint32_t i = 0; i < nEntries; i++)
@@ -470,7 +463,7 @@ ColourRegister RimLoader::GetColour(uint32_t index) const
 {
 	ColourRegister colour = { 0, 0, 0 };
 
-	if (index < numColours)
+	if (index < colourMap.size())
 	{
 		colour = colourMap[index];
 	}
