@@ -1562,6 +1562,9 @@
     <ClInclude Include="..\..\3dc\level_kind.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\alien_ghost_jumps.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\env_info.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>

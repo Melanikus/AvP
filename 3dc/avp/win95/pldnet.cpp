@@ -51,6 +51,9 @@
 //   be in the list of far places as well as in the list of AI modules
 //   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
 //   messages don't all fit, so a tester's log shows both
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   every 10 seconds the log says how far the aliens' ghosts jumped when their news came, on floors, walls and ceilings
+//   (alien_ghost_jumps.h)
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -123,6 +126,7 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "npc_ghosts.h"
 #include "coop_in_game.h"
 #include "coop_menu.h"
+#include "alien_ghost_jumps.h"
 
 // coop_in_game.h keeps one bit for each place on the player list
 static_assert(kCoopMostPlayers == NET_MAXPLAYERS, "coop_in_game.h needs one bit for each player");
@@ -405,6 +409,7 @@ static void ProcessNetMsg_FragmentalObjectsStatus(NETMESSAGE_FRAGMENTALOBJECTSST
 static void ProcessNetMsg_StrategySynch(NETMESSAGE_STRATEGYSYNCH *messagePtr);
 static void ProcessNetMsg_LocalObjectOnFire(NETMESSAGE_LOBONFIRE *messagePtr, NetID senderId);
 static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetID senderId);
+static void WriteAlienGhostJumps(void);
 static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messagePtr, NetID senderId);
 static void ProcessNetMsg_SpotAlienSound(NETMESSAGE_SPOTALIENSOUND *messagePtr, NetID senderId);
 static void ProcessNetMsg_LocalObjectDestroyed_Request(NETMESSAGE_LOBDESTROYED_REQUEST *messagePtr, NetID senderId);
@@ -2377,6 +2382,8 @@ static void AddPlayerAndObjectUpdateMessages(void)
 void EndAVPNetGame(void)
 {
 	SwitchSyncs_LevelIsOver();
+	// What the last few seconds counted about the aliens' ghosts, so it isn't lost with the game
+	WriteAlienGhostJumps();
 	RemovePlayerFromGame(AvPNetID);
 	TransmitPlayerLeavingNetMsg();
 
@@ -8366,6 +8373,54 @@ static void ProcessNetMsg_LocalObjectOnFire(NETMESSAGE_LOBONFIRE *messagePtr, Ne
 	}
 }
 
+// How far the aliens' ghosts jump when their news comes, by the surface the news puts them on, counted for one line every 10 seconds
+// (alien_ghost_jumps.h)
+static AlienGhostJumps alienGhostJumps;
+
+// Writes what's been counted, if anything, and starts counting again
+static void WriteAlienGhostJumps(void)
+{
+	std::string const line = AlienGhostJumps_Line(alienGhostJumps, timeGetTime());
+
+	if (!line.empty())
+	{
+		LogString(line);
+	}
+
+	alienGhostJumps = AlienGhostJumps();
+}
+
+// Counts the jump an alien's ghost is about to make: from where this machine's guess has it now, to where the news puts it. So this is
+// called before the ghost is moved. Only a ghost that's drawn near counts: a far one's place is only roughly known, so its jump means
+// nothing.
+static void NoteAlienGhostJump(STRATEGYBLOCK *sbPtr, const VECTORCH *newsPlace, EULER *newsTurn, bool crawling)
+{
+	NETGHOSTDATABLOCK const *const ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
+	DYNAMICSBLOCK const *const dynPtr = sbPtr->DynPtr;
+
+	if (!ghostData || !dynPtr || ghostData->onlyValidFar)
+	{
+		return;
+	}
+
+	// The news's down, taken from its turn the same way ProcessNetMsg_AlienAIState, below, takes it for a ghost that starts crawling: the
+	// alien's own down. The ghost's own down is the one its physics has been keeping.
+	MATRIXCH turn;
+	CreateEulerMatrix(newsTurn, &turn);
+	int const newsDown[3] = { turn.mat12, turn.mat22, turn.mat32 };
+	int const ghostDown[3] = { dynPtr->GravityDirection.vx, dynPtr->GravityDirection.vy, dynPtr->GravityDirection.vz };
+	unsigned int const now = timeGetTime();
+
+	if (AlienGhostJumps_LineIsDue(alienGhostJumps, now))
+	{
+		WriteAlienGhostJumps();
+	}
+
+	AlienGhostJumps_Note(&alienGhostJumps, AlienGhost_SurfaceOf(newsDown[1]),
+		AlienGhost_JumpMm(newsPlace->vx - dynPtr->Position.vx, newsPlace->vy - dynPtr->Position.vy, newsPlace->vz - dynPtr->Position.vz),
+		crawling, AlienGhost_DownIsOff(ghostDown, newsDown), now);
+}
+
 static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetID senderId)
 {
 	STRATEGYBLOCK *sbPtr;
@@ -8406,6 +8461,13 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 	}
 	else
 	{
+		// How far the guess was from this news, counted before the ghost is put right. Whether the alien is crawling is only in the
+		// message while the guess is built into the game (EXTRAPOLATION_TEST, pldnet.h), which it always is.
+#if EXTRAPOLATION_TEST
+		NoteAlienGhostJump(sbPtr, &position, &orientation, !messagePtr->standard_gravity);
+#else
+		NoteAlienGhostJump(sbPtr, &position, &orientation, false);
+#endif
 		// update the ghost...
 		MaintainGhostFireStatus(sbPtr, (int)messagePtr->IAmOnFire);
 		// NB don't need to update the object type
