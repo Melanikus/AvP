@@ -222,9 +222,10 @@ static void TestBrokenFiles()
 	Check(VerdictOf(noMark) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "no end mark after a good entry");
 
 	// A start past the end of the file, as a broken size elsewhere might ask for.
+	// (Not called "small": windows.h, which memory_wall.h needs, makes that word mean "char".)
 	SoundBankEntry entry;
-	Bytes small(4, 0);
-	Check(SoundBank_ReadEntry(AtTheWall(small), small.size(), 100, &entry) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "a start beyond the file");
+	Bytes fourBytes(4, 0);
+	Check(SoundBank_ReadEntry(AtTheWall(fourBytes), fourBytes.size(), 100, &entry) == SOUND_BANK_FILE_STOPS_BEFORE_THE_END_MARK, "a start beyond the file");
 
 	// The name.
 	Bytes noZero;
