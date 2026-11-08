@@ -3458,20 +3458,21 @@ static void SayWhatTheWatchFound(const char *how)
 
 	char line[300] = { 0 };
 
-	_snprintf(line, sizeof(line) - 1, "hudson: watch: %s. Floor %.1f m, wall %.1f m, ceiling %.1f m, by where its gravity pointed. Its first blow landed %s",
+	_snprintf(line, sizeof(line) - 1, "hudson: watch: %s. On the way to him: floor %.1f m, wall %.1f m, ceiling %.1f m, by where its gravity pointed. Its first blow landed %s",
 		how, watchMillimetres[kWatchFloor] / 1000.0, watchMillimetres[kWatchWall] / 1000.0, watchMillimetres[kWatchCeiling] / 1000.0, when);
 	LogString(line);
 }
 
-// Every frame of a watched fight, while the alien's alive. Counts how far it went on each kind of surface, says once a second where it is, and ends the run
-// a few seconds after its first blow lands. True once it has ended the run, so that nothing else is done with this frame.
+// Every frame of a watched fight, while the alien's alive. Counts how far it went on each kind of surface on its way to him, says once a second where it is,
+// and ends the run a few seconds after its first blow lands. Only the way there is counted: its lunges while it attacks him aren't part of it. True once it
+// has ended the run, so that nothing else is done with this frame.
 static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alien, LONG frame)
 {
 	DWORD const now = GetTickCount();
 	VECTORCH const here = alien->DynPtr->Position;
 	WatchSurface const surface = SurfaceItsOn(alien->DynPtr);
 
-	if (watchHasLastPlace)
+	if (watchHasLastPlace && watchFirstBlowAt == 0)
 	{
 		VECTORCH moved = { here.vx - watchLastPlace.vx, here.vy - watchLastPlace.vy, here.vz - watchLastPlace.vz };
 		int const step = Approximate3dMagnitude(&moved);
