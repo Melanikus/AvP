@@ -603,6 +603,7 @@
     <ClInclude Include="..\..\3dc\avp\paintball.h" />
     <ClInclude Include="..\..\3dc\avp\particle.h" />
     <ClInclude Include="..\..\3dc\avp\pfarlocs.h" />
+    <ClInclude Include="..\..\3dc\avp\ai_module_door.h" />
     <ClInclude Include="..\..\3dc\avp\pheromone.h" />
     <ClInclude Include="..\..\3dc\avp\player.h" />
     <ClInclude Include="..\..\3dc\avp\pmove.h" />
