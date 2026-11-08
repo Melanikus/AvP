@@ -4,6 +4,9 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a level can't overfill the list of video screens or give one a picture of the wrong size, and a video with no sound plays;
 //   starting a film on a screen lets go of the last one, even if it had finished
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   whatever is called for each frame of a film can stop it, as a key would
+//   something can be done for each frame of a film, so that a network game keeps going under it
 
 #ifdef _XBOX
 	#define _fseeki64 fseek // ensure libvorbis uses fseek and not _fseeki64 for xbox
@@ -243,6 +246,8 @@ int32_t OpenFMV(const char *filenamePtr)
 	return fmvHandle;
 }
 
+bool (*WhileAFilmPlays)(void) = 0;
+
 extern void PlayFMV(const char *filenamePtr)
 {
 	if (!IntroOutroMoviesAreActive) {
@@ -256,10 +261,15 @@ extern void PlayFMV(const char *filenamePtr)
 	}
 
 	bool playing = true;
+	bool toldToStop = false;
 
 	while (playing)
 	{
 		CheckForWindowsMessages();
+
+		if (WhileAFilmPlays && !WhileAFilmPlays()) {
+			toldToStop = true;
+		}
 
 		ThisFramesRenderingHasBegun();
 
@@ -281,7 +291,7 @@ extern void PlayFMV(const char *filenamePtr)
 		DirectReadKeyboard();
 
 		// added DebouncedGotAnyKey to ensure previous frames key press for starting level doesn't count
-		if (GotAnyKey && DebouncedGotAnyKey)
+		if ((GotAnyKey && DebouncedGotAnyKey) || toldToStop)
 		{
 			fmv.Close();
 			playing = false;

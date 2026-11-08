@@ -1,0 +1,508 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "an odd number gives the second swing",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return (randomNumber & 1) != 0;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "an even number gives the first swing",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return (randomNumber & 1) != 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the speed of a throw",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "kStaffThrowSpeed = 60000",
+					"to": "kStaffThrowSpeed = 6000"
+				}
+			]
+		},
+		{
+			"name": "the time in the air",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "kStaffFlightTime = 65536 * 10",
+					"to": "kStaffFlightTime = 65536 * 100"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the damage",
+			"changes": [
+				{
+					"file": "3dc/avp/equipment.cpp",
+					"from": "1*65536, /* it holds one, which a throw looks for */\n\t\t{\n\t\t\t{\n\t\t\t\t0,20,20,0,0,0,",
+					"to": "1*65536, /* it holds one, which a throw looks for */\n\t\t{\n\t\t\t{\n\t\t\t\t0,120,0,0,0,0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the reach",
+			"changes": [
+				{
+					"file": "3dc/avp/equipment.cpp",
+					"from": "4200, /* how far the staff reaches */",
+					"to": "420, /* how far the staff reaches */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the model's file",
+			"changes": [
+				{
+					"file": "3dc/avp/equipment.cpp",
+					"from": "\"Staff_Hud\"",
+					"to": "\"pred_HUD\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Predator's place for it",
+			"changes": [
+				{
+					"file": "3dc/avp/equipment.cpp",
+					"from": "WEAPON_PRED_DISC,\n\tWEAPON_PRED_STAFF,",
+					"to": "WEAPON_PRED_DISC,\n\tNULL_WEAPON,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the swing lands when the model says",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "if (PlayersWeaponHModelController.keyframe_flags & 1)\n",
+					"to": "if (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a throw needs a staff",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": " && weaponPtr->PrimaryRoundsRemaining > 0)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the model is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "LoadedNPC tempnpc(\"Staff_Hud.rif\")",
+					"to": "LoadedNPC tempnpc(\"pred_hud.rif\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the test command gives it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/cheat.cpp",
+					"from": "wdPtr->PrimaryMagazinesRemaining=2;",
+					"to": "continue;"
+				}
+			]
+		},
+		{
+			"name": "the time once it has landed",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "kStaffStayTime = 65536 * 20",
+					"to": "kStaffStayTime = 65536 * 21"
+				}
+			]
+		},
+		{
+			"name": "how far past its step it reaches",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return distanceToIt < lengthOfThisStep + 10;",
+					"to": "return distanceToIt < lengthOfThisStep + 11;"
+				}
+			]
+		},
+		{
+			"name": "its reach counts the step",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return distanceToIt < lengthOfThisStep + 10;",
+					"to": "return distanceToIt < 10;"
+				}
+			]
+		},
+		{
+			"name": "a flying staff with too much time",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return timeLeft > 0 && timeLeft <= kStaffFlightTime;",
+					"to": "return timeLeft > 0;"
+				}
+			]
+		},
+		{
+			"name": "a flying staff with no time",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return timeLeft > 0 && timeLeft <= kStaffFlightTime;",
+					"to": "return timeLeft <= kStaffFlightTime;"
+				}
+			]
+		},
+		{
+			"name": "a landed staff with too much time",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return timeLeft > 0 && timeLeft <= kStaffStayTime;",
+					"to": "return timeLeft > 0;"
+				}
+			]
+		},
+		{
+			"name": "a landed staff with no time",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return timeLeft > 0 && timeLeft <= kStaffStayTime;",
+					"to": "return timeLeft <= kStaffStayTime;"
+				}
+			]
+		},
+		{
+			"name": "only the three stages",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "\treturn false;\n}\n\n// No place, speed",
+					"to": "\treturn true;\n}\n\n// No place, speed"
+				}
+			]
+		},
+		{
+			"name": "a place past the edge",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return number > -1000000 && number < 1000000;",
+					"to": "return number > -1000000;"
+				}
+			]
+		},
+		{
+			"name": "a place past the other edge",
+			"changes": [
+				{
+					"file": "3dc/avp/staff.h",
+					"from": "return number > -1000000 && number < 1000000;",
+					"to": "return number < 1000000;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its own object",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "MakeObject(I_BehaviourThrownStaff, place)",
+					"to": "MakeObject(I_BehaviourSpeargunBolt, place)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing stops it in the air",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\tdynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it can't hit the thrower",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "FindPolygonInLineOfSight_TwoIgnores(&direction, &dynPtr->PrevPosition, 0, sbPtr->SBdptr, Player);",
+					"to": "FindPolygonInLineOfSight_TwoIgnores(&direction, &dynPtr->PrevPosition, 0, sbPtr->SBdptr, 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it reacts only to what it reaches",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "!ThrownStaff_ReachesIt(LOS_Lambda, stepLength)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the speargun's damage",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "TemplateAmmo[AMMO_PRED_RIFLE].MaxDamage[AvP.Difficulty]",
+					"to": "TemplateAmmo[AMMO_PRED_STAFF].MaxDamage[AvP.Difficulty]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its time runs out",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "block->TimeLeft <= 0",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a body part that's gone",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "if (!part || (part->flags & section_data_notreal))",
+					"to": "if (!part)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a body that's gone",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\tif (!body)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says which way",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\"staff: thrown, heading %d %d %d\"",
+					"to": "\"staff: %d %d %d\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says how far",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\"staff: %s, after flying %d mm\"",
+					"to": "\"staff: %s %d\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a save block of the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "if (header->size != sizeof(*block))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved stage is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "!ThrownStaff_SavedStageIsGood(block->State, block->TimeLeft)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved place is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "!ThrownStaff_SavedPlaceIsGood(&block->Position)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved speed is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "!ThrownStaff_SavedPlaceIsGood(&block->LinVelocity)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game runs it",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "ThrownStaffBehaviour(sbptr);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a missing model is safe",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "GetLoadedShapeMSL(\"StaffPickup\") >= 0 ? \"StaffPickup\" : \"spear\"",
+					"to": "\"StaffPickup\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it goes into a save",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "SaveStrategy_ThrownStaff(sbPtr);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it comes back from a save",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "LoadStrategy_ThrownStaff(header);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it keeps its own last place",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\tdynPtr->PrevPosition = dynPtr->Position;\n}\n\n// One frame in the air",
+					"to": "}\n\n// One frame in the air"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: when nothing stops it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "!ThrownStaff_ReachesIt(LOS_Lambda, stepLength))\n\t{\n\t\tThrownStaff_FlyOn(dynPtr);",
+					"to": "!ThrownStaff_ReachesIt(LOS_Lambda, stepLength))\n\t{\n\t\tNewTrailPoint(dynPtr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: when it cuts off a part",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "flies on\", block->DistanceFlown);\n\t\t\tThrownStaff_FlyOn(dynPtr);",
+					"to": "flies on\", block->DistanceFlown);\n\t\t\tNewTrailPoint(dynPtr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log says how far it dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\"staff: its time ran out, lying %d mm below where it hit\"",
+					"to": "\"staff: %d\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: measured from where it hit",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "block->HeightItHitAt = point->vy;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it finds the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "block->RestHeight = LOS_ObjectHitPtr ? LOS_Point.vy : place.vy;",
+					"to": "block->RestHeight = place.vy;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it stops falling",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "if (dynPtr->GravityOn && dynPtr->Position.vy >= block->RestHeight)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a save knows if it is falling",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "dynPtr->GravityOn = dynPtr->Position.vy < block->RestHeight ? 1 : 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved rest height is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "|| !ThrownStaff_SavedNumberIsGood(block->RestHeight)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log names the kind",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_staff.cpp",
+					"from": "\"hit something of kind %d that isn't a body, and is gone\"",
+					"to": "\"hit %d\""
+				}
+			]
+		}
+	]
+}

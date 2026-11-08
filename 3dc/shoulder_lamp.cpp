@@ -7,6 +7,8 @@ static bool lampIsOn = false;
 static bool lampIsAskedFor = false;
 static long framesDrawn = 0;
 static bool playerCouldHaveALamp = false;
+// Nothing in this build asks for the real light: the setting that does comes with the lamp work. So the lamp is always the painted version.
+static const bool realLightIsWanted = false;
 
 // The robot arm. See ShoulderLamp_FollowTheView.
 static bool aimIsKnown = false;
@@ -18,6 +20,7 @@ static double aimDown = 0.0;
 static double followSeconds = kShoulderLampFollowSeconds;
 static double spotSize = kShoulderLampSpotSize;
 static double spotIntensity = kShoulderLampIntensity;
+static float placeFromEyes[3] = { (float)kShoulderLampAcross, (float)kShoulderLampUp, (float)kShoulderLampAhead };
 
 void ShoulderLamp_Toggle()
 {
@@ -67,6 +70,16 @@ bool ShoulderLamp_TakeThisFramesAnswer()
 long ShoulderLamp_FramesDrawn()
 {
 	return framesDrawn;
+}
+
+bool ShoulderLamp_CanBeALight()
+{
+	return lampIsOn && playerCouldHaveALamp && realLightIsWanted;
+}
+
+const float *ShoulderLamp_PlaceFromEyes()
+{
+	return placeFromEyes;
 }
 
 static double DotProductOf(const double *a, const double *b)
@@ -150,7 +163,7 @@ void ShoulderLamp_SetFollowSeconds(double seconds)
 }
 
 // A plain number, typed by a person. Only digits, with one dot at most. See ShoulderLamp_FollowSecondsFromWords in the header for why it's read by hand.
-static bool ReadPlainNumber(const char *words, unsigned int length, double *out)
+bool ReadPlainNumber(const char *words, unsigned int length, double *out)
 {
 	// Longer than anyone needs for any of these, and it means the sum below can't get large
 	if (!words || length == 0 || length > 8)

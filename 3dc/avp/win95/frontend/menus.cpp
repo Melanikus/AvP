@@ -7,11 +7,33 @@
 //   refused; the credits roll stops at the end of credits.txt; a typed letter's width is looked up with an unsigned
 //   byte
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   going on to the next level of a campaign skips the menus
 //   leaving the page of games found closes what the search has open on the network
+//   a client whose host has gone goes back to the main menus
+//   the class slider shows the new classes' names, and a host or joiner can start as one
+// Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
+//   a client whose host has gone goes back to the main menus
+//   a network game's loading screen has all five of its lines, where some could be left unset
 // Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
+//   the log says when a save slot is listed as empty because its numbers are wrong
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   choosing a campaign's level on the level row starts that campaign, with its own briefing
+//   a level's films play only when the game plays as single player does, and the network goes on underneath them
+//   the host chooses a campaign's difficulty, and a joiner plays what the host says rather than his last single player game's
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a co-op campaign's pause menu has a Players page, and asks a host before leaving; the page after a co-op game says why it ended
+//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
+//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+//   the co-op campaign pages: see coop_menu.h. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+//   a marine's class comes from the class slider through ClassSlider_ToClass, the same sum as before, in the one place its test checks
+//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
+//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -21,8 +43,11 @@
 #include "pldnet.h"
 #include "Input.h"
 #include "menus.h"
+#include "marine_classes.h"
 #include "view_settings.h"
 #include "env_info.h"
+#include "custom_maps.h"
+#include "coop_menu.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -39,13 +64,16 @@
 #include "menu_data.h"
 #include "psnd.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "networking.h"
 #include "utilities.h"
 #include "tables.h"
 #include "d3d_render.h"
 #include "OnScreenKeyboard.h"
 #include "logString.h"
+#include <vector>
 #include "profile_checks.h"
+#include "address_box.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -70,6 +98,8 @@ extern void Show_WinnerScreen(void);
 extern void AvP_UpdateMenus(void);
 extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
+static void StartTheCoopCampaign(void);
+void SetBriefingTextToBlank(void);
 extern bool Net_UpdateSessionList(int &SelectedItem);
 extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
@@ -87,6 +117,7 @@ extern void CheatMode_GetNextAllowedEnvironment(int *environmentPtr, int searchF
 extern void RenderKeyConfigRectangle(int alpha);
 extern void IngameKeyboardInput_ClearBuffer(void);
 extern int LengthOfMenuText(const char *textPtr);
+extern int HeightOfMenuGfx(texID_t textureID);
 extern int PlayMenuBackgroundFmv();
 extern char *GetGamePadButtonTextString(enum TEXTSTRING_ID stringID);
 
@@ -108,9 +139,22 @@ void HandlePostGameFMVs(void);
 void HandlePreGameFMVs(void);
 
 static void SetupNewMenu(enum AVPMENU_ID menuID);
+static void CountTheRowsOnThisPage(void);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
 static void RenderEpisodeSelectMenu(void);
+static void RenderCustomMapPicture(void);
+
+// How far down a page a picture starts: below the title, a few pixels clear of the tails of letters like "p"
+static const int kMenuPictureTop = 106;
+
+extern int CustomMapToPlay;
+extern int CustomMapSpecies;
+extern int CustomMapDifficulty;
+extern texID_t MISSING_TEXTURE; // d3_func.cpp: what a picture that can't be read gives back
+
+// The names the Custom maps page's map row shows, as the row wants them: the list's own names, or one line saying there are none
+static std::vector<char *> customMapRowNames;
 static void RenderKeyConfigurationMenu(void);
 static void RenderUserProfileSelectMenu(void);
 static void RenderLoadGameMenu(void);
@@ -141,6 +185,7 @@ void PlayMenuMusic(void);
 void ThisFramesRenderingHasFinished(void);
 void EndMenuMusic(void);
 void PlayFMV(const char *filenamePtr);
+extern bool (*WhileAFilmPlays)(void);
 int NumberOfAvailableLevels(I_PLAYER_TYPE playerID);
 int LevelMostLikelyToPlay(I_PLAYER_TYPE playerID);
 void Net_EnumConnections();
@@ -280,8 +325,41 @@ int GetAvPMenuState()
 const int FRAMES_PER_SECOND = 60;
 const int SKIP_TICKS = 1000 / FRAMES_PER_SECOND;
 
+// The next level of a campaign: everyone's still connected, so nobody is asked anything.
+static void PlayFilmAfterCampaignLevel(int finishedLevel);
+
+static int StartNextCampaignLevel(void)
+{
+	PlayFilmAfterCampaignLevel(netGameData.coopCampaignLevel - 1);
+	Coop_LevelChangeHasStarted();
+	CheatMode_Active = CHEATMODE_NONACTIVE;
+	LoadGameRequest = SAVELOAD_REQUEST_NONE;
+	AvP.LevelCompleted = 0;
+	TimeScale = ONE_FIXED;
+	SetLevelToLoadForCampaign();
+	SetBriefingTextForMultiplayer();
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+	return 1;
+}
+
+// The Start row of the co-op campaign page
+static void StartTheCoopCampaign(void)
+{
+	if (CoopMenu_HostStarts())
+	{
+		AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+		SetLevelToLoadForThisNetworkGame();
+		SetBriefingTextForMultiplayer();
+	}
+}
+
 int AvP_MainMenus(void)
 {
+	if (Coop_LevelChangeIsDue())
+	{
+		return StartNextCampaignLevel();
+	}
+
 	LoadDefaultPrimaryConfigs();
 	
 	SoundSys_ResetFadeLevel();
@@ -320,10 +398,28 @@ int AvP_MainMenus(void)
 	}
 	VideoModeNotAvailable = 0;
 
-	if (AvP.LevelCompleted && CheatMode_Active == CHEATMODE_NONACTIVE && !DebuggingCommandsActive)
+	if (CoopMenu_HasALastWord())
 	{
-		HandlePostGameFMVs();
-		OkayToPlayNextEpisode();
+		// A co-op game ended for a reason the player should hear: the page says why, before anything else. A custom map played with others
+		// has no page of its own to go back to, so that's forgotten here.
+		CoopMenu_PageAfterACustomMap();
+		AvP.LevelCompleted = 0;
+		SetupNewMenu(AVPMENU_COOP_OUT);
+		AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	}
+	else if (AvP.LevelCompleted && CheatMode_Active == CHEATMODE_NONACTIVE && !DebuggingCommandsActive)
+	{
+		if (CustomMaps_Playing())
+		{
+			// A custom map has no film after it, and no place in a campaign: the episode numbers still name the last stock level, so
+			// using them here would play that level's film and mark it done. It goes back to its own page instead.
+			SetupNewMenu((enum AVPMENU_ID)CoopMenu_PageAfterACustomMap());
+		}
+		else
+		{
+			HandlePostGameFMVs();
+			OkayToPlayNextEpisode();
+		}
 		AvP.LevelCompleted = 0;
 		AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	}
@@ -345,6 +441,9 @@ int AvP_MainMenus(void)
 	}
 
 	CheatMode_Active = CHEATMODE_NONACTIVE;
+
+	// Whatever was played has ended and been dealt with above, so nothing is being played now
+	CustomMaps_SetPlaying(false);
 
 	TimeStampedMessage("starting general menus");
 
@@ -459,22 +558,60 @@ void HandlePostGameFMVs(void)
 	}
 }
 
+// While a film plays, the connection has to stay alive, or the other machines give up on this one. Only that:
+// messages wait until the level has loaded, as they do during any load. On the way to the next level there's
+// no level here for them to act on. Each machine sees the film for itself, and anyone can skip it with a key.
+static bool KeepTheNetworkGoing(void)
+{
+	Net_ServiceNetwork();
+	return true;
+}
+
+static void PlayFilmWithTheNetworkGoing(const char *film)
+{
+	if (AvP.Network != I_No_Network)
+	{
+		WhileAFilmPlays = KeepTheNetworkGoing;
+	}
+
+	PlayFMV(film);
+	WhileAFilmPlays = 0;
+}
+
 void HandlePreGameFMVs(void)
 {
-	if (AvPMenus.MenusState == MENUSSTATE_STARTGAME && LoadGameRequest == SAVELOAD_REQUEST_NONE)
+	// A deathmatch on one of these levels isn't its story, so it doesn't get its film. A campaign does.
+	if (AvPMenus.MenusState == MENUSSTATE_STARTGAME && LoadGameRequest == SAVELOAD_REQUEST_NONE && SameAsSinglePlayer())
 	{
 		if (!stricmp("derelict", LevelName))
 		{
-			PlayFMV("FMVs/marineintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/marineintro.bik");
 		}
 		else if (!stricmp("temple", LevelName))
 		{
-			PlayFMV("FMVs/alienintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/alienintro.bik");
 		}
 		else if (!stricmp("fall", LevelName))
 		{
-			PlayFMV("FMVs/predatorintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/predatorintro.bik");
 		}
+	}
+}
+
+// The film single player shows when its last basic level is finished, for a campaign going on past it.
+static void PlayFilmAfterCampaignLevel(int finishedLevel)
+{
+	if (netGameData.coopCampaign == kCampaignMarine && finishedLevel == MAX_NO_OF_BASIC_MARINE_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/marineoutro.bik");
+	}
+	else if (netGameData.coopCampaign == kCampaignPredator && finishedLevel == MAX_NO_OF_BASIC_PREDATOR_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/predatoroutro.bik");
+	}
+	else if (netGameData.coopCampaign == kCampaignAlien && finishedLevel == MAX_NO_OF_BASIC_ALIEN_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/alienoutro.bik");
 	}
 }
 
@@ -517,17 +654,50 @@ extern int InGameMenusAreRunning(void)
 
 extern void AvP_UpdateMenus(void)
 {
-	if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
+	{
+		switch (CoopMenu_EveryFrame(AvPMenus.CurrentMenu == AVPMENU_COOP_HOST))
+		{
+			case kCoopPageGoesToTheLoad:
+				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+				SetLevelToLoadForThisNetworkGame();
+				SetBriefingTextForMultiplayer();
+				break;
+
+			case kCoopPageHostHasGone:
+				CoopMenu_PageLeft();
+				SetupNewMenu(AVPMENU_MAIN);
+				return;
+
+			case kCoopPageRowsChanged:
+				CountTheRowsOnThisPage();
+				break;
+
+			case kCoopPageJoinerIsOut:
+				SetupNewMenu(AVPMENU_COOP_OUT);
+				return;
+
+			default:
+				break;
+		}
+	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_COOP_PLAYERS)
+	{
+		// Players come and go behind this page, so its rows are filled in each frame
+		if (CoopMenu_PlayersPageFrame())
+		{
+			CountTheRowsOnThisPage();
+		}
+	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 	{
 		MinimalNetCollectMessages();
-		if (AvP.Network == I_Host)
-		{	/*
-			We have become host while in the process of joining.
-			This is bad.
-			Best leave the game and return to the main menus.
-			*/
+		if (netGameData.myGameState == NGS_Error_HostLost)
+		{
+			// The host has gone, so there's no game to join. Back to the main menus.
 			Net_Disconnect();
+			AvP.Network = I_No_Network;
 			SetupNewMenu(AVPMENU_MAIN);
 			return;
 		}
@@ -565,10 +735,13 @@ extern void AvP_UpdateMenus(void)
 					case 8:
 					case 9:
 					case 10:
+					case 11:
+					case 12:
+					case 13:
 						netGameData.myCharacterType = NGCT_Marine;
 						netGameData.myNextCharacterType = NGCT_Marine;
 						AvP.PlayerType = I_Marine;
-						netGameData.myCharacterSubType =(NETGAME_SPECIALISTCHARACTERTYPE) (MP_Species-2);
+						netGameData.myCharacterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)ClassSlider_ToClass(MP_Species);
 						break;
 				}
 			}
@@ -601,16 +774,16 @@ extern void AvP_UpdateMenus(void)
 			retval = Net_ConnectingToSession();
 			if (retval == NET_FAIL)
 			{
-				// player has aborted, go back a menu
-				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				// player has aborted, go back a menu. Someone the host removed is told so.
+				SetupNewMenu(Net_WasRemovedByTheHost() ? AVPMENU_COOP_OUT : AVPMENU_MULTIPLAYER);
 				return;
 			}
 		}
 
 		if (retval == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 		{
-			// successfully joined
-			SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG_JOIN);
+			// successfully joined. A game from the co-op campaign page has its own page.
+			SetupNewMenu(Net_CoopLobbyState() != kCoopLobbyNone ? AVPMENU_COOP_JOIN : AVPMENU_MULTIPLAYER_CONFIG_JOIN);
 		}
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION)
@@ -779,6 +952,30 @@ extern void AvP_UpdateMenus(void)
 	ActUponUsersInput();
 }
 
+// How many rows this page has, and how high they are. The co-op campaign page asks again when someone comes or goes, and the row the host is on
+// might have been that player's.
+static void CountTheRowsOnThisPage(void)
+{
+	AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
+	AvPMenus.NumberOfElementsInMenu=0;
+	AvPMenus.MenuHeight=0;
+	do
+	{
+		elementPtr->Brightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
+
+		AvPMenus.MenuHeight += HeightOfMenuElement(elementPtr);
+
+		AvPMenus.NumberOfElementsInMenu++;
+		elementPtr++;
+	}
+	while (elementPtr->ElementID != AVPMENU_ELEMENT_ENDOFMENU);
+
+	if (AvPMenus.CurrentlySelectedElement >= AvPMenus.NumberOfElementsInMenu)
+	{
+		AvPMenus.CurrentlySelectedElement = AvPMenus.NumberOfElementsInMenu - 1;
+	}
+}
+
 static void SetupNewMenu(enum AVPMENU_ID menuID)
 {
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
@@ -862,6 +1059,79 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 		{
 			break;
 		}
+
+		case AVPMENU_COOP_HOST:
+		{
+			// This page opens the game. If that can't be done, there's no page.
+			if (!CoopMenu_HostPageOpens())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_COOP_JOIN:
+		{
+			CoopMenu_JoinPageOpens();
+			break;
+		}
+
+		case AVPMENU_COOP_OUT:
+		{
+			// Nothing to say, so no page
+			if (!CoopMenu_OutPageOpens())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_COOP_PLAYERS:
+		{
+			CoopMenu_PlayersPageFrame();
+			break;
+		}
+
+		case AVPMENU_CUSTOMMAPS:
+		{
+			// Found afresh each time the page opens, so a map added while the game runs shows up
+			CustomMaps_Find();
+
+			customMapRowNames.clear();
+
+			for (int i = 0; i < CustomMaps_Count(); i++)
+			{
+				customMapRowNames.push_back(const_cast<char *>(CustomMaps_Name(i)));
+			}
+
+			if (customMapRowNames.empty())
+			{
+				customMapRowNames.push_back(GetTextString(TEXTSTRING_CUSTOMMAPS_NONE));
+			}
+
+			AVPMENU_ELEMENT *const mapRow = &AvPMenus.MenuElements[0];
+			mapRow->TextSliderStringPointer = customMapRowNames.data();
+			mapRow->MaxSliderValue = (int)customMapRowNames.size() - 1;
+
+			// The last choice stays, if it's still one of them
+			if (CustomMapToPlay < 0 || CustomMapToPlay > mapRow->MaxSliderValue)
+			{
+				CustomMapToPlay = 0;
+			}
+
+			if (CustomMapSpecies < 0 || CustomMapSpecies > 2)
+			{
+				CustomMapSpecies = 0;
+			}
+
+			if (CustomMapDifficulty < 0 || CustomMapDifficulty > 2)
+			{
+				CustomMapDifficulty = 1;
+			}
+			break;
+		}
 	
 		case AVPMENU_MARINELEVELS:
 		{
@@ -938,11 +1208,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_INGAME:
 		case AVPMENU_INNETGAME:
+		case AVPMENU_INCOOPGAME:
 		{
 			if (AvP.Network != I_No_Network)
 			{
-				// in a multiplayer game set up a menu without the restart mission option
-				menuID = AVPMENU_INNETGAME;
+				// in a multiplayer game set up a menu without the restart mission option. A campaign's has a Players row.
+				menuID = SameAsSinglePlayer() ? AVPMENU_INCOOPGAME : AVPMENU_INNETGAME;
+
+				if (menuID == AVPMENU_INCOOPGAME)
+				{
+					CoopMenu_InGameMenuOpens();
+				}
+
 				AvPMenus.CurrentMenu = menuID;
 				AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default
 				AvPMenus.FontToUse = AvPMenusData[menuID].FontToUse;
@@ -1090,22 +1367,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 	}
 
-	/* count the number of elements in the menu */
-	{
-		AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
-		AvPMenus.NumberOfElementsInMenu=0;
-		AvPMenus.MenuHeight=0;
-		do
-		{
-			elementPtr->Brightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
-
-			AvPMenus.MenuHeight += HeightOfMenuElement(elementPtr);
-
-			AvPMenus.NumberOfElementsInMenu++;
-			elementPtr++;
-		}
-		while (elementPtr->ElementID != AVPMENU_ELEMENT_ENDOFMENU);
-	}
+	CountTheRowsOnThisPage();
 
 	switch (menuID)
 	{
@@ -1196,6 +1458,7 @@ static void RenderMenu(void)
 	AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
 
 	int y;
+	texID_t coopPicture = MISSING_TEXTURE;
 	
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS)
 	{
@@ -1204,6 +1467,15 @@ static void RenderMenu(void)
 		{
 			y = MENU_BOTTOMYEDGE - AvPMenus.MenuHeight;
 			RenderBriefingScreenInfo();
+		}
+		else if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
+		{
+			// These pages have a picture, and can have more rows than fit under it
+			texID_t const picture = CoopMenu_Picture();
+			CoopPageLayout const layout = CoopPage_Layout(AvPMenus.MenuHeight, MENU_CENTREY, picture != MISSING_TEXTURE ? kMenuPictureTop + HeightOfMenuGfx(picture) : 0);
+
+			y = layout.rowsTop;
+			coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;
 		}
 		else
 		{
@@ -1255,6 +1527,27 @@ static void RenderMenu(void)
 	{
 		char *textPtr = GetTextString(AvPMenusData[AvPMenus.CurrentMenu].MenuTitle);
 		RenderMenuText(textPtr, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+
+		if (AvPMenus.CurrentMenu == AVPMENU_CUSTOMMAPS)
+		{
+			RenderCustomMapPicture();
+		}
+		else if (coopPicture != MISSING_TEXTURE)
+		{
+			DrawAvPMenuGfx(coopPicture, MENU_CENTREX, kMenuPictureTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+		}
+	}
+}
+
+// The chosen custom map's own picture, under the title. A map with none shows nothing there. custom_maps.cpp keeps a picture
+// small enough to fit above the rows.
+static void RenderCustomMapPicture(void)
+{
+	texID_t const picture = CustomMaps_Picture(CustomMapToPlay);
+
+	if (picture != MISSING_TEXTURE)
+	{
+		DrawAvPMenuGfx(picture, MENU_CENTREX, kMenuPictureTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 }
 
@@ -1947,6 +2240,21 @@ static void RenderLoadGameMenu(void)
 	}
 }
 
+// What a text field shows: its own text, except the join page's address box, which shows a dot for each character unless Tab is
+// held (address_box.h). The address itself is left as it is.
+static char *TextFieldShows(AVPMENU_ELEMENT *elementPtr)
+{
+	static char shown[64];   // the box takes 15 characters (MAX_IPADDRESS_LENGTH, menu_data.cpp), and a longer one is cut short
+
+	if (elementPtr->TextPtr != IPAddressString)
+	{
+		return elementPtr->TextPtr;
+	}
+
+	AddressBox_TextToDraw(IPAddressString, KeyboardInput[KEY_TAB] != 0, shown, sizeof(shown));
+	return shown;
+}
+
 static void RenderHelpString()
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -1961,7 +2269,18 @@ static void RenderHelpString()
 		area.top    = 420;
 		area.bottom = 480;//ScreenDescriptorBlock.SDB_Height; // bjd MENU
 
-		RenderSmallFontString_Wrapped(GetTextString(elementPtr->HelpString), &area,BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		// The address box's help also says how to see the address (address_box.h)
+		if (elementPtr->TextPtr == IPAddressString)
+		{
+			static char help[512];
+			_snprintf(help, sizeof(help) - 1, "%s %s", GetTextString(elementPtr->HelpString), kAddressBoxHelp);
+			help[sizeof(help) - 1] = '\0';
+			RenderSmallFontString_Wrapped(help, &area, BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		}
+		else
+		{
+			RenderSmallFontString_Wrapped(GetTextString(elementPtr->HelpString), &area,BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		}
 	}
 }
 
@@ -2217,6 +2536,12 @@ static void ActUponUsersInput(void)
 					{
 						Net_Disconnect();
 					}
+					break;
+				}
+				case AVPMENU_COOP_HOST:
+				case AVPMENU_COOP_JOIN:
+				{
+					CoopMenu_PageLeft();
 					break;
 				}
 				case AVPMENU_DETAILLEVELS:
@@ -2744,6 +3069,39 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_CUSTOMMAP_START:
+		{
+			// With no map found, there's nothing to start
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && CustomMaps_SetLevelToLoad(CustomMapToPlay))
+			{
+				AvP.PlayerType = CustomMapSpecies == 1 ? I_Predator : CustomMapSpecies == 2 ? I_Alien : I_Marine;
+				AvP.Difficulty = CustomMapDifficulty == 0 ? I_Easy : CustomMapDifficulty == 2 ? I_Hard : I_Medium;
+				CustomMaps_SetPlaying(true);
+				CustomMaps_ForgetPictures();
+				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+			}
+			break;
+		}
+		case AVPMENU_ELEMENT_COOP_PLAYER:
+		{
+			break;
+		}
+		case AVPMENU_ELEMENT_COOP_REMOVE:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				CoopMenu_HostRemoves(elementPtr->MaxValue);
+			}
+			break;
+		}
+		case AVPMENU_ELEMENT_COOP_START:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				StartTheCoopCampaign();
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -2929,18 +3287,21 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
 				
-				AvP.Difficulty = I_Medium; //bjd - was 1;
+				Campaign_SetFromLevelRow();
+				Campaign_SetDifficulty();
+				Campaign_ChooseRollNumber();
+
+				// A campaign is a co-op game. Any other kind can't carry one over, from a page visited earlier or a game left without going through its end
+				if (netGameData.gameType != NGT_Coop)
+				{
+					netGameData.coopCampaign = kCampaignNone;
+					netGameData.coopCampaignLevel = 0;
+				}
 
 				if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) != NET_FAIL)
 				{
 					AvPMenus.MenusState = MENUSSTATE_STARTGAME;
-					if (netGameData.gameType == NGT_Coop) {
-						SetLevelToLoadForCooperative(netGameData.levelNumber);
-					}
-					else {
-						SetLevelToLoadForMultiplayer(netGameData.levelNumber);
-					}
-					
+					SetLevelToLoadForThisNetworkGame();
 					SetBriefingTextForMultiplayer();
 				}
 			}
@@ -2950,15 +3311,23 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
+				if (!Net_HostsLevelIsOnItsList())
+				{
+					break;
+				}
+
 				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 				netGameData.myStartFlag = 1;
 
-				if (netGameData.gameType==NGT_Coop) {
-					SetLevelToLoadForCooperative(netGameData.levelNumber);
-				}
-				else {
-					SetLevelToLoadForMultiplayer(netGameData.levelNumber);
-				}
+				// The host has to hear this, or it never says this player has joined. The only other send is on the species page, before this was set.
+				AddNetMsg_PlayerDescription();
+				NetSendMessages();
+
+				// What the host said, or he'd keep whatever his last single player game was set to, with
+				// other health and armour than everyone else, and his damage worked out differently.
+				Campaign_SetDifficulty();
+
+				SetLevelToLoadForThisNetworkGame();
 				SetBriefingTextForMultiplayer();
 			}
 			break;
@@ -3308,6 +3677,8 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_STARTLEVELWITHCHEAT:
 		case AVPMENU_ELEMENT_SAVEMPCONFIG:
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
+		case AVPMENU_ELEMENT_CUSTOMMAP_START:
+		case AVPMENU_ELEMENT_COOP_START:
 		case AVPMENU_ELEMENT_JOINLOBBIED:
 		case AVPMENU_ELEMENT_CONNECTIONCHOICE :
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
@@ -3356,6 +3727,12 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			{
 				//we have the index of the first string
 				textPtr = GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->FirstTextSliderString+*(elementPtr->SliderValuePtr)));
+
+				// The new classes' names aren't next to stock's in the game's text
+				if (elementPtr->ElementID == AVPMENU_ELEMENT_SPECIES_TEXTSLIDER && ClassSlider_NewNameIndex(*elementPtr->SliderValuePtr) >= 0)
+				{
+					textPtr = GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE_SHOTGUN + ClassSlider_NewNameIndex(*elementPtr->SliderValuePtr)));
+				}
 			}
 			
 			if (elementPtr->TextDescription!=TEXTSTRING_BLANK)
@@ -3448,7 +3825,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				if (AvPMenus.UserEnteringText && e==AvPMenus.CurrentlySelectedElement)
 				{
 					int b = GetSin(CloakingPhase&4095);
-					int x = RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness/2,AVPMENUFORMAT_CENTREJUSTIFIED);
+					int x = RenderText(TextFieldShows(elementPtr),MENU_CENTREX,y,elementPtr->Brightness/2,AVPMENUFORMAT_CENTREJUSTIFIED);
 					x = RenderText("I",x,y,MUL_FIXED(b,b),AVPMENUFORMAT_CENTREJUSTIFIED);
 
 					//work out how much space was left over
@@ -3459,7 +3836,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				}
 				else
 				{
-					RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
+					RenderText(TextFieldShows(elementPtr),MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
 				}
 			}
 			else
@@ -3469,7 +3846,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				if (AvPMenus.UserEnteringText && e==AvPMenus.CurrentlySelectedElement)
 				{
 					int b = GetSin(CloakingPhase&4095);
-					int x = RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness/2,AVPMENUFORMAT_LEFTJUSTIFIED);
+					int x = RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness/2,AVPMENUFORMAT_LEFTJUSTIFIED);
 					x = RenderText("I",x,y,MUL_FIXED(b,b),AVPMENUFORMAT_LEFTJUSTIFIED);
 					
 					//work out how much space was left over
@@ -3480,7 +3857,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				}
 				else
 				{
-					RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
+					RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
 				}
 			}
 			break;
@@ -3635,6 +4012,8 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			DrawAvPMenuGfx(elementPtr->textureID, MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		}
+		case AVPMENU_ELEMENT_COOP_PLAYER:
+		case AVPMENU_ELEMENT_COOP_REMOVE:
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
@@ -4720,6 +5099,31 @@ static void UpdateMultiplayerConfigurationMenu()
 		netGameData.levelNumber%=NumCoopLevels;
 	}
 
+	// Someone setting up a game: what the level row has chosen. A joiner's page shows what the host told it.
+	if (AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN)
+	{
+		Campaign_SetFromLevelRow();
+	}
+
+	// The difficulty row only means something for a campaign's level. Any other game is at Medium, so there
+	// it says that and can't be changed. A joiner's page only ever shows it.
+	{
+		static int mediumToShow = I_Medium;
+		bool const isCampaign = netGameData.coopCampaign != kCampaignNone;
+
+		for (AVPMENU_ELEMENT *row = AvPMenus.MenuElements; row->ElementID != AVPMENU_ELEMENT_ENDOFMENU; row++)
+		{
+			if (row->TextDescription == TEXTSTRING_DIFFICULTY_LEVEL)
+			{
+				row->ElementID = (isCampaign && AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN) ? AVPMENU_ELEMENT_TEXTSLIDER : AVPMENU_ELEMENT_DUMMYTEXTSLIDER;
+				row->SliderValuePtr = isCampaign ? &netGameData.coopDifficulty : &mediumToShow;
+			}
+		}
+	}
+
+	// On the level row, say what choosing a campaign's level means
+	elementPtr->HelpString = netGameData.coopCampaign != kCampaignNone ? TEXTSTRING_MPHELP_CAMPAIGN_LEVEL : TEXTSTRING_MPHELP_ENVIRONMENT;
+
 	//see if selected element is the gamestyle element
 	elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
 
@@ -4889,6 +5293,19 @@ static BOOL IsSmartgunInLevel(int level)
 
 static void SetBriefingTextForMultiplayer()
 {
+	// A campaign's level has the words single player shows for it, and none of a network game's settings count
+	if (netGameData.coopCampaign != kCampaignNone && netGameData.coopCampaign != kCampaignCustom)
+	{
+		I_PLAYER_TYPE const species = netGameData.coopCampaign == kCampaignPredator ? I_Predator
+			: netGameData.coopCampaign == kCampaignAlien ? I_Alien : I_Marine;
+
+		SetBriefingTextForEpisode(netGameData.coopCampaignLevel, species);
+		return;
+	}
+
+	// Every line starts blank, because below only some of them get set, and the loading screen reads all five. A line nothing set would crash it.
+	SetBriefingTextToBlank();
+
 	int level = NumberForCurrentLevel();
 
 	int num_not_available = 0;
@@ -5285,6 +5702,14 @@ static void GetHeaderInfoForSaveSlot(SAVE_SLOT_HEADER* save_slot, const char* fi
 		strncmp(block.AvP_Save_String,"AVPSAVE0",8))
 	{
 		//no good.
+		return;
+	}
+
+	// These three pick a level, a table entry and a line of text, so they have to be ones the game can write. A file that fails looks like
+	// an empty slot.
+	if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))
+	{
+		LogString("save: a save slot's numbers aren't ones the game could have written, so it's listed as empty");
 		return;
 	}
 

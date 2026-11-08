@@ -3,8 +3,11 @@
 	This file contains game-specific console variables
 	
  */
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the 8 debug variables are there in a beta, for testers (see beta_build.h), and TIMESCALE is refused in a network game
 //#include "reentrant_queue.h"
 #include "3dc.h"
+#include "build_identity.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
@@ -28,6 +31,12 @@
 
 /* KJL 11:48:45 28/01/98 - used to scale NormalFrameTime, so the game can be slowed down */
 extern int TimeScale;
+
+// For a console variable that a network game refuses
+static bool GameVars_InANetworkGame(void)
+{
+	return AvP.Network != I_No_Network;
+}
 extern int MotionTrackerScale;
 extern int LeanScale;
 
@@ -99,13 +108,17 @@ void CreateGameSpecificConsoleVariables(void)
 	bool IsACheat = false;
 	#endif
 
+	// In a beta these are there for testers, without DebuggingCommandsActive, which would also stop saving, statistics and the next
+	// level's unlock: see beta_build.h. The 8 variables.
 	#ifndef AVP_DEBUG_VERSION // allow debug commands without -debug
 	#ifndef AVP_DEBUG_FOR_FOX // allow debug commands without -debug
-	if (DebuggingCommandsActive)
+	if (DebuggingCommandsActive || BuildIdentity_IsABeta())
 	#endif
 	#endif
 	{
-		ConsoleVariable :: MakeSimpleConsoleVariable_FixP
+		// The game's speed. Refused in a network game: the host sets everyone's speed as the game starts, and one machine going faster or
+		// slower than the rest would break the game for the others.
+		ConsoleVariable *const timeScale = ConsoleVariable :: MakeSimpleConsoleVariable_FixP
 		(
 			TimeScale, // int& Value_ToUse,
 			"TIMESCALE", // ProjChar* pProjCh_ToUse,
@@ -114,6 +127,7 @@ void CreateGameSpecificConsoleVariables(void)
 			65536*4, // int MaxVal_New
 			IsACheat
 		);
+		timeScale -> RefuseWhen(GameVars_InANetworkGame, "NO TIMESCALE IN MULTIPLAYER MODE");
 		ConsoleVariable :: MakeSimpleConsoleVariable_FixP
 		(
 			LeanScale, // int& Value_ToUse,

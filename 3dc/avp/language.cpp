@@ -7,9 +7,16 @@
 //   message about a bad language file has a size limit
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's text comes from here. A stock language.txt has no such strings, and a player's file stays as it is
-// Modified 2026-11-06 by Melanikus for the AvP port:
 //   the name of the marine's shoulder lamp key comes from here too
 //   the text of the rendering page's lines for choosing a key
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the names for the new classes, Allow Staff and the sidearm
+//   the new guns' words come from here
+//   the words for choosing a campaign on the level row
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the words a player sees during a co-op game
+//   the words of the single player Custom maps page. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+//   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -62,6 +69,89 @@ static char OurTextStrings[][200] =
 	"That key can't be used: another line here has it. This line still has its old key.",
 	"That key can't be used: it's one of your controls. This line still has its old key.",
 	"One of your controls has this key too. The control wins, so this line does nothing for that species. Choose another key here, or change the control.",
+	"Shotgun",
+	"Sniper Rifle",
+	"Revolver",
+	"M79",
+	"Sniper Ammo",
+	"Revolver Ammo",
+	"M79 Grenades",
+	"M79 Fire",
+	"M79 Frag",
+	"Stock open",
+	"Stock closed",
+	"Reload",
+	"Staff",
+	"Marine - Shotgun",
+	"Marine - Revolver",
+	"Marine - M79",
+	"Max Shotgun Marines",
+	"Max Revolver Marines",
+	"Max M79 Marines",
+	"Allow Shotgun",
+	"Allow Revolver",
+	"Allow M79",
+	"Allow Staff",
+	"Sidearm",
+	"For marine specialists",
+	"Pistol",
+	"Revolver",
+	"Campaign",
+	"Plays as single player does: everyone is this species, with its start, kit and pick-ups",
+	"For a campaign's level. The host chooses, and everyone plays it",
+	"Custom maps",
+	"Play a map someone has made for single player. The maps in avp_rifs/Custom that are made for single player are listed here.",
+	"Map",
+	"Which map. A map's own picture shows above, if it comes with one.",
+	"None found",
+	"Play as",
+	"Who you play. A map made for one of them may not suit the others.",
+	"How hard the map is.",
+	"Start the map. Finishing it unlocks nothing and counts towards no campaign. You can't save on a custom map yet.",
+	"Co-op campaign",
+	"Play a campaign with friends. Others can join as soon as you open this page, and you start when everyone is here.",
+	"Which campaign to play. You can all play one of the three, or a custom map made for single player.",
+	"Marine",
+	"Predator",
+	"Alien",
+	"Custom map",
+	"Start at",
+	"The level to start from, or which custom map.",
+	"Who everyone plays. Each campaign has its own, so this only changes for a custom map.",
+	"Kit between levels",
+	"Keep: each level starts with what you were carrying, or what the level gives, whichever is more. Reset: each level gives its own kit. If you die, you get the level's own kit.",
+	"Reset",
+	"Keep",
+	"Players joined",
+	"How many are here, with you.",
+	"Without the map",
+	"They stay behind when you start. Maps aren't sent over the network, so they need their own copy.",
+	"Nobody",
+	"and %d more",
+	"Start, for everyone who has the map.",
+	"The map",
+	"Maps aren't sent over the network, so you need your own copy of a custom map, in avp_rifs/Custom.",
+	"Waiting for the host",
+	"You have this map",
+	"Missing",
+	"Different version",
+	"The game has started without you, because you don't have this map.",
+	"The host chooses what's played. You'll go when the host starts.",
+	"Remove",
+	"Takes this player out of the game. They can't come back into this game from the same address.",
+	"The host removed you from this game.",
+	"alive",
+	"out until the next level",
+	"joining...",
+	"You're out until the next level. Operate watches someone else.",
+	"Level complete:",
+	"Waiting for:",
+	"The game carries on while you're here.",
+	"Players",
+	"The host has left the game.",
+	"You're the host: leaving ends the game for everyone.",
+	"Campaign complete",
+	"Map complete",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

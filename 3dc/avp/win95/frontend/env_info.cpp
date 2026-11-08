@@ -1,13 +1,23 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a custom map can be played as a campaign of one level. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   built-in and custom level names are copied into LevelName with a size limit and always end inside
 //   it, and the level file name is written with a size limit, so they always fit
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the three campaigns can be walked through in order by a network game
+//   the level lists have the 32 single player levels on them, and the level row chooses a campaign
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   declarations written so the security scanner can read this file (CODING-STANDARD.md, rule 1)
+//   in a campaign, everyone plays its species, as each machine starts the game
 #include "3dc.h"		 
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "env_info.h"
+#include "level_lists.h"
+#include "custom_maps.h"
 #include "user_profile.h"
 #include "mp_config.h"
 #include "pldnet.h"
@@ -5146,6 +5156,117 @@ void SetLevelToLoadForPredator(int episode)
 {
 	SetBuiltInLevelName(RifNamesForEnvironments[PredatorEpisodes[episode]]);
 }
+// The list for a campaign, or NULL for a number that isn't one.
+static const AVP_ENVIRONMENT_ID *ListForCampaign(int campaign)
+{
+	switch (campaign)
+	{
+		case kCampaignMarine: return MarineEpisodes;
+		case kCampaignPredator: return PredatorEpisodes;
+		case kCampaignAlien: return AlienEpisodes;
+		default: return NULL;
+	}
+}
+
+int Campaign_LevelCount(int campaign)
+{
+	// One level, and only once a lobby has chosen the map. A number alone in a message isn't enough, because with no map there's no level to load.
+	if (campaign == kCampaignCustom)
+	{
+		return netGameData.coopCustomMap[0] != 0 ? 1 : 0;
+	}
+
+	const AVP_ENVIRONMENT_ID *const list = ListForCampaign(campaign);
+	int count = 0;
+
+	while (list && list[count] != AVP_ENVIRONMENT_END_OF_LIST)
+	{
+		count++;
+	}
+
+	return count;
+}
+
+int Campaign_Environment(int campaign, int place)
+{
+	// A custom map isn't one of the game's own levels, so it has no number on their list
+	if (campaign == kCampaignCustom || place < 0 || place >= Campaign_LevelCount(campaign))
+	{
+		return -1;
+	}
+
+	return (int)ListForCampaign(campaign)[place];
+}
+
+void Campaign_SetFromLevelRow(void)
+{
+	int campaign = kCampaignNone;
+	int campaignLevel = 0;
+
+	// Only the co-op list starts the mode. On the other list the same level is only a place to fight.
+	if (netGameData.gameType == NGT_Coop)
+	{
+		LevelList_CampaignAt(netGameData.levelNumber, MAX_NO_OF_COOPERATIVE_EPISODES, &campaign, &campaignLevel);
+	}
+
+	netGameData.coopCampaign = campaign;
+	netGameData.coopCampaignLevel = campaignLevel;
+}
+
+void Campaign_ChooseRollNumber(void)
+{
+	netGameData.coopRollNumber = FastRandom();
+}
+
+void Campaign_SetDifficulty(void)
+{
+	AvP.Difficulty = netGameData.coopCampaign != kCampaignNone ? (I_HARDANUFF)netGameData.coopDifficulty : I_Medium;
+}
+
+void SetLevelToLoadForThisNetworkGame(void)
+{
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		// Everyone plays the campaign's species, as in single player, whatever they chose on the species page. The host's Start and each
+		// joiner's Join both come through here, just before the level loads.
+		Coop_TakeCampaignSpecies();
+		SetLevelToLoadForCampaign();
+	}
+	else if (netGameData.gameType == NGT_Coop)
+	{
+		SetLevelToLoadForCooperative(netGameData.levelNumber);
+	}
+	else
+	{
+		SetLevelToLoadForMultiplayer(netGameData.levelNumber);
+	}
+}
+
+void SetLevelToLoadForCampaign(void)
+{
+	// The file is this machine's own, found among the maps it listed itself, by a name that was checked as it arrived
+	if (netGameData.coopCampaign == kCampaignCustom)
+	{
+		if (!CustomMaps_SetLevelToLoad(CustomMaps_Named(netGameData.coopCustomMap, sizeof(netGameData.coopCustomMap))))
+		{
+			LogErrorString("campaign: the custom map the lobby chose isn't on this machine's list");
+		}
+
+		return;
+	}
+
+	int const environment = Campaign_Environment(netGameData.coopCampaign, netGameData.coopCampaignLevel);
+
+	// The numbers were checked as they arrived, so this is only for a mistake of ours
+	if (environment >= 0)
+	{
+		SetBuiltInLevelName(RifNamesForEnvironments[environment]);
+
+		// The level row follows, so that a page showing it names the level that's really being played
+		netGameData.levelNumber = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);
+	}
+}
+
 void SetLevelToLoadForMarine(int episode)
 {
 	SetBuiltInLevelName(RifNamesForEnvironments[MarineEpisodes[episode]]);
@@ -5162,10 +5283,35 @@ static void SetCustomLevelName(const char *name)
 	LevelName[sizeof(LevelName) - 1] = '\0';
 }
 
+// The numbers in level_lists.h have to be the real lengths of these lists. Each list has its end marker as well.
+static_assert(sizeof(MarineEpisodes) / sizeof(MarineEpisodes[0]) == kLevelListMarineLevels + 1, "the Marine's campaign isn't the length level_lists.h says");
+static_assert(sizeof(PredatorEpisodes) / sizeof(PredatorEpisodes[0]) == kLevelListPredatorLevels + 1, "the Predator's campaign isn't the length level_lists.h says");
+static_assert(sizeof(AlienEpisodes) / sizeof(AlienEpisodes[0]) == kLevelListAlienLevels + 1, "the Alien's campaign isn't the length level_lists.h says");
+
+// One of the 32 single player levels on a list: its environment, or -1 for any other place.
+static int SinglePlayerLevelAtPlace(int place, int stockLevels)
+{
+	int campaign = kCampaignNone;
+	int campaignLevel = 0;
+
+	if (!LevelList_CampaignAt(place, stockLevels, &campaign, &campaignLevel))
+	{
+		return -1;
+	}
+
+	return Campaign_Environment(campaign, campaignLevel);
+}
+
 void SetLevelToLoadForMultiplayer(int episode)
 {
+	int const singlePlayerLevel = SinglePlayerLevelAtPlace(episode, MAX_NO_OF_MULTIPLAYER_EPISODES);
+
+	if (singlePlayerLevel >= 0)
+	{
+		SetBuiltInLevelName(RifNamesForEnvironments[singlePlayerLevel]);
+	}
 	//is this a custom level?
-	if(episode>=MAX_NO_OF_MULTIPLAYER_EPISODES)
+	else if(episode>=MAX_NO_OF_MULTIPLAYER_EPISODES)
 	{
 		//it certainly is
 		//(the game type sent passed to the function doesn't really matter , as long as it isn't NGT_COOP)
@@ -5178,8 +5324,14 @@ void SetLevelToLoadForMultiplayer(int episode)
 }
 void SetLevelToLoadForCooperative(int episode)
 {
+	int const singlePlayerLevel = SinglePlayerLevelAtPlace(episode, MAX_NO_OF_COOPERATIVE_EPISODES);
+
+	if (singlePlayerLevel >= 0)
+	{
+		SetBuiltInLevelName(RifNamesForEnvironments[singlePlayerLevel]);
+	}
 	//is this a custom level?
-	if(episode>=MAX_NO_OF_COOPERATIVE_EPISODES)
+	else if(episode>=MAX_NO_OF_COOPERATIVE_EPISODES)
 	{
 		//it certainly is
 		SetCustomLevelName(GetCustomMultiplayerLevelName(episode,NGT_Coop));

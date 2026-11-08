@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the level lists have the 32 single player levels on them, between the multiplayer levels and the custom ones
+//   the settings for the new classes and Allow Staff come last in the file, checked, so older files read the same
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   multiplayer level and settings names and paths have size limits, and so do the texts read from a settings
 //   file; a path that does not fit counts as a missing file, a name with dots in it stays whole, the custom
@@ -14,12 +17,14 @@
 #include "menu_data.h"
 #include "mp_config.h"
 #include "env_info.h"
+#include "level_lists.h"
 #include "menus.h"
 #include "list_tem.hpp"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "..\3dc\FileStream.h"
 #include "logString.h"
+#include "marine_classes.h"
 
 extern void SetDefaultMultiplayerConfig();
 extern char MP_SessionName[];
@@ -321,6 +326,19 @@ static void ReadConfigString(FileStream &file, char *buffer, size_t bufferSize, 
 	buffer[bufferSize - 1] = 0;
 }
 
+// The settings for the newer classes come last in the file, after the custom level name, so that a file from before they
+// existed reads just as it always did. If the file stops before one of them, that setting keeps the default it already has.
+// (Reading a number the plain way would give 0 there, not the default: no limit, and nothing allowed.)
+static void ReadLaterSetting(FileStream &file, int *setting, int lowest, int highest)
+{
+	int32_t number = 0;
+
+	if (file.ReadBytes((uint8_t*)&number, sizeof(number)) == sizeof(number))
+	{
+		*setting = Setting_FromFile(number, lowest, highest, *setting);
+	}
+}
+
 void LoadMultiplayerConfigurationByIndex(int index)
 {
 	if (index < 0 || index >= ConfigurationFilenameList.size()) {
@@ -424,6 +442,15 @@ void LoadMultiplayerConfiguration(const char* name)
 	else {
 		netGameData.customLevelName[0] = 0;
 	}
+
+	ReadLaterSetting(file, &netGameData.maxMarineShotgun, 0, 8);
+	ReadLaterSetting(file, &netGameData.maxMarineRevolver, 0, 8);
+	ReadLaterSetting(file, &netGameData.maxMarineM79, 0, 8);
+	ReadLaterSetting(file, &netGameData.allowShotgun, 0, 1);
+	ReadLaterSetting(file, &netGameData.allowRevolver, 0, 1);
+	ReadLaterSetting(file, &netGameData.allowM79, 0, 1);
+	ReadLaterSetting(file, &netGameData.allowStaff, 0, 1);
+	ReadLaterSetting(file, &netGameData.coopDifficulty, 0, 2);
 
 	file.Close();
 
@@ -531,6 +558,16 @@ void SaveMultiplayerConfiguration(const char* name)
 
 	// and now the string
 	file.WriteBytes((uint8_t*)netGameData.customLevelName, length);
+
+	// the newer classes' settings come last: see ReadLaterSetting
+	file.PutInt32LE(netGameData.maxMarineShotgun);
+	file.PutInt32LE(netGameData.maxMarineRevolver);
+	file.PutInt32LE(netGameData.maxMarineM79);
+	file.PutInt32LE(netGameData.allowShotgun);
+	file.PutInt32LE(netGameData.allowRevolver);
+	file.PutInt32LE(netGameData.allowM79);
+	file.PutInt32LE(netGameData.allowStaff);
+	file.PutInt32LE(netGameData.coopDifficulty);
 
 	file.Close();
 
@@ -707,6 +744,52 @@ void ClearMultiplayerLevelNameArray()
 	}
 }
 
+// The name of a single player level for the level row: the level, then whose it is, so that the same
+// place in two campaigns can be told apart. "Campaign" goes in front on the co-op list, because there
+// choosing it starts the mode that plays as single player does.
+static char *NewSinglePlayerLevelName(int place, int isCoopList)
+{
+	int campaign = kCampaignNone;
+	int campaignLevel = 0;
+	char buffer[200];
+
+	LevelList_CampaignAt(place, 0, &campaign, &campaignLevel);
+
+	int nameText = TEXTSTRING_MARINELEVELS_1;
+	int speciesText = TEXTSTRING_MULTIPLAYER_MARINE;
+
+	if (campaign == kCampaignPredator)
+	{
+		nameText = TEXTSTRING_PREDATORLEVELS_1;
+		speciesText = TEXTSTRING_MULTIPLAYER_PREDATOR;
+	}
+	else if (campaign == kCampaignAlien)
+	{
+		nameText = TEXTSTRING_ALIENLEVELS_1;
+		speciesText = TEXTSTRING_MULTIPLAYER_ALIEN;
+	}
+
+	const char *levelName = GetTextString((TEXTSTRING_ID)(nameText + campaignLevel));
+	const char *speciesName = GetTextString((TEXTSTRING_ID)speciesText);
+
+	if (isCoopList)
+	{
+		_snprintf(buffer, sizeof(buffer) - 1, "%s - %s (%s)", GetTextString(TEXTSTRING_CAMPAIGN_LEVEL), levelName, speciesName);
+	}
+	else
+	{
+		_snprintf(buffer, sizeof(buffer) - 1, "%s (%s)", levelName, speciesName);
+	}
+
+	buffer[sizeof(buffer) - 1] = 0;
+
+	// Copy the name into memory made exactly big enough for it: its length plus one byte for the end marker.
+	size_t const nameSize = strlen(buffer) + 1;
+	char *name = (char*) AllocateMem(nameSize);
+	memcpy(name, buffer, nameSize);
+	return name;
+}
+
 void BuildMultiplayerLevelNameArray()
 {
 	// Holds a level's name for the menu: a custom level's file name (up to 259 characters) or a stock level's name, then a
@@ -762,8 +845,8 @@ void BuildMultiplayerLevelNameArray()
 
 	NumCustomLevels = CustomLevelNameList.size();
 
-	NumMultiplayerLevels = MAX_NO_OF_MULTIPLAYER_EPISODES + NumCustomLevels;
-	NumCoopLevels = MAX_NO_OF_COOPERATIVE_EPISODES + NumCustomLevels;
+	NumMultiplayerLevels = LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES) + NumCustomLevels;
+	NumCoopLevels = LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES) + NumCustomLevels;
 
 	MultiplayerLevelNames = (char**) AllocateMem(sizeof(char*)* NumMultiplayerLevels);
 
@@ -813,11 +896,18 @@ void BuildMultiplayerLevelNameArray()
 		}
 	}
 
+	// then every single player level, on both lists
+	for (int i = 0; i < kLevelListCampaignLevels; i++)
+	{
+		CoopLevelNames[MAX_NO_OF_COOPERATIVE_EPISODES + i] = NewSinglePlayerLevelName(i, TRUE);
+		MultiplayerLevelNames[MAX_NO_OF_MULTIPLAYER_EPISODES + i] = NewSinglePlayerLevelName(i, FALSE);
+	}
+
 	// now add the custom level names
 	for (int i = 0; i < NumCustomLevels; i++)
 	{
-		CoopLevelNames[i+MAX_NO_OF_COOPERATIVE_EPISODES] = CustomLevelNameList[i];
-		MultiplayerLevelNames[i+MAX_NO_OF_MULTIPLAYER_EPISODES] = CustomLevelNameList[i];
+		CoopLevelNames[i+LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES)] = CustomLevelNameList[i];
+		MultiplayerLevelNames[i+LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES)] = CustomLevelNameList[i];
 	}
 
 	// now initialise the environment name entries for the various configuration menus
@@ -874,7 +964,7 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 	// find the index of a custom level from its name
 	if (gameType == NGT_Coop)
 	{
-		for (int i = MAX_NO_OF_COOPERATIVE_EPISODES; i < NumCoopLevels; i++)
+		for (int i = LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES); i < NumCoopLevels; i++)
 		{
 			if (!_stricmp(buffer, CoopLevelNames[i])) {
 				return i;
@@ -883,7 +973,7 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 	}
 	else
 	{
-		for (int i = MAX_NO_OF_MULTIPLAYER_EPISODES; i < NumMultiplayerLevels; i++)
+		for (int i = LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES); i < NumMultiplayerLevels; i++)
 		{
 			if (!_stricmp(buffer, MultiplayerLevelNames[i])) {
 				return i;
@@ -896,47 +986,32 @@ int GetCustomMultiplayerLevelIndex(char* name,int gameType)
 
 bool IsCustomLevel(int index, int gameType)
 {
-	bool isCustom = false;
-	if (gameType == NGT_Coop)
-	{
-		if (index >= MAX_NO_OF_COOPERATIVE_EPISODES) {
-			isCustom = true;
-		}
-	}
-	else
-	{
-		if (index >= MAX_NO_OF_MULTIPLAYER_EPISODES) {
-			isCustom = true;
-		}
-	}
-	return isCustom;
+	return LevelList_IsCustom(index, gameType == NGT_Coop ? MAX_NO_OF_COOPERATIVE_EPISODES : MAX_NO_OF_MULTIPLAYER_EPISODES);
 }
 
 // returns name of custom level (without stuff tacked on the end)
 char *GetCustomMultiplayerLevelName(int index, int gameType)
 {
-	bool isCustom = false;
+	bool const isCustom = IsCustomLevel(index, gameType);
 
 	// Big enough for any name BuildMultiplayerLevelNameArray makes, and every copy into it stops at its end.
 	// (At 100 bytes, a custom level file name of about 90 characters or more would not fit.)
 	static char return_string[MAX_PATH + 64];
 	return_string[0] = 0;
-	
-	// find the index of a custom level from its name
+
+	// A single player level is known by its place on the list, so it has no name here. This name is
+	// looked for among the custom levels when a saved game setup is read back, and it wouldn't be found.
+	if (LevelList_IsSinglePlayerLevel(index, gameType == NGT_Coop ? MAX_NO_OF_COOPERATIVE_EPISODES : MAX_NO_OF_MULTIPLAYER_EPISODES))
+	{
+		return return_string;
+	}
+
 	if (gameType == NGT_Coop)
 	{
-		if (index >= MAX_NO_OF_COOPERATIVE_EPISODES) {
-			isCustom = true;
-		}
-
 		strncpy(return_string, CoopLevelNames[index], sizeof(return_string) - 1);
 	}
 	else
 	{
-		if (index >= MAX_NO_OF_MULTIPLAYER_EPISODES) {
-			isCustom = true;
-		}
-
 		strncpy(return_string, MultiplayerLevelNames[index], sizeof(return_string) - 1);
 	}
 	return_string[sizeof(return_string) - 1] = 0;
@@ -963,13 +1038,13 @@ int GetLocalMultiplayerLevelIndex(int index, char* levelName, int gameType)
 		// not a custom level, just need to check to see if the level index is in range
 		if (gameType == NGT_Coop)
 		{
-			if (index < MAX_NO_OF_COOPERATIVE_EPISODES) {
+			if (index < LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES)) {
 				return index;
 			}
 		}
 		else
 		{
-			if (index < MAX_NO_OF_MULTIPLAYER_EPISODES) {
+			if (index < LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES)) {
 				return index;
 			}
 		}

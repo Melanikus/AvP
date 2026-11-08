@@ -3,8 +3,12 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a level starts with its whole allowance of pictures;
 //   the level file path is built with a size limit; a path that does not fit counts as a missing file
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   what the game says while a level loads goes in the level's own log, beside it, when the level can't be loaded or has things
+//   refused (level_log.h)
 
 #include "3dc.h"
+#include "level_log.h"
 #include "texture_relief.h"
 #include "RimLoader.h"
 #include "module.h"
@@ -478,6 +482,10 @@ void LoadRifFile()
 	EnvFileName[0] = '\0';
 	LevelDir[0] = '\0';
 
+	// From here until the level is in, what the game says is kept for the level's own log as well
+	LevelLog_StartGathering();
+	bool pathMade = false;
+
 	// Set up the dirname for the Rif load
 	// (LevelName can hold up to 259 characters for a custom level, so the whole path may not fit. A path cut short could
 	// name a different file, so a path that does not fit counts as a missing file.)
@@ -489,17 +497,23 @@ void LoadRifFile()
 	else
 	{
 		file_and_path[sizeof(file_and_path) - 1] = '\0';
+		pathMade = true;
 		env_rif = avp_load_rif((const char*)&file_and_path[0]);
 	}
 	Set_Progress_Bar_Position(PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4);
-	
+
 	if (INVALID_RIFFHANDLE == env_rif)
 	{
+		// The level can't be loaded, so its log is always written, before the game stops
+		LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, pathMade ? file_and_path : "", true);
 //		finiObjects();
 		exit(0x3421);
 	};
 
 	copy_rif_data(env_rif, CCF_ENVIRONMENT, PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4, PBAR_LEVEL_INTERVAL*.6);
+
+	// The level is in. Its log is written only if something in it was refused.
+	LevelLog_Finish(GameDataDirName, Env_List[AvP.CurrentEnv]->main, file_and_path, false);
 
 	textureRelief.LogWhatIsHeld();
 }

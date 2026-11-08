@@ -1,3 +1,10 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a predator's self-destruct reaches players on other machines;
+//   an NPC's voice is heard on other machines in a game that plays as single player;
+//   a network game that plays the same as single player has predators, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   a predator targets a player on another machine by his species
+//   a far predator goes after a player on another machine as he does the one on this machine, and can be hit by one
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a predator's weapon named by a level or save file is checked: a level's gets his wristblade, a save's part is left out
 //   a predator whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
@@ -8,6 +15,13 @@ Source file for predator AI
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a dormant predator keeps its own copy of its level data, not a pointer to it
+//   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
+//   a save file can no longer give a predator a weapon that does not exist
+//   the elevation animation and the pistol muzzle are checked before use, because either can be missing
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved predator has to be on a real path, and its personal number has to pick one of the predators' settings
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -15,6 +29,7 @@ Source file for predator AI
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -46,6 +61,8 @@ Source file for predator AI
 #include "bh_dummy.h"
 #include "bh_agun.h"
 #include "scream.h"
+#include "npc_kinds.h"
+#include "pldnet.h"
 #include "io.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -151,6 +168,18 @@ void DoPredatorDeathSound(STRATEGYBLOCK *sbPtr);
 void DoPredatorAISwipeSound(STRATEGYBLOCK *sbPtr);
 
 void CreatePredoBot(VECTORCH *position, int weapon);
+
+// One of his voice's sounds, here and, in a game that plays as single player, on every other machine, where only a ghost of him is.
+// A sound already playing on this handle isn't played again, so it isn't told again either.
+static void PredatorSoundOnEveryMachine(int voice, int category, int pitch, int *handle, VECTORCH *place)
+{
+	if (!handle || *handle == SOUND_NOACTIVEINDEX)
+	{
+		AddNetMsg_NpcSound(kNpcSoundPredator, voice, category, pitch, place);
+	}
+
+	PlayPredatorSound(voice, category, pitch, handle, place);
+}
 void Predator_Enter_SelfDestruct_State(STRATEGYBLOCK *sbPtr);
 /* Patrick 21/8/97 --------------------------------------------------
 Predator personalisation parameters:
@@ -725,8 +754,8 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         LOCALASSERT(bhdata);
         toolsData = (TOOLS_DATA_PREDATOR *)bhdata;
 
-        /* check we're not in a net game */
-        if(AvP.Network != I_No_Network)
+        /* A network game has no predators, unless it plays the same as single player */
+        if(!SameAsSinglePlayer())
         {
                 RemoveBehaviourStrategy(sbPtr);
                 return;
@@ -736,7 +765,7 @@ void InitPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         block sensibly...
         so just set the shapeIndex from the tools data & copy the name id*/
         sbPtr->shapeIndex = toolsData->shapeIndex;
-        for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+        NameFromTheLevel(sbPtr, toolsData->nameID);
 
         /* create, initialise and attach a dynamics block */
         sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -914,7 +943,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         pred_bhv=(DORMANT_PREDATOR_STATUS_BLOCK*)AllocateMem(sizeof(DORMANT_PREDATOR_STATUS_BLOCK));
 
         pred_bhv->bhvr_type=I_BehaviourDormantPredator;
-        pred_bhv->toolsData=bhdata;
+        pred_bhv->toolsData=*(TOOLS_DATA_PREDATOR*)bhdata;
 
         sbPtr->SBdataptr=(void*) pred_bhv;
 
@@ -923,7 +952,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
 {
         DORMANT_PREDATOR_STATUS_BLOCK* pred_bhv;
-        void* toolsData;
+        TOOLS_DATA_PREDATOR toolsData;
 
         GLOBALASSERT(sbPtr);
         GLOBALASSERT(sbPtr->SBdataptr);
@@ -934,7 +963,13 @@ void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
         DeallocateMem(pred_bhv);
         InitialiseSBValues(sbPtr);
         sbPtr->I_SBtype = I_BehaviourPredator;
-        EnableBehaviourType(sbPtr,I_BehaviourPredator ,toolsData );
+        EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );
+
+        // A game with no predators has just removed this one
+        if(!sbPtr->SBdataptr)
+        {
+                return;
+        }
 
         //find strategyblock of death target
         {
@@ -1001,7 +1036,12 @@ void SetPredatorElevation(STRATEGYBLOCK *sbPtr) {
         GLOBALASSERT(angle1<=1024);
 
         elevation_controller=Get_Delta_Sequence(&predatorStatusPointer->HModelController,"Elevation");
-        GLOBALASSERT(elevation_controller);
+
+        // the game removes this animation in some states, and a save file can leave it out
+        if (!elevation_controller) {
+                return;
+        }
+
         {
                 int fake_timer;
 
@@ -1736,7 +1776,8 @@ void PredatorIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
                 return;
         }
 
-        if(!(sbPtr->SBdptr))
+        /* In a network game a far predator can be hit by a player who's near him, and he has a corpse and a death target like any other */
+        if((!(sbPtr->SBdptr))&&(AvP.Network==I_No_Network))
         {
                 DestroyAnyStrategyBlock(sbPtr);
                 return;
@@ -1817,6 +1858,7 @@ void PredatorIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multipl
                 if(predatorStatusPointer->death_target_sbptr)
                 {
                         RequestState(predatorStatusPointer->death_target_sbptr,predatorStatusPointer->death_target_request, 0);
+                        LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
                 }
 
                 #if 0
@@ -2152,7 +2194,8 @@ static PRED_RETURN_CONDITION Execute_PFS_Hunt(STRATEGYBLOCK *sbPtr)
         }
 
         if ((!PredatorIsAwareOfTarget(sbPtr))
-                ||(predatorStatusPointer->Target!=Player->ObStrategyBlock))
+                ||(!predatorStatusPointer->Target)
+                ||(!NPC_IsAPlayer(predatorStatusPointer->Target)))
         {
                 /* I have a bad feeling about this. */
                 return(PRC_Request_Wander);
@@ -2509,7 +2552,11 @@ static PRED_RETURN_CONDITION Execute_PNS_DischargePistol(STRATEGYBLOCK *sbPtr)
 
                         muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                        CreatePPPlasmaBoltKernel(&muzzle->World_Offset, &muzzle->SecMat,0);
+                        // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                        if (muzzle)
+                        {
+                                CreatePPPlasmaBoltKernel(&muzzle->World_Offset, &muzzle->SecMat,0);
+                        }
                         predatorStatusPointer->volleySize++;
                 }
 
@@ -2699,7 +2746,11 @@ static PRED_RETURN_CONDITION Execute_PNS_AttackWithPlasmaCaster(STRATEGYBLOCK *s
 
                                 muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                                InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&TemplateAmmo[AMMO_PRED_ENERGY_BOLT].MaxDamage[AvP.Difficulty],65536);
+                                // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                                if (muzzle)
+                                {
+                                        InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&TemplateAmmo[AMMO_PRED_ENERGY_BOLT].MaxDamage[AvP.Difficulty],65536);
+                                }
                                 predatorStatusPointer->volleySize++;
                         }
                         predatorStatusPointer->stateTimer=(ONE_FIXED);
@@ -2784,7 +2835,7 @@ static PRED_RETURN_CONDITION Execute_PNS_Avoidance(STRATEGYBLOCK *sbPtr)
         LOCALASSERT(predatorStatusPointer);
 
         /* first check for a close attack... */
-        if(VectorDistance((&Player->ObStrategyBlock->DynPtr->Position),(&sbPtr->DynPtr->Position)) < PRED_CLOSE_ATTACK_RANGE)
+        if(NPC_DistanceToNearestPlayer(&sbPtr->DynPtr->Position) < PRED_CLOSE_ATTACK_RANGE)
         {
                 return(PRC_Request_Attack);
         }
@@ -5090,6 +5141,11 @@ int Predator_TargetFilter(STRATEGYBLOCK *candidate) {
                                         return(0);
                                 }
 
+                                // In a network game the player on this machine can be waiting to come back, and a predator shouldn't stay after him
+                                if (AvP.Network != I_No_Network && NPC_IsDead(candidate)) {
+                                        return(0);
+                                }
+
                                 switch(AvP.PlayerType)
                                 {
                                         case I_Alien:
@@ -5176,11 +5232,14 @@ int Predator_TargetFilter(STRATEGYBLOCK *candidate) {
                 case I_BehaviourNetGhost:
                         {
                         NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+                        // A player on another machine goes by his own species, as the player on this one does above.
+                        // A dead one's ghost has already turned into a corpse, so it isn't one of these.
                         switch (dataptr->type) {
                                 case I_BehaviourMarinePlayer:
                                 case I_BehaviourAlienPlayer:
+                                        return(1);
+                                        break;
                                 case I_BehaviourPredatorPlayer:
-                                        //return(1);
                                         return(0);
                                         break;
                                 default:
@@ -6214,22 +6273,27 @@ static PRED_RETURN_CONDITION Execute_PNS_DischargeSpeargun(STRATEGYBLOCK *sbPtr)
 
                         muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                        shotVector.vx=muzzle->SecMat.mat31;
-                        shotVector.vy=muzzle->SecMat.mat32;
-                        shotVector.vz=muzzle->SecMat.mat33;
+                        // the muzzle is a named part of the model. It may be missing, and then no spear is fired, but the
+                        // count below still goes up, so the predator moves on from firing
+                        if (muzzle)
+                        {
+                                shotVector.vx=muzzle->SecMat.mat31;
+                                shotVector.vy=muzzle->SecMat.mat32;
+                                shotVector.vz=muzzle->SecMat.mat33;
 
-                        FindPolygonInLineOfSight(&shotVector,&muzzle->World_Offset,0,sbPtr->SBdptr);
+                                FindPolygonInLineOfSight(&shotVector,&muzzle->World_Offset,0,sbPtr->SBdptr);
 
-                        /* Now deal with LOS_ObjectHitPtr. */
-                        if (LOS_ObjectHitPtr) {
-                                if (LOS_HModel_Section) {
-                                        if (LOS_ObjectHitPtr->ObStrategyBlock) {
-                                                if (LOS_ObjectHitPtr->ObStrategyBlock->SBdptr) {
-                                                        GLOBALASSERT(LOS_ObjectHitPtr->ObStrategyBlock->SBdptr->HModelControlBlock==LOS_HModel_Section->my_controller);
+                                /* Now deal with LOS_ObjectHitPtr. */
+                                if (LOS_ObjectHitPtr) {
+                                        if (LOS_HModel_Section) {
+                                                if (LOS_ObjectHitPtr->ObStrategyBlock) {
+                                                        if (LOS_ObjectHitPtr->ObStrategyBlock->SBdptr) {
+                                                                GLOBALASSERT(LOS_ObjectHitPtr->ObStrategyBlock->SBdptr->HModelControlBlock==LOS_HModel_Section->my_controller);
+                                                        }
                                                 }
                                         }
+                                        HandleSpearImpact(&LOS_Point,LOS_ObjectHitPtr->ObStrategyBlock,AMMO_PRED_RIFLE,&shotVector, 1, LOS_HModel_Section);
                                 }
-                                HandleSpearImpact(&LOS_Point,LOS_ObjectHitPtr->ObStrategyBlock,AMMO_PRED_RIFLE,&shotVector, 1, LOS_HModel_Section);
                         }
 
                         predatorStatusPointer->volleySize++;
@@ -6434,7 +6498,11 @@ static PRED_RETURN_CONDITION Execute_PNS_AttackBrutallyWithPlasmaCaster(STRATEGY
                                 Pred_Weapon_Damage.BlowUpSections=1;
                                 Pred_Weapon_Damage.Special=0;
 
-                                InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&Pred_Weapon_Damage,65536);
+                                // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                                if (muzzle)
+                                {
+                                        InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&Pred_Weapon_Damage,65536);
+                                }
                                 predatorStatusPointer->volleySize++;
                         }
                         predatorStatusPointer->enableSwap=1;
@@ -6670,9 +6738,11 @@ static PRED_RETURN_CONDITION Execute_PNS_NewDischargePistol(STRATEGYBLOCK *sbPtr
                         null_vec.vy=0;
                         null_vec.vz=0;
 
-                        GLOBALASSERT(muzzle);
-
-                        FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                        if (muzzle)
+                        {
+                                FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        }
 
                 }
 
@@ -6837,7 +6907,9 @@ void StartPredatorSelfDestructExplosion(STRATEGYBLOCK *sbPtr) {
 		   SbPtr->I_SBtype==I_BehaviourPredatorAlien ||
 		   SbPtr->I_SBtype==I_BehaviourMarinePlayer ||
 		   SbPtr->I_SBtype==I_BehaviourPredatorPlayer ||
-		   SbPtr->I_SBtype==I_BehaviourAlienPlayer)
+		   SbPtr->I_SBtype==I_BehaviourAlienPlayer ||
+		   // A player on another machine: hurting his ghost sends the damage on to him
+		   (SbPtr->I_SBtype==I_BehaviourNetGhost && NPC_IsAPlayer(SbPtr)))
 		{
 	 		{
 	 			//kill the creature/player
@@ -6870,7 +6942,7 @@ void DoPredatorHitSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR DAMAGE SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_Hurt,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_Hurt,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6896,7 +6968,7 @@ void DoPredatorAcidSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR ACID DAMAGE SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Acid,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Acid,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6922,7 +6994,7 @@ void DoPredatorDeathSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR DEATH SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_Dying,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_Dying,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6948,7 +7020,7 @@ void DoPredatorRandomSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR GENERAL SCREAM. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Scream_General,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Scream_General,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6974,7 +7046,7 @@ void DoPredatorTauntSound(STRATEGYBLOCK *sbPtr) {
 	/* This one is for PREDATOR TAUNT. */
 
 	if (predatorStatusPointer->soundHandle==SOUND_NOACTIVEINDEX) {
-		PlayPredatorSound(0,PSC_Taunt,pitch,
+		PredatorSoundOnEveryMachine(0,PSC_Taunt,pitch,
 			&predatorStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 	}
 
@@ -6993,7 +7065,7 @@ void DoPredatorAISwipeSound(STRATEGYBLOCK *sbPtr) {
 
 	/* This one is for PREDATOR SWIPE SOUND. */
 
-	PlayPredatorSound(0,PSC_Swipe,0,NULL,&sbPtr->DynPtr->Position);
+	PredatorSoundOnEveryMachine(0,PSC_Swipe,0,NULL,&sbPtr->DynPtr->Position);
 
 }
 
@@ -7123,7 +7195,10 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(obstruction)
 	COPYELEMENT_LOAD(wanderData)
 	COPYELEMENT_LOAD(IAmCrouched)
-	COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))
+	{
+		COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	}
 	COPYELEMENT_LOAD(nearSpeed)
 	COPYELEMENT_LOAD(GibbFactor)
 	COPYELEMENT_LOAD(incidentFlag)
@@ -7139,6 +7214,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Explode)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);
 
 	//load ai module pointers
 	predatorStatusPointer->missionmodule = GetPointerFromAIModuleIndex(block->missionmodule_index);
@@ -7155,7 +7231,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	predatorStatusPointer->Selected_Weapon = GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

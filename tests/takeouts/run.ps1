@@ -46,6 +46,36 @@ foreach ($folder in $list.copy) {
 }
 $global:LASTEXITCODE = 0
 
+# A test that links a library vcpkg built names it in its settings, under vcpkg_installed (net_close_test names ENet's
+# headers and enet.lib). The copy above leaves .lib files out on purpose, so exactly the ones the settings name are
+# copied here, from this repository's own vcpkg_installed, which a build of the game fills. A name has to stay inside
+# vcpkg_installed. (Added 2026-11-07, for net_close_test.)
+$settings = Join-Path $repository "tests\$Test.args"
+if (Test-Path -LiteralPath $settings) {
+    foreach ($word in @(Get-Content -LiteralPath $settings | ForEach-Object { $_ -split '\s+' } | Where-Object { $_ })) {
+        $named = $word -replace '^/I', ''
+        if ($named -cnotmatch '^vcpkg_installed[\\/]') { continue }
+        if (($named -split '[\\/]') -contains '..' -or $named.Contains(':')) { throw "tests\$Test.args names $named, which isn't inside vcpkg_installed" }
+
+        # Not $from and $to: PowerShell reads a name the same in capitals or small letters, so those would be -From and -To above,
+        # which hold whole numbers, and a path can't go in one.
+        $libraryFrom = Join-Path $repository $named
+        $libraryTo = Join-Path $tree $named
+        if (Test-Path -LiteralPath $libraryFrom -PathType Container) {
+            & robocopy $libraryFrom $libraryTo /E /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "Couldn't copy $named" }
+        }
+        elseif (Test-Path -LiteralPath $libraryFrom -PathType Leaf) {
+            New-Item -ItemType Directory -Force (Split-Path -Parent $libraryTo) | Out-Null
+            Copy-Item -LiteralPath $libraryFrom -Destination $libraryTo
+        }
+        else {
+            throw "tests\$Test.args names $named, and it isn't there. Build the game once, so vcpkg puts its libraries in vcpkg_installed."
+        }
+    }
+    $global:LASTEXITCODE = 0
+}
+
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $visualStudio) { throw 'Visual Studio with the C++ tools was not found' }

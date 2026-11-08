@@ -1,0 +1,1758 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the Marine has another number of levels",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "kLevelListMarineLevels = MAX_NO_OF_MARINE_EPISODES,",
+					"to": "kLevelListMarineLevels = MAX_NO_OF_MARINE_EPISODES - 1,"
+				}
+			]
+		},
+		{
+			"name": "the Predator has another number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "kLevelListPredatorLevels = MAX_NO_OF_PREDATOR_EPISODES,",
+					"to": "kLevelListPredatorLevels = MAX_NO_OF_PREDATOR_EPISODES - 1,"
+				}
+			]
+		},
+		{
+			"name": "the Alien has another number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "kLevelListAlienLevels = MAX_NO_OF_ALIEN_EPISODES,",
+					"to": "kLevelListAlienLevels = MAX_NO_OF_ALIEN_EPISODES - 1,"
+				}
+			]
+		},
+		{
+			"name": "the total leaves one out",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "kLevelListCampaignLevels = kLevelListMarineLevels + kLevelListPredatorLevels + kLevelListAlienLevels",
+					"to": "kLevelListCampaignLevels = kLevelListMarineLevels + kLevelListPredatorLevels"
+				}
+			]
+		},
+		{
+			"name": "custom levels start in the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return stockLevels + kLevelListCampaignLevels;",
+					"to": "return stockLevels;"
+				}
+			]
+		},
+		{
+			"name": "the last of the 32 counts as custom",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return place >= LevelList_FirstCustom(stockLevels);",
+					"to": "return place >= LevelList_FirstCustom(stockLevels) - 1;"
+				}
+			]
+		},
+		{
+			"name": "the last multiplayer level counts as one of the 32",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return place >= stockLevels && !LevelList_IsCustom(place, stockLevels);",
+					"to": "return place >= stockLevels - 1 && !LevelList_IsCustom(place, stockLevels);"
+				}
+			]
+		},
+		{
+			"name": "the first of the 32 does not",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return place >= stockLevels && !LevelList_IsCustom(place, stockLevels);",
+					"to": "return place > stockLevels && !LevelList_IsCustom(place, stockLevels);"
+				}
+			]
+		},
+		{
+			"name": "a custom level counts as one of the 32",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return place >= stockLevels && !LevelList_IsCustom(place, stockLevels);",
+					"to": "return place >= stockLevels;"
+				}
+			]
+		},
+		{
+			"name": "the Marine's levels are counted one short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "if (along < kLevelListMarineLevels)",
+					"to": "if (along < kLevelListMarineLevels - 1)"
+				}
+			]
+		},
+		{
+			"name": "the Predator's are",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "if (along < kLevelListPredatorLevels)",
+					"to": "if (along < kLevelListPredatorLevels - 1)"
+				}
+			]
+		},
+		{
+			"name": "the Predator's levels start at the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "along -= kLevelListMarineLevels;",
+					"to": "along -= kLevelListMarineLevels - 1;"
+				}
+			]
+		},
+		{
+			"name": "the Marine is reported as the Predator",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "*campaign = kCampaignMarine;",
+					"to": "*campaign = kCampaignPredator;"
+				}
+			]
+		},
+		{
+			"name": "the Predator is reported as the Alien",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "*campaign = kCampaignPredator;",
+					"to": "*campaign = kCampaignAlien;"
+				}
+			]
+		},
+		{
+			"name": "the Alien is reported as the Marine",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "*campaign = kCampaignAlien;",
+					"to": "*campaign = kCampaignMarine;"
+				}
+			]
+		},
+		{
+			"name": "the Alien's level is wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "*campaignLevel = along - kLevelListPredatorLevels;",
+					"to": "*campaignLevel = along;"
+				}
+			]
+		},
+		{
+			"name": "the way back has the wrong start for the Predator",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "before = kLevelListMarineLevels;",
+					"to": "before = 0;"
+				}
+			]
+		},
+		{
+			"name": "and for the Alien",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "before = kLevelListMarineLevels + kLevelListPredatorLevels;",
+					"to": "before = kLevelListMarineLevels;"
+				}
+			]
+		},
+		{
+			"name": "the way back goes past a campaign's last level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "if (campaignLevel < 0 || campaignLevel >= levels)",
+					"to": "if (campaignLevel < 0 || campaignLevel > levels)"
+				}
+			]
+		},
+		{
+			"name": "the way back goes before the first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "if (campaignLevel < 0 || campaignLevel >= levels)",
+					"to": "if (campaignLevel >= levels)"
+				}
+			]
+		},
+		{
+			"name": "the way back has a place for no campaign",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "default:\n\t\t\treturn -1;",
+					"to": "default:\n\t\t\tlevels = 1;"
+				}
+			]
+		},
+		{
+			"name": "the way back leaves off the list's start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/level_lists.h",
+					"from": "return stockLevels + before + campaignLevel;",
+					"to": "return before + campaignLevel;"
+				}
+			]
+		},
+		{
+			"name": "a spot on top of him",
+			"changes": [
+				{
+					"file": "3dc/avp/player_spots.h",
+					"from": "{ 1, 0 }, { -1, 0 }, { 1, -1 },",
+					"to": "{ 0, 0 }, { -1, 0 }, { 1, -1 },"
+				}
+			]
+		},
+		{
+			"name": "two spots the same",
+			"changes": [
+				{
+					"file": "3dc/avp/player_spots.h",
+					"from": "{ 0, -3 }, { 0, 3 }, { 3, 0 }, { -3, 0 },",
+					"to": "{ 0, -3 }, { 0, -3 }, { 3, 0 }, { -3, 0 },"
+				}
+			]
+		},
+		{
+			"name": "a spot far away",
+			"changes": [
+				{
+					"file": "3dc/avp/player_spots.h",
+					"from": "{ 0, -4 }, { 0, 4 }, { 4, 0 }, { -4, 0 },",
+					"to": "{ 0, -4 }, { 0, 4 }, { 40, 0 }, { -4, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the spots are too close for two bodies",
+			"changes": [
+				{
+					"file": "3dc/avp/player_spots.h",
+					"from": "kPlayerSpotGap = 1500,",
+					"to": "kPlayerSpotGap = 900,"
+				}
+			]
+		},
+		{
+			"name": "the other side comes later",
+			"changes": [
+				{
+					"file": "3dc/avp/player_spots.h",
+					"from": "{ 1, 0 }, { -1, 0 }, { 1, -1 },",
+					"to": "{ 1, 0 }, { 1, -1 }, { -1, 0 },"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the deathmatch list has no room for them",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "NumMultiplayerLevels = LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES) + NumCustomLevels;",
+					"to": "NumMultiplayerLevels = MAX_NO_OF_MULTIPLAYER_EPISODES + NumCustomLevels;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "NumCoopLevels = LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES) + NumCustomLevels;",
+					"to": "NumCoopLevels = MAX_NO_OF_COOPERATIVE_EPISODES + NumCustomLevels;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: they're not named on the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "CoopLevelNames[MAX_NO_OF_COOPERATIVE_EPISODES + i] = NewSinglePlayerLevelName(i, TRUE);",
+					"to": "CoopLevelNames[MAX_NO_OF_COOPERATIVE_EPISODES + i] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "MultiplayerLevelNames[MAX_NO_OF_MULTIPLAYER_EPISODES + i] = NewSinglePlayerLevelName(i, FALSE);",
+					"to": "MultiplayerLevelNames[MAX_NO_OF_MULTIPLAYER_EPISODES + i] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: custom levels overwrite them on the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "CoopLevelNames[i+LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES)] = CustomLevelNameList[i];",
+					"to": "CoopLevelNames[i+MAX_NO_OF_COOPERATIVE_EPISODES] = CustomLevelNameList[i];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and on the other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "MultiplayerLevelNames[i+LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES)] = CustomLevelNameList[i];",
+					"to": "MultiplayerLevelNames[i+MAX_NO_OF_MULTIPLAYER_EPISODES] = CustomLevelNameList[i];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom level is looked for among the 32 on the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "for (int i = LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES); i < NumCoopLevels; i++)",
+					"to": "for (int i = MAX_NO_OF_COOPERATIVE_EPISODES; i < NumCoopLevels; i++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and on the other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "for (int i = LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES); i < NumMultiplayerLevels; i++)",
+					"to": "for (int i = MAX_NO_OF_MULTIPLAYER_EPISODES; i < NumMultiplayerLevels; i++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one of the 32 counts as custom",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "return LevelList_IsCustom(index, gameType == NGT_Coop ? MAX_NO_OF_COOPERATIVE_EPISODES : MAX_NO_OF_MULTIPLAYER_EPISODES);",
+					"to": "return index >= (gameType == NGT_Coop ? MAX_NO_OF_COOPERATIVE_EPISODES : MAX_NO_OF_MULTIPLAYER_EPISODES);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner refuses one of the 32 on the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "if (index < LevelList_FirstCustom(MAX_NO_OF_COOPERATIVE_EPISODES)) {",
+					"to": "if (index < MAX_NO_OF_COOPERATIVE_EPISODES) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and on the other",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "if (index < LevelList_FirstCustom(MAX_NO_OF_MULTIPLAYER_EPISODES)) {",
+					"to": "if (index < MAX_NO_OF_MULTIPLAYER_EPISODES) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved setup loses one of the 32",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "return return_string;\n\t}\n\n\tif (gameType == NGT_Coop)\n\t{\n\t\tstrncpy",
+					"to": "(void)0;\n\t}\n\n\tif (gameType == NGT_Coop)\n\t{\n\t\tstrncpy"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the deathmatch list doesn't load them",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "int const singlePlayerLevel = SinglePlayerLevelAtPlace(episode, MAX_NO_OF_MULTIPLAYER_EPISODES);",
+					"to": "int const singlePlayerLevel = -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the co-op list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "int const singlePlayerLevel = SinglePlayerLevelAtPlace(episode, MAX_NO_OF_COOPERATIVE_EPISODES);",
+					"to": "int const singlePlayerLevel = -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Marine's list isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "sizeof(MarineEpisodes) / sizeof(MarineEpisodes[0]) == kLevelListMarineLevels + 1",
+					"to": "sizeof(MarineEpisodes) != 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the Predator's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "sizeof(PredatorEpisodes) / sizeof(PredatorEpisodes[0]) == kLevelListPredatorLevels + 1",
+					"to": "sizeof(PredatorEpisodes) != 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the Alien's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "sizeof(AlienEpisodes) / sizeof(AlienEpisodes[0]) == kLevelListAlienLevels + 1",
+					"to": "sizeof(AlienEpisodes) != 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a deathmatch on one of them starts the mode",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "if (netGameData.gameType == NGT_Coop)\n\t{\n\t\tLevelList_CampaignAt(",
+					"to": "if (true)\n\t{\n\t\tLevelList_CampaignAt("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level row doesn't follow the campaign",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "netGameData.levelNumber = LevelList_PlaceOf(MAX_NO_OF_COOPERATIVE_EPISODES, netGameData.coopCampaign, netGameData.coopCampaignLevel);",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's page chooses too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN)\n\t{\n\t\tCampaign_SetFromLevelRow();",
+					"to": "if (true)\n\t{\n\t\tCampaign_SetFromLevelRow();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: not once more as the game starts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "Campaign_SetFromLevelRow();\n\t\t\t\tCampaign_SetDifficulty();\n\t\t\t\tCampaign_ChooseRollNumber();\n",
+					"to": "Campaign_SetDifficulty();\n\t\t\t\tCampaign_ChooseRollNumber();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host doesn't load it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "AvPMenus.MenusState = MENUSSTATE_STARTGAME;\n\t\t\t\t\tSetLevelToLoadForThisNetworkGame();",
+					"to": "AvPMenus.MenusState = MENUSSTATE_STARTGAME;\n\t\t\t\t\tSetLevelToLoadForCooperative(netGameData.levelNumber);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor does a joiner",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "his damage worked out differently.\n\t\t\t\tCampaign_SetDifficulty();\n\n\t\t\t\tSetLevelToLoadForThisNetworkGame();",
+					"to": "his damage worked out differently.\n\t\t\t\tCampaign_SetDifficulty();\n\n\t\t\t\tSetLevelToLoadForCooperative(netGameData.levelNumber);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the briefing is a network game's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "SetBriefingTextForEpisode(netGameData.coopCampaignLevel, species);",
+					"to": "(void)species;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tCharacterSubTypesAvailable[NGSCT_M79] = netGameData.maxMarineM79;\n\tCampaignFixesWhoMayBeWhat();",
+					"to": "\tCharacterSubTypesAvailable[NGSCT_M79] = netGameData.maxMarineM79;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and nobody can be an Alien",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "CharacterTypesAvailable[NGCT_Alien] = NET_MAXPLAYERS;",
+					"to": "CharacterTypesAvailable[NGCT_Alien] = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the species search gives up early",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "while (count <= kClassSliderLast);",
+					"to": "while (count < 9);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a deathmatch gets the film",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "LoadGameRequest == SAVELOAD_REQUEST_NONE && SameAsSinglePlayer())",
+					"to": "LoadGameRequest == SAVELOAD_REQUEST_NONE)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a film stops the network",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "PlayFilmWithTheNetworkGoing(\"FMVs/alienintro.bik\");",
+					"to": "PlayFMV(\"FMVs/alienintro.bik\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: all films do",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "WhileAFilmPlays = KeepTheNetworkGoing;",
+					"to": "WhileAFilmPlays = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the film doesn't call it",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if (WhileAFilmPlays && !WhileAFilmPlays()) {",
+					"to": "if (WhileAFilmPlays) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: being told to stop does nothing",
+			"changes": [
+				{
+					"file": "3dc/FmvCutscenes.cpp",
+					"from": "if ((GotAnyKey && DebouncedGotAnyKey) || toldToStop)",
+					"to": "if (GotAnyKey && DebouncedGotAnyKey)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the class kit",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "single player's kit instead.\n\t\t\tif(!SameAsSinglePlayer())",
+					"to": "single player's kit instead.\n\t\t\tif(AvP.Network != I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sniper rifle can't be picked up",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "return !SameAsSinglePlayer() && weaponID == WEAPON_SONICCANNON;",
+					"to": "return AvP.Network != I_No_Network && weaponID == WEAPON_SONICCANNON;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor its ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (!SameAsSinglePlayer() && ammoID == AMMO_SNIPER)",
+					"to": "if (AvP.Network != I_No_Network && ammoID == AMMO_SNIPER)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's staff setting counts",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (!SameAsSinglePlayer() && netGameData.allowStaff)",
+					"to": "if (AvP.Network != I_No_Network && netGameData.allowStaff)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: so does unlimited pistol ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.h",
+					"from": "(netGameData.pistolInfiniteAmmo && !SameAsSinglePlayer())",
+					"to": "(netGameData.pistolInfiniteAmmo)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level's guns are thinned out",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "if(!SameAsSinglePlayer())\n\t\t{\n\t\t\t//if in a network game , see if this is an allowable weapon",
+					"to": "if(AvP.Network != I_No_Network)\n\t\t{\n\t\t\t//if in a network game , see if this is an allowable weapon"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pick-ups come back",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "if(netGameData.timeForRespawn>0 && !SameAsSinglePlayer())",
+					"to": "if(netGameData.timeForRespawn>0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead player leaves a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "if (!SameAsSinglePlayer())\n\t\t\t   \t{\n\n\t\t\t   \t\tVECTORCH location=",
+					"to": "{\n\n\t\t\t   \t\tVECTORCH location="
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can send a dropped gun",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (SameAsSinglePlayer())\n\t{\n\t\tNet_NoteRefused(\"a dropped gun was sent in a game that plays as single player\");\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone out still shows a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t// Only the host knows for sure, and only the host can start a level again for everyone\n",
+					"to": "\tMakePlayersWeaponPickupVisible();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level's starting equipment is the host's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(!SameAsSinglePlayer())\n\t{\n\t\tStartingEquipment.predator_pistol=netGameData.allowPistol;",
+					"to": "if(AvP.Network != I_No_Network)\n\t{\n\t\tStartingEquipment.predator_pistol=netGameData.allowPistol;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a time limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.timeLimit > 0 && !SameAsSinglePlayer())\n\t\t\t{\n\t\t\t\tif (((netGameData.GameTimeElapsed",
+					"to": "if (netGameData.timeLimit > 0)\n\t\t\t{\n\t\t\t\tif (((netGameData.GameTimeElapsed"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a score limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.scoreLimit > 0 && !SameAsSinglePlayer())",
+					"to": "if (netGameData.scoreLimit > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a score on the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!SameAsSinglePlayer() && (score || IsItPossibleToScore()))",
+					"to": "if (score || IsItPossibleToScore())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: time on the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "// show time left\n\tif (netGameData.timeLimit > 0 && !SameAsSinglePlayer())",
+					"to": "// show time left\n\tif (netGameData.timeLimit > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a campaign's level starts with a time of being safe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.coopCampaign != kCampaignNone)\n\t{\n\t\tpsPtr->invulnerabilityTimer = 0;",
+					"to": "if (netGameData.coopCampaign != kCampaignNone)\n\t{\n\t\t(void)psPtr;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a campaign looks for multiplayer starts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "PlacePlayerWithNoMultiplayerStart(playerSbPtr);\n\t\treturn;\n\t}\n\n\tif (MultiplayerRestartSeed)",
+					"to": "(void)0;\n\t}\n\n\tif (MultiplayerRestartSeed)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no starts leaves him at 0,0,0",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!numStartPositions) {\n\t\tPlacePlayerWithNoMultiplayerStart(playerSbPtr);",
+					"to": "if (!numStartPositions) {\n\t\t(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and after a restart",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.playerData[i].playerId == AvPNetID) {\n\t\t\t\tPlacePlayerWithNoMultiplayerStart(playerSbPtr);",
+					"to": "if (netGameData.playerData[i].playerId == AvPNetID) {\n\t\t\t\t(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he needn't be able to walk there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (HowFarALineRuns(&from, &way, distance + kBodyWidth) < distance + kBodyWidth)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: there needn't be a floor",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (toFloor >= mostDown || toFloor < kChestHeight - kMostStepUp)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor room for his head",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (HowFarALineRuns(&chest, &up, BodyHeight() - kChestHeight) < BodyHeight() - kChestHeight)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone is as tall as a Marine",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AvP.PlayerType == I_Predator ? CE_PREDATOR : AvP.PlayerType == I_Alien ? CE_ALIEN : CE_MARINE",
+					"to": "CE_MARINE"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor his sides",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (HowFarALineRuns(&chest, &sideways, kBodyWidth) < kBodyWidth)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it needn't be inside the level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (ModuleFromPosition(&chest, (MODULE *)0) == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone can be on it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!SomeoneIsOnThisSpot(candidate))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone joining goes to a teammate even at the start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (Magnitude(&apart) < kFarFromTheStart)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and beside a dead teammate",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": " || !netGameData.playerData[i].playerAlive)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead player comes back",
+			"changes": [
+				{
+					"file": "3dc/avp/pmove.cpp",
+					"from": "Coop_WhileOut(psPtr->Mvt_InputRequests.Flags.Rqst_Operate != 0);\n\t\treturn;",
+					"to": "(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he doesn't watch anyone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (someoneElseIsHere && (asksToChangeWhoHeWatches || !MultiplayerObservedPlayer))\n\t{\n\t\tGetNextMultiplayerObservedPlayer();",
+					"to": "if (someoneElseIsHere && (asksToChangeWhoHeWatches || !MultiplayerObservedPlayer))\n\t{\n\t\t(void)0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he can be given himself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (someoneElseIsHere && (asksToChangeWhoHeWatches || !MultiplayerObservedPlayer))",
+					"to": "if (asksToChangeWhoHeWatches || !MultiplayerObservedPlayer)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the watcher is pulled along on the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "because watching works by moving the player to where they are.\n\tTurnOffMultiplayerObserveMode();",
+					"to": "because watching works by moving the player to where they are."
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can start the level again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network != I_Host || !Coop_EveryoneIsDead())",
+					"to": "if (!Coop_EveryoneIsDead())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it starts again with someone alive",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network != I_Host || !Coop_EveryoneIsDead())",
+					"to": "if (AvP.Network != I_Host)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others aren't told",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_RestartNetworkGame(seed);\n\t\tNetSendMessagesNow();\n\t\tRestartNetworkGame(seed);",
+					"to": "RestartNetworkGame(seed);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: urgent messages wait for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.sendTimer = 0;\n\tNetSendMessages();",
+					"to": "NetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: moving on waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "or leave if this was the last\n\tNetSendMessagesNow();",
+					"to": "or leave if this was the last\n\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: leaving waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_PlayerLeaving();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the start of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();",
+					"to": "AddNetMsg_StartGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a game waits for the clock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();",
+					"to": "// AddNetMsg_EndGame();\n\t\tNetSendMessages();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone left behind stays behind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Coop_GoToPlace(messagePtr->coopCampaignLevel);",
+					"to": "netGameData.coopCampaignLevel = messagePtr->coopCampaignLevel;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can be left behind, even someone not playing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning\n\t\t\t\t\t&& ",
+					"to": "bool const leftBehind = "
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level called off while it loads still starts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;",
+					"to": "AvP.MainLoopRunning = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: places are measured from the start, not the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "VECTORCH spot = ground;",
+					"to": "VECTORCH spot = *middle;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and judged from up there",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (ABodyFitsHere(&ground, &spot))",
+					"to": "if (ABodyFitsHere(middle, &spot))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the floor is never looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "ground.vy = lookFrom.vy + toTheFloor;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: too many players goes unsaid",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (playerNumber >= found)\n\t{\n\t\tLogErrorString(",
+					"to": "if (false)\n\t{\n\t\tLogErrorString("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: others are kept waiting for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "bool const timeIsUp = someoneElseIsHere && everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;",
+					"to": "bool const timeIsUp = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone alone doesn't get to wait",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "bool const timeIsUp = someoneElseIsHere && everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;",
+					"to": "bool const timeIsUp = everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone is dead while he's alive",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (PlayerStatusPtr->IsAlive)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone still in the menus stops a restart",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.playerData[i].playerAlive && FindGhost(netGameData.playerData[i].playerId, GHOST_PLAYEROBJECTID))",
+					"to": "if (netGameData.playerData[i].playerAlive)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a stock game restarts on everyone dead",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network == I_No_Network || netGameData.coopCampaign == kCampaignNone)\n\t{\n\t\treturn false;",
+					"to": "if (AvP.Network == I_No_Network)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lives end a campaign",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.maxLives > 0 && !SameAsSinglePlayer())",
+					"to": "if (netGameData.maxLives > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead player gets the score table",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "(!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer && !SameAsSinglePlayer()))",
+					"to": "(!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pick-ups come back on points",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (netGameData.pointsForRespawn == 0 || SameAsSinglePlayer()) {",
+					"to": "if (netGameData.pointsForRespawn == 0) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: starting again remembers what was reported",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "LogString(\"campaign: the level is starting again\");\n\t\tLevelEvents_LevelStartsAgain();",
+					"to": "LogString(\"campaign: the level is starting again\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone out gets no failed screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "if (AvP.Network == I_No_Network || Coop_EveryoneIsDead())",
+					"to": "if (AvP.Network == I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner is told to press a key that does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/game_statistics.cpp",
+					"from": "AvP.Network == I_Peer ? TEXTSTRING_MULTIPLAYER_WAITFORRESTARTGAME : TEXTSTRING_MULTIPLAYER_PRESSKEYTORESTARTGAME",
+					"to": "TEXTSTRING_MULTIPLAYER_PRESSKEYTORESTARTGAME"
+				}
+			]
+		},
+		{
+			"name": "the top of the roll is thrown away",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/shared_roll.h",
+					"from": "(int)((value >> 16) & 0xffff)",
+					"to": "(int)(value & 0xfffff)"
+				}
+			]
+		},
+		{
+			"name": "a game's number makes no difference",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/shared_roll.h",
+					"from": "unsigned int value = SharedRoll_Stir(2166136261u, gameNumber);",
+					"to": "unsigned int value = 2166136261u;"
+				}
+			]
+		},
+		{
+			"name": "the object's first makes no difference",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/shared_roll.h",
+					"from": "value = SharedRoll_Stir(value, first);",
+					"to": "(void)first;"
+				}
+			]
+		},
+		{
+			"name": "the object's second makes no difference",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/shared_roll.h",
+					"from": "value = SharedRoll_Stir(value, second);",
+					"to": "(void)second;"
+				}
+			]
+		},
+		{
+			"name": "the object's third makes no difference",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/shared_roll.h",
+					"from": "value = SharedRoll_Stir(value, third);",
+					"to": "(void)third;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a group of objects rolls for itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "SharedRoll(netGameData.coopRollNumber, group, 0, 0) : FastRandom() & 0xffff;",
+					"to": "FastRandom() & 0xffff : FastRandom() & 0xffff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: so does one by itself",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "dieroll=SharedRoll(netGameData.coopRollNumber, bbd->alt_vector[0].vx, bbd->alt_vector[0].vy, bbd->alt_vector[0].vz);",
+					"to": "dieroll=FastRandom() & 0xffff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the number isn't sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->coopRollNumber = netGameData.coopRollNumber;",
+					"to": "messagePtr->coopRollNumber = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and isn't read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.coopRollNumber = messagePtr->coopRollNumber;",
+					"to": "(void)messagePtr->coopRollNumber;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host never chooses it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "Campaign_SetFromLevelRow();\n\t\t\t\tCampaign_SetDifficulty();\n\t\t\t\tCampaign_ChooseRollNumber();",
+					"to": "Campaign_SetFromLevelRow();\n\t\t\t\tCampaign_SetDifficulty();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a message brings back every pick-up",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!SameAsSinglePlayer() && (netGameData.myGameState == NGS_Playing ||",
+					"to": "if ((netGameData.myGameState == NGS_Playing ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's page has no row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_ENVIRONMENT}, {0},\t{&netGameData.levelNumber},\t{0},\tTEXTSTRING_MPHELP_ENVIRONMENT},\n\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},\t{TEXTSTRING_DIFFICULTY_EASY},\tTEXTSTRING_MPHELP_CAMPAIGN_DIFFICULTY},\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can change it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "row->ElementID = (isCampaign && AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN) ? AVPMENU_ELEMENT_TEXTSLIDER : AVPMENU_ELEMENT_DUMMYTEXTSLIDER;",
+					"to": "row->ElementID = AVPMENU_ELEMENT_TEXTSLIDER;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: another game shows the wrong one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "row->SliderValuePtr = isCampaign ? &netGameData.coopDifficulty : &mediumToShow;",
+					"to": "row->SliderValuePtr = &netGameData.coopDifficulty;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host doesn't play it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "Campaign_SetFromLevelRow();\n\t\t\t\tCampaign_SetDifficulty();",
+					"to": "Campaign_SetFromLevelRow();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner keeps his last single player game's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "other health and armour than everyone else, and his damage worked out differently.\n\t\t\t\tCampaign_SetDifficulty();",
+					"to": "other health and armour than everyone else, and his damage worked out differently."
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every game is at the host's",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "AvP.Difficulty = netGameData.coopCampaign != kCampaignNone ? (I_HARDANUFF)netGameData.coopDifficulty : I_Medium;",
+					"to": "AvP.Difficulty = (I_HARDANUFF)netGameData.coopDifficulty;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it isn't sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->coopDifficulty = (unsigned char)netGameData.coopDifficulty;",
+					"to": "messagePtr->coopDifficulty = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it isn't checked on arrival",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.coopDifficulty = NetCampaignDifficultyIsGood(messagePtr->coopDifficulty) ? messagePtr->coopDifficulty : I_Medium;",
+					"to": "netGameData.coopDifficulty = messagePtr->coopDifficulty;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it starts at nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.pointsForRespawn = 0;\n\tnetGameData.coopDifficulty = I_Medium;",
+					"to": "netGameData.pointsForRespawn = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it isn't checked from a file",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "ReadLaterSetting(file, &netGameData.coopDifficulty, 0, 2);",
+					"to": "netGameData.coopDifficulty = file.GetInt32LE();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it isn't saved",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "file.PutInt32LE(netGameData.coopDifficulty);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the build doesn't check the version",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "#include \"net_version_check.h\"\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the version isn't checked against the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "static_assert(kMultiplayerVersion == kVersionTheseSizesBelongTo,",
+					"to": "static_assert(true,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the sizes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "kSizesNow == kSizesAtThatVersion",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game description isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor the level list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "61 * kLevelListCampaignLevels;",
+					"to": "0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nor how many kinds of message",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/net_version_check.h",
+					"from": "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the version isn't raised",
+			"changes": [
+				{
+					"file": "3dc/networking.h",
+					"from": "const int kMultiplayerVersion = 112;",
+					"to": "const int kMultiplayerVersion = 111;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an honest goodbye is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kMostLeavingsEachSecond = NET_MESSAGEITERATIONS;",
+					"to": "kMostLeavingsEachSecond = 2;"
+				}
+			]
+		},
+		{
+			"name": "starting again forgets nothing that happened",
+			"changes": [
+				{
+					"file": "3dc/avp/level_events.h",
+					"from": "list->events[i].happened = false;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "starting again empties the list, as it used to",
+			"changes": [
+				{
+					"file": "3dc/avp/level_events.h",
+					"from": "for (int i = 0; i < list->count; i++)\n\t{\n\t\tlist->events[i].happened = false;\n\t}",
+					"to": "list->count = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host keeps the last game's list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AvP.Network = I_Host;\n\n\t// A new game, so nothing that happened in the last one counts, even on the same level\n\tLevelEvents_NewLevel();",
+					"to": "AvP.Network = I_Host;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner keeps the last game's list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AvP.Network  = I_Peer;\n\n\t// A new game, so nothing that happened in the last one counts, even on the same level\n\tLevelEvents_NewLevel();",
+					"to": "AvP.Network  = I_Peer;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone who joined late never hears",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AddNetMsg_GameDescription();\n\t\t\t\t\tLevelEvents_SayAgainWhatHappened();",
+					"to": "AddNetMsg_GameDescription();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a loading screen says it every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network == I_Host && timeGetTime() - lastDescription >= 1000) {",
+					"to": "if (AvP.Network == I_Host) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone sends sights",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "if ((AvP.Network!=I_No_Network)\n\t   &&(AvP.PlayerType == I_Predator)\n\t   &&((weaponPtr->WeaponIDNumber == WEAPON_PRED_RIFLE)\n\t    ||(weaponPtr->WeaponIDNumber == WEAPON_PRED_SHOULDERCANNON)) )",
+					"to": "if (AvP.Network!=I_No_Network)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner never says it has started",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "netGameData.myStartFlag = 1;\n\n\t\t\t\t// The host has to hear this, or it never says this player has joined. The only other send is on the species page, before this was set.\n\t\t\t\tAddNetMsg_PlayerDescription();\n\t\t\t\tNetSendMessages();",
+					"to": "netGameData.myStartFlag = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: other games lose their object sync",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!SameAsSinglePlayer())\n\t\t\t\t\t{\n\t\t\t\t\t\tAddNetMsg_StrategySynch();",
+					"to": "if (false)\n\t\t\t\t\t{\n\t\t\t\t\t\tAddNetMsg_StrategySynch();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every game says objects oftener",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (SameAsSinglePlayer() && timeGetTime() - lastObjectSynch >= kMillisecondsBetweenObjectSynchs)",
+					"to": "if (timeGetTime() - lastObjectSynch >= kMillisecondsBetweenObjectSynchs)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the object sync is no faster",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kMillisecondsBetweenObjectSynchs = 100;",
+					"to": "kMillisecondsBetweenObjectSynchs = 1000;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowShotgun is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->allowShotgun = netGameData.allowShotgun;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowShotgun is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.allowShotgun = messagePtr->allowShotgun;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowRevolver is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->allowRevolver = netGameData.allowRevolver;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowRevolver is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.allowRevolver = messagePtr->allowRevolver;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowM79 is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->allowM79 = netGameData.allowM79;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowM79 is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.allowM79 = messagePtr->allowM79;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowStaff is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->allowStaff = netGameData.allowStaff;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowStaff is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.allowStaff = messagePtr->allowStaff;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineShotgun is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->maxMarineShotgun = netGameData.maxMarineShotgun;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineShotgun is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.maxMarineShotgun = messagePtr->maxMarineShotgun;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineRevolver is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->maxMarineRevolver = netGameData.maxMarineRevolver;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineRevolver is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.maxMarineRevolver = messagePtr->maxMarineRevolver;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineM79 is not sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->maxMarineM79 = netGameData.maxMarineM79;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: maxMarineM79 is not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.maxMarineM79 = messagePtr->maxMarineM79;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: allowStaff is not in the description",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "unsigned int allowStaff: 1;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: everyone keeps the species they chose",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "\t\tCoop_TakeCampaignSpecies();\n\t\tSetLevelToLoadForCampaign();\n",
+					"to": "\t\tSetLevelToLoadForCampaign();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a description after the word to go on puts the campaign or place back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\tif (Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come",
+					"to": "\t\t\tif (false && Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come"
+				}
+			]
+		}
+	]
+}

@@ -37,25 +37,17 @@ jobs:
         shell: pwsh
         run: ./tests/compile-shaders.ps1
 
+      # Some tests use the game's own libraries, and only those: this job doesn't build the game. The shader test compiles with the
+      # library the game does, and the network tests link the game's ENet, so both come before the tests are built. The action says how
+      # they're made, the same way as a real build, and the Take-outs check uses it too.
+      - name: Fetch the game's shader compiler and ENet
+        uses: ./.github/actions/fetch-test-libraries
+        with:
+          ports: dxsdk-d3dx enet
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1
-
-      # The shader test compiles with the same library the game does, so it needs that library, and only that: this job doesn't
-      # build the game. The registry commit is the builtin-baseline in vcpkg.json, the same as a real build.
-      - name: Fetch the game's shader compiler
-        shell: pwsh
-        run: |
-          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
-          $root = Join-Path $env:RUNNER_TEMP 'vcpkg'
-          git init -q $root
-          git -C $root fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
-          git -C $root checkout -q FETCH_HEAD
-          if ((git -C $root rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
-          & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & (Join-Path $root 'vcpkg.exe') install dxsdk-d3dx:x86-windows --classic --x-install-root=vcpkg_installed
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # With no tests at all this fails, so a broken build script can't pass as "every test passed".
       - name: Run every test
@@ -97,13 +89,14 @@ jobs:
         shell: pwsh
         run: ./tests/release-test.ps1 -OnlyNewFunctions
 
-      # CODING-STANDARD.md, rule 1: write "const WEAPON_SLOT slot", not "enum WEAPON_SLOT const slot". Snyk Code can't read a file with the second
-      # form, and skips all of it. The count in snyk.yml then fails, but it can't say which file, so this names the file and the line. Added
-      # 2026-11-07 by Melanikus for the AvP port.
+      # CODING-STANDARD.md, rule 1: const goes first for an enum type and for a type from inside a template. Write "const WEAPON_SLOT slot", not
+      # "enum WEAPON_SLOT const slot", and "const auto found", not "std::map<...>::const_iterator const found". Snyk Code can't read a file with
+      # either "no" form, and skips all of it. The count in snyk.yml then fails, but it can't say which file, so this names the file and the line.
+      # Added 2026-11-07 by Melanikus for the AvP port; the second form added the same day.
       #
       # It reads every C and C++ file git has, of the kinds that count looks at, one line at a time. So a comment written that way is refused too
       # (say it another way), and a declaration split over two lines isn't seen here; the count in snyk.yml still catches that file.
-      - name: Refuse "enum TYPE const name" (CODING-STANDARD.md, rule 1)
+      - name: Refuse the forms Snyk Code can't read (CODING-STANDARD.md, rule 1)
         shell: bash
         # Every C and C++ file here is plain ASCII today, but one in a pull request may not be. In a UTF-8 setting, a byte that isn't
         # UTF-8 makes grep call the whole file binary, and say only that it matched, with no line. So files are read byte by byte (LC_ALL=C),
@@ -113,8 +106,9 @@ jobs:
         run: |
           # The same kinds of file as the count in snyk.yml
           types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
-          # "enum", then a type's name, then "const", each a whole word
-          form='(^|[^A-Za-z0-9_])enum[[:space:]]+[A-Za-z_][A-Za-z0-9_:]*[[:space:]]+const([^A-Za-z0-9_]|$)'
+          # The first form: "enum", then a type's name, then "const", each a whole word. The second: a type named from inside a template,
+          # such as a map's iterator ("...>::iterator"), then "const" as a whole word. Either one is a line written this way.
+          form='(^|[^A-Za-z0-9_])enum[[:space:]]+[A-Za-z_][A-Za-z0-9_:]*[[:space:]]+const([^A-Za-z0-9_]|$)|>[[:space:]]*(::[A-Za-z_][A-Za-z0-9_]*)+[[:space:]]+const([^A-Za-z0-9_]|$)'
           looked=0
           found=0
 
@@ -136,7 +130,7 @@ jobs:
               number=${hit%%:*}
               text=${hit#*:}
               echo "Found in ${file//[$'\r\n']/ }, line $number: ${text//$'\r'/}"
-              echo "::error file=$note,line=$number,title=CODING-STANDARD.md rule 1::Write const TYPE name, not enum TYPE const name. Snyk Code can't read a file with this form, and skips all of it."
+              echo "::error file=$note,line=$number,title=CODING-STANDARD.md rule 1::Put const first: const TYPE name, not enum TYPE const name, and const auto name, not a template's inner type then const. Snyk Code can't read a file with this form, and skips all of it."
             done <<< "$lines"
           done < <(git ls-files -z | grep -ziE "$types")
 

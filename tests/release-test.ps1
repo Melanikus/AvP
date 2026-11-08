@@ -203,7 +203,10 @@ $result = Run-Script 'check-new-functions.ps1' @()
 $gaveAnAnswer = $result.Text.Contains('The game uses all') -or $result.Text.Contains('nothing in the game uses these new functions')
 $hasNoHistory = $result.Text.Contains("isn't here, so nothing can be compared")
 Check ($gaveAnAnswer -or ($hasNoHistory -and -not $OnlyNewFunctions)) "check-new-functions.ps1 finds the repository by itself. It said: $($result.Text)"
-Write-Host "On this commit's own code, it says: $($result.Text)"
+# A checkout without the history, as the Windows Unit tests job has, can only say the older commit isn't there. The job
+# release-checks-on-ubuntu fetches the history and runs these rows with -OnlyNewFunctions, where that answer fails.
+$why = if ($hasNoHistory) { ' (this checkout has no history to compare with: release-checks-on-ubuntu reads it with the history)' } else { '' }
+Write-Host "On this commit's own code, it says: $($result.Text)$why"
 
 Make-GameWithFiles @{ }
 Check ((Run-AsAStep 'check-new-functions.ps1' (New-Functions-Arguments)) -eq 0) 'as a step, check-new-functions.ps1 passes when it should'
@@ -244,6 +247,8 @@ function Make-GoodRepository
 {
     Clear-Work
     Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') "# Title`n`nWords.`n`n## What's in the way`n`nNothing.`n"
+    Write-File (Join-Path $work 'tests/assert_limits_allowed.txt') "# Rows marked NOT SAFE YET wait for a fix. This header says so, and doesn't count.`n   # | NOT SAFE YET, in a note with spaces in front, doesn't count either`n3dc/a.cpp | assert(i < kMost); | the number is checked before it gets here`n"
+    Write-File (Join-Path $work 'PLAYTEST.md') "# Playing it`n`nEverything here is true today.`n"
     $project = '<Project>'
 
     foreach ($file in $shadowFiles)
@@ -324,6 +329,34 @@ foreach ($case in $blockersRefused)
 Make-GoodRepository
 Remove-Item -LiteralPath (Join-Path $work 'RELEASE-BLOCKERS.md')
 Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'RELEASE-BLOCKERS.md is missing' 'taking the file away stops it'
+
+# --- Asserts still marked not yet safe, and tester notes still pending. Each is refused for its own reason, and a header that only
+# talks about such rows isn't.
+Make-GoodRepository
+Check ((Check-Release $good).Code -eq 0) 'a header that talks about NOT SAFE YET rows, with none under it, is let through'
+
+Make-GoodRepository
+Add-Content -LiteralPath (Join-Path $work 'tests/assert_limits_allowed.txt') -Value '3dc/b.cpp | assert(j < kMost); | NOT SAFE YET: waits for another PR'
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'still marks an assert as not yet safe' 'an assert still marked not yet safe stops it'
+
+Make-GoodRepository
+Remove-Item -LiteralPath (Join-Path $work 'tests/assert_limits_allowed.txt')
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'tests/assert_limits_allowed.txt is missing' 'taking the assert list away stops it'
+
+Make-GoodRepository
+Add-Content -LiteralPath (Join-Path $work 'PLAYTEST.md') -Value 'The mark key works. [PENDING: once it is in.]'
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'PLAYTEST.md still has a line marked [PENDING]' 'tester notes with a pending line stop it'
+
+Make-GoodRepository
+Remove-Item -LiteralPath (Join-Path $work 'PLAYTEST.md')
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'PLAYTEST.md is missing' 'taking the tester notes away stops it'
+
+# The real assert list: how many rows it marks NOT SAFE YET, said, not failed. Such a row is an honest record of an assert that's in the
+# code whether we write it down or not. Failing every pull request that records one would push people to leave it out, which is the
+# opposite of writing things down for whoever comes later, and it would gain no security: check-release.ps1 refuses any release while
+# one is listed. So a pull request can record one with a card, and nothing ships with one.
+$realUnsafe = @(Get-Content (Join-Path $repository 'tests/assert_limits_allowed.txt') | Where-Object { -not $_.TrimStart().StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
+Write-Host "  The real assert list marks $($realUnsafe.Count) row(s) NOT SAFE YET. A release is refused until that's 0."
 
 $realBlockers = Get-Content (Join-Path $repository 'RELEASE-BLOCKERS.md')
 Check ($realBlockers -contains "## What's in the way") "the real file has the heading the script looks for"
@@ -419,12 +452,17 @@ function Write-Sums
 function Make-GoodPackage
 {
     Clear-Work
-    foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
+    foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
     Write-File (Join-Path $package 'BUILD.txt') "avpx_main $commit"
     Write-File (Join-Path $package 'shaders/reliefMain.psh') 'shader one'
     Write-File (Join-Path $package 'shaders/volume.vsh') 'shader two'
     Write-File (Join-Path $packageRepository 'shaders/reliefMain.psh') 'shader one'
     Write-File (Join-Path $packageRepository 'shaders/volume.vsh') 'shader two'
+    # One of our game files, in a folder, as the game folder wants it, with the commit's list naming it
+    Write-File (Join-Path $package 'avp_huds/Ours.rif') 'a model'
+    $modelHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')).Hash.ToLower()
+    Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') "$modelHash  avp_huds/Ours.rif"
+    Write-File (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') 'a model'
     Write-Sums
 }
 
@@ -434,7 +472,7 @@ Make-GoodPackage
 $result = Run-Script 'check-release-package.ps1' (Package-Arguments)
 Check ($result.Code -eq 0) "a good package passes. It said: $($result.Text)"
 
-foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
+foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
 {
     Make-GoodPackage
     Remove-Item -LiteralPath (Join-Path $package $name)
@@ -461,6 +499,39 @@ Remove-Item -Recurse -LiteralPath (Join-Path $packageRepository 'shaders')
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit has no shaders' 'no shaders to compare with is refused'
 
 Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'the game file avp_huds/Ours.rif is not in the package' 'a missing game file is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'avp_huds/Ours.rif') 'some other model'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "the game file avp_huds/Ours.rif in the package isn't the one this commit lists" 'a different game file is refused'
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $packageRepository 'package-files/SHA256SUMS.txt')
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit lists none of our game files' 'a commit with no list of game files is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') 'changed in the commit, not on the list'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/avp_huds/Ours.rif in this commit isn't the file its list names" 'a game file that has drifted from its list is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $packageRepository 'package-files/avp_huds/Extra.rif') 'in the folder, not on the list'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/avp_huds/Extra.rif isn't on package-files/SHA256SUMS.txt" 'a game file left off the list is refused'
+
+Make-GoodPackage
+New-Item -ItemType SymbolicLink -Path (Join-Path $packageRepository 'package-files/avp_huds/Linked.rif') -Target (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') | Out-Null
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'package-files/avp_huds/Linked.rif is a link' 'a link among the game files is refused'
+
+foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif', ('0' * 64) + '  avp_huds/a[1].rif', ('0' * 64) + '  /root.rif', ('0' * 64) + '  PLAYTEST.md', ('0' * 64) + '  shaders/reliefMain.psh', ('0' * 64) + '  avp_huds/run.bat', ('0' * 64) + '  bin/AvP_Classic.exe'))
+{
+    Make-GoodPackage
+    Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') $badLine
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the game folder" "a list line naming somewhere else is refused: $badLine"
+}
+
+Make-GoodPackage
 Write-File (Join-Path $package 'BUILD.txt') 'avpx_main 1111111111111111111111111111111111111111'
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) "BUILD.txt doesn't say this package came from" 'a package from another commit is refused'
@@ -469,6 +540,19 @@ Make-GoodPackage
 Write-File (Join-Path $package 'other.exe') 'a program'
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'other.exe is in the package' 'a second program is refused'
+
+foreach ($stray in 'evil.dll', 'bin/run.bat', 'bin/more/extra.dll', 'shaders/start.cmd')
+{
+    Make-GoodPackage
+    Write-File (Join-Path $package $stray) 'something Windows runs'
+    Write-Sums
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$stray is something Windows runs, and only the game and its own libraries, in bin, may be in the package" "something Windows runs is refused outside bin: $stray"
+}
+
+Make-GoodPackage
+Write-File (Join-Path $package 'AvP_Classic.exe') 'the game, but not in bin'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'AvP_Classic.exe is in the package, and the only program in it should be the game, bin/AvP_Classic.exe' 'the game anywhere but bin is refused'
 
 foreach ($name in 'AvPx.pdb', 'AvPx.map')
 {
@@ -510,7 +594,7 @@ Check ((Run-AsAStep 'check-release.ps1' @('-Version', $good, '-Repository', $wor
 
 Make-GoodPackage
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 0) 'as a step, check-release-package.ps1 passes when it should'
-Remove-Item -LiteralPath (Join-Path $package 'D3DCompiler_43.dll')
+Remove-Item -LiteralPath (Join-Path $package 'bin/D3DCompiler_43.dll')
 Write-Sums
 Check ((Run-AsAStep 'check-release-package.ps1' @('-Package', $package, '-Commit', $commit, '-Repository', $packageRepository)) -eq 1) 'and it fails when it should'
 

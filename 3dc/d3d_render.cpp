@@ -13,7 +13,10 @@
 //   couldn't start draws nothing, and an overlay in two parts goes whole or not at all
 //   -shadowshoot: a key sends a ray through the crosshair, and the log says every shadow prism it goes through. It needs -dev
 // Modified 2026-11-05 by Melanikus for the AvP port:
+//   a comparison of the two routes for the walls says how many pixels had a surface, and an error if none did
+//   -staticcomparedrop leaves half the walls out of the new route on the frames it compares, to prove the comparison notices
 //   a network game puts back whatever the command line changed about how shadows and lights are drawn
+//   where the routes differ, the comparison says where, how far a colour moved, and whether two polygons tie there
 //   the LIGHTING and SHADOWS console commands, with L and H as their keys under -dev. See view_switches.h. LIGHTING replaces G's FINAL WITHOUT RELIEF view
 //   with Gouraud lighting, chosen live lights stay in the game's own lighting
 //   the shadow volumes can be turned off on their own. Nothing is collected for casting and no prism is built or drawn, and the lights go on as they were
@@ -25,11 +28,12 @@
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
 //   the marine's shoulder lamp is drawn on the finished picture of the world, under the HUD, and while it's on in Gouraud the surface pictures are drawn for it. See shoulder_lamp.h
 //   it goes on before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
-//   the developers' view moves from G to J, which no default control set uses
+//   the developers' view moves from G to J, which no default control set uses, because G is now the marine's shoulder lamp
 //   the LAMPFOLLOW command says how long the shoulder lamp takes to catch up with the view
 //   the keys for the lighting, the shadows and the developers' views can be changed on the rendering page. The first two now work for everyone, and a control with the same key wins
 //   the LAMPSPOTSIZE and LAMPINTENSITY commands say how big and how strong its spot is, playing alone. A network game keeps them as built
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the shoulder lamp is drawn before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   up to 20 steady and 12 brief lights can cast shadows, and each light adds itself to the light total in a pass of its own, on the part of the screen it can reach
 //   a card that can't add to a float picture draws shadows without the surface pictures, and -shadownofloatblend asks for that on any card, so it can be tried
 //   each report says how many lights were in reach, which were chosen, which were passed over and why, and what the shadow passes took
@@ -37,10 +41,14 @@
 //   the SHADOWEVENGAP console command switches -shadowevengap while the game runs, and the tag always says which it is
 //   the polygons on their way to the screen are noted, for choosing the lights that show the most. See light_choice.h
 //   a frame with no light chosen has its world turned down like any other, so the screen doesn't jump brighter when the last light leaves the list
+//   the NORMAL LINES view, after NORMALS on J, stands the normals the surface pass gets up as lines in the level. See normal_lines.h
+//   the painted lamp has a wet glint, worked out per pixel, where its spot lands
+//   the PIXELGLOW, PIXELCURVE and PIXELLEVEL commands change how a lamp's light looks per pixel, playing alone, and the tag shows them. A network game keeps them as built
 
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
+//   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -85,10 +93,12 @@
 #include "frustum.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
+#include "pixel_look.h"
 #include "light_reach.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "shadow_debug.h"
+#include "mark_key.h"
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
@@ -102,6 +112,8 @@
 #endif
 #include "static_frame.h"
 #include "surface_static.h"
+#include "static_level.h"
+#include "normal_lines.h"
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
@@ -306,6 +318,28 @@ bool staticDecalsTest = false;
 // A frame the lamp was switched on during hasn't written its normals, so its surface pictures would come out of whatever was left in the list
 static bool surfaceNormalsWereWrittenThisFrame = false;
 
+// What's on the game's list, for the NORMAL LINES view: see NoteCornersForNormalLines. J turns it on, which takes -dev, and a network game turns it off. Three numbers for each corner.
+int NormalLinesOn = 0;
+
+struct NormalLinesPolygon
+{
+	uint32_t firstVertex;   // its first corner's place in the game's list of vertices, and so in the list of normals
+	uint32_t corners;
+	uint32_t firstCorner;   // and in normalLinesCorners
+	int shapeNumber;        // what it was drawn as, for the log: see normal_lines.h
+	int behaviour;
+	bool hasPolygonList;
+};
+
+static const size_t kNormalLinesMostPolygons = 16384;
+static const size_t kNormalLinesMostCorners = 65536;
+static std::vector<NormalLinesPolygon> normalLinesPolygons;
+static std::vector<float> normalLinesCorners;
+static int normalLinesNotNoted = 0;
+static void DrawNormalLines();
+void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList);
+char const *GetLoadedShapeName(int position);
+
 static bool LockExecuteBuffer()
 {
 	ProcessorStageClock clock(kProcessorLocks);
@@ -326,6 +360,12 @@ static bool LockExecuteBuffer()
 	// frame, so nothing can start reading them on a frame that didn't write them: a frame turned on by J collected no polygons, so its pass has nothing to do.
 	{
 		extern int ToyShadowsMode;
+
+		// NORMAL LINES reads what's written from here on. A frame can open these lists more than once, and only what's in them now reaches the surface pass.
+		SurfaceNormals_KeepACopy(NormalLinesOn != 0);
+		normalLinesCorners.clear();
+		normalLinesPolygons.clear();
+		normalLinesNotNoted = 0;
 
 		// The shoulder lamp reads the surface pictures too, and in Gouraud nothing else will have asked for them
 		if (ToyShadowsMode || ShoulderLamp_CouldBeDrawn())
@@ -471,7 +511,9 @@ static bool toyFinalFlush = false;
 static bool surfacePicturesAreFromThisFrame = false;
 
 static void DrawShoulderLamp();
+static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
+bool ToyShadows_ShoulderLampIsChosen();
 static int toyEarlyFlushes = 0;     // how often the lists were drawn before the end of a frame, since the last report
 static bool earlyFlushThisFrame = false;
 static void ToyShadows_Draw();
@@ -586,6 +628,12 @@ static bool ExecuteBuffer()
 		mainList->Draw(RenderList::kSeeThrough);
 	}
 
+	// The developer's view of the normals. Only in a frame's last drawing, when the whole level is in the depth buffer, which is what lets a wall hide them, and ahead of the weapon, which clears it.
+	if (toyFinalFlush && NormalLinesOn)
+	{
+		DrawNormalLines();
+	}
+
 	// render any particles
 	if (particleList->GetSize())
 	{
@@ -602,6 +650,8 @@ static bool ExecuteBuffer()
 	// It comes before the gun on purpose. The lamp lights a wall by adding the wall's own colour, read from a picture of the walls, at each spot on the screen. The gun and the hands aren't
 	// in that picture, so a lamp drawn over them added the colour of the wall behind them, which made the gun look see-through. Now the gun goes on afterwards, whole and solid.
 	// The price: the painted lamp doesn't light the gun at all.
+	bool compareTheLamp = false;
+
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
 		DrawShoulderLamp();
@@ -1575,6 +1625,35 @@ void DrawParticles()
 	}
 }
 
+// Notes where a polygon on the game's list goes, for the NORMAL LINES view, which comes before the numbers are handed to the card. Only for what the surface pass draws again: solid polygons that aren't the
+// weapon. It has one limit, for what's on the list at once, and what doesn't fit is said in the log. See normal_lines.h.
+static void NoteCornersForNormalLines(const RENDERVERTEX *corners, uint32_t count, int translucency)
+{
+	if (!NormalLinesOn || gunLayer || translucency != TRANSLUCENCY_OFF)
+	{
+		return;
+	}
+
+	if (normalLinesPolygons.size() >= kNormalLinesMostPolygons || normalLinesCorners.size() / 3 + count > kNormalLinesMostCorners)
+	{
+		normalLinesNotNoted++;
+		return;
+	}
+
+	NormalLinesPolygon polygon = { (uint32_t)vb, count, (uint32_t)(normalLinesCorners.size() / 3), -1, -1, false };
+
+	ToyShadows_WhatIsBeingDrawn(&polygon.shapeNumber, &polygon.behaviour, &polygon.hasPolygonList);
+	normalLinesPolygons.push_back(polygon);
+
+	// the same three sums as the game's list, below
+	for (uint32_t i = 0; i < count; i++)
+	{
+		normalLinesCorners.push_back((float)corners[i].X);
+		normalLinesCorners.push_back((float)-corners[i].Y);
+		normalLinesCorners.push_back((float)corners[i].Z);
+	}
+}
+
 // Writes down a polygon's normals, if it goes in the surface pictures. Only a real polygon of the shape being drawn has normals to look up,
 // and shapePolygon is its place in that shape. The other callers make their polygons up on the spot, like an explosion's, and those have no
 // corner numbers, so they leave it at -1. A see-through polygon can be drawn long after its shape, when the shape's normals are no longer
@@ -1613,6 +1692,7 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 	}
 
 	WriteSurfaceNormals(inputPolyPtr, shapePolygon);
+	NoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -1658,6 +1738,7 @@ void D3D_ZBufferedGouraudPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	// With no texture, this reads the white one, so the surface pictures hold it as white. It's still a real surface, and the lights left out
 	// of the game's lighting for its shape are added from those pictures.
 	WriteSurfaceNormals(inputPolyPtr, shapePolygon);
+	NoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -1694,6 +1775,8 @@ void D3D_PredatorThermalVisionPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVER
 	if (!mainList->AddItem(RenderPolygon.NumberOfVertices, NO_TEXTURE, TRANSLUCENCY_OFF)) {
 		return;
 	}
+
+	NoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, TRANSLUCENCY_OFF);
 
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
@@ -2736,6 +2819,8 @@ void D3D_SkyPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVertice
 		return;
 	}
 
+	NoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);
+
 	for (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)
 	{
 		RENDERVERTEX *vertices = &renderVerticesPtr[i];
@@ -2857,6 +2942,7 @@ void ThisFramesRenderingHasFinished()
 
 		FrameTiming_EndFrame();
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
+		Mark_EndFrame(d3d.lpD3DDevice);
 	}
 
 	// The game goes on whether or not this frame could be drawn, so what's below happens either way
@@ -4785,6 +4871,7 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	HRESULT result = S_OK;
 
+
 	FrameTiming_Mark(kStageShading);
 	FrameTiming_CountPrismCorners(toyNumVerts, 0);
 
@@ -5179,9 +5266,16 @@ static IDirect3DSurface9 *toyMaskSurface = 0;
 static IDirect3DSurface9 *toyDepthSurface = 0;
 static bool toyTargetsFailed = false;
 
-// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. Everything about how this looks is in shaders/shoulderLamp.psh.
+// The spot and the cone of the marine's shoulder lamp: see shoulder_lamp.h. When the lamp is a real light this frame, that's all drawn elsewhere, and there's nothing to do here. Everything about how this looks is in shaders/shoulderLamp.psh.
 static void DrawShoulderLamp()
 {
+	bool const isARealLight = ToyShadows_ShoulderLampIsChosen() && surfacePicturesAreFromThisFrame;
+
+	if (isARealLight)
+	{
+		return;
+	}
+
 	if (d3d.shoulderLampEffect == kNullEffectID)
 	{
 		return;
@@ -5210,7 +5304,7 @@ static void DrawShoulderLamp()
 	ChangeZWriteEnable(ZWRITE_DISABLED);
 
 	// Only when they're from this frame: a picture left from an earlier one would show the lamp on walls that aren't there any more
-	bool const onWalls = surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
+	bool const onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture;
 
 	// Where the lamp is aimed, as a place on the screen: half of what the projection makes of it, because the screen goes from 0 to 1, and not from -1 to 1
 	float const aim[4] = { ShoulderLamp_AimAcross() * d3d.matProjection._11 * 0.5f, ShoulderLamp_AimDown() * d3d.matProjection._22 * 0.5f, 0.0f, 0.0f };
@@ -5271,6 +5365,12 @@ static void DrawShoulderLamp()
 	{
 		device->SetTexture(3, NULL);
 		device->SetTexture(4, NULL);
+
+		// The wet glint needs to know which way each pixel faces, which only the pictures can say
+		if (SurfacePictures_Normal())
+		{
+			DrawLampGlint(strength, wide, aim, spot);
+		}
 	}
 
 	ChangeZWriteEnable(ZWRITE_ENABLED);
@@ -5388,7 +5488,7 @@ static bool ToyMakeTargets(LPDIRECT3DDEVICE9 device)
 // doesn't grow with a surface's slant. In the world it does grow: it's 1.6 units at 10 metres, 56 at 60 and 156 at 100. Depth isn't written here, so of
 // two polygons that both pass, the last drawn wins, and a wider margin lets the wrong one win along the line where two surfaces meet. So far away,
 // the pictures can hold the wrong polygon's normal near a crease. -shadowbiassteps tries a smaller hair. Says false if nothing was drawn.
-static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool useStatic)
+static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bool useStatic, bool backwards = false)
 {
 	ToySetVolumeState(device);
 
@@ -5397,7 +5497,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
 
-	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights());
+	bool const drawn = SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights(), backwards);
 
 	ToySetFloatState(device, D3DRS_DEPTHBIAS, 0.0f);
 
@@ -5409,6 +5509,7 @@ static bool ToyDrawPictures(LPDIRECT3DDEVICE9 device, const float *worldAxes, bo
 // off by default until the comparison has been seen to come out clean in the game.
 int StaticSurfaceOn = 0;
 int StaticSurfaceCompare = 0;
+int StaticCompareDropsHalf = 0;   // -staticcomparedrop, with -dev. A comparison that has never found anything hasn't shown it can, so this breaks the new route on purpose, only on the frames being compared. Holes are the right answer then
 extern int StaticSceneOn;
 
 // Can the walls come from the fixed buffer on this frame, as far as the shadows go? Only in the real picture, with lights added per pixel, because the other
@@ -5554,6 +5655,68 @@ struct RoutePictures
 	}
 };
 
+// Two empty pictures match perfectly, so a line of zeros only means something if there was a surface to compare. An error goes in the log, so that this can't be read as a pass.
+static void SayIfNothingWasCompared(const char *which, int frame, const PictureDifferences &differences)
+{
+	if (differences.pixelsWithSurface > 0)
+	{
+		return;
+	}
+
+	char line[160] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "%s: frame %d: the old route drew nothing, so its zeros prove nothing", which, frame);
+	LogErrorString(line);
+}
+
+// Says whereabouts two pictures differ, so that someone can go and look. Colours are written the way a web page writes them.
+static void SayWhereTheyDiffer(const char *which, int frame, const char *how, const WhereTheyDiffer &where)
+{
+	if (!where.pixels)
+	{
+		return;
+	}
+
+	char line[300] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "%s: frame %d: %d pixels differ %s, %d of them solid, between %d %d and %d %d. The first is at %d %d, where colour %06X became %06X and distance %.2f became %.2f",
+		which, frame, where.pixels, how, where.solidPixels, where.left, where.top, where.right, where.bottom, where.firstX, where.firstY,
+		(unsigned int)where.firstColourBefore, (unsigned int)where.firstColourAfter, where.firstDistanceBefore, where.firstDistanceAfter);
+	LogString(line);
+}
+
+// The routes differ on this frame. Is that the new route drawing something else, or two polygons tying, with each route keeping a different one? Drawing the
+// old route again with every polygon in the opposite order tells them apart: see TIES in static_frame.cpp.
+static void SayWhetherTheRoutesDifferOnTies(LPDIRECT3DDEVICE9 device, const float *worldAxes, int frame, const RoutePictures &oldRoute, const RoutePictures &newRoute)
+{
+	RoutePictures backwards;
+	bool const drawn = ToyDrawPictures(device, worldAxes, false, true) && backwards.Read(device, toyDepthSurface);
+
+	device->SetRenderTarget(0, toyDepthSurface);
+	device->Clear(0, NULL, D3DCLEAR_TARGET, 0xFFFFFFFF, 1.0f, 0);
+
+	char line[200] = { 0 };
+
+	if (!drawn)
+	{
+		_snprintf(line, sizeof(line) - 1, "static compare: frame %d: couldn't read the backwards pictures, so nothing's known about ties", frame);
+		LogString(line);
+		return;
+	}
+
+	TiesBetweenPolygons ties;
+
+	StaticFrame_SplitByTies(oldRoute.InMemory(), newRoute.InMemory(), backwards.InMemory(), oldRoute.colour.description.Width, oldRoute.colour.description.Height,
+		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &ties);
+
+	_snprintf(line, sizeof(line) - 1, "static compare: frame %d: %d pixels hold a tie, because the old route's own pictures change when it draws backwards. On a tie %d differ, and off one %d",
+		frame, ties.pixelsThatTie, ties.onATie.pixels, ties.notOnATie.pixels);
+	LogString(line);
+
+	SayWhereTheyDiffer("static compare", frame, "on a tie", ties.onATie);
+	SayWhereTheyDiffer("static compare", frame, "off a tie", ties.notOnATie);
+}
+
 // Draws the pictures both ways and compares them. Whatever's left in the pictures after this, the caller draws them again.
 static void CompareSurfaceRoutes(LPDIRECT3DDEVICE9 device, const float *worldAxes, int frame)
 {
@@ -5583,10 +5746,16 @@ static void CompareSurfaceRoutes(LPDIRECT3DDEVICE9 device, const float *worldAxe
 		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &differences);
 
 	_snprintf(line, sizeof(line) - 1,
-		"static compare: frame %d, %d pixels, %d ranges: %d holes in the new route, %d only in the new route, %d colours changed, %d normals changed, %d distances changed, largest change %.2f",
-		frame, differences.pixelsCompared, numFrameRanges, differences.holesInNew, differences.extraInNew, differences.colourChanged,
-		differences.normalChanged, differences.distanceChanged, differences.largestDistanceChange);
+		"static compare: frame %d, %d pixels, %d with a surface, %d ranges: %d holes in the new route, %d only in the new route, %d colours changed, %d normals changed, %d distances changed, largest change %.2f, largest colour step %d",
+		frame, differences.pixelsCompared, differences.pixelsWithSurface, numFrameRanges, differences.holesInNew, differences.extraInNew, differences.colourChanged,
+		differences.normalChanged, differences.distanceChanged, differences.largestDistanceChange, differences.largestColourStep);
 	LogString(line);
+	SayIfNothingWasCompared("static compare", frame, differences);
+
+	if (differences.holesInNew || differences.extraInNew || differences.colourChanged || differences.normalChanged || differences.distanceChanged)
+	{
+		SayWhetherTheRoutesDifferOnTies(device, worldAxes, frame, oldRoute, newRoute);
+	}
 }
 
 // Draws just the walls that are in the fixed buffer, both ways, each with a depth buffer of its own, and compares them. It has to run on a frame that went the
@@ -5642,9 +5811,16 @@ static void CompareSceneRoutes(LPDIRECT3DDEVICE9 device, int frame)
 		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &differences);
 
 	_snprintf(line, sizeof(line) - 1,
-		"static scene compare: frame %d (drawn the old way, so its timings don't count), %d pixels: %d holes in the new route, %d only in the new route, %d colours changed, %d distances changed, the largest by %.2f",
-		frame, differences.pixelsCompared, differences.holesInNew, differences.extraInNew, differences.colourChanged, differences.distanceChanged, differences.largestDistanceChange);
+		"static scene compare: frame %d (drawn the old way, so its timings don't count), %d pixels, %d with a surface: %d holes in the new route, %d only in the new route, %d colours changed, %d distances changed, the largest by %.2f, the largest colour step %d",
+		frame, differences.pixelsCompared, differences.pixelsWithSurface, differences.holesInNew, differences.extraInNew, differences.colourChanged, differences.distanceChanged, differences.largestDistanceChange, differences.largestColourStep);
 	LogString(line);
+	SayIfNothingWasCompared("static scene compare", frame, differences);
+
+	WhereTheyDiffer where;
+
+	StaticFrame_WhereTheyDiffer(oldRoute.InMemory(), newRoute.InMemory(), oldRoute.colour.description.Width, oldRoute.colour.description.Height,
+		oldRoute.normal.description.Format == D3DFMT_A2R10G10B10, &where);
+	SayWhereTheyDiffer("static scene compare", frame, "here", where);
 }
 
 // There are two ways to show a shadow. If this card can do everything below, the surface pictures are drawn and every light reads them. Chosen live lights then
@@ -5653,6 +5829,28 @@ static void CompareSceneRoutes(LPDIRECT3DDEVICE9 device, int frame)
 static bool ToyPicturesCanRun(LPDIRECT3DDEVICE9 device)
 {
 	return d3d.shadowBlurEffect != kNullEffectID && PixelLights_Ready(device) && ToyMakeTargets(device);
+}
+
+// The wet glint where the painted lamp lands. It reads pictures on stages the game's own drawing uses, so everything is put back exactly as it was, because the game caches its render states.
+static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot)
+{
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	float const *const from = ShoulderLamp_PlaceFromEyes();
+
+	// The lamp's place beside his eyes has "up" the game's way round, which is down in the space of the light list
+	float const numbers[4 * 4] =
+	{
+		strength, 0.0f, 0.0f, wide,
+		aim[0], aim[1], 0.0f, 0.0f,
+		spot[0], spot[1], spot[2], 0.0f,
+		from[0], -from[1], from[2], 0.0f,
+	};
+
+	if (SUCCEEDED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))
+	{
+		PixelLights_AddLampGlint(device, toyDepthTexture, numbers);
+		savedCardSettings->Apply();
+	}
 }
 
 // The shoulder lamp lights each wall's own colour, and reads that from the surface pictures. With lights added per pixel they're already there. In Gouraud nothing else draws them, so while the lamp is on this does: the solid polygons once more, into the
@@ -6798,7 +6996,7 @@ static bool PerPixelLightsCanRun()
 }
 
 // What's really being drawn, whatever was asked for
-static int LightingReallyDrawn()
+int LightingReallyDrawn()
 {
 	if (LightingNow == kLightingGouraud || !PerPixelLightsCanRun())
 	{
@@ -6865,7 +7063,7 @@ static void ShadowStatus_Draw()
 		return;
 	}
 
-	enum { kMostLines = 14, kLineLength = 48 };
+	enum { kMostLines = 15, kLineLength = 48 };
 	char lines[kMostLines][kLineLength];
 	int numLines = 0;
 
@@ -6880,7 +7078,10 @@ static void ShadowStatus_Draw()
 	// This line is always there, so that switching SHADOWEVENGAP shows, whichever way it went.
 	_snprintf(lines[numLines++], kLineLength - 1, "EVEN GAP %s, %sBIAS %d", ShadowsEvenGap ? "ON" : "OFF", ShadowsDepthGap ? ((StaticSceneOn || !KeptPrismsOff) ? "DEPTH GAP PART, " : "DEPTH GAP, ") : "", ShadowBiasSteps ? ShadowBiasSteps : 17);
 
-	_snprintf(lines[numLines++], kLineLength - 1, "%s", kToyViewNames[ToyShadowsMode]);
+	// So that a picture of the screen says what these were
+	_snprintf(lines[numLines++], kLineLength - 1, "PIXEL GLOW %.2f, CURVE %.2f, LEVEL %.2f", PixelLook_Now(kPixelLookGlow), PixelLook_Now(kPixelLookCurve), PixelLook_Now(kPixelLookLevel));
+
+	_snprintf(lines[numLines++], kLineLength - 1, "%s", NormalLinesOn ? kNormalLinesName : kToyViewNames[ToyShadowsMode]);
 	_snprintf(lines[numLines++], kLineLength - 1, "COMMIT %s", AVP_BUILD_COMMIT);
 	_snprintf(lines[numLines++], kLineLength - 1, "FRAME %d", toyFrame + 1);
 	_snprintf(lines[numLines++], kLineLength - 1, "ROOM %s", ToyShadows_RoomName());
@@ -7081,6 +7282,237 @@ static bool DevKeysCanAct()
 	return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();
 }
 
+// Adds what the fixed buffer gave the surface pass on this frame: the same ranges SurfaceStatic_Draw drew. Every number that says where to look is checked against the lists, even though they were made together.
+static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *view, const float *axes)
+{
+	size_t vertexCount = 0, indexCount = 0;
+	const StaticVertex *const vertices = StaticLevel_KeptVertices(&vertexCount);
+	const uint32_t *const indices = StaticLevel_KeptIndices(&indexCount);
+	int rangeCount = 0;
+	const StaticRange *const ranges = SurfaceStatic_FrameRanges(&rangeCount);
+
+	if (!vertices || !indices || !ranges)
+	{
+		return;
+	}
+
+	// which frame each corner was last done in, so a corner two triangles share gets one line
+	static std::vector<uint32_t> doneInFrame;
+	static uint32_t thisFrame = 0;
+
+	if (doneInFrame.size() != vertexCount)
+	{
+		doneInFrame.assign(vertexCount, 0);
+		thisFrame = 0;
+	}
+
+	thisFrame++;
+
+	for (int r = 0; r < rangeCount; r++)
+	{
+		StaticRange const &range = ranges[r];
+
+		for (uint32_t triangle = 0; triangle < range.triangles; triangle++)
+		{
+			uint64_t const first = (uint64_t)range.firstIndex + (uint64_t)triangle * 3;
+
+			if (first + 3 > indexCount)
+			{
+				break;
+			}
+
+			float corners[9], normals[9];
+			size_t at[3];
+			bool drawn[3];
+			bool allThere = true;
+
+			for (int i = 0; i < 3; i++)
+			{
+				uint64_t const place = (uint64_t)range.baseVertex + indices[first + i];
+
+				if (place >= vertexCount)
+				{
+					allThere = false;
+					break;
+				}
+
+				StaticVertex const &vertex = vertices[place];
+
+				at[i] = (size_t)place;
+				drawn[i] = doneInFrame[at[i]] == thisFrame;
+				corners[i * 3 + 0] = vertex.x;
+				corners[i * 3 + 1] = vertex.y;
+				corners[i * 3 + 2] = vertex.z;
+				normals[i * 3 + 0] = vertex.nx;
+				normals[i * 3 + 1] = vertex.ny;
+				normals[i * 3 + 2] = vertex.nz;
+			}
+
+			if (!allThere)
+			{
+				continue;
+			}
+
+			NormalLines_AddBufferTriangle(list, view, axes, corners, normals, range.twoSided, drawn);
+
+			for (int i = 0; i < 3; i++)
+			{
+				if (drawn[i])
+				{
+					doneInFrame[at[i]] = thisFrame;
+				}
+			}
+		}
+	}
+}
+
+// The NORMAL LINES view: see normal_lines.h. The lines go through the same sums as the level's own polygons, so the depth buffer can compare them with it, and that's what makes a wall hide them. Everything this changes
+// on the card is put back afterwards, because it's in the middle of the frame. Its pixel shader wants a texture and there's none, so it goes without. A network game gets none of this:
+// these views can show what's behind a wall.
+static void DrawNormalLines()
+{
+	if (!NormalLinesOn || ToyShadowsMode != kToyViewFinal || AvP.Network != I_No_Network)
+	{
+		return;
+	}
+
+	// LIGHTING or SHADOWS can have turned the view on part way through this frame, and then it started with the list of normals closed. The copy would still hold an older frame's numbers, in the
+	// places this frame's polygons have now, and every line would be comparing one polygon with another's normal. The next frame is right.
+	if (!surfaceNormalsWereWrittenThisFrame)
+	{
+		return;
+	}
+
+	uint32_t verticesInCopy = 0;
+	const float *const normals = SurfaceNormals_TheCopy(&verticesInCopy);
+
+	if (!normals)
+	{
+		return;
+	}
+
+	float view[12], axes[9];
+	ToyShadows_ViewMatrix(view);
+	ToyShadows_WorldAxes(axes);
+
+	static NormalLinesList list;
+	static NormalLinesShapes shapes;
+	NormalLines_Clear(list);
+	NormalLines_ForgetShapes(shapes);
+
+	bool const bufferDrew = surfacePicturesAreFromThisFrame && SurfacePictures_LastDrawWasFromBuffer();
+
+	for (size_t i = 0; i < normalLinesPolygons.size(); i++)
+	{
+		NormalLinesPolygon const &polygon = normalLinesPolygons[i];
+
+		if (polygon.firstVertex <= verticesInCopy && polygon.corners <= verticesInCopy - polygon.firstVertex)
+		{
+			int const pastNinetyBefore = list.pastNinety, badlyBefore = list.found[kNormalLeansBadly], leaningBefore = list.found[kNormalLeans];
+
+			NormalLines_AddListPolygon(list, &normalLinesCorners[polygon.firstCorner * 3], normals + polygon.firstVertex * 4, (int)polygon.corners, axes, bufferDrew);
+			NormalLines_NoteShape(shapes, polygon.shapeNumber, polygon.behaviour, polygon.hasPolygonList, list.pastNinety - pastNinetyBefore, list.found[kNormalLeansBadly] - badlyBefore, list.found[kNormalLeans] - leaningBefore);
+		}
+	}
+
+	if (bufferDrew)
+	{
+		AddTheFixedBufferToNormalLines(list, view, axes);
+	}
+
+	// The first frame of the view always says its counts, so that a person can read off the numbers for where they're standing. A gap in the frames means the view was turned off and on again.
+	static int lastFrameDrawn = -2;
+	static bool saidItStoppedShort = false;
+	bool const firstFrameOfTheView = toyFrame > lastFrameDrawn + 1 || toyFrame < lastFrameDrawn;
+	bool const stoppedShort = NormalLines_StoppedShort(list, normalLinesNotNoted);
+
+	lastFrameDrawn = toyFrame;
+
+	if (firstFrameOfTheView || toyFrame % kFramesBetweenReports == 0 || (stoppedShort && !saidItStoppedShort))
+	{
+		char line[600];
+		NormalLines_Describe(list, toyFrame, surfacePicturesAreFromThisFrame, bufferDrew, earlyFlushThisFrame, normalLinesNotNoted, line, sizeof(line));
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+
+		static const int kShapesInTheLog = 6;
+		char shapesLine[1000];
+		NormalLines_PutWorstFirst(shapes);
+		NormalLines_DescribeShapes(shapes, GetLoadedShapeName, kShapesInTheLog, shapesLine, sizeof(shapesLine));
+		shapesLine[sizeof(shapesLine) - 1] = 0;
+		LogString(shapesLine);
+
+		saidItStoppedShort = saidItStoppedShort || stoppedShort;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// This is what makes a wall hide them. Turning it off would paint them over the wall. They start on a surface, so they go a hair nearer, or the surface would hide their first few pixels and a whole outline.
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	// a card only takes so many at once, and this is well under what any of them takes
+	static const size_t kMostLinesInOneDraw = 16000;
+	static std::vector<D3DLVERTEX> vertices;
+
+	for (int kind = 0; kind < kNormalLineKinds; kind++)
+	{
+		std::vector<NormalLineEnd> const &ends = list.ends[kind];
+
+		vertices.resize(ends.size());
+
+		for (size_t i = 0; i < ends.size(); i++)
+		{
+			vertices[i].x = ends[i].x;
+			vertices[i].y = ends[i].y;
+			vertices[i].z = ends[i].z;
+			vertices[i].color = RGBA_MAKE(ends[i].red, ends[i].green, ends[i].blue, 255);
+			vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+			vertices[i].u = 0.0f;
+			vertices[i].v = 0.0f;
+		}
+
+		for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+		{
+			size_t const left = ends.size() / 2 - line;
+
+			device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+		}
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 // The developer tools show what walls hide. EDGES and RED VOLUMES draw the shadow of someone behind a wall straight through it, and the shoot tool and the reports say much the same in
 // words. In a network game that's cheating, so none of it runs there, whatever the command line said, and the log says why once. This is asked every frame, because a game only becomes a
 // network game after it has started, and a view that was put aside can come back.
@@ -7128,17 +7560,29 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 
 	bool const tuningWasChanged = ShadowTuning_PutBack(shadowTuning, (int)(sizeof(shadowTuning) / sizeof(shadowTuning[0])));
 
+	if (NormalLinesOn)
+	{
+		NormalLinesOn = 0;
+		LogString("normal lines: this is a network game, so they're off");
+	}
+
 	// A bigger or brighter lamp than the others have would be cheating. How quickly it follows the view isn't: LAMPFOLLOW only moves the lamp.
 	if (ShoulderLamp_PutSpotBack())
 	{
 		LogString("lamp: this is a network game, so its size and strength are back as they were built");
 	}
 
+	// And so would a brighter room than the others have
+	if (PixelLook_PutBack())
+	{
+		LogString("pixel look: this is a network game, so PIXELGLOW, PIXELCURVE and PIXELLEVEL are back as they were built");
+	}
+
 	ShadowSurfaceBias = shadowSurfaceBiasAsBuilt;
 
 	bool const viewShowsTooMuch = ToyShadowsMode != kToyViewOff && ToyShadowsMode != kToyViewFinal;
 
-	if (!viewShowsTooMuch && !ShadowShootOn && !ShadowFlickerOn && !ShadowsFullReport && !tuningWasChanged)
+	if (!viewShowsTooMuch && !ShadowShootOn && !ShadowFlickerOn && !ShadowsFullReport && !StaticCompareDropsHalf && !tuningWasChanged)
 	{
 		return;
 	}
@@ -7151,6 +7595,7 @@ static void KeepDeveloperToolsOutOfNetworkGames()
 	ShadowShootOn = 0;
 	ShadowFlickerOn = 0;
 	ShadowsFullReport = 0;
+	StaticCompareDropsHalf = 0;
 
 	static bool toldThem = false;
 
@@ -7218,14 +7663,6 @@ void LightingCommand(char *words)
 	if (!SwitchWords_LightingAsk(words, &lightingAsked))
 	{
 		SaySwitch("LIGHTING TAKES 1 GOURAUD, 2 PERPIXEL, 3 NORMALS OR 4 RELIEF, OR NOTHING FOR THE NEXT");
-	}
-}
-
-void ShadowAmbientCommand(char *words)
-{
-	if (!SwitchWords_ShadowAmbientAsk(words, &shadowAmbientAsked))
-	{
-		SaySwitch("SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
 	}
 }
 
@@ -7339,6 +7776,14 @@ void LampIntensityCommand(char *words)
 	SaySwitch(said);
 }
 
+void ShadowAmbientCommand(char *words)
+{
+	if (!SwitchWords_ShadowAmbientAsk(words, &shadowAmbientAsked))
+	{
+		SaySwitch("SHADOWAMBIENT TAKES ON OR OFF, OR NOTHING TO SWITCH IT");
+	}
+}
+
 // The menu asks the same way the commands do. See view_settings.cpp.
 void ViewSwitches_AskLighting(int choice)
 {
@@ -7415,6 +7860,49 @@ void ReliefDepthCommand(char *words)
 		message[sizeof(message) - 1] = 0;
 		SaySwitch(message);
 	}
+}
+
+// PIXELGLOW, PIXELCURVE and PIXELLEVEL: how a lamp's light looks per pixel, for this run of the game. See pixel_look.h. On its own, each says what it is now.
+static void PixelLookCommand(PixelLookNumber which, char const *name, char const *refused, char *words)
+{
+	if (!ReliefToolsCanAct(name))
+	{
+		return;
+	}
+
+	char const *start = "";
+	size_t length = 0;
+
+	if (words)
+	{
+		SwitchWords_Trim(words, &start, &length);
+	}
+
+	if (length > 0 && !PixelLook_FromWords(which, start, (unsigned int)length))
+	{
+		SaySwitch(refused);
+		return;
+	}
+
+	char said[60] = { 0 };
+
+	_snprintf(said, sizeof(said) - 1, "%s IS %.2f", name, PixelLook_Now(which));
+	SaySwitch(said);
+}
+
+void PixelGlowCommand(char *words)
+{
+	PixelLookCommand(kPixelLookGlow, "PIXELGLOW", "PIXELGLOW TAKES A NUMBER FROM 0 TO 1, LIKE 0.25", words);
+}
+
+void PixelCurveCommand(char *words)
+{
+	PixelLookCommand(kPixelLookCurve, "PIXELCURVE", "PIXELCURVE TAKES A NUMBER FROM 0.25 TO 4, LIKE 1", words);
+}
+
+void PixelLevelCommand(char *words)
+{
+	PixelLookCommand(kPixelLookLevel, "PIXELLEVEL", "PIXELLEVEL TAKES A NUMBER FROM 0 TO 2, LIKE 1", words);
 }
 
 extern int DrawFullBright;
@@ -7642,13 +8130,17 @@ static void ToyShadows_Draw()
 		return;
 	}
 
-	// J, which no default control set uses, or whichever key the player has chosen on the rendering page. Not while typing, or a J in the console or a chat message would change the view.
+	// J, which no default control set uses, or whichever key the player has chosen on the rendering page. G was this key until it became the marine's shoulder lamp. Not while typing, or a J in the console or a chat message would change the view.
 	if (DevKeysCanAct() && ViewSettings_KeyPressed(kViewKeyDevViews))
 	{
-		ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
+		// The last place on the list, after NORMALS, is the lines: see normal_lines.h.
+		if (!View_StepNormalLines(&ToyShadowsMode, kToyViewOff, kToyViewFinal, kViewNormals, &NormalLinesOn))
+		{
+			ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);
+		}
 
 		static char message[40];
-		_snprintf(message, sizeof(message) - 1, "VIEW: %s", kToyViewNames[ToyShadowsMode]);
+		_snprintf(message, sizeof(message) - 1, "VIEW: %s", NormalLinesOn ? kNormalLinesName : kToyViewNames[ToyShadowsMode]);
 		message[sizeof(message) - 1] = 0;
 		NewOnScreenMessage(message);
 		LogString(message);
@@ -7728,6 +8220,7 @@ static void ToyShadows_Draw()
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
 	report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+
 
 	if (!report.lights)
 	{
@@ -7877,12 +8370,21 @@ static void ToyShadows_Draw()
 			}
 			else
 			{
+				if (StaticCompareDropsHalf)
+				{
+					LogString("static compare: half the ranges are left out of the new route on purpose, so the lines below should show holes");
+					SurfaceStatic_SetFrame(frameRanges, numFrameRanges / 2);
+				}
+
 				CompareSurfaceRoutes(device, worldAxes, toyFrame);
 
 				if (StaticSceneOn)
 				{
 					CompareSceneRoutes(device, toyFrame);
 				}
+
+				// every range again, for the frame's real pictures
+				SurfaceStatic_SetFrame(frameRanges, numFrameRanges);
 			}
 		}
 

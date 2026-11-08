@@ -633,6 +633,16 @@
 					"to": "\" needs a model, which"
 				}
 			]
+		},
+		{
+			"name": "a ghost's block is cleared before it's checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "\t\tNETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));\n\t\tif(!ghostData)\n\t\t{\n\t\t\t/* allocation failed */\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;\n\t\t}\n\n\t\t// New memory holds whatever was there before, and not every kind of ghost sets every field. It's cleared only once it's\n\t\t// known to be there: AllocateMem is meant to stop the game rather than give back nothing, but this doesn't count on it.\n\t\tmemset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));\n",
+					"to": "\t\tNETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));\n\t\tmemset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));\n\t\tif(!ghostData)\n\t\t{\n\t\t\t/* allocation failed */\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn NULL;\n\t\t}\n\n"
+				}
+			]
 		}
 	]
 }

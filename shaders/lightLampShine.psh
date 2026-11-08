@@ -1,0 +1,45 @@
+// Pixel shader input structure
+struct PS_INPUT
+{
+    float2 ScreenPlace : VPOS;
+};
+
+#include "lightShapes.fxh"
+
+// Global variables. c0 is Screen: see lightShapes.fxh
+float4 Lamp      : register(c1);    // .x is how strong the lamp is at this moment, which is where the flicker comes in. .w is how wide the screen is for its height
+float4 Swing     : register(c2);    // .xy is how far the lamp's aim is from the middle of the screen, as a place on the screen
+float4 Spot      : register(c3);    // .x is how far the spot reaches from its middle. .z is how strong it is, where 1 is as built. See shaders/shoulderLamp.psh
+float4 LampPlace : register(c4);    // .xyz is where the lamp is, in the same space as the light list
+
+// Where the spot's aimed, and its colour. These match shaders/shoulderLamp.psh, which is full, and that's why this is a shader of its own.
+static const float2 kAim = float2(0.50f, 0.50f);
+static const float3 kLampGlint = float3(1.0f, 0.92f, 0.78f);
+
+// How much of the way in from its edge the glint takes to reach its full strength. Soft, so that it has no edge of its own.
+static const float kGlintEdge = 0.6f;
+
+
+// Name: Lamp glint pixel shader
+// Type: Pixel shader
+// Desc: The wet glint where the marine's shoulder lamp lands. The painted lamp isn't a light: it's drawn over the finished picture, so no other pass knows about it. This works out the glint from the way each pixel
+// faces, as the lights do, so it slides over the bumps as he moves, and only inside the spot. Nothing blocks it, because a painted lamp has no shadows. How it looks is at the top of lightShapes.fxh.
+
+float4 ps_main(in PS_INPUT In) : COLOR0
+{
+    float4 place = PlaceOnPicture(In.ScreenPlace);
+
+    clip(tex2Dlod(Colours, place).a - 0.5f);
+
+    float  howFar   = tex2Dlod(Depth, place).r;
+    float3 position = PositionHere(In.ScreenPlace, howFar);
+    float3 normal   = NormalHere(place);
+
+    float2 wide    = float2(Lamp.w, 1.0f);
+    float  fromAim = distance(place.xy * wide, (kAim + Swing.xy) * wide);
+    float  inSpot  = smoothstep(0.0f, 1.0f, saturate((Spot.x - fromAim) / (Spot.x * kGlintEdge)));
+    float  away    = howFar / kLampHalfDistance;
+    float  shine   = ShineHere(LampPlace.xyz - position, position, normal);
+
+    return float4(kLampGlint * shine * kShineStrength * inSpot * Lamp.x * Spot.z / (1.0f + away * away), 0.0f);
+}

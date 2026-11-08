@@ -102,7 +102,10 @@ jobs:
     timeout-minutes: 300
     strategy:
       fail-fast: false   # one list failing doesn't stop the others, so a run shows every list that needs work
-      max-parallel: 8
+      # GitHub Pro runs up to 40 jobs at once for this account. 30 leaves room for the other checks of the same pull request
+      # (build, tests, Snyk), so the take-out lists, which are the slowest part of a run, finish sooner. It costs nothing more on a
+      # public repository.
+      max-parallel: 30
       matrix:
         list: ${{ fromJSON(needs.choose.outputs.lists) }}
     steps:
@@ -110,6 +113,27 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # A test that links one of the game's own libraries names vcpkg_installed in its settings (net_close_test links our ENet),
+      # and the runner copies exactly those files into its copy of the code. So they're fetched first, by the same action and with
+      # the same ports as the Tests check, so both checks build a test against the same libraries. A list whose test names
+      # nothing there skips this.
+      - name: See whether this list's test links the game's libraries
+        id: libraries
+        shell: pwsh
+        env:
+          LIST: ${{ matrix.list }}
+        run: |
+          $settings = "tests/$($env:LIST).args"
+          $links = (Test-Path -LiteralPath $settings) -and ((Get-Content -LiteralPath $settings -Raw) -match 'vcpkg_installed')
+          "It links the game's libraries: $links"
+          "links=$(if ($links) { 'yes' } else { 'no' })" >> $env:GITHUB_OUTPUT
+
+      - name: Fetch the game's libraries the test links
+        if: steps.libraries.outputs.links == 'yes'
+        uses: ./.github/actions/fetch-test-libraries
+        with:
+          ports: dxsdk-d3dx enet
 
       # The runner says how each row went, and gives back a non-zero result if any row wasn't noticed or couldn't be run. A list
       # whose test isn't here at all can't be run either, and fails the same way.

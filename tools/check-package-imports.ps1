@@ -16,16 +16,19 @@ with the game for anyone to read. See the end of this script.
 WHAT IT CAN'T SEE: a library loaded by name while the program is running, such as D3DCompiler_43.dll. tests/package_test.cpp checks that one
 works, and this only checks that it's there and signed. tests/try-package.ps1 shows that each of these checks refuses when it should.
 #>
+# -Package is the folder the program and its libraries are in: the package's bin, where the game is AvP_Classic.exe
 param(
     [Parameter(Mandatory = $true)][string]$Package
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Part of Windows itself, from Windows 8 on, which is what PLAYTEST.md asks for
+# Part of Windows itself, from Windows 8 on, which is what PLAYTEST.md asks for. bcrypt.dll is Windows' own cryptography library, there
+# since Windows Vista: the game links it because ENet's host_secret.c (vcpkg-overlay-ports/enet, for patch 006) asks it for random
+# numbers with BCryptGenRandom.
 $partOfWindows = @(
-    'advapi32.dll', 'avrt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll', 'winmm.dll',
-    'ws2_32.dll', 'xinput1_4.dll'
+    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll',
+    'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
 # Microsoft's Visual C++ Redistributable, which PLAYTEST.md tells a tester to install from Microsoft
@@ -64,7 +67,7 @@ foreach ($file in $files) {
 }
 
 # With nothing read, everything would have passed, which would prove nothing
-if ($files.Count -lt 2 -or $inPackage -notcontains 'avpx.exe' -or $namesRead -eq 0) {
+if ($files.Count -lt 2 -or $inPackage -notcontains 'avp_classic.exe' -or $namesRead -eq 0) {
     throw "This doesn't look like a package: $($files.Count) programs and libraries, $namesRead names read in $Package"
 }
 

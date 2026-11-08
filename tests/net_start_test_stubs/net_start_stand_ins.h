@@ -13,6 +13,7 @@
 #define _console_h_
 #define _ConfigFile_h_
 #define LOGSTRING_H
+void LogString(const std::string &logString);
 
 typedef uint32_t NetID;
 
@@ -103,6 +104,7 @@ typedef struct
 {
 	char Name[40];
 	int levelIndex;
+	char coopLobby;
 	uint32_t host;
 	uint16_t port;
 	GUID Guid;

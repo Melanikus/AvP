@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the GOD cheat is there in a beta, for testers (see beta_build.h)
 /*******************************************************************
  *
  *    DESCRIPTION: 	chtcodes.cpp
@@ -11,6 +13,7 @@
 
 /* Includes ********************************************************/
 #include "3dc.h"
+#include "build_identity.h"
 #include "scstring.hpp"
 #include "gadget.h"
 #include "strutil.h"
@@ -178,9 +181,11 @@ void SCString :: ProcessAnyCheatCodes(void)
 			return;
 		}
 	}
+	// In a beta these are there for testers, without DebuggingCommandsActive, which would also stop saving, statistics and the next
+	// level's unlock: see beta_build.h. GOD.
 	#ifndef AVP_DEBUG_VERSION // allow debug commands without -debug
 	#ifndef AVP_DEBUG_FOR_FOX // allow debug commands without -debug
-	if (DebuggingCommandsActive)
+	if (DebuggingCommandsActive || BuildIdentity_IsABeta())
 	#endif
 	#endif
 	{

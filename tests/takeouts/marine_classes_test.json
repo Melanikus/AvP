@@ -1,0 +1,678 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the shotgun class is the first new place",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kClassSliderFirstNew = 11,",
+					"to": "kClassSliderFirstNew = 10,"
+				}
+			]
+		},
+		{
+			"name": "the last place on the slider",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kClassSliderLast = 13",
+					"to": "kClassSliderLast = 14"
+				}
+			]
+		},
+		{
+			"name": "a place is two more than its class",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "return slider - 2;",
+					"to": "return slider - 3;"
+				}
+			]
+		},
+		{
+			"name": "new names start at the first new place",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (slider < kClassSliderFirstNew || slider > kClassSliderLast)",
+					"to": "if (slider > kClassSliderLast)"
+				}
+			]
+		},
+		{
+			"name": "no new name past the last",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (slider < kClassSliderFirstNew || slider > kClassSliderLast)",
+					"to": "if (slider < kClassSliderFirstNew)"
+				}
+			]
+		},
+		{
+			"name": "shotgun start",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kClassShotgunStartRounds = 60",
+					"to": "kClassShotgunStartRounds = 61"
+				}
+			]
+		},
+		{
+			"name": "revolver start",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kClassRevolverStartRounds = 100",
+					"to": "kClassRevolverStartRounds = 101"
+				}
+			]
+		},
+		{
+			"name": "M79 start",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kClassM79StartEachKind = 15",
+					"to": "kClassM79StartEachKind = 16"
+				}
+			]
+		},
+		{
+			"name": "revolver sidearm start",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kSidearmRevolverStartRounds = 50",
+					"to": "kSidearmRevolverStartRounds = 51"
+				}
+			]
+		},
+		{
+			"name": "pistol sidearm start",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kSidearmPistolStartMagazines = 10",
+					"to": "kSidearmPistolStartMagazines = 11"
+				}
+			]
+		},
+		{
+			"name": "sidearm: only a marine",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (!isMarine || marineClass == kClassGeneral || !specialistPistols)",
+					"to": "if (marineClass == kClassGeneral || !specialistPistols)"
+				}
+			]
+		},
+		{
+			"name": "sidearm: no class, none",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (!isMarine || marineClass == kClassGeneral || !specialistPistols)",
+					"to": "if (!isMarine || !specialistPistols)"
+				}
+			]
+		},
+		{
+			"name": "sidearm: host turned them off",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (!isMarine || marineClass == kClassGeneral || !specialistPistols)",
+					"to": "if (!isMarine || marineClass == kClassGeneral)"
+				}
+			]
+		},
+		{
+			"name": "sidearm: pistols marine",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "return revolverAllowed ? kSidearmRevolver : kSidearmNone;",
+					"to": "return kSidearmRevolver;"
+				}
+			]
+		},
+		{
+			"name": "sidearm: pistols marine has no choice",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (marineClass == kClassPistols)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "sidearm: revolver not allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (!revolverAllowed)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "sidearm: the choice counts",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "return choiceInTheMenu == kSidearmRevolver ? kSidearmRevolver : kSidearmPistol;",
+					"to": "return kSidearmPistol;"
+				}
+			]
+		},
+		{
+			"name": "sidearm: a choice that is not one",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "return choiceInTheMenu == kSidearmRevolver ? kSidearmRevolver : kSidearmPistol;",
+					"to": "return choiceInTheMenu != kSidearmPistol ? kSidearmRevolver : kSidearmPistol;"
+				}
+			]
+		},
+		{
+			"name": "settings: too low",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (fromFile < lowest || fromFile > highest)",
+					"to": "if (fromFile > highest)"
+				}
+			]
+		},
+		{
+			"name": "settings: too high",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (fromFile < lowest || fromFile > highest)",
+					"to": "if (fromFile < lowest)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: 12 classes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "#define NUM_PC_SUBTYPES 12",
+					"to": "#define NUM_PC_SUBTYPES 13"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: skirmish forces the limit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tnetGameData.maxMarineM79 = 8;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the staff is off to begin with",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tnetGameData.allowStaff = 0;",
+					"to": "\tnetGameData.allowStaff = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the staff is off at the very start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tFALSE,  // BOOL allowStaff;",
+					"to": "\tTRUE,   // BOOL allowStaff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a class not allowed has no places",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.maxMarineRevolver = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a limit counts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "CharacterSubTypesAvailable[NGSCT_M79] = netGameData.maxMarineM79;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player takes a place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "CharacterSubTypesAvailable[NGSCT_Shotgun]--;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the slider comes round",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (*species > kClassSliderLast) {",
+					"to": "if (*species > 10) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both ways",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "*species = kClassSliderLast;",
+					"to": "*species = 10;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host starts as a new class",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "case 13:\n\t\t\t\tnetGameData.myCharacterType = NGCT_Marine;",
+					"to": "netGameData.myCharacterType = NGCT_Marine;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner starts as a new class",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "case 13:\n\t\t\t\t\t\tnetGameData.myCharacterType = NGCT_Marine;",
+					"to": "netGameData.myCharacterType = NGCT_Marine;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the slider shows new names",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "TEXTSTRING_MULTIPLAYER_MARINE_SHOTGUN + ClassSlider_NewNameIndex(",
+					"to": "TEXTSTRING_MULTIPLAYER_MARINE_SHOTGUN + 0 * ClassSlider_NewNameIndex("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a class menu stops short",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{kClassSliderLast},\t{&MP_Species},\t\t{TEXTSTRING_MULTIPLAYER_MARINE},\tTEXTSTRING_MULTIPLAYER_SPECIES_HELP},\n\t{AVPMENU_ELEMENT_TEXTSLIDER,\t\t{TEXTSTRING_MULTIPLAYER_SIDEARM},\t\t{1},\t{&MP_Sidearm},\t\t{TEXTSTRING_SIDEARM_PISTOL},\tTEXTSTRING_MPHELP_SIDEARM},\n\t{AVPMENU_ELEMENT_STARTMPGAME,",
+					"to": "{10},\t{&MP_Species},\t\t{TEXTSTRING_MULTIPLAYER_MARINE},\tTEXTSTRING_MULTIPLAYER_SPECIES_HELP},\n\t{AVPMENU_ELEMENT_TEXTSLIDER,\t\t{TEXTSTRING_MULTIPLAYER_SIDEARM},\t\t{1},\t{&MP_Sidearm},\t\t{TEXTSTRING_SIDEARM_PISTOL},\tTEXTSTRING_MPHELP_SIDEARM},\n\t{AVPMENU_ELEMENT_STARTMPGAME,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a setting is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "*setting = Setting_FromFile(number, lowest, highest, *setting);",
+					"to": "*setting = number;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a missing setting keeps its default",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "if (file.ReadBytes((uint8_t*)&number, sizeof(number)) == sizeof(number))",
+					"to": "file.ReadBytes((uint8_t*)&number, sizeof(number));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Allow Staff is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "ReadLaterSetting(file, &netGameData.allowStaff, 0, 1);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Allow Staff is written",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/mp_config.cpp",
+					"from": "file.PutInt32LE(netGameData.allowStaff);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shotgun class",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "a=StartWithClassGun(playerStatusPtr, WEAPON_AUTOSHOTGUN, kClassShotgunStartRounds);",
+					"to": "a=StartWithClassGun(playerStatusPtr, WEAPON_PULSERIFLE, kClassShotgunStartRounds);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the revolver class",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "a=StartWithClassGun(playerStatusPtr, WEAPON_BEAMCANNON, kClassRevolverStartRounds);",
+					"to": "a=StartWithClassGun(playerStatusPtr, WEAPON_PULSERIFLE, kClassRevolverStartRounds);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the M79 class",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "M79_SetEveryKind(&playerStatusPtr->WeaponSlot[a], kClassM79StartEachKind);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no model file",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "slot = SlotForThisWeapon(WEAPON_PULSERIFLE);\n\t\tspares = 5;",
+					"to": "spares = 5;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the staff when allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (!SameAsSinglePlayer() && netGameData.allowStaff)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: shotgun ammo",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "ammoID!=AMMO_PLAYER_SHOTGUN && !IsMySidearmsAmmo(ammoID)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: M79 ammo",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "ammoID!=AMMO_M79_STANDARD && ammoID!=AMMO_M79_FIRE && ammoID!=AMMO_M79_FRAG && !IsMySidearmsAmmo(ammoID)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: shotgun gun",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "weaponID!=WEAPON_AUTOSHOTGUN && !IsMySidearm(weaponID)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: revolver gun",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "weaponID!=WEAPON_BEAMCANNON && !IsMySidearm(weaponID)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: M79 gun",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "weaponID!=WEAPON_MYSTERYGUN && !IsMySidearm(weaponID)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sniper ammo refused",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (!SameAsSinglePlayer() && ammoID == AMMO_SNIPER)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sniper gun refused",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (IsKeptOutOfNetworkGames(weaponID))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sniper gun hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "objectstatusptr->subType==WEAPON_SONICCANNON||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: sniper ammo hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "objectstatusptr->subType==AMMO_SNIPER||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a staff not allowed is hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "(!netGameData.allowStaff && objectstatusptr->subType==WEAPON_PRED_STAFF)||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an M79 not allowed is hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "(!netGameData.allowM79 && objectstatusptr->subType==WEAPON_MYSTERYGUN)||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: revolver ammo not allowed is hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "(!netGameData.allowRevolver && objectstatusptr->subType==AMMO_REVOLVER)||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the test command and the sniper",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/cheat.cpp",
+					"from": "if (!SameAsSinglePlayer() && wdPtr->WeaponIDNumber==WEAPON_SONICCANNON) continue;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a missing model gives the pulse rifle",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "return found ? found : GetNamedHierarchyFromLibrary(\"hnpcmarine\",\"marine with pulse rifle\");",
+					"to": "return found;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: others hear the shotgun",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "Sound_Play(SID_WEAPON_SHOTGUN_FIRE,\"hd\"",
+					"to": "Sound_Play(SID_SHOTGUN,\"hd\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: others hear the revolver",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "Sound_Play(SID_WEAPON_REVOLVER_FIRE,\"hd\"",
+					"to": "Sound_Play(SID_SHOTGUN,\"hd\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dropped gun with no model has a shape",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "if (sbPtr->shapeIndex<0)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new gun on the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "toolsdata.shapeIndex=GetLoadedShapeMSL(\"shotgunpick\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dropped gun not allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "type==WEAPON_MYSTERYGUN && !netGameData.allowM79",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: both model files",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "{ \"ShotgunBot.rif\", \"MelPyth_hnpcmarine.rif\" }",
+					"to": "{ \"ShotgunBot.rif\" }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the dropped gun file",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "LoadedNPC tempnpc(\"ShotgunPickup.rif\");",
+					"to": "LoadedNPC tempnpc(\"Elsewhere.rif\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the revolver flash",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "(weaponPtr->WeaponIDNumber == WEAPON_BEAMCANNON) ||",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a revolver kill has a picture",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "case AMMO_REVOLVER :\n\t\t\treturn ICON_MARINE_PISTOL;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an M79 kill has a picture",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "case AMMO_M79_DIRECT_HIT :",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the menu works out the class with its own copy of the sum",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "netGameData.myCharacterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)ClassSlider_ToClass(MP_Species);",
+					"to": "netGameData.myCharacterSubType =(NETGAME_SPECIALISTCHARACTERTYPE) (MP_Species-2);"
+				}
+			]
+		}
+	]
+}

@@ -366,3 +366,5 @@ MigrationBackup/
 FodyWeavers.xsd
 # vcpkg manifest mode: installed packages are build output
 vcpkg_installed/
+# Written by tools/build-and-package.ps1 for each build: which version and commit it is
+3dc/build_version.h
