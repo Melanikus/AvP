@@ -185,11 +185,6 @@ bool SaveTest_Running()
 	return running;
 }
 
-bool SaveTest_WasAsked()
-{
-	return asked;
-}
-
 SaveTestMenusAsk SaveTest_MenusAsk()
 {
 	if (!running || menusAnswered)

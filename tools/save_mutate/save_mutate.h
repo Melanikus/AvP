@@ -25,7 +25,9 @@
 //     0, -1, 1, the most and the least an int holds, and one more and one less than they were. That reaches the counts, list numbers,
 //     kinds and behaviours a block holds without this knowing every block's layout;
 //   - bytes anywhere in the unpacked blocks, picked the same way;
-//   - the level's header: its size, its species and episode out of range, its difficulty out of range, and its "AvP save" mark changed.
+//   - the level's header: its size, its species and episode out of range, its difficulty out of range, and its "AvP save" mark changed;
+//   - names: wherever a block holds a strategy block's name (its own, or one it points at, such as a target), the name of a strategy
+//     block of another behaviour is put there, so a loader is handed an object of a kind it doesn't expect.
 // And MOVING a save onto another map, the edit that's an attack in itself: the header's episode set to another level's.
 //
 // It changes the blocks BEFORE they're packed again, so each copy is a save the game will unpack: what's tried is the loader, not only the
@@ -46,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -53,6 +56,12 @@
 
 size_t const kSaveMutateMostFile = 64u * 1024u * 1024u;   // a save bigger than this isn't a save: the game's are tens of kilobytes
 size_t const kSaveMutateMostBlocks = 1000000;              // blocks in one save
+size_t const kSaveMutateMostChanges = 200000;              // changes in one list: past this many, the rest are left out
+size_t const kSaveMutateMostName = 39;                     // the longest copy name the harness reads (kCustomMapNameMost)
+int const kSaveMutateStrategyKind = 2;                     // SaveBlock_Strategy, in savegame.h
+size_t const kSaveMutateBehaviourAt = 8;                   // a strategy block's behaviour, after its kind and size (SAVE_BLOCK_STRATEGY_HEADER)
+size_t const kSaveMutateNameAt = 12;                       // and its own name, after its behaviour
+size_t const kSaveMutateNameLength = 8;                    // SB_NAME_LENGTH, in strategy_def.h
 int const kSaveMutateBlockKinds = 22;                      // SaveBlock_MainHeader up to SaveBlock_GunOwnState, in savegame.h: 0 to 21
 int const kSaveMutateHeaderSize = 8;                        // a block's type and size, an int each
 int const kSaveMutateLevelBlockSize = 28;                   // LEVEL_SAVE_BLOCK, savegame.h: the header, the 8-byte mark, 4 bytes, 4, 2, padding
@@ -89,7 +98,8 @@ enum SaveMutateKind
 	kSaveMutateByte,           // one byte anywhere in the blocks set to value
 	kSaveMutateHeaderByte,     // one byte of the level's header set to value
 	kSaveMutateLevelHeaderSize,   // the level header's own size set to value
-	kSaveMutateMoveTo          // the header's episode set to value: the save moved onto another map
+	kSaveMutateMoveTo,         // the header's episode set to value: the save moved onto another map
+	kSaveMutateName            // the strategy block's name at a place in a block set to the name of strategy block number value
 };
 
 struct SaveMutateChange
@@ -268,6 +278,18 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 {
 	std::vector<SaveMutateChange> changes;
 	SaveMutateRandom random(seed);
+	// Every change goes in through here, which stops at kSaveMutateMostChanges: a save of very many blocks would otherwise make a list
+	// as big as it likes
+	struct Adding
+	{
+		static void One(std::vector<SaveMutateChange> *list, SaveMutateChange const &c)
+		{
+			if (list->size() < kSaveMutateMostChanges)
+			{
+				list->push_back(c);
+			}
+		}
+	};
 
 	// The level's header
 	int64_t const headerSizes[] = { 0, kSaveMutateHeaderSize - 1, kSaveMutateLevelBlockSize - 1, static_cast<int64_t>(save.header.size()) + 1, INT_MAX, -1 };
@@ -275,7 +297,7 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 	for (size_t k = 0; k < sizeof(headerSizes) / sizeof(headerSizes[0]); k++)
 	{
 		SaveMutateChange const c = { kSaveMutateLevelHeaderSize, 0, 4, headerSizes[k] };
-		changes.push_back(c);
+		Adding::One(&changes, c);
 	}
 
 	int64_t const headerBytes[][2] = { { kSaveMutateSpeciesAt, 3 }, { kSaveMutateSpeciesAt, 255 }, { kSaveMutateEpisodeAt, 255 },
@@ -286,14 +308,14 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 		if (static_cast<size_t>(headerBytes[k][0]) < save.header.size())
 		{
 			SaveMutateChange const c = { kSaveMutateHeaderByte, 0, static_cast<size_t>(headerBytes[k][0]), headerBytes[k][1] };
-			changes.push_back(c);
+			Adding::One(&changes, c);
 		}
 	}
 
 	for (size_t k = 0; k < moveTo.size(); k++)
 	{
 		SaveMutateChange const c = { kSaveMutateMoveTo, 0, kSaveMutateEpisodeAt, moveTo[k] };
-		changes.push_back(c);
+		Adding::One(&changes, c);
 	}
 
 	// Each block: its size, its type, and dropped, doubled and swapped
@@ -305,17 +327,20 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 		for (size_t k = 0; k < sizeof(sizes) / sizeof(sizes[0]); k++)
 		{
 			SaveMutateChange const c = { kSaveMutateBlockSize, b, 4, sizes[k] };
-			changes.push_back(c);
+			Adding::One(&changes, c);
 		}
 
 		SaveMutateChange const types[] = { { kSaveMutateBlockType, b, 0, -1 }, { kSaveMutateBlockType, b, 0, kSaveMutateBlockKinds },
 			{ kSaveMutateDropBlock, b, 0, 0 }, { kSaveMutateDoubleBlock, b, 0, 0 } };
-		changes.insert(changes.end(), types, types + 4);
+		for (size_t k = 0; k < 4; k++)
+		{
+			Adding::One(&changes, types[k]);
+		}
 
 		if (b + 1 < save.list.size())
 		{
 			SaveMutateChange const c = { kSaveMutateSwapBlock, b, 0, 0 };
-			changes.push_back(c);
+			Adding::One(&changes, c);
 		}
 	}
 
@@ -340,7 +365,59 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 			int64_t const was = SaveMutate_ReadInt(&save.blocks[save.list[b].at + at]);
 			int64_t const values[] = { 0, -1, 1, INT_MAX, INT_MIN, was + 1, was - 1 };
 			SaveMutateChange const c = { kSaveMutateWord, b, at, values[random.Below(sizeof(values) / sizeof(values[0]))] };
-			changes.push_back(c);
+			Adding::One(&changes, c);
+		}
+	}
+
+	// Names inside blocks. First every strategy block's own name, but for one of all zeros, which is no name. Then wherever a block holds
+	// one of those names, the name of the next strategy block, in the save's order, whose behaviour is another.
+	{
+		std::map<std::string, size_t> owner;
+		std::vector<size_t> strategies;
+
+		for (size_t b = 0; b < save.list.size(); b++)
+		{
+			SaveMutateBlock const &k = save.list[b];
+
+			if (k.type == kSaveMutateStrategyKind && static_cast<size_t>(k.size) >= kSaveMutateNameAt + kSaveMutateNameLength)
+			{
+				std::string const name(reinterpret_cast<const char *>(&save.blocks[k.at + kSaveMutateNameAt]), kSaveMutateNameLength);
+
+				if (name.find_first_not_of('\0') != std::string::npos && owner.insert(std::make_pair(name, strategies.size())).second)
+				{
+					strategies.push_back(b);
+				}
+			}
+		}
+
+		for (size_t b = 0; b < save.list.size() && strategies.size() > 1; b++)
+		{
+			SaveMutateBlock const &k = save.list[b];
+
+			for (size_t at = kSaveMutateHeaderSize; at + kSaveMutateNameLength <= static_cast<size_t>(k.size); at++)
+			{
+				std::string const here(reinterpret_cast<const char *>(&save.blocks[k.at + at]), kSaveMutateNameLength);
+				const auto found = owner.find(here);
+
+				if (found == owner.end())
+				{
+					continue;
+				}
+
+				int const behaviour = SaveMutate_ReadInt(&save.blocks[save.list[strategies[found->second]].at + kSaveMutateBehaviourAt]);
+
+				for (size_t step = 1; step < strategies.size(); step++)
+				{
+					size_t const other = strategies[(found->second + step) % strategies.size()];
+
+					if (SaveMutate_ReadInt(&save.blocks[save.list[other].at + kSaveMutateBehaviourAt]) != behaviour)
+					{
+						SaveMutateChange const c = { kSaveMutateName, b, at, static_cast<int64_t>(other) };
+						Adding::One(&changes, c);
+						break;
+					}
+				}
+			}
 		}
 	}
 
@@ -348,37 +425,55 @@ inline std::vector<SaveMutateChange> SaveMutate_Changes(const SaveMutateSave &sa
 	for (size_t k = 0; k < randomBytes && !save.blocks.empty(); k++)
 	{
 		SaveMutateChange const c = { kSaveMutateByte, 0, random.Below(save.blocks.size()), static_cast<int64_t>(random.Next() & 0xFF) };
-		changes.push_back(c);
+		Adding::One(&changes, c);
 	}
 
 	return changes;
 }
 
-// A change's name for a copy's file: what was changed, and to what. Only letters, digits, - and _, so it's a safe file name.
+// A change's name for a copy's file: what was changed, and to what, short: b is the block, k its kind, m a minus. Only letters, digits
+// and _, so it keeps to the custom map name rule the harness reads names by, and never more than kSaveMutateMostName letters: a name
+// that would be longer is "change_" and a number worked out from it (FNV-1a), so the same change always has the same name.
 inline std::string SaveMutate_Name(const SaveMutateSave &save, const SaveMutateChange &c)
 {
 	char text[160];
 	int const type = c.block < save.list.size() ? save.list[c.block].type : -1;
 	long long const value = static_cast<long long>(c.value);
-	char const *sign = value < 0 ? "minus" : "";
+	char const *sign = value < 0 ? "m" : "";
 	unsigned long long const magnitude = value < 0 ? static_cast<unsigned long long>(-(value + 1)) + 1u : static_cast<unsigned long long>(value);
 
 	switch (c.kind)
 	{
-	case kSaveMutateBlockSize: snprintf(text, sizeof(text), "block%04u_type%d_size_%s%llu", static_cast<unsigned>(c.block), type, sign, magnitude); break;
-	case kSaveMutateBlockType: snprintf(text, sizeof(text), "block%04u_type%d_typeset_%s%llu", static_cast<unsigned>(c.block), type, sign, magnitude); break;
-	case kSaveMutateDropBlock: snprintf(text, sizeof(text), "block%04u_type%d_dropped", static_cast<unsigned>(c.block), type); break;
-	case kSaveMutateDoubleBlock: snprintf(text, sizeof(text), "block%04u_type%d_doubled", static_cast<unsigned>(c.block), type); break;
-	case kSaveMutateSwapBlock: snprintf(text, sizeof(text), "block%04u_type%d_swapped_with_next", static_cast<unsigned>(c.block), type); break;
-	case kSaveMutateWord: snprintf(text, sizeof(text), "block%04u_type%d_word_at%u_%s%llu", static_cast<unsigned>(c.block), type, static_cast<unsigned>(c.at), sign, magnitude); break;
-	case kSaveMutateByte: snprintf(text, sizeof(text), "byte_at%u_%llu", static_cast<unsigned>(c.at), magnitude); break;
-	case kSaveMutateHeaderByte: snprintf(text, sizeof(text), "header_byte_at%u_%llu", static_cast<unsigned>(c.at), magnitude); break;
-	case kSaveMutateLevelHeaderSize: snprintf(text, sizeof(text), "header_size_%s%llu", sign, magnitude); break;
-	case kSaveMutateMoveTo: snprintf(text, sizeof(text), "moved_to_episode%llu", magnitude); break;
+	case kSaveMutateBlockSize: snprintf(text, sizeof(text), "b%u_k%d_size_%s%llu", static_cast<unsigned>(c.block), type, sign, magnitude); break;
+	case kSaveMutateBlockType: snprintf(text, sizeof(text), "b%u_k%d_kind_%s%llu", static_cast<unsigned>(c.block), type, sign, magnitude); break;
+	case kSaveMutateDropBlock: snprintf(text, sizeof(text), "b%u_k%d_drop", static_cast<unsigned>(c.block), type); break;
+	case kSaveMutateDoubleBlock: snprintf(text, sizeof(text), "b%u_k%d_double", static_cast<unsigned>(c.block), type); break;
+	case kSaveMutateSwapBlock: snprintf(text, sizeof(text), "b%u_k%d_swap", static_cast<unsigned>(c.block), type); break;
+	case kSaveMutateWord: snprintf(text, sizeof(text), "b%u_k%d_w%u_%s%llu", static_cast<unsigned>(c.block), type, static_cast<unsigned>(c.at), sign, magnitude); break;
+	case kSaveMutateByte: snprintf(text, sizeof(text), "byte%u_%llu", static_cast<unsigned>(c.at), magnitude); break;
+	case kSaveMutateHeaderByte: snprintf(text, sizeof(text), "head%u_%llu", static_cast<unsigned>(c.at), magnitude); break;
+	case kSaveMutateLevelHeaderSize: snprintf(text, sizeof(text), "headsize_%s%llu", sign, magnitude); break;
+	case kSaveMutateMoveTo: snprintf(text, sizeof(text), "episode%llu", magnitude); break;
+	case kSaveMutateName: snprintf(text, sizeof(text), "b%u_k%d_n%u_from_b%llu", static_cast<unsigned>(c.block), type, static_cast<unsigned>(c.at), magnitude); break;
 	default: snprintf(text, sizeof(text), "unknown"); break;
 	}
 
-	return text;
+	std::string name = text;
+
+	if (name.size() > kSaveMutateMostName)
+	{
+		uint32_t hash = 2166136261u;
+
+		for (size_t k = 0; k < name.size(); k++)
+		{
+			hash = (hash ^ static_cast<uint8_t>(name[k])) * 16777619u;
+		}
+
+		snprintf(text, sizeof(text), "change_%08x", static_cast<unsigned>(hash));
+		name = text;
+	}
+
+	return name;
 }
 
 // Makes the copy one change describes: the whole file's bytes, ready to write. False if the change doesn't fit this save (a block that
@@ -387,7 +482,7 @@ inline bool SaveMutate_Make(const SaveMutateSave &save, const SaveMutateChange &
 {
 	std::vector<uint8_t> header(save.header), blocks;
 	bool const isBlock = c.kind == kSaveMutateBlockSize || c.kind == kSaveMutateBlockType || c.kind == kSaveMutateDropBlock ||
-		c.kind == kSaveMutateDoubleBlock || c.kind == kSaveMutateSwapBlock || c.kind == kSaveMutateWord;
+		c.kind == kSaveMutateDoubleBlock || c.kind == kSaveMutateSwapBlock || c.kind == kSaveMutateWord || c.kind == kSaveMutateName;
 
 	if (isBlock && c.block >= save.list.size())
 	{
@@ -438,12 +533,32 @@ inline bool SaveMutate_Make(const SaveMutateSave &save, const SaveMutateChange &
 	{
 		size_t const at = block.at + (c.kind == kSaveMutateBlockType ? 0 : c.at);
 
-		if (c.at + 4 > static_cast<size_t>(block.size))
+		if (static_cast<size_t>(block.size) < 4 || c.at > static_cast<size_t>(block.size) - 4)
 		{
 			return false;
 		}
 
 		SaveMutate_WriteInt(&blocks[at], c.value);
+		break;
+	}
+
+	case kSaveMutateName:
+	{
+		// The other block has to be a strategy block with its own name, and the name has to fit where it goes
+		if (c.value < 0 || static_cast<uint64_t>(c.value) >= save.list.size())
+		{
+			return false;
+		}
+
+		SaveMutateBlock const other = save.list[static_cast<size_t>(c.value)];
+
+		if (other.type != kSaveMutateStrategyKind || static_cast<size_t>(other.size) < kSaveMutateNameAt + kSaveMutateNameLength ||
+			static_cast<size_t>(block.size) < kSaveMutateNameLength || c.at > static_cast<size_t>(block.size) - kSaveMutateNameLength)
+		{
+			return false;
+		}
+
+		memcpy(&blocks[block.at + c.at], &save.blocks[other.at + kSaveMutateNameAt], kSaveMutateNameLength);
 		break;
 	}
 

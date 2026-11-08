@@ -9,7 +9,7 @@
 //   - it reads only from its own folder, SaveTest, beside the game copy it runs from, never the player's saves, and only a file whose
 //     name keeps to the custom map name rule (custom_map_name.h): no '\', '/', ':' or '.', so it can't reach outside the folder, and
 //     no name Windows keeps for a device. The ".sav" is added here;
-//   - and to make a save to break (-savetest-make <species> <episode>), the species and the episode have to be ones the game has.
+//   - and to make a save to break (-savetest-make <species>,<episode>), the species and the episode have to be ones the game has.
 // Each refusal has its own reason, and the harness says it in the log and stops.
 //
 // NOTHING HERE KNOWS ABOUT THE GAME. It's handed what the game knows (the switches, whether it's a network game, the counts of levels), so

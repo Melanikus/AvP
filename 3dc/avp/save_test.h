@@ -37,9 +37,6 @@ bool SaveTest_Start(bool dev, bool networkGame);
 
 bool SaveTest_Running();
 
-// Whether -savetest or -savetest-make was on the command line at all, refused or not: the closing splash screens are skipped then
-bool SaveTest_WasAsked();
-
 // What the menus are to do for the harness, asked once a frame. kSaveTestMenusNothing once it's been answered.
 enum SaveTestMenusAsk
 {
@@ -52,7 +49,7 @@ SaveTestMenusAsk SaveTest_MenusAsk();
 int SaveTest_Species();
 int SaveTest_Episode();
 
-// The save to load, as a path from the folder the game copy runs from: SaveTest\<name>.sav
+// The save to load, as a full path: SaveTest\<name>.sav in the folder the game copy runs from
 const char *SaveTest_SavePath();
 
 // The menus say what they did: false if they couldn't (no profile, no slot), and the harness closes the game with the reason

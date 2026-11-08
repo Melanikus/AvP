@@ -514,8 +514,7 @@ int AvP_MainMenus(void)
 
 	#if 0
 	#if PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO
-	// A save test closes the game without the 25 seconds of splash screens: it's run hundreds of times (save_test.h)
-	if (/*!AvP.LevelCompleted &&*/ (AvPMenus.MenusState != MENUSSTATE_STARTGAME) && !SaveTest_WasAsked()) ShowSplashScreens();
+	if (/*!AvP.LevelCompleted &&*/ (AvPMenus.MenusState != MENUSSTATE_STARTGAME)) ShowSplashScreens();
 	TimeStampedMessage("after ShowSplashScreens");
 	#endif
 	#endif

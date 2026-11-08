@@ -110,8 +110,48 @@
 			"changes": [
 				{
 					"file": "tools/save_mutate/save_mutate.h",
-					"from": "if (c.at + 4 > static_cast<size_t>(block.size))\n\t\t{\n\t\t\treturn false;\n\t\t}",
-					"to": "if (c.at > static_cast<size_t>(block.size))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+					"from": "if (static_cast<size_t>(block.size) < 4 || c.at > static_cast<size_t>(block.size) - 4)",
+					"to": "if (c.at > static_cast<size_t>(block.size))"
+				}
+			]
+		},
+		{
+			"name": "names inside blocks are never changed",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "for (size_t b = 0; b < save.list.size() && strategies.size() > 1; b++)",
+					"to": "for (size_t b = 0; b < save.list.size() && strategies.size() > 100; b++)"
+				}
+			]
+		},
+		{
+			"name": "a name is put where one of the same behaviour was",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (SaveMutate_ReadInt(&save.blocks[save.list[other].at + kSaveMutateBehaviourAt]) != behaviour)",
+					"to": "if (SaveMutate_ReadInt(&save.blocks[save.list[other].at + kSaveMutateBehaviourAt]) == behaviour)"
+				}
+			]
+		},
+		{
+			"name": "a name from a block that is not a strategy block is used",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (other.type != kSaveMutateStrategyKind || static_cast<size_t>(other.size) < kSaveMutateNameAt + kSaveMutateNameLength ||",
+					"to": "if (static_cast<size_t>(other.size) < kSaveMutateNameAt + kSaveMutateNameLength ||"
+				}
+			]
+		},
+		{
+			"name": "a name longer than the harness reads is kept",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (name.size() > kSaveMutateMostName)\n\t{\n\t\tuint32_t hash",
+					"to": "if (name.size() > 1000)\n\t{\n\t\tuint32_t hash"
 				}
 			]
 		}

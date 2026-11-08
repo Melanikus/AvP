@@ -195,6 +195,12 @@ int main(int argc, char **argv)
 			if (names[n] == name)
 			{
 				name += "_" + std::to_string(k);
+
+				if (name.size() > kSaveMutateMostName)
+				{
+					name = "change" + std::to_string(k);
+				}
+
 				break;
 			}
 		}

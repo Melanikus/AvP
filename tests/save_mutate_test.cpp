@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "custom_map_name.h"
 #include "huffman.hpp"
 #include "save_mutate.h"
 
@@ -194,12 +195,15 @@ static void Copies()
 			char const c = name[i];
 			namesSafe = namesSafe && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-');
 		}
+
+		// and the harness reads it: it keeps to the custom map name rule, which also means no more than 39 letters
+		namesSafe = namesSafe && name.size() <= kSaveMutateMostName && CustomMapName_IsSafe(name.c_str(), name.size() + 1);
 	}
 
 	// Two random picks can land on the same word or byte with the same value, so a name can come twice; the names never say anything but
 	// letters, digits and _
 	Check(names.size() >= 60, "nearly every change has a name of its own (" + std::to_string(names.size()) + " names for " + std::to_string(changes.size()) + ")");
-	Check(namesSafe, "and every name is only letters, digits, - and _, so it's a safe file name");
+	Check(namesSafe, "and every name is only letters, digits, - and _, and keeps to the rule the harness reads names by");
 
 	std::vector<SaveMutateChange> const again = SaveMutate_Changes(save, 145, 4, 5, moveTo);
 	bool same = again.size() == changes.size();
@@ -292,9 +296,16 @@ static void Copies()
 	std::vector<uint8_t> moved, header, blocks;
 	Check(SaveMutate_Make(save, move, &moved) && Unpack(moved, &header, &blocks) && header[kSaveMutateEpisodeAt] == 3 && header[kSaveMutateSpeciesAt] == 0 &&
 		blocks == original, "a save moved to episode 3 is the same save with only its episode changed");
-	Check(SaveMutate_Name(save, move) == "moved_to_episode3", "and its name says so");
+	Check(SaveMutate_Name(save, move) == "episode3", "and its name says so");
 	SaveMutateChange const size = { kSaveMutateBlockSize, 1, 4, -1 };
-	Check(SaveMutate_Name(save, size) == "block0001_type10_size_minus1", "a block's size set to -1 is named by the block, its kind and the value");
+	Check(SaveMutate_Name(save, size) == "b1_k10_size_m1", "a block's size set to -1 is named by the block, its kind and the value");
+
+	// A name that would be longer than the harness reads: a name put at 4000000000 in block 4000000000 (kind -1, as there's no such block),
+	// from block 4000000000, would be b4000000000_k-1_n4000000000_from_b4000000000, 44 letters
+	SaveMutateChange const huge = { kSaveMutateName, 4000000000u, 4000000000u, 4000000000LL };
+	std::string const hugeName = SaveMutate_Name(save, huge);
+	Check(hugeName.size() == 15 && hugeName.compare(0, 7, "change_") == 0 && CustomMapName_IsSafe(hugeName.c_str(), hugeName.size() + 1) &&
+		SaveMutate_Name(save, huge) == hugeName, "a name past 39 letters is change_ and a number, the same each time (" + hugeName + ")");
 
 	// Changes that don't fit this save make no copy
 	SaveMutateChange const noBlock = { kSaveMutateDropBlock, 9, 0, 0 }, pastEnd = { kSaveMutateByte, 0, 1000, 1 }, lastSwap = { kSaveMutateSwapBlock, 2, 0, 0 };
@@ -305,10 +316,81 @@ static void Copies()
 		!SaveMutate_Make(save, wordPast, &none), "a block that isn't there, a byte past the end, swapping the last block, and a word past its block make no copy");
 }
 
+// A strategy block: its behaviour, its own name, and then these bytes
+static std::vector<uint8_t> Strategy(int behaviour, const char *name, std::vector<uint8_t> const &rest)
+{
+	std::vector<uint8_t> block;
+	PutInt(&block, kSaveMutateStrategyKind);
+	PutInt(&block, static_cast<int64_t>(kSaveMutateHeaderSize + 4 + kSaveMutateNameLength + rest.size()));
+	PutInt(&block, behaviour);
+	std::string const eight(name, kSaveMutateNameLength);
+	block.insert(block.end(), eight.begin(), eight.end());
+	block.insert(block.end(), rest.begin(), rest.end());
+	return block;
+}
+
+static void Names()
+{
+	printf("Names inside blocks\n");
+
+	// Two strategy blocks: AAAAAAAA, behaviour 7, and BBBBBBBB, behaviour 9, which holds AAAAAAAA as its target. And a block of another
+	// kind, big enough to hold a name where a strategy block keeps its own, holding CCCCCCCC and DDDDDDDD, which name nothing in the save.
+	std::vector<uint8_t> const four = { 5, 0, 0, 0 };
+	std::string const targetName = "AAAAAAAA";
+	std::vector<uint8_t> target = { 6, 0, 0, 0 };
+	target.insert(target.end(), targetName.begin(), targetName.end());
+	std::vector<uint8_t> blocks = Strategy(7, "AAAAAAAA", four);
+	std::vector<uint8_t> const second = Strategy(9, "BBBBBBBB", target), other = Block(10, { 0x43434343, 0x43434343, 0x44444444, 0x44444444 });
+	blocks.insert(blocks.end(), second.begin(), second.end());
+	blocks.insert(blocks.end(), other.begin(), other.end());
+	std::vector<uint8_t> file;
+	SaveMutateSave save;
+	Check(SaveMutate_Pack(LevelHeader(), blocks, &file) && SaveMutate_Open(file, &save) == nullptr && save.list.size() == 3,
+		"a save with two strategy blocks opens");
+
+	std::vector<SaveMutateChange> named;
+	std::vector<SaveMutateChange> const all = SaveMutate_Changes(save, 145, 0, 0, std::vector<int>());
+
+	for (size_t k = 0; k < all.size(); k++)
+	{
+		if (all[k].kind == kSaveMutateName)
+		{
+			named.push_back(all[k]);
+		}
+	}
+
+	// Each one's own name, at 12, gets the other's; and the target in the second, at 24, gets the second's own, of another behaviour.
+	// The third block's CCCCCCCC and DDDDDDDD name nothing in the save, so nothing is put there.
+	Check(named.size() == 3, "three names to change (" + std::to_string(named.size()) + ")");
+	Check(named.size() == 3 && named[0].block == 0 && named[0].at == 12 && named[0].value == 1 && named[1].block == 1 && named[1].at == 12 &&
+		named[1].value == 0 && named[2].block == 1 && named[2].at == 24 && named[2].value == 1,
+		"the first's name gets the second's, the second's the first's, and the target in the second gets the second's own");
+	Check(named.size() == 3 && SaveMutate_Name(save, named[2]) == "b1_k2_n24_from_b1", "named by the block, the place and where the name comes from");
+
+	bool right = named.size() == 3;
+
+	for (size_t k = 0; k < named.size() && right; k++)
+	{
+		std::vector<uint8_t> copy, header, unpacked;
+		std::vector<uint8_t> want(blocks);
+		SaveMutateBlock const into = save.list[named[k].block], from = save.list[static_cast<size_t>(named[k].value)];
+		memcpy(&want[into.at + named[k].at], &blocks[from.at + kSaveMutateNameAt], kSaveMutateNameLength);
+		right = SaveMutate_Make(save, named[k], &copy) && Unpack(copy, &header, &unpacked) && unpacked == want;
+	}
+
+	Check(right, "each copy has the other name in that one place, and nothing else changed");
+
+	SaveMutateChange const notStrategy = { kSaveMutateName, 1, 24, 2 }, pastEnd = { kSaveMutateName, 1, 25, 0 }, noBlock = { kSaveMutateName, 1, 12, 9 };
+	std::vector<uint8_t> none;
+	Check(!SaveMutate_Make(save, notStrategy, &none) && !SaveMutate_Make(save, pastEnd, &none) && !SaveMutate_Make(save, noBlock, &none),
+		"a name from a block that isn't a strategy block, one that wouldn't fit, or from no block makes no copy");
+}
+
 int main()
 {
 	Opening();
 	Copies();
+	Names();
 
 	if (checksFailed)
 	{
