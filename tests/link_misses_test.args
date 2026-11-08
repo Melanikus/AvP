@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MT /J /W3 /sdl /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_MSVC_STL_HARDENING=1
+/I3dc/avp
+tests/link_misses_test.cpp

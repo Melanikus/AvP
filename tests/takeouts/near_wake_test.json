@@ -1,0 +1,448 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the most a player has to come is 5 m",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "kNearWakeMostMillimetres = 4000.0;",
+					"to": "kNearWakeMostMillimetres = 5000.0;"
+				}
+			]
+		},
+		{
+			"name": "the least a player has to come is 1 m",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "kNearWakeLeastMillimetres = 1500.0;",
+					"to": "kNearWakeLeastMillimetres = 1000.0;"
+				}
+			]
+		},
+		{
+			"name": "two switches can be between a box and its NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tkNearWakeMostSwitchesBetween = 1,",
+					"to": "\tkNearWakeMostSwitchesBetween = 2,"
+				}
+			]
+		},
+		{
+			"name": "a box's list holds a different number",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tkNearWakeMostSleepers = 32,",
+					"to": "\tkNearWakeMostSleepers = 31,"
+				}
+			]
+		},
+		{
+			"name": "a level gets a different number of lines",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tkNearWakeMostLines = 100 ",
+					"to": "\tkNearWakeMostLines = 99 "
+				}
+			]
+		},
+		{
+			"name": "a point inside the box is some distance from it",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\treturn outside > 0 ? outside : 0;",
+					"to": "\treturn outside > 0 ? outside : 1;"
+				}
+			]
+		},
+		{
+			"name": "only one side of the box is measured",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tdouble const outside = below > above ? below : above;",
+					"to": "\tdouble const outside = above;"
+				}
+			]
+		},
+		{
+			"name": "a corner is measured along one axis",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\treturn sqrt(dx * dx + dy * dy + dz * dz);\n}\n\n// How near a player",
+					"to": "\treturn dx + dy + dz;\n}\n\n// How near a player"
+				}
+			]
+		},
+		{
+			"name": "the floor isn't kept to",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tif (boxDistance < kNearWakeLeastMillimetres)\n\t{\n\t\treturn kNearWakeLeastMillimetres;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the cap isn't kept to",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\treturn boxDistance > kNearWakeMostMillimetres ? kNearWakeMostMillimetres : boxDistance;",
+					"to": "\treturn boxDistance;"
+				}
+			]
+		},
+		{
+			"name": "a full list doesn't say so",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\t\tsleepers->full = true;\n\t\treturn false;",
+					"to": "\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "emptying the list leaves the note that it was full",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tsleepers->count = 0;\n\tsleepers->full = false;",
+					"to": "\tsleepers->count = 0;"
+				}
+			]
+		},
+		{
+			"name": "a sleeper's reach isn't worked out",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tsleeper.reach = NearWake_Reach(sleeper.boxDistance);",
+					"to": "\tsleeper.reach = sleeper.boxDistance;"
+				}
+			]
+		},
+		{
+			"name": "a player exactly at the reach counts as near",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\t\tif (distance < sleepers.list[i].reach)",
+					"to": "\t\tif (distance <= sleepers.list[i].reach)"
+				}
+			]
+		},
+		{
+			"name": "how near the player came isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\t\t\t*howFar = distance;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the line gives the distances in mm",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "playerDistance / 1000.0, NearWake_KindName(sleeper.kind)",
+					"to": "playerDistance, NearWake_KindName(sleeper.kind)"
+				}
+			]
+		},
+		{
+			"name": "a number that isn't a kind gets a kind's name",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "kNearWakeKindNames[kind] : \"NPC\";",
+					"to": "kNearWakeKindNames[kind] : \"alien\";"
+				}
+			]
+		},
+		{
+			"name": "the line after the most a level has changes",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "walk-in boxes set off this way in this level, so no more lines",
+					"to": "boxes set off in this level, so no more lines"
+				}
+			]
+		},
+		{
+			"name": "the line for a box that wakes too many changes",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\"near wake: a walk-in box wakes more than %d sleeping NPCs, so only the first %d are looked at\"",
+					"to": "\"near wake: a box wakes more than %d NPCs, so the first %d are looked at\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner looks for sleepers too",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\treturn AvP.Network == I_No_Network || AvP.NetworkAIServer;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper that's gone is still looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (!target || target->SBflags.destroyed_but_preserved || !target->SBdataptr)\n\t{\n\t\treturn false;\n\t}\n\n\tswitch (target->I_SBtype)",
+					"to": "\tif (!target || !target->SBdataptr)\n\t{\n\t\treturn false;\n\t}\n\n\tswitch (target->I_SBtype)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien that's awake counts as asleep",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "if (alien->BehaviourState != ABS_Dormant || !target->DynPtr)",
+					"to": "if (!target->DynPtr)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger that's awake counts as asleep",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "if (hugger->nearBehaviourState != FHNS_Floating || !target->DynPtr)",
+					"to": "if (!target->DynPtr)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dormant predator is never looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tcase I_BehaviourDormantPredator:\n",
+					"to": "\t\tcase I_BehaviourPredator:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sentry gun that's on counts as asleep",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "if (gun->behaviourState != I_inactive || !target->DynPtr)",
+					"to": "if (!target->DynPtr)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a xenoborg is looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tdefault:\n\t\t\treturn false;\n\t}\n}",
+					"to": "\t\tcase I_BehaviourXenoborg:\n\t\tdefault:\n\t\t\treturn false;\n\t}\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper a box wakes isn't put on its list",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tNearWakeSleepers_Add(sleepers, where, kind, box);\n\t\treturn;",
+					"to": "\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: there's no limit to the switches between a box and its NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": " || switchesBetween >= kNearWakeMostSwitchesBetween)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch between is never looked through",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\t\tAddSleepersFrom(between->ls_targets[i].sbptr, box, sleepers, switchesBetween + 1);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box's list isn't emptied first",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tNearWakeSleepers_Clear(sleepers);\n\n\tif (!areaSwitch",
+					"to": "\tif (!areaSwitch"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box that wakes too many is said every time",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (sleepers->full && !saidABoxWakesTooMany)",
+					"to": "\tif (sleepers->full)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's lines have no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (linesThisLevel >= kNearWakeMostLines)\n\t{\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line after the most a level has is never written",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tLogString(NearWake_LinesStop());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the count carries into the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tlinesThisLevel = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: destroying every block doesn't start the count again",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\tNearWake_LevelEnds();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box doesn't look for sleepers",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\tNearWake_FindSleepers(sbptr, &bs_bhv->trigger_volume_min, &bs_bhv->trigger_volume_max, &sleepers);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box looks for sleepers on a joiner too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\tif (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &bs",
+					"to": "\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &bs"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box isn't set off by a player near a sleeper",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request",
+					"to": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tbs_bhv->request"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box is only set off by nearness",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request",
+					"to": "\t\t\tif (sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box is tested for things that aren't players",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\tif (!needToTest)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > bs_bhv",
+					"to": "\t\t\tif (!sbPtr->DynPtr)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > bs_bhv"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's line is written every frame a player stays near",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\tbs_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);\n\t\t\t}\n",
+					"to": "\t\t\tbs_bhv->triggered_last = TRUE;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box doesn't look for sleepers",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tNearWake_FindSleepers(sbptr, &ls_bhv->trigger_volume_min, &ls_bhv->trigger_volume_max, &sleepers);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box isn't set off by a player near a sleeper",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request",
+					"to": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tls_bhv->request"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's line is written every frame a player stays near",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tls_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);\n\t\t\t}\n",
+					"to": "\t\t\tls_bhv->triggered_last = TRUE;\n"
+				}
+			]
+		}
+	]
+}

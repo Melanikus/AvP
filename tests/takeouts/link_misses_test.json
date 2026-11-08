@@ -1,0 +1,318 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a link with no name is written",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\tif (LinkMisses_IsNoName(name))\n\t{\n\t\treturn kLinkMissNoName;\n\t}\n\n\tfor (int i = 0; i < misses->count; i++)",
+					"to": "\tfor (int i = 0; i < misses->count; i++)"
+				}
+			]
+		},
+		{
+			"name": "a name is written each time it misses",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\t\t\treturn kLinkMissAlreadyWritten;",
+					"to": "\t\t\tcontinue;"
+				}
+			]
+		},
+		{
+			"name": "the list holds a different number of names",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\tkLinkMissesMostNames = 64 ",
+					"to": "\tkLinkMissesMostNames = 65 "
+				}
+			]
+		},
+		{
+			"name": "a full list says so every time",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\t\tbool const firstTime = !misses->saidItIsFull;",
+					"to": "\t\tbool const firstTime = true;"
+				}
+			]
+		},
+		{
+			"name": "a full list never says so",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\t\treturn firstTime ? kLinkMissFirstOneTooMany : kLinkMissTooMany;",
+					"to": "\t\treturn kLinkMissTooMany;"
+				}
+			]
+		},
+		{
+			"name": "the next level keeps the names written",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\tmisses->count = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the next level keeps the note that the list was full",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\tmisses->saidItIsFull = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name is written in capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\"%02x\"",
+					"to": "\"%02X\""
+				}
+			]
+		},
+		{
+			"name": "something with no place is given one",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\tif (hasPlace)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "a place is written in mm",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "x / 1000.0, y / 1000.0, z / 1000.0",
+					"to": "x, y, z"
+				}
+			]
+		},
+		{
+			"name": "the line when the links are made changes",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\" aims at \"",
+					"to": "\" points at \""
+				}
+			]
+		},
+		{
+			"name": "the line when a switch goes on or off changes",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "\" went on or off, and its target \"",
+					"to": "\" changed, and its target \""
+				}
+			]
+		},
+		{
+			"name": "the two full lines are the same",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "onRequest ? \" when a switch goes on or off\" : \"\"",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "one link is counted as several",
+			"changes": [
+				{
+					"file": "3dc/avp/link_misses.h",
+					"from": "links == 1 ? \"link aims\" : \"links aim\"",
+					"to": "\"links aim\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a name's length isn't checked against a block's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "static_assert(kLinkNameLength == SB_NAME_LENGTH, \"link_misses.h keeps names as long as a strategy block's\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link that finds nothing isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tif (!found)\n\t{\n\t\tSayLinkMissing(&linkMissesAtLoad, false, source, what, name);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link with no name is said",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tif (LinkMisses_IsNoName(name))\n\t{\n\t\treturn;\n\t}\n\n\t// A placed NPC",
+					"to": "\t// A placed NPC"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link to a placed NPC not made here is written as broken",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tif (LevelNameIsAPlacedNpc(name))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link to a placed NPC is counted again each time a switch goes on or off",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\tif (!onRequest)\n\t\t{\n\t\t\tlinksToNpcsNotMadeHere++;",
+					"to": "\t\tif (true)\n\t\t{\n\t\t\tlinksToNpcsNotMadeHere++;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new name isn't written",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\t\tLogString(onRequest ? LinkMisses_OnRequestLine(from, name) : LinkMisses_AtLoadLine(from, name));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a full list isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\tcase kLinkMissFirstOneTooMany:\n\t\t\tLogString(LinkMisses_TooManyLine(onRequest));\n",
+					"to": "\t\tcase kLinkMissFirstOneTooMany:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one link is looked up without saying a miss",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "FindLinkTarget(sbptr, \"a light\", pl_bhv->destruct_target_ID)",
+					"to": "FindSBWithName(pl_bhv->destruct_target_ID)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the links to NPCs not made here aren't said",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\t\tLogString(LinkMisses_NpcsNotMadeHereLine(linksToNpcsNotMadeHere));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the names said when a switch went on or off carry into the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tLinkMisses_Forget(&linkMissesOnRequest);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the count of links to NPCs not made here carries into the next level",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "\tlinksToNpcsNotMadeHere = 0;\n}",
+					"to": "}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: destroying every block doesn't start the lists again",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\tLinkMisses_LevelEnds();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a placed NPC is found by half its name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "memcmp(&bbd->id, name, sizeof(bbd->id)) == 0",
+					"to": "memcmp(&bbd->id, name, 4) == 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything in the level's list counts as a placed NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "if (BehaviourIsAnNpcTheHostRuns(bbd->sb_type) && memcmp(",
+					"to": "if (memcmp("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch going on or off doesn't say what wasn't there",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\tif (bs_bhv->state != wasOn)\n\t{\n\t\tSayTargetsNotThere(sbptr, bs_bhv);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch says its targets that were there too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\tif (!bs_bhv->bs_targets[i])\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch going on or off doesn't say what wasn't there",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tif (!ls_bhv->ls_targets[i].sbptr)\n\t\t\t{\n\t\t\t\tLinkMisses_SwitchWentOnOrOff(sbptr, ls_bhv->ls_targets[i].name);\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
