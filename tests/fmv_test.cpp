@@ -20,9 +20,11 @@
 // Of BinkPlayback.cpp, only opening a film and closing it run here. Its threads and its frame copy don't, because they need the real decoder and a sound card. A run of the real
 // decoders under the address sanitizer covers those: see tests/takeouts/README.md.
 //
-// The real decoder, the real sound stream, and a level's room echo number (openal_audio.cpp) are in code that
+// The real decoder, the real sound stream (openal_stream.cpp) and a level's room echo number (openal_audio.cpp) are in code that
 // brings most of the game with it, or a sound card. This test reads the ones that matter as text, at the end, and checks what they say. It can't
 // run them. The stand-in decoder below reports what the real one does: one sound track, or none for a film without sound.
+// (Modified 2026-11-08 by Melanikus for the AvP port: the sound stream's code moved to openal_stream.cpp, so it's read from there.
+// tests/audio_stream_test.cpp runs it.)
 
 #pragma comment(lib, "winmm.lib")
 
@@ -996,13 +998,14 @@ static void CheckTheRealCode()
 	Check(decoder.find("std::vector<class SmackerDecoder*> classInstances") == std::string::npos, "the list of decoders can't move under another film's thread");
 
 	std::string const sound = ReadSourceFile("3dc/avp/win95/openal_audio.cpp");
-	std::string const stop = FunctionStartingWith(sound, "int32_t AudioStream::Stop()");
+	std::string const streams = ReadSourceFile("3dc/avp/win95/openal_stream.cpp");
+	std::string const stop = FunctionStartingWith(streams, "int32_t AudioStream::Stop()");
 	Check(stop.find("if (_source)") != std::string::npos, "stopping a stream that couldn't start reads nothing");
 
-	std::string const letGo = FunctionStartingWith(sound, "AudioStream::~AudioStream()");
+	std::string const letGo = FunctionStartingWith(streams, "AudioStream::~AudioStream()");
 	Check(letGo.find("if (_threadStarted)") != std::string::npos && letGo.find("if (_mutexMade)") != std::string::npos && letGo.find("if (_source)") != std::string::npos, "and letting go of it only lets go of what it got as far as making");
 
-	std::string const wait = FunctionStartingWith(sound, "void AudioStream::WaitForFreeBuffer()");
+	std::string const wait = FunctionStartingWith(streams, "void AudioStream::WaitForFreeBuffer()");
 	Check(wait.find("&& _isPlaying") != std::string::npos, "and waiting on a stream ends when it's stopped");
 
 	std::string const environment = FunctionStartingWith(sound, "void PlatSetEnviroment(");

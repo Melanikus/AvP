@@ -1,0 +1,259 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the loader reads a file larger than any level",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "if (!LevelFile_SizeIsUsable(bytes_on_disk))",
+					"to": "if (bytes_on_disk < 0)"
+				}
+			]
+		},
+		{
+			"name": "the loader takes only the lower 32 bits of a file's size",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "file_size = (DWORD)bytes_on_disk;",
+					"to": "file_size = GetFileSize(rif_file, NULL);"
+				}
+			]
+		},
+		{
+			"name": "a file refused for its size isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "LogErrorStringC(LevelFile_SizeRefusalLine(file_name, bytes_on_disk).c_str());",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the read of the file's first 8 bytes may come up short",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": " || bytes_read != 8)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the read of a packed file may come up short",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": " || bytes_read != file_size-8)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the read of a plain file's size may come up short",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": " || bytes_read != 4)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the read of a plain file's level may come up short",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": " || bytes_read != file_size-12)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the sum leaves out the file's first 8 bytes",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "MD5Update(&sum_so_far, (md5byte const *)id_buffer, 8);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a packed file's sum leaves out all but its first 8 bytes",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "MD5Update(&sum_so_far, (md5byte const *)(buffer+8), file_size-8);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a plain file's sum leaves out the size in its heading",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "MD5Update(&sum_so_far, (md5byte const *)&file_size_from_file, 4);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a plain file's sum leaves out its level",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "MD5Update(&sum_so_far, (md5byte const *)buffer, file_size-12);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the sum is never finished",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "MD5Final(file_sum.md5, &sum_so_far);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a packed file's size is given as the size of its level unpacked",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "file_sum.bytes = (unsigned int)bytes_on_disk;",
+					"to": "file_sum.bytes = (unsigned int)file_size;"
+				}
+			]
+		},
+		{
+			"name": "a file shorter than a level's heading may be read",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "return bytes >= kLevelFileLeastBytes && bytes <= kLevelFileMostBytes;",
+					"to": "return bytes <= kLevelFileMostBytes;"
+				}
+			]
+		},
+		{
+			"name": "a file of any size may be read",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "return bytes >= kLevelFileLeastBytes && bytes <= kLevelFileMostBytes;",
+					"to": "return bytes >= kLevelFileLeastBytes;"
+				}
+			]
+		},
+		{
+			"name": "a file of just the most a level may be is refused",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "return bytes >= kLevelFileLeastBytes && bytes <= kLevelFileMostBytes;",
+					"to": "return bytes >= kLevelFileLeastBytes && bytes < kLevelFileMostBytes;"
+				}
+			]
+		},
+		{
+			"name": "a file too short is said to be too large",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "if (bytes < kLevelFileLeastBytes)",
+					"to": "if (bytes < 0)"
+				}
+			]
+		},
+		{
+			"name": "a size that can't be found is said to be too short",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "if (bytes < 0)",
+					"to": "if (bytes < -1)"
+				}
+			]
+		},
+		{
+			"name": "the line calls the sum something else",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "\" bytes, MD5 \"",
+					"to": "\" bytes, sum \""
+				}
+			]
+		},
+		{
+			"name": "the line writes each byte of the sum with its lower half twice",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "line += kHexDigits[sum.md5[i] >> 4];",
+					"to": "line += kHexDigits[sum.md5[i] & 15];"
+				}
+			]
+		},
+		{
+			"name": "the line writes a large size as a number below zero",
+			"changes": [
+				{
+					"file": "3dc/level_file_sum.h",
+					"from": "snprintf(size, sizeof(size), \"%u\", sum.bytes);",
+					"to": "snprintf(size, sizeof(size), \"%d\", sum.bytes);"
+				}
+			]
+		},
+		{
+			"name": "loading a level doesn't say which file it was",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the line names the level, not the path it was loaded from",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "LevelFileSum_Line(file_and_path, ",
+					"to": "LevelFileSum_Line(Env_List[AvP.CurrentEnv]->main, "
+				}
+			]
+		},
+		{
+			"name": "a level's handle gives no sum",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "return h->fc->file_sum;",
+					"to": "return LevelFileSum();"
+				}
+			]
+		},
+		{
+			"name": "the custom maps list lists files larger than the loader reads",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;",
+					"to": "static const long long kCustomMapMostFileBytes = 33LL << 20;"
+				}
+			]
+		}
+	]
+}
