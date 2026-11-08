@@ -4,6 +4,8 @@
 //   compiled, and the "#if 1" lines around its closing bracket, so code scanners can read the file; the game runs
 //   the same code as before;
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an alien coming for its target measures how far away the target is only once it knows it has one
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -813,8 +815,6 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	LOCALASSERT(alienStatusPointer);
 	LOCALASSERT(dynPtr);
 
-	distanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));
-
 	if (alienStatusPointer->Target==NULL) {
 		/* Approach what? */
 		AlienHandleMovingAnimation(sbPtr);
@@ -823,6 +823,10 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
 		return;
 	}
+
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   this used to come before the check above, so an alien with no target read through an empty pointer and the game crashed
+	distanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));
 
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);
