@@ -54,6 +54,7 @@ Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, insid
    | `MelPyth\fastfile` | `common.ffl`, the new guns' sounds |
    | `graphics\MelPyth\HUDs\Marine` | the 15 pictures (`.rim`) |
    | the game folder itself | `PLAYTEST.md` (this guide), `License.txt`, `BUILD.txt` and `SHA256SUMS.txt` |
+   | `licences` | each library's own licence, and `README.txt`, which says which is whose and where the source of the ones under the GNU licences is |
 
    `MelPyth_MarWep.rif` holds the M5 versions of the pulse rifle, with its ammo counter, and of the pistols. With it the game
    draws those guns from it; without it, from your own `marwep.rif`, as before.

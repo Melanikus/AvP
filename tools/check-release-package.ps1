@@ -1,5 +1,6 @@
 <#
-Says whether a finished package is fit to be a release. release.yml runs this after tools/build-and-package.ps1, on what that made.
+Says whether a finished package is fit to be a release. release.yml runs this after tools/build-and-package.ps1, on what that made, and
+every pull request does too (game-build.yml), so a change to the package is tried before a release depends on it.
 
 The build has already passed if we get here, so this looks for what a build wouldn't notice:
 - A file the game only asks for while it's running. The game compiles its shaders from text files every time it starts, using
@@ -9,6 +10,7 @@ The build has already passed if we get here, so this looks for what a build woul
 - A package from another commit, or with a list of hashes that doesn't match it.
 - A program in it that isn't the game.
 - One of our game files missing, or not the one this commit lists (package-files/SHA256SUMS.txt).
+- A program or library without its licence beside it (licences/README.txt says which is whose).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package,
@@ -202,6 +204,50 @@ foreach ($file in @(Get-ChildItem -LiteralPath $Package -Recurse -File))
 if ($listed.Count -gt 0)
 {
     Stop-Release "the list of hashes names a file that isn't in the package: $(@($listed.Keys)[0])"
+}
+
+# Each program and library in bin comes with its licence. licences/README.txt names each one once, at the start of a line, with the
+# licences in licences that go with it, and each of those has to be there and not empty. So no library can go out without its licence.
+# (LICENCE-NOTICES-1, added 2026-11-08.)
+$licenceList = Join-Path $Package 'licences/README.txt'
+
+if (-not (Test-Path -LiteralPath $licenceList -PathType Leaf))
+{
+    Stop-Release 'licences/README.txt is not in the package'
+}
+
+$licenceLines = @(Get-Content -LiteralPath $licenceList)
+
+foreach ($binary in @(Get-ChildItem -LiteralPath (Join-Path $Package 'bin') -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object Name))
+{
+    $line = @($licenceLines | Where-Object { $_.StartsWith("bin/$($binary.Name): ", [System.StringComparison]::OrdinalIgnoreCase) })
+
+    if ($line.Count -eq 0)
+    {
+        Stop-Release "bin/$($binary.Name) isn't named in licences/README.txt, so its licence wouldn't go with it"
+    }
+
+    if ($line.Count -gt 1)
+    {
+        Stop-Release "bin/$($binary.Name) is named more than once in licences/README.txt"
+    }
+
+    $licenceFiles = @([regex]::Matches($line[0], 'licences/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.txt') | ForEach-Object { $_.Value })
+
+    if ($licenceFiles.Count -eq 0)
+    {
+        Stop-Release "licences/README.txt names no licence for bin/$($binary.Name)"
+    }
+
+    foreach ($licence in $licenceFiles)
+    {
+        $licencePath = Join-Path $Package $licence
+
+        if (-not (Test-Path -LiteralPath $licencePath -PathType Leaf) -or (Get-Item -LiteralPath $licencePath).Length -eq 0)
+        {
+            Stop-Release "$licence, the licence for bin/$($binary.Name), is missing or empty"
+        }
+    }
 }
 
 Write-Host 'The package has everything it should, and it matches this commit.'
