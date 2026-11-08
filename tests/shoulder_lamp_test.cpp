@@ -1,5 +1,8 @@
 // Tests for the marine's shoulder lamp. The first half tries shoulder_lamp.cpp, which knows nothing about the game. The second half reads the game's source, for the things that only mean something where they join the game: who can have a lamp, which
 // key it's on, and how an old profile gets that key. Written 2026-11-05 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a missing marker is a failed check of its own, and the network check's second half reads the part of the drawing it names, which
+//   before was always empty, so that half could never fail (SOURCE-SLICE-1)
 #include "shoulder_lamp.h"
 
 #include <fstream>
@@ -63,12 +66,21 @@ static int CountOf(const std::string &text, const char *what)
 	return count;
 }
 
+// The text from one marker up to the next one after it. If either marker isn't there, that's a failed check of its own, named by the
+// marker, and the text given back is empty. An empty text alone wasn't enough: a check that something is NOT inside it passes on nothing,
+// which is how the network check below stood unable to fail (card SOURCE-SLICE-1).
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
 	std::string::size_type const start = text.find(from);
 	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
 
-	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	if (start == std::string::npos || end == std::string::npos)
+	{
+		Check(false, std::string("the code this test reads has \"") + (start == std::string::npos ? from : to) + "\"" + (start == std::string::npos ? "" : std::string(" after \"") + from + "\""));
+		return std::string();
+	}
+
+	return text.substr(start, end - start);
 }
 
 static bool ComesBefore(const std::string &text, const char *first, const char *second)
@@ -679,7 +691,9 @@ static void TestJoiningTheGame()
 	Check(Has(drawing, "d3d.shoulderLampEffect == kNullEffectID"), "and if its shader couldn't be made, there's simply no lamp");
 	Check(!Has(Between(device, "// we should bail out if the shaders can't be loaded", "return false;"), "shoulderLampEffect"), "and that doesn't stop the game starting");
 	// The only thing a network game changes here is that the spot's size and strength go back as built. The lamp itself stays on, whichever game it is.
-	Check(Has(drawing, "// A network game keeps these as built.") && !Has(Between(drawing, "static void DrawShoulderLamp()", "// A network game keeps these as built."), "Network") && !Has(Between(drawing, "// How big and how strong the spot is.", "ChangeZWriteEnable(ZWRITE_ENABLED);"), "Network"), "the user's ruling: it isn't turned off in a network game");
+	// The part after the size and strength is read from the game's file, up to where drawing ends, because drawing itself stops just before
+	// that end, so a piece of drawing ending there would always be empty.
+	Check(Has(drawing, "// A network game keeps these as built.") && !Has(Between(drawing, "static void DrawShoulderLamp()", "// A network game keeps these as built."), "Network") && !Has(Between(render, "// How big and how strong the spot is.", "ChangeZWriteEnable(ZWRITE_ENABLED);"), "Network"), "the user's ruling: it isn't turned off in a network game");
 	Check(Has(drawing, "onWalls = !isARealLight && surfacePicturesAreFromThisFrame && SurfacePictures_Colour() && toyDepthTexture"), "walls are only lit from surface pictures of this frame");
 	Check(Has(render, "void ThisFramesRenderingHasBegun()\n{\n\tsurfacePicturesAreFromThisFrame = false;"), "which is forgotten at the start of each frame");
 	Check(Has(render, "surfacePicturesAreFromThisFrame = true;\n\t\t\tFrameTiming_Mark(kStageSurfacePictures);"), "and only set when they've been drawn");
