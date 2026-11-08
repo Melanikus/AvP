@@ -466,6 +466,8 @@ static void TestTheLoadersAsk()
 	Check(Has(ReadSourceFile("3dc/avp/bh_binary_switch.cpp"), "if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))"), "a switch's sequence has to be its own");
 	Check(Has(ReadSourceFile("3dc/avp/bh_link_switch.cpp"), "if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))"), "and a linked switch's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_light.cpp"), "if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))"), "and a light's");
+	Check(Has(ReadSourceFile("3dc/avp/bh_weapon.cpp"), "if(behav->Target && !behav->Target->DynPtr && !behav->Target->SBdptr) behav->Target = NULL;"),
+		"a saved disc's target has to have a place in the world to home on");
 	Check(Has(ReadSourceFile("3dc/avp/bh_lift_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "a lift door's frame has to be real");
 	Check(Has(ReadSourceFile("3dc/avp/bh_switch_door.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a switch door's");
 	Check(Has(ReadSourceFile("3dc/avp/bh_types.cpp"), "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,"), "and a proximity door's");
