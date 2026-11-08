@@ -14,16 +14,6 @@
 			]
 		},
 		{
-			"name": "the canary is built without the bounds checks, so the guard refuses to compile it",
-			"changes": [
-				{
-					"file": "tests/stl_bounds_canary_test.args",
-					"from": " /D_MSVC_STL_HARDENING=1",
-					"to": ""
-				}
-			]
-		},
-		{
 			"name": "the checks are off and the guard lets that through: the canary's copy reads past the end and ends normally",
 			"changes": [
 				{

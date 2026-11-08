@@ -109,6 +109,19 @@ jobs:
 
           Check (-not (Test-Path -LiteralPath (Join-Path $PWD 'tests/zz_refusal_probe_test.args'))) 'and the made-up test is gone again'
 
+          # The guard itself (tests/every_test/every_test.h): without the checks, a test doesn't compile at all, whichever way it's built. A
+          # take-out row can't show that, because the take-out runner needs every row's copy to build, so it's shown here, by the guard's own
+          # words. Visual Studio is set up as build.ps1 sets it up, and cl only reads the code (/Zs), writing nothing.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
+          Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+          $withoutChecks = @(((Get-Content tests/stl_bounds_canary_test.args) -join ' ') -split '\s+' | Where-Object { $_ -and $_ -cne '/D_MSVC_STL_HARDENING=1' })
+          $said = & cl.exe /nologo /Zs @withoutChecks 2>&1 | Out-String
+          $said
+          Check ($LASTEXITCODE -ne 0 -and $said -cmatch "Every test is built with the standard library's bounds checks") 'and without the checks, the guard refuses to compile a test at all, and says why'
+
           # The step says how it went itself. A PowerShell step on GitHub otherwise ends with the exit code of the last program it ran, and
           # here that's a build.ps1 that was meant to refuse, so it would fail even with every check above passing.
           if ($failed.Count -gt 0) { throw "build.ps1 didn't refuse as it should: $($failed -join '; ')" }
