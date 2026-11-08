@@ -116,9 +116,8 @@ inline void SaveMutate_WriteInt(uint8_t *at, int64_t value)
 	at[3] = static_cast<uint8_t>(v >> 24);
 }
 
-// Opens a save's bytes: the level's header, the package unpacked by the game's own checked decoder, and its blocks walked as the loader
-// walks them. Gives back nothing if it worked, or why not.
-inline const char *SaveMutate_Open(const std::vector<uint8_t> &file, SaveMutateSave *out)
+// The work of SaveMutate_Open, below, which empties out again if this refuses part way
+inline const char *SaveMutate_OpenParts(const std::vector<uint8_t> &file, SaveMutateSave *out)
 {
 	out->header.clear();
 	out->blocks.clear();
@@ -200,6 +199,22 @@ inline const char *SaveMutate_Open(const std::vector<uint8_t> &file, SaveMutateS
 	}
 
 	return nullptr;
+}
+
+// Opens a save's bytes: the level's header, the package unpacked by the game's own checked decoder, and its blocks walked as the loader
+// walks them. Gives back nothing if it worked, or why not; a save it refuses leaves out empty, whatever part it had read.
+inline const char *SaveMutate_Open(const std::vector<uint8_t> &file, SaveMutateSave *out)
+{
+	const char *why = SaveMutate_OpenParts(file, out);
+
+	if (why)
+	{
+		out->header.clear();
+		out->blocks.clear();
+		out->list.clear();
+	}
+
+	return why;
 }
 
 // Packs a header and blocks into a save file's bytes, with the game's own compressor, as SaveGame does. False if it can't.

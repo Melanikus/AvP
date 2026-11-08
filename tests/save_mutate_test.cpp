@@ -146,7 +146,11 @@ static void Opening()
 	std::vector<uint8_t> notPackage(file);
 	notPackage[kSaveMutateLevelBlockSize] = 'X';
 	Check(std::string(SaveMutate_Open(notPackage, &save)) == "the rest of the file isn't a Huffman package", "a file with no package after its header is refused");
-	std::vector<uint8_t> cut(file.begin(), file.end() - 1);
+	// A package cut to 4 bytes of packed data. One byte off the end isn't enough: the decoder reads the packed data 4 bytes at a time and
+	// leaves a part word at the end, so a copy one byte short can still unpack. 4 bytes hold 32 bits, and the blocks unpack to 52 bytes,
+	// so the decoder refuses it whatever the code lengths are (it can't be more bytes than the bits it was given).
+	std::vector<uint8_t> cut(file.begin(), file.begin() + kSaveMutateLevelBlockSize + sizeof(HuffmanPackage) + 4);
+	Check(SaveMutate_Open(file, &save) == nullptr && !save.list.empty(), "before it, the whole save opens, so there's something to leave behind");
 	Check(std::string(SaveMutate_Open(cut, &save)) == "the package doesn't unpack", "a package cut short doesn't unpack, and is refused");
 	Check(save.list.empty() && save.blocks.empty() && save.header.empty(), "a refused save leaves nothing behind");
 
