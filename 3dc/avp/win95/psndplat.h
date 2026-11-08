@@ -5,30 +5,17 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   sndSource moved, as it was, to openal_shared.h, which the sound streams' own file shares
 #ifndef PSNDPLAT_H
 #define PSNDPLAT_H
 
 #ifdef USE_OPENAL
 #include <AL/al.h>
+#include "openal_shared.h"
 #endif
 
 #include "psnd.h"
-
-#ifdef USE_OPENAL
-
-struct sndSource
-{
-	bool _isFree;
-	ALuint _alSource;
-
-	// constructor
-	sndSource()
-	{
-		_isFree = true;
-	}
-};
-
-#endif
 
 /* Patrick 10/6/97 -------------------------------------------------------------
   SAMPLE SUPPORT

@@ -26,6 +26,10 @@
 //   a stream remembers what it got as far as making, so that one that failed to start can be let go of
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out what was only for the XAudio2 sound backend, which nothing has built since OpenAL replaced it
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an OpenAL stream's list of free buffers is only ever looked at with its lock held, and what its own thread and its user both
+//   read is kept so that both can read it at once safely. Its code is in 3dc/avp/win95/openal_stream.cpp. GetBytesWritten, which
+//   was never written or used, is gone
 
 #ifndef _AudioStreaming_h_
 #define _AudioStreaming_h_
@@ -44,11 +48,15 @@ enum
 #include <AL/al.h>
 #include <pthread.h>
 #include <deque>
+#include <atomic>
 
 struct sndSource;
 
 void *CheckProcessedBuffers(void *argument);
 
+// A stream: sound that comes in pieces while it plays, such as the level's music or a film's sound. Two threads use one at once. Its
+// user, such as the music thread, writes each piece into a free buffer and gives it to OpenAL to play. The stream's own thread
+// (CheckProcessedBuffers) takes back each buffer OpenAL has played, so it's free again.
 class AudioStream
 {
 	private:
@@ -56,11 +64,15 @@ class AudioStream
 		uint32_t	_nChannels;
 		uint32_t	_rate;
 		uint32_t	_bytesPerSample;
-		uint64_t	_totalSamplesWritten;
+		std::atomic<uint64_t> _totalSamplesWritten;
 		ALuint		*_buffers;
 		ALenum		_format;
 		uint8_t		*_dataBuffers;
 		uint32_t	_volume;
+
+		// The buffers that are free to be written into. Both threads change this list, so nothing looks at it, not even at how long
+		// it is, without _bufferMutex held. These three are the only way to it: each takes the lock, does its one thing, and lets go.
+		std::deque<ALuint> _freeBufferQueue;
 
 	public:
 		AudioStream();
@@ -76,9 +88,14 @@ class AudioStream
 		uint64_t GetNumSamplesPlayed();
 		uint64_t GetNumSamplesWritten();
 		uint32_t GetWritableBufferSize();
-		uint32_t GetBytesWritten();
 		uint32_t GetBufferSize();
 		void WaitForFreeBuffer();
+
+		// The free buffers, with the lock held (see _freeBufferQueue above). With no lock made, because Init stopped early, there are
+		// no free buffers, and nothing is taken or given back.
+		bool TakeFreeBuffer(ALuint *buffer);   // takes the oldest free buffer, or says there's none
+		void GiveBackBuffer(ALuint buffer);    // a buffer OpenAL has played is free again
+		uint32_t CountFreeBuffers();
 
 		// what Init got as far as making, so that letting go of a stream only lets go of what there is
 		bool _threadStarted;
@@ -87,14 +104,14 @@ class AudioStream
 		uint32_t	_bufferCount;
 		sndSource	*_source;
 		pthread_t	_playbackThread;
-		uint64_t	_totalBytesPlayed;
+		std::atomic<uint64_t> _totalBytesPlayed;   // added to by the stream's thread, read by the stream's user
 		uint32_t	_bufferSize;
 		pthread_mutex_t _bufferMutex;
 
-		bool _isPaused;
-		bool _isPlaying;
-
-		std::deque<ALuint> _freeBufferQueue;
+		// Set by the stream's user and read by the stream's own thread, at the same time, so each is an atomic: a value two threads can
+		// read and write at once without either seeing half of a change
+		std::atomic<bool> _isPaused;
+		std::atomic<bool> _isPlaying;
 };
 
 #endif
