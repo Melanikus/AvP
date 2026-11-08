@@ -4,7 +4,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the HUD's size comes from the screen's height and the player's HUD size, for every species, and a change shows from the next frame
 //   (HUD-SCALE-1, see hud_scale.h); the alien's health bar is as wide as a 4:3 screen; the gunsight is drawn at the HUD's size;
-//   DrawPredatorEnergyBar is gone, because nothing ever called it. Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   DrawPredatorEnergyBar is gone, because nothing ever called it; the log says each new size the HUD is drawn at. Reported by Bobblen;
+//   follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -27,6 +28,7 @@
 #include "kshape.h"
 #include "hud_scale.h"
 #include "view_settings.h"
+#include "logString.h"
 
 extern void D3D_RenderHUDString_Centred(char *stringPtr, uint32_t centreX, uint32_t y, uint32_t colour);
 extern void D3D_RenderHUDNumber_Centred(uint32_t number, uint32_t x, uint32_t y, uint32_t colour);
@@ -263,26 +265,38 @@ void D3D_InitialiseMarineHUD(void)
 //
 // In 1999 these were worked out once, when a level started, and only the marine's HUD set HUDScaleFactor, so the Predator worked out
 // its own. Now every species gets them: a level's start asks with evenIfUnchanged true (here, and StartGame in game.cpp), and MaintainHUD
-// asks on every frame with it false. Asked with false, nothing changes unless the screen's height or the HUD size has, so a new screen
+// asks on every frame with it false. Asked with false, nothing changes unless the screen's size or the HUD size has, so a new screen
 // size or HUD size shows from the next frame, and the debug build's MOTIONTRACKERSCALE command (gamevars.cpp) still holds until then.
+//
+// Each time the screen's size or the HUD size is new, the log says so, with the scale, in one line such as "HUD: 1920x1080 at 100% of
+// the usual size, scale 138240". So a tester's marked picture (the F2 key), or a report, can say what size the HUD was drawn at.
 void HUD_FollowTheScreen(bool evenIfUnchanged)
 {
+	static int widthBefore = -1;
 	static int heightBefore = -1;
 	static int sizeBefore = -1;
 
+	int const width = ScreenDescriptorBlock.SDB_Width;
 	int const height = ScreenDescriptorBlock.SDB_Height;
 	int const size = ViewSettings_HUDSize();
+	bool const somethingIsNew = width != widthBefore || height != heightBefore || size != sizeBefore;
 
-	if (!evenIfUnchanged && height == heightBefore && size == sizeBefore)
+	if (!evenIfUnchanged && !somethingIsNew)
 	{
 		return;
 	}
 
+	widthBefore = width;
 	heightBefore = height;
 	sizeBefore = size;
 
 	HUDScaleFactor = HUDScale_ForScreen(height, size);
 	MotionTrackerScale = HUDScaleFactor;
+
+	if (somethingIsNew)
+	{
+		LogString("HUD: " + std::to_string(width) + "x" + std::to_string(height) + " at " + std::to_string(size) + "% of the usual size, scale " + std::to_string(HUDScaleFactor));
+	}
 }
 
 void LoadCommonTextures(void)

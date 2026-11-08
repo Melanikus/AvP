@@ -341,7 +341,9 @@ static void TestJoiningTheGame()
 	std::string const follow = Between(hud3d, "void HUD_FollowTheScreen(bool evenIfUnchanged)\n{", "\n}\n");
 	Check(Has(follow, "int const height = ScreenDescriptorBlock.SDB_Height;") && Has(follow, "int const size = ViewSettings_HUDSize();"), "the scale comes from the screen's height and the player's HUD size");
 	Check(Has(follow, "HUDScaleFactor = HUDScale_ForScreen(height, size);") && Has(follow, "MotionTrackerScale = HUDScaleFactor;"), "and goes to both the HUD's scale and the motion tracker's");
-	Check(Has(follow, "if (!evenIfUnchanged && height == heightBefore && size == sizeBefore)\n\t{\n\t\treturn;"), "asked again with nothing changed, it leaves them alone");
+	Check(Has(follow, "bool const somethingIsNew = width != widthBefore || height != heightBefore || size != sizeBefore;"), "what counts as a change is the screen's size or the HUD size");
+	Check(Has(follow, "if (!evenIfUnchanged && !somethingIsNew)\n\t{\n\t\treturn;"), "asked again with nothing changed, it leaves them alone");
+	Check(Has(follow, "if (somethingIsNew)\n\t{\n\t\tLogString(\"HUD: \" + std::to_string(width) + \"x\" + std::to_string(height) + \" at \" + std::to_string(size) + \"% of the usual size, scale \" + std::to_string(HUDScaleFactor));"), "and each new size goes in the log once, with the screen, the HUD size and the scale");
 	Check(Has(hud3dHeader, "void HUD_FollowTheScreen(bool evenIfUnchanged);") && Has(hud3dHeader, "extern fixed_t HUDScaleFactor;"), "hud.cpp can ask for it, and read the scale");
 
 	Check(Has(Between(hud3d, "void D3D_InitialiseMarineHUD(void)\n{", "\n}\n"), "HUD_FollowTheScreen(true);"), "the marine's HUD asks when it's set up");

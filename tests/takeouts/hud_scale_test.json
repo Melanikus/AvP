@@ -250,8 +250,28 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/d3d_hud.cpp",
-					"from": "if (!evenIfUnchanged && height == heightBefore && size == sizeBefore)",
+					"from": "if (!evenIfUnchanged && !somethingIsNew)",
 					"to": "if (!evenIfUnchanged)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new screen width alone isn't a change",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "bool const somethingIsNew = width != widthBefore || height != heightBefore || size != sizeBefore;",
+					"to": "bool const somethingIsNew = height != heightBefore || size != sizeBefore;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say the HUD's new size",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "if (somethingIsNew)\n\t{\n\t\tLogString(",
+					"to": "if (false)\n\t{\n\t\tLogString("
 				}
 			]
 		},
