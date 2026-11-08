@@ -37,7 +37,7 @@ if (-not $Repository)
 # The checks this commit has to have passed, by the names branch protection and build.yml use. Add a new required check here as well.
 # Take-outs is the one required check that isn't here: it runs only on pull requests, never on a push to avpx_main, so this commit has
 # no Take-outs run of its own to look at. Its result counted when each pull request merged.
-$requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu'
+$requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu', 'Tests under the address sanitizer'
 
 # What Shadows & Shaders is made of: the shadows, the per-pixel lighting, the relief mapping and the rendering menu. A file being here
 # isn't enough for code, because a file can be left behind and not built, so each .cpp has to be in the game's project too.
