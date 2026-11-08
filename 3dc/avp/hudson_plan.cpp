@@ -209,6 +209,8 @@ const char *const kHudsonRefusedWalkPlaceNotThreeNumbers = "walkfrom=, walkto= a
 const char *const kHudsonRefusedWalkNeedsBoth = "walkfrom= and walkto= go together: one says where he starts, the other where he walks to";
 const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks once he has walked, so it needs walkfrom= and walkto=";
 const char *const kHudsonRefusedTogetherNotANumber = "together= is how many aliens at once, from 2 to 8";
+const char *const kHudsonRefusedEveryNotASecond = "every= is seconds from 0.1 to 10, with at most one figure after the dot, like 0.5";
+const char *const kHudsonRefusedEveryWithoutTogether = "every= is how long between the aliens of together=, so it needs together=";
 const char *const kHudsonRefusedTogetherWithoutWatch = "together= is how many aliens a watched fight has at once, so it needs watch=alien";
 const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or rooms=: with rooms= the camera goes to a marine who isn't the player";
 
@@ -385,7 +387,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
 	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
-	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false, seenTogether = false;
+	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false, seenTogether = false, seenEvery = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
 
@@ -934,6 +936,35 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			{
 				return kHudsonRefusedTogetherNotANumber;
 			}
+		}
+		else if (WordIs(place, nameLength, "every"))
+		{
+			if (seenEvery)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenEvery = true;
+
+			// Read by hand: one or two figures, and then perhaps a dot and one more, so 0.5 is 5 tenths. Nothing else, so no "1e9" and no comma for a dot.
+			size_t const dot = (valueLength >= 3 && value[valueLength - 2] == '.') ? valueLength - 2 : valueLength;
+			bool shaped = dot >= 1 && dot <= 2 && (dot == valueLength || isdigit((unsigned char)value[valueLength - 1]));
+			int tenths = 0;
+
+			for (size_t i = 0; shaped && i < dot; i++)
+			{
+				shaped = isdigit((unsigned char)value[i]) != 0;
+				tenths = tenths * 10 + (value[i] - '0');
+			}
+
+			tenths = tenths * 10 + ((shaped && dot < valueLength) ? value[valueLength - 1] - '0' : 0);
+
+			if (!shaped || tenths < 1 || tenths > 100)
+			{
+				return kHudsonRefusedEveryNotASecond;
+			}
+
+			plan->watchEveryMs = tenths * 100;
 		}
 		else if (WordIs(place, nameLength, "watchfrom"))
 		{
@@ -2393,6 +2424,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->holdFire && !plan->watchAlien)
 	{
 		return kHudsonRefusedHoldFireWithoutWatch;
+	}
+
+	if (seenEvery && !seenTogether)
+	{
+		return kHudsonRefusedEveryWithoutTogether;
 	}
 
 	if (seenTogether && !plan->watchAlien)

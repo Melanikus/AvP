@@ -796,6 +796,22 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien together=3", kHudsonRefusedTogetherWithoutWatch);
 	Refused("-hudson level=a frames=1 rooms=1 together=3", kHudsonRefusedWatchWordsWithoutCombat);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=3 together=3", kHudsonRefusedAskedTwice);
+	// every=: the others one at a time, as a generator sends them
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0.5", &plan) == 0 && plan.watchEveryMs == 500, "every=0.5 is half a second between them");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=2", &plan) == 0 && plan.watchEveryMs == 2000, "every=2 is two seconds");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=10", &plan) == 0 && plan.watchEveryMs == 10000, "and 10 is the most");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0.1", &plan) == 0 && plan.watchEveryMs == 100, "and 0.1 the least");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5", &plan) == 0 && plan.watchEveryMs == 0, "without it they all come at once");
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=10.1", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0.55", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=0,5", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=.5", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=5.", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=x.5", kHudsonRefusedEveryNotASecond);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien every=0.5", kHudsonRefusedEveryWithoutTogether);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5 every=1 every=1", kHudsonRefusedAskedTwice);
 	// The user's alien films have the lamp on at the biggest spot it has: lampsize=
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.35", &plan) == 0 && plan.lampOn && plan.lampSizeHundredths == 35, "lampsize=0.35 is the most the spot goes to");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.05", &plan) == 0 && plan.lampSizeHundredths == 5, "and 0.05 the least");
@@ -1222,9 +1238,11 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("3dc/avp/hudson_strategies.cpp"), "\t\tcase I_BehaviourFaceHugger:\n\t\t{\n\t\t\tstatic const char *const states[] = { \"approaching\", \"attacking\", \"waiting\", \"avoiding\", \"dying\", \"floating\", \"jumping\", \"about to jump\" };"), "SOURCE: a facehugger's state is said in words");
 		Check(Has(ReadSourceFile("3dc/avp/bh_facehugger.h"), "\tFHNS_Approach,\n\tFHNS_Attack,\n\tFHNS_Wait,\n\tFHNS_Avoidance,\n\tFHNS_Dying,\n\tFHNS_Floating,\n\tFHNS_Jumping,\n\tFHNS_AboutToJump,"), "SOURCE: in the order the game has them");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LampSize) { $arguments += \" lampsize=$LampSize\" }"), "SOURCE: the script can ask for lampsize=");
-		Check(Has(watchCode, "if (plan.watchTogether > 1)\n\t{\n\t\tMakeTheOtherAliens(spot, frame);"), "SOURCE: together= makes the others with the first");
-		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)", "\n}\n"), "if (!ModuleFromPosition(&spot, (MODULE *)0))"), "SOURCE: only where there's a room");
-		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)", "\n}\n"), "for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)"), "SOURCE: and never more than there are names for");
+		Check(Has(watchCode, "if (plan.watchTogether > 1)\n\t{\n\t\ttogetherFirst = spot;\n\t\ttogetherFirstAt = GetTickCount();"), "SOURCE: together= makes the others round the first, from when it was made");
+		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(LONG frame)\n{", "\n}\n"), "if (!ModuleFromPosition(&spot, (MODULE *)0))"), "SOURCE: only where there's a room");
+		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(LONG frame)\n{", "\n}\n"), "while (togetherTried < plan.watchTogether - 1 && togetherTried < kHudsonMostTogether - 1 && now - togetherFirstAt >= (DWORD)(togetherTried + 1) * (DWORD)plan.watchEveryMs)"), "SOURCE: never more than there are names for, and each only once its turn has come");
+		Check(Has(watchCode, "\tif (plan.watchTogether > 1)\n\t{\n\t\tMakeTheOtherAliens(frame);\n\t}\n\n\tint const seconds"), "SOURCE: and the watch asks each frame whose turn it is");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Every) { $arguments += \" every=$Every\" }"), "SOURCE: the script can ask for every=");
 		Check(Has(watchCode, "		WatchTheOtherAliens(marine, seconds);"), "SOURCE: and follows each of them once a second");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Together -gt 0) { $arguments += \" together=$Together\" }"), "SOURCE: the script can ask for together=");
 		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.cpp"), "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())"), "SOURCE: a host who is out alone starts the level again after dieat=, as single player does");

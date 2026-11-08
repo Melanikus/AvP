@@ -367,6 +367,10 @@ static LONG visionViews = 0, visionReadsFailed = 0, visionMirrored = 0, visionNo
 static char alienName[SB_NAME_LENGTH] = { 0 };
 static char otherAlienNames[kHudsonMostTogether - 1][SB_NAME_LENGTH];   // together=: the aliens made with the first one. See "WATCHING AN ALIEN"
 static int otherAliensMade = 0;
+static VECTORCH togetherFirst;          // where the first was made, which the others are made round
+static DWORD togetherFirstAt = 0;       // when, by this machine's clock
+static int togetherTried = 0;           // how many of the others have had their turn, made or not
+static bool togetherSaidHowMany = false;
 
 // What a watched fight has found so far: see "WATCHING AN ALIEN", further down.
 enum WatchSurface
@@ -3513,6 +3517,7 @@ static void SayWhatTheWatchFound(const char *how)
 // and ends the run a few seconds after its first blow lands. Only the way there is counted: its lunges while it attacks him aren't part of it. True once it
 // has ended the run, so that nothing else is done with this frame.
 static void WatchTheOtherAliens(const STRATEGYBLOCK *marine, int seconds);   // together=: below, with the others' making
+static void MakeTheOtherAliens(LONG frame);
 
 static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alien, LONG frame)
 {
@@ -3533,6 +3538,12 @@ static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alie
 
 	watchLastPlace = here;
 	watchHasLastPlace = true;
+
+	// together= with every=: the others come one at a time
+	if (plan.watchTogether > 1)
+	{
+		MakeTheOtherAliens(frame);
+	}
 
 	int const seconds = (int)((now - watchStartedAt) / 1000);
 
@@ -3732,20 +3743,22 @@ static void LookFromHisEyesAtTheAlien(const STRATEGYBLOCK *marine, VECTORCH *pla
 	MakeMatrixFromDirection(&look, turn);
 }
 
-// together=: the other aliens of a watched fight, made at the same moment as the first, round it on the same floor: 2 m to each side, in front, behind,
-// and then on the corners. One that would be in no room isn't made, and the log says so, so the count made is always in the log. Each is followed once a
-// second (see WatchTheOtherAliens), and its first blow on him ends the run as the first one's does, because a blow is a blow whoever lands it.
-static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)
+// together=: the other aliens of a watched fight, round the first on the same floor: 2 m to each side, in front, behind, and then on the corners.
+// Without every= they're all made at the same moment as the first. With it, one comes each every= after the first, as a level's generator sends
+// them, and this is asked each frame to make the ones whose turn has come. One that would be in no room isn't made, and the log says so, so the
+// count made is always in the log. Each is followed once a second (see WatchTheOtherAliens), and its first blow on him ends the run as the first
+// one's does, because a blow is a blow whoever lands it.
+static void MakeTheOtherAliens(LONG frame)
 {
 	static const int kApart = 2000;   // mm, along the floor
 	static const int offsets[kHudsonMostTogether - 1][2] = { { kApart, 0 }, { -kApart, 0 }, { 0, kApart }, { 0, -kApart }, { kApart, kApart }, { -kApart, kApart }, { kApart, -kApart } };
 	char line[200] = { 0 };
+	DWORD const now = GetTickCount();
 
-	otherAliensMade = 0;
-
-	for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)
+	while (togetherTried < plan.watchTogether - 1 && togetherTried < kHudsonMostTogether - 1 && now - togetherFirstAt >= (DWORD)(togetherTried + 1) * (DWORD)plan.watchEveryMs)
 	{
-		VECTORCH spot = { first.vx + offsets[i][0], first.vy, first.vz + offsets[i][1] };
+		int const i = togetherTried++;
+		VECTORCH spot = { togetherFirst.vx + offsets[i][0], togetherFirst.vy, togetherFirst.vz + offsets[i][1] };
 
 		if (!ModuleFromPosition(&spot, (MODULE *)0))
 		{
@@ -3767,12 +3780,17 @@ static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)
 
 		memcpy(otherAlienNames[otherAliensMade], made->SBname, SB_NAME_LENGTH);
 		otherAliensMade++;
-		_snprintf(line, sizeof(line) - 1, "hudson: together: alien %d of %d is made at frame %ld, at %d %d %d", otherAliensMade + 1, plan.watchTogether, frame, spot.vx, spot.vy, spot.vz);
+		_snprintf(line, sizeof(line) - 1, "hudson: together: alien %d of %d is made at frame %ld, %lu ms after the first, at %d %d %d", otherAliensMade + 1, plan.watchTogether, frame,
+			(unsigned long)(now - togetherFirstAt), spot.vx, spot.vy, spot.vz);
 		LogString(line);
 	}
 
-	_snprintf(line, sizeof(line) - 1, "hudson: together: %d of the %d aliens asked for are made", otherAliensMade + 1, plan.watchTogether);
-	LogString(line);
+	if (togetherTried == plan.watchTogether - 1 && !togetherSaidHowMany)
+	{
+		togetherSaidHowMany = true;
+		_snprintf(line, sizeof(line) - 1, "hudson: together: %d of the %d aliens asked for are made", otherAliensMade + 1, plan.watchTogether);
+		LogString(line);
+	}
 }
 
 // together=: once a second, where each of the other aliens is and what it's doing, in the same words as the first one's line, so that a reader can
@@ -3861,7 +3879,12 @@ static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)
 
 	if (plan.watchTogether > 1)
 	{
-		MakeTheOtherAliens(spot, frame);
+		togetherFirst = spot;
+		togetherFirstAt = GetTickCount();
+		togetherTried = 0;
+		otherAliensMade = 0;
+		togetherSaidHowMany = false;
+		MakeTheOtherAliens(frame);
 	}
 }
 

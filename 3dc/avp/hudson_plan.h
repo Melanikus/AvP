@@ -255,6 +255,7 @@ struct HudsonPlan
 	bool combatAlien;     // run the world, and make an alien in front of him to fight
 	int combatAliens;     // aliens=: how many to make, one after another. 1 unless it says
 	bool watchAlien;      // watch=alien: in a fight, the camera follows the alien from the side, and the log says where it goes once a second. See "WATCHING AN ALIEN" in hudson.cpp
+	int watchEveryMs;     // every=0.1 to 10 seconds: with together=, the others come one at a time this long apart, as a level's generator sends them. 0 is all at once
 	int watchTogether;    // together=2 to 8: a watched fight has this many aliens at once, made a few metres apart round the first, each with its own line once a second. 0 or 1 is one
 	bool watchFromEyes;   // watchfrom=eyes: in a watched fight, the camera stays at his own eyes, as a player would see the alien come. watchfrom=side is the camera beside the alien, as without it
 	bool holdFire;        // holdfire=yes: in a watched fight, he never fires, so that the alien gets to him
@@ -510,6 +511,8 @@ extern const char *const kHudsonRefusedLookAtWithoutWalk;
 extern const char *const kHudsonRefusedWalkNotAlone;
 extern const char *const kHudsonRefusedTogetherNotANumber;
 extern const char *const kHudsonRefusedTogetherWithoutWatch;
+extern const char *const kHudsonRefusedEveryNotASecond;
+extern const char *const kHudsonRefusedEveryWithoutTogether;
 
 // A run must never touch the player's own copy of the game. So it won't start from anything that looks like a Steam folder. This is against a slip, not against someone determined.
 bool HudsonPlan_FolderIsRefused(const char *folder);

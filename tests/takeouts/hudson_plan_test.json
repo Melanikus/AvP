@@ -8261,8 +8261,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "\t\tMakeTheOtherAliens(spot, frame);",
-					"to": "\t\t;"
+					"from": "\t\ttogetherFirstAt = GetTickCount();\n\t\ttogetherTried = 0;\n\t\totherAliensMade = 0;\n\t\ttogetherSaidHowMany = false;\n\t\tMakeTheOtherAliens(frame);",
+					"to": "\t\ttogetherFirstAt = GetTickCount();\n\t\ttogetherTried = 0;\n\t\totherAliensMade = 0;\n\t\ttogetherSaidHowMany = false;"
 				}
 			]
 		},
@@ -8281,8 +8281,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)",
-					"to": "for (int i = 0; i < plan.watchTogether - 1; i++)"
+					"from": "togetherTried < plan.watchTogether - 1 && togetherTried < kHudsonMostTogether - 1 && now",
+					"to": "togetherTried < plan.watchTogether - 1 && now"
 				}
 			]
 		},
@@ -8342,6 +8342,106 @@
 				{
 					"file": "3dc/avp/hudson.cpp",
 					"from": "\t\tstatus->Mvt_MotionIncrement = ONE_FIXED;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->watchEveryMs = tenths * 100;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "every= takes nothing as a second",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!shaped || tenths < 1 || tenths > 100)",
+					"to": "if (!shaped || tenths > 100)"
+				}
+			]
+		},
+		{
+			"name": "every= takes more than ten seconds",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!shaped || tenths < 1 || tenths > 100)",
+					"to": "if (!shaped || tenths < 1)"
+				}
+			]
+		},
+		{
+			"name": "every= takes any shape",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!shaped || tenths < 1 || tenths > 100)",
+					"to": "if (tenths < 1 || tenths > 100)"
+				}
+			]
+		},
+		{
+			"name": "every= takes two figures after the dot",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "size_t const dot = (valueLength >= 3 && value[valueLength - 2] == '.') ? valueLength - 2 : valueLength;",
+					"to": "size_t const dot = (valueLength >= 3 && value[valueLength - 3] == '.') ? valueLength - 3 : (valueLength >= 3 && value[valueLength - 2] == '.') ? valueLength - 2 : valueLength;"
+				}
+			]
+		},
+		{
+			"name": "every= goes without together=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenEvery && !seenTogether)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "every= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenEvery)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others all come at once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " && now - togetherFirstAt >= (DWORD)(togetherTried + 1) * (DWORD)plan.watchEveryMs)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no turn ever comes for the later ones",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t// together= with every=: the others come one at a time\n\tif (plan.watchTogether > 1)\n\t{\n\t\tMakeTheOtherAliens(frame);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for every=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Every) { $arguments += \" every=$Every\" }\n",
 					"to": ""
 				}
 			]
