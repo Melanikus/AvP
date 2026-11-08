@@ -37,8 +37,27 @@ enum CoopPageAnswer
 bool CoopMenu_HostPageOpens(void);
 void CoopMenu_JoinPageOpens(void);
 
-// The page for a joiner who's out of the game. It works out what to say from how they came to be there.
-void CoopMenu_OutPageOpens(void);
+// The page for a player the co-op game has ended for. It works out what to say from how that happened. False if nothing did, and there's
+// nothing to say.
+bool CoopMenu_OutPageOpens(void);
+
+// winmain.cpp, as a network game ends and before anything is wiped: notes why it ended, for the page after it
+void CoopMenu_TheGameIsEnding(void);
+
+// Is there something to tell the player about the game that just ended? AvP_MainMenus goes to that page first.
+bool CoopMenu_HasALastWord(void);
+
+// The pause menu in a campaign: makes Quit a question on the host's machine
+void CoopMenu_InGameMenuOpens(void);
+
+// Each frame of the Players page: fills in its rows. True if the number of rows changed.
+bool CoopMenu_PlayersPageFrame(void);
+
+// One player's line, "Hicks: alive". False if nobody is at that place on the list.
+bool CoopMenu_PlayerLine(int place, char *line, size_t room);
+
+// A level's name in a campaign, as the Start at row shows it
+char *CoopMenu_LevelName(int campaign, int place);
 
 CoopPageAnswer CoopMenu_EveryFrame(bool isTheHostsPage);
 

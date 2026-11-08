@@ -22,8 +22,8 @@
 #ifndef _net_version_check_h_
 #define _net_version_check_h_ 1
 
-static const int kVersionTheseSizesBelongTo = 111;
-static const unsigned int kSizesAtThatVersion = 55126;
+static const int kVersionTheseSizesBelongTo = 112;
+static const unsigned int kSizesAtThatVersion = 55128;
 
 static const unsigned int kSizesNow =
 	1 * sizeof(NETMESSAGEHEADER) +

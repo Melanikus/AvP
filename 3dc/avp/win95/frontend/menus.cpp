@@ -25,6 +25,7 @@
 //   a level's films play only when the game plays as single player does, and the network goes on underneath them
 //   the host chooses a campaign's difficulty, and a joiner plays what the host says rather than his last single player game's
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   a co-op campaign's pause menu has a Players page, and asks a host before leaving; the page after a co-op game says why it ended
 //   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
 //   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the co-op campaign pages: see coop_menu.h. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
@@ -397,7 +398,16 @@ int AvP_MainMenus(void)
 	}
 	VideoModeNotAvailable = 0;
 
-	if (AvP.LevelCompleted && CheatMode_Active == CHEATMODE_NONACTIVE && !DebuggingCommandsActive)
+	if (CoopMenu_HasALastWord())
+	{
+		// A co-op game ended for a reason the player should hear: the page says why, before anything else. A custom map played with others
+		// has no page of its own to go back to, so that's forgotten here.
+		CoopMenu_PageAfterACustomMap();
+		AvP.LevelCompleted = 0;
+		SetupNewMenu(AVPMENU_COOP_OUT);
+		AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	}
+	else if (AvP.LevelCompleted && CheatMode_Active == CHEATMODE_NONACTIVE && !DebuggingCommandsActive)
 	{
 		if (CustomMaps_Playing())
 		{
@@ -669,6 +679,14 @@ extern void AvP_UpdateMenus(void)
 
 			default:
 				break;
+		}
+	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_COOP_PLAYERS)
+	{
+		// Players come and go behind this page, so its rows are filled in each frame
+		if (CoopMenu_PlayersPageFrame())
+		{
+			CountTheRowsOnThisPage();
 		}
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
@@ -1061,7 +1079,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_COOP_OUT:
 		{
-			CoopMenu_OutPageOpens();
+			// Nothing to say, so no page
+			if (!CoopMenu_OutPageOpens())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_COOP_PLAYERS:
+		{
+			CoopMenu_PlayersPageFrame();
 			break;
 		}
 
@@ -1179,11 +1208,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_INGAME:
 		case AVPMENU_INNETGAME:
+		case AVPMENU_INCOOPGAME:
 		{
 			if (AvP.Network != I_No_Network)
 			{
-				// in a multiplayer game set up a menu without the restart mission option
-				menuID = AVPMENU_INNETGAME;
+				// in a multiplayer game set up a menu without the restart mission option. A campaign's has a Players row.
+				menuID = SameAsSinglePlayer() ? AVPMENU_INCOOPGAME : AVPMENU_INNETGAME;
+
+				if (menuID == AVPMENU_INCOOPGAME)
+				{
+					CoopMenu_InGameMenuOpens();
+				}
+
 				AvPMenus.CurrentMenu = menuID;
 				AvPMenus.MenuElements = AvPMenusData[menuID].MenuElements; // could use default
 				AvPMenus.FontToUse = AvPMenusData[menuID].FontToUse;
@@ -3046,6 +3082,10 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_COOP_PLAYER:
+		{
+			break;
+		}
 		case AVPMENU_ELEMENT_COOP_REMOVE:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -3972,6 +4012,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			DrawAvPMenuGfx(elementPtr->textureID, MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		}
+		case AVPMENU_ELEMENT_COOP_PLAYER:
 		case AVPMENU_ELEMENT_COOP_REMOVE:
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{

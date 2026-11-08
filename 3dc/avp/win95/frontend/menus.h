@@ -128,7 +128,10 @@ enum AVPMENU_ID
 	AVPMENU_CUSTOMMAPS,        // the custom maps for single player: see custom_maps.h
 	AVPMENU_COOP_HOST,         // the co-op campaign, chosen by a host with others gathering: see coop_menu.h
 	AVPMENU_COOP_JOIN,         // the same rows, shown to a joiner
-	AVPMENU_COOP_OUT           // one plain sentence, for a joiner the game went on without or the host removed
+	AVPMENU_COOP_OUT,          // one plain sentence, for a player the co-op game has ended for, and why
+	AVPMENU_INCOOPGAME,        // the pause menu in a co-op campaign: the network game's, with a Players row
+	AVPMENU_COOP_PLAYERS,      // who's in and alive, from that menu, where a host can remove someone
+	AVPMENU_COOP_HOSTQUITS     // a host is asked if they mean to end the game for everyone
 };
 
 enum AVPMENU_FONT_ID
@@ -213,6 +216,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_VIEWKEY,   // a key on the rendering page. Its MaxValue is which of ViewKeyLine it is
 	AVPMENU_ELEMENT_CUSTOMMAP_START, // starts the custom map chosen on the Custom maps page
 	AVPMENU_ELEMENT_COOP_START, // a host starts the co-op campaign chosen on the page, for everyone with the map
+	AVPMENU_ELEMENT_COOP_PLAYER, // one player's line on the Players page: their name and whether they're alive. Nothing happens when it's pressed.
 	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 };
 

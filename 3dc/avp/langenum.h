@@ -6,6 +6,8 @@
 //   the words for choosing a campaign and its difficulty
 //   the names for the new classes, Allow Staff and the sidearm
 //   the new guns' words
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the words a player sees during a co-op game
 #ifndef _langenum_h_
 #define _langenum_h_ 1
 /* KJL 17:05:36 05/01/97
@@ -1470,6 +1472,18 @@ enum TEXTSTRING_ID
 	TEXTSTRING_COOP_REMOVE,
 	TEXTSTRING_COOP_REMOVE_HELP,
 	TEXTSTRING_COOP_REMOVED,
+	TEXTSTRING_COOP_ALIVE,
+	TEXTSTRING_COOP_OUT,
+	TEXTSTRING_COOP_JOINING,
+	TEXTSTRING_COOP_WATCHING,
+	TEXTSTRING_COOP_LEVEL_COMPLETE,
+	TEXTSTRING_COOP_WAITING_FOR,
+	TEXTSTRING_COOP_GAME_CARRIES_ON,
+	TEXTSTRING_COOP_PLAYERS_ROW,
+	TEXTSTRING_COOP_HOST_LEFT,
+	TEXTSTRING_COOP_HOST_QUITS,
+	TEXTSTRING_COOP_CAMPAIGN_COMPLETE,
+	TEXTSTRING_COOP_MAP_COMPLETE,
 
 	MAX_NO_OF_TEXTSTRINGS
 };

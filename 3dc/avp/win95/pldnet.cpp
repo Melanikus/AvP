@@ -8,6 +8,7 @@
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 //   the disc is checked before use, because a save file can leave that part out
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   in a co-op campaign the score key lists who's alive, a player who's out is told so, and the loading screen says which level was finished and who it's waiting for
 //   the co-op lobby: what it takes, the host's choice, a joiner's answer, and a custom map as a campaign of one level. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a level's end notes what each player carries on with in a co-op campaign. Credit: Melanikus and Bobblen (the kept kit follows Bobblen's avp-forever, rewritten)
@@ -117,6 +118,11 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "hmodel.h"
 #include "npc_kinds.h"
 #include "npc_ghosts.h"
+#include "coop_in_game.h"
+#include "coop_menu.h"
+
+// coop_in_game.h keeps one bit for each place on the player list
+static_assert(kCoopMostPlayers == NET_MAXPLAYERS, "coop_in_game.h needs one bit for each player");
 
 /*----------------------------------------------------------------------
   Some globals for use in this file
@@ -2454,6 +2460,7 @@ void AddNetMsg_GameDescription(void)
 		messagePtr->coopCampaign = (unsigned char)netGameData.coopCampaign;
 		messagePtr->coopCampaignLevel = (unsigned char)netGameData.coopCampaignLevel;
 		messagePtr->coopDifficulty = (unsigned char)netGameData.coopDifficulty;
+		messagePtr->coopWaitingFor = netGameData.coopWaitingFor;
 		messagePtr->coopRollNumber = netGameData.coopRollNumber;
 		messagePtr->scoreLimit = netGameData.scoreLimit;
 		messagePtr->timeLimit = (unsigned char)netGameData.timeLimit;
@@ -6115,6 +6122,9 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 
 			// Any number at all is safe here: see shared_roll.h
 			netGameData.coopRollNumber = messagePtr->coopRollNumber;
+
+			// Any list is safe too: it only picks which names go on a line of text, and a place with nobody in it is passed over
+			netGameData.coopWaitingFor = messagePtr->coopWaitingFor;
 		}
 
 		// level number got from the session description instead
@@ -13122,6 +13132,34 @@ BOOL AreThereAnyLivesLeft()
 #define FONT_MARINESYMBOL   177
 #define FONT_PREDATORSYMBOL 178
 
+// How far apart the lines below are on the screen, in its own pixels: the small font is 15 high
+static const int kCoopLineStep = 20;
+
+// The score key in a campaign: each player and whether they're alive, out until the next level, or still joining. For the same 5 seconds the
+// score table shows for, and drawn from the player list every machine has, so it needs no message of its own.
+static void Coop_ShowWhoIsAlive(void)
+{
+	ShowMultiplayerScoreTimer -= RealFrameTime;
+
+	if (ShowMultiplayerScoreTimer < 0)
+	{
+		ShowMultiplayerScoreTimer = 0;
+	}
+
+	int y = ScreenDescriptorBlock.SDB_Height / 3;
+
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		char line[100];
+
+		if (CoopMenu_PlayerLine(place, line, sizeof(line)))
+		{
+			RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width / 2, y, 0xffffffff);
+			y += kCoopLineStep;
+		}
+	}
+}
+
 void DoMultiplayerEndGameScreen(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
@@ -13465,7 +13503,15 @@ void DoMultiplayerSpecificHud()
 	    netGameData.myGameState == NGS_EndGameScreen ||
 	    (!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer && !SameAsSinglePlayer()))
 	{
-		DoMultiplayerEndGameScreen();
+		// In a campaign the scores mean nothing, so the same key shows who's in and alive
+		if (SameAsSinglePlayer() && netGameData.myGameState != NGS_EndGameScreen)
+		{
+			Coop_ShowWhoIsAlive();
+		}
+		else
+		{
+			DoMultiplayerEndGameScreen();
+		}
 	}
 	else
 	{
@@ -13476,6 +13522,12 @@ void DoMultiplayerSpecificHud()
 
 			if (index != NET_IDNOTINPLAYERLIST) {
 				RenderStringCentred(netGameData.playerData[index].name, ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height / 2, 0xff0000ff);
+			}
+
+			// Watching someone can look like a fault, so a campaign says what it is
+			if (SameAsSinglePlayer())
+			{
+				RenderStringCentred(GetTextString(TEXTSTRING_COOP_WATCHING), ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height / 2 + kCoopLineStep, 0xffffffff);
 			}
 		}
 	}
@@ -13778,6 +13830,10 @@ bool SameAsSinglePlayer(void)
 // Set when the level that's running is ending because everyone is going on to the next one.
 static bool coopLevelChangeIsDue = false;
 
+// The level just finished, for the next loading screen to name, or -1. And whether that was the last level, for the page after the game.
+static int coopFinishedPlace = -1;
+static bool coopCampaignIsOver = false;
+
 static void Coop_LevelStopsRunning(void);
 
 static void Coop_GoToPlace(int place)
@@ -13794,10 +13850,17 @@ static void Coop_GoToPlace(int place)
 	// behind whoever he was watching, because watching works by moving the player to where they are.
 	TurnOffMultiplayerObserveMode();
 
+	// The loading screen says which level was finished, if this is the level after it
+	coopFinishedPlace = place == netGameData.coopCampaignLevel + 1 ? netGameData.coopCampaignLevel : -1;
+
 	netGameData.coopCampaignLevel = place;
 	coopLevelChangeIsDue = place < Campaign_LevelCount(netGameData.coopCampaign);
 	AvP.MainLoopRunning = 0;
 
+	if (!coopLevelChangeIsDue)
+	{
+		coopCampaignIsOver = true;
+	}
 }
 
 /*----------------------------------------------------------------------
@@ -13840,6 +13903,7 @@ static void AddNetMsg_CoopWithNothingElse(NETMESSAGETYPE type)
 
 void Coop_WaitOnLoadingScreenBegins(void)
 {
+	netGameData.coopWaitingFor = 0;
 	memset(coopPlaceIsReady, 0, sizeof(coopPlaceIsReady));
 	coopGoHasCome = false;
 	coopLevelIsRunningOnHost = false;
@@ -13872,6 +13936,9 @@ bool Coop_MayStartLevel(bool keyHasBeenPressed)
 		{
 			placeHasPlayer[place] = netGameData.playerData[place].playerId != 0;
 		}
+
+		// Who everyone is waiting for, which goes out in the game description
+		netGameData.coopWaitingFor = CoopWaiting_Places(placeHasPlayer, coopPlaceIsReady, NET_MAXPLAYERS, PlayerIdInPlayerList(AvPNetID), coopThisPlayerPressed);
 
 		if (!waitedLongEnough && !NetEveryoneElseIsReady(placeHasPlayer, coopPlaceIsReady, NET_MAXPLAYERS, PlayerIdInPlayerList(AvPNetID)))
 		{
@@ -14019,6 +14086,9 @@ static void Coop_ForgetTheAnswers(void)
 static void Coop_ForgetTheLobby(void)
 {
 	coopLobbyState = kCoopLobbyNone;
+	coopFinishedPlace = -1;
+	coopCampaignIsOver = false;
+	netGameData.coopWaitingFor = 0;
 	memset(&coopChoice, 0, sizeof(coopChoice));
 	coopChoiceIsInUse = false;
 	coopHostHasStarted = false;
@@ -14343,6 +14413,42 @@ void Coop_TakeCampaignSpecies(void)
 		default:
 			break;
 	}
+}
+
+bool Coop_TheCampaignIsOver(void)
+{
+	return coopCampaignIsOver;
+}
+
+// "Level complete: Derelict", on the loading screen of the level after it. False if this loading screen isn't one.
+bool Coop_LevelCompleteLine(char *line, size_t room)
+{
+	if (room == 0 || coopFinishedPlace < 0 || !SameAsSinglePlayer() || AvP.Network == I_No_Network)
+	{
+		return false;
+	}
+
+	_snprintf(line, room - 1, "%s %s", GetTextString(TEXTSTRING_COOP_LEVEL_COMPLETE), CoopMenu_LevelName(netGameData.coopCampaign, coopFinishedPlace));
+	line[room - 1] = 0;
+	return true;
+}
+
+// "Waiting for: Hicks", once this player has pressed a key and is waiting for others
+bool Coop_WaitingForLine(char *line, size_t room)
+{
+	if (!coopThisPlayerPressed)
+	{
+		return false;
+	}
+
+	const char *names[NET_MAXPLAYERS];
+
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		names[place] = netGameData.playerData[place].playerId != 0 ? netGameData.playerData[place].name : NULL;
+	}
+
+	return CoopWaiting_Line(line, room, GetTextString(TEXTSTRING_COOP_WAITING_FOR), netGameData.coopWaitingFor, names, NET_PLAYERNAMELENGTH, PlayerIdInPlayerList(AvPNetID));
 }
 
 bool Coop_LevelChangeIsDue(void)

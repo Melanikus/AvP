@@ -7,6 +7,7 @@
 //   the class menus reach the new classes and have the sidearm, with limit and allow rows, and Allow Staff
 //   the reload key has its line on the marine's keys page
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   the co-op pause menu, its Players page, and the host's question before leaving
 //   the single player Custom maps page, and the way to it. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the co-op campaign pages, and the way to them from the multiplayer page. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 #include "3dc.h"
@@ -792,6 +793,50 @@ static AVPMENU_ELEMENT AvPMenu_InGame[] =
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
+// The pause menu in a co-op campaign. The game carries on behind it, as in any network game, so every row's help line says so. Quit is a
+// question first on the host's machine, because leaving ends the game for everyone: coop_menu.cpp makes the last row that as the menu opens.
+AVPMENU_ELEMENT AvPMenu_InCoopGame[] =
+{
+	{AVPMENU_ELEMENT_RESUMEGAME,	{TEXTSTRING_INGAMEMENU_RESUMEGAME},	{0},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_COOP_PLAYERS_ROW},	{AVPMENU_COOP_PLAYERS},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MOUSECONTROLS_TITLE},	{AVPMENU_CONTROLS},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_JOYSTICKCONTROLS_TITLE},	{AVPMENU_JOYSTICKCONTROLS},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_MARINEKEYCONTROLS_TITLE},	{AVPMENU_MARINEKEYCONFIG},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_AVOPTIONS_TITLE},	{AVPMENU_INGAMEAVOPTIONS},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_QUITGAME,	{TEXTSTRING_INGAMEMENU_QUITTOMAINMENU},	{0},	{0},	{0},	TEXTSTRING_COOP_GAME_CARRIES_ON},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// Who's in and alive. One row for each place on the list of players, then on the host's machine one Remove row for each other player.
+// coop_menu.cpp fills them in every frame, because players come and go behind this page. Each stays the end of the page until it's a row.
+AVPMENU_ELEMENT AvPMenu_CoopPlayers[] =
+{
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// The host's question before leaving. No comes first, so a key pressed by mistake doesn't end the game for everyone.
+static AVPMENU_ELEMENT AvPMenu_CoopHostQuits[] =
+{
+	{AVPMENU_ELEMENT_GOTOMENU,	{TEXTSTRING_NO},	{AVPMENU_INGAME},	{0},	{0},	TEXTSTRING_COOP_HOST_QUITS},
+	{AVPMENU_ELEMENT_QUITGAME,	{TEXTSTRING_YES},	{0},	{0},	{0},	TEXTSTRING_COOP_HOST_QUITS},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
 static AVPMENU_ELEMENT AvPMenu_InNetGame[] =
 {
 	{AVPMENU_ELEMENT_RESUMEGAME, {TEXTSTRING_INGAMEMENU_RESUMEGAME},		{0}},
@@ -1060,10 +1105,19 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_COOP_OUT
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_COOP_TITLE,			AvPMenu_CoopOut,					AVPMENU_MULTIPLAYER, 0},
+
+	// AVPMENU_INCOOPGAME
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_InCoopGame,					AVPMENU_INCOOPGAME, 0},
+
+	// AVPMENU_COOP_PLAYERS
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_CoopPlayers,					AVPMENU_INGAME, 0},
+
+	// AVPMENU_COOP_HOSTQUITS
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_BLANK,			AvPMenu_CoopHostQuits,					AVPMENU_INGAME, 0},
 };
 
 // One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
-static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_COOP_OUT + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_COOP_HOSTQUITS + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
 extern void MakeSelectSessionMenu(void)
 {

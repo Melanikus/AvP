@@ -23,6 +23,7 @@
 //   the log starts with which build this is: its version and commit, the program file's size and fingerprint, and which Windows
 //   it runs on (build_identity.h)
 //   F2 marks the moment for a tester, with a line in the log and a picture of the screen (mark_key.h)
+//   as a co-op game ends, why it ended is noted before it's wiped, for the page after it
 
 #include "3dc.h"
 #include "build_identity.h"
@@ -48,6 +49,7 @@
 #include "view.h"
 #include "vision.h"
 #include "menus.h"
+#include "coop_menu.h"
 #include "ourasert.h" 
 #include "davehook.h"
 #include "showcmds.h"
@@ -998,6 +1000,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// netgame support
 		if (AvP.Network != I_No_Network && !Coop_LevelChangeIsDue())
 		{
+			// The page after a co-op game says why it ended, and the game's end is about to wipe what tells
+			CoopMenu_TheGameIsEnding();
+
 			/* we cleanup and reset our game mode here, at the end of the game loop, as other 
 			clean-up functions need to know if we've just exited a netgame */
 			EndAVPNetGame();

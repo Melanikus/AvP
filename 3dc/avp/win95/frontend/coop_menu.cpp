@@ -8,6 +8,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "pldnet.h"
+#include "coop_in_game.h"
 #include "menus.h"
 #include "menu_data.h"
 #include "env_info.h"
@@ -27,6 +28,8 @@
 extern AVPMENU_ELEMENT AvPMenu_CoopHost[];
 extern AVPMENU_ELEMENT AvPMenu_CoopJoin[];
 extern AVPMENU_ELEMENT AvPMenu_CoopOut[];
+extern AVPMENU_ELEMENT AvPMenu_InCoopGame[];
+extern AVPMENU_ELEMENT AvPMenu_CoopPlayers[];
 extern void MinimalNetCollectMessages(void);
 extern void SetDefaultMultiplayerConfig();
 extern texID_t MISSING_TEXTURE;
@@ -49,6 +52,9 @@ static const uint16_t kLevelNumberOfACustomLevel = 100;
 static std::vector<char *> placeNames;
 static int campaignOnTheRow = kCampaignNone;
 
+// What the page after a co-op game says, noted before the game is wiped. kCoopLastWordNone means nothing to say.
+static CoopLastWord lastWord = kCoopLastWordNone;
+
 // The text of each joiner's row on the host's page
 static char removeRowText[NET_MAXPLAYERS - 1][kCoopRowTextBytes];
 static int removeRowsShown = 0;
@@ -67,6 +73,24 @@ static AVPMENU_ELEMENT *RowOf(AVPMENU_ELEMENT *page, int textOfTheRow)
 	// The rows are in menu_data.cpp, and coop_lobby_test checks they're all there
 	GLOBALASSERT(0);
 	return page;
+}
+
+char *CoopMenu_LevelName(int campaign, int place)
+{
+	if (campaign == kCampaignCustom)
+	{
+		return netGameData.coopCustomMap;
+	}
+
+	// A place outside the campaign has no name. Every caller has checked it, so this is only the last word on it.
+	if (place < 0 || place >= Campaign_LevelCount(campaign))
+	{
+		return GetTextString(TEXTSTRING_BLANK);
+	}
+
+	int const firstName = campaign == kCampaignPredator ? TEXTSTRING_PREDATORLEVELS_1 : campaign == kCampaignAlien ? TEXTSTRING_ALIENLEVELS_1 : TEXTSTRING_MARINELEVELS_1;
+
+	return GetTextString((enum TEXTSTRING_ID)(firstName + place));
 }
 
 // Fills the Start at row for this campaign. A joiner has only the one map the host named.
@@ -88,11 +112,9 @@ static void FillPlaceNames(AVPMENU_ELEMENT *page, int campaign, bool isTheHostsP
 	}
 	else
 	{
-		int const firstName = campaign == kCampaignPredator ? TEXTSTRING_PREDATORLEVELS_1 : campaign == kCampaignAlien ? TEXTSTRING_ALIENLEVELS_1 : TEXTSTRING_MARINELEVELS_1;
-
 		for (int place = 0; place < Campaign_LevelCount(campaign); place++)
 		{
-			placeNames.push_back(GetTextString((enum TEXTSTRING_ID)(firstName + place)));
+			placeNames.push_back(CoopMenu_LevelName(campaign, place));
 		}
 	}
 
@@ -220,10 +242,10 @@ static void HostPlayerLines(void)
 	}
 }
 
-// One row for each joiner, after Start, so that Start stays where it is as they come and go. Says true if the rows have changed.
-static bool HostRemoveRows(void)
+// One row for each joiner, from this row on, so that the rows above stay where they are as players come and go. Says true if the rows have
+// changed. The lobby's page and the Players page each keep a count of their own.
+static bool HostRemoveRows(AVPMENU_ELEMENT *firstRow, int &rowsShownBefore)
 {
-	AVPMENU_ELEMENT *const firstRow = RowOf(AvPMenu_CoopHost, TEXTSTRING_LEVELSELECT_START) + 1;
 	int rows = 0;
 
 	for (int place = 0; place < NET_MAXPLAYERS && rows < NET_MAXPLAYERS - 1; place++)
@@ -244,9 +266,9 @@ static bool HostRemoveRows(void)
 		rows++;
 	}
 
-	bool const changed = rows != removeRowsShown;
+	bool const changed = rows != rowsShownBefore;
 
-	removeRowsShown = rows;
+	rowsShownBefore = rows;
 
 	for (int row = rows; row < NET_MAXPLAYERS - 1; row++)
 	{
@@ -304,7 +326,7 @@ static CoopPageAnswer HostEveryFrame(void)
 	Net_CoopHostSays();
 	NetSendMessages();
 
-	return HostRemoveRows() ? kCoopPageRowsChanged : kCoopPageStays;
+	return HostRemoveRows(RowOf(AvPMenu_CoopHost, TEXTSTRING_LEVELSELECT_START) + 1, removeRowsShown) ? kCoopPageRowsChanged : kCoopPageStays;
 }
 
 bool CoopMenu_HostStarts(void)
@@ -392,15 +414,160 @@ void CoopMenu_JoinPageOpens(void)
 	JoinerRowsFromTheChoice();
 }
 
-// A player left behind gets the map's name too, and the help line says where a map goes. A removed player only needs the sentence, and may
-// have come straight here, turned away at the door, so they may never have heard a map's name.
-void CoopMenu_OutPageOpens(void)
+// What each way of being out says: the sentence, its help line, and the second row, which names what was finished or the map that's
+// missing. A removed player, who may have been turned away at the door, and one whose host left need only the sentence.
+struct CoopOutPage
 {
-	bool const removed = Net_WasRemovedByTheHost();
+	CoopLastWord word;
+	enum TEXTSTRING_ID sentence;
+	enum TEXTSTRING_ID help;
+	enum TEXTSTRING_ID secondRow;  // TEXTSTRING_BLANK for none
+};
 
-	AvPMenu_CoopOut[0].TextDescription = removed ? TEXTSTRING_COOP_REMOVED : TEXTSTRING_COOP_LEFT_BEHIND;
-	AvPMenu_CoopOut[0].HelpString = removed ? TEXTSTRING_BLANK : TEXTSTRING_COOP_MAP_LINE_HELP;
-	AvPMenu_CoopOut[1].ElementID = removed ? AVPMENU_ELEMENT_ENDOFMENU : AVPMENU_ELEMENT_DUMMYTEXTFIELD;
+static const CoopOutPage kOutPages[] =
+{
+	{kCoopLastWordLeftBehind, TEXTSTRING_COOP_LEFT_BEHIND, TEXTSTRING_COOP_MAP_LINE_HELP, TEXTSTRING_COOP_MAP_LINE},
+	{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_BLANK, TEXTSTRING_BLANK},
+	{kCoopLastWordHostLeft, TEXTSTRING_COOP_HOST_LEFT, TEXTSTRING_BLANK, TEXTSTRING_BLANK},
+	{kCoopLastWordCampaignComplete, TEXTSTRING_COOP_CAMPAIGN_COMPLETE, TEXTSTRING_BLANK, TEXTSTRING_CAMPAIGN_LEVEL},
+	{kCoopLastWordMapComplete, TEXTSTRING_COOP_MAP_COMPLETE, TEXTSTRING_BLANK, TEXTSTRING_COOP_MAP_LINE},
+};
+
+bool CoopMenu_OutPageOpens(void)
+{
+	// A removed player trying again comes straight here from the door, so that's asked first
+	if (Net_WasRemovedByTheHost())
+	{
+		lastWord = kCoopLastWordRemoved;
+	}
+
+	CoopLastWord const word = lastWord;
+
+	// Said once: the next game starts with nothing to say
+	lastWord = kCoopLastWordNone;
+
+	for (size_t i = 0; i < sizeof(kOutPages) / sizeof(kOutPages[0]); i++)
+	{
+		if (kOutPages[i].word == word)
+		{
+			AvPMenu_CoopOut[0].TextDescription = kOutPages[i].sentence;
+			AvPMenu_CoopOut[0].HelpString = kOutPages[i].help;
+			AvPMenu_CoopOut[1].TextDescription = kOutPages[i].secondRow;
+			AvPMenu_CoopOut[1].ElementID = kOutPages[i].secondRow == TEXTSTRING_BLANK ? AVPMENU_ELEMENT_ENDOFMENU : AVPMENU_ELEMENT_DUMMYTEXTFIELD;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void CoopMenu_TheGameIsEnding(void)
+{
+	int const campaign = netGameData.coopCampaign;
+	bool const hostHasGone = AvP.Network == I_Peer && netGameData.myGameState == NGS_Error_HostLost;
+
+	lastWord = CoopLastWord_AtTheEnd(campaign != kCampaignNone, campaign == kCampaignCustom, Coop_TheCampaignIsOver(), Net_WasRemovedByTheHost(), hostHasGone);
+
+	// The second row names what was finished. The game's end wipes the names, so they're kept now.
+	if (lastWord == kCoopLastWordMapComplete)
+	{
+		strncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);
+	}
+	else if (lastWord == kCoopLastWordCampaignComplete)
+	{
+		int const row = campaign >= kCampaignMarine && campaign <= kCampaignAlien ? campaign - kCampaignMarine : 0;
+		int const difficulty = netGameData.coopDifficulty >= 0 && netGameData.coopDifficulty <= 2 ? netGameData.coopDifficulty : 0;
+
+		_snprintf(CoopRowMapLine, sizeof(CoopRowMapLine) - 1, "%s, %s", GetTextString((enum TEXTSTRING_ID)(TEXTSTRING_COOP_CAMPAIGN_MARINE + row)), GetTextString((enum TEXTSTRING_ID)(TEXTSTRING_DIFFICULTY_EASY + difficulty)));
+	}
+
+	CoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;
+}
+
+bool CoopMenu_HasALastWord(void)
+{
+	return lastWord != kCoopLastWordNone;
+}
+
+// ---- During the game
+
+void CoopMenu_InGameMenuOpens(void)
+{
+	AVPMENU_ELEMENT *quit = AvPMenu_InCoopGame;
+
+	while (quit[1].ElementID != AVPMENU_ELEMENT_ENDOFMENU)
+	{
+		quit++;
+	}
+
+	if (AvP.Network == I_Host)
+	{
+		quit->ElementID = AVPMENU_ELEMENT_GOTOMENU;
+		quit->MenuToGoTo = AVPMENU_COOP_HOSTQUITS;
+	}
+	else
+	{
+		quit->ElementID = AVPMENU_ELEMENT_QUITGAME;
+	}
+}
+
+bool CoopMenu_PlayerLine(int place, char *line, size_t room)
+{
+	if (room == 0 || place < 0 || place >= NET_MAXPLAYERS || netGameData.playerData[place].playerId == 0)
+	{
+		return false;
+	}
+
+	NETGAME_PLAYERDATA const &player = netGameData.playerData[place];
+	NetID const host = AvP.Network == I_Host ? AvPNetID : Net_HostPlayerID();
+	CoopPlayerState const state = CoopPlayer_State(player.startFlag != 0, player.playerId == host, player.playerAlive != 0);
+	const TEXTSTRING_ID words = state == kCoopPlayerAlive ? TEXTSTRING_COOP_ALIVE : state == kCoopPlayerOut ? TEXTSTRING_COOP_OUT : TEXTSTRING_COOP_JOINING;
+	char name[NET_PLAYERNAMELENGTH + 1];
+
+	// A name from another machine is copied up to its room, so a missing end can't run on into the line
+	memcpy(name, player.name, NET_PLAYERNAMELENGTH);
+	name[NET_PLAYERNAMELENGTH] = 0;
+
+	_snprintf(line, room - 1, "%s: %s", name, GetTextString(words));
+	line[room - 1] = 0;
+	return true;
+}
+
+// The text of each player's line on the Players page
+static char playerRowText[NET_MAXPLAYERS][100];
+static int playerRemoveRowsShown = 0;
+
+bool CoopMenu_PlayersPageFrame(void)
+{
+	int rows = 0;
+
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		if (CoopMenu_PlayerLine(place, playerRowText[rows], sizeof(playerRowText[rows])))
+		{
+			AvPMenu_CoopPlayers[rows].ElementID = AVPMENU_ELEMENT_COOP_PLAYER;
+			AvPMenu_CoopPlayers[rows].TextPtr = playerRowText[rows];
+			rows++;
+		}
+	}
+
+	bool changed = false;
+
+	// The rest of the player rows, and on the host's machine the Remove rows after them
+	if (AvP.Network == I_Host)
+	{
+		changed = HostRemoveRows(&AvPMenu_CoopPlayers[rows], playerRemoveRowsShown);
+	}
+	else
+	{
+		AvPMenu_CoopPlayers[rows].ElementID = AVPMENU_ELEMENT_ENDOFMENU;
+	}
+
+	static int playerRowsShown = 0;
+
+	changed = changed || rows != playerRowsShown;
+	playerRowsShown = rows;
+	return changed;
 }
 
 // This joiner has the map, and the host has started. It's what the joiner's own Start does in every other kind of game.
@@ -427,6 +594,8 @@ static CoopPageAnswer JoinerIsOut(void)
 	// The one thing to keep from the wipe: the name of the map a player left behind would need
 	strncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);
 	CoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;
+
+	lastWord = Net_WasRemovedByTheHost() ? kCoopLastWordRemoved : kCoopLastWordLeftBehind;
 
 	CoopMenu_PageLeft();
 	return kCoopPageJoinerIsOut;

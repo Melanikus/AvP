@@ -780,13 +780,13 @@ static void TestThePages()
 	Check(Has(menus, "case kCoopPageJoinerIsOut:\n\t\t\t\tSetupNewMenu(AVPMENU_COOP_OUT);"), "the rows that were wiped aren't left on the screen");
 
 	std::string const outPage = Between(data, "AVPMENU_ELEMENT AvPMenu_CoopOut[] =", "};");
-	std::string const outOpens = Between(pages, "void CoopMenu_OutPageOpens(void)\n{", "\n}\n");
+	std::string const outOpens = Between(pages, "bool CoopMenu_OutPageOpens(void)\n{", "\n}\n");
 
 	Check(!Has(outPage, "netGameData"), "the page for a joiner who's out reads nothing the end of the game wipes");
 	Check(Has(outPage, "{AVPMENU_ELEMENT_GOTOMENU,"), "its sentence is a row of its own, in the middle of the page, so it has the room it needs");
-	Check(Has(outOpens, "removed ? TEXTSTRING_COOP_REMOVED : TEXTSTRING_COOP_LEFT_BEHIND"), "it says which of the two happened");
-	Check(Has(outOpens, "removed ? TEXTSTRING_BLANK : TEXTSTRING_COOP_MAP_LINE_HELP"), "and only a player left behind is told where a map goes");
-	Check(Has(outOpens, "removed ? AVPMENU_ELEMENT_ENDOFMENU : AVPMENU_ELEMENT_DUMMYTEXTFIELD"), "a removed player, who may never have heard a name, gets no map row");
+	Check(Has(outOpens, "if (Net_WasRemovedByTheHost())\n\t{\n\t\tlastWord = kCoopLastWordRemoved;"), "it says which happened, asking first if the player was removed");
+	Check(Has(pages, "{kCoopLastWordLeftBehind, TEXTSTRING_COOP_LEFT_BEHIND, TEXTSTRING_COOP_MAP_LINE_HELP, TEXTSTRING_COOP_MAP_LINE},"), "a player left behind is told where a map goes, and which map");
+	Check(Has(pages, "{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_BLANK, TEXTSTRING_BLANK},"), "a removed player, who may never have heard a name, gets only the sentence");
 	Check(Has(joinerFrame, "if (netGameData.myGameState == NGS_Error_HostLost)"), "a joiner whose host has gone isn't left waiting");
 	Check(Has(pages, "if (CoopRowPlace < 0 || CoopRowPlace >= (int)placeNames.size())\n\t{\n\t\tCoopRowPlace = 0;\n\t}\n\n\tif (CoopRowSpecies < 0"), "a joiner's row of names can't be read past its end");
 

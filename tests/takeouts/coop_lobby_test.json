@@ -1099,8 +1099,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
-					"from": "\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n\n\tCoopMenu_PageLeft();\n",
-					"to": "\tCoopMenu_PageLeft();\n\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n"
+					"from": "\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n\n\tlastWord = Net_WasRemovedByTheHost() ? kCoopLastWordRemoved : kCoopLastWordLeftBehind;\n\n\tCoopMenu_PageLeft();\n",
+					"to": "\tlastWord = Net_WasRemovedByTheHost() ? kCoopLastWordRemoved : kCoopLastWordLeftBehind;\n\n\tCoopMenu_PageLeft();\n\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n"
 				}
 			]
 		},
@@ -1109,8 +1109,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
-					"from": "removed ? TEXTSTRING_COOP_REMOVED : TEXTSTRING_COOP_LEFT_BEHIND",
-					"to": "TEXTSTRING_COOP_LEFT_BEHIND"
+					"from": "\tif (Net_WasRemovedByTheHost())\n\t{\n\t\tlastWord = kCoopLastWordRemoved;\n\t}\n\n\tCoopLastWord const word = lastWord;\n",
+					"to": "\tCoopLastWord const word = lastWord;\n"
 				}
 			]
 		},
@@ -1119,8 +1119,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
-					"from": "removed ? TEXTSTRING_BLANK : TEXTSTRING_COOP_MAP_LINE_HELP",
-					"to": "TEXTSTRING_COOP_MAP_LINE_HELP"
+					"from": "{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_BLANK, TEXTSTRING_BLANK},",
+					"to": "{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_COOP_MAP_LINE_HELP, TEXTSTRING_BLANK},"
 				}
 			]
 		},
@@ -1129,8 +1129,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
-					"from": "removed ? AVPMENU_ELEMENT_ENDOFMENU : AVPMENU_ELEMENT_DUMMYTEXTFIELD",
-					"to": "AVPMENU_ELEMENT_DUMMYTEXTFIELD"
+					"from": "{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_BLANK, TEXTSTRING_BLANK},",
+					"to": "{kCoopLastWordRemoved, TEXTSTRING_COOP_REMOVED, TEXTSTRING_BLANK, TEXTSTRING_COOP_MAP_LINE},"
 				}
 			]
 		},

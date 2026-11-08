@@ -1,5 +1,6 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   how many marine classes there are (NUM_PC_SUBTYPES) is checked against the list of them when the game is built
+//   the game description carries who the loading screen is waiting for
 //   the co-op lobby: two new messages, the host's rows, and what the pages ask. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the new guns' settings are in the game description, so a joiner uses the host's
@@ -329,6 +330,10 @@ typedef struct netgame_gamedata
 	// 1 if each player keeps their kit between the levels of a campaign (campaign_kit.h), and 0 for each level's own kit. Only the co-op campaign page turns it on.
 	int coopKeepKit;
 
+	// On the loading screen, the places of the players who haven't pressed a key yet, one bit each. The host works it out, and a joiner
+	// has it from the game description. See coop_in_game.h.
+	unsigned char coopWaitingFor;
+
 	// A custom map chosen in a co-op lobby: its name, who plays it (0 Marine, 1 Predator, 2 Alien), and its size and sum, only to compare. See coop_lobby.h.
 	// No name means no custom map.
 	char coopCustomMap[kCoopMapNameBytes];
@@ -454,6 +459,7 @@ typedef struct netmessage_gamedescription
 	unsigned char coopCampaign;
 	unsigned char coopCampaignLevel;
 	unsigned char coopDifficulty;
+	unsigned char coopWaitingFor;
 	int coopRollNumber;
 	int scoreLimit;
 	unsigned char timeLimit;
@@ -1132,6 +1138,11 @@ extern void Coop_LevelEndReached(void);
 
 // Whether the level that's just ended is going on to another, with everyone still connected. Then the game keeps its connection, and the menus are skipped.
 extern bool Coop_LevelChangeIsDue(void);
+
+// What a player is told during a co-op game: see coop_in_game.h
+extern bool Coop_TheCampaignIsOver(void);
+extern bool Coop_LevelCompleteLine(char *line, size_t room);
+extern bool Coop_WaitingForLine(char *line, size_t room);
 
 // In a campaign everyone plays that campaign's species. Does nothing in a game with no campaign.
 extern void Coop_TakeCampaignSpecies(void);

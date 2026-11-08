@@ -14,6 +14,7 @@
 //   the new guns' words come from here
 //   the words for choosing a campaign on the level row
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   the words a player sees during a co-op game
 //   the words of the single player Custom maps page. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 #include "3dc.h"
@@ -139,6 +140,18 @@ static char OurTextStrings[][200] =
 	"Remove",
 	"Takes this player out of the game. They can't come back into this game from the same address.",
 	"The host removed you from this game.",
+	"alive",
+	"out until the next level",
+	"joining...",
+	"You're out until the next level. Operate watches someone else.",
+	"Level complete:",
+	"Waiting for:",
+	"The game carries on while you're here.",
+	"Players",
+	"The host has left the game.",
+	"You're the host: leaving ends the game for everyone.",
+	"Campaign complete",
+	"Map complete",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

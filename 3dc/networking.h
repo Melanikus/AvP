@@ -125,11 +125,12 @@ Version 108 - Used by builds of the in-game pages, before they landed. Not this 
 Version 109 - Used by rehearsal builds of the co-op landing, before it landed: the co-op branch with main's network fixes. Never to be used again
 Version 110 - 109, and a search's question as big as its answer, so an answer is never bigger than its question
 Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's answer about the map, and a byte in a game's description
+Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in a game's description
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 111; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 112; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;

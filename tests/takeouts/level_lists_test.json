@@ -1459,8 +1459,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 111;",
-					"to": "const int kMultiplayerVersion = 110;"
+					"from": "const int kMultiplayerVersion = 112;",
+					"to": "const int kMultiplayerVersion = 111;"
 				}
 			]
 		},

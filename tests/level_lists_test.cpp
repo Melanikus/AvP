@@ -424,7 +424,7 @@ static void TestTheWiring()
 	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
 	Check(Has(versionCheck, "61 * kLevelListCampaignLevels;"), "and so is the level list");
 	Check(Has(versionCheck, "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
-	Check(Has(networking, "const int kMultiplayerVersion = 111;"), "this build's version");
+	Check(Has(networking, "const int kMultiplayerVersion = 112;"), "this build's version");
 }
 
 int main()
