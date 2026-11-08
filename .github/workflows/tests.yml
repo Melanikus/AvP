@@ -110,8 +110,9 @@ jobs:
           # Which part this is, counted from 0, and how many parts there are, both from GitHub, so they always agree with the list above
           PART: ${{ strategy.job-index }}
           PARTS: ${{ strategy.job-total }}
-          # PROBE ONLY (sanitize-probe-3, never merged): every test with all of the sanitizer's stronger settings on, to see what breaks
-          ASAN_OPTIONS: detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1:strict_init_order=1:alloc_dealloc_mismatch=1:detect_container_overflow=1:detect_invalid_pointer_pairs=2
+          # PROBE ONLY (sanitize-probe-4, never merged): every test with the sanitizer's stronger settings on, to see what breaks. Not
+          # use-after-return: probe 3 showed its compile switch alone makes correct code fail (run 42499238690)
+          ASAN_OPTIONS: strict_string_checks=1:check_initialization_order=1:strict_init_order=1:alloc_dealloc_mismatch=1:detect_container_overflow=1:detect_invalid_pointer_pairs=2
         run: |
           # In name order, compared letter by letter, so all four machines share them out the same way
           $names = [string[]]@(Get-ChildItem -LiteralPath tests -Filter '*.args' -File | ForEach-Object { $_.BaseName })
@@ -322,6 +323,7 @@ jobs:
       # sanitize.ps1 with ASAN_OPTIONS empty, then with its setting, and what the sanitizer said is printed from the test's said.txt. It
       # also shows whether a setting is an unknown word here, and whether leaks are looked for at all. It never fails the job.
       - name: "Probe: the sanitizer's stronger settings, one broken program each"
+        if: always()   # probe 3's never ran, because the step before it failed
         timeout-minutes: 25
         shell: pwsh
         run: |
@@ -362,6 +364,19 @@ jobs:
             '__declspec(noinline) void Keep() { volatile int local[4] = { 1, 2, 3, 4 }; escaped = local; }'
             'int main() { Keep(); std::printf("%d\n", escaped[1]); return 0; }'
           ))
+          # Only this one is compiled with use-after-return's switch, which the setting needs
+          Set-Content -LiteralPath tests/more_use_after_return_test.args -Value ($settings + ' /fsanitize-address-use-after-return'), 'tests/more_use_after_return_0.cpp'
+
+          # Correct code, a string made for a call and gone after it, compiled with the same switch: probe 3 saw this shape reported as
+          # stack-use-after-scope in relief_map_file_test.cpp:76. If it's reported here too, the switch is wrong on correct code.
+          Write-Canary 'flag_on_correct_code' @(, @(
+            '#include <cstdio>'
+            '#include <string>'
+            'static int said = 0;'
+            '__declspec(noinline) static void Say(bool ok, std::string const &what) { if (ok) said += (int)what.size(); }'
+            'int main() { Say(true, "one thing to say about it"); Say(true, "and another thing to say"); std::printf("%d\n", said); return 0; }'
+          ))
+          Set-Content -LiteralPath tests/more_flag_on_correct_code_test.args -Value ($settings + ' /fsanitize-address-use-after-return'), 'tests/more_flag_on_correct_code_0.cpp'
           Write-Canary 'strict_string' @(, @(
             '#include <cstdio>'
             '#include <cstdlib>'
@@ -417,6 +432,8 @@ jobs:
 
           Try-Canary 'use_after_return' ''
           Try-Canary 'use_after_return' 'detect_stack_use_after_return=1'
+          Try-Canary 'flag_on_correct_code' ''
+          Try-Canary 'flag_on_correct_code' 'detect_stack_use_after_return=1'
           Try-Canary 'strict_string' ''
           Try-Canary 'strict_string' 'strict_string_checks=1'
           Try-Canary 'init_order' ''

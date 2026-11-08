@@ -331,8 +331,7 @@ foreach ($word in @($settings -split '\s+' | Where-Object { $_ }))
 }
 
 # The test's settings come last, because they can end with /link, and anything after /link goes to the linker
-# PROBE ONLY (sanitize-probe-3, never merged): /fsanitize-address-use-after-return, which detect_stack_use_after_return needs
-$built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address /fsanitize-address-use-after-return `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @`"$settingsCopy`"" $repository (Join-Path $out 'build.txt')
+$built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @`"$settingsCopy`"" $repository (Join-Path $out 'build.txt')
 
 if ($built -ne 0) {
     $buildSaid = Join-Path $out 'build.txt'
