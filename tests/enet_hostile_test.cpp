@@ -117,7 +117,8 @@ static void ENET_CALLBACK OutOfMemory(void)
 // checks that it does.
 static const size_t kLargestMessage = 4000;
 
-// Whether an address is this machine's own loopback address, 127.0.0.1, which never leaves the machine. Says it as well.
+// Whether an address is this machine's own loopback address, 127.0.0.1, which never leaves the machine. Says it as well. The address is
+// compared as the number it is, against Windows' own name for that one (INADDR_LOOPBACK), in the order ENet keeps it, not as text.
 static bool IsOnThisMachine(const ENetAddress &address, const char *what)
 {
 	char name[64] = "";
@@ -125,7 +126,7 @@ static bool IsOnThisMachine(const ENetAddress &address, const char *what)
 	enet_address_get_host_ip(&address, name, sizeof(name));
 	printf("        %s: %s port %u\n", what, name, (unsigned)address.port);
 
-	return strcmp(name, "127.0.0.1") == 0;
+	return address.host == ENET_HOST_TO_NET_32(INADDR_LOOPBACK);
 }
 
 static ENetAddress ThisMachine()
