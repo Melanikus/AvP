@@ -777,6 +777,38 @@ static bool HasStandOff(std::vector<AlienWaysPoint> const &way)
 	return false;
 }
 
+// Whether every point of a way round the pillar is on one of its surfaces: a floor (y = 0) or a wall (x = 0 or z = 0). A stand-off point is out
+// in the air by the corner, so a way with one, wherever it was put, isn't: HasStandOff above only knows the one outside the block.
+static bool AllOnTheSurfaces(std::vector<AlienWaysPoint> const &way)
+{
+	for (AlienWaysPoint const &p : way)
+	{
+		if (p.x != 0 && p.y != 0 && p.z != 0)
+		{
+			return false;
+		}
+	}
+
+	return !way.empty();
+}
+
+// Whether, after the stand-off, the way goes on along wall B, 1.5 m up, to above floor 2, where it starts down: the stand-off is one point
+// more, not in place of the one after it
+static bool OnAlongTheWallAfterTheStandOff(std::vector<AlienWaysPoint> const &way)
+{
+	for (size_t k = 1; k + 1 < way.size(); k++)
+	{
+		AlienWaysPoint const &next = way[k + 1];
+
+		if (At(way[k - 1], { 0, -1500, 0 }) && At(way[k], { 800, -1500, 800 }) && next.z == 0 && next.y == -1500 && next.x <= -4000 && next.x >= -5000)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void RoundTheCorner()
 {
 	printf("Round an outside corner\n");
@@ -785,6 +817,7 @@ static void RoundTheCorner()
 	Check(map.Build(Pillar(true, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound, "a way is found round the block");
 	Check(HasStandOff(map.Way()), "round the corner, the crossing onto the second wall is followed by the stand-off point, 800 mm out along both facings");
 	Check(Near(MetresOf(map.Way()).floor, 2.118, 0.01), "and it's still the way by the walls, with no more floor");
+	Check(OnAlongTheWallAfterTheStandOff(map.Way()), "after the stand-off the way goes on along the second wall to where it starts down: nothing is lost for it");
 	bool facingsCarried = false;
 
 	for (size_t k = 1; k < map.Way().size(); k++)
@@ -797,10 +830,18 @@ static void RoundTheCorner()
 
 	Check(facingsCarried, "each point of the way carries the facing of the polygon it's on from there, for telling when a step is made");
 
-	Check(map.Build(Pillar(true, false)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way()),
-		"walls that face into a room's corner, not out of a block's, get no stand-off: nothing is in the way there");
-	Check(map.Build(Pillar(false, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way()),
-		"nor walls whose facings the level doesn't store");
+	Check(map.Build(Pillar(true, false)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way())
+		&& AllOnTheSurfaces(map.Way()), "walls that face into a room's corner, not out of a block's, get no stand-off: nothing is in the way there");
+	Check(map.Build(Pillar(false, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way())
+		&& AllOnTheSurfaces(map.Way()), "nor walls whose facings the level doesn't store");
+
+	// Facings 0.3 long, too short to be facings at all: each wall's middle would seem to be behind the other's face, but nothing is known of
+	// which way the walls face, so no stand-off is put out
+	std::vector<AlienWaysPolygon> shortFacings = Pillar(true, true);
+	shortFacings[2].facing[0] = 0.3f;
+	shortFacings[3].facing[2] = 0.3f;
+	Check(map.Build(shortFacings) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && AllOnTheSurfaces(map.Way()),
+		"nor walls whose facings are too short to be facings");
 
 	// What's refused, and turning a facing
 	std::vector<AlienWaysPolygon> world = Pillar(true, true);

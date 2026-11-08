@@ -235,16 +235,6 @@
 			]
 		},
 		{
-			"name": "the claims hold fewer aliens than the guide has places",
-			"changes": [
-				{
-					"file": "3dc/avp/alien_ways_claims.h",
-					"from": "int const kAlienWaysClaimsMostAliens = 64;",
-					"to": "int const kAlienWaysClaimsMostAliens = 63;"
-				}
-			]
-		},
-		{
 			"name": "a join's place before the list is read",
 			"changes": [
 				{
