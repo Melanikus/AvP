@@ -1,7 +1,7 @@
 # Builds a test with the address sanitizer and runs it. Written 2026-11-05 by Melanikus for the AvP port.
 #
-# The sanitizer watches every read and write, and stops the program at the first one outside what it was given. A test can only see what it looks for, and this sees the rest. It gives back a
-# non-zero result if the sanitizer stopped the test, or the test failed.
+# The sanitizer watches every read and write, and stops the program at the first one outside what it was given. A test can only see what it looks for, and this sees the rest. It gives back 0
+# when the test passes under it, 1 when the sanitizer stopped the test or the test failed, and 2 when it couldn't be run at all. Its last line says which.
 #
 # Run it from anywhere, in PowerShell:
 #   tests/takeouts/sanitize.ps1 <test>              for example: tests/takeouts/sanitize.ps1 relief_map_file_test
@@ -11,6 +11,8 @@
 # Modified 2026-11-08 by Melanikus for the AvP port:
 #   the test is built with the C runtime inside it (/MT), the same as every test, and refused if it comes out asking Windows for it as a DLL (STATIC-1)
 #   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
+#   the test's name is checked before its folder is emptied, and anything that isn't one of the repository's tests is refused (AvP Tao 3)
+#   a test that doesn't pass shows everything it and the sanitizer said, because in the automatic checks the folder that keeps it is gone once the check ends
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -18,9 +20,16 @@ $ErrorActionPreference = 'Stop'
 trap { Write-Host "Could not run the sanitizer: $_"; exit 2 }
 
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+
+# The test's name picks the folder that's emptied below, so it's checked before anything is touched (AvP Tao 3: input is treated as hostile).
+# Without this, a name like ..\..\AvP points outside the test's own folder, for example at a repository beside it, and everything in it would be deleted.
+# A name is only letters, digits and _, and it has to be one of the repository's tests, with its tests\<name>.args.
+if ($Test -cnotmatch '\A[A-Za-z0-9_]+\z') { throw "'$Test' isn't a test's name. A test's name is only letters, digits and _, so nothing outside its own folder is ever emptied" }
+if (-not (Test-Path -LiteralPath (Join-Path $repository "tests\$Test.args") -PathType Leaf)) { throw "there's no test called $Test`: tests\$Test.args isn't there" }
+
 $base = if ($env:RUNNER_TEMP) { Join-Path $env:RUNNER_TEMP 'avp-sanitize' } else { Join-Path (Split-Path -Parent $repository) 'AvP-test-out\sanitize' }
 $out = Join-Path $base $Test
-if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Recurse -Force }
 New-Item -ItemType Directory -Force $out | Out-Null
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -125,6 +134,15 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
     return $process.ExitCode
 }
 
+# Prints all that a program said, from the files Invoke-Tool kept it in, when something has gone wrong. In the automatic checks those
+# files are gone once the check ends, so the check's own log is the only place anyone can read why.
+function Show-WhatWasSaid([string]$what, [string[]]$files)
+{
+    Write-Host "----- $what"
+    Get-Content -LiteralPath $files -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ }
+    Write-Host "----- the end of $what"
+}
+
 # The address sanitizer's own library has to be beside the program, and it's on the path once Visual Studio is set up
 function Copy-SanitizerLibrary([string]$to)
 {
@@ -158,8 +176,9 @@ function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysT
 $built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @tests\$Test.args" $repository (Join-Path $out 'build.txt')
 
 if ($built -ne 0) {
-    Write-Host "$Test didn't build:"
-    Get-Content (Join-Path $out 'build.txt') -TotalCount 10
+    $buildSaid = Join-Path $out 'build.txt'
+    Show-WhatWasSaid 'what the compiler said' @($buildSaid, "$buildSaid.errors")
+    Write-Host "$Test didn't build. What the compiler said is above"
     exit 1
 }
 
@@ -183,15 +202,17 @@ Copy-SanitizerLibrary $out
 $result = Invoke-Tool (Join-Path $out 't.exe') '' $repository (Join-Path $out 'said.txt')
 Get-Content -LiteralPath (Join-Path $out 'said.txt.errors') | Add-Content -LiteralPath (Join-Path $out 'said.txt')
 
-$stopped = @(Select-String -Path (Join-Path $out 'said.txt') -Pattern 'ERROR: AddressSanitizer' -SimpleMatch)
+$said = Join-Path $out 'said.txt'
+$stopped = @(Select-String -LiteralPath $said -Pattern 'ERROR: AddressSanitizer' -SimpleMatch)
 if ($stopped.Count) {
+    Show-WhatWasSaid "what $Test and the sanitizer said" @($said)
     Write-Host "The sanitizer stopped $Test`: $($stopped[0].Line)"
-    Write-Host "All of it is in $out\said.txt"
     exit 1
 }
 
 if ($result -ne 0) {
-    Write-Host "$Test failed under the sanitizer, with exit code $result. All of it is in $out\said.txt"
+    Show-WhatWasSaid "what $Test said" @($said)
+    Write-Host "$Test failed under the sanitizer, with exit code $result"
     exit 1
 }
 

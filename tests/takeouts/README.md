@@ -58,6 +58,10 @@ Each test is run from a window of its own there. Run several from one window her
 script stops and says why if the setup didn't give it the compiler. A test built for the sanitizer has the C runtime built in, as every test does,
 but the sanitizer's own library uses the runtime's DLLs while it runs, so a pass under the sanitizer says nothing about running without them.
 
+The same check makes sure the gate can fail: in its own copy of the repository it writes a test that reads one byte past the end of a block, and
+one that fails a check, and neither may pass. When a test doesn't pass, the script prints everything the test and the sanitizer said, because the
+folder that keeps it is gone once an automatic check ends. And it refuses a name that isn't one of the tests before it empties any folder.
+
 ## What these don't cover
 
 Some checks read the game's own films and pictures, which aren't in the repository and can't be. Those are in `tests/stock`, and need a copy of the game.

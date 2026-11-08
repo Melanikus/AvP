@@ -71,18 +71,20 @@ jobs:
   # what a test doesn't look for. A crash or a memory bug is a security bug here (AvP Tao #1), so a test that doesn't pass under it stops the
   # merge, the same as one that fails above. It's slower than the ordinary run, so the tests are shared out between four machines: in name
   # order, the first test to part 1, the second to part 2, and so on, round again. A new test joins a part with no change to this file.
+  # GitHub numbers the parts and counts them (strategy.job-index and strategy.job-total), so the list of parts below can be made longer or
+  # shorter and no test is ever left out.
   #
   # The sanitizer's own library uses the C runtime's DLLs while a test runs, so a pass here says nothing about running without them. The
   # Unit tests job above is the one that shows that. sanitize.ps1 says why, beside its own check.
   sanitizer:
-    name: Tests under the address sanitizer, part ${{ matrix.part }} of 4
+    name: Tests under the address sanitizer, part ${{ matrix.part }} of ${{ strategy.job-total }}
     # A test that hangs fails here, as above
     timeout-minutes: 30
     runs-on: windows-2025-vs2026   # pinned: the same machine as the Unit tests job
     strategy:
       fail-fast: false   # one part failing doesn't stop the others, so a run shows every test that needs work
       matrix:
-        part: [1, 2, 3, 4]
+        part: [1, 2, 3, 4]   # only the parts' names on the page: the tests are shared out by GitHub's own count, as above
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,8 +103,9 @@ jobs:
       - name: Run this part's tests under the sanitizer
         shell: pwsh
         env:
-          PART: ${{ matrix.part }}
-          PARTS: 4
+          # Which part this is, counted from 0, and how many parts there are, both from GitHub, so they always agree with the list above
+          PART: ${{ strategy.job-index }}
+          PARTS: ${{ strategy.job-total }}
         run: |
           # In name order, compared letter by letter, so all four machines share them out the same way
           $names = [string[]]@(Get-ChildItem -LiteralPath tests -Filter '*.args' -File | ForEach-Object { $_.BaseName })
@@ -111,10 +114,15 @@ jobs:
           # With no tests at all this fails, so a wrong folder can't pass as "every test passed"
           if ($names.Count -eq 0) { throw 'No tests were found' }
 
+          # An empty or wrong number would make every part take the same share, and leave the rest of the tests out without a word
+          if ($env:PART -cnotmatch '\A[0-9]+\z' -or $env:PARTS -cnotmatch '\A[1-9][0-9]*\z' -or [int]$env:PART -ge [int]$env:PARTS) {
+            throw "GitHub didn't say which part this is: part '$env:PART' (counted from 0) of '$env:PARTS'"
+          }
+
           $part = [int]$env:PART
           $parts = [int]$env:PARTS
-          $mine = @(for ($i = $part - 1; $i -lt $names.Count; $i += $parts) { $names[$i] })
-          "Part $part of ${parts}: $($mine.Count) of the $($names.Count) tests: $($mine -join ', ')"
+          $mine = @(for ($i = $part; $i -lt $names.Count; $i += $parts) { $names[$i] })
+          "Part $($part + 1) of ${parts}: $($mine.Count) of the $($names.Count) tests: $($mine -join ', ')"
 
           $pwsh = Join-Path $PSHOME 'pwsh.exe'
           $notPassed = [System.Collections.Generic.List[string]]::new()
@@ -131,8 +139,12 @@ jobs:
   # sanitize.ps1's own refusals, made to happen on purpose, each checked for its reason. SANITIZE-RUN-1's probe ran it four times from one
   # window, and by the third the path was too long for Visual Studio's setup, which failed with nothing but a line from Windows. Now the
   # setup is done once in a window, and the script stops, saying why, when the setup can't be done or didn't finish. The old script fails
-  # each of the three cases: it gave no reason of its own, and it set up again on every run. relief_map_file_test is used because it needs
+  # each of those three cases: it gave no reason of its own, and it set up again on every run. relief_map_file_test is used because it needs
   # nothing from vcpkg.
+  #
+  # Two more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). And the gate is
+  # seen to fail, because a check nobody has seen fail proves nothing: two broken tests are written here, one that reads past the end of a
+  # block and one that fails a check, and sanitize.ps1 must refuse each, with its reason, and show what each said.
   sanitizer-refusals:
     name: The sanitizer script's own refusals
     timeout-minutes: 15
@@ -151,13 +163,13 @@ jobs:
           $failed = [System.Collections.Generic.List[string]]::new()
           function Check([bool]$ok, [string]$what) { if ($ok) { "ok      $what" } else { "FAILED  $what"; $failed.Add($what) } }
 
-          # Runs sanitize.ps1 in a PowerShell of its own, started with the path given, and gives back its exit code and all it said. The
-          # step's own path is put back straight after, whatever happens.
-          function Run-WithPath([string]$path) {
+          # Runs sanitize.ps1 on a test, in a PowerShell of its own, started with the path given, and gives back its exit code and all it
+          # said. The step's own path is put back straight after, whatever happens.
+          function Run-WithPath([string]$path, [string]$test = 'relief_map_file_test') {
             $said = Join-Path $env:RUNNER_TEMP 'refusal-said.txt'
             $errors = Join-Path $env:RUNNER_TEMP 'refusal-errors.txt'
             $env:PATH = $path
-            try { $run = Start-Process -FilePath $pwsh -ArgumentList '-NoProfile -NonInteractive -File tests/takeouts/sanitize.ps1 relief_map_file_test' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $said -RedirectStandardError $errors }
+            try { $run = Start-Process -FilePath $pwsh -ArgumentList "-NoProfile -NonInteractive -File tests/takeouts/sanitize.ps1 $test" -NoNewWindow -Wait -PassThru -RedirectStandardOutput $said -RedirectStandardError $errors }
             finally { $env:PATH = $original }
             @{ code = $run.ExitCode; text = "$(Get-Content -Raw -LiteralPath $said)$(Get-Content -Raw -LiteralPath $errors)" }
           }
@@ -192,8 +204,66 @@ jobs:
           Check ($first -eq 0 -and $second -eq 0 -and $third -eq 0) "three runs from one window all pass (they gave back $first, $second and $third)"
           Check ($env:PATH -ceq $afterFirst) "and the path after the third is the one after the first, $($afterFirst.Length) characters, so the setup was done once"
 
+          # 4. A name that isn't a test's is refused before any folder is touched. Here ".." points at this runner's own temporary folder,
+          #    the one the sanitizer's folders are made in, and the old script emptied whatever its name pointed at. So a file is left
+          #    there first, and it has to still be there afterwards.
+          $marker = Join-Path $env:RUNNER_TEMP 'sanitize-name-marker.txt'
+          Set-Content -LiteralPath $marker -Value 'Left here by the sanitizer-refusals job: sanitize.ps1 .. must not delete it'
+          $result = Run-WithPath $original '..'
+          $result.text
+          Check ($result.code -eq 2) "with the name '..', it can't run, and gives back 2 (it gave back $($result.code))"
+          Check ($result.text -cmatch "Could not run the sanitizer: '\.\.' isn't a test's name") 'and it says that isn''t a test''s name'
+          Check (Test-Path -LiteralPath $marker -PathType Leaf) 'and the folder that name points at is as it was, with the file left in it'
+          $result = Run-WithPath $original 'no_such_test'
+          $result.text
+          Check ($result.code -eq 2) "with the name of a test that isn't there, it can't run, and gives back 2 (it gave back $($result.code))"
+          Check ($result.text -cmatch "Could not run the sanitizer: there's no test called no_such_test: tests\\no_such_test\.args isn't there") 'and it says there''s no such test'
+
+          # 5. The gate has to be seen to fail. Two broken tests are written into this job's own copy of the repository, and never
+          #    committed. The first reads one byte past the end of a block it asked for: without the sanitizer that goes unnoticed, the
+          #    program carries on and gives back 0, so only the sanitizer can fail it. The second fails one of its own checks, as a test
+          #    does. sanitize.ps1 must give back 1 for each, say why, and show what each said. If either passed, every green part above would
+          #    mean nothing.
+          $settings = '/std:c++17 /EHsc /MT /W3 /sdl /FC'
+          Set-Content -LiteralPath tests/canary_overflow_test.args -Value $settings, 'tests/canary_overflow_test.cpp'
+          Set-Content -LiteralPath tests/canary_overflow_test.cpp -Value @(
+            '// Written by tests.yml''s sanitizer-refusals job, and never committed: it reads one byte past the end of a 16-byte block, on purpose'
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            'int main()'
+            '{'
+            '    volatile int past = 16;   // volatile, so the compiler can''t see that the read is past the end, and leave it out'
+            '    char *block = static_cast<char *>(std::malloc(16));'
+            '    if (!block) return 2;'
+            '    std::printf("read %d\n", block[past]);'
+            '    std::free(block);'
+            '    return 0;'
+            '}'
+          )
+          Set-Content -LiteralPath tests/canary_fails_test.args -Value $settings, 'tests/canary_fails_test.cpp'
+          Set-Content -LiteralPath tests/canary_fails_test.cpp -Value @(
+            '// Written by tests.yml''s sanitizer-refusals job, and never committed: it fails one of its checks, and reads nothing it shouldn''t'
+            '#include <cstdio>'
+            'int main()'
+            '{'
+            '    std::printf("FAILED  a check this canary fails on purpose\n");'
+            '    return 1;'
+            '}'
+          )
+
+          $result = Run-WithPath $original 'canary_overflow_test'
+          $result.text
+          Check ($result.code -eq 1) "a test that reads past the end of a block gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch 'The sanitizer stopped canary_overflow_test: .*AddressSanitizer: heap-buffer-overflow') 'and it says the sanitizer stopped it, for reading past the block'
+          Check ($result.text -cmatch 'READ of size 1 at') 'and the log has the sanitizer''s whole report, not only its first line'
+          $result = Run-WithPath $original 'canary_fails_test'
+          $result.text
+          Check ($result.code -eq 1) "a test that fails a check gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch 'canary_fails_test failed under the sanitizer, with exit code 1') 'and it says the test failed, with its exit code'
+          Check ($result.text -cmatch 'FAILED  a check this canary fails on purpose') 'and the log has what the test said'
+
           if ($failed.Count -gt 0) { throw "$($failed.Count) of the sanitizer script's own checks failed: $($failed -join '; ')" }
-          "Each of the sanitizer script's refusals happens, with its reason, and a window set up once stays as it was"
+          "Each of the sanitizer script's refusals happens, with its reason, a window set up once stays as it was, and the gate fails a broken test"
 
   # One job with one name, to make a required check of. It passes only if every part passed, and the script's own refusals happened.
   sanitizer-result:
@@ -210,7 +280,7 @@ jobs:
         run: |
           echo "The tests under the sanitizer: $PARTS. The sanitizer script's own refusals: $REFUSALS."
           if [ "$PARTS" != "success" ]; then echo "At least one test didn't pass under the sanitizer. The failed part's own job says which, and why."; exit 1; fi
-          if [ "$REFUSALS" != "success" ]; then echo "One of sanitize.ps1's own refusals didn't happen as it should. That job says which."; exit 1; fi
+          if [ "$REFUSALS" != "success" ]; then echo "One of sanitize.ps1's own refusals didn't happen as it should, or a broken test wasn't failed. That job says which."; exit 1; fi
           echo "Every test passes under the address sanitizer"
 
   # A release's first job runs on this machine, not on the Windows one above, so pull requests try its checks here too. Otherwise their first real run here
