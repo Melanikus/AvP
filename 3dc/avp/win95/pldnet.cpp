@@ -49,12 +49,15 @@
 //   be in the list of far places as well as in the list of AI modules
 //   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
 //   messages don't all fit, so a tester's log shows both
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a full message's change to a figure's guess is worked out by ghost_guess.h, the same sums moved there so a test can run them
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
 
 #include "3dc.h"
 #include "inline.h"
+#include "ghost_guess.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "gamedef.h"
@@ -6541,23 +6544,9 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 				diff = ghostData->velocity;
 				SubVector(&velocity, &diff);
 
-				if (Approximate3dMagnitude(&diff) > 1000)
-				{
-					// change in velocity , so reset extrapolation timer
-					ghostData->extrapTimer = -ONE_FIXED;
-				}
-
+				// A change of speed of more than 1000 starts the guess again (ghost_guess.h does the sums, and its test runs them)
+				GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, Approximate3dMagnitude(&diff) > 1000, playerTimer);
 				ghostData->velocity = velocity;
-				ghostData->extrapTimerLast = 0;
-
-				if (playerTimer >= (int)ghostData->lastTimeRead) {
-					ghostData->extrapTimer -= (playerTimer - ghostData->lastTimeRead);
-				}
-				else {
-					ghostData->extrapTimer = -ONE_FIXED;
-				}
-
-				ghostData->lastTimeRead = playerTimer;
 			}
 
 			if (ghostData->type == I_BehaviourAlienPlayer)
@@ -8401,23 +8390,9 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 		velocity.vz = MUL_FIXED(sbPtr->DynPtr->OrientMat.mat33, messagePtr->speed);
 		diff = Approximate3dMagnitude(&ghostData->velocity) - Approximate3dMagnitude(&velocity);
 
-		if (diff > 1500 || -diff > 1500)
-		{
-			// change in velocity , so reset extrapolation timer
-			ghostData->extrapTimer = -ONE_FIXED;
-		}
-
+		// For an alien, a change of its speed's size of more than 1500 starts the guess again (ghost_guess.h)
+		GhostGuess_Message(&ghostData->extrapTimer, &ghostData->extrapTimerLast, &ghostData->lastTimeRead, diff > 1500 || -diff > 1500, playerTimer);
 		ghostData->velocity = velocity;
-		ghostData->extrapTimerLast = 0;
-
-		if (playerTimer >= (int)ghostData->lastTimeRead) {
-			ghostData->extrapTimer -= (playerTimer - ghostData->lastTimeRead);
-		}
-		else {
-			ghostData->extrapTimer = -ONE_FIXED;
-		}
-
-		ghostData->lastTimeRead = playerTimer;
 		sbPtr->DynPtr->UseStandardGravity = messagePtr->standard_gravity;
 
 		if (!sbPtr->DynPtr->UseStandardGravity)
