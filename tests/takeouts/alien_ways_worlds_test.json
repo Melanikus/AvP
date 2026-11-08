@@ -1,0 +1,38 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a ceiling costs as much as a floor",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (node < static_cast<int>(Polygons()) && kind[node] == kAlienWaysFloor)",
+					"to": "if (node < static_cast<int>(Polygons()) && kind[node] != kAlienWaysWall)"
+				}
+			]
+		},
+		{
+			"name": "a join that is only a point is never crossed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon\n",
+					"to": "\t\t\tif (Distance(stretchA[joinStretch[k]], stretchB[joinStretch[k]]) == 0.0)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\t// It crosses where the stretch the two share is nearest to where it came onto this polygon\n"
+				}
+			]
+		},
+		{
+			"name": "the guess counts the rest of the way at the floor's price",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt));",
+					"to": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt) * price);"
+				}
+			]
+		}
+	]
+}
