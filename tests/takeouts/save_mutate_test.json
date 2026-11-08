@@ -1,0 +1,119 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"tools"
+	],
+	"rows": [
+		{
+			"name": "a file bigger than any save is read",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (file.size() > kSaveMutateMostFile)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a header smaller than a level's header is taken",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (headerSize < kSaveMutateLevelBlockSize || static_cast<size_t>(headerSize) > file.size())",
+					"to": "if (headerSize < 9 || static_cast<size_t>(headerSize) > file.size())"
+				}
+			]
+		},
+		{
+			"name": "a file that doesn't start with a level's header is taken",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (SaveMutate_ReadInt(&file[0]) != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a block whose size runs past the end is taken",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (size < kSaveMutateHeaderSize || static_cast<size_t>(size) > out->blocks.size() - at)",
+					"to": "if (size < kSaveMutateHeaderSize)"
+				}
+			]
+		},
+		{
+			"name": "a block smaller than its own header is taken",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (size < kSaveMutateHeaderSize || static_cast<size_t>(size) > out->blocks.size() - at)",
+					"to": "if (size < 1 || static_cast<size_t>(size) > out->blocks.size() - at)"
+				}
+			]
+		},
+		{
+			"name": "a packed save leaves out the level's header",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "out->assign(header.begin(), header.end());",
+					"to": "out->clear();"
+				}
+			]
+		},
+		{
+			"name": "a dropped block is kept",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "blocks.insert(blocks.end(), start + block.at + block.size, start + save.blocks.size());",
+					"to": "blocks.insert(blocks.end(), start + block.at, start + save.blocks.size());"
+				}
+			]
+		},
+		{
+			"name": "a swap keeps the blocks in their order",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "blocks.insert(blocks.end(), start + next.at, start + next.at + next.size);\n\t\tblocks.insert(blocks.end(), start + block.at, start + block.at + block.size);",
+					"to": "blocks.insert(blocks.end(), start + block.at, start + block.at + block.size);\n\t\tblocks.insert(blocks.end(), start + next.at, start + next.at + next.size);"
+				}
+			]
+		},
+		{
+			"name": "a block's type is set where its size is",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "size_t const at = block.at + (c.kind == kSaveMutateBlockType ? 0 : c.at);",
+					"to": "size_t const at = block.at + (c.kind == kSaveMutateBlockType ? 4 : c.at);"
+				}
+			]
+		},
+		{
+			"name": "one number fewer is tried for each kind of block",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "for (size_t k = 0; k < wordsPerKind && !ofKind.empty(); k++)",
+					"to": "for (size_t k = 0; k + 1 < wordsPerKind && !ofKind.empty(); k++)"
+				}
+			]
+		},
+		{
+			"name": "a word past its block makes a copy",
+			"changes": [
+				{
+					"file": "tools/save_mutate/save_mutate.h",
+					"from": "if (c.at + 4 > static_cast<size_t>(block.size))\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": "if (c.at > static_cast<size_t>(block.size))\n\t\t{\n\t\t\treturn false;\n\t\t}"
+				}
+			]
+		}
+	]
+}
