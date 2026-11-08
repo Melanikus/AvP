@@ -119,7 +119,7 @@ param(
     [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
-    [string]$UserCopy = '', # the folder of a copy of the game the user is playing at the same time. A game running from there doesn't stop this run; any other still does. Needs -WhileInUse
+    [string]$UserCopy = '', # the folder of a copy of the game the user is playing at the same time. A game running from there, or from inside it, doesn't stop this run; any other still does. Needs -WhileInUse
     [string]$Exe = 'AvPx.exe',
     [switch]$TimingsDontMatter,
     [switch]$WhileInUse,
@@ -213,18 +213,22 @@ if ($NetPartner)
     if ($partner -match 'steamapps') { Stop-Here "-NetPartner looks like a Steam folder" }
 }
 
-# -UserCopy: the user may be playing their own copy while a run shares the machine. Only a game from exactly that folder is let be, and never this run's own folder.
-$userCopy = ''
+# -UserCopy: the user may be playing their own copy while a run shares the machine. A game running from that folder, or from anything inside it, is let be.
+# PowerShell's names don't care about capitals, so this one is $userCopyFolder: a $userCopy here would be the setting itself, and emptying it would undo it.
+$userCopyFolder = ''
 
 if ($UserCopy)
 {
     if (-not $WhileInUse) { Stop-Here "-UserCopy is a run sharing the machine with someone's game, so it needs -WhileInUse" }
     if (-not (Test-Path -LiteralPath $UserCopy -PathType Container)) { Stop-Here "-UserCopy isn't a folder: $UserCopy" }
-    $userCopy = (Get-Item -LiteralPath $UserCopy).FullName.TrimEnd('\')
-    if ($userCopy -eq $folder.TrimEnd('\')) { Stop-Here "-UserCopy has to be another folder than the run's own" }
+    $userCopyFolder = (Get-Item -LiteralPath $UserCopy).FullName.TrimEnd('\')
+    $runFolder = $folder.TrimEnd('\')
+
+    # Neither may be inside the other, or one of this run's own copies could be taken for the user's
+    if ($userCopyFolder -eq $runFolder -or $runFolder -like "$userCopyFolder\*" -or $userCopyFolder -like "$runFolder\*") { Stop-Here "-UserCopy and the run's own folder can't be the same, or one inside the other" }
 }
 
-$running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(AvPx|debug_AvPx|AvP_Classic|AvP)$' -and -not ($partner -and $_.Path -like "$partner\*") -and -not ($NetSecondPartner -and $_.Path -like "$NetSecondPartner\*") -and -not ($userCopy -and $_.Path -like "$userCopy\*") })
+$running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(AvPx|debug_AvPx|AvP_Classic|AvP)$' -and -not ($partner -and $_.Path -like "$partner\*") -and -not ($NetSecondPartner -and $_.Path -like "$NetSecondPartner\*") -and -not ($userCopyFolder -and $_.Path -like "$userCopyFolder\*") })
 if ($running.Count -gt 0) { Stop-Here "the game is already running: $($running[0].ProcessName)" }
 
 if (-not $TimingsDontMatter)
