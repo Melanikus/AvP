@@ -1,6 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a file chunk read from a file keeps that file's size and MD5 sum, for the log (level_file_sum.h)
+//   RIF_File_Chunk, the second level loader, is gone: nothing ever called it (REMOVED-CODE.md)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   an empty file chunk remembers its version chunk, so that who owns it is plain to read
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -170,39 +171,12 @@ private:
 
 	friend class File_Chunk;
 	friend class GodFather_Chunk;
-	friend class RIF_File_Chunk;
 
 
 
 	RIF_Version_Num_Chunk	(Chunk_With_Children * parent)
 	:	Chunk (parent,"RIFVERIN"), file_version_no (0)
 	{}
-};
-
-///////////////////////////////////////////////
-
-class RIF_File_Chunk : public Chunk_With_Children
-{
-public:
-
-	// This is a special chunk which does not output itself
-
-	RIF_File_Chunk (Chunk_With_Children * parent, const char * fname);
-
-	size_t size_chunk()
-	{
-		return chunk_size = 0;
-	}
-
-	virtual void post_input_processing();
-
-	BOOL output_chunk (HANDLE & /*h*/){return TRUE;};
-	void fill_data_block (char * /*c*/){};
-
-	void list_objects(List<Object_Chunk *> * pList);
-	void list_shapes(List<Shape_Chunk *> * pList);
-	Environment_Data_Chunk * get_env_data();
-
 };
 
 ///////////////////////////////////////////////

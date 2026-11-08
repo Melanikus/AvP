@@ -13,7 +13,8 @@
 //     everything in it adds up; neither gives a size or a sum, and the log says why each was refused.
 // - By reading the game's source: loading a level writes the line, once, after the level is in and before it's copied into the game,
 //   naming the path it was loaded from; the loader reads the size as a 64-bit number, and every read it makes has to get all it asked
-//   for and adds what it got to the sum; the custom maps list uses the loader's own largest size.
+//   for and adds what it got to the sum; the second loader, which read sizes the old way, stays gone; the custom maps list uses the
+//   loader's own largest size.
 //
 // WHAT IT CAN'T SHOW: a file of 4 GB or more, whose size's lower 32 bits look small. Making one would fill the disk of the computer
 // running the tests. The rule's own check below covers that size, and the source check shows the loader reads all 64 bits.
@@ -365,6 +366,15 @@ static void TestTheGameUsesIt()
 	Check(Count(loader, "ReadFile(") == 4 && Count(loader, ", &bytes_read, 0) || bytes_read != ") == 4,
 		"each of the loader's four reads has to get every byte it asked for");
 	Check(Count(loader, "MD5Update(&sum_so_far, ") == 4, "and each one adds what it read to the sum");
+
+	// There was a second loader, RIF_File_Chunk, that read a file's size the old way, with no limit. Nothing ever called it, and it went
+	// (REMOVED-CODE.md). It mustn't come back that way: the loader above is the only one, so its reads are the whole file's reads.
+	std::string const loaderFile = ReadWholeFile("3dc/win95/mishchnk.cpp");
+	std::string const loaderHeader = ReadWholeFile("3dc/win95/mishchnk.hpp");
+	Check(!loaderFile.empty() && !loaderHeader.empty() && !Has(loaderHeader, "class RIF_File_Chunk") && !Has(loaderFile, "RIF_File_Chunk::") &&
+		!Has(loaderFile, "\"SUBRIFFL\""), "the second loader, which nothing called, is gone");
+	Check(Count(loaderFile, "ReadFile(") == 4 && !Has(loaderFile, "GetFileSize("),
+		"and the loader file's only reads are the loader's four, with no file's size read the old way");
 
 	std::string const customMaps = ReadWholeFile("3dc/avp/win95/frontend/custom_maps.cpp");
 	Check(Has(customMaps, "static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;"),

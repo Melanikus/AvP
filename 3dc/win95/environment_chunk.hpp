@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   no longer names RIF_File_Chunk, the second level loader, which is gone (REMOVED-CODE.md)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them
 //   a level's paths each need a number of their own
@@ -33,7 +35,6 @@ private:
 
 	friend class File_Chunk;
 	friend class GodFather_Chunk;
-	friend class RIF_File_Chunk;
 
 
 

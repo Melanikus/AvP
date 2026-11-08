@@ -254,6 +254,46 @@
 					"to": "static const long long kCustomMapMostFileBytes = 33LL << 20;"
 				}
 			]
+		},
+		{
+			"name": "the second loader's class comes back",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.hpp",
+					"from": "class RIF_Name_Chunk : public Chunk\n",
+					"to": "class RIF_File_Chunk : public Chunk_With_Children\n{\n};\n\nclass RIF_Name_Chunk : public Chunk\n"
+				}
+			]
+		},
+		{
+			"name": "the second loader's chunk name comes back",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "BOOL File_Chunk::write_file (const char * fname)\n",
+					"to": "static const char *const kOldSubFile = \"SUBRIFFL\";\n\nBOOL File_Chunk::write_file (const char * fname)\n"
+				}
+			]
+		},
+		{
+			"name": "a file's size is read the old way again",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "BOOL File_Chunk::write_file (const char * fname)\n",
+					"to": "static DWORD OldFileSize(HANDLE file) { return GetFileSize(file, NULL); }\n\nBOOL File_Chunk::write_file (const char * fname)\n"
+				}
+			]
+		},
+		{
+			"name": "the loader file reads a file somewhere else too",
+			"changes": [
+				{
+					"file": "3dc/win95/mishchnk.cpp",
+					"from": "BOOL File_Chunk::write_file (const char * fname)\n",
+					"to": "static BOOL OldRead(HANDLE file, char *into, DWORD count, DWORD *got) { return ReadFile(file, into, count, got, 0); }\n\nBOOL File_Chunk::write_file (const char * fname)\n"
+				}
+			]
 		}
 	]
 }

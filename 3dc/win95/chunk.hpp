@@ -1,6 +1,8 @@
 // Chunk library
 
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   no longer names RIF_File_Chunk, the second level loader, which is gone (REMOVED-CODE.md)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a group of helper macros that nothing used
 //   added ChildChunkFits, which checks that a child chunk's size from the file can be real
@@ -207,7 +209,6 @@ private:
 	friend class Chunk_With_Children;
 	friend class Sprite_Header_Chunk; // sprite updating needs to scan through all child chunks
 	friend class File_Chunk;
-	friend class RIF_File_Chunk;
 	friend class Shape_Chunk;
 
 	Chunk * next;

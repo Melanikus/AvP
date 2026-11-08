@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   no longer names RIF_File_Chunk, the second level loader, which is gone (REMOVED-CODE.md)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed code and declarations only the level editor used: the game itself never runs them; added a
 //   check on the shape numbers a level file gives, and on the numbers that give a shape's size
@@ -110,7 +112,6 @@ private:
 	friend class Shape_UV_Coord_Chunk;
 	friend class Shape_Header_Chunk;
 	friend class Shape_External_File_Chunk;
-	friend class RIF_File_Chunk;
 	friend class File_Chunk;
 	friend class Shape_Centre_Chunk;
 
@@ -521,7 +522,6 @@ private:
 
 	friend class Shape_Chunk;
 	friend class Object_Chunk;
-	friend class RIF_File_Chunk;
 	friend class File_Chunk;
 	friend class Environment;
 	friend class Shape_Morphing_Frame_Data_Chunk;
