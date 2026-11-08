@@ -3,6 +3,8 @@
 //   in the mode that plays as single player does, a host waits for a key too, and a level starts for everyone together
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a level load answers other machines all the way through
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   in a co-op campaign the loading screen says which level was finished, and who it's waiting for
 #include "3dc.h"
 #include "module.h"
 #include "platform.h"
@@ -30,6 +32,8 @@ extern bool SameAsSinglePlayer(void);
 // In pldnet.cpp. Begins is called once when the screen comes up, and MayStartLevel each frame after that.
 extern void Coop_WaitOnLoadingScreenBegins(void);
 extern bool Coop_MayStartLevel(bool keyHasBeenPressed);
+extern bool Coop_LevelCompleteLine(char *line, size_t room);
+extern bool Coop_WaitingForLine(char *line, size_t room);
 extern void RenderGrabbedScreen(void);
 extern void ThisFramesRenderingHasBegun(void);
 extern void ThisFramesRenderingHasFinished(void);
@@ -248,6 +252,22 @@ void Game_Has_Loaded()
 
 		if (!IsDemoVersion()) { // demo doesn't show this
 			RenderStringCentred(GetTextString(TEXTSTRING_INGAME_PRESSANYKEYTOCONTINUE), ScreenDescriptorBlock.SDB_Width/2, ((ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_SafeZoneHeightOffset)*23)/24-9, 0xffffffff);
+		}
+
+		// In a co-op campaign: the level just finished, above the next one's name, and who's still to press a key, above the bar
+		if (startsTogether)
+		{
+			char line[160];
+
+			if (Coop_LevelCompleteLine(line, sizeof(line)))
+			{
+				RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width/2, ScreenDescriptorBlock.SDB_Height/2 - 100, 0xffffffff);
+			}
+
+			if (Coop_WaitingForLine(line, sizeof(line)))
+			{
+				RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width/2, ((ScreenDescriptorBlock.SDB_Height - ScreenDescriptorBlock.SDB_SafeZoneHeightOffset)*11)/12 - 25, 0xffffffff);
+			}
 		}
 
 		ThisFramesRenderingHasFinished();

@@ -15,6 +15,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
 //   avp-forever, commit 207704e); the two copies of "which model for which kind" are one function, AlienModel
+//   ALIENBOT, PREDALIENBOT and PRAETORIANBOT are refused in a network game again, as MARINEBOT is
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -110,12 +111,11 @@ void CastAlienBot(void) {
 	#define BOTRANGE 2000
 
 	VECTORCH position;
-	#if 0
+	// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game
 	if (AvP.Network!=I_No_Network) {
 		NewOnScreenMessage("NO ALIENBOTS IN MULTIPLAYER MODE");
 		return;
 	}
-	#endif
 	position=Player->ObStrategyBlock->DynPtr->Position;
 	position.vx+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat31,BOTRANGE);
 	position.vy+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat32,BOTRANGE);
@@ -130,12 +130,11 @@ void CastPredAlienBot(void) {
 	#define BOTRANGE 2000
 
 	VECTORCH position;
-	#if 0
+	// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game
 	if (AvP.Network!=I_No_Network) {
 		NewOnScreenMessage("NO ALIENBOTS IN MULTIPLAYER MODE");
 		return;
 	}
-	#endif
 	position=Player->ObStrategyBlock->DynPtr->Position;
 	position.vx+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat31,BOTRANGE);
 	position.vy+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat32,BOTRANGE);
@@ -150,12 +149,11 @@ void CastPraetorianBot(void) {
 	#define BOTRANGE 2000
 
 	VECTORCH position;
-	#if 0
+	// Refused in a network game: the alien would be real on this machine and sent to everyone, so one player could fill everyone's game
 	if (AvP.Network!=I_No_Network) {
 		NewOnScreenMessage("NO ALIENBOTS IN MULTIPLAYER MODE");
 		return;
 	}
-	#endif
 	position=Player->ObStrategyBlock->DynPtr->Position;
 	position.vx+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat31,BOTRANGE);
 	position.vy+=MUL_FIXED(Player->ObStrategyBlock->DynPtr->OrientMat.mat32,BOTRANGE);

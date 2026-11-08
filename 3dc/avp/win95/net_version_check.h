@@ -22,8 +22,8 @@
 #ifndef _net_version_check_h_
 #define _net_version_check_h_ 1
 
-static const int kVersionTheseSizesBelongTo = 110;
-static const unsigned int kSizesAtThatVersion = 49510;
+static const int kVersionTheseSizesBelongTo = 112;
+static const unsigned int kSizesAtThatVersion = 55128;
 
 static const unsigned int kSizesNow =
 	1 * sizeof(NETMESSAGEHEADER) +
@@ -90,6 +90,8 @@ static const unsigned int kSizesNow =
 	65 * sizeof(NETMESSAGE_NPCSOUND) +
 	66 * sizeof(NETMESSAGE_NPCTHROWNOBJECT) +
 	67 * sizeof(NETMESSAGE_LIFTSTATE) +
+	68 * sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE) +
+	69 * sizeof(NETMESSAGE_COOPMAPANSWER) +
 	59 * MAX_NO_OF_MULTIPLAYER_EPISODES +
 	60 * MAX_NO_OF_COOPERATIVE_EPISODES +
 	61 * kLevelListCampaignLevels;

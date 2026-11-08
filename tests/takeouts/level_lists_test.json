@@ -1009,7 +1009,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning\n\t\t\t\t&& ",
+					"from": "bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning\n\t\t\t\t\t&& ",
 					"to": "bool const leftBehind = "
 				}
 			]
@@ -1289,7 +1289,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/frontend/menu_data.cpp",
-					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},\t{TEXTSTRING_DIFFICULTY_EASY},\tTEXTSTRING_MPHELP_CAMPAIGN_DIFFICULTY},\n",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER_POINTER,\t{TEXTSTRING_MULTIPLAYER_ENVIRONMENT}, {0},\t{&netGameData.levelNumber},\t{0},\tTEXTSTRING_MPHELP_ENVIRONMENT},\n\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},\t{TEXTSTRING_DIFFICULTY_EASY},\tTEXTSTRING_MPHELP_CAMPAIGN_DIFFICULTY},\n",
 					"to": ""
 				}
 			]
@@ -1459,8 +1459,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 110;",
-					"to": "const int kMultiplayerVersion = 109;"
+					"from": "const int kMultiplayerVersion = 112;",
+					"to": "const int kMultiplayerVersion = 111;"
 				}
 			]
 		},
@@ -1749,8 +1749,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "\t\tif (Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come",
-					"to": "\t\tif (false && Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come"
+					"from": "\t\t\tif (Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come",
+					"to": "\t\t\tif (false && Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come"
 				}
 			]
 		}

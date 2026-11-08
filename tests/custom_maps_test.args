@@ -4,3 +4,4 @@
 tests/custom_maps_test.cpp
 3dc/avp/win95/frontend/custom_maps.cpp
 3dc/win95/huffman.cpp
+3dc/win95/md5.c

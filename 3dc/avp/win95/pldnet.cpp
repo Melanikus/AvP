@@ -7,6 +7,11 @@
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
 //   the disc is checked before use, because a save file can leave that part out
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   in a co-op campaign the score key lists who's alive, a player who's out is told so, and the loading screen says which level was finished and who it's waiting for
+//   the co-op lobby: what it takes, the host's choice, a joiner's answer, and a custom map as a campaign of one level. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a level's end notes what each player carries on with in a co-op campaign. Credit: Melanikus and Bobblen (the kept kit follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the new guns' settings are in the game description, so a joiner uses the host's
 //   the room needed round a level's start is for however tall the player is
@@ -42,6 +47,8 @@
 //   loads the level the host loads, and the log says when one tried
 //   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
 //   be in the list of far places as well as in the list of AI modules
+//   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
+//   messages don't all fit, so a tester's log shows both
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -99,6 +106,8 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 
 #include "networking.h"
 #include "level_lists.h"
+#include "inventory.h"
+#include "custom_maps.h"
 #include "lift_checks.h"
 #include "logString.h"
 #include "MemoryStream.h"
@@ -109,6 +118,11 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "hmodel.h"
 #include "npc_kinds.h"
 #include "npc_ghosts.h"
+#include "coop_in_game.h"
+#include "coop_menu.h"
+
+// coop_in_game.h keeps one bit for each place on the player list
+static_assert(kCoopMostPlayers == NET_MAXPLAYERS, "coop_in_game.h needs one bit for each player");
 
 /*----------------------------------------------------------------------
   Some globals for use in this file
@@ -405,6 +419,8 @@ static void ProcessNetMsg_CoopReady(NetID senderId);
 static void LevelEvents_SayAgainWhatHappened(void);
 static const DWORD kMillisecondsBetweenObjectSynchs = 100;
 static void ProcessNetMsg_CoopGo(void);
+static void ProcessNetMsg_CoopCampaignChoice(NETMESSAGE_COOPCAMPAIGNCHOICE *messagePtr);
+static void ProcessNetMsg_CoopMapAnswer(NETMESSAGE_COOPMAPANSWER *messagePtr, NetID senderId);
 static void ProcessNetMsg_LevelEvent(NETMESSAGE_LEVELEVENT *messagePtr);
 static void ProcessNetMsg_LevelEventAsk(NETMESSAGE_LEVELEVENT *messagePtr, NetID senderId);
 void StartOfGame_PlayerPlacement(STRATEGYBLOCK *playerSbPtr, int seed);
@@ -418,6 +434,12 @@ static void Handle_LastManStanding_RestartTimer(unsigned char time);
 static void CheckSpeciesTagState();
 static void Handle_SpeciesTag_NewPersonIt(NetID predatorID);
 static int CountPlayersOfType(NETGAME_CHARACTERTYPE species);
+
+// Who plays the custom map a co-op lobby chose
+static NETGAME_CHARACTERTYPE Coop_CustomMapCharacter(void)
+{
+	return netGameData.coopCustomSpecies == 1 ? NGCT_Predator : netGameData.coopCustomSpecies == 2 ? NGCT_Alien : NGCT_Marine;
+}
 
 static int GetSizeOfLocalObjectDamagedMessage(char *messagePtr);
 static int GetSizeOfGhostHierarchyDamagedMessage(char *messagePtr);
@@ -473,6 +495,22 @@ void CheckStateOfObservedPlayer();
 /*----------------------------------------------------------------------
   Initalisation of net game
   ----------------------------------------------------------------------*/
+// How many of the host's switch messages couldn't be matched with this machine's switches in this level (see NetLevelCount)
+static NetLevelCount switchSyncsNotMatched;
+
+// The level is over, or another is starting: the log hears how many of the host's switch messages couldn't be used in it, if any were
+static void SwitchSyncs_LevelIsOver(void)
+{
+	unsigned long long const notMatched = NetLevelCount_LevelIsOver(switchSyncsNotMatched);
+
+	if (notMatched > 0)
+	{
+		LogString("net: in that level, " + std::to_string(notMatched) + " of the host's messages about switches, doors and lifts couldn't be matched with this machine's, so they were left out");
+	}
+}
+
+static void Coop_ForgetTheLobby(void);
+
 void InitAVPNetGameForHost(int species, int gamestyle, int level)
 {
 	AvP.GameMode = I_GM_Playing;
@@ -480,6 +518,8 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 
 	// A new game, so nothing that happened in the last one counts, even on the same level
 	LevelEvents_NewLevel();
+	Campaign_ForgetKit();
+	Coop_ForgetTheLobby();
 	AvP.NetworkAIServer = (gamestyle == NGT_Coop);
 	/* init the send message buffer */
 	InitialiseSendMessageBuffer();
@@ -634,6 +674,7 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 			break;
 	}
 
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.numDeaths[0] = 0;
 	netGameData.numDeaths[1] = 0;
@@ -647,6 +688,11 @@ void InitAVPNetGameForJoin(void)
 
 	// A new game, so nothing that happened in the last one counts, even on the same level
 	LevelEvents_NewLevel();
+	Campaign_ForgetKit();
+	netGameData.coopKeepKit = 0;
+	Coop_ForgetTheLobby();
+	netGameData.coopCampaign = kCampaignNone;
+	netGameData.coopCampaignLevel = 0;
 	AvP.NetworkAIServer = 0;
 
 	// init the send message buffer
@@ -712,6 +758,7 @@ void InitAVPNetGameForJoin(void)
 	numMessagesReceived    = 0;      /* these are for testing */
 	numMessagesTransmitted = 0;
 	InitNetLog();
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.numDeaths[0] = 0;
 	netGameData.numDeaths[1] = 0;
@@ -1131,7 +1178,8 @@ static const unsigned short kMostChatLinesEachSecond = 4;
 static const unsigned short kMostExplosionsEachSecond = 24;
 static const unsigned short kMostGibbingsEachSecond = 16;
 static const unsigned short kMostThingsDestroyedEachSecond = 60;
-static const unsigned short kMostHitsEachSecond = 240; // far more than any gun can land in a second
+static const unsigned short kMostHitsEachSecond = 240; // the biggest shotgun fires 32 pellets, and a body can be hit by each
+static const unsigned short kMostMapAnswersEachSecond = 4; // a joiner answers every 2 seconds, and again each time a choice changes
 static const unsigned short kMostLeavingsEachSecond = NET_MESSAGEITERATIONS; // a machine that's leaving says so this many times, because it gets no other chance
 
 // In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
@@ -1199,7 +1247,9 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_NpcKilled, sizeof(NETMESSAGE_NPCKILLED), false, true },
 	{ NetMT_NpcSound, sizeof(NETMESSAGE_NPCSOUND), false, true },
 	{ NetMT_NpcThrownObject, sizeof(NETMESSAGE_NPCTHROWNOBJECT), false, true },
-	{ NetMT_LiftState, sizeof(NETMESSAGE_LIFTSTATE), false, true }
+	{ NetMT_LiftState, sizeof(NETMESSAGE_LIFTSTATE), false, true },
+	{ NetMT_CoopCampaignChoice, sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE), false, true },
+	{ NetMT_CoopMapAnswer, sizeof(NETMESSAGE_COOPMAPANSWER), false, false, kMostMapAnswersEachSecond }
 };
 
 // The build stops here if a message changes while the multiplayer version doesn't. See that file.
@@ -1302,6 +1352,70 @@ bool Net_BlocksAreShort()
 	return AvP.Network != I_No_Network && (NetPoolIsShort(NumActiveStBlocks, maxstblocks, kStrategyBlocksKeptBack) || NetPoolIsShort(NumActiveBlocks, maxobjects, kDisplayBlocksKeptBack));
 }
 
+// THE CO-OP LOBBY. See coop_lobby.h for what it is and why. These two lists are all it takes: every other kind is refused here, before
+// anything reads it, and before a host passes anything on. Chat isn't on them, because a menu page can neither type it nor show it, and
+// a player's description isn't on the host's, because a host sends none in the lobby. tests/coop_lobby_test.cpp holds these same lists
+// and every kind against them, so adding to one has to be decided there too.
+static const unsigned char kCoopLobbyFromAJoiner[] = { NetMT_PlayerDescription, NetMT_PlayerLeaving, NetMT_CoopMapAnswer };
+static const unsigned char kCoopLobbyFromTheHost[] = { NetMT_GameDescription, NetMT_PlayerLeaving, NetMT_CoopCampaignChoice };
+static const unsigned char kCoopJustTheAnswer[] = { NetMT_CoopMapAnswer };
+
+static_assert(kCoopChoiceCustomCampaign == kCampaignCustom, "coop_lobby.h and env_info.h have to agree on what a custom map's campaign number is");
+static_assert(kCoopChoiceFirstCampaign == kCampaignMarine, "coop_lobby.h and env_info.h have to agree on where the campaigns start");
+static_assert(sizeof(netGameData.coopCustomMap) == kCoopMapNameBytes, "the game's copy of the name has to be the size of the message's");
+
+static int coopLobbyState = kCoopLobbyNone;
+static bool coopHostHasStarted = false;
+
+int Net_CoopLobbyState(void)
+{
+	return coopLobbyState;
+}
+
+// An answer about the map means nothing to the other joiners, so a host keeps it to itself
+bool Net_MessageIsForTheHostAlone(const uint8_t *message, size_t size)
+{
+	size_t partCount = 0;
+	size_t onTheList = 0;
+
+	return NetCountPartsOnTheList(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), LengthOfANetPart, kCoopJustTheAnswer, sizeof(kCoopJustTheAnswer), &partCount, &onTheList) && onTheList != 0;
+}
+
+// Does this machine take this message, as far as the lobby goes? It has already been shown to be well made.
+static bool Net_CoopLobbyTakesThis(const uint8_t *message, size_t size)
+{
+	unsigned char const *const parts = message + kMessageHeaderSize;
+	size_t const bytes = size - kMessageHeaderSize;
+	size_t const ruleCount = sizeof(kNetPartRules) / sizeof(kNetPartRules[0]);
+	size_t partCount = 0;
+	size_t onTheList = 0;
+
+	if (coopLobbyState == kCoopLobbyNone)
+	{
+		// An answer means nothing in a game with no lobby. Once a host has started, one can still be on its way, which is honest, so that isn't refused.
+		if (AvP.Network == I_Host && !coopHostHasStarted && Net_MessageIsForTheHostAlone(message, size))
+		{
+			Net_NoteRefused(kCoopRefusedAnswerNoLobby);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool const isHost = AvP.Network == I_Host;
+	unsigned char const *const list = isHost ? kCoopLobbyFromAJoiner : kCoopLobbyFromTheHost;
+	size_t const listCount = isHost ? sizeof(kCoopLobbyFromAJoiner) : sizeof(kCoopLobbyFromTheHost);
+
+	if (NetCountPartsOnTheList(parts, bytes, kNetPartRules, ruleCount, LengthOfANetPart, list, listCount, &partCount, &onTheList) && onTheList == partCount)
+	{
+		return true;
+	}
+
+	// A game under way is honest traffic this machine isn't ready for, so the log says that instead
+	Net_NoteRefused(coopLobbyState == kCoopLobbyUnderWay ? kCoopRefusedPartBeforeJoining : kCoopRefusedPartInLobby);
+	return false;
+}
+
 bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)
 {
 	if (size < kMessageHeaderSize)
@@ -1313,7 +1427,7 @@ bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost
 	switch (NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))
 	{
 		case kNetPartsGood:
-			return true;
+			return Net_CoopLobbyTakesThis(message, size);
 		case kNetPartsOnlyFromTheHost:
 			Net_NoteRefused("a part only a host may send");
 			return false;
@@ -1769,6 +1883,20 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 				break;
 			}
 
+			case (NetMT_CoopCampaignChoice):
+			{
+				ProcessNetMsg_CoopCampaignChoice((NETMESSAGE_COOPCAMPAIGNCHOICE *)subMessagePtr);
+				subMessagePtr += sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE);
+				break;
+			}
+
+			case (NetMT_CoopMapAnswer):
+			{
+				ProcessNetMsg_CoopMapAnswer((NETMESSAGE_COOPMAPANSWER *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_COOPMAPANSWER);
+				break;
+			}
+
 			case (NetMT_LevelEvent):
 			{
 				ProcessNetMsg_LevelEvent((NETMESSAGE_LEVELEVENT *)subMessagePtr);
@@ -1976,6 +2104,7 @@ void NetSendMessages(void)
 					netGameData.gameDescriptionTimeDelay += ONE_FIXED;
 					AddNetMsg_GameDescription();
 					LevelEvents_SayAgainWhatHappened();
+					Net_CoopHostSays();
 
 					if (!SameAsSinglePlayer())
 					{
@@ -2017,6 +2146,7 @@ void NetSendMessages(void)
 		if (AvP.Network == I_Host && timeGetTime() - lastDescription >= 1000) {
 			lastDescription = timeGetTime();
 			AddNetMsg_GameDescription();
+			Net_CoopHostSays();
 		}
 	}
 
@@ -2243,6 +2373,7 @@ static void AddPlayerAndObjectUpdateMessages(void)
   ----------------------------------------------------------------------*/
 void EndAVPNetGame(void)
 {
+	SwitchSyncs_LevelIsOver();
 	RemovePlayerFromGame(AvPNetID);
 	TransmitPlayerLeavingNetMsg();
 
@@ -2257,6 +2388,9 @@ void EndAVPNetGame(void)
 	// Or the next game hosted from the menus would still count as a campaign
 	netGameData.coopCampaign = kCampaignNone;
 	netGameData.coopCampaignLevel = 0;
+	netGameData.coopKeepKit = 0;
+	Campaign_ForgetKit();
+	Coop_ForgetTheLobby();
 	netGameData.skirmishMode = FALSE;
 	TurnOffMultiplayerObserveMode();
 	//reset time scale to default value
@@ -2266,6 +2400,20 @@ void EndAVPNetGame(void)
 /*----------------------------------------------------------------------
   Functions for adding each message type to the send message buffer
   ----------------------------------------------------------------------*/
+
+// A message didn't fit in what's going out this frame, so it's left out. The log hears of it, a few times and then less often, with how
+// many there have been, so a tester's log shows a game sending more than a frame holds. This used to be an assert, which only stopped a
+// test build, but a busy game can fill a frame: it isn't a mistake in the code.
+static void NoteSendBufferFull(int bytesWanted)
+{
+	static unsigned long long timesFull = 0;
+
+	if (LogThisDrop(timesFull))
+	{
+		LogString("net: a message of " + std::to_string(bytesWanted) + " bytes didn't fit in this frame's " + std::to_string(NET_MESSAGEBUFFERSIZE) +
+			" bytes, so it was left out (number " + std::to_string(timesFull) + " of these)");
+	}
+}
 void AddNetMsg_GameDescription(void)
 {
 	NETMESSAGEHEADER *headerPtr;
@@ -2282,7 +2430,7 @@ void AddNetMsg_GameDescription(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2312,6 +2460,7 @@ void AddNetMsg_GameDescription(void)
 		messagePtr->coopCampaign = (unsigned char)netGameData.coopCampaign;
 		messagePtr->coopCampaignLevel = (unsigned char)netGameData.coopCampaignLevel;
 		messagePtr->coopDifficulty = (unsigned char)netGameData.coopDifficulty;
+		messagePtr->coopWaitingFor = netGameData.coopWaitingFor;
 		messagePtr->coopRollNumber = netGameData.coopRollNumber;
 		messagePtr->scoreLimit = netGameData.scoreLimit;
 		messagePtr->timeLimit = (unsigned char)netGameData.timeLimit;
@@ -2398,7 +2547,7 @@ void AddNetMsg_PlayerDescription(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2432,7 +2581,7 @@ void AddNetMsg_StartGame(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2555,7 +2704,7 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2942,7 +3091,7 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3111,7 +3260,7 @@ void AddNetMsg_FrameTimer()
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3348,7 +3497,7 @@ void AddNetMsg_PlayerKilled(int objectId, DAMAGE_PROFILE *damage)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3444,7 +3593,7 @@ void AddNetMsg_PlayerDeathAnim(int deathId, int objectId)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3476,7 +3625,7 @@ void AddNetMsg_PlayerLeaving(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3504,7 +3653,7 @@ void AddNetMsg_AllGameScores(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3552,7 +3701,7 @@ void AddNetMsg_PlayerScores(int playerId)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3595,7 +3744,7 @@ void AddNetMsg_ScoreChange(int killerIndex, int victimIndex)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3639,7 +3788,7 @@ void AddNetMsg_SpeciesScores()
 
 	if (numBytesReqd > numBytesLeft)
 	{
-		LOCALASSERT(1 == 0);
+		NoteSendBufferFull(numBytesReqd);
 		/* don't add it */
 		return;
 	}
@@ -3682,7 +3831,7 @@ void AddNetMsg_LocalObjectState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3858,7 +4007,7 @@ void AddNetMsg_LocalObjectDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, 
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4003,7 +4152,7 @@ void AddNetMsg_LocalObjectDestroyed_Request(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4048,7 +4197,7 @@ void AddNetMsg_LocalObjectDestroyed(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4097,7 +4246,7 @@ void AddNetMsg_InanimateObjectDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *dama
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4185,7 +4334,7 @@ void AddNetMsg_InanimateObjectDestroyed(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4221,7 +4370,7 @@ void AddNetMsg_ObjectPickedUp(char *objectName)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4253,7 +4402,7 @@ void AddNetMsg_EndGame(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4289,7 +4438,7 @@ void AddNetMsg_LOSRequestBinarySwitch(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4333,7 +4482,7 @@ void AddNetMsg_PlatformLiftState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4378,7 +4527,7 @@ void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4414,7 +4563,7 @@ void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4596,7 +4745,7 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4668,7 +4817,7 @@ void AddNetMsg_MakeExplosion(VECTORCH *positionPtr, enum EXPLOSION_ID explosionI
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4703,7 +4852,7 @@ void AddNetMsg_MakeFlechetteExplosion(VECTORCH *positionPtr, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4739,7 +4888,7 @@ void AddNetMsg_MakePlasmaExplosion(VECTORCH *positionPtr, VECTORCH *fromPosition
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4777,7 +4926,7 @@ void AddNetMsg_PredatorLaserSights(VECTORCH *positionPtr, VECTORCH *normalPtr, D
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4870,7 +5019,7 @@ void AddNetMsg_LocalObjectOnFire(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4917,7 +5066,7 @@ void AddNetMsg_RestartNetworkGame(int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4955,7 +5104,7 @@ void AddNetMsg_FragmentalObjectsStatus(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5062,7 +5211,7 @@ void AddNetMsg_StrategySynch(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5157,7 +5306,7 @@ void AddNetMsg_CreateWeapon(char *objectName, int type, VECTORCH *location)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5246,7 +5395,7 @@ void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5362,7 +5511,7 @@ void AddNetMsg_AlienAISeqChange(STRATEGYBLOCK *sbPtr, int sequence_type, int sub
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5421,7 +5570,7 @@ void AddNetMsg_AlienAIKilled(STRATEGYBLOCK *sbPtr, int death_code, int death_tim
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5486,7 +5635,7 @@ void AddNetMsg_FarAlienPosition(STRATEGYBLOCK *sbPtr, int targetModuleIndex, int
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5531,7 +5680,7 @@ void AddNetMsg_GhostHierarchyDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damag
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5647,7 +5796,7 @@ void AddNetMsg_Gibbing(STRATEGYBLOCK *sbPtr, int gibbFactor, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5683,7 +5832,7 @@ void AddNetMsg_SpotAlienSound(int soundCategory, int alienType, int pitch, VECTO
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5718,7 +5867,7 @@ void AddNetMsg_PlayerID(NetID playerID, unsigned char message)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5747,7 +5896,7 @@ void AddNetMsg_LastManStanding_RestartTimer(char time)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5776,7 +5925,7 @@ void AddNetMsg_LastManStanding_Restart(NetID alienID, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5810,7 +5959,7 @@ void AddNetMsg_RespawnPickups(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5832,7 +5981,7 @@ void AddNetMsg_SpotOtherSound(enum soundindex SoundIndex, VECTORCH *position, in
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5920,56 +6069,63 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 
 		netGameData.gameType = (NETGAME_TYPE)messagePtr->gameType;
 
-		if (Coop_LevelChangeIsDue())
+		// In the co-op lobby a joiner hears all this only from the host's choice, so that an old description can't undo a newer choice
+		if (coopLobbyState == kCoopLobbyNone)
 		{
-			// The host's word to go on has come, and this description can be one it made before it moved. When the host
-			// reaches a level's end, it adds the next-level message and sends at once, and that send can add the
-			// once-a-second description behind it, still naming the old place. Written down, that old place would make this
-			// machine load the level it has just finished, while the host loads the next. So while a move is due, the
-			// campaign and the place stay the pair the next-level message gave and was checked against. The descriptions
-			// sent while the next level loads name them too.
-			static unsigned long long oldPlacesLeft = 0;
-
-			if ((messagePtr->coopCampaign != netGameData.coopCampaign || messagePtr->coopCampaignLevel != netGameData.coopCampaignLevel) && LogThisDrop(oldPlacesLeft))
+			if (Coop_LevelChangeIsDue())
 			{
-				LogString("campaign: a game description naming campaign " + std::to_string(messagePtr->coopCampaign) + " place " + std::to_string(messagePtr->coopCampaignLevel) +
-					" came after the word to go on to place " + std::to_string(netGameData.coopCampaignLevel) + ", so the campaign and place stay as they are (number " +
-					std::to_string(oldPlacesLeft) + " of these)");
+				// The host's word to go on has come, and this description can be one it made before it moved. When the host
+				// reaches a level's end, it adds the next-level message and sends at once, and that send can add the
+				// once-a-second description behind it, still naming the old place. Written down, that old place would make this
+				// machine load the level it has just finished, while the host loads the next. So while a move is due, the
+				// campaign and the place stay the pair the next-level message gave and was checked against. The descriptions
+				// sent while the next level loads name them too.
+				static unsigned long long oldPlacesLeft = 0;
+
+				if ((messagePtr->coopCampaign != netGameData.coopCampaign || messagePtr->coopCampaignLevel != netGameData.coopCampaignLevel) && LogThisDrop(oldPlacesLeft))
+				{
+					LogString("campaign: a game description naming campaign " + std::to_string(messagePtr->coopCampaign) + " place " + std::to_string(messagePtr->coopCampaignLevel) +
+						" came after the word to go on to place " + std::to_string(netGameData.coopCampaignLevel) + ", so the campaign and place stay as they are (number " +
+						std::to_string(oldPlacesLeft) + " of these)");
+				}
 			}
-		}
-		// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all
-		else if (NetCampaignPlaceIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, Campaign_LevelCount(messagePtr->coopCampaign)))
-		{
-			// Someone playing a level who hears here that the campaign has gone on wasn't told the proper way. If this
-			// only wrote the number down, he'd stay in the old level for good, with the others waiting for him. It
-			// shouldn't ever happen, so the log says when it does.
-			bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning
-				&& NetCampaignMoveIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, netGameData.coopCampaign, netGameData.coopCampaignLevel, Campaign_LevelCount(netGameData.coopCampaign));
-
-			netGameData.coopCampaign = messagePtr->coopCampaign;
-
-			if (leftBehind)
+			// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all
+			else if (NetCampaignPlaceIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, Campaign_LevelCount(messagePtr->coopCampaign)))
 			{
-				LogErrorString("campaign: the host has gone on to another level and nobody told this machine, so it's going on now");
-				Coop_GoToPlace(messagePtr->coopCampaignLevel);
+				// Someone playing a level who hears here that the campaign has gone on wasn't told the proper way. If this
+				// only wrote the number down, he'd stay in the old level for good, with the others waiting for him. It
+				// shouldn't ever happen, so the log says when it does.
+				bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning
+					&& NetCampaignMoveIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, netGameData.coopCampaign, netGameData.coopCampaignLevel, Campaign_LevelCount(netGameData.coopCampaign));
+
+				netGameData.coopCampaign = messagePtr->coopCampaign;
+
+				if (leftBehind)
+				{
+					LogErrorString("campaign: the host has gone on to another level and nobody told this machine, so it's going on now");
+					Coop_GoToPlace(messagePtr->coopCampaignLevel);
+				}
+				else
+				{
+					netGameData.coopCampaignLevel = messagePtr->coopCampaignLevel;
+				}
 			}
 			else
 			{
-				netGameData.coopCampaignLevel = messagePtr->coopCampaignLevel;
+				netGameData.coopCampaign = kCampaignNone;
+				netGameData.coopCampaignLevel = 0;
 			}
-		}
-		else
-		{
-			netGameData.coopCampaign = kCampaignNone;
-			netGameData.coopCampaignLevel = 0;
-		}
 
-		// It picks a row in the tables of damage and health, so it's checked in the same way. A bad number gets the
-		// game's usual difficulty, not a refusal, because the rest of the description may be good.
-		netGameData.coopDifficulty = NetCampaignDifficultyIsGood(messagePtr->coopDifficulty) ? messagePtr->coopDifficulty : I_Medium;
+			// It picks a row in the tables of damage and health, so it's checked in the same way. A bad number gets the
+			// game's usual difficulty, not a refusal, because the rest of the description may be good.
+			netGameData.coopDifficulty = NetCampaignDifficultyIsGood(messagePtr->coopDifficulty) ? messagePtr->coopDifficulty : I_Medium;
 
-		// Any number at all is safe here: see shared_roll.h
-		netGameData.coopRollNumber = messagePtr->coopRollNumber;
+			// Any number at all is safe here: see shared_roll.h
+			netGameData.coopRollNumber = messagePtr->coopRollNumber;
+
+			// Any list is safe too: it only picks which names go on a line of text, and a place with nobody in it is passed over
+			netGameData.coopWaitingFor = messagePtr->coopWaitingFor;
+		}
 
 		// level number got from the session description instead
 		// netGameData.levelNumber = messagePtr->levelNumber;
@@ -5988,7 +6144,13 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 		netGameData.useCharacterKillValues = messagePtr->useCharacterKillValues;
 		netGameData.sendDecals = messagePtr->sendDecals;
 		netGameData.gameSpeed = messagePtr->gameSpeed;
-		netGameData.disableFriendlyFire = messagePtr->disableFriendlyFire;
+
+		// One of the host's rows in the co-op lobby, like the campaign above
+		if (coopLobbyState == kCoopLobbyNone)
+		{
+			netGameData.disableFriendlyFire = messagePtr->disableFriendlyFire;
+		}
+
 		netGameData.fallingDamage = messagePtr->fallingDamage;
 		netGameData.pistolInfiniteAmmo = messagePtr->pistolInfiniteAmmo;
 		netGameData.specialistPistols = messagePtr->specialistPistols;
@@ -8075,6 +8237,14 @@ static void ProcessNetMsg_StrategySynch(NETMESSAGE_STRATEGYSYNCH *messagePtr)
 	{
 		//strategies are obviously different from those on the host's machine
 		textprint("Strategy checksums don't match");
+
+		// The host's message names its switches by where they are in its list. A different list means it would name the wrong ones, so the
+		// whole message is left out. The log hears of it once a level: the checksums are only numbers, so nothing the host sent is written as text.
+		if (NetLevelCount_One(switchSyncsNotMatched))
+		{
+			LogString("net: the host's switches, doors and lifts can't be matched with this machine's (the host's checksum is " + std::to_string(messagePtr->strategyCheckSum) +
+				", this machine's " + std::to_string(netGameData.myStrategyCheckSum) + "), so in this level they won't follow the host's. The two machines may not have the same level file");
+		}
 		return;
 	}
 
@@ -8370,6 +8540,7 @@ static bool AddPartToSendBuffer(NETMESSAGETYPE type, void const *part, int size)
 
 	if (headerSize + size > left)
 	{
+		NoteSendBufferFull(headerSize + size);
 		return false;
 	}
 
@@ -12273,6 +12444,10 @@ static void CampaignFixesWhoMayBeWhat(void)
 		case kCampaignAlien:
 			CharacterTypesAvailable[NGCT_Alien] = NET_MAXPLAYERS;
 			break;
+		case kCampaignCustom:
+			CharacterTypesAvailable[Coop_CustomMapCharacter()] = NET_MAXPLAYERS;
+			CharacterSubTypesAvailable[NGSCT_General] = NET_MAXPLAYERS;
+			break;
 	}
 }
 
@@ -12957,6 +13132,34 @@ BOOL AreThereAnyLivesLeft()
 #define FONT_MARINESYMBOL   177
 #define FONT_PREDATORSYMBOL 178
 
+// How far apart the lines below are on the screen, in its own pixels: the small font is 15 high
+static const int kCoopLineStep = 20;
+
+// The score key in a campaign: each player and whether they're alive, out until the next level, or still joining. For the same 5 seconds the
+// score table shows for, and drawn from the player list every machine has, so it needs no message of its own.
+static void Coop_ShowWhoIsAlive(void)
+{
+	ShowMultiplayerScoreTimer -= RealFrameTime;
+
+	if (ShowMultiplayerScoreTimer < 0)
+	{
+		ShowMultiplayerScoreTimer = 0;
+	}
+
+	int y = ScreenDescriptorBlock.SDB_Height / 3;
+
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		char line[100];
+
+		if (CoopMenu_PlayerLine(place, line, sizeof(line)))
+		{
+			RenderStringCentred(line, ScreenDescriptorBlock.SDB_Width / 2, y, 0xffffffff);
+			y += kCoopLineStep;
+		}
+	}
+}
+
 void DoMultiplayerEndGameScreen(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *)(Player->ObStrategyBlock->SBdataptr);
@@ -13300,7 +13503,15 @@ void DoMultiplayerSpecificHud()
 	    netGameData.myGameState == NGS_EndGameScreen ||
 	    (!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer && !SameAsSinglePlayer()))
 	{
-		DoMultiplayerEndGameScreen();
+		// In a campaign the scores mean nothing, so the same key shows who's in and alive
+		if (SameAsSinglePlayer() && netGameData.myGameState != NGS_EndGameScreen)
+		{
+			Coop_ShowWhoIsAlive();
+		}
+		else
+		{
+			DoMultiplayerEndGameScreen();
+		}
 	}
 	else
 	{
@@ -13311,6 +13522,12 @@ void DoMultiplayerSpecificHud()
 
 			if (index != NET_IDNOTINPLAYERLIST) {
 				RenderStringCentred(netGameData.playerData[index].name, ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height / 2, 0xff0000ff);
+			}
+
+			// Watching someone can look like a fault, so a campaign says what it is
+			if (SameAsSinglePlayer())
+			{
+				RenderStringCentred(GetTextString(TEXTSTRING_COOP_WATCHING), ScreenDescriptorBlock.SDB_Width / 2, ScreenDescriptorBlock.SDB_Height / 2 + kCoopLineStep, 0xffffffff);
 			}
 		}
 	}
@@ -13613,19 +13830,37 @@ bool SameAsSinglePlayer(void)
 // Set when the level that's running is ending because everyone is going on to the next one.
 static bool coopLevelChangeIsDue = false;
 
+// The level just finished, for the next loading screen to name, or -1. And whether that was the last level, for the page after the game.
+static int coopFinishedPlace = -1;
+static bool coopCampaignIsOver = false;
+
 static void Coop_LevelStopsRunning(void);
 
 static void Coop_GoToPlace(int place)
 {
 	Coop_LevelStopsRunning();
+
+	// What this player carries on with, while there's still a level and a player to read it from. A message that arrives during a load finds neither.
+	if (netGameData.myGameState == NGS_Playing)
+	{
+		Campaign_NoteKit(place);
+	}
+
 	// Someone out and watching gets his own body back. If he kept watching, the next level would pull him along
 	// behind whoever he was watching, because watching works by moving the player to where they are.
 	TurnOffMultiplayerObserveMode();
+
+	// The loading screen says which level was finished, if this is the level after it
+	coopFinishedPlace = place == netGameData.coopCampaignLevel + 1 ? netGameData.coopCampaignLevel : -1;
 
 	netGameData.coopCampaignLevel = place;
 	coopLevelChangeIsDue = place < Campaign_LevelCount(netGameData.coopCampaign);
 	AvP.MainLoopRunning = 0;
 
+	if (!coopLevelChangeIsDue)
+	{
+		coopCampaignIsOver = true;
+	}
 }
 
 /*----------------------------------------------------------------------
@@ -13657,6 +13892,7 @@ static void AddNetMsg_CoopWithNothingElse(NETMESSAGETYPE type)
 
 	if (headerSize > numBytesLeft)
 	{
+		NoteSendBufferFull(headerSize);
 		return;
 	}
 
@@ -13667,6 +13903,7 @@ static void AddNetMsg_CoopWithNothingElse(NETMESSAGETYPE type)
 
 void Coop_WaitOnLoadingScreenBegins(void)
 {
+	netGameData.coopWaitingFor = 0;
 	memset(coopPlaceIsReady, 0, sizeof(coopPlaceIsReady));
 	coopGoHasCome = false;
 	coopLevelIsRunningOnHost = false;
@@ -13699,6 +13936,9 @@ bool Coop_MayStartLevel(bool keyHasBeenPressed)
 		{
 			placeHasPlayer[place] = netGameData.playerData[place].playerId != 0;
 		}
+
+		// Who everyone is waiting for, which goes out in the game description
+		netGameData.coopWaitingFor = CoopWaiting_Places(placeHasPlayer, coopPlaceIsReady, NET_MAXPLAYERS, PlayerIdInPlayerList(AvPNetID), coopThisPlayerPressed);
 
 		if (!waitedLongEnough && !NetEveryoneElseIsReady(placeHasPlayer, coopPlaceIsReady, NET_MAXPLAYERS, PlayerIdInPlayerList(AvPNetID)))
 		{
@@ -13770,6 +14010,7 @@ void AddNetMsg_CoopNextLevel(int place)
 
 	if (headerSize + messageSize > numBytesLeft)
 	{
+		NoteSendBufferFull(headerSize + messageSize);
 		return;
 	}
 
@@ -13820,6 +14061,335 @@ static void ProcessNetMsg_CoopNextLevel(NETMESSAGE_COOPNEXTLEVEL *messagePtr)
 	Coop_GoToPlace(messagePtr->place);
 }
 
+/*----------------------------------------------------------------------
+  THE CO-OP LOBBY'S TWO MESSAGES. See coop_lobby.h. On a host, coopChoice is what it last said, and on a joiner what it last took.
+  ----------------------------------------------------------------------*/
+static NETMESSAGE_COOPCAMPAIGNCHOICE coopChoice;
+static bool coopChoiceIsInUse = false;   // a host: this game came from the page, so the choice is said. A joiner: one has been taken
+static DWORD coopLastSaidAt = 0;
+static int coopMyMapAnswer = kCoopMapIsMissing;
+static int coopMyLastAnswerSaid = -1;
+static unsigned int coopChoiceLastAnswered = 0;
+
+// What a host has heard from each player, for the choice it's on. kCoopNoAnswerYet until they say.
+static int const kCoopNoAnswerYet = -1;
+static int coopMapAnswers[NET_MAXPLAYERS];
+
+static void Coop_ForgetTheAnswers(void)
+{
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		coopMapAnswers[place] = kCoopNoAnswerYet;
+	}
+}
+
+static void Coop_ForgetTheLobby(void)
+{
+	coopLobbyState = kCoopLobbyNone;
+	coopFinishedPlace = -1;
+	coopCampaignIsOver = false;
+	netGameData.coopWaitingFor = 0;
+	memset(&coopChoice, 0, sizeof(coopChoice));
+	coopChoiceIsInUse = false;
+	coopHostHasStarted = false;
+	coopMyMapAnswer = kCoopMapIsMissing;
+	coopMyLastAnswerSaid = -1;
+	coopChoiceLastAnswered = 0;
+	netGameData.coopCustomMap[0] = 0;
+	Coop_ForgetTheAnswers();
+}
+
+void Net_CoopLobbyOpens(void)
+{
+	Coop_ForgetTheLobby();
+	coopLobbyState = kCoopLobbyOpen;
+	coopChoiceIsInUse = true;
+}
+
+void Net_CoopLobbyJoined(int state)
+{
+	Coop_ForgetTheLobby();
+	coopLobbyState = CoopLobby_StateIsReal(state) ? state : kCoopLobbyNone;
+}
+
+void Net_CoopLobbyEnds(void)
+{
+	coopLobbyState = kCoopLobbyNone;
+}
+
+bool Net_CoopChoiceIsHeard(void)
+{
+	return coopChoiceIsInUse;
+}
+
+bool Net_CoopHostHasStarted(void)
+{
+	return coopHostHasStarted;
+}
+
+int Net_CoopMyMapAnswer(void)
+{
+	return coopMyMapAnswer;
+}
+
+bool Net_CoopPlayerHasTheMap(int place)
+{
+	return NetNumberFitsTable(place, NET_MAXPLAYERS) && coopMapAnswers[place] == kCoopMapIsHere;
+}
+
+// The rows, as the message says them. Everything not used stays nothing, so two choices with the same rows are the same bytes.
+static void Coop_ChoiceFromTheRows(NETMESSAGE_COOPCAMPAIGNCHOICE &choice)
+{
+	bool const isCustom = netGameData.coopCampaign == kCampaignCustom;
+
+	memset(&choice, 0, sizeof(choice));
+	choice.number = coopChoice.number;
+	choice.campaign = (unsigned char)netGameData.coopCampaign;
+	choice.place = (unsigned char)netGameData.coopCampaignLevel;
+	choice.species = (unsigned char)(isCustom ? netGameData.coopCustomSpecies : netGameData.coopCampaign - kCoopChoiceFirstCampaign);
+	choice.difficulty = (unsigned char)netGameData.coopDifficulty;
+	choice.keepKit = netGameData.coopKeepKit ? 1 : 0;
+	choice.friendlyFireOff = netGameData.disableFriendlyFire ? 1 : 0;
+	choice.started = coopHostHasStarted ? 1 : 0;
+	choice.rollNumber = netGameData.coopRollNumber;
+
+	if (isCustom)
+	{
+		memcpy(choice.mapName, netGameData.coopCustomMap, sizeof(choice.mapName));
+		choice.mapSize = netGameData.coopCustomMapSize;
+		memcpy(choice.mapSum, netGameData.coopCustomMapSum, sizeof(choice.mapSum));
+	}
+}
+
+static void AddNetMsg_CoopCampaignChoice(void)
+{
+	int const headerSize = sizeof(NETMESSAGEHEADER);
+	int const messageSize = sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE);
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if (headerSize + messageSize > numBytesLeft)
+	{
+		return;
+	}
+
+	NETMESSAGEHEADER *const headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+	endSendBuffer += headerSize;
+	NETMESSAGE_COOPCAMPAIGNCHOICE *const messagePtr = (NETMESSAGE_COOPCAMPAIGNCHOICE *)endSendBuffer;
+	endSendBuffer += messageSize;
+
+	headerPtr->type = (unsigned char)NetMT_CoopCampaignChoice;
+	*messagePtr = coopChoice;
+}
+
+void Net_CoopHostSays(void)
+{
+	if (AvP.Network != I_Host || !coopChoiceIsInUse)
+	{
+		return;
+	}
+
+	NETMESSAGE_COOPCAMPAIGNCHOICE now;
+
+	Coop_ChoiceFromTheRows(now);
+
+	// Anything different is a new choice with a higher number, and what anyone said about the last one no longer counts
+	if (memcmp(&now, &coopChoice, sizeof(now)) != 0)
+	{
+		now.number = coopChoice.number + 1;
+		coopChoice = now;
+		Coop_ForgetTheAnswers();
+	}
+	else if (timeGetTime() - coopLastSaidAt < 1000)
+	{
+		return;
+	}
+
+	coopLastSaidAt = timeGetTime();
+	AddNetMsg_CoopCampaignChoice();
+}
+
+void Net_CoopHostStarts(void)
+{
+	coopHostHasStarted = true;
+	coopLobbyState = kCoopLobbyNone;
+
+	Net_CoopHostSays();
+
+	// Now, because a load is about to begin, and joiners are waiting on this word
+	NetSendMessagesNow();
+}
+
+// What this joiner can say about the map the host has chosen. A stock campaign's levels are on every machine.
+static int Coop_WorkOutMyMapAnswer(void)
+{
+	if (coopChoice.campaign != kCoopChoiceCustomCampaign)
+	{
+		return kCoopMapIsHere;
+	}
+
+	unsigned int size = 0;
+	unsigned char sum[kCoopMapSumBytes] = { 0 };
+
+	// Only among the maps this machine listed itself. The host's words are never made into a path.
+	bool const haveIt = CustomMaps_SizeAndSum(CustomMaps_Named(coopChoice.mapName, sizeof(coopChoice.mapName)), &size, sum);
+
+	return CoopMap_Answer(haveIt, size, sum, coopChoice.mapSize, coopChoice.mapSum);
+}
+
+static void ProcessNetMsg_CoopCampaignChoice(NETMESSAGE_COOPCAMPAIGNCHOICE *messagePtr)
+{
+	// Once a joiner is in the game it has what it needs. This is still said, for anyone arriving late.
+	if (AvP.Network != I_Peer || coopLobbyState == kCoopLobbyNone)
+	{
+		return;
+	}
+
+	switch (CoopChoice_Step(messagePtr->number, coopChoiceIsInUse, coopChoice.number, coopHostHasStarted))
+	{
+		case kCoopChoiceIsARepeat:
+			return;
+		case kCoopChoiceIsOlder:
+			Net_NoteRefused(kCoopRefusedOlder);
+			return;
+		case kCoopChoiceIsAfterTheStart:
+			Net_NoteRefused(kCoopRefusedAfterStart);
+			return;
+		default:
+			break;
+	}
+
+	// A custom map is one level. Campaign_LevelCount only says so once a map is chosen, and this is what would choose it.
+	int const levels = messagePtr->campaign == kCoopChoiceCustomCampaign ? 1 : Campaign_LevelCount(messagePtr->campaign);
+	const char *const why = CoopChoice_WhyRefused(*messagePtr, levels);
+
+	if (why)
+	{
+		Net_NoteRefused(why);
+		return;
+	}
+
+	// It's good, all of it, so now it's this machine's copy of the host's rows
+	coopChoice = *messagePtr;
+	coopChoiceIsInUse = true;
+	coopHostHasStarted = messagePtr->started != 0;
+
+	netGameData.coopCampaign = messagePtr->campaign;
+	netGameData.coopCampaignLevel = messagePtr->place;
+	netGameData.coopCustomSpecies = messagePtr->species;
+	netGameData.coopDifficulty = messagePtr->difficulty;
+	netGameData.coopKeepKit = messagePtr->keepKit;
+	netGameData.disableFriendlyFire = messagePtr->friendlyFireOff;
+	netGameData.coopRollNumber = messagePtr->rollNumber;
+
+	// The rule says the name ends inside its field, and this makes sure of it
+	memcpy(netGameData.coopCustomMap, messagePtr->mapName, sizeof(netGameData.coopCustomMap));
+	netGameData.coopCustomMap[sizeof(netGameData.coopCustomMap) - 1] = 0;
+	netGameData.coopCustomMapSize = messagePtr->mapSize;
+	memcpy(netGameData.coopCustomMapSum, messagePtr->mapSum, sizeof(netGameData.coopCustomMapSum));
+
+	coopMyMapAnswer = Coop_WorkOutMyMapAnswer();
+}
+
+static void AddNetMsg_CoopMapAnswer(void)
+{
+	int const headerSize = sizeof(NETMESSAGEHEADER);
+	int const messageSize = sizeof(NETMESSAGE_COOPMAPANSWER);
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if (headerSize + messageSize > numBytesLeft)
+	{
+		return;
+	}
+
+	NETMESSAGEHEADER *const headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+	endSendBuffer += headerSize;
+	NETMESSAGE_COOPMAPANSWER *const messagePtr = (NETMESSAGE_COOPMAPANSWER *)endSendBuffer;
+	endSendBuffer += messageSize;
+
+	headerPtr->type = (unsigned char)NetMT_CoopMapAnswer;
+	messagePtr->number = coopChoice.number;
+	messagePtr->answer = (unsigned char)coopMyMapAnswer;
+}
+
+void Net_CoopJoinerSays(void)
+{
+	// Nothing to answer yet, or nobody is listening any more
+	if (AvP.Network != I_Peer || coopLobbyState != kCoopLobbyOpen || !coopChoiceIsInUse || coopHostHasStarted)
+	{
+		return;
+	}
+
+	DWORD const kSayAnswerEveryMilliseconds = 2000;
+
+	// A host flicking along a row makes a new choice each time, and the host only takes so many answers a second. The last answer always
+	// gets said, on a later frame, so this only thins them out.
+	DWORD const kLeastMillisecondsBetweenAnswers = 500;
+
+	DWORD const sinceLast = timeGetTime() - coopLastSaidAt;
+	bool const hasNewsToSay = coopMyLastAnswerSaid != coopMyMapAnswer || coopChoiceLastAnswered != coopChoice.number;
+
+	if (sinceLast < kLeastMillisecondsBetweenAnswers || (!hasNewsToSay && sinceLast < kSayAnswerEveryMilliseconds))
+	{
+		return;
+	}
+
+	coopLastSaidAt = timeGetTime();
+	coopMyLastAnswerSaid = coopMyMapAnswer;
+	coopChoiceLastAnswered = coopChoice.number;
+	AddNetMsg_CoopMapAnswer();
+}
+
+static void ProcessNetMsg_CoopMapAnswer(NETMESSAGE_COOPMAPANSWER *messagePtr, NetID senderId)
+{
+	// A joiner never hears these, and they aren't passed on. One that crosses the host's Start on its way has nothing left to say.
+	if (AvP.Network != I_Host || coopHostHasStarted)
+	{
+		return;
+	}
+
+	int const place = PlayerIdInPlayerList(senderId);
+	const char *const why = CoopAnswer_WhyRefused(*messagePtr, coopLobbyState == kCoopLobbyOpen, place != NET_IDNOTINPLAYERLIST, coopChoice.number);
+
+	if (why)
+	{
+		Net_NoteRefused(why);
+		return;
+	}
+
+	// An answer to an earlier choice says nothing about this one
+	if (messagePtr->number == coopChoice.number)
+	{
+		coopMapAnswers[place] = messagePtr->answer;
+	}
+}
+
+void Net_CoopTakeTheCampaign(void)
+{
+	netGameData.gameType = NGT_Coop;
+	netGameData.gameSpeed = NETGAMESPEED_100PERCENT;
+	TimeScale = ONE_FIXED;
+
+	// The loading screen and the score page show a custom map by this name. The copy reads as many bytes as the name it goes into
+	// holds, so the map's name has to be at least that long.
+	static_assert(sizeof(netGameData.customLevelName) <= sizeof(netGameData.coopCustomMap), "the copy would read past the end of the map's name");
+	memcpy(netGameData.customLevelName, netGameData.coopCustomMap, sizeof(netGameData.customLevelName));
+	netGameData.customLevelName[sizeof(netGameData.customLevelName) - 1] = 0;
+
+	Campaign_SetDifficulty();
+	Coop_TakeCampaignSpecies();
+
+	// The page opened the game before anyone had chosen, so this machine's own place on the list has to catch up
+	netGameData.myCharacterSubType = NGSCT_General;
+
+	int const myPlace = PlayerIdInPlayerList(AvPNetID);
+
+	if (myPlace != NET_IDNOTINPLAYERLIST)
+	{
+		netGameData.playerData[myPlace].characterType = netGameData.myCharacterType;
+		netGameData.playerData[myPlace].characterSubType = netGameData.myCharacterSubType;
+	}
+}
+
 void Coop_TakeCampaignSpecies(void)
 {
 	switch (netGameData.coopCampaign)
@@ -13836,9 +14406,49 @@ void Coop_TakeCampaignSpecies(void)
 			netGameData.myCharacterType = netGameData.myNextCharacterType = NGCT_Alien;
 			AvP.PlayerType = I_Alien;
 			break;
+		case kCampaignCustom:
+			netGameData.myCharacterType = netGameData.myNextCharacterType = Coop_CustomMapCharacter();
+			AvP.PlayerType = netGameData.coopCustomSpecies == 1 ? I_Predator : netGameData.coopCustomSpecies == 2 ? I_Alien : I_Marine;
+			break;
 		default:
 			break;
 	}
+}
+
+bool Coop_TheCampaignIsOver(void)
+{
+	return coopCampaignIsOver;
+}
+
+// "Level complete: Derelict", on the loading screen of the level after it. False if this loading screen isn't one.
+bool Coop_LevelCompleteLine(char *line, size_t room)
+{
+	if (room == 0 || coopFinishedPlace < 0 || !SameAsSinglePlayer() || AvP.Network == I_No_Network)
+	{
+		return false;
+	}
+
+	_snprintf(line, room - 1, "%s %s", GetTextString(TEXTSTRING_COOP_LEVEL_COMPLETE), CoopMenu_LevelName(netGameData.coopCampaign, coopFinishedPlace));
+	line[room - 1] = 0;
+	return true;
+}
+
+// "Waiting for: Hicks", once this player has pressed a key and is waiting for others
+bool Coop_WaitingForLine(char *line, size_t room)
+{
+	if (!coopThisPlayerPressed)
+	{
+		return false;
+	}
+
+	const char *names[NET_MAXPLAYERS];
+
+	for (int place = 0; place < NET_MAXPLAYERS; place++)
+	{
+		names[place] = netGameData.playerData[place].playerId != 0 ? netGameData.playerData[place].name : NULL;
+	}
+
+	return CoopWaiting_Line(line, room, GetTextString(TEXTSTRING_COOP_WAITING_FOR), netGameData.coopWaitingFor, names, NET_PLAYERNAMELENGTH, PlayerIdInPlayerList(AvPNetID));
 }
 
 bool Coop_LevelChangeIsDue(void)
@@ -13854,6 +14464,7 @@ void Coop_LevelChangeHasStarted(void)
 	InitialiseSendMessageBuffer();
 
 	netGameData.myGameState = NGS_Joining;
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.stateCheckTimeDelay = 0;
 	netGameData.GameTimeElapsed = 0;
@@ -13908,8 +14519,14 @@ static void AddNetMsg_LevelEvent(NETMESSAGETYPE type, const char *source)
 	int const messageSize = sizeof(NETMESSAGE_LEVELEVENT);
 	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
 
-	if (netGameData.myGameState != NGS_Playing || headerSize + messageSize > numBytesLeft)
+	if (netGameData.myGameState != NGS_Playing)
 	{
+		return;
+	}
+
+	if (headerSize + messageSize > numBytesLeft)
+	{
+		NoteSendBufferFull(headerSize + messageSize);
 		return;
 	}
 

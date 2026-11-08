@@ -26,10 +26,13 @@ enum
 	kCampaignNone = 0,
 	kCampaignMarine,
 	kCampaignPredator,
-	kCampaignAlien
+	kCampaignAlien,
+
+	// One custom map, played the same way. It's only a campaign once a co-op lobby has chosen a map: see Campaign_LevelCount.
+	kCampaignCustom
 };
 
-// How many levels a campaign has. 0 for a number that isn't a campaign.
+// How many levels a campaign has. 0 for a number that isn't a campaign, and 0 for a custom map when no lobby has chosen one.
 int Campaign_LevelCount(int campaign);
 
 // The level at this place in a campaign, or -1 if there's no such place.

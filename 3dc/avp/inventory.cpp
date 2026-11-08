@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a player's kit in a co-op campaign can carry on from the last level. Credit: Melanikus and Bobblen (the kept kit follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a game that plays as single player, the guns and ammunition a player can pick up are single player's
 //   three more marine classes start with their guns, specialists have a sidearm, a Predator has the staff if it's allowed, and the sniper rifle stays out of network games
@@ -680,6 +682,9 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
     playerStatusPtr->GrapplingHookEnabled = StartingEquipment.predator_grappling_hook;	
 
 	LoadAllWeapons(PlayerStatusPtr);
+
+	// In a co-op campaign with Keep chosen, what this player carried out of the last level. It comes last, on top of what the level gives.
+	Campaign_GiveKeptKit(playerStatusPtr);
 }
 
 

@@ -47,7 +47,15 @@ struct ENetPeer
 	ENetAddress address;
 	void *data;
 	ENetPeerState state;
+	enet_uint32 packetsSent;              // these five, for the network's numbers in the log (net_stats.h) and a tester's mark
+	enet_uint32 packetsLost;
+	enet_uint32 packetLoss;
+	enet_uint32 roundTripTime;
+	enet_uint32 roundTripTimeVariance;
 };
+
+// The real one's loss is a share of this
+enum { ENET_PEER_PACKET_LOSS_SCALE = (1 << 16) };
 
 struct ENetHost
 {
@@ -58,6 +66,8 @@ struct ENetHost
 	enet_uint32 olderConnectsRefused;   // our ENet patch 006: CONNECTs from an older version, told no
 	ENetPeer *peers;
 	size_t peerCount;
+	enet_uint32 totalSentData;            // these two, for the network's numbers in the log (net_stats.h)
+	enet_uint32 totalReceivedData;
 };
 
 struct ENetEvent
@@ -65,6 +75,7 @@ struct ENetEvent
 	ENetEventType type;
 	ENetPeer *peer;
 	ENetPacket *packet;
+	enet_uint32 data;
 };
 
 int enet_initialize();

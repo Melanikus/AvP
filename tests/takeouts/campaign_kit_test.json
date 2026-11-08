@@ -1,0 +1,338 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a player dead at the end keeps their kit",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "note.noted = playerIsAlive;",
+					"to": "note.noted = true;"
+				}
+			]
+		},
+		{
+			"name": "the note forgets which campaign it is for",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\tnote.campaign = campaign;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the note forgets which level it is for",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\tnote.place = place;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kit is given with Reset chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "return keepIsChosen && note.noted",
+					"to": "return note.noted"
+				}
+			]
+		},
+		{
+			"name": "a kit is given with nothing noted",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "return keepIsChosen && note.noted && ",
+					"to": "return keepIsChosen && "
+				}
+			]
+		},
+		{
+			"name": "a kit is given in another campaign",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": " && note.campaign == campaign && ",
+					"to": " && "
+				}
+			]
+		},
+		{
+			"name": "a kit is given on another level",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "note.campaign == campaign && note.place == place;",
+					"to": "note.campaign == campaign;"
+				}
+			]
+		},
+		{
+			"name": "the larger is always the level's",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "return a > b ? a : b;",
+					"to": "return a;"
+				}
+			]
+		},
+		{
+			"name": "the larger is always what was kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "return a > b ? a : b;",
+					"to": "return b;"
+				}
+			]
+		},
+		{
+			"name": "the walk goes on past the end of the level's list",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "int const guns = level.guns < kept.guns ? level.guns : kept.guns;",
+					"to": "int const guns = kept.guns;"
+				}
+			]
+		},
+		{
+			"name": "the walk goes on past the end of what was kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "int const guns = level.guns < kept.guns ? level.guns : kept.guns;",
+					"to": "int const guns = level.guns;"
+				}
+			]
+		},
+		{
+			"name": "a slot holding another gun takes the old gun's numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tif (now.weapon != had.weapon)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a gun this level doesn't allow is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tif (now.possessed < 0)\n\t\t{\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a gun carried isn't carried on",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tif (had.possessed > 0)\n\t\t{\n\t\t\tnow.possessed = 1;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a gun the level gives is taken away because it was lost",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tif (had.possessed > 0)\n\t\t{\n\t\t\tnow.possessed = 1;\n\t\t}\n",
+					"to": "\t\tnow.possessed = had.possessed;\n"
+				}
+			]
+		},
+		{
+			"name": "rounds aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tnow.primaryRounds = CampaignKit_Larger(now.primaryRounds, had.primaryRounds);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "second rounds aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tnow.secondaryRounds = CampaignKit_Larger(now.secondaryRounds, had.secondaryRounds);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "magazines aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tnow.primaryMagazines = CampaignKit_Larger(now.primaryMagazines, had.primaryMagazines);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "second magazines aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tnow.secondaryMagazines = CampaignKit_Larger(now.secondaryMagazines, had.secondaryMagazines);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "left-over rounds aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tnow.leftoverRounds = CampaignKit_Larger(now.leftoverRounds, had.leftoverRounds);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the launcher's rounds aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tlevel.launcherRounds[kind] = CampaignKit_Larger(level.launcherRounds[kind], kept.launcherRounds[kind]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the launcher's magazines aren't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.h",
+					"from": "\t\tlevel.launcherMagazines[kind] = CampaignKit_Larger(level.launcherMagazines[kind], kept.launcherMagazines[kind]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing stops the build if a player gets more slots",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.cpp",
+					"from": "static_assert(MAX_NO_OF_WEAPON_SLOTS <= kCampaignKitMostGuns, \"a kit has to have room for every slot a player has: raise kCampaignKitMostGuns\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead player is noted as alive",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.cpp",
+					"from": "CampaignKit_Note(note, Campaign_PlayerIsAliveAtTheEnd(), netGameData.coopCampaign, place, kit);",
+					"to": "CampaignKit_Note(note, true, netGameData.coopCampaign, place, kit);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's own ammunition doesn't come back",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.cpp",
+					"from": "\tGuns_GiveBackOwnStates();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a kept gun starts empty",
+			"changes": [
+				{
+					"file": "3dc/avp/campaign_kit.cpp",
+					"from": "\tLoadAllWeapons(playerStatusPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kit is never given",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "\tCampaign_GiveKeptKit(playerStatusPtr);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kit is never noted",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tCampaign_NoteKit(place);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kit is noted during a load, with no player to read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (netGameData.myGameState == NGS_Playing)\n\t{\n\t\tCampaign_NoteKit(place);\n\t}\n",
+					"to": "\tCampaign_NoteKit(place);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new game hosted starts with the last game's kit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tLevelEvents_NewLevel();\n\tCampaign_ForgetKit();\n\tCoop_ForgetTheLobby();\n",
+					"to": "\tLevelEvents_NewLevel();\n\tCoop_ForgetTheLobby();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new game joined starts with the last game's kit",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tLevelEvents_NewLevel();\n\tCampaign_ForgetKit();\n\tnetGameData.coopKeepKit = 0;\n",
+					"to": "\tLevelEvents_NewLevel();\n\tnetGameData.coopKeepKit = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner keeps the last game's choice",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tCampaign_ForgetKit();\n\tnetGameData.coopKeepKit = 0;\n\tCoop_ForgetTheLobby();\n\tnetGameData.coopCampaign",
+					"to": "\tCampaign_ForgetKit();\n\tCoop_ForgetTheLobby();\n\tnetGameData.coopCampaign"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game's end keeps the host's choice",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tnetGameData.coopKeepKit = 0;\n\tCampaign_ForgetKit();\n",
+					"to": "\tCampaign_ForgetKit();\n"
+				}
+			]
+		}
+	]
+}

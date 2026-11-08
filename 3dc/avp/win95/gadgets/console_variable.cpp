@@ -1,6 +1,9 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   temporary text objects are let go automatically when the code using them ends, instead of by hand
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a typed number is kept in range before it's worked out, so no number anyone types can go wrong in the sum (console_value.h)
+//   a variable can be refused in some games, such as TIMESCALE in a network game
 /*******************************************************************
  *
  *    DESCRIPTION: 	consvar.cpp
@@ -14,6 +17,9 @@
 /* Includes ********************************************************/
 #include "3dc.h"
 #include "console_variable.hpp"
+#include "console_value.h"
+
+#include <stdlib.h>
 #include "strutil.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -257,8 +263,9 @@ ConsoleVariable::~ConsoleVariable()
 				}
 				else
 				{
-					// interpret as int
-					int NewValue = atoi(pProjCh_Search);
+					// interpret as int. strtoll stops at the largest or smallest number it can hold, where atoi's answer for digits that go on
+					// too long isn't defined
+					int NewValue = ConsoleValue_ToInt(strtoll(pProjCh_Search, NULL, 10));
 
 					oi()->ProcessSetValue( NewValue );
 
@@ -308,7 +315,9 @@ ConsoleVariable :: ConsoleVariable
 			// constructor for the SCString adds the required reference
 	),
 	MinVal(MinVal_New),
-	MaxVal(MaxVal_New)
+	MaxVal(MaxVal_New),
+	pRefusedNow(0),
+	pProjCh_RefusedWhy(0)
 {
 	/* PRECONDITION */
 	{
@@ -362,6 +371,11 @@ void ConsoleVariable :: ProcessSetValue
 	// used by command processor; sets the value and outputs
 	// a message
 
+	if (IsRefusedNow())
+	{
+		return;
+	}
+
 	int OldValue = GetValue();
 
 	SetValue( Val_New );
@@ -377,11 +391,34 @@ void ConsoleVariable :: ProcessSetValue
 	// used by command processor; sets the value and outputs
 	// a message
 
+	if (IsRefusedNow())
+	{
+		return;
+	}
+
 	int OldValue = GetValue();
 
 	SetValue( Val_New );
 
 	OutputResultOfSetValue( OldValue );
+}
+
+void ConsoleVariable :: RefuseWhen(bool (*refusedNow)(void), ProjChar* pProjCh_Why)
+{
+	pRefusedNow = refusedNow;
+	pProjCh_RefusedWhy = pProjCh_Why;
+}
+
+bool ConsoleVariable :: IsRefusedNow(void)
+{
+	if (pRefusedNow == 0 || !pRefusedNow())
+	{
+		return false;
+	}
+
+	RefHolder<SCString> pSCString_Out(new SCString(pProjCh_RefusedWhy ? pProjCh_RefusedWhy : (ProjChar*)"NOT NOW"));
+	pSCString_Out -> SendToScreen();
+	return true;
 }
 
 void ConsoleVariable :: OutputResultOfSetValue( int OldVal )
@@ -484,20 +521,13 @@ void ConsoleVariable_Simple_Int :: SetValue(int Val_New)
 
 void ConsoleVariable_Simple_Int :: SetValue(float Val_New_F )
 {
-	int Val_New = int(Val_New_F);
+	// Kept in range while it's still a decimal, then made whole. "Not a number" leaves the value as it was.
+	int Val_New;
 
-	// Ensure bounded:
-	if ( Val_New > MaxVal )
+	if (ConsoleValue_FromDecimal(Val_New_F, 1.0, MinVal, MaxVal, &Val_New))
 	{
-		Val_New = MaxVal;
+		theValue = Val_New;
 	}
-
-	if ( Val_New < MinVal )
-	{
-		Val_New = MinVal;
-	}
-
-	theValue = Val_New;
 }
 
 // private:
@@ -591,38 +621,19 @@ int ConsoleVariable_Simple_FixP :: GetValue(void) const
 
 void ConsoleVariable_Simple_FixP :: SetValue(int Val_New)
 {
-	Val_New *= ONE_FIXED;
-
-	// Ensure bounded:
-	if ( Val_New > MaxVal )
-	{
-		Val_New = MaxVal;
-	}
-
-	if ( Val_New < MinVal )
-	{
-		Val_New = MinVal;
-	}
-
-	theValue = Val_New;
+	// A whole number of units times ONE_FIXED, worked out in numbers big enough for any int, then kept in range
+	theValue = ConsoleValue_WholeAsFixed(Val_New, MinVal, MaxVal);
 }
 
 void ConsoleVariable_Simple_FixP :: SetValue(float Val_New_F )
 {
-	int Val_New = int(Val_New_F * ONE_FIXED);
+	// Times ONE_FIXED and kept in range while it's still a decimal, then made whole. "Not a number" leaves the value as it was.
+	int Val_New;
 
-	// Ensure bounded:
-	if ( Val_New > MaxVal )
+	if (ConsoleValue_FromDecimal(Val_New_F, ONE_FIXED, MinVal, MaxVal, &Val_New))
 	{
-		Val_New = MaxVal;
+		theValue = Val_New;
 	}
-
-	if ( Val_New < MinVal )
-	{
-		Val_New = MinVal;
-	}
-
-	theValue = Val_New;
 }
 
 // private:

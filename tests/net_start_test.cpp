@@ -65,13 +65,22 @@ void Con_PrintDebugMessage(const std::string &)
 {
 }
 
-int Config_GetInt(const std::string &, const std::string &, int defaultValue)
+// What the test's settings file says. A setting that isn't in it gets the game's own number, as with a file that doesn't have the line.
+static std::map<std::string, int> settingsFile;
+
+int Config_GetInt(const std::string &, const std::string &variable, int defaultValue)
 {
-	return defaultValue;
+	const std::map<std::string, int>::const_iterator found = settingsFile.find(variable);
+
+	return found == settingsFile.end() ? defaultValue : found->second;
 }
 
-void NewOnScreenMessage(char *)
+// What the game put on the screen, so a test can see it never shows an address
+static std::vector<std::string> screenLines;
+
+void NewOnScreenMessage(char *message)
 {
+	screenLines.push_back(message ? message : "");
 }
 
 void MinimalNetCollectMessages()
@@ -142,6 +151,28 @@ static bool lastAskedFromTheHost = false;
 static size_t lastAskedSize = 0;
 
 static bool clientCanAfford = true;
+
+// The co-op lobby's state, which pldnet.cpp keeps. It's here so a check can say a lobby is open.
+static int lobbyStateForTheTest = 0;
+
+int Net_CoopLobbyState(void)
+{
+	return lobbyStateForTheTest;
+}
+
+void Net_CoopLobbyJoined(int state)
+{
+	lobbyStateForTheTest = state;
+}
+
+bool Net_MessageIsForTheHostAlone(const uint8_t *, size_t)
+{
+	return false;
+}
+
+void Net_NoteRefused(const char *)
+{
+}
 
 bool Net_ClientCanAfford(const uint8_t *, size_t, size_t)
 {
@@ -285,7 +316,11 @@ static void EverythingArrives()
 	packetsOnTheirWay.clear();
 }
 
-ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t channelLimit, enet_uint32, enet_uint32)
+// The speeds the last host was made with, in bytes a second
+static enet_uint32 hostIncomingBandwidth = 0;
+static enet_uint32 hostOutgoingBandwidth = 0;
+
+ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth)
 {
 	if (hostCreateFails)
 	{
@@ -293,6 +328,8 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	}
 
 	hostsCreated++;
+	hostIncomingBandwidth = incomingBandwidth;
+	hostOutgoingBandwidth = outgoingBandwidth;
 	connectionsAllowed = peerCount;
 	channelsAllowed = channelLimit;
 
@@ -587,11 +624,12 @@ int enet_address_set_host_ip(ENetAddress *address, const char *)
 	return 0;
 }
 
-int enet_address_get_host_ip(const ENetAddress *, char *hostName, size_t nameLength)
+// Writes the address as ENet would, four numbers with dots, so that any line made from it would show it
+int enet_address_get_host_ip(const ENetAddress *address, char *hostName, size_t nameLength)
 {
 	if (nameLength > 0)
 	{
-		hostName[0] = 0;
+		snprintf(hostName, nameLength, "%u.%u.%u.%u", address->host & 0xFF, (address->host >> 8) & 0xFF, (address->host >> 16) & 0xFF, address->host >> 24);
 	}
 
 	return 0;
@@ -1595,6 +1633,36 @@ static void TestARealClientGetsIn()
 	EndTheGame();
 }
 
+// What the host's screen says when someone connects. Players stream and share pictures of their screens, so the other machine's address
+// and port are never shown there, only which connection it is (SCREENIP-1; the user's ruling: no IPs).
+static void TestNoAddressOnScreen()
+{
+	HostWithClients(0);
+	screenLines.clear();
+
+	peers[3].address.host = 0x1400A8C0;   // 192.168.0.20, as ENet keeps it: the first of the four numbers in the lowest byte
+	peers[3].address.port = 23513;
+	Connects(3);
+	TakeEverything();
+
+	bool saidWhichConnection = false;
+	bool showedTheAddress = false;
+
+	for (size_t i = 0; i < screenLines.size(); i++)
+	{
+		saidWhichConnection = saidWhichConnection || screenLines[i] == "A player is joining (connection 4)";
+		showedTheAddress = showedTheAddress || Has(screenLines[i], "192") || Has(screenLines[i], "168") || Has(screenLines[i], "23513");
+	}
+
+	Check(saidWhichConnection, "the host's screen says a player is joining, and as which connection");
+	Check(!showedTheAddress, "and never their address or port");
+	Check(!Has(ReadSourceFile("3dc/networking.cpp"), "enet_address_get_host_ip("), "and the network code never turns an address into text at all");
+
+	peers[3].address.host = 0;
+	peers[3].address.port = 0;
+	EndTheGame();
+}
+
 static void TestLettingPeopleIn()
 {
 	playersInGame.clear();
@@ -2172,7 +2240,7 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(names.size() == 63, "there are 63 kinds of part: " + std::to_string(names.size()));
+	Check(names.size() == 65, "there are 65 kinds of part: " + std::to_string(names.size()));
 
 	int inTheTable = 0, sameLength = 0, inOrder = 0;
 	std::string::size_type place = 0;
@@ -2227,10 +2295,10 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(inTheTable == 63, "every one of them is in the table");
-	Check(inOrder == 63, "in the game's order");
-	Check(sameLength == 63, "and each has the length the code that reads it steps by:" + mismatched);
-	Check(CountOf(table, "{ NetMT_") == 63, "and there's nothing else in it");
+	Check(inTheTable == 65, "every one of them is in the table");
+	Check(inOrder == 65, "in the game's order");
+	Check(sameLength == 65, "and each has the length the code that reads it steps by:" + mismatched);
+	Check(CountOf(table, "{ NetMT_") == 65, "and there's nothing else in it");
 
 	// What a message can make. The kind and the weapon are its own numbers, and a shape this level didn't load comes back as -1.
 	std::string const makeGhost = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
@@ -2314,7 +2382,7 @@ static void TestTheTableOfMessageParts()
 
 	// Who may say what. These are the ones whoever hears them just believes.
 	std::vector<std::string> const onlyTheHost = { "NetMT_CoopGo", "NetMT_CoopNextLevel", "NetMT_LevelEvent", "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores",
-		"NetMT_NpcState", "NetMT_NpcXenoDeltas", "NetMT_NpcKilled", "NetMT_NpcSound", "NetMT_NpcThrownObject", "NetMT_LiftState" };
+		"NetMT_NpcState", "NetMT_NpcXenoDeltas", "NetMT_NpcKilled", "NetMT_NpcSound", "NetMT_NpcThrownObject", "NetMT_LiftState", "NetMT_CoopCampaignChoice" };
 	int rightOnes = 0;
 
 	for (std::string const &name : onlyTheHost)
@@ -2324,8 +2392,8 @@ static void TestTheTableOfMessageParts()
 		rightOnes += (at != std::string::npos && Has(table.substr(at, table.find('\n', at) - at), ", true }")) ? 1 : 0;
 	}
 
-	Check(rightOnes == 33, "33 kinds can only come from the host");
-	Check(CountOf(table, ", true }") == 33, "and no others");
+	Check(rightOnes == 34, "34 kinds can only come from the host");
+	Check(CountOf(table, ", true }") == 34, "and no others");
 
 	// Numbers in a message that are used as places in memory. Whichever machine sent them, they could be anything.
 	Check(Has(Between(pldnet, "static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)\n{", "static void ProcessNetMsg_ScoreChange("), "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))\n\t{\n\t\treturn;"), "a player's scores have to name a place in the list");
@@ -2356,7 +2424,7 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "static uint8_t msg[kMostMessageBytes];"), "the buffer a message is read into has room for the most a message can be");
 	Check(CountOf(pldnet, "NetNumberFitsTable(") >= 3 && Has(pldnet, "!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES)"), "a damage message naming ammunition that isn't in the table is ignored");
 	Check(CountOf(pldnet, "if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))") == 2, "in the other two damage messages as well");
-	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))\n\t{\n\t\tcase kNetPartsGood:\n\t\t\treturn true;"), "the whole message is walked, from after its header");
+	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))\n\t{\n\t\tcase kNetPartsGood:\n\t\t\treturn Net_CoopLobbyTakesThis(message, size);"), "the whole message is walked, from after its header");
 	Check(Has(pldnet, "if (size < kMessageHeaderSize)\n\t{\n\t\tNet_NoteRefused("), "and one too short to have a header is refused");
 	Check(Has(pldnet, "return NetChatPartLength(part, bytesLeft);"), "a chat line has to end inside the message");
 	Check(Has(reading, "// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.\n\t\t\t\treturn;"), "and a part nobody knows stops the reading");
@@ -2456,7 +2524,52 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 110;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 112;"), "and an older game can tell this one isn't what it speaks");
+
+	// The log lines a tester's log needs from pldnet.cpp. A message left out for want of room says so from every place it can be left out.
+	Check(Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tNoteSendBufferFull(numBytesReqd);") && !Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tLOCALASSERT(1 == 0);"), "SOURCE: a message left out of a full frame is in the log, from every room check");
+	Check(Has(pldnet, "if (headerSize + size > left)\n\t{\n\t\tNoteSendBufferFull(headerSize + size);"), "SOURCE: and from the one the NPCs' messages use");
+	Check(Has(pldnet, "\t\tif (NetLevelCount_One(switchSyncsNotMatched))\n\t\t{\n\t\t\tLogString(\"net: the host's switches, doors and lifts can't be matched"), "SOURCE: the host's switches that can't be matched are in the log, once a level");
+	Check(Has(pldnet, "void EndAVPNetGame(void)\n{\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: and how many, when the game ends");
+	Check(Has(pldnet, "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: or the next level starts");
+}
+
+// The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
+// to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
+// The three numbers the settings file holds, one per line, as a player's file has them
+static void StartAgainWith(int port, int incoming, int outgoing)
+{
+	EndTheGame();
+	Net_Deinitialise();
+	settingsFile.clear();
+	settingsFile["PortNumber"] = port;
+	settingsFile["IncomingBandwidth"] = incoming;
+	settingsFile["OutgoingBandwidth"] = outgoing;
+	logLines.clear();
+	Net_Initialise();
+}
+
+static void TestTheSettingsFile()
+{
+	StartAgainWith(0, -5, -1);
+	Check(LogHas("net: the settings file's PortNumber is 0, which the game can't use, so it uses 23513"), "a port of 0 isn't used, and the log says so");
+	Check(LogHas("net: the settings file's IncomingBandwidth is -5, which the game can't use, so it uses 0"), "nor a speed below nothing coming in");
+	Check(LogHas("net: the settings file's OutgoingBandwidth is -1, which the game can't use, so it uses 0"), "nor going out");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "and a host plays on the game's own port");
+	Check(hostIncomingBandwidth == 0 && hostOutgoingBandwidth == 0, "with as much speed as there is, not four thousand million bytes a second");
+
+	StartAgainWith(23514, 0, 0);
+	Check(LogHas("net: the settings file's PortNumber is 23514, which the game can't use, so it uses 23513"), "the port a search uses isn't used for the game as well");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "so the host still opens both");
+
+	StartAgainWith(65536, 0, 0);
+	Check(LogHas("net: the settings file's PortNumber is 65536, which the game can't use, so it uses 23513"), "nor a port past the last there is");
+
+	StartAgainWith(30000, 20000, 10000);
+	Check(std::none_of(logLines.begin(), logLines.end(), [](std::string const &line) { return line.rfind("net: the settings file's", 0) == 0; }), "a port and speeds the game can use are used, with nothing in the log");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 30000, "and the host plays on it");
+	Check(hostIncomingBandwidth == 20000 && hostOutgoingBandwidth == 10000, "with the speeds the file says");
+	EndTheGame();
 }
 
 // Called last: every message from every test above has been looked at by now, and each of them had a stack under it
@@ -2489,6 +2602,7 @@ int main()
 	TestJoiningWhileAPageIsSearching();
 	DirtyTheStack();
 	TestARealClientGetsIn();
+	TestNoAddressOnScreen();
 	TestWhatAClientCantAfford();
 	TestAnsweringWhileLoading();
 	TestConnectionsThatHoldAPlace();
@@ -2512,6 +2626,7 @@ int main()
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
+	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();
 

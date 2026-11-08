@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a custom map can be played as a campaign of one level. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   built-in and custom level names are copied into LevelName with a size limit and always end inside
 //   it, and the level file name is written with a size limit, so they always fit
@@ -15,6 +17,7 @@
 #include "gamedef.h"
 #include "env_info.h"
 #include "level_lists.h"
+#include "custom_maps.h"
 #include "user_profile.h"
 #include "mp_config.h"
 #include "pldnet.h"
@@ -5167,6 +5170,12 @@ static const AVP_ENVIRONMENT_ID *ListForCampaign(int campaign)
 
 int Campaign_LevelCount(int campaign)
 {
+	// One level, and only once a lobby has chosen the map. A number alone in a message isn't enough, because with no map there's no level to load.
+	if (campaign == kCampaignCustom)
+	{
+		return netGameData.coopCustomMap[0] != 0 ? 1 : 0;
+	}
+
 	const AVP_ENVIRONMENT_ID *const list = ListForCampaign(campaign);
 	int count = 0;
 
@@ -5180,7 +5189,8 @@ int Campaign_LevelCount(int campaign)
 
 int Campaign_Environment(int campaign, int place)
 {
-	if (place < 0 || place >= Campaign_LevelCount(campaign))
+	// A custom map isn't one of the game's own levels, so it has no number on their list
+	if (campaign == kCampaignCustom || place < 0 || place >= Campaign_LevelCount(campaign))
 	{
 		return -1;
 	}
@@ -5234,6 +5244,17 @@ void SetLevelToLoadForThisNetworkGame(void)
 
 void SetLevelToLoadForCampaign(void)
 {
+	// The file is this machine's own, found among the maps it listed itself, by a name that was checked as it arrived
+	if (netGameData.coopCampaign == kCampaignCustom)
+	{
+		if (!CustomMaps_SetLevelToLoad(CustomMaps_Named(netGameData.coopCustomMap, sizeof(netGameData.coopCustomMap))))
+		{
+			LogErrorString("campaign: the custom map the lobby chose isn't on this machine's list");
+		}
+
+		return;
+	}
+
 	int const environment = Campaign_Environment(netGameData.coopCampaign, netGameData.coopCampaignLevel);
 
 	// The numbers were checked as they arrived, so this is only for a mistake of ours

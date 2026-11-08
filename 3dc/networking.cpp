@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the co-op lobby: a game's description says if it has one, and in the lobby nothing is passed on and a silent joiner goes sooner. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Copyright (C) 2011 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -49,6 +51,11 @@
 //   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
 //   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
+//   the settings file's port and speeds are checked, and one the game can't use is put back to the game's own, with a log line
+//   the screen says which connection a joining player is, never their address or port
+//   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
+//   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
+//   (net_stats.h)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -59,8 +66,10 @@
 #include "mp_config.h"
 #include "networking.h"
 #include "net_checks.h"
+#include "coop_lobby.h"
 #include "net_host.h"
 #include "net_close.h"
+#include "net_stats.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -125,6 +134,13 @@ static unsigned int halfOpenSince[kMostClients + 1];
 
 // A player sends something many times a second, even waiting in a menu, and a level loads in much less than this. So a player silent for this long has gone, and is asked to go.
 static const unsigned int kMostMillisecondsSilent = 300000;
+// In the co-op lobby a joiner says something every 2 seconds, so this much silence means it has stopped. A seat in the lobby costs the others a place in the game.
+static const unsigned int kMostMillisecondsSilentInTheLobby = 30000;
+
+// A host's list of the addresses it has removed, and whether this machine has been removed by its host. See coop_lobby.h.
+static CoopRemovedList removedPlayers;
+static bool removedByTheHost = false;
+
 static unsigned int lastHeardFrom[kMostClients + 1];
 
 // How many bytes one client may send in a second, on top of how many messages. A real game sends a tenth of this. A host keeps what it's passing on until the other machines say they have it, for as long as the patience, so this also limits how much one client can make it keep.
@@ -153,6 +169,10 @@ extern bool AddPlayerToGame(NetID id, const char *name);
 extern void Net_PlayerHasGone(NetID id);
 extern void Net_HostHasGone();
 extern bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost);
+extern int Net_CoopLobbyState(void);
+extern void Net_NoteRefused(const char *why);
+extern bool Net_MessageIsForTheHostAlone(const uint8_t *message, size_t size);
+extern void Net_CoopLobbyJoined(int state);
 extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
 extern unsigned char DebouncedKeyboardInput[];
 
@@ -238,6 +258,13 @@ static void Net_AddSession(SessionDescription &session)
 	uint16_t gameStyle = session.gameStyle;
 	uint16_t level     = session.level;
 
+	// This comes from anyone who answers a search, like everything else here
+	if (!CoopLobby_StateIsReal(session.coopLobby))
+	{
+		LogDroppedMessage("a game described itself with a lobby state there isn't");
+		return;
+	}
+
 	// the session description comes from any machine on the LAN: SessionData (and the session menu,
 	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
 	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
@@ -284,6 +311,7 @@ static void Net_AddSession(SessionDescription &session)
 
 	SessionData[NumberOfSessionsFound].host = session.host;
 	SessionData[NumberOfSessionsFound].port = session.port;
+	SessionData[NumberOfSessionsFound].coopLobby = (char)session.coopLobby;
 
 	// bounded: a long session name used to overflow Name (40 bytes) into host/port
 	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
@@ -311,13 +339,14 @@ static void Net_AddSession(SessionDescription &session)
 		// get the level number in our list of levels (assuming we have the level)
 
 		int local_index = GetLocalMultiplayerLevelIndex(level, session.levelName, gameStyle);
-		if (local_index < 0)
+		// A lobby game stays on the list without its map, because its page is where this player is told so. It has no use for the place on the list.
+		if (local_index < 0 && session.coopLobby == kCoopLobbyNone)
 		{
 			// we don't have the level, so ignore this session
 			return;
 		}
 
-		SessionData[NumberOfSessionsFound].levelIndex = local_index;
+		SessionData[NumberOfSessionsFound].levelIndex = local_index < 0 ? 0 : local_index;
 	}
 
 	NumberOfSessionsFound++;
@@ -491,6 +520,19 @@ bool Net_UpdateSessionList(int &SelectedItem)
 	return changed;
 }
 
+// A number from the settings file, if the game can use it; if not, the game's own number, and the log says so. Only the number is written
+// in the log, never the file's text, so nothing in the file can make a line that isn't ours.
+static int NetSettingOrOwn(const char *name, int fromTheFile, bool usable, int own)
+{
+	if (usable)
+	{
+		return fromTheFile;
+	}
+
+	LogString(std::string("net: the settings file's ") + name + " is " + std::to_string(fromTheFile) + ", which the game can't use, so it uses " + std::to_string(own));
+	return own;
+}
+
 NetResult Net_Initialise()
 {
 	Con_PrintMessage("Initialising ENet networking");
@@ -501,11 +543,16 @@ NetResult Net_Initialise()
 		return NET_FAIL;
 	}
 
-	// get user config data
-	netPortNumber = Config_GetInt("[Networking]", "PortNumber", netPortNumber);
-//	broadcastPort = Config_GetInt("[Networking]", "BroadcastPort", broadcastPort);
-	incomingBandwidth = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
-	outgoingBandwidth = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
+	// The player's own settings. The settings file can hold any number, so each one is checked, and one the game can't use is put back to
+	// the game's own, with a line in the log saying so. The port is the one the host plays on: it has to be a port there is, and not the one
+	// a search uses (broadcastPort), which the host opens as well. A speed of 0 means "as much as there is", and one below 0 means nothing.
+	int const port = Config_GetInt("[Networking]", "PortNumber", (int)netPortNumber);
+	int const incoming = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
+	int const outgoing = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
+
+	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535 && port != (int)broadcastPort, (int)netPortNumber);
+	incomingBandwidth = (uint32_t)NetSettingOrOwn("IncomingBandwidth", incoming, incoming >= 0, 0);
+	outgoingBandwidth = (uint32_t)NetSettingOrOwn("OutgoingBandwidth", outgoing, outgoing >= 0, 0);
 
 	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network. See OpenDiscoverySocket.
 
@@ -683,6 +730,39 @@ void Net_Disconnect()
 
 	sessionCheckTimer = 0;
 	CloseDiscoverySocket();
+
+	// The game has closed, and the list was only for this game
+	CoopRemoved_Forget(removedPlayers);
+}
+
+static NetID IDOfConnection(const ENetPeer *peer);
+
+void Net_RemoveThisPlayer(NetID id)
+{
+	if (AvP.Network != I_Host || !host || id == 0 || id == AvPNetID)
+	{
+		return;
+	}
+
+	for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; ++peer)
+	{
+		if (peer->state == ENET_PEER_STATE_CONNECTED && IDOfConnection(peer) == id)
+		{
+			CoopRemoved_Add(removedPlayers, peer->address.host);
+
+			// They're out at once: nothing more from this connection counts, whatever it does about the goodbye
+			peer->data = NULL;
+			netSession.nPlayers--;
+			Net_PlayerHasGone(id);
+			enet_peer_disconnect(peer, kCoopRemovedByTheHost);
+			return;
+		}
+	}
+}
+
+bool Net_WasRemovedByTheHost()
+{
+	return removedByTheHost;
 }
 
 uint32_t Net_JoinGame()
@@ -802,6 +882,83 @@ static void LogDroppedMessage(const char *why)
 
 // Our ENet (patch 006) tells an older version of the game no as soon as it asks to join, without a place or an event, and
 // counts it. This puts that in the log, so a host can see why that player never got in.
+// THE NETWORK'S NUMBERS IN THE LOG (net_stats.h): about once a second, whether a connection has started or stopped struggling, and every
+// 10 seconds its round trip, loss and resends, and the bytes in and out. Connections are named by their number, never their address.
+static_assert(kNetStatsLossScale == ENET_PEER_PACKET_LOSS_SCALE, "net_stats.h reads ENet's loss as a share of the same whole");
+
+static ENetHost *netStatsHost = NULL;               // the host these numbers are for: a new game's host starts them again
+static unsigned int netStatsLastLook = 0;
+static unsigned int netStatsLastLines = 0;
+static unsigned int netStatsBytesIn = 0;
+static unsigned int netStatsBytesOut = 0;
+static bool netStatsStruggling[kMostClients + 1];
+
+static void LogConnectionNumbers()
+{
+	unsigned int const now = enet_time_get();
+
+	if (host != netStatsHost)
+	{
+		netStatsHost = host;
+		netStatsLastLook = now;
+		netStatsLastLines = now;
+		netStatsBytesIn = host->totalReceivedData;
+		netStatsBytesOut = host->totalSentData;
+
+		for (size_t i = 0; i <= kMostClients; i++)
+		{
+			netStatsStruggling[i] = false;
+		}
+
+		return;
+	}
+
+	if (now - netStatsLastLook < 1000)
+	{
+		return;
+	}
+
+	netStatsLastLook = now;
+	bool const linesDue = now - netStatsLastLines >= kNetStatsEveryMilliseconds;
+	char words[200];
+
+	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
+	{
+		ENetPeer const &peer = host->peers[i];
+
+		if (peer.state != ENET_PEER_STATE_CONNECTED)
+		{
+			netStatsStruggling[i] = false;
+			continue;
+		}
+
+		NetStats_Connection const numbers = { peer.roundTripTime, peer.roundTripTimeVariance, peer.packetLoss, peer.packetsLost, peer.packetsSent };
+		bool struggling = false;
+
+		if (NetStats_Change((int)i + 1, netStatsStruggling[i], numbers, &struggling, words, sizeof(words)))
+		{
+			LogString(words);
+		}
+
+		netStatsStruggling[i] = struggling;
+
+		if (linesDue)
+		{
+			NetStats_ConnectionLine((int)i + 1, numbers, words, sizeof(words));
+			LogString(words);
+		}
+	}
+
+	if (linesDue)
+	{
+		NetStats_BytesLine(host->totalReceivedData, netStatsBytesIn, host->totalSentData, netStatsBytesOut, now - netStatsLastLines, words, sizeof(words));
+		LogString(words);
+		netStatsLastLines = now;
+		netStatsBytesIn = host->totalReceivedData;
+		netStatsBytesOut = host->totalSentData;
+	}
+}
+
 static void LogOlderVersionsToldNo()
 {
 	static unsigned long long toldNo = 0;
@@ -848,10 +1005,10 @@ static void ForgetConnectionsNotLetIn()
 
 		halfOpenSince[i] = 0;
 
-		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent)
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data != NULL && now - lastHeardFrom[i] >= (Net_CoopLobbyState() == kCoopLobbyOpen ? kMostMillisecondsSilentInTheLobby : kMostMillisecondsSilent))
 		{
 			// The ordinary way out, so that the game hears this player has gone
-			LogDroppedMessage("a player has sent nothing for minutes");
+			LogDroppedMessage("a player has sent nothing for too long");
 			lastHeardFrom[i] = now;
 			enet_peer_disconnect(peer, 0);
 			continue;
@@ -914,6 +1071,8 @@ void Net_ServiceNetwork()
 	if (host)
 	{
 		enet_host_service(host, NULL, 0);
+
+		LogConnectionNumbers();
 
 		// also check for session data requests
 		if (AvP.Network == I_Host) {
@@ -1020,6 +1179,14 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 		return;
 	}
 
+	// Somebody the host took out of this game
+	if (CoopRemoved_Has(removedPlayers, peer->address.host))
+	{
+		Net_NoteRefused(kCoopRefusedRemoved);
+		enet_peer_disconnect(peer, kCoopRemovedByTheHost);
+		return;
+	}
+
 	NetID const id = Net_GetNextPlayerID();
 
 	if (netSession.nPlayers >= netSession.maxPlayers || !AddPlayerToGame(id, player.name))
@@ -1105,7 +1272,7 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 
 	size_t const connection = (size_t)(from - host->peers);
 
-	if (connection <= kMostClients)
+	if (connection <= kMostClients && Net_CoopLobbyState() == kCoopLobbyNone)
 	{
 		lastHeardFrom[connection] = enet_time_get();
 	}
@@ -1133,6 +1300,18 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 	if (!Net_ClientCanAfford(data, size, connection))
 	{
 		return false;
+	}
+
+	// In the lobby only what the lobby takes counts as being heard from, so sending what's refused doesn't keep a seat
+	if (connection <= kMostClients && Net_CoopLobbyState() != kCoopLobbyNone)
+	{
+		lastHeardFrom[connection] = enet_time_get();
+	}
+
+	// Nothing goes from one joiner to another in the lobby, and an answer about the map is only ever for the host
+	if (Net_CoopLobbyState() != kCoopLobbyNone || Net_MessageIsForTheHostAlone(data, size))
+	{
+		return true;
 	}
 
 	// Clients can't reach each other, so the host passes this on to the rest
@@ -1228,11 +1407,10 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						messagesUsed[eEvent.peer - host->peers] = 0;
 					}
 
-					char ipaddr[32];
-					enet_address_get_host_ip(&eEvent.peer->address, ipaddr, sizeof(ipaddr));
-
+					// Which connection it is, by number, and never the other machine's address or port: players stream and share pictures of
+					// their screens, and an address there would tell anyone watching where that player is (the user's ruling: no IPs)
 					std::stringstream sstream;
-					sstream << "Enet got a connection from " << ipaddr << ":" << eEvent.peer->address.port;
+					sstream << "A player is joining (connection " << (eEvent.peer - host->peers) + 1 << ")";
 					NewOnScreenMessage((char*)sstream.str().c_str());
 
 					// A connection that has only just been made hasn't been let in yet, whoever had this place in ENet's list before
@@ -1306,6 +1484,7 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					else if (eEvent.peer == ServerPeer)
 					{
 						ServerPeer = NULL;
+						removedByTheHost = eEvent.data == kCoopRemovedByTheHost;
 					}
 
 					break;
@@ -1427,6 +1606,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	// Whatever this was belonged to the last game. The host gives this game's.
 	AvPNetID = 0;
 	hostPlayerID = 0;
+	removedByTheHost = false;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -1476,6 +1656,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	}
 
 	InitAVPNetGameForJoin();
+
+	// From here on, before anything has been read from the host
+	Net_CoopLobbyJoined(SessionData[sessionNumber].coopLobby);
 
 	netGameData.levelNumber = SessionData[sessionNumber].levelIndex;
 	netGameData.joiningGameStatus = JOINNETGAME_WAITFORDESC;
@@ -1636,7 +1819,59 @@ static NetResult Net_CreateSession(const char *sessionName, const char *levelNam
 	return NET_OK;
 }
 
+void Net_SayWhatTheGameIs(uint16_t level, const char *levelName, const char *sessionName, uint8_t coopLobby)
+{
+	netSession.level = level;
+	netSession.coopLobby = coopLobby;
+
+	// Each is cleared first, so nothing of a longer old name stays after the end of a shorter new one
+	memset(netSession.levelName, 0, sizeof(netSession.levelName));
+	memset(netSession.sessionName, 0, sizeof(netSession.sessionName));
+	strncpy(netSession.levelName, levelName, sizeof(netSession.levelName) - 1);
+	strncpy(netSession.sessionName, sessionName, sizeof(netSession.sessionName) - 1);
+}
+
 NetResult Net_UpdateSessionDescForLobbiedGame(uint16_t gameStyle, uint16_t level)
 {
 	return NET_OK;
+}
+
+// Each connection, by number and round trip, for a tester's mark (networking.h). The number is its place in ENet's list, the same one the
+// screen names when a player joins, and never an address.
+void Net_DescribeConnections(char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	words[0] = '\0';
+
+	if (!host || AvP.Network == I_No_Network)
+	{
+		return;
+	}
+
+	size_t used = 0;
+
+	for (size_t i = 0; i < host->peerCount && used + 1 < size; i++)
+	{
+		ENetPeer const &peer = host->peers[i];
+
+		if (peer.state != ENET_PEER_STATE_CONNECTED)
+		{
+			continue;
+		}
+
+		int const added = _snprintf(words + used, size - 1 - used, "%sconnection %u at %u ms", used ? ", " : "", (unsigned)i + 1, (unsigned)peer.roundTripTime);
+
+		if (added < 0)
+		{
+			break;
+		}
+
+		used += (size_t)added;
+	}
+
+	words[used < size ? used : size - 1] = '\0';
 }

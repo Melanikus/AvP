@@ -8,6 +8,7 @@
 #include "huffman.hpp"
 #include "utilities.h"
 #include "logString.h"
+#include "md5.h"
 
 #include <corecrt_io.h> // the C library's file listing. Its usual name, io.h, is also the name of a game header, which comes first
 #include <stdio.h>
@@ -28,12 +29,20 @@ static const int kCustomMapMostLevelBytes = 64 << 20;
 static const uint32_t kCustomMapPictureMostWide = 200;
 static const uint32_t kCustomMapPictureMostHigh = 100;
 
+static const int kCustomMapSumBytes = 16;
+
 // The list has a name for each map. The names are kept, never the files' own names, so nothing found in the folder is used unchecked.
 struct CustomMapEntry
 {
 	char name[kCustomMapNameMost + 1];
 	texID_t picture;
 	bool pictureTried;
+
+	// The size of its file and its sum, once something has asked for them
+	bool sumTried;
+	bool sumIsGood;
+	unsigned int fileBytes;
+	unsigned char sum[kCustomMapSumBytes];
 };
 
 static std::vector<CustomMapEntry> customMaps;
@@ -208,6 +217,8 @@ void CustomMaps_Find(void)
 
 		entry.picture = MISSING_TEXTURE;
 		entry.pictureTried = false;
+		entry.sumTried = false;
+		entry.sumIsGood = false;
 		customMaps.push_back(entry);
 	}
 	while (_findnext64(search, &found) == 0);
@@ -215,6 +226,65 @@ void CustomMaps_Find(void)
 	_findclose(search);
 
 	std::sort(customMaps.begin(), customMaps.end(), ByName);
+}
+
+// Reads the whole file a piece at a time, and stops at the most a level may be: a file can have grown since the list was made.
+static bool SumTheFile(const char *name, unsigned int *fileBytes, unsigned char *sum)
+{
+	FILE *const file = avp_fopen((std::string("avp_rifs/Custom/") + name + ".rif").c_str(), "rb");
+
+	if (!file)
+	{
+		return false;
+	}
+
+	std::vector<unsigned char> piece(64 * 1024);
+	struct MD5Context context;
+	long long total = 0;
+	size_t got;
+
+	MD5Init(&context);
+
+	while (total <= kCustomMapMostFileBytes && (got = fread(piece.data(), 1, piece.size(), file)) > 0)
+	{
+		MD5Update(&context, piece.data(), (unsigned int)got);
+		total += (long long)got;
+	}
+
+	bool const readItAll = !ferror(file) && total <= kCustomMapMostFileBytes;
+
+	fclose(file);
+	MD5Final(sum, &context);
+	*fileBytes = (unsigned int)total;
+
+	return readItAll;
+}
+
+bool CustomMaps_SizeAndSum(int which, unsigned int *fileBytes, unsigned char sum[kCustomMapSumBytes])
+{
+	if (which < 0 || which >= (int)customMaps.size())
+	{
+		return false;
+	}
+
+	CustomMapEntry &entry = customMaps[which];
+
+	// Only once for each map, so a host changing its mind over and over costs a joiner nothing more
+	if (!entry.sumTried)
+	{
+		entry.sumTried = true;
+		entry.sumIsGood = SumTheFile(entry.name, &entry.fileBytes, entry.sum);
+	}
+
+	if (!entry.sumIsGood)
+	{
+		return false;
+	}
+
+	*fileBytes = entry.fileBytes;
+	memcpy(sum, entry.sum, sizeof(entry.sum));
+
+	return true;
 }
 
 int CustomMaps_Count(void)
@@ -230,6 +300,25 @@ const char *CustomMaps_Name(int which)
 	}
 
 	return customMaps[which].name;
+}
+
+int CustomMaps_Named(const char *name, size_t room)
+{
+	if (!CustomMapName_IsSafe(name, room))
+	{
+		return -1;
+	}
+
+	// In any case, because Windows takes Map.rif and map.rif for the same file
+	for (size_t i = 0; i < customMaps.size(); i++)
+	{
+		if (_stricmp(customMaps[i].name, name) == 0)
+		{
+			return (int)i;
+		}
+	}
+
+	return -1;
 }
 
 bool CustomMaps_SetLevelToLoad(int which)

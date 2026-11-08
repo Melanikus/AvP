@@ -15,4 +15,8 @@ std::string BuildIdentity_Lines();
 // The last of those lines alone
 std::string BuildIdentity_Windows();
 
+// Whether this build is a beta: see beta_build.h. In a beta the console's debug and cheat commands are there, and using them doesn't
+// count as cheating.
+bool BuildIdentity_IsABeta();
+
 #endif
