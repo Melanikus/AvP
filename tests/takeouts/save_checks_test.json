@@ -894,6 +894,76 @@
 					"to": "if(sbPtr)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a marine's saved path isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tNPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's saved path isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\tNPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine with no path or step walks one anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\n\tif ((marineStatusPointer->stepnumber<0)||(marineStatusPointer->path<0)) {\n",
+					"to": "\n\tif (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and the other place a marine walks a path",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\n\t\tif ((marineStatusPointer->stepnumber<0)||(marineStatusPointer->path<0)) {\n",
+					"to": "\n\t\tif (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator with no path or step walks one anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\n        if ((predatorStatusPointer->stepnumber<0)||(predatorStatusPointer->path<0)) {\n",
+					"to": "\n        if (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's path that isn't there gets a step",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(path_index<0 || path_index>=PathArraySize)",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's path is followed without asking",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if(!PathCanBeFollowed(new_path)) return;",
+					"to": ""
+				}
+			]
 		}
 	]
 }

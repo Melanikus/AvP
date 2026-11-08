@@ -448,6 +448,14 @@ static void TestTheLoadersAsk()
 
 	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;"), "a saved path has to be a real path");
 	Check(Has(ReadSourceFile("3dc/avp/bh_ais.cpp"), "*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;"), "and a real step on it");
+
+	// What keeps bh_ais.cpp's asserts on a path and a step out of reach of a save, or of a level (tests/assert_limits_allowed.txt)
+	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+	std::string const predator = ReadSourceFile("3dc/avp/bh_predator.cpp");
+	Check(Has(marine, "\tNPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);") && Has(predator, "\tNPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);"), "a marine's and a predator's saved path and step both go through that check");
+	Check(CountOf(marine, "if ((marineStatusPointer->stepnumber<0)||(marineStatusPointer->path<0)) {") == 2 && CountOf(predator, "if ((predatorStatusPointer->stepnumber<0)||(predatorStatusPointer->path<0)) {") == 2, "and each of the four places that walks a path goes off wandering first when there's no path or step");
+	Check(Has(ReadSourceFile("3dc/avp/win95/projload.cpp"), "if(path_index<0 || path_index>=PathArraySize)\n\t{\n\t\treturn -1; //path doesn't exist"), "a level's path that isn't there gets no step");
+	Check(Has(marine, "if(!PathCanBeFollowed(new_path)) return;"), "and a switch's path is asked about before a marine follows it");
 	Check(Has(ReadSourceFile("3dc/avp/bh_corpse.cpp"), "Save_PlaceInListOrNone(block->hltable_index, numberOfTables)"), "a corpse's table has to be real");
 	Check(Has(ReadSourceFile("3dc/avp/decal.cpp"), "if(Save_PlaceInListOrNone(saved_decal->ModuleIndex, ModuleArraySize) < 0)"), "a decal's module has to be real");
 	Check(Has(ReadSourceFile("3dc/avp/bh_queen.cpp"), "Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects)"), "and what the Queen holds");
