@@ -121,21 +121,20 @@ char const *GetSaveFolderProblem()
 	return noSaveFolder ? saveFolderProblem : NULL;
 }
 
+// For a save test (save_test.h): the folder the game's folder is made in, in place of the player's Documents. Empty for a game.
+static std::string saveTestFolder;
+
 bool UseSaveTestFolder(const char *gameFolder)
 {
-	std::string where;
-	char const *const whatWentWrong = SaveFolder_MakeForSaveTest(gameFolder, saveFolder, sizeof(saveFolder), &where);
+	// SaveTest beside the game copy, or in the folder it started from if the copy's own folder isn't known: anywhere but the player's
+	saveTestFolder = (gameFolder && gameFolder[0]) ? std::string(gameFolder) + "\\SaveTest" : std::string("SaveTest");
+	SaveFolder_MakeOne(saveTestFolder, NULL);
 
-	if (whatWentWrong)
-	{
-		saveFolder[0] = 0;
-		noSaveFolder = true;
-		_snprintf(saveFolderProblem, sizeof(saveFolderProblem) - 1, "%s%s%s", whatWentWrong, where.empty() ? "" : ": ", where.c_str());
-		return false;
-	}
-
+	// The folder is worked out again from the start, the way the game always works it out, only from there
+	saveFolder[0] = 0;
 	noSaveFolder = false;
-	return true;
+	GetSaveFolderPath();
+	return !noSaveFolder;
 }
 
 char *GetSaveFolderPath()
@@ -154,11 +153,23 @@ char *GetSaveFolderPath()
 #ifdef _WIN32
 
 	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
+	// For a save test it's made in the save test's own folder instead, the same way, and never in the player's Documents, even if that folder can't be used.
 	char documents[MAX_PATH] = {0};
-	char const *whatWentWrong = "Can't find the player's Documents folder";
+	char const *whatWentWrong = saveTestFolder.empty() ? "Can't find the player's Documents folder" : "The save test's folder can't be used";
 	std::string where;
+	bool placeKnown = false;
 
-	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
+	if (saveTestFolder.empty())
+	{
+		placeKnown = SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents));
+	}
+	else if (saveTestFolder.length() < sizeof(documents))
+	{
+		memcpy(documents, saveTestFolder.c_str(), saveTestFolder.length() + 1);
+		placeKnown = true;
+	}
+
+	if (placeKnown)
 	{
 		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
 	}

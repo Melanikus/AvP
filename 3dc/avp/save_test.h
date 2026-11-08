@@ -10,8 +10,10 @@
 //
 // SAFE FOR THE PLAYER. The rules are in save_test_rules.h: only with -dev, never in a network game, and only a file in SaveTest named as
 // the custom map name rule allows. And before anything else, on either word alone, the game's folder for its log, settings, profiles
-// and saves is pointed at SaveTest, in the folder the game copy runs from. So even a run the rules refuse never touches the player's
-// own log, settings or saves. The harness uses a profile of its own there, called SaveTest.
+// and saves is made in SaveTest, in the folder the game copy runs from (SaveTest\My Games\Aliens versus Predator\, as it would be in
+// Documents), and never in the player's Documents. So even a run the rules refuse never touches the player's own log, settings or
+// saves. The harness uses a profile of its own there, called SaveTest. The saves it loads, and the seeds it makes, are in SaveTest
+// itself.
 //
 // WHAT'S CALLED WHERE:
 //   - winmain.cpp, before the log is cleared: SaveTest_TakeCommandLine;

@@ -254,7 +254,8 @@ void SaveTest_GameFrame()
 		char slot[MAX_PATH], seed[MAX_PATH];
 		bool copied = false;
 
-		if (GetFilenameForSaveSlot(0, slot) && _snprintf(seed, sizeof(seed) - 1, "%sseed_%d_%d.sav", GetSaveFolderPath(), species, episode) >= 0)
+		// The seed goes beside the saves the harness loads, in SaveTest itself
+		if (GetFilenameForSaveSlot(0, slot) && _snprintf(seed, sizeof(seed) - 1, "%s\\SaveTest\\seed_%d_%d.sav", gameFolder, species, episode) >= 0)
 		{
 			seed[sizeof(seed) - 1] = 0;
 			copied = CopyFileA(slot, seed, FALSE) != 0;

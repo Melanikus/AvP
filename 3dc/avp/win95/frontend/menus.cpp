@@ -479,8 +479,8 @@ int AvP_MainMenus(void)
 		ViewSettings_MenuFrame();
 		Reverb_MenuFrame();
 
-		SaveTestMenus();
 		CheckForLoadGame();
+		SaveTestMenus();
 
 		ThisFramesRenderingHasFinished();
 		FlipBuffers();
