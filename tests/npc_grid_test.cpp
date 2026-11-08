@@ -371,6 +371,13 @@ static void Searches()
 	Check(grid.Way().size() >= 3 && grid.Way().size() * 2 <= grid.WayPath().size(),
 		"pulled straight, it has a turn or two, not a point for each cell (" + Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
 
+	// At a slant across open floor, well clear of the pillar: the search's cells go diagonally, then straight, but a marine fits all along the
+	// straight line between the two, so pulled straight it's that line, the start and the goal and nothing between
+	AlienWaysXYZ const slantFrom = { 450, 0, 450 }, slantTo = { 5550, 0, 2250 };
+	Check(grid.StartSearch(slantFrom, slantTo, kNpcGridMarine, 1, 100000) == nullptr && grid.Work(static_cast<size_t>(-1)) == kNpcGridFound &&
+		grid.Way().size() == 2 && grid.WayPath().size() > 2, "a way at a slant across open floor is one straight line, start to goal (" +
+		Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
+
 	// The same with too few looks
 	Check(grid.Search(from, to, kNpcGridMarine, 1, 3, &way, &looks) == kNpcGridTooFar && way.empty() && looks == 3,
 		"allowed to look at only 3 cells, it gives up, with no way");
@@ -812,12 +819,13 @@ static void Reach()
 		return;
 	}
 
-	// A point 500 out from the wall and 300 past its end (z 3300). Seen onto the wall's plane it's past the wall's grid, so the cell under
-	// it isn't there, nor are the 3 x 3 round it; but the wall's last column of cells, at z 2850, is 673 away (500 out and 450 along), inside the reach.
-	uint32_t const c = grid.NearestCell(500, -1650, 3300, kNpcGridAlien, 1500);
+	// A point 500 out from the wall and 600 past its end (z 3600). Seen onto the wall's plane it's two cells past the wall's grid, so neither
+	// the cell under it nor any of the 3 x 3 round it is there; but the wall's last column of cells, at z 2850, is 901 away (500 out and
+	// 750 along), inside the reach.
+	uint32_t const c = grid.NearestCell(500, -1650, 3600, kNpcGridAlien, 1500);
 	double m[3] = { 0.0, 0.0, 0.0 };
 	Check(c != kNpcGridNoCell && grid.Middle(c, m) && m[0] == 0 && m[1] == -1650 && m[2] == 2850,
-		"a point past a wall's end finds the wall's nearest cell, two columns from the one under it");
+		"a point two cells past a wall's end finds the wall's nearest cell, further than the 3 x 3 round it reaches");
 
 	// 1000 past the end, the nearest cell is 500 out and 1150 along: 1254 away, more than the reach of 1200 given here
 	Check(grid.NearestCell(500, -1650, 4000, kNpcGridAlien, 1200) == kNpcGridNoCell, "and one further than the reach finds none");
