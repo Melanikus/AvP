@@ -10,6 +10,8 @@
 //   the co-op pause menu, its Players page, and the host's question before leaving
 //   the single player Custom maps page, and the way to it. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the co-op campaign pages, and the way to them from the multiplayer page. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   both sound pages have a Room echo row (REVERB-TOGGLE-1). Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -61,6 +63,7 @@ extern CONTROL_METHODS PlayerControlMethods;
 extern JOYSTICK_CONTROL_METHODS PlayerJoystickControlMethods;
 extern int FmvSoundVolume;
 extern int EffectsSoundVolume;
+extern int ReverbIsOn;   // openal_audio.cpp: the Room echo setting, 1 on and 0 off (reverb_choice.h)
 extern int MoviesAreActive;
 extern int IntroOutroMoviesAreActive;
 
@@ -305,6 +308,7 @@ static AVPMENU_ELEMENT AvPMenu_InGameAVOptions[] =
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume}},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_CDVOLUME},	 {CDDA_VOLUME_MAX},	{&musicVolume}},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_ROOMECHO}, {1}, {&ReverbIsOn},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INGAMEMOVIES}, {1}, {&MoviesAreActive},	{TEXTSTRING_NO}},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_DETAILLEVELS_TITLE},	{AVPMENU_DETAILLEVELS}},
 	{AVPMENU_ELEMENT_SAVESETTINGS,	{TEXTSTRING_AVOPTIONS_USETHESESETTINGS},{0},{0},{0},	TEXTSTRING_AVOPTIONS_USETHESESETTINGS_HELP},
@@ -318,6 +322,7 @@ static AVPMENU_ELEMENT AvPMenu_MainMenuAVOptions[] =
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_EFFECTSVOLUME},	 {VOLUME_MAX},	{&EffectsSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_EFFECTSVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_MUSICVOLUME},	 {ONE_FIXED/512},	{&FmvSoundVolume},	{0},	TEXTSTRING_AVOPTIONS_MUSICVOLUME_HELP},
 	{AVPMENU_ELEMENT_SLIDER,		{TEXTSTRING_AVOPTIONS_CDVOLUME},	 {CDDA_VOLUME_MAX},	{&musicVolume},		{0},	TEXTSTRING_AVOPTIONS_CDVOLUME_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_ROOMECHO}, {1}, {&ReverbIsOn},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INGAMEMOVIES}, {1}, {&MoviesAreActive},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_INGAMEMOVIES_HELP},
 	{AVPMENU_ELEMENT_TEXTSLIDER,	{TEXTSTRING_AVOPTIONS_INTROOUTROMOVIES}, {1}, {&IntroOutroMoviesAreActive},	{TEXTSTRING_NO},	TEXTSTRING_AVOPTIONS_INTROOUTROMOVIES_HELP},
 	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_DETAILLEVELS_TITLE},	{AVPMENU_DETAILLEVELS},	{0},	{0},	TEXTSTRING_DETAILLEVELS_TITLE_HELP},

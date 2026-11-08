@@ -16,6 +16,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the words a player sees during a co-op game
 //   the words of the single player Custom maps page. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the words of the sound pages' Room echo row. Reported by Bobblen; the setting follows the idea in his avp-forever, rewritten
 //   the words of the co-op campaign pages. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 #include "3dc.h"
 #include "inline.h"
@@ -152,6 +154,8 @@ static char OurTextStrings[][200] =
 	"You're the host: leaving ends the game for everyone.",
 	"Campaign complete",
 	"Map complete",
+	"Room echo",
+	"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");
