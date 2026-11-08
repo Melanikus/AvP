@@ -5235,6 +5235,25 @@ int Campaign_Environment(int campaign, int place)
 	return (int)ListForCampaign(campaign)[place];
 }
 
+// For a Hudson run with net= and coopend=: which of the three campaigns a level is on, and where
+bool Campaign_FindEnvironment(int environment, int *campaign, int *place)
+{
+	for (int which = kCampaignMarine; which <= kCampaignAlien; which++)
+	{
+		for (int at = 0; at < Campaign_LevelCount(which); at++)
+		{
+			if (Campaign_Environment(which, at) == environment)
+			{
+				*campaign = which;
+				*place = at;
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 void Campaign_SetFromLevelRow(void)
 {
 	int campaign = kCampaignNone;
