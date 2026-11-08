@@ -1184,6 +1184,56 @@
 					"to": "\t\tline.toKind = 0;\n"
 				}
 			]
+		},
+		{
+			"name": "DRIVE: it drives in a frame Steer was asked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "if (follower.steered || follower.count <= 0 || follower.fresh)",
+					"to": "if (follower.count <= 0 || follower.fresh)"
+				}
+			]
+		},
+		{
+			"name": "DRIVE: it drives a way that isn't taken up yet",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "if (follower.steered || follower.count <= 0 || follower.fresh)",
+					"to": "if (follower.steered || follower.count <= 0)"
+				}
+			]
+		},
+		{
+			"name": "DRIVE: it doesn't go on past a point it has reached",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t// Past every point it has reached, as Steer goes, so it heads on rather than back at a point it's already at\n\twhile (follower.heading < follower.count && Reached(at, down, follower.points[follower.heading]) && OnTheKindNeeded(follower.points, follower.heading, down))",
+					"to": "\t// Past every point it has reached, as Steer goes, so it heads on rather than back at a point it's already at\n\twhile (false)"
+				}
+			]
+		},
+		{
+			"name": "DRIVE: it drives an alien off its way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "if (offTheWayBy > kAlienWaysOffTheWay)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "DRIVE: being driven counts as being asked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);\n\t*towards = aim;\n\treturn true;",
+					"to": "AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);\n\t*towards = aim;\n\tfollower.steered = true;\n\tfollower.steeredAt = now;\n\tfollower.guided = true;\n\treturn true;"
+				}
+			]
 		}
 	]
 }

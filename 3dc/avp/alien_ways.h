@@ -38,6 +38,16 @@ extern int AlienWaysSwitchedOn;
 // to compare the two. Set once, at start, by winmain.cpp; the guide is given it at each level's start.
 extern int AlienWaysAimAheadMm;
 
+// Modified 2026-11-08 by Melanikus for the AvP port: a watch on one alien, every frame (#109).
+// -alienwayswatch=N, with -dev, picks the alien with the guide's place N, from 0 to kAlienWaysMostWatchPlace (the guide's
+// kAlienWaysMostFollowers - 1). Each frame that alien gets one line in the log: its state, what that state did (AlienWays_WatchNote), whether
+// the alien ways were asked and answered, whether the guide kept driving it (AlienWays_KeepDriving), its grip, its speed, whether it has a
+// target, and the marine scent in its AI module and the ones next to it, which is what Hunt follows. -1, the default, watches nothing. At most
+// kAlienWaysMostWatchLines lines a level, so a long run can't fill the log. Set once, at start, by winmain.cpp.
+extern int AlienWaysWatchPlace;
+int const kAlienWaysMostWatchPlace = 63;
+int const kAlienWaysMostWatchLines = 6000;   // 100 seconds of frames at 60 a second
+
 void AlienWays_LevelStart();
 void AlienWays_Frame();
 void AlienWays_LevelEnd();
@@ -81,5 +91,18 @@ bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
 // where the alien is, and its module, at most once a second for each alien and kAlienWaysMostWouldHaveLines times a level. turnedBack means
 // the test for turning back (NPC_CannotReachTarget); otherwise it's the test for running into something (NPC_IsObstructed).
 void AlienWays_WouldHaveAvoided(struct strategyblock *alien, bool turnedBack);
+
+// Modified 2026-11-08 by Melanikus for the AvP port: keeps an alien going along its way on a frame its state didn't ask (#109).
+// Asked once a frame for each near alien, after its state has run (NearAlienBehaviour, bh_near.cpp). For an alien in Approach, Hunt or Wander
+// that wasn't asked about this frame, but that the guide still keeps (it last asked within half a second), and that has a way it's on, it
+// gives back true and the direction along that way, a length of 65536 (AlienWaysGuide::Drive). The game then keeps it holding on to what
+// it's on and sets its speed, as a state on its way does. False means: nothing to do, the frame stays as its state left it.
+bool AlienWays_KeepDriving(struct strategyblock *alien, struct vectorch *direction);
+
+// The watch on one alien (AlienWaysWatchPlace). WatchNote adds a few words to this frame's line for that alien, saying what its state did;
+// for any other alien, or with the watch off, it does nothing. WatchLine writes the line at the end of the alien's frame, with hasTarget and
+// keptDriving from the game, and starts the next.
+void AlienWays_WatchNote(struct strategyblock *alien, const char *note);
+void AlienWays_WatchLine(struct strategyblock *alien, bool hasTarget, bool keptDriving);
 
 #endif

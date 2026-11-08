@@ -1,4 +1,6 @@
 // See alien_ways_guide.h. Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   Drive keeps an alien going along its way on a frame its state didn't ask, without counting as asking (#109)
 #include "alien_ways_guide.h"
 
 #include <float.h>
@@ -755,5 +757,58 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	AlienWays_AimAlong(follower.points, follower.count, follower.heading, ask.at, aimAheadMm, &aim);
 	*towards = aim;
 	follower.guided = true;
+	return true;
+}
+
+// Modified 2026-11-08 by Melanikus for the AvP port: Drive, for a frame the alien's state didn't ask (alien_ways_guide.h).
+bool AlienWaysGuide::Drive(const AlienWaysMap *map, const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ down, AlienWaysXYZ *towards)
+{
+	if (!map || !map->Ready() || !towards)
+	{
+		return false;
+	}
+
+	int const f = Find(who);
+
+	if (f < 0)
+	{
+		return false;
+	}
+
+	Follower &follower = followers[f];
+
+	// Only on a frame Steer wasn't asked, and with a way it has taken up. Nothing here touches steered or steeredAt, so Drive never makes it
+	// look asked. Two things need no test of their own: Frame lets an alien go once half a second has passed since it was asked, so one found
+	// here is always within that; and one resting after being stuck has no way, because being found stuck drops it.
+	if (follower.steered || follower.count <= 0 || follower.fresh)
+	{
+		return false;
+	}
+
+	// Past every point it has reached, as Steer goes, so it heads on rather than back at a point it's already at
+	while (follower.heading < follower.count && Reached(at, down, follower.points[follower.heading]) && OnTheKindNeeded(follower.points, follower.heading, down))
+	{
+		follower.heading++;
+		follower.nearest = DBL_MAX;
+		follower.headwayAt = now;
+	}
+
+	// Used up, or off the way: the next Steer drops it. Until then the game steers it as it always did.
+	if (follower.heading >= follower.count || follower.heading < 1)
+	{
+		return false;
+	}
+
+	double const offTheWayBy = DistanceToStretch(at, follower.points[follower.heading - 1], follower.points[follower.heading]);
+
+	if (offTheWayBy > kAlienWaysOffTheWay)
+	{
+		return false;
+	}
+
+	AlienWaysPoint const &next = follower.points[follower.heading];
+	AlienWaysXYZ aim = { next.x, next.y, next.z };
+	AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);
+	*towards = aim;
 	return true;
 }

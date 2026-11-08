@@ -173,6 +173,42 @@ static void TestWandering(const std::string &source)
 		"SOURCE: and its pose is changed to match, before the animation is moved on");
 }
 
+// Modified 2026-11-08 by Melanikus for the AvP port: an alien its state didn't ask about is kept going on its way (#109).
+// Hunt and Wander take turns, a frame each, and on the Hunt frame nothing asks for the alien's way, so it stood still and let go of the wall.
+// After whichever state ran, the near behaviour asks the guide to keep it going (AlienWays_KeepDriving) and, if so, it holds on and moves.
+// And the watch on one alien (-alienwayswatch) hears which way Hunt left, and gets its line at the end of the frame.
+static void TestKeptDriving(const std::string &source)
+{
+	std::string const nearBehaviour = Between(source, "void NearAlienBehaviour(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	Check(!nearBehaviour.empty(), "SOURCE: the near behaviour is there to read");
+
+	char const *const keep = "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr) && AlienWays_KeepDriving(sbPtr, &keepGoing))\n"
+		"\t\t{\n"
+		"\t\t\tsbPtr->DynPtr->UseStandardGravity = 0;\n"
+		"\t\t\tNPCSetVelocity(sbPtr, &keepGoing, alienStatusPointer->MaxSpeed);\n"
+		"\t\t\tkeptDriving = true;\n";
+	Check(Has(nearBehaviour, keep), "SOURCE: a standard alien that can climb, which its guide keeps driving, holds on and goes along its way at its speed");
+
+	// After the velocity is zeroed and the state has run, and before the frame ends: so it only fills a frame the state left empty
+	std::string::size_type const zeroed = nearBehaviour.find("dynPtr->LinVelocity.vx = dynPtr->LinVelocity.vy = dynPtr->LinVelocity.vz = 0;");
+	std::string::size_type const states = nearBehaviour.find("AlienNearState_Taunting(sbPtr);");
+	std::string::size_type const kept = nearBehaviour.find("AlienWays_KeepDriving(sbPtr, &keepGoing)");
+	Check(zeroed != std::string::npos && states != std::string::npos && kept != std::string::npos && zeroed < states && states < kept,
+		"SOURCE: it's asked only after the speed is zeroed and the state has run");
+
+	std::string::size_type const line = nearBehaviour.find("AlienWays_WatchLine(sbPtr, alienStatusPointer->Target != NULL, keptDriving);");
+	Check(line != std::string::npos && kept < line, "SOURCE: the watch's line comes at the end of the frame, saying whether it was kept driving");
+
+	// Which way Hunt left, and that Wander sent it back, for the watch
+	std::string const hunt = Between(source, "static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	std::string const wander = Between(source, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
+	Check(Has(hunt, "AlienWays_WatchNote(sbPtr, \"Hunt found no next module by the marine scent, so it goes to Wander\");")
+		&& Has(hunt, "AlienWays_WatchNote(sbPtr, \"Hunt is in the module with the most marine scent and has no target, so it goes to Wander\");")
+		&& Has(hunt, "AlienWays_WatchNote(sbPtr, \"Hunt is in the module with the most marine scent, so it lets its target go and stays in Hunt\");"),
+		"SOURCE: the watch hears which of its three ways Hunt left without steering");
+	Check(Has(wander, "AlienWays_WatchNote(sbPtr, \"Wander knows of its target, so it goes back to Hunt\");"), "SOURCE: and that Wander sent it back to Hunt");
+}
+
 int main()
 {
 	std::string const source = ReadSourceFile("3dc/avp/bh_near.cpp");
@@ -182,6 +218,8 @@ int main()
 	TestHunting(source);
 	puts("2. wandering");
 	TestWandering(source);
+	puts("3. kept driving");
+	TestKeptDriving(source);
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 
