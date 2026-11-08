@@ -34,6 +34,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the list of versions has 105 and 106, which raised the number without a line
 //   Net_DescribeConnections, each connection's number and round trip for a tester's mark
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   Net_NoteFrame and Net_NoteFigureWait, for the report's lines on frames and figures
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -96,6 +98,11 @@ int       Net_ConnectingToLobbiedGame(char *playerName);
 // "connection 1 at 45 ms, connection 2 at 120 ms". Never an address. words has room for size characters and always ends with a 0;
 // it's empty out of a network game.
 void      Net_DescribeConnections(char *words, size_t size);
+
+// For the 10-second report's two lines on frames and figures (net_watch.h). pldnet.cpp tells it each frame's time, in the game's own frame
+// time (65536 to a second), and pldghost.cpp tells it each time a figure waited more than 100 ms for news, with how far it then moved.
+void      Net_NoteFrame(int frameTime);
+void      Net_NoteFigureWait(unsigned int waitedMs, unsigned int jumpMm, bool aPlayer);
 
 extern NetID AvPNetID;
 

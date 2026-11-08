@@ -1,5 +1,7 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   an NPC ghost remembers its clothes and its beams
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a ghost remembers when its last news came, for the report's line on figures that wait for news
 /*---------------------------Patrick 28/3/97----------------------------
   Header for Multi-Player ghost object support header
   ----------------------------------------------------------------------*/
@@ -8,6 +10,7 @@
 
 #include "pvisible.h"
 #include "pldnet.h"
+#include "net_watch.h"
 
 /*---------------------------Patrick 28/3/97----------------------------
   Structures for ghosts and ghost data blocks
@@ -66,7 +69,25 @@ typedef struct netghostdatablock
 	int extrapTimer;
 	unsigned int lastTimeRead;
 	#endif
+
+	// For the 10-second report's line on figures that wait for news (net_watch.h): when its last news came, where it was drawn before the
+	// first news of this frame, and whether news came this frame. All zeros when the ghost is made, which means no news yet.
+	NetFigureNews news;
+	VECTORCH placeBeforeNews;
+	unsigned char newsThisFrame;
 }NETGHOSTDATABLOCK;
+
+// A message about this ghost has come, and drawnAt is where it's drawn before the message moves it. Only the frame's first message is
+// kept, so that the jump the report gives is the whole of what the frame's news did. PlayerGhostExtrapolation counts it, after the
+// frame's messages are all in.
+inline void Ghost_NewsCame(NETGHOSTDATABLOCK *ghostData, const VECTORCH *drawnAt)
+{
+	if (!ghostData->newsThisFrame)
+	{
+		ghostData->placeBeforeNews = *drawnAt;
+		ghostData->newsThisFrame = 1;
+	}
+}
 
 /*---------------------------Patrick 28/3/97----------------------------
   Protoypes

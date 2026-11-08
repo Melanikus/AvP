@@ -8,6 +8,9 @@
 // its own: see InitMarineBehaviour, InitPredatorBehaviour and the others.
 //
 // WHAT ISN'T SHOWN YET: sounds other than an NPC's voice, such as a xenoborg's motors, aren't heard on other machines.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each NPC's news is noted, for the 10-second report's line on figures that wait for news (net_watch.h)
 
 #include "3dc.h"
 #include "inline.h"
@@ -681,6 +684,9 @@ void NpcGhosts_ApplyState(STRATEGYBLOCK *ghost, NETMESSAGE_NPCSTATE const *state
 	}
 
 	DYNAMICSBLOCK *const dynPtr = ghost->DynPtr;
+
+	// For the 10-second report's line on figures that wait for news: where it's drawn before this frame's news (pldghost.h)
+	Ghost_NewsCame(ghostData, &dynPtr->Position);
 
 	dynPtr->PrevPosition = dynPtr->Position;
 	dynPtr->PrevOrientMat = dynPtr->OrientMat;

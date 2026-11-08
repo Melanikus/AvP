@@ -56,6 +56,9 @@
 //   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 //   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
 //   (net_stats.h)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the 10-second report also says how this machine's frames went, and how often other players' and NPCs' figures waited for news
+//   (net_watch.h)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -70,6 +73,7 @@
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
+#include "net_watch.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -893,6 +897,20 @@ static unsigned int netStatsBytesIn = 0;
 static unsigned int netStatsBytesOut = 0;
 static bool netStatsStruggling[kMostClients + 1];
 
+// What the frames and the figures did since the last full lines (net_watch.h). They start again with each set of lines, and with a new game.
+static NetFrameWatch netFrames = {};
+static NetFigureWatch netFigures = {};
+
+void Net_NoteFrame(int frameTime)
+{
+	NetFrameWatch_Note(&netFrames, NetFrameWatch_Milliseconds(frameTime));
+}
+
+void Net_NoteFigureWait(unsigned int waitedMs, unsigned int jumpMm, bool aPlayer)
+{
+	NetFigureWatch_Note(&netFigures, waitedMs, jumpMm, aPlayer);
+}
+
 static void LogConnectionNumbers()
 {
 	unsigned int const now = enet_time_get();
@@ -904,6 +922,8 @@ static void LogConnectionNumbers()
 		netStatsLastLines = now;
 		netStatsBytesIn = host->totalReceivedData;
 		netStatsBytesOut = host->totalSentData;
+		netFrames = NetFrameWatch();
+		netFigures = NetFigureWatch();
 
 		for (size_t i = 0; i <= kMostClients; i++)
 		{
@@ -953,6 +973,16 @@ static void LogConnectionNumbers()
 	{
 		NetStats_BytesLine(host->totalReceivedData, netStatsBytesIn, host->totalSentData, netStatsBytesOut, now - netStatsLastLines, words, sizeof(words));
 		LogString(words);
+
+		// How the frames went, and how often the figures had to wait, over the same time
+		unsigned int const seconds = (now - netStatsLastLines + 500) / 1000;
+		NetFrameWatch_Line(netFrames, seconds, words, sizeof(words));
+		LogString(words);
+		NetFigureWatch_Line(netFigures, seconds, words, sizeof(words));
+		LogString(words);
+		netFrames = NetFrameWatch();
+		netFigures = NetFigureWatch();
+
 		netStatsLastLines = now;
 		netStatsBytesIn = host->totalReceivedData;
 		netStatsBytesOut = host->totalSentData;
