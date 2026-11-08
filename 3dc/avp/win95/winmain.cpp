@@ -24,6 +24,10 @@
 //   it runs on (build_identity.h)
 //   F2 marks the moment for a tester, with a line in the log and a picture of the screen (mark_key.h)
 //   as a co-op game ends, why it ended is noted before it's wiped, for the page after it
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   -n is ignored in a network game and while a saved game loads, and its name has to keep to the rule for a map's name (level_switch.h)
+//   -l, -n and -w are read as whole words, so a longer switch that starts with the same letters isn't taken for them
+//   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
 
 #include "3dc.h"
 #include "build_identity.h"
@@ -69,6 +73,8 @@
 #include "mp_config.h"
 #include "logString.h"
 #include "command_line_word.h"
+#include "level_switch.h"
+#include "savegame.h"
 #include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
@@ -192,7 +198,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	LogString(GetWindowTitle());
 	LogString(BuildIdentity_Lines());
 
-	I_AVP_ENVIRONMENTS level_to_load = I_Num_Environments;
 	char *command_line = lpCmdLine;
 	char *instr = 0;
 
@@ -225,60 +230,49 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 	SetFastRandom();
 
-	//see if any extra npc rif files should be loaded
-	char* strpos = strstr(command_line, "-l");
-	if (strpos)
+	// -l asks for more kinds of creature to be loaded with every level, one letter for each kind. command_line_word.h says how it's read.
 	{
-		while (strpos)
+		struct LoadLetter
 		{
-			strpos += 2;
-			if (*strpos >= 'a' && *strpos <= 'z')
+			char letter;
+			BOOL *load;
+			const char *kind;
+		};
+
+		// Every letter in kCommandLineLoadLetters is here, and nothing else (level_switch_test checks)
+		LoadLetter const loadLetters[] = {
+			{ 'a', &ForceLoad_Alien, "aliens" },
+			{ 'm', &ForceLoad_Marine, "marines" },
+			{ 'p', &ForceLoad_Predator, "predators" },
+			{ 'h', &ForceLoad_Hugger, "facehuggers" },
+			{ 'q', &ForceLoad_Queen, "the queen" },
+			{ 'c', &ForceLoad_Civvie, "civilians" },
+			{ 'x', &ForceLoad_Xenoborg, "xenoborgs" },
+			{ 't', &ForceLoad_Pretorian, "praetorians" },
+			{ 'r', &ForceLoad_PredAlien, "predaliens" },
+			{ 's', &ForceLoad_SentryGun, "sentry guns" },
+		};
+
+		std::string loaded;
+
+		for (LoadLetter const &each : loadLetters)
+		{
+			if (CommandLineLoadAsks(command_line, each.letter))
 			{
-				while (*strpos >= 'a' && *strpos <= 'z')
-				{
-					switch (*strpos)
-					{
-						case 'a':
-							ForceLoad_Alien = TRUE;
-							printf("ForceLoad_Alien set to true\n");
-							break;
-						case 'm':
-							ForceLoad_Marine = TRUE;
-							break;
-						case 'p':
-							ForceLoad_Predator = TRUE;
-							break;
-						case 'h':
-							ForceLoad_Hugger = TRUE;
-							break;
-						case 'q':
-							ForceLoad_Queen = TRUE;
-							break;
-						case 'c':
-							ForceLoad_Civvie = TRUE;
-							break;
-						case 'x':
-							ForceLoad_Xenoborg = TRUE;
-							break;
-						case 't':
-							ForceLoad_Pretorian = TRUE;
-							break;
-						case 'r':
-							ForceLoad_PredAlien = TRUE;
-							break;
-						case 's':
-							ForceLoad_SentryGun = TRUE;
-							break;
-					}
-					strpos++;
-				}
+				*each.load = TRUE;
+				loaded += (loaded.empty() ? "" : ", ") + std::string(each.kind);
 			}
-			else
-			{
-				ForceLoad_Alien = TRUE;
-				printf("ForceLoad_Alien set to true\n");
-			}
-			strpos = strstr(strpos, "-l");
+		}
+
+		if (!loaded.empty())
+		{
+			LogString("command line: -l loads these with every level: " + loaded);
+		}
+
+		if (int const notRead = CommandLineLoadWordsNotRead(command_line))
+		{
+			LogString("command line: " + std::to_string(notRead) + " word(s) starting -l weren't read as -l, which takes only the letters "
+				+ kCommandLineLoadLetters + " after it");
 		}
 	}
 
@@ -324,7 +318,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		};
 
 		extern int ToyShadowsMode;
-		// not -noshadows: the level name switch further down takes anything starting with -n
+		// -shadowsoff, not -noshadows, because the level name switch -n used to take any word starting with -n. It reads only the
+		// whole word now (LEVEL-SWITCH-1), but the names stay as they are, so that launch options already written keep working.
 		if (strstr(command_line, "-shadowsoff"))
 		{
 			ToyShadowsMode = 0;
@@ -581,25 +576,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		KeepMainRifFile = TRUE;
 	}
 
-	if (strstr(command_line, "-m"))
-	{
-		UseMouseCentreing = TRUE;
-	}
-
+	// The mouse is kept inside the game's window unless -dontgrabmouse says not to. (-m used to ask for this. It isn't read any more,
+	// because this line has made it so whatever -m said, and an -m left in old launch options does nothing, as before.)
 	UseMouseCentreing = TRUE;
 
 	// windowed mode?
-	if (strstr(command_line, "-w"))
+	if (CommandLineHasWord(command_line, "-w"))
 	{
 		WindowMode = WindowModeSubWindow;
-
-		// will stop mouse cursor moving outside game window
-		//UseMouseCentreing = TRUE;
 	}
 
 	if (strstr(command_line, "-dontgrabmouse"))
 	{
-		// if this was previously set due to -m or -w, disable it
+		// the mouse is let go, whatever the lines above say
 		UseMouseCentreing = FALSE;
 	}
 
@@ -655,17 +644,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	FF_Init();
 
 	InitGame();
-
-	/****** Put in by John to sort out easy sub window mode ******/
-	/****** REMOVE FOR GAME!!!!! ******/
-
-	#if debug && 1//!PREDATOR_DEMO
-
-	if (instr = strstr(command_line, "-s")) {
-		sscanf(instr, "-s%d", &level_to_load);
-	}
-
-	#endif
 
 	Env_List[0]->main = LevelName;
 
@@ -762,9 +740,24 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		mainMenu = false;
 
 		#if !(PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO)
-		if (instr = strstr(command_line, "-n"))
+		// -n names a level to load instead of the one the menus chose. level_switch.h says when it's used, and when it's ignored.
 		{
-			sscanf(instr, "-n %259s", LevelName); // reads at most 259 characters: LevelName holds 260 bytes
+			static_assert(kLevelSwitchMostLetters < sizeof(LevelName), "LevelName has room for any name -n can give");
+
+			char named[kLevelSwitchMostLetters + 1];
+			bool const networkGame = AvP.Network != I_No_Network;
+			bool const loadingASave = LoadGameRequest != SAVELOAD_REQUEST_NONE;
+			const LevelSwitchAnswer answer = LevelSwitch_Read(command_line, networkGame, loadingASave, named, sizeof(named));
+
+			if (answer == kLevelSwitchUseIt)
+			{
+				LogString(std::string("level: loading ") + named + ", which -n names, instead of " + LevelName + ", which the menus chose");
+				strcpy_s(LevelName, sizeof(LevelName), named);
+			}
+			else if (answer != kLevelSwitchNotAsked)
+			{
+				LogString(std::string("level: -n is ignored: ") + LevelSwitch_Why(answer) + ". Loading " + LevelName + ".");
+			}
 		}
 		#endif
 
