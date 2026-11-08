@@ -13,6 +13,12 @@
 //
 // THE KEYS: three more lines say which key changes the lighting (L), the shadows (H) and the developers' views (J). They're kept in the same file, as numbers. The rules for which key a line may have
 // are in view_keys.h, and this is what joins them to the game. A key already in use is refused, and the line's help says why. A control that gets one of these keys afterwards wins, and both pages show it.
+//
+// THE HUD SIZE: the last line is a slider for how big the HUD is drawn, 50% to 150% of the usual size, kept in the same file as HUDSize. The rules are in hud_scale.h. The HUD takes
+// a new size from the next frame of a level: HUD_FollowTheScreen, in d3d_hud.cpp, asks ViewSettings_HUDSize every frame.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the HUD size line, its slider and its word in the settings file (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 
 #include "3dc.h"
 #include "module.h"
@@ -26,6 +32,7 @@
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
+#include "hud_scale.h"
 
 #include <string.h>
 #include <string>
@@ -45,6 +52,12 @@ static const char kHeading[] = "[Video]";
 static const char kRendering[] = "Rendering";
 static const char kShadows[] = "Shadows";
 static const char kAutoGenerate[] = "AutoGenerateMaps";
+static const char kHUDSizeSetting[] = "HUDSize";
+
+// The HUD size the player chose, a percentage of the usual size, and where the page's slider shows it, from 0 to kHUDSizeSliderPlaces
+static int hudSize = kHUDSizeUsual;
+int MenuHUDSize = kHUDSizeUsualPlace;
+static int lastHUDSize = kHUDSizeUsualPlace;
 
 int MenuRendering = kLightingGouraud;
 int MenuShadows = 0;
@@ -172,6 +185,17 @@ void ViewSettings_Load()
 			Config_SetString(kHeading, kKeySettings[line], std::to_string(viewKeys[line]));
 		}
 	}
+
+	// The HUD size, read as a word for the same reason as the keys. A file from before this line gets the usual size, and gets the line.
+	std::string const hudSizeWord = Config_GetString(kHeading, kHUDSizeSetting, std::to_string(kHUDSizeUsual));
+
+	if (!HUDSize_FromSavedWord(hudSizeWord.c_str(), &hudSize))
+	{
+		LogErrorString("the settings file's HUDSize line isn't one of the HUD sizes, 50 to 150 in steps of 10, so it's " + std::to_string(hudSize));
+		Config_SetString(kHeading, kHUDSizeSetting, std::to_string(hudSize));
+	}
+
+	MenuHUDSize = lastHUDSize = HUDSize_SliderPlace(hudSize);
 }
 
 void ViewSettings_MenuFrame()
@@ -244,10 +268,25 @@ void ViewSettings_MenuFrame()
 		changed = true;
 	}
 
+	// The HUD size changes from the next frame of a level, which asks for it every frame. The slider only moves one place at a time between
+	// its ends, and the size is still worked out from its place through the rules, so it can only ever be one of the sizes there are.
+	if (MenuHUDSize != lastHUDSize)
+	{
+		hudSize = HUDSize_AtSliderPlace(MenuHUDSize);
+		MenuHUDSize = lastHUDSize = HUDSize_SliderPlace(hudSize);
+		Config_SetString(kHeading, kHUDSizeSetting, std::to_string(hudSize));
+		changed = true;
+	}
+
 	if (changed)
 	{
 		Config_Save();
 	}
+}
+
+int ViewSettings_HUDSize()
+{
+	return hudSize;
 }
 
 int ViewSettings_KeyOnLine(int line)

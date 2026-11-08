@@ -9,6 +9,10 @@
 extern int MenuRendering;      // one of the LightingChoice numbers
 extern int MenuShadows;        // 0 or 1
 extern int MenuAutoGenerate;   // 0 or 1
+extern int MenuHUDSize;        // the page's last line: the HUD size slider's place, 0 to kHUDSizeSliderPlaces (hud_scale.h)
+
+// The HUD size the player chose, as a percentage of the usual size, kHUDSizeSmallest to kHUDSizeLargest (hud_scale.h)
+int ViewSettings_HUDSize();
 
 // Once the settings file has been read, and before anything looks at how to draw: starts the game the way the player last chose, or the way the game has always looked.
 void ViewSettings_Load();
