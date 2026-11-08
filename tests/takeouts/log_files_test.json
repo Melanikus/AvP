@@ -106,7 +106,7 @@
     { "name": "SOURCE: the crash words are written as they came",
       "changes": [{ "file": "3dc/logString.cpp", "from": "LogFiles_LeaveOutThePlayer(words, privateThings, crashWritten, sizeof(crashWritten));", "to": "strncpy(crashWritten, words, sizeof(crashWritten) - 1);" }] },
     { "name": "SOURCE: what to leave out is never found",
-      "changes": [{ "file": "3dc/logString.cpp", "from": "LogFiles_PrivateGather(privateThings, folder);", "to": "LogFiles_PrivateClear(privateThings);" }] },
+      "changes": [{ "file": "3dc/logString.cpp", "from": "LogFiles_PrivateGather(privateThings, GetSaveFolderPath());", "to": "LogFiles_PrivateClear(privateThings);" }] },
     { "name": "SOURCE: the old logs aren't moved along when the game starts",
       "changes": [{ "file": "3dc/logString.cpp", "from": "LogFiles_MoveAlong(filePath);\n\t\tLogFiles_Empty(filePath);", "to": "LogFiles_Empty(filePath);" }] },
     { "name": "SOURCE: a crash writes nothing of what or where",

@@ -4,7 +4,11 @@
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save; the buffer a save is
 //   built in grows through ReallocMem
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
+//   a save that can't be written whole leaves the old one as it was, where before a full disk destroyed it and still said GAME SAVED
 #include "3dc.h"
+#include "save_file_write.h"
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -402,8 +406,6 @@ static BOOL SaveGameAllowed()
 void SaveGame()
 {
 	char filename[MAX_PATH];
-	HANDLE file;
-	DWORD bytes_written;
 	int headerLength;
 	HuffmanPackage *packagePtr;
 
@@ -467,23 +469,28 @@ void SaveGame()
 	//clear the save request
 	SaveGameRequest = SAVELOAD_REQUEST_NONE;
 
-	//write the file
- 	file = avp_CreateFile(filename,GENERIC_WRITE, 0, 0, CREATE_ALWAYS,FILE_FLAG_RANDOM_ACCESS, 0);
-	
-	if (file == INVALID_HANDLE_VALUE)
-	{
-		GLOBALASSERT("Error saving file"==0);
-		return;
-	}
-
-	WriteFile(file,SaveInfo.BufferStart,headerLength,&bytes_written,0);
-
 	// bjd - check cast ok
 	packagePtr = HuffmanCompression(reinterpret_cast<unsigned char*>(SaveInfo.BufferStart+headerLength), SaveInfo.BufferSpaceUsed-headerLength);
 
-	WriteFile(file, packagePtr, packagePtr->CompressedDataSize+sizeof(HuffmanPackage), &bytes_written, 0);
+	// The new save goes in a file of its own, and only takes the old one's place once it's all there. See save_file_write.h.
+	bool const saved = packagePtr && SaveFile_WriteSafely(filename, SaveInfo.BufferStart, headerLength, packagePtr, packagePtr->CompressedDataSize + sizeof(HuffmanPackage));
 
-	CloseHandle(file);
+	if (packagePtr)
+	{
+		DeallocateMem(packagePtr);
+	}
+
+	// The player is told, and it doesn't cost them a save, because SaveGameAllowed took one off for a save that hasn't happened.
+	if (!saved)
+	{
+		if (!unlimitedSaves)
+		{
+			NumberOfSavesLeft++;
+		}
+
+		NewOnScreenMessage("GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN");
+		return;
+	}
 
 	NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_GAMESAVED));
 	DisplaySavesLeft();

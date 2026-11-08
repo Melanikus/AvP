@@ -1,3 +1,5 @@
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   the save folder is never missing: without one the path is empty and the log says why once, where before the log and this went round until the game crashed
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -24,14 +26,13 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
-// Modified 2026-11-07 by Melanikus for the AvP port:
-//   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
-//   it was built in, with the name of whoever built it, into the game
+//   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
 #include <string>
 #include <algorithm>
 #include "configFile.h"
 #include "logString.h"
+#include "save_folder.h"
 #include <assert.h>
 
 #ifdef _WIN32
@@ -39,11 +40,12 @@
 	#include <shlwapi.h>
 #endif
 
-// This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
-// and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
-static const char kThisFile[] = "3dc/utilities.cpp";
-
 static char saveFolder[MAX_PATH] = {0};
+static bool noSaveFolder = false;
+
+// What went wrong finding the save folder. It isn't logged there, because the log asks for the save folder before it can write anything. See TheLogWriter in logString.cpp.
+// It's plain characters because this can be asked for before the game's own start, when a std::string in this file might not be ready.
+static char saveFolderProblem[MAX_PATH + 100] = {0};
 
 // TODO: remove this
 extern void ReleaseDirect3D();
@@ -114,10 +116,15 @@ int StringToInt(const std::string &string)
 
 }
 
+char const *GetSaveFolderProblem()
+{
+	return noSaveFolder ? saveFolderProblem : NULL;
+}
+
 char *GetSaveFolderPath()
 {
-	// check if we've got the path previously and use it again
-	if (*saveFolder) {
+	// check if we've got the path previously and use it again, or if we've found there isn't one
+	if (*saveFolder || noSaveFolder) {
 		return saveFolder;
 	}
 
@@ -129,91 +136,26 @@ char *GetSaveFolderPath()
 #endif
 #ifdef _WIN32
 
-	// get path to users "My Documents" folder
-	if (FAILED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, saveFolder)))
+	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
+	char documents[MAX_PATH] = {0};
+	char const *whatWentWrong = "Can't find the player's Documents folder";
+	std::string where;
+
+	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
 	{
-		LogErrorString("Can't find save folder path. ", __LINE__, kThisFile);
-		return 0;
+		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
 	}
 
-	std::string path = saveFolder;
-
-	// change backslashes in path to forwardslashes
-	std::replace(path.begin(), path.end(), '\\', '/');
-
-	path += "/My Games";
-
-	// first check if "My Games" folder exists, we try create it..
-	if (::CreateDirectory(path.c_str(), NULL) == 0)
+	if (whatWentWrong)
 	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + path, __LINE__, kThisFile);
-			return NULL;
-		}
+		// With nowhere to keep its files the game can still run. The path stays empty, so its files go in the folder it started from, and the folders for saved games and network settings are made there.
+		// If they can't be, a file that won't open is handled like any other.
+		noSaveFolder = true;
+		_snprintf(saveFolderProblem, sizeof(saveFolderProblem) - 1, "%s%s%s", whatWentWrong, where.empty() ? "" : ": ", where.c_str());
+		SaveFolder_MakeOne("User_Profiles/", NULL);
+		SaveFolder_MakeOne("MPConfig/", NULL);
 	}
 
-	path += "/Aliens versus Predator";
-
-	// then check the "Aliens versus Predator" folder
-	if (::CreateDirectory(path.c_str(), NULL) == 0)
-	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + path, __LINE__, kThisFile);
-			return NULL;
-		}
-	}
-
-	// add a slash to the end of the path
-	path += "/";
-
-	// also, create User_Profiles folder if required
-	std::string profilePath = path + "User_Profiles/";
-
-	if (::CreateDirectory(profilePath.c_str(), NULL) == 0)
-	{
-		// something went wrong.
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, kThisFile);
-			return NULL;
-		}
-	}
-
-	// lets create MPConfig folder too
-	profilePath = path + "MPConfig/";
-
-	if (::CreateDirectory(profilePath.c_str(), NULL) == 0)
-	{
-		// something went wrong..
-		DWORD error = ::GetLastError();
-		if (error == ERROR_PATH_NOT_FOUND)
-		{
-			LogErrorString("Can't create directory " + profilePath, __LINE__, kThisFile);
-			return NULL;
-		}
-	}
-
-	// check our path string will fit in saveFolder char[]
-	if (path.length() <= MAX_PATH - 1)
-	{
-		strncpy(saveFolder, path.c_str(), path.length());
-		saveFolder[path.length()] = '\0';
-	}
-	else
-	{
-		// fatal error?
-		LogErrorString("Save folder path too long");
-		return NULL;
-	}
-
-	// we're ok if we're here?
 	return saveFolder;
 #endif
 }
