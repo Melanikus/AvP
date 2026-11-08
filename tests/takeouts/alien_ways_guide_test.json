@@ -150,8 +150,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "const AlienWaysSearch result = map->Work(left);",
-					"to": "const AlienWaysSearch result = map->Work(1000000);"
+					"from": "map->Work(std::min(left, std::max(0, looksAllowed)));",
+					"to": "map->Work(1000000);"
 				}
 			]
 		},
@@ -1040,8 +1040,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "claimsOn ? &claims : nullptr, next,",
-					"to": "nullptr, next,"
+					"from": "kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,\n",
+					"to": "kAlienWaysFloorPrice, nullptr, next,\n"
 				}
 			]
 		},
@@ -1270,8 +1270,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
-					"to": "kAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
+					"from": "nullptr, next,\n\t\t\t\tflanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
+					"to": "nullptr, next,\n\t\t\t\tkAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
 				}
 			]
 		},
@@ -1300,7 +1300,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\tline.cost = map->LastSearchCost();\n",
+					"from": "\tline.cost = searchOnGrid ? -1.0 : map->LastSearchCost();\n",
 					"to": ""
 				}
 			]

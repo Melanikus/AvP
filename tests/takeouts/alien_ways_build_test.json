@@ -150,8 +150,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_build.cpp",
-					"from": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n\tStop();\n",
-					"to": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n"
+					"from": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given, bool withGrid)\n{\n\tStop();\n",
+					"to": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given, bool withGrid)\n{\n"
 				}
 			]
 		},
