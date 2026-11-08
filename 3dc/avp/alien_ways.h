@@ -1,6 +1,8 @@
 // The game's side of the alien ways map (alien_ways_map.h): building it at each level's start, letting it go at the end, and saying in the
 // log how that went. Written 2026-11-08 by Melanikus for the AvP port ("For Aliens, Floor is lava", #109 and #118).
 //
+// How all of this works, in plain words: ALIEN-WAYS.md, beside this file.
+//
 // WHILE IT'S BEING BUILT AND FILMED it's only on with the developer switch -alienways, which needs -dev (winmain.cpp). When it ships it's
 // always on, in every mode, with no setting for players: that's the user's ruling, and it's the one line in AlienWays_On to change.
 //
@@ -75,7 +77,8 @@ size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);
 struct strategyblock;
 struct vectorch;
 
-// For an alien that's coming for its target (AlienNearState_Approach, bh_near.cpp), heading for goal, the point the game's own code picked:
+// For an alien that's coming for its target, hunting it or wandering (AlienNearState_Approach, _Hunt and _Wander, bh_near.cpp), heading for
+// goal, the point the game's own code picked:
 // the target itself, or the way into the next module towards it. When the target is in a module the alien's can see, the way goes to the
 // target itself instead, so it can go round by the walls and ceilings all the way. Gives back true, and the direction to go in, a length of
 // 65536, when the alien has a way to follow across the walls and ceilings now. False means: steer it the way the game always has. Only on the game's thread.
@@ -89,7 +92,8 @@ bool AlienWays_Following(struct strategyblock *alien);
 bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
 
 // On a frame its way steers an alien, the game's own tests that would send it off to avoid something are kept from acting, because running
-// into a wall is how it climbs (AlienNearState_Approach, bh_near.cpp). When one of them would have acted, this says so in the log: which one,
+// into a wall is how it climbs (AlienNearState_Approach, _Hunt and _Wander, bh_near.cpp). When one of them would have acted, this says so in
+// the log: which one,
 // where the alien is, and its module, at most once a second for each alien and kAlienWaysMostWouldHaveLines times a level. turnedBack means
 // the test for turning back (NPC_CannotReachTarget); otherwise it's the test for running into something (NPC_IsObstructed).
 void AlienWays_WouldHaveAvoided(struct strategyblock *alien, bool turnedBack);
