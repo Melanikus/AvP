@@ -333,6 +333,11 @@ bool AlienWaysMap::Joined(int a, int b, AlienWaysXYZ *from, AlienWaysXYZ *to) co
 
 int AlienWaysMap::NearestPolygon(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar) const
 {
+	return NearestPolygonOfKind(point, firstGiven, endGiven, within, howFar, -1);
+}
+
+int AlienWaysMap::NearestPolygonOfKind(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar, int wanted) const
+{
 	if (!ready || within < 0)
 	{
 		return -1;
@@ -346,7 +351,7 @@ int AlienWaysMap::NearestPolygon(AlienWaysXYZ point, size_t firstGiven, size_t e
 	{
 		int const polygon = mapNumber[given];
 
-		if (polygon < 0)
+		if (polygon < 0 || (wanted >= 0 && kind[polygon] != wanted))
 		{
 			continue;
 		}

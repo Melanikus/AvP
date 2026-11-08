@@ -54,8 +54,9 @@ struct strategyblock;
 struct vectorch;
 
 // For an alien that's coming for its target (AlienNearState_Approach, bh_near.cpp), heading for goal, the point the game's own code picked:
-// the target itself, or the way into the next module towards it. Gives back true, and the direction to go in, a length of 65536, when the
-// alien has a way to follow across the walls and ceilings now. False means: steer it the way the game always has. Only on the game's thread.
+// the target itself, or the way into the next module towards it. When the target is in a module the alien's can see, the way goes to the
+// target itself instead, so it can go round by the walls and ceilings all the way. Gives back true, and the direction to go in, a length of
+// 65536, when the alien has a way to follow across the walls and ceilings now. False means: steer it the way the game always has. Only on the game's thread.
 bool AlienWays_Steer(struct strategyblock *alien, struct strategyblock *target, const struct vectorch *goal, struct vectorch *direction);
 
 // Whether this alien's last AlienWays_Steer gave back true. An alien on a way crawls (AlienShouldBeCrawling, bh_near.cpp).

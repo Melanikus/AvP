@@ -82,6 +82,23 @@ static AlienWaysRange PolygonsOf(const MODULE *module)
 	return theModules[module->m_index];
 }
 
+// Whether the target is in the alien's own module, or one that can be seen from it. The game's own visibility lists say so
+// (IsModuleVisibleFromModule, module.cpp), and a module with no list sees only itself.
+static bool InView(MODULE *from, MODULE *to)
+{
+	if (!from || !to)
+	{
+		return false;
+	}
+
+	if (from == to)
+	{
+		return true;
+	}
+
+	return from->m_vmptr && IsModuleVisibleFromModule(from, to);
+}
+
 // An alien that's no longer guided gets the game's usual gravity back. It's only touched if it's still one of the game's live objects, the same
 // one, and still an alien: something dead or gone is never read.
 static void GiveGravityBack(const AlienWaysWho &who)
@@ -118,7 +135,8 @@ static std::string Metres(AlienWaysXYZ point)
 static void TellHowASearchWent(const AlienWaysReport &line)
 {
 	char text[512];
-	std::string const where = "from " + Metres(line.from) + " to " + Metres(line.to);
+	const char *const startedOn = line.fromKind == kAlienWaysFloor ? " on the floor" : (line.fromKind == kAlienWaysWall ? " on a wall" : (line.fromKind == kAlienWaysCeiling ? " on the ceiling" : ""));
+	std::string const where = "from " + Metres(line.from) + startedOn + " to " + Metres(line.to) + (line.toTheTarget ? " (its target)" : " (on the way to its target)");
 
 	switch (line.outcome)
 	{
@@ -268,6 +286,15 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	ask.goal = AlienWaysXYZ{ goal->vx, goal->vy, goal->vz };
 	ask.goalPolygons[0] = ask.atPolygons;
 	ask.goalPolygons[1] = PolygonsOf(target ? target->containingModule : 0);
+	ask.goalIsTheTarget = false;
+
+	// When the target can be seen from where the alien is, the way goes all the way to it. The game's own code heads for the way into the
+	// next module instead whenever the player is in another one, and a way that short is mostly floor: the user's first play showed that.
+	if (target && target->DynPtr && InView(alien->containingModule, target->containingModule))
+	{
+		ask.goal = AlienWaysXYZ{ target->DynPtr->Position.vx, target->DynPtr->Position.vy, target->DynPtr->Position.vz };
+		ask.goalIsTheTarget = true;
+	}
 
 	AlienWaysXYZ towards;
 

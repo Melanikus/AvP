@@ -364,6 +364,96 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "an alien low on a wall starts its search on the floor below it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "int from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, KindUnder(follower.last.down));",
+					"to": "int from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, -1);"
+				}
+			]
+		},
+		{
+			"name": "with none of its own kind near, an alien's search never starts",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (from < 0)\n\t\t{\n\t\t\tfrom = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, -1);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the report never says the goal was the target",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tsearchToTheTarget = follower.last.goalIsTheTarget;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the report never says where the search started",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tline.fromKind = searchFromKind;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon of any kind is taken for the kind asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": " || (wanted >= 0 && kind[polygon] != wanted))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a module with no list of what it can see has its empty list read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "return from->m_vmptr && IsModuleVisibleFromModule(from, to);",
+					"to": "return IsModuleVisibleFromModule(from, to);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the way only ever goes to the next module, never to the target",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\task.goal = AlienWaysXYZ{ target->DynPtr->Position.vx, target->DynPtr->Position.vy, target->DynPtr->Position.vz };\n\t\task.goalIsTheTarget = true;",
+					"to": "\t\task.goalIsTheTarget = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a target with no dynamics is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (target && target->DynPtr && InView(",
+					"to": "if (target && InView("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say which goal a search took",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "(line.toTheTarget ? \" (its target)\" : \" (on the way to its target)\")",
+					"to": "std::string()"
+				}
+			]
 		}
 	]
 }

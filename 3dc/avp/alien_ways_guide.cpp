@@ -50,8 +50,9 @@ namespace
 		return a.place == b.place && a.name == b.name;
 	}
 
-	// The polygon nearest to point among the ranges given, or -1 if none is within kAlienWaysNearEnough
-	int NearestIn(const AlienWaysMap &map, AlienWaysXYZ point, const AlienWaysRange *ranges, int rangeCount)
+	// The polygon nearest to point among the ranges given, of the kind given or of any kind if it's -1, or -1 if none is within
+	// kAlienWaysNearEnough
+	int NearestIn(const AlienWaysMap &map, AlienWaysXYZ point, const AlienWaysRange *ranges, int rangeCount, int kind)
 	{
 		int best = -1;
 		double bestFar = DBL_MAX;
@@ -59,7 +60,7 @@ namespace
 		for (int r = 0; r < rangeCount; r++)
 		{
 			double howFar = DBL_MAX;
-			int const found = map.NearestPolygon(point, ranges[r].first, ranges[r].end, kAlienWaysNearEnough, &howFar);
+			int const found = map.NearestPolygonOfKind(point, ranges[r].first, ranges[r].end, kAlienWaysNearEnough, &howFar, kind);
 
 			if (found >= 0 && howFar < bestFar)
 			{
@@ -69,6 +70,21 @@ namespace
 		}
 
 		return best;
+	}
+
+	// The kind of surface an alien is standing on, from which way is down for it: down is +y on a floor, -y on a ceiling, and across on a wall.
+	// The line between them is the map's own, kAlienWaysFloorFacing. With no down given, -1: any kind.
+	int KindUnder(AlienWaysXYZ down)
+	{
+		double const length = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+
+		if (!(length > 0.0))
+		{
+			return -1;
+		}
+
+		double const downY = down.y / length;
+		return downY >= kAlienWaysFloorFacing ? kAlienWaysFloor : (downY <= -kAlienWaysFloorFacing ? kAlienWaysCeiling : kAlienWaysWall);
 	}
 }
 
@@ -83,6 +99,8 @@ void AlienWaysGuide::Clear()
 	turnedAway = 0;
 	searching = -1;
 	searchFrom = searchGoal = AlienWaysXYZ{ 0, 0, 0 };
+	searchToTheTarget = false;
+	searchFromKind = -1;
 	searchAskedAt = searchMicroseconds = 0;
 	searchFrames = 0;
 	reportCount = 0;
@@ -288,10 +306,20 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		line.follower = static_cast<size_t>(next);
 		line.from = follower.last.at;
 		line.to = follower.last.goal;
+		line.toTheTarget = follower.last.goalIsTheTarget;
 		line.waitedMs = now - follower.askedAt;
 
-		int const from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1);
-		int const to = NearestIn(*map, follower.last.goal, follower.last.goalPolygons, 2);
+		// It starts on a polygon of the kind it's standing on: an alien low on a wall starts on the wall, not the floor just below it.
+		// If there's none of that kind near, the nearest of any kind.
+		int from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, KindUnder(follower.last.down));
+
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, -1);
+		}
+
+		int const to = NearestIn(*map, follower.last.goal, follower.last.goalPolygons, 2, -1);
+		line.fromKind = from >= 0 ? static_cast<int>(map->KindOf(from)) : -1;
 
 		if (from < 0 || to < 0)
 		{
@@ -315,6 +343,8 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		searching = next;
 		searchFrom = follower.last.at;
 		searchGoal = follower.last.goal;
+		searchToTheTarget = follower.last.goalIsTheTarget;
+		searchFromKind = line.fromKind;
 		searchAskedAt = follower.askedAt;
 		searchMicroseconds = 0;
 		searchFrames = 0;
@@ -329,6 +359,8 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	line.follower = static_cast<size_t>(searching);
 	line.from = searchFrom;
 	line.to = searchGoal;
+	line.toTheTarget = searchToTheTarget;
+	line.fromKind = searchFromKind;
 	line.frames = searchFrames;
 	line.waitedMs = now - searchAskedAt;
 	line.microseconds = searchMicroseconds;

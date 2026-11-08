@@ -50,7 +50,8 @@ struct AlienWaysRange
 int const kAlienWaysFloorPrice = 10;              // the floor costs 10 times as much as a wall or a ceiling. Step 2c's knee.
 size_t const kAlienWaysMostFollowers = 64;        // aliens with a way at once. One more is steered by the game's own code.
 int const kAlienWaysLooksPerFrame = 500;          // polygons all the searches may look at in one frame, between them
-int const kAlienWaysNearEnough = 2000;            // mm: how far an alien, or its goal, can be from a polygon and still start on it
+int const kAlienWaysNearEnough = 2000;            // mm: how far an alien, or its goal, can be from a polygon and still start on it. An alien
+                                                  // starts on the nearest polygon of the kind it's standing on, by its down, if there's one that near.
 int const kAlienWaysReached = 600;                // mm across the surface the alien is on: a point that near has been reached...
 int const kAlienWaysBodyHeight = 1500;            // ...as long as it's no more than this far above or below the alien's own middle
 int const kAlienWaysOffTheWay = 3000;             // mm: an alien this far from its way has lost it, and asks again
@@ -69,6 +70,7 @@ struct AlienWaysAsk
 	AlienWaysRange atPolygons;      // where to look for the polygon it's on: the module it's in
 	AlienWaysXYZ goal;              // where it's going
 	AlienWaysRange goalPolygons[2]; // where to look for the polygon the goal's on: the alien's module and the target's. The nearer wins.
+	bool goalIsTheTarget;           // the goal is the target itself, not a point on the way to it: only so the log can say which
 };
 
 // How one search went, for the log
@@ -93,6 +95,8 @@ struct AlienWaysReport
 	int looks;                      // polygons looked at
 	int points;
 	bool cutShort;                  // the way was longer than the map gives, and stops short of the goal
+	bool toTheTarget;               // the goal was the target itself (AlienWaysAsk::goalIsTheTarget)
+	int fromKind;                   // the kind of polygon the search started on (an AlienWaysKind), or -1 if none was near
 	double floorMm, wallMm, ceilingMm;
 };
 
@@ -161,6 +165,8 @@ private:
 	// The one search that's running, and for which alien, or -1
 	int searching;
 	AlienWaysXYZ searchFrom, searchGoal;
+	bool searchToTheTarget;
+	int searchFromKind;
 	long long searchAskedAt, searchMicroseconds;
 	int searchFrames;
 

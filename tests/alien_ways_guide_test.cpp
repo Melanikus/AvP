@@ -110,6 +110,7 @@ static AlienWaysAsk Ask(const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ g
 	ask.goal = goal;
 	ask.goalPolygons[0] = ask.atPolygons;
 	ask.goalPolygons[1] = AlienWaysRange{ 0, 0 };
+	ask.goalIsTheTarget = false;
 	return ask;
 }
 
@@ -385,7 +386,7 @@ static void LetGo()
 	// Nor one whose last steer gave back no: the game's own code has set its gravity already
 	AlienWaysGuide stopped;
 	GuidedAlien(stopped, Alien(3));
-	stopped.Steer(&map, Ask(Alien(3), { 2000, -3000, 0 }, kGoal, 13), &towards);
+	stopped.Steer(&map, Ask(Alien(3), { 2000, -3000, -1000 }, kGoal, 13), &towards);
 	Frame(stopped, map, 16, lapsed);
 	Check(Frame(stopped, map, 16, lapsed) == 0, "nor one whose last steer said no");
 
@@ -510,6 +511,45 @@ static void NoBetterThanToday()
 	Check(!islands.Steer(&apart, Ask(Alien(1), { 500, 0, 500 }, { 6500, 0, 500 }, 2), &towards), "and the alien isn't guided");
 }
 
+// Where a search starts: on the kind of surface the alien is standing on, by its down (Secondary's note on 79a00e7c)
+static void StartsOnItsOwnKind()
+{
+	printf("Where a search starts\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const AlienWaysReport *reports = nullptr;
+
+	// 300 mm out from the left wall and 200 mm above tile 5: the floor's box is the nearer, 200 mm against 300
+	AlienWaysXYZ const low = { 300, -200, 5500 };
+	AlienWaysGuide standing;
+	standing.Steer(&map, Ask(Alien(1), low, kGoal, 13), &towards);
+	Frame(standing, map, 16);
+	Check(ReportsOf(standing, &reports) == 1 && reports[0].fromKind == kAlienWaysFloor && !reports[0].toTheTarget,
+		"an alien standing on the floor starts its search on the floor, and the report says the goal wasn't the target itself");
+
+	AlienWaysGuide clinging;
+	AlienWaysAsk onTheWall = Ask(Alien(1), low, kGoal, 13);
+	onTheWall.down = AlienWaysXYZ{ -65536, 0, 0 };
+	clinging.Steer(&map, onTheWall, &towards);
+	Frame(clinging, map, 16);
+	Check(ReportsOf(clinging, &reports) == 1 && reports[0].fromKind == kAlienWaysWall, "one clinging low on the wall starts on the wall, though the floor is nearer");
+
+	// Upside down on the floor, with no ceiling within 2 m: it starts on the nearest polygon of any kind
+	AlienWaysGuide nothingNear;
+	AlienWaysAsk upsideDown = Ask(Alien(1), { 1000, 0, 5500 }, kGoal, 13);
+	upsideDown.down = AlienWaysXYZ{ 0, -65536, 0 };
+	nothingNear.Steer(&map, upsideDown, &towards);
+	Frame(nothingNear, map, 16);
+	Check(ReportsOf(nothingNear, &reports) == 1 && reports[0].fromKind == kAlienWaysFloor, "with none of its own kind within 2 m, it starts on the nearest of any kind");
+
+	AlienWaysGuide toTheTarget;
+	AlienWaysAsk toIt = Ask(Alien(1), kStart, kGoal, 13);
+	toIt.goalIsTheTarget = true;
+	toTheTarget.Steer(&map, toIt, &towards);
+	Frame(toTheTarget, map, 16);
+	Check(ReportsOf(toTheTarget, &reports) == 1 && reports[0].toTheTarget, "when the goal is the target itself, the report says so");
+}
+
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
 
 // One source file, with Windows line ends made plain
@@ -604,6 +644,14 @@ static void SourceOfTheGame()
 	std::string const steer = Between(ways, "bool AlienWays_Steer(", "bool AlienWays_Following(");
 	Check(Has(steer, "if (!AlienWays_On() || !map ||"), "SOURCE: no alien is guided with the switch off, or on a machine that doesn't run the aliens");
 
+	// The goal: the target itself when it can be seen from the alien's module (the user's first play: ways to the next module were mostly floor)
+	std::string const inView = Between(ways, "static bool InView(MODULE *from, MODULE *to)", "// An alien that's no longer guided");
+	Check(Has(inView, "return from->m_vmptr && IsModuleVisibleFromModule(from, to);"), "SOURCE: a module with no list of what it can see sees only itself, and no empty list is read");
+	Check(Has(steer, "if (target && target->DynPtr && InView(alien->containingModule, target->containingModule))\n\t{\n"
+		"\t\task.goal = AlienWaysXYZ{ target->DynPtr->Position.vx, target->DynPtr->Position.vy, target->DynPtr->Position.vz };\n\t\task.goalIsTheTarget = true;"),
+		"SOURCE: when the target can be seen from the alien's module, the way goes all the way to the target");
+	Check(Has(ways, "(line.toTheTarget ? \" (its target)\" : \" (on the way to its target)\")"), "SOURCE: and the log says which goal a search took");
+
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "told = true;");
 	Check(ComesBefore(end, "theGuide.Clear();", "theBuild.Stop();"), "SOURCE: at a level's end the ways go, before the map they're on");
 
@@ -623,6 +671,7 @@ int main()
 	WhoIsWho();
 	Allowance();
 	NoBetterThanToday();
+	StartsOnItsOwnKind();
 	SourceOfTheGame();
 
 	if (checksFailed)
