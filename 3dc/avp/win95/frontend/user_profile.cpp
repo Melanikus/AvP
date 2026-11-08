@@ -161,6 +161,44 @@ static void SettleMarineNewKeys(PLAYER_INPUT_CONFIGURATION *primary, PLAYER_INPU
 	secondary->Marine_Reload = ShoulderLamp_KeyFromProfile(secondary->Marine_Reload, KEY_ESCAPE, KEY_VOID, false, KEY_VOID);
 }
 
+extern AVP_USER_PROFILE *UserProfile_ForSaveTest(const char *name)
+{
+	if (!name || !UserProfileNameIsSafe(name) || strlen(name) > MAX_SIZE_OF_USERS_NAME)
+	{
+		return 0;
+	}
+
+	// The list's first and next entries can only be asked for while there are entries, and never past the last one
+	for (AVP_USER_PROFILE *profilePtr = UserProfilesList.size() > 0 ? UserProfilesList.first_entry() : 0; profilePtr; profilePtr = UserProfilesList.next_entry(profilePtr))
+	{
+		if (!strcmp(profilePtr->Name, name))
+		{
+			return profilePtr;
+		}
+
+		if (profilePtr == UserProfilesList.last_entry())
+		{
+			break;
+		}
+	}
+
+	AVP_USER_PROFILE *profilePtr = new AVP_USER_PROFILE;
+	*profilePtr = DefaultUserProfile;
+	::GetLocalTime(&profilePtr->TimeLastUpdated);
+	::SystemTimeToFileTime(&profilePtr->TimeLastUpdated, &profilePtr->FileTime);
+	strncpy(profilePtr->Name, name, MAX_SIZE_OF_USERS_NAME);
+	profilePtr->Name[MAX_SIZE_OF_USERS_NAME] = 0;
+	SetDefaultProfileOptions(profilePtr);
+	InsertProfileIntoList(profilePtr);
+
+	if (!SaveUserProfile(profilePtr))
+	{
+		return 0;
+	}
+
+	return profilePtr;
+}
+
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
 {
 	if (!UserProfileNameIsSafe(profilePtr->Name)) {

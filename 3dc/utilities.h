@@ -57,6 +57,11 @@ char *GetSaveFolderPath();
 
 // What went wrong finding that folder, or null if nothing did.
 char const *GetSaveFolderProblem();
+
+// For the save test harness only (save_test.h): from now on the folder is SaveTest in gameFolder, never the player's. It has to be
+// called before anything asks for the folder, the log included. If SaveTest can't be made, the game has no folder, so its files go in
+// the folder it started from, which is still never the player's. Says whether SaveTest is the folder.
+bool UseSaveTestFolder(const char *gameFolder);
 void avp_MessageBox(const char* message, int type);
 void avp_exit(int code);
 

@@ -121,6 +121,23 @@ char const *GetSaveFolderProblem()
 	return noSaveFolder ? saveFolderProblem : NULL;
 }
 
+bool UseSaveTestFolder(const char *gameFolder)
+{
+	std::string where;
+	char const *const whatWentWrong = SaveFolder_MakeForSaveTest(gameFolder, saveFolder, sizeof(saveFolder), &where);
+
+	if (whatWentWrong)
+	{
+		saveFolder[0] = 0;
+		noSaveFolder = true;
+		_snprintf(saveFolderProblem, sizeof(saveFolderProblem) - 1, "%s%s%s", whatWentWrong, where.empty() ? "" : ": ", where.c_str());
+		return false;
+	}
+
+	noSaveFolder = false;
+	return true;
+}
+
 char *GetSaveFolderPath()
 {
 	// check if we've got the path previously and use it again, or if we've found there isn't one

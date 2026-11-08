@@ -21,6 +21,7 @@
 #include "Input.h"
 #include "language.h"
 #include "d3d_hud.h"
+#include "save_test.h"
 
 extern SCREENDESCRIPTORBLOCK ScreenDescriptorBlock;
 extern int FadingGameInAfterLoading;
@@ -185,7 +186,8 @@ static bool LoadingScreenIsDone(bool startsTogether, bool *keyHasBeenPressed)
 		return Coop_MayStartLevel(*keyHasBeenPressed);
 	}
 
-	return *keyHasBeenPressed || AvP.Network == I_Host;
+	// A save test has nobody to press a key, so it counts as having pressed one (save_test.h)
+	return *keyHasBeenPressed || AvP.Network == I_Host || SaveTest_Running();
 }
 
 void Game_Has_Loaded()

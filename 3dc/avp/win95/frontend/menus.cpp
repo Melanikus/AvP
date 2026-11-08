@@ -76,6 +76,7 @@
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
+#include "save_test.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -304,6 +305,7 @@ JOYSTICK_CONTROL_METHODS PlayerJoystickControlMethods;
 static void RenderScrollyMenu();
 static void RenderHelpString();
 static void CheckForLoadGame();
+static void SaveTestMenus();
 
 static void UpdateMultiplayerConfigurationMenu();
 
@@ -477,6 +479,7 @@ int AvP_MainMenus(void)
 		ViewSettings_MenuFrame();
 		Reverb_MenuFrame();
 
+		SaveTestMenus();
 		CheckForLoadGame();
 
 		ThisFramesRenderingHasFinished();
@@ -511,7 +514,8 @@ int AvP_MainMenus(void)
 
 	#if 0
 	#if PREDATOR_DEMO||MARINE_DEMO||ALIEN_DEMO
-	if (/*!AvP.LevelCompleted &&*/ (AvPMenus.MenusState != MENUSSTATE_STARTGAME)) ShowSplashScreens();
+	// A save test closes the game without the 25 seconds of splash screens: it's run hundreds of times (save_test.h)
+	if (/*!AvP.LevelCompleted &&*/ (AvPMenus.MenusState != MENUSSTATE_STARTGAME) && !SaveTest_WasAsked()) ShowSplashScreens();
 	TimeStampedMessage("after ShowSplashScreens");
 	#endif
 	#endif
@@ -5731,6 +5735,82 @@ static void GetHeaderInfoForSaveSlot(SAVE_SLOT_HEADER* save_slot, const char* fi
 	save_slot->SavesLeft = block.NumberOfSavesLeft;
 }
 
+
+// The save test harness's choices, made the way a player's are (save_test.h): its own profile, then either its save put in the
+// profile's first slot and that slot loaded, by CheckForLoadGame straight after this, or a new game of the level it names
+static void SaveTestMenus()
+{
+	SaveTestMenusAsk const ask = SaveTest_MenusAsk();
+
+	if (ask == kSaveTestMenusNothing)
+	{
+		return;
+	}
+
+	AVP_USER_PROFILE *profile = UserProfile_ForSaveTest("SaveTest");
+
+	if (!profile)
+	{
+		SaveTest_MenusDid(false, "save test: its profile can't be made");
+		return;
+	}
+
+	UserProfilePtr = profile;
+	GetSettingsFromUserProfile();
+
+	if (ask == kSaveTestMenusLoad)
+	{
+		char slot[MAX_PATH];
+
+		if (!GetFilenameForSaveSlot(0, slot) || !CopyFileA(SaveTest_SavePath(), slot, FALSE))
+		{
+			SaveTest_MenusDid(false, "save test: the save can't be put in the profile's first slot");
+			return;
+		}
+
+		// The slot is read as the load menu reads it. A save whose header the menus can't read shows as an empty slot, and that's an
+		// answer too: the menus never load it
+		ScanSaveSlots();
+
+		if (!SaveGameSlot[0].SlotUsed)
+		{
+			SaveTest_MenusDid(false, "save test: the menus read the save's slot as empty, so it's never loaded");
+			return;
+		}
+
+		LoadGameRequest = 0;
+		SaveTest_MenusDid(true, nullptr);
+		return;
+	}
+
+	int const episode = SaveTest_Episode();
+	AvP.Difficulty = I_Medium;
+
+	switch (SaveTest_Species())
+	{
+		case I_Marine:
+			AvP.PlayerType = I_Marine;
+			MarineEpisodeToPlay = episode;
+			SetLevelToLoadForMarine(episode);
+			break;
+
+		case I_Predator:
+			AvP.PlayerType = I_Predator;
+			PredatorEpisodeToPlay = episode;
+			SetLevelToLoadForPredator(episode);
+			break;
+
+		default:
+			AvP.PlayerType = I_Alien;
+			AlienEpisodeToPlay = episode;
+			SetLevelToLoadForAlien(episode);
+			break;
+	}
+
+	SetBriefingTextForEpisode(episode, AvP.PlayerType);
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+	SaveTest_MenusDid(true, nullptr);
+}
 
 static void CheckForLoadGame()
 {

@@ -150,6 +150,10 @@ extern int NumberOfUserProfiles(void);
 extern AVP_USER_PROFILE *GetFirstUserProfile(void);
 extern AVP_USER_PROFILE *GetNextUserProfile(void);
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr);
+
+// The save test harness's own profile (save_test.h): the profile of that name, or a new one made with the default settings and saved.
+// Only a save test asks, and its folder is SaveTest, never the player's. Nothing if it can't be made.
+extern AVP_USER_PROFILE *UserProfile_ForSaveTest(const char *name);
 extern BOOL UserProfileNameIsSafe(const char *name);
 extern void DeleteUserProfile(int number);
 

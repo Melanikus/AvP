@@ -50,6 +50,7 @@
 #include "..\3dc\FileStream.h"
 #include "console.h"
 #include "ConfigFile.h"
+#include "save_test.h"
 
 // extern Varibles
 extern int VideoMode;
@@ -389,6 +390,9 @@ void UpdateGame(void)
 		else if (LoadGameRequest != SAVELOAD_REQUEST_NONE) {
 			LoadSavedGame();
 		}
+
+		// The save test harness counts its frames, saves its seed, and closes the game when it's done (save_test.h)
+		SaveTest_GameFrame();
 	}
 
 	ObjectDynamics();

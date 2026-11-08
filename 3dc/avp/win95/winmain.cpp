@@ -81,6 +81,7 @@
 #include "frame_timing.h"
 #include "FastFile.h"
 #include "console.h"
+#include "save_test.h"
 
 #if debug
 #define MainTextPrint 1
@@ -200,6 +201,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	StopGameIfNewFails();
 
 	SetWindowTitle();
+
+	// The save test harness (save_test.h) points the game's folder at its own SaveTest before anything is written there, the log first
+	SaveTest_TakeCommandLine(lpCmdLine);
 	ClearLog();
 	LogString(GetWindowTitle());
 	LogString(BuildIdentity_Lines());
@@ -608,6 +612,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 //	#endif //AVP_DEBUG_VERSION
+
+	// A save test is decided here, before anything reaches the network or the menus. If it's refused, the log says why and the game
+	// closes, having written nothing of the player's (save_test.h)
+	{
+		extern int DevMode;
+		bool const networkGame = CommandLineHasWord(command_line, "-server") || CommandLineHasWord(command_line, "-client");
+
+		if (!SaveTest_Start(DevMode != 0, networkGame))
+		{
+			CloseDebugConsole();
+			exit(kSaveTestRefusedExit);
+		}
+	}
 
 	// -server and -client start a network game straight away, so they have to be the words themselves: a level's name given to -n may
 	// hold a '-', and a name like arena-server mustn't open a game to the network (SWITCH-WORDS-1)
