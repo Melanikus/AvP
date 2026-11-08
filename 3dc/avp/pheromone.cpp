@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a game that plays as single player, an alien on another machine leaves a trail NPCs can follow
 /*-----------------------Patrick 12/11/96--------------------------
   Source for AVP Pheromone system
   -----------------------------------------------------------------*/
@@ -433,6 +435,11 @@ void PlayerPheromoneSystem(void)
 		   			PherPl_WriteBuf[playerSbPtr->containingModule->m_aimodule->m_index] = PlayerSmell;
 					AddMarinePheromones(playerSbPtr->containingModule->m_aimodule);
 				}
+			}
+			else if(ghostData->type==I_BehaviourAlienPlayer && SameAsSinglePlayer() && playerSbPtr->containingModule)
+			{
+				// Single player lays this trail for its one player whatever the species, and NPCs hunt by it. So every player leaves one here.
+				PherPl_WriteBuf[playerSbPtr->containingModule->m_aimodule->m_index] = PlayerSmell;
 			}
 		}
 	}

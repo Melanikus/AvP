@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a game that plays as single player a dead player is out until the next level, rather than coming back
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   walking and crouching always slow the player down, and TurnSpeedAdjust only decides whether turning slows too (walk_speeds.h).
 //   Found through Bobblen's avp-forever (commit 2b70546)
@@ -1181,7 +1183,8 @@ static void CorpseMovement(STRATEGYBLOCK *sbPtr)
 	{
 		if(deathFadeLevel>0)
 		{
-			deathFadeLevel-= RealFrameTime/2;	
+			// (The same speed as single player's in a game that plays like it)
+			deathFadeLevel-= SameAsSinglePlayer() ? RealFrameTime/4 : RealFrameTime/2;
 		}
 		else
 		{
@@ -1201,6 +1204,13 @@ static void NetPlayerDeadProcessing(STRATEGYBLOCK *sbPtr)
 
 	/* call the read input function so that we can still respawn/quit, etc */
 	ReadPlayerGameInput(sbPtr);
+
+	// A game that plays as single player has no coming back: he's out until the next level
+	if (SameAsSinglePlayer())
+	{
+		Coop_WhileOut(psPtr->Mvt_InputRequests.Flags.Rqst_Operate != 0);
+		return;
+	}
 
 	/* check for re-spawn */
 	if(psPtr->Mvt_InputRequests.Flags.Rqst_Operate)

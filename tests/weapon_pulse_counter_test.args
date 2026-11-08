@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /FC /we4996
+/DNDEBUG
+/I3dc/avp
+tests/weapon_pulse_counter_test.cpp

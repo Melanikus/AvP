@@ -21,10 +21,6 @@ void CustomMaps_Find(void);
 int CustomMaps_Count(void);
 const char *CustomMaps_Name(int which);
 
-// Which of them has this name, in any case, or -1. The name is checked against the rule first, and only ever compared with the list: it's
-// never used to build a path itself.
-int CustomMaps_Named(const char *name, size_t room);
-
 // Puts "Custom/<name>" into LevelName, for the game to load. False, with LevelName unchanged, for a number that isn't one of them.
 bool CustomMaps_SetLevelToLoad(int which);
 

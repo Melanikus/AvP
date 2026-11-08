@@ -395,6 +395,38 @@ static char crashWords[4096];
 
 static LONG WINAPI WriteLogBeforeCrash(EXCEPTION_POINTERS *crash)
 {
+	// Where it happened, as distances from the start of the game's own code, so that the linker's map can name the function. The stack holds the way back: any number on it that points into the game is probably a place that called something.
+	char const *const base = (char const *)GetModuleHandle(NULL);
+	IMAGE_NT_HEADERS const *const headers = (IMAGE_NT_HEADERS const *)(base + ((IMAGE_DOS_HEADER const *)base)->e_lfanew);
+	size_t const size = headers->OptionalHeader.SizeOfImage;
+	EXCEPTION_RECORD const *const record = crash->ExceptionRecord;
+	char line[200];
+
+	_snprintf(line, sizeof(line) - 1, "crash: code %08lX at %p, %IX into the game, on the address %p", record->ExceptionCode, record->ExceptionAddress, (size_t)((char const *)record->ExceptionAddress - base), record->NumberParameters > 1 ? (void *)record->ExceptionInformation[1] : NULL);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	size_t const *stack = (size_t const *)crash->ContextRecord->Esp;
+	std::string found = "crash: on the stack";
+	int kept = 0;
+
+	for (int i = 0; i < 400 && kept < 24 && !IsBadReadPtr(stack + i, sizeof(size_t)); i++)
+	{
+		size_t const distance = stack[i] - (size_t)base;
+
+		if (distance > headers->OptionalHeader.BaseOfCode && distance < size)
+		{
+			char one[16];
+
+			_snprintf(one, sizeof(one) - 1, " %IX", distance);
+			one[sizeof(one) - 1] = 0;
+			found += one;
+			kept++;
+		}
+	}
+
+	LogString(found);
+
 	if (logWriter)
 	{
 		// What was waiting first, so the lines stay in order, then what crashed and where

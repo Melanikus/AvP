@@ -1,4 +1,6 @@
 // One drawing of the surfaces each frame, for every light to read. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   says whether the last drawing used the fixed buffer, for the NORMAL LINES view
 // See surface_pictures.cpp for how it works.
 
 #ifndef SURFACE_PICTURES_H
@@ -16,6 +18,9 @@ bool SurfacePictures_Ready(LPDIRECT3DDEVICE9 device);
 // Whether what draws the relief pictures is there, so choosing them makes sense, even in the menus before any level has loaded them.
 bool SurfacePictures_ReliefCouldRun();
 
+// Whether the walls in the last drawing of the pictures came from the fixed buffer, and not from the game's list.
+bool SurfacePictures_LastDrawWasFromBuffer();
+
 // Whether the relief pictures and what draws them are all there, so that asking for relief really would draw it.
 bool SurfacePictures_ReliefCanRun();
 
@@ -25,8 +30,9 @@ void SurfacePictures_Release();
 // Draws the frame's solid polygons into the pictures. depthPicture is where each pixel's distance goes, and it has already been cleared.
 // worldAxes holds the world's three directions in the light list's space, three numbers each.
 // marchWanted asks for the walk through the depth maps, which is the Relief map lighting: see reliefMarch.fxh. It needs reliefWanted, and it leaves the fixed buffer out.
+// backwards draws the game's list in the opposite order, for the check in static_frame.cpp that finds where polygons tie.
 // The caller has set the depth test and the rest of the device up. Says false if nothing was drawn.
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic = false, bool marchWanted = false);
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic = false, bool marchWanted = false, bool backwards = false);
 
 // Tells the pixel shaders in the card's registers c0 to c3 what reliefMarch.fxh expects there: the world's directions, the depth, and which way the height and the tilt run. With march false the
 // depth is 0, so no pixel moves and no depth map is read.

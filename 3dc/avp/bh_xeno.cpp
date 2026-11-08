@@ -4,7 +4,10 @@
 //   a xenoborg whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
 //   Bobblen's avp-forever, commit 207704e)
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a network game that plays the same as single player has xenoborgs, on the host
+//   when this dies on the host, its death target reaches the other machines
 //   a xenoborg that has just been killed no longer has its freed block read and written
+//   a xenoborg only goes after the players on other machines, not everything they throw and leave behind
 /* Patrick 4/7/97 ----------------------------------------------------
   Source file for Xenoborg AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -492,8 +495,8 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	toolsData = (TOOLS_DATA_XENO *)bhdata;
 	LOCALASSERT(sbPtr);
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no xenoborgs, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
@@ -502,7 +505,7 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* make the assumption that the loader has initialised the strategy block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapeIndex;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -1218,6 +1221,7 @@ static void KillXeno(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int
 	if(xenoStatusPointer->death_target_sbptr)
 	{
 		RequestState(xenoStatusPointer->death_target_sbptr,xenoStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 
@@ -2660,7 +2664,8 @@ int Xenoborg_TargetFilter(STRATEGYBLOCK *candidate) {
 						return(1);
 						break;
 					default:
-						return(1);
+						/* A grenade or a corpse isn't a target */
+						return(0);
 						break;
 				}
 			}

@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   two declarations: whether this game plays the same as single player, and the call that tells the other machines an NPC's death has happened
 #ifndef GAMEDEF_INCLUDED
 
 /*
@@ -174,6 +176,12 @@ extern DISPLAYBLOCK *Player;
 /* KJL 15:42:23 10/02/96 - These two are mine. */
 extern void MaintainPlayer(void);
 extern void MaintainHUD(void);
+
+// Is this game one that plays the same as single player? True in single player, and in a network game playing a campaign. See pldnet.cpp.
+extern bool SameAsSinglePlayer(void);
+
+// That NPC's death has just happened on the host, so its target goes off on the other machines too. See pldnet.h.
+extern void LevelEvents_Happened(const char *sourceName);
 
 
 /*********************************************************/

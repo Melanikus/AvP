@@ -1,5 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79 fires its grenades through the same function as the grenade launcher, and sets their speed
+//   a grenade that bursts on contact bursts on a ghost of any NPC the host runs
+//   so does a mine, and the smart disc and the Predator's disc seek those ghosts as they seek the real NPCs
 //   running out of dynamics blocks or lights no longer crashes, and a molotov with no strategy block gives back its display block
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
@@ -46,6 +49,7 @@
 #include "detaillevels.h"
 #include "pldghost.h"
 #include "pldnet.h"
+#include "npc_ghosts.h"
 
 #define FLAMETHROWER_PARTICLES_PER_FRAME (MUL_FIXED(120,NormalFrameTime))
 #define PREDPISTOLFLECHETTES_PARTICLES_PER_FRAME (MUL_FIXED(50,NormalFrameTime))
@@ -63,7 +67,7 @@
 *                                    P R O T O T Y P E S	                                *
 ****************************************************************************************KJL*/
 static void InitialiseRocketBehaviour(void);
-static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID);
+STRATEGYBLOCK *InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID);
 static STRATEGYBLOCK* InitialisePulseGrenadeBehaviour(void);
 static void InitialisePPPlasmaBoltBehaviour(void);
 static void InitialiseSpeargunBoltBehaviour(void);
@@ -343,7 +347,8 @@ int Frisbee_TargetFilter(STRATEGYBLOCK *candidate) {
 						return(1);
 						break;
 					default:
-						return(0);
+						// A copy of an NPC the host runs counts as the real one does, above: anything but a marine
+						return(NpcGhosts_TypeIsAnNpc(dataptr->type) && dataptr->type != I_BehaviourMarine);
 						break;
 				}
 			}
@@ -1085,7 +1090,7 @@ STRATEGYBLOCK* CreateGrenadeKernel(AVP_BEHAVIOUR_TYPE behaviourID, VECTORCH *pos
 	return dispPtr->ObStrategyBlock;
 }
 
-static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
+STRATEGYBLOCK *InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
 {
 	VECTORCH position;
 
@@ -1106,7 +1111,7 @@ static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
 		position.vz = position.vz/4 + VDBPtr->VDB_World.vz;
   	}
 
-	CreateGrenadeKernel(behaviourID,&position,&PlayersWeapon.ObMat,1);
+	return CreateGrenadeKernel(behaviourID,&position,&PlayersWeapon.ObMat,1);
 
 }
 
@@ -1171,7 +1176,7 @@ extern void GrenadeBehaviour(STRATEGYBLOCK *sbPtr)
 				if((ghostData->type == I_BehaviourMarinePlayer)||
 			   		(ghostData->type == I_BehaviourPredatorPlayer)||
 			   		(ghostData->type == I_BehaviourAlienPlayer)||
-			   		(ghostData->type == I_BehaviourAlien))
+			   		(ghostData->type == I_BehaviourAlien)||NpcGhosts_TypeIsAnNpc(ghostData->type))
 				{
 			   		explodeNow = 1;
 				}
@@ -1272,7 +1277,7 @@ extern void ClusterGrenadeBehaviour(STRATEGYBLOCK *sbPtr)
 				if((ghostData->type == I_BehaviourMarinePlayer)||
 			   		(ghostData->type == I_BehaviourPredatorPlayer)||
 			   		(ghostData->type == I_BehaviourAlienPlayer)||
-			   		(ghostData->type == I_BehaviourAlien))
+			   		(ghostData->type == I_BehaviourAlien)||NpcGhosts_TypeIsAnNpc(ghostData->type))
 				{
 			   		explodeNow = 1;
 				}
@@ -1537,7 +1542,8 @@ int ValidTargetForProxMine(STRATEGYBLOCK *obstaclePtr)
 		if (ghostDataPtr->type==I_BehaviourAlienPlayer
 		  ||ghostDataPtr->type==I_BehaviourMarinePlayer
 		  ||ghostDataPtr->type==I_BehaviourPredatorPlayer
-		  ||ghostDataPtr->type==I_BehaviourAlien)
+		  ||ghostDataPtr->type==I_BehaviourAlien
+		  ||NpcGhosts_TypeIsAnNpc(ghostDataPtr->type))
 		{
 			return 1;
 		}
@@ -4041,6 +4047,14 @@ int PredDisc_TargetFilter(STRATEGYBLOCK *candidate) {
 		case I_BehaviourNetGhost:
 			{
 				NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+
+				// In the mode that plays as single player does, the disc seeks what it seeks there: an NPC, which here may be a
+				// copy of one the host runs. The other players are on your side, so it leaves them alone.
+				if (SameAsSinglePlayer())
+				{
+					return(dataptr->type == I_BehaviourAlien || NpcGhosts_TypeIsAnNpc(dataptr->type));
+				}
+
 				switch (dataptr->type) {
 					case I_BehaviourMarinePlayer:
 					case I_BehaviourAlienPlayer:

@@ -57,15 +57,17 @@ struct Seen
 	bool messageCameFirst;
 };
 
-// Whether an address is this machine's own loopback address, 127.0.0.1, which never leaves the machine. Says it as well.
-static bool IsOnThisMachine(ENetAddress const &address, const char *what)
+// Whether an address is this machine's own loopback address, 127.0.0.1, which never leaves the machine. Says it as well. The address is
+// compared as the number it is, against Windows' own name for that one (INADDR_LOOPBACK), in the order ENet keeps it, not as text.
+// Called IsThisMachinesAddress, not IsOnThisMachine, because Snyk Code joins functions with the same name across files.
+static bool IsThisMachinesAddress(ENetAddress const &address, const char *what)
 {
 	char name[64] = "";
 
 	enet_address_get_host_ip(&address, name, sizeof(name));
 	printf("        %s: %s port %u\n", what, name, (unsigned)address.port);
 
-	return strcmp(name, "127.0.0.1") == 0;
+	return address.host == ENET_HOST_TO_NET_32(INADDR_LOOPBACK);
 }
 
 static ENetHost *MakeHostOnThisMachine()
@@ -82,7 +84,7 @@ static ENetHost *MakeHostOnThisMachine()
 
 	if (host && enet_socket_get_address(host->socket, &bound) == 0)
 	{
-		CloseCheck(IsOnThisMachine(bound, "a host's socket is on"), "the socket is on 127.0.0.1 only");
+		CloseCheck(IsThisMachinesAddress(bound, "a host's socket is on"), "the socket is on 127.0.0.1 only");
 	}
 	else
 	{
@@ -119,7 +121,7 @@ static bool MakePair(Pair *pair)
 		return false;
 	}
 
-	CloseCheck(IsOnThisMachine(pair->leaversConnection->address, "the connection goes to"), "and the connection goes to 127.0.0.1 only");
+	CloseCheck(IsThisMachinesAddress(pair->leaversConnection->address, "the connection goes to"), "and the connection goes to 127.0.0.1 only");
 
 	DWORD const startedAt = GetTickCount();
 	bool otherHasIt = false;

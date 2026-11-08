@@ -18,6 +18,11 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   with Gouraud lighting, a flare's shadow takes only what the flare really gave, and lamps alone are drawn from several positions
 //   with the shadow volumes off, nothing is collected for casting, and the shadow code is only told that the world was drawn
+//   the marine's shoulder lamp is a real light on the chosen list, when lights are added per pixel
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   can say what shape is being drawn, for the NORMAL LINES view's log
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   only the map's lights you can see take a place on the shadow list, unless SHADOWAMBIENT says otherwise. See light_choice.h
 //   up to 20 steady and 12 brief lights are chosen, and the choosing counts what became of each light, for the log
@@ -39,6 +44,7 @@
 #include "chunk_textures.h"
 #include "kshape.h"
 #include "pixel_lights.h"
+#include "shoulder_lamp.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "kzsort.h"
@@ -6041,6 +6047,14 @@ const char *ToyShadows_RoomName()
 	return toyRoomName;
 }
 
+// What's being drawn at this moment, for the NORMAL LINES view's log: see normal_lines.h. Only asked for a polygon that was given its normals, so these are the ones it was drawn with.
+void ToyShadows_WhatIsBeingDrawn(int *shapeNumber, int *behaviour, bool *hasPolygonList)
+{
+	*shapeNumber = Global_ODB_Ptr ? Global_ODB_Ptr->ObShape : -1;
+	*behaviour = (Global_ODB_Ptr && Global_ODB_Ptr->ObStrategyBlock) ? (int)Global_ODB_Ptr->ObStrategyBlock->I_SBtype : -1;
+	*hasPolygonList = Global_ShapeHeaderPtr && Global_ShapeHeaderPtr->sh_surfacepolygons;
+}
+
 // Has a level been shown since this was last asked? Menus and loading screens don't count.
 bool ToyShadows_TakeViewRan()
 {
@@ -6227,6 +6241,45 @@ static void PickLampsForPositions(const ToyFoundLight *chosen, int numChosen, co
 	}
 }
 
+void ToyShadows_WorldAxes(float *axes);
+
+// The marine's shoulder lamp as a real light: see shoulder_lamp.h. It belongs to nothing in the game, so the game's own lighting never hears of it, and it's only ever added per pixel. That's why it only goes on the list when lights are being added per pixel:
+// anywhere else it would be a shadow with no light to take away.
+static LIGHTBLOCK shoulderLampLight;
+static bool shoulderLampIsChosen = false;
+
+bool ToyShadows_ShoulderLampIsChosen()
+{
+	return shoulderLampIsChosen;
+}
+
+static void ConsiderTheShoulderLamp(ToyFoundLight *found, int *numFound, int most)
+{
+	if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)
+	{
+		return;
+	}
+
+	float axes[9];
+	float const *const from = ShoulderLamp_PlaceFromEyes();
+
+	ToyShadows_WorldAxes(axes);
+	memset(&shoulderLampLight, 0, sizeof(shoulderLampLight));
+
+	// The three directions of the view, as the world has them, so that it's always at the same place beside his eyes
+	shoulderLampLight.LightWorld.vx = toyCameraWorld.vx + (int)(axes[0] * from[0] + axes[1] * from[1] + axes[2] * from[2]);
+	shoulderLampLight.LightWorld.vy = toyCameraWorld.vy + (int)(axes[3] * from[0] + axes[4] * from[1] + axes[5] * from[2]);
+	shoulderLampLight.LightWorld.vz = toyCameraWorld.vz + (int)(axes[6] * from[0] + axes[7] * from[1] + axes[8] * from[2]);
+	shoulderLampLight.LightBright = (int)(ShoulderLamp_Flicker((double)timeGetTime() / 1000.0) * (float)ONE_FIXED);
+	shoulderLampLight.LightRange = kShoulderLampRange;
+	shoulderLampLight.RedScale = kShoulderLampRed;
+	shoulderLampLight.GreenScale = kShoulderLampGreen;
+	shoulderLampLight.BlueScale = kShoulderLampBlue;
+
+	// Given as the player's, so that it counts even this close to the camera, and so that his own body doesn't throw a shadow from it
+	ToyConsiderLight(&shoulderLampLight, Player, found, numFound, most, &lightsThisFrame.steadyInReach);
+}
+
 // Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
 // before: a live light can only leave the game's lighting for a frame it hasn't been used in yet, and a muzzle flash only has that
 // one frame. The camera can't move after this point, because TranslationSetup is the only thing that sets ViewMatrix, and it runs
@@ -6296,6 +6349,8 @@ void ToyShadows_ChooseLights()
 	{
 		ToyConsiderLight(&LightElementStorage[i].LightBlock, 0, brief, &numBrief, kLightChoiceMostCandidates, &lightsThisFrame.briefInReach);
 	}
+
+	ConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);
 
 	LightChoice_KeepTheLargest(&lightChoiceSamples);
 	numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
@@ -6404,6 +6459,13 @@ void ToyShadows_ChooseLights()
 				out[6] = held * ToyFraction(light->BlueScale);
 				out[8] = 0.0f;
 			}
+
+			// 2: the lamp's own look, a cone
+			if (light == &shoulderLampLight)
+			{
+				out[8] = 2.0f;
+				shoulderLampIsChosen = true;
+			}
 		}
 
 		toyChosenOwners[place] = chosen[i].owner;
@@ -6422,6 +6484,9 @@ static int mostInReach = 0;
 static int mostInReachFrame = 0;
 static char mostInReachRoom[sizeof(toyRoomName)] = "none";
 static int mostChosen = 0;
+static int mostSteady = 0;
+static int mostBrief = 0;
+static int framesNoted = 0;
 static int mostPasses = 0;
 static float mostMilliseconds = 0.0f;
 
@@ -6438,7 +6503,10 @@ void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)
 		memcpy(mostInReachRoom, toyRoomName, sizeof(mostInReachRoom));
 	}
 
+	framesNoted++;
 	mostChosen = (chosen > mostChosen) ? chosen : mostChosen;
+	mostSteady = (lightsThisFrame.steadyChosen > mostSteady) ? lightsThisFrame.steadyChosen : mostSteady;
+	mostBrief = (lightsThisFrame.briefChosen > mostBrief) ? lightsThisFrame.briefChosen : mostBrief;
 	mostPasses = (passes > mostPasses) ? passes : mostPasses;
 	mostMilliseconds = (milliseconds > mostMilliseconds) ? milliseconds : mostMilliseconds;
 }
@@ -6846,7 +6914,8 @@ void ShadowShoot_CrosshairPixel(int *x, int *y)
 	*y = hasSight ? (int)(GunMuzzleSightY >> 16) : -1;
 }
 
-void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
+// alsoIgnore is one more thing the ray goes straight through, as well as the player: a marine the camera is looking out from, for one.
+void ShadowShoot_FindTarget(const float *direction, ShootTarget *target, const void *alsoIgnore)
 {
 	memset(target, 0, sizeof(*target));
 	target->shapeNumber = -1;
@@ -6868,7 +6937,7 @@ void ShadowShoot_FindTarget(const float *direction, ShootTarget *target)
 	DISPLAYBLOCK *const keptObject = LOS_ObjectHitPtr;
 	SECTION_DATA *const keptSection = LOS_HModel_Section;
 
-	FindPolygonInLineOfSight(&aim, &place, 0, Player);
+	FindPolygonInLineOfSight_TwoIgnores(&aim, &place, 0, Player, (DISPLAYBLOCK *)alsoIgnore);
 
 	DISPLAYBLOCK const *hit = LOS_ObjectHitPtr;
 	SECTION_DATA const *section = LOS_HModel_Section;

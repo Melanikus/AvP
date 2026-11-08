@@ -1,4 +1,9 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a campaign, something with several possible places is in the same one on every machine
+//   a map can place pickups of the new guns and their ammunition: see weapon_pickups.h
+//   a network game that plays the same as single player sets up all the level's NPCs on the host, and none on the others
+//   every machine notes each NPC's death target, for when the host says that NPC has died
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and a sound file path
 //   too long for its buffer, a blank sound name or an impossible sound number is skipped, like a missing sound;
@@ -23,6 +28,7 @@
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "bh_types.h"
+#include "weapon_pickups.h"
 #include "environment_chunk.hpp"
 #include "chunk_object.hpp"
 #include "chunk_light.hpp"
@@ -68,6 +74,8 @@
 #include "dxlog.h"
 #include "mempool.h"
 #include "pldnet.h"
+#include "env_info.h"
+#include "shared_roll.h"
 #include "3dc.h"
 #include "logString.h"
 
@@ -353,7 +361,8 @@ static int get_location_group_die_roll(int group)
 	//need to roll a new value for this group
 	LocationGroupDieRoll* loc_group=new LocationGroupDieRoll;
 	loc_group->group=group;
-	loc_group->roll=FastRandom() & 0xffff;
+	// (Every machine in a campaign has to agree where things are: see shared_roll.h)
+	loc_group->roll=netGameData.coopCampaign != kCampaignNone && AvP.Network != I_No_Network ? SharedRoll(netGameData.coopRollNumber, group, 0, 0) : FastRandom() & 0xffff;
 	DieRoll_List.add_entry(loc_group);
 
 	return loc_group->roll;
@@ -385,6 +394,11 @@ static void select_alternate_location(BehaviourBlockData* bbd)
 		if(bbd->location_group)
 		{
 			dieroll=get_location_group_die_roll(bbd->location_group);
+		}
+		else if (netGameData.coopCampaign != kCampaignNone && AvP.Network != I_No_Network)
+		{
+			// Every machine in a campaign has to agree where this is: see shared_roll.h. Its first place is what tells it from another object.
+			dieroll=SharedRoll(netGameData.coopRollNumber, bbd->alt_vector[0].vx, bbd->alt_vector[0].vy, bbd->alt_vector[0].vz);
 		}
 		else
 		{
@@ -527,8 +541,8 @@ void create_strategies_from_list ()
 		if(AvP.Network != I_No_Network && !AvP.NetworkAIServer)
 		{
 			//if this is a network game , and we aren't the	ai host , then we shouldn't set up
-			//any aliens
-			if(bbd->sb_type==I_BehaviourAlien) continue;
+			//any aliens, or any of the other people, because the host runs them and tells us where they are
+			if(BehaviourIsAnNpcTheHostRuns(bbd->sb_type)) continue;
 		}
 
 		//if this is a quantum object , need to select location
@@ -2268,6 +2282,58 @@ static void add_newsimpleobject(Object_Chunk * ob, int list_pos, AVP_Strategy_Ch
 			case 9:
 				tdio->subType=AMMO_PRED_RIFLE;
 				break;
+			case 1:
+				// The map tool's "Shotgun" ammunition, which the game itself never had a gun for
+				tdio->subType = AMMO_PLAYER_SHOTGUN;
+				break;
+		}
+	}
+
+	// The new guns. The game's own objects can't be these: no stock map has an object of either of these types.
+	if (tdio->typeId == IOT_IRGoggles)
+	{
+		tdio->typeId = IOT_Weapon;
+		tdio->subType = WEAPON_AUTOSHOTGUN;
+	}
+
+	if (tdio->typeId == IOT_DataTape)
+	{
+		switch (PlacedPickup_FromName(ob->object_data.o_name))
+		{
+			case kPlacedPickup_M79:
+				tdio->typeId = IOT_Weapon;
+				tdio->subType = WEAPON_MYSTERYGUN;
+				break;
+			case kPlacedPickup_SniperRifle:
+				tdio->typeId = IOT_Weapon;
+				tdio->subType = WEAPON_SONICCANNON;
+				break;
+			case kPlacedPickup_Revolver:
+				tdio->typeId = IOT_Weapon;
+				tdio->subType = WEAPON_BEAMCANNON;
+				break;
+			case kPlacedPickup_M79Grenades:
+				tdio->typeId = IOT_Ammo;
+				tdio->subType = AMMO_M79_STANDARD;
+				break;
+			case kPlacedPickup_M79FireGrenades:
+				tdio->typeId = IOT_Ammo;
+				tdio->subType = AMMO_M79_FIRE;
+				break;
+			case kPlacedPickup_M79FragGrenades:
+				tdio->typeId = IOT_Ammo;
+				tdio->subType = AMMO_M79_FRAG;
+				break;
+			case kPlacedPickup_SniperRounds:
+				tdio->typeId = IOT_Ammo;
+				tdio->subType = AMMO_SNIPER;
+				break;
+			case kPlacedPickup_RevolverRounds:
+				tdio->typeId = IOT_Ammo;
+				tdio->subType = AMMO_REVOLVER;
+				break;
+			default:
+				break;
 		}
 	}
 
@@ -2497,6 +2563,11 @@ static void add_alien(AVP_Generator_Chunk * agc)
 	ObjectID ID=agc->CalculateID();
 	*(ObjectID*)&tda->nameID[0]=ID;
 	
+	if (*(int *)&tda->death_target_ID[0] || *(int *)&tda->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tda->death_target_ID, 1);
+	}
+
 	AddToBehaviourList(agc->name,ID, I_BehaviourAlien, (void *) tda,0,agc->get_alternate_locations_chunk(),agc->flags);
 }
 
@@ -2653,6 +2724,11 @@ static void add_marine(AVP_Generator_Chunk * agc)
 	}
 	
 	
+	if (*(int *)&tdm->death_target_ID[0] || *(int *)&tdm->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tdm->death_target_ID, tdm->death_target_request);
+	}
+
 	AddToBehaviourList(agc->name,ID, I_BehaviourMarine, (void *) tdm,0,agc->get_alternate_locations_chunk(),agc->flags);
 }	
 
@@ -2787,6 +2863,11 @@ static void add_predator(AVP_Generator_Chunk * agc)
 	ObjectID ID=agc->CalculateID();
 	*(ObjectID*)&tdp->nameID[0] = ID;
 
+	if (*(int *)&tdp->death_target_ID[0] || *(int *)&tdp->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tdp->death_target_ID, tdp->death_target_request);
+	}
+
 	if(agc->flags & AVPGENFLAG_GENERATORINACTIVE)
 		AddToBehaviourList(agc->name,ID, I_BehaviourDormantPredator, (void *) tdp,0,agc->get_alternate_locations_chunk(),agc->flags);
 	else
@@ -2838,6 +2919,11 @@ static void add_queen(AVP_Generator_Chunk * agc)
 		}
 	}									
 
+
+	if (*(int *)&tdq->death_target_ID[0] || *(int *)&tdq->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tdq->death_target_ID, tdq->death_target_request);
+	}
 
 	AddToBehaviourList(agc->name,ID, I_BehaviourQueenAlien, (void *) tdq,0,agc->get_alternate_locations_chunk(),agc->flags);
 	
@@ -2893,6 +2979,11 @@ static void add_hugger(AVP_Generator_Chunk * agc)
 	}
 
 	
+	if (*(int *)&tdfh->death_target_ID[0] || *(int *)&tdfh->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tdfh->death_target_ID, tdfh->death_target_request);
+	}
+
 	AddToBehaviourList(agc->name,ID, I_BehaviourFaceHugger, (void *) tdfh,0,agc->get_alternate_locations_chunk(),agc->flags);
 }
 
@@ -2949,6 +3040,11 @@ static void add_autogun(AVP_Generator_Chunk * agc)
 	ObjectID ID=agc->CalculateID();
 	*(ObjectID*)&att->nameID[0]=ID;
 	
+	if (*(int *)&att->death_target_ID[0] || *(int *)&att->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, att->death_target_ID, att->death_target_request);
+	}
+
 	AddToBehaviourList(agc->name,ID,I_BehaviourAutoGun, (void *) att,0,agc->get_alternate_locations_chunk(),agc->flags);
 }	
 
@@ -3011,6 +3107,11 @@ static void add_xenoborg(AVP_Generator_Chunk * agc)
 	ObjectID ID=agc->CalculateID();
 	*(ObjectID*)&tdx->nameID[0]=ID;
 
+
+	if (*(int *)&tdx->death_target_ID[0] || *(int *)&tdx->death_target_ID[4])
+	{
+		LevelEvents_Note((const char *)&ID, tdx->death_target_ID, tdx->death_target_request);
+	}
 
 	AddToBehaviourList(agc->name,ID, I_BehaviourXenoborg, (void *) tdx,0,agc->get_alternate_locations_chunk(),agc->flags);
 	
@@ -3078,34 +3179,34 @@ void setup_generators (Environment_Data_Chunk * envd)
 					   AvP.PlayerType==I_Predator && (agc->flags & AVPGENFLAG_AVPGAMEMODEPREDATOR))
 					#endif
 					{
-						//note : only aliens can appear in a network game
+						//note : only aliens can appear in a network game, unless it plays the same as single player
 						switch (agc->type)
 						{
 							case 1:
 								add_alien(agc);
 								break;
 							case 2:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_predator(agc);
 								break;
 							
 							case 3:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_hugger(agc);
 								break;
 							case 4:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_xenoborg(agc);
 								break;
 							case 5:
 								add_alien(agc);//add_alien also does predaliens
 								break;
 							case 6:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_queen(agc);
 								break;
 							case 7:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_marine(agc);
 								break;
 							case 8:
@@ -3113,7 +3214,7 @@ void setup_generators (Environment_Data_Chunk * envd)
 								break;
 
 							case 9:
-								if(AvP.Network == I_No_Network)
+								if(SameAsSinglePlayer())
 									add_autogun(agc); 
 								break;
 

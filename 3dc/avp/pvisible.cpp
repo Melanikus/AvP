@@ -3,6 +3,10 @@
 //   running out of strategy blocks is checked before one is used
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   an object of a type the game doesn't know is left out
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a game that plays as single player every gun and box is there, the host's Allow rows don't count, and what's taken stays gone
+//   a new gun someone has dropped has a shape, unless the host doesn't allow it
+//   guns and ammo of classes that aren't allowed don't appear, and neither do the sniper rifle's in a network game
 
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /*------------------------Patrick 14/1/97-----------------------------
@@ -1093,6 +1097,12 @@ void InitInanimateObject(void* bhdata, STRATEGYBLOCK *sbPtr)
                 objectstatusptr->event_target->request=toolsData->event_request;
                 for(i=0;i<SB_NAME_LENGTH;i++) objectstatusptr->event_target->event_target_ID[i] = toolsData->event_target_ID[i];
                 objectstatusptr->event_target->event_target_sbptr=0;
+
+                // Picking it up happens on one machine, so every machine writes down what it sets off. See level_events.h.
+                if(toolsData->triggering_event & ObjectEventFlag_PickedUp)
+                {
+                        LevelEvents_NoteItem(toolsData->nameID,objectstatusptr->event_target->event_target_ID,toolsData->event_request,toolsData->position.vx,toolsData->position.vy,toolsData->position.vz);
+                }
         }
         else
         {
@@ -1384,7 +1394,7 @@ void InitInanimateObject(void* bhdata, STRATEGYBLOCK *sbPtr)
         objectstatusptr->startingHealth = sbPtr->SBDamageBlock.Health;
         objectstatusptr->startingArmour = sbPtr->SBDamageBlock.Armour;
 
-		if(AvP.Network != I_No_Network)
+		if(!SameAsSinglePlayer())
 		{
 			//if in a network game , see if this is an allowable weapon
 			if(objectstatusptr->typeId==IOT_Weapon)
@@ -1395,6 +1405,11 @@ void InitInanimateObject(void* bhdata, STRATEGYBLOCK *sbPtr)
 				   (!netGameData.allowGrenadeLauncher && objectstatusptr->subType==WEAPON_GRENADELAUNCHER)||	
 				   (!netGameData.allowPistols && objectstatusptr->subType==WEAPON_MARINE_PISTOL)||	
 				   (!netGameData.allowSmartDisc && objectstatusptr->subType==WEAPON_FRISBEE_LAUNCHER)||
+				   (!netGameData.allowShotgun && objectstatusptr->subType==WEAPON_AUTOSHOTGUN)||
+				   (!netGameData.allowRevolver && objectstatusptr->subType==WEAPON_BEAMCANNON)||
+				   (!netGameData.allowM79 && objectstatusptr->subType==WEAPON_MYSTERYGUN)||
+				   (!netGameData.allowStaff && objectstatusptr->subType==WEAPON_PRED_STAFF)||
+				   objectstatusptr->subType==WEAPON_SONICCANNON|| // the sniper rifle stays in single player for now
 				   (!netGameData.allowMinigun && objectstatusptr->subType==WEAPON_MINIGUN))
 				{
                 	RemoveBehaviourStrategy(sbPtr);
@@ -1409,6 +1424,10 @@ void InitInanimateObject(void* bhdata, STRATEGYBLOCK *sbPtr)
 				   (!netGameData.allowGrenadeLauncher && objectstatusptr->subType==AMMO_GRENADE)||	
 				   (!netGameData.allowPistols && objectstatusptr->subType==AMMO_MARINE_PISTOL_PC)||	
 				   (!netGameData.allowSmartDisc && objectstatusptr->subType==AMMO_FRISBEE)||
+				   (!netGameData.allowShotgun && objectstatusptr->subType==AMMO_PLAYER_SHOTGUN)||
+				   (!netGameData.allowRevolver && objectstatusptr->subType==AMMO_REVOLVER)||
+				   (!netGameData.allowM79 && (objectstatusptr->subType==AMMO_M79_STANDARD || objectstatusptr->subType==AMMO_M79_FIRE || objectstatusptr->subType==AMMO_M79_FRAG))||
+				   objectstatusptr->subType==AMMO_SNIPER|| // the sniper rifle stays in single player for now
 				   (!netGameData.allowMinigun && objectstatusptr->subType==AMMO_MINIGUN))
 				{
                 	RemoveBehaviourStrategy(sbPtr);
@@ -1919,7 +1938,7 @@ void KillInanimateObjectForRespawn(STRATEGYBLOCK *sbPtr)
                 sbPtr->maintainVisibility = 0;
                 if(sbPtr->SBdptr) MakeObjectFar(sbPtr);
 
-				if(netGameData.timeForRespawn>0)
+				if(netGameData.timeForRespawn>0 && !SameAsSinglePlayer())
                 	objectstatusptr->respawnTimer = netGameData.timeForRespawn*ONE_FIXED;
 				else
                 	objectstatusptr->respawnTimer = OBJECT_RESPAWN_NO_RESPAWN;
@@ -2195,6 +2214,12 @@ STRATEGYBLOCK* CreateMultiplayerWeaponPickup(VECTORCH* location,int type,char* n
 		}
 	}
 
+	if ((type==WEAPON_AUTOSHOTGUN && !netGameData.allowShotgun)
+		|| (type==WEAPON_BEAMCANNON && !netGameData.allowRevolver)
+		|| (type==WEAPON_MYSTERYGUN && !netGameData.allowM79)) {
+		return(0);
+	}
+
 	if (type==WEAPON_TWO_PISTOLS) {
 		trueType=WEAPON_MARINE_PISTOL;
 	} else {
@@ -2243,6 +2268,12 @@ STRATEGYBLOCK* CreateMultiplayerWeaponPickup(VECTORCH* location,int type,char* n
 			break;
 		case WEAPON_MINIGUN:
 			toolsdata.shapeIndex=GetLoadedShapeMSL("minigun");
+			break;
+		case WEAPON_AUTOSHOTGUN:
+		case WEAPON_BEAMCANNON:
+		case WEAPON_MYSTERYGUN:
+			// M5 has one model for a new gun on the floor, whichever gun it is
+			toolsdata.shapeIndex=GetLoadedShapeMSL("shotgunpick");
 			break;
 	}
 

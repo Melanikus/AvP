@@ -240,7 +240,8 @@ static void TestDynamics()
 	Check(true, "an object with no dynamics block is left alone");
 }
 
-// A good value has to count nothing, and a bad one has to count against the check that refused it and no other. If only the total were looked at, a later check could hide a missing one.
+// A good value has to count nothing, and a bad one has to count against the check that refused it and no other. If only the total were looked at, a later check could hide a missing one. The
+// log's line names each check that refused something and how many times, so the whole line has to be just that one check, that many times.
 static void CheckRefusedBy(const char *check, int count, const char *what)
 {
 	char words[200] = { 0 };
@@ -250,7 +251,7 @@ static void CheckRefusedBy(const char *check, int count, const char *what)
 	char wanted[120] = { 0 };
 
 	snprintf(wanted, sizeof(wanted), "save: %d values refused, by %s %d", count, check, count);
-	Check(Save_RefusalsBy(check) == count && strcmp(words, wanted) == 0, what);
+	Check(strcmp(words, wanted) == 0, what);
 	Save_StartCountingRefusals();
 }
 

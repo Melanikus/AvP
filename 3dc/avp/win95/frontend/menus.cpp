@@ -7,18 +7,27 @@
 //   refused; the credits roll stops at the end of credits.txt; a typed letter's width is looked up with an unsigned
 //   byte
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   going on to the next level of a campaign skips the menus
 //   leaving the page of games found closes what the search has open on the network
+//   a client whose host has gone goes back to the main menus
+//   the class slider shows the new classes' names, and a host or joiner can start as one
+// Modified 2026-11-05 by Melanikus for the AvP port:
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
 //   a client whose host has gone goes back to the main menus
 //   a network game's loading screen has all five of its lines, where some could be left unset
-// Modified 2026-11-07 by Melanikus for the AvP port:
-//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
-//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
 //   the log says when a save slot is listed as empty because its numbers are wrong
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   choosing a campaign's level on the level row starts that campaign, with its own briefing
+//   a level's films play only when the game plays as single player does, and the network goes on underneath them
+//   the host chooses a campaign's difficulty, and a joiner plays what the host says rather than his last single player game's
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a marine's class comes from the class slider through ClassSlider_ToClass, the same sum as before, in the one place its test checks
+//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
+//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -28,6 +37,7 @@
 #include "pldnet.h"
 #include "Input.h"
 #include "menus.h"
+#include "marine_classes.h"
 #include "view_settings.h"
 #include "env_info.h"
 #include "custom_maps.h"
@@ -80,6 +90,7 @@ extern void Show_WinnerScreen(void);
 extern void AvP_UpdateMenus(void);
 extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
+void SetBriefingTextToBlank(void);
 extern bool Net_UpdateSessionList(int &SelectedItem);
 extern void Net_StopSearchingForSessions();
 extern void SelectMenuDisplayMode(void);
@@ -163,6 +174,7 @@ void PlayMenuMusic(void);
 void ThisFramesRenderingHasFinished(void);
 void EndMenuMusic(void);
 void PlayFMV(const char *filenamePtr);
+extern bool (*WhileAFilmPlays)(void);
 int NumberOfAvailableLevels(I_PLAYER_TYPE playerID);
 int LevelMostLikelyToPlay(I_PLAYER_TYPE playerID);
 void Net_EnumConnections();
@@ -302,8 +314,30 @@ int GetAvPMenuState()
 const int FRAMES_PER_SECOND = 60;
 const int SKIP_TICKS = 1000 / FRAMES_PER_SECOND;
 
+// The next level of a campaign: everyone's still connected, so nobody is asked anything.
+static void PlayFilmAfterCampaignLevel(int finishedLevel);
+
+static int StartNextCampaignLevel(void)
+{
+	PlayFilmAfterCampaignLevel(netGameData.coopCampaignLevel - 1);
+	Coop_LevelChangeHasStarted();
+	CheatMode_Active = CHEATMODE_NONACTIVE;
+	LoadGameRequest = SAVELOAD_REQUEST_NONE;
+	AvP.LevelCompleted = 0;
+	TimeScale = ONE_FIXED;
+	SetLevelToLoadForCampaign();
+	SetBriefingTextForMultiplayer();
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+	return 1;
+}
+
 int AvP_MainMenus(void)
 {
+	if (Coop_LevelChangeIsDue())
+	{
+		return StartNextCampaignLevel();
+	}
+
 	LoadDefaultPrimaryConfigs();
 	
 	SoundSys_ResetFadeLevel();
@@ -493,22 +527,60 @@ void HandlePostGameFMVs(void)
 	}
 }
 
+// While a film plays, the connection has to stay alive, or the other machines give up on this one. Only that:
+// messages wait until the level has loaded, as they do during any load. On the way to the next level there's
+// no level here for them to act on. Each machine sees the film for itself, and anyone can skip it with a key.
+static bool KeepTheNetworkGoing(void)
+{
+	Net_ServiceNetwork();
+	return true;
+}
+
+static void PlayFilmWithTheNetworkGoing(const char *film)
+{
+	if (AvP.Network != I_No_Network)
+	{
+		WhileAFilmPlays = KeepTheNetworkGoing;
+	}
+
+	PlayFMV(film);
+	WhileAFilmPlays = 0;
+}
+
 void HandlePreGameFMVs(void)
 {
-	if (AvPMenus.MenusState == MENUSSTATE_STARTGAME && LoadGameRequest == SAVELOAD_REQUEST_NONE)
+	// A deathmatch on one of these levels isn't its story, so it doesn't get its film. A campaign does.
+	if (AvPMenus.MenusState == MENUSSTATE_STARTGAME && LoadGameRequest == SAVELOAD_REQUEST_NONE && SameAsSinglePlayer())
 	{
 		if (!stricmp("derelict", LevelName))
 		{
-			PlayFMV("FMVs/marineintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/marineintro.bik");
 		}
 		else if (!stricmp("temple", LevelName))
 		{
-			PlayFMV("FMVs/alienintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/alienintro.bik");
 		}
 		else if (!stricmp("fall", LevelName))
 		{
-			PlayFMV("FMVs/predatorintro.bik");
+			PlayFilmWithTheNetworkGoing("FMVs/predatorintro.bik");
 		}
+	}
+}
+
+// The film single player shows when its last basic level is finished, for a campaign going on past it.
+static void PlayFilmAfterCampaignLevel(int finishedLevel)
+{
+	if (netGameData.coopCampaign == kCampaignMarine && finishedLevel == MAX_NO_OF_BASIC_MARINE_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/marineoutro.bik");
+	}
+	else if (netGameData.coopCampaign == kCampaignPredator && finishedLevel == MAX_NO_OF_BASIC_PREDATOR_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/predatoroutro.bik");
+	}
+	else if (netGameData.coopCampaign == kCampaignAlien && finishedLevel == MAX_NO_OF_BASIC_ALIEN_EPISODES - 1)
+	{
+		PlayFilmWithTheNetworkGoing("FMVs/alienoutro.bik");
 	}
 }
 
@@ -597,10 +669,13 @@ extern void AvP_UpdateMenus(void)
 					case 8:
 					case 9:
 					case 10:
+					case 11:
+					case 12:
+					case 13:
 						netGameData.myCharacterType = NGCT_Marine;
 						netGameData.myNextCharacterType = NGCT_Marine;
 						AvP.PlayerType = I_Marine;
-						netGameData.myCharacterSubType =(NETGAME_SPECIALISTCHARACTERTYPE) (MP_Species-2);
+						netGameData.myCharacterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)ClassSlider_ToClass(MP_Species);
 						break;
 				}
 			}
@@ -3030,18 +3105,21 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				}
 				SaveMultiplayerConfiguration(GetTextString(TEXTSTRING_PREVIOUSGAME_FILENAME));
 				
-				AvP.Difficulty = I_Medium; //bjd - was 1;
+				Campaign_SetFromLevelRow();
+				Campaign_SetDifficulty();
+				Campaign_ChooseRollNumber();
+
+				// A campaign is a co-op game. Any other kind can't carry one over, from a page visited earlier or a game left without going through its end
+				if (netGameData.gameType != NGT_Coop)
+				{
+					netGameData.coopCampaign = kCampaignNone;
+					netGameData.coopCampaignLevel = 0;
+				}
 
 				if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, netGameData.levelNumber) != NET_FAIL)
 				{
 					AvPMenus.MenusState = MENUSSTATE_STARTGAME;
-					if (netGameData.gameType == NGT_Coop) {
-						SetLevelToLoadForCooperative(netGameData.levelNumber);
-					}
-					else {
-						SetLevelToLoadForMultiplayer(netGameData.levelNumber);
-					}
-					
+					SetLevelToLoadForThisNetworkGame();
 					SetBriefingTextForMultiplayer();
 				}
 			}
@@ -3059,12 +3137,15 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 				netGameData.myStartFlag = 1;
 
-				if (netGameData.gameType==NGT_Coop) {
-					SetLevelToLoadForCooperative(netGameData.levelNumber);
-				}
-				else {
-					SetLevelToLoadForMultiplayer(netGameData.levelNumber);
-				}
+				// The host has to hear this, or it never says this player has joined. The only other send is on the species page, before this was set.
+				AddNetMsg_PlayerDescription();
+				NetSendMessages();
+
+				// What the host said, or he'd keep whatever his last single player game was set to, with
+				// other health and armour than everyone else, and his damage worked out differently.
+				Campaign_SetDifficulty();
+
+				SetLevelToLoadForThisNetworkGame();
 				SetBriefingTextForMultiplayer();
 			}
 			break;
@@ -3463,6 +3544,12 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			{
 				//we have the index of the first string
 				textPtr = GetTextString(static_cast<enum TEXTSTRING_ID>(elementPtr->FirstTextSliderString+*(elementPtr->SliderValuePtr)));
+
+				// The new classes' names aren't next to stock's in the game's text
+				if (elementPtr->ElementID == AVPMENU_ELEMENT_SPECIES_TEXTSLIDER && ClassSlider_NewNameIndex(*elementPtr->SliderValuePtr) >= 0)
+				{
+					textPtr = GetTextString(static_cast<enum TEXTSTRING_ID>(TEXTSTRING_MULTIPLAYER_MARINE_SHOTGUN + ClassSlider_NewNameIndex(*elementPtr->SliderValuePtr)));
+				}
 			}
 			
 			if (elementPtr->TextDescription!=TEXTSTRING_BLANK)
@@ -4827,6 +4914,31 @@ static void UpdateMultiplayerConfigurationMenu()
 		netGameData.levelNumber%=NumCoopLevels;
 	}
 
+	// Someone setting up a game: what the level row has chosen. A joiner's page shows what the host told it.
+	if (AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN)
+	{
+		Campaign_SetFromLevelRow();
+	}
+
+	// The difficulty row only means something for a campaign's level. Any other game is at Medium, so there
+	// it says that and can't be changed. A joiner's page only ever shows it.
+	{
+		static int mediumToShow = I_Medium;
+		bool const isCampaign = netGameData.coopCampaign != kCampaignNone;
+
+		for (AVPMENU_ELEMENT *row = AvPMenus.MenuElements; row->ElementID != AVPMENU_ELEMENT_ENDOFMENU; row++)
+		{
+			if (row->TextDescription == TEXTSTRING_DIFFICULTY_LEVEL)
+			{
+				row->ElementID = (isCampaign && AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN) ? AVPMENU_ELEMENT_TEXTSLIDER : AVPMENU_ELEMENT_DUMMYTEXTSLIDER;
+				row->SliderValuePtr = isCampaign ? &netGameData.coopDifficulty : &mediumToShow;
+			}
+		}
+	}
+
+	// On the level row, say what choosing a campaign's level means
+	elementPtr->HelpString = netGameData.coopCampaign != kCampaignNone ? TEXTSTRING_MPHELP_CAMPAIGN_LEVEL : TEXTSTRING_MPHELP_ENVIRONMENT;
+
 	//see if selected element is the gamestyle element
 	elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
 
@@ -4996,6 +5108,16 @@ static BOOL IsSmartgunInLevel(int level)
 
 static void SetBriefingTextForMultiplayer()
 {
+	// A campaign's level has the words single player shows for it, and none of a network game's settings count
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		I_PLAYER_TYPE const species = netGameData.coopCampaign == kCampaignPredator ? I_Predator
+			: netGameData.coopCampaign == kCampaignAlien ? I_Alien : I_Marine;
+
+		SetBriefingTextForEpisode(netGameData.coopCampaignLevel, species);
+		return;
+	}
+
 	// Every line starts blank, because below only some of them get set, and the loading screen reads all five. A line nothing set would crash it.
 	SetBriefingTextToBlank();
 

@@ -2,6 +2,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a light whose shape has fewer animation sequences than expected is no longer an assert, because looking one up now copes with that
 //   a light can only be set to a sequence of its own texture animation
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the host's "destroyed lights" setting doesn't apply in a game that plays as single player
 
 #include "3dc.h"
 #include "inline.h"
@@ -258,7 +260,7 @@ void PlacedLightBehaviour(STRATEGYBLOCK *sbPtr)
 	if(AvP.Network!=I_No_Network)
 	{
 		//If playing a network game with predestroyed lights , get rid of this light
-		if(netGameData.preDestroyLights)
+		if(netGameData.preDestroyLights && !SameAsSinglePlayer())
 		{
 			if(sbPtr->maintainVisibility)
 			{
@@ -382,7 +384,7 @@ void RespawnLight(STRATEGYBLOCK *sbPtr)
 	LOCALASSERT(pl_bhv);
 	LOCALASSERT(AvP.Network!=I_No_Network);
 
-	if(netGameData.preDestroyLights)
+	if(netGameData.preDestroyLights && !SameAsSinglePlayer())
 	{
 		//don't restore lights for this type of net game
 		return;
