@@ -287,6 +287,12 @@ static void Cells()
 	Check(grid.NearestCell(150, 0, 150, kNpcGridMarine, 400) == kNpcGridNoCell, "nor anywhere within 400 of it");
 	Check(grid.NearestCell(450, 0, 450, kNpcGridMarine, 10) != kNpcGridNoCell, "but at (450, 0, 450) he does");
 
+	// A point under the floor is behind it: the floor faces up, away from it, so it has no cell there, though one is 200 away. And a point
+	// 400 outside the room's wall is behind that wall's face. A body only ever clings to the side of a surface it's on.
+	Check(grid.NearestCell(1650, 200, 1650, kNpcGridAlien, 400) == kNpcGridNoCell, "a point 200 under the floor has no cell: the floor faces away from it");
+	Check(grid.NearestCell(-400, -1650, 1650, kNpcGridAlien, 500) == kNpcGridNoCell, "nor a point 400 outside the room, behind its wall");
+	Check(grid.NearestCell(1650, -200, 1650, kNpcGridAlien, 400) != kNpcGridNoCell, "while a point 200 above the floor has the floor's cell");
+
 	// Its links reach the walls beside it
 	size_t count = 0;
 	const uint32_t *links = grid.LinksOf(corner, &count);
@@ -352,6 +358,14 @@ static void Searches()
 
 	Check(allStand, "on cells he fits on");
 	Check(looks > 0 && looks <= 100000, "it says how many cells it looked at (" + Number(looks) + ")");
+
+	// The same way spread over frames gives points: pulled straight across the floor, far fewer than its cells. The pillar's in the way of
+	// the diagonal from (1650, 1650) to (4350, 4350), so it takes at least one turn, and a straight line can't do it in one.
+	AlienWaysXYZ const marineFrom = { 1650, 0, 1650 }, marineTo = { 4350, 0, 4350 };
+	Check(grid.StartSearch(marineFrom, marineTo, kNpcGridMarine, 1, 100000) == nullptr && grid.Work(static_cast<size_t>(-1)) == kNpcGridFound,
+		"a marine's way from positions is found");
+	Check(grid.Way().size() >= 3 && grid.Way().size() * 2 <= grid.WayPath().size(),
+		"pulled straight, it has a turn or two, not a point for each cell (" + Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
 
 	// The same with too few looks
 	Check(grid.Search(from, to, kNpcGridMarine, 1, 3, &way, &looks) == kNpcGridTooFar && way.empty() && looks == 3,

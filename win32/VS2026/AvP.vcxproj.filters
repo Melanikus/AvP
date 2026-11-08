@@ -1022,6 +1022,9 @@
     <ClInclude Include="..\..\3dc\avp\npc_grid.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_grid_smooth.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bonusabilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
