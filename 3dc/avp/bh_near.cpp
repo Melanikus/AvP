@@ -7,6 +7,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a standard alien coming for its target follows its way up the walls and along the ceilings, when the alien ways map
 //   has one for it (alien_ways.h), and crawls while it does; without one it moves as it always has (#109)
+//   a standard alien that's hunting, or wandering from module to module, follows its way across the walls and ceilings too, to the
+//   point the game picked for it, and a wandering alien crawls when it should, as a hunting one does (#109)
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -1346,6 +1348,42 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	dynPtr->UseStandardGravity=1;
 
 	/* check if we should be crouched or standing up */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   until now nothing was here, and a wandering alien never changed whether it was crouched. Now it does as a hunting one does
+	//   (AlienNearState_Hunt): it crawls when AlienShouldBeCrawling says so, which it does for an alien on its way across the walls and
+	//   ceilings (alien_ways.h), as well as for the reasons it always had (not upright, in an air duct, too wounded to stand, told to
+	//   crawl, or a praetorian that prefers to), and it stands up again when that stops.
+	//   So an alien on a way crawls in every state that steers it, rather than climbing the walls upright. Wandering has no air duct to
+	//   head for, so that's all it asks.
+	//   Only with the alien ways switched on (-dev -alienways, alien_ways.h). Without them, a wandering alien is left as it was in 1999,
+	//   since those older reasons would otherwise change the game for everyone, ways or no ways.
+	if (AlienWaysSwitchedOn)
+	{
+		int redo=0;
+
+		if(alienStatusPointer->IAmCrouched)
+		{
+			/* curently crouched: should it be running? */
+			if(!AlienShouldBeCrawling(sbPtr))
+			{
+				alienStatusPointer->IAmCrouched = 0;
+				redo=1;
+			}
+		}
+		else
+		{
+			/* currently standing: should it be crawling? */
+			if(AlienShouldBeCrawling(sbPtr))
+			{
+				alienStatusPointer->IAmCrouched = 1;
+				redo=1;
+			}
+		}
+
+		if (redo) {
+			StartAlienMovementSequence(sbPtr);
+		}
+	}
 
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);
@@ -1408,7 +1446,25 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* ok: should have a current target at this stage... */
-	NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further from its wander point than it attacks from, follows its way across the walls and
+	//   ceilings to that point, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach). The
+	//   point is the way into a module next to this one, picked above, so the way changes only how it gets there, never where. Without a
+	//   way, without a point, or within that distance of it, it's steered as it always was. Either way the direction goes through the same
+	//   checks below. There's no target while wandering (it was let go above), so none is given. On a way it crawls: see the start of
+	//   this state.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
+		&& (alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)
+		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
+		&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+	}
+	else
+	{
+		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
 
 	/* test here for impeding collisions, and not being able to reach target... */
@@ -1894,7 +1950,24 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* ok: should have a current target at this stage... */
-	NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   a standard alien that can climb, and is further from the point picked above than it attacks from, follows its way across the
+	//   walls and ceilings to that point, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach).
+	//   The point is the way into the next module towards where it hunts, so the way changes only how it gets there, never where. Without
+	//   a way, or within that distance of the point, it's steered as it always was. Either way the direction goes through the same checks
+	//   below. No target is given, even when there is one: given one it can see, the alien ways code would head for the target itself
+	//   instead of the point, and going straight for a target is Approach's job. So the way always goes to Hunt's own point.
+	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
+		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
+		&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+	{
+		/* Stick to whatever it's touching, and go along it towards the way's next point */
+		dynPtr->UseStandardGravity=0;
+	}
+	else
+	{
+		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
+	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
 
 	/* test here for impeding collisions, and not being able to reach target... */
