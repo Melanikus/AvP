@@ -77,6 +77,13 @@ static void TestSlider()
 	Check(ClassSlider_NewNameIndex(14) == -1, "and there's no fourth");
 }
 
+// Whether topping up a shotgun with these shells gives these
+static bool TopsUpTo(int inGun, int spare, int holds, int inGunAfter, int spareAfter)
+{
+	const ShotgunRounds rounds = EveryMarineShotgun_TopUp(inGun, spare, holds);
+	return rounds.inGun == inGunAfter && rounds.spare == spareAfter;
+}
+
 static void TestStarts()
 {
 	Check(kClassShotgunStartRounds == 60, "a shotgun marine starts with 60 spare rounds, M5's 5 boxes of 12");
@@ -85,13 +92,15 @@ static void TestStarts()
 	Check(kSidearmRevolverStartRounds == 50, "a revolver as a sidearm has 50, M5's 10 boxes of 5");
 	Check(kSidearmPistolStartMagazines == 10, "a pistol as a sidearm has 10 magazines, as stock's does");
 
-	// Every marine player has the shotgun too, with 42 spare rounds for it
-	Check(kEveryMarineShotgunRounds == 42, "every marine player has 42 spare rounds for the shotgun");
-	Check(EveryMarineShotgun_Spares(0) == 42, "a marine who had none for it has the 42");
-	Check(EveryMarineShotgun_Spares(10) == 52, "and they go on top of any he has, so a shotgun marine keeps his own");
-	Check(EveryMarineShotgun_Spares(57) == 99, "up to as many as a gun counts");
-	Check(EveryMarineShotgun_Spares(58) == 99, "and no more");
-	Check(EveryMarineShotgun_Spares(99) == 99, "even for one that's full");
+	// Every marine player has the shotgun too, with 42 shells in all
+	Check(kEveryMarineShotgunRounds == 42, "every marine player has 42 shells for the shotgun in all");
+	Check(TopsUpTo(0, 0, 12, 12, 30), "a marine with none has 12 in the gun and 30 spare");
+	Check(TopsUpTo(12, 48, 12, 12, 48), "a shotgun marine, who has more, keeps what he has");
+	Check(TopsUpTo(5, 10, 12, 12, 30), "the gun is filled first, and the rest are spare, to 42 in all");
+	Check(TopsUpTo(0, 42, 12, 0, 42), "42 already, even all spare, is enough");
+	Check(TopsUpTo(0, 41, 12, 1, 41), "one short gets the one, in the gun");
+	Check(TopsUpTo(13, 0, 12, 13, 29), "a gun with more in it than it holds keeps them");
+	Check(TopsUpTo(0, 0, 0, 0, 42), "and a gun that holds none has them all spare");
 }
 
 static void TestSidearm()
@@ -187,11 +196,15 @@ static void TestWiring()
 	const std::string player = ReadSource("3dc/avp/player.cpp");
 	const std::string respawn = ReadSource("3dc/avp/pmove.cpp");
 
-	Check(Has(inventory, "if (AvP.PlayerType == I_Marine && LoadGameRequest == SAVELOAD_REQUEST_NONE)"), "every marine player gets the shotgun as he starts, but not as a save loads");
-	Check(Has(inventory, "\t\tSayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);"), "and then the line goes on the console");
-	Check(inventory.find("SayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);") > inventory.find("LoadAllWeapons(PlayerStatusPtr);"), "after the start has loaded his guns, so the 42 are all spares");
+	Check(Has(inventory, "if (AvP.PlayerType == I_Marine && LoadGameRequest == SAVELOAD_REQUEST_NONE)"), "every marine player starts with the shotgun, but not as a save loads");
+	Check(Has(inventory, "\t\tSayTheShotgunLine = 1;"), "and the line goes on the console");
+	Check(Has(inventory, "\t\tif (TheHostAllowsTheShotgun())\n\t\t{\n\t\t\tStartWithTheShotgunToo(playerStatusPtr);"), "the gun, if the host allows it, but the line either way");
+	Check(Has(inventory, "return SameAsSinglePlayer() || (netGameData.allowShotgun && netGameData.maxMarineShotgun > 0);"), "a network game's host can have it off, with Allow Shotgun or the class's places, but single player and the co-op campaign always have it");
+	Check(inventory.find("StartWithTheShotgunToo(playerStatusPtr);") > inventory.find("LoadAllWeapons(PlayerStatusPtr);"), "after the start has loaded his guns, so the shells he has are counted");
 	Check(Has(inventory, "\tgun->Possessed = 1;"), "he has the gun");
-	Check(Has(inventory, "gun->PrimaryMagazinesRemaining = EveryMarineShotgun_Spares(gun->PrimaryMagazinesRemaining);"), "with the 42 added to what he has, as the sum above says");
+	Check(Has(inventory, "const ShotgunRounds rounds = EveryMarineShotgun_TopUp(inGun, gun->PrimaryMagazinesRemaining, holds);"), "topped up as the sum above says");
+	Check(Has(inventory, "gun->PrimaryRoundsRemaining = rounds.inGun << ONE_FIXED_SHIFT;"), "the gun is filled");
+	Check(Has(inventory, "gun->PrimaryMagazinesRemaining = rounds.spare;"), "and the spares set to the sum's, not added to");
 	Check(Count(inventory, "NewOnScreenMessage(\"I like to have this handy, for close encounters\");") == 1, "the line is word for word, in one place");
 	Check(Has(inventory, "if (SayTheShotgunLine)\n\t{\n\t\tSayTheShotgunLine = 0;\n\t\tNewOnScreenMessage("), "and it goes once each time he starts");
 	Check(Has(player, "InitialisePlayersInventory(psPtr);") && Has(respawn, "InitialisePlayersInventory(psPtr);"), "a level's start and a start again in a network game both set him up there");

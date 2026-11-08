@@ -1,7 +1,7 @@
 // The marine classes a multiplayer game offers beyond stock's, and the sidearm that goes with a class. The classes and how
 // they start are taken from MelPyth M5 by Mupp. Only how it behaves was read from that mod, and this is written new.
 // Written 2026-11-06 by Melanikus for the AvP port.
-// Modified 2026-11-07 by Melanikus for the AvP port: every marine player has the shotgun too, with 42 rounds for it.
+// Modified 2026-11-07 by Melanikus for the AvP port: every marine player has the shotgun too, with 42 shells for it in all.
 //
 // There's no sniper class: the user wants the sniper rifle kept to single player for now.
 //
@@ -38,25 +38,46 @@ enum
 	kSidearmRevolverStartRounds = 50
 };
 
-// Every marine player has the shotgun too, whatever his class, each time he starts: the user's feature for the first release.
-// He has this many spare rounds for it, beside the ones in the gun. A gun never counts more spares than kMostSpareRounds, the
-// same limit a box he picks up has.
+// Every marine player has the shotgun too, each time he starts: the user's feature for the first release. He has at least this
+// many shells for it in all, in the gun and spare.
 enum
 {
-	kEveryMarineShotgunRounds = 42,
-	kMostSpareRounds = 99
+	kEveryMarineShotgunRounds = 42
 };
 
-// His spare rounds for the shotgun once he's been given the 42. They're added to what he has, so a shotgun marine keeps his
-// class's rounds as well. If that comes to more than a gun counts, he has as many as it counts.
-inline int EveryMarineShotgun_Spares(int sparesNow)
+// The shotgun's shells: how many are in the gun, and how many are spare. Both are whole shells.
+struct ShotgunRounds
 {
-	if (sparesNow > kMostSpareRounds - kEveryMarineShotgunRounds)
+	int inGun;
+	int spare;
+};
+
+// Tops his shotgun up to kEveryMarineShotgunRounds shells in all. The gun is filled first, as far as it holds, and the rest are
+// spare: an empty gun that holds 12 gets 12, and 30 spare. A marine who already has as many or more, such as a shotgun marine,
+// keeps what he has, so it never adds past 42 and never stacks. "holds" is how many the gun takes.
+inline ShotgunRounds EveryMarineShotgun_TopUp(int inGun, int spare, int holds)
+{
+	ShotgunRounds rounds = { inGun, spare };
+	int const missing = kEveryMarineShotgunRounds - (inGun + spare);
+
+	if (missing <= 0)
 	{
-		return kMostSpareRounds;
+		return rounds;
 	}
 
-	return sparesNow + kEveryMarineShotgunRounds;
+	// The room left in the gun. A gun with more in it than it holds has none, rather than having some taken out.
+	int room = holds - inGun;
+
+	if (room < 0)
+	{
+		room = 0;
+	}
+
+	int const intoTheGun = missing < room ? missing : room;
+
+	rounds.inGun += intoTheGun;
+	rounds.spare += missing - intoTheGun;
+	return rounds;
 }
 
 // A marine's sidearm: what he carries beside his class's own gun.

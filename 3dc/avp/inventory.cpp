@@ -1,5 +1,6 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
-//   every marine player starts with the shotgun too, and 42 spare rounds for it, and a line on the console says so
+//   every marine player starts with the shotgun too, with 42 shells for it in all, unless a network game's host has the shotgun off,
+//   and a line on the console
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a game that plays as single player, the guns and ammunition a player can pick up are single player's
 //   three more marine classes start with their guns, specialists have a sidearm, a Predator has the staff if it's allowed, and the sniper rifle stays out of network games
@@ -62,8 +63,8 @@ PLAYER_STARTING_EQUIPMENT StartingEquipment;
 
 int RecallDisc_Charge=400000;
 
-// Set when a marine player has just been given the shotgun as he starts. At a level's start he's set up while the level loads,
-// before its first frame, so the line that goes with the gun waits until he's in play. See MaintainPlayersInventory.
+// Set when a marine player has just started. At a level's start he's set up while the level loads, before its first frame, so the
+// line that goes with the shotgun waits until he's in play. See MaintainPlayersInventory.
 static int SayTheShotgunLine = 0;
 
 #define MEDICOMP_MAX_AMMO	(ONE_FIXED*4)
@@ -155,35 +156,42 @@ static int StartWithClassGun(PLAYER_STATUS *playerStatusPtr, enum WEAPON_ID weap
 	return slot;
 }
 
-// Every marine player has the shotgun too, whatever else he starts with, and kEveryMarineShotgunRounds spare rounds for it
-// (marine_classes.h). A shotgun marine already has it, and the 42 go on top of his class's rounds. It comes loaded, as every gun
-// he starts with does. This runs after the start has loaded his guns, so the 42 are all spares. Says whether he has it: when the
-// gun's model file is missing, it has no slot, and then he doesn't.
-static int StartWithTheShotgunToo(PLAYER_STATUS *playerStatusPtr)
+// In a network game the host can have the shotgun off: Allow Shotgun set to No, or a shotgun class with no places. Then no marine
+// gets it free. A game that plays as single player, single player itself and the co-op campaign, always has it. (The user's ruling,
+// 2026-11-07.)
+static int TheHostAllowsTheShotgun(void)
+{
+	return SameAsSinglePlayer() || (netGameData.allowShotgun && netGameData.maxMarineShotgun > 0);
+}
+
+// Every marine player has the shotgun too, whatever else he starts with, and at least kEveryMarineShotgunRounds shells for it in
+// all (marine_classes.h says how they're shared between the gun and spare). A marine who already has that many, a shotgun marine
+// say, keeps what he has. This runs after the start has loaded his guns, so the shells he already has are counted. When the gun's
+// model file is missing, it has no slot, and then he doesn't get it.
+static void StartWithTheShotgunToo(PLAYER_STATUS *playerStatusPtr)
 {
 	int const slot = SlotForThisWeapon(WEAPON_AUTOSHOTGUN);
 
 	if (slot == -1)
 	{
-		return 0;
+		return;
 	}
 
 	PLAYER_WEAPON_DATA *const gun = &playerStatusPtr->WeaponSlot[slot];
 	const enum AMMO_ID ammo = TemplateWeapon[WEAPON_AUTOSHOTGUN].PrimaryAmmoID;
+	// The rounds in a gun are kept as a fraction, 65536 to a shell. This gun's are always whole shells.
+	int const holds = ammo != AMMO_NONE ? TemplateAmmo[ammo].AmmoPerMagazine >> ONE_FIXED_SHIFT : 0;
+	int const inGun = gun->PrimaryRoundsRemaining >> ONE_FIXED_SHIFT;
+	const ShotgunRounds rounds = EveryMarineShotgun_TopUp(inGun, gun->PrimaryMagazinesRemaining, holds);
 
 	gun->Possessed = 1;
 
-	// He had no rounds for it, so the start left it empty. It's filled as the start fills a gun whose spares are single rounds:
-	// with as many as it holds.
-	if (gun->PrimaryRoundsRemaining == 0 && ammo != AMMO_NONE)
+	if (rounds.inGun != inGun)
 	{
-		int const holds = TemplateAmmo[ammo].AmmoPerMagazine >> ONE_FIXED_SHIFT;
-
-		gun->PrimaryRoundsRemaining = holds << ONE_FIXED_SHIFT;
+		gun->PrimaryRoundsRemaining = rounds.inGun << ONE_FIXED_SHIFT;
 	}
 
-	gun->PrimaryMagazinesRemaining = EveryMarineShotgun_Spares(gun->PrimaryMagazinesRemaining);
-	return 1;
+	gun->PrimaryMagazinesRemaining = rounds.spare;
 }
 
 void MaintainPlayersInventory(void)
@@ -726,13 +734,19 @@ void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr)
 
 	LoadAllWeapons(PlayerStatusPtr);
 
-	// Every marine player has the shotgun too, each time he starts or starts again, and the console says so. Not when a save is
-	// loading, though: then setting him up is only the first step, and the save says what he has. He isn't starting.
+	// Every marine player has the shotgun too, each time he starts or starts again, unless a network game's host has it off, and the
+	// console says the line either way. Not when a save is loading, though: then setting him up is only the first step, and the save
+	// says what he has. He isn't starting.
 	SayTheShotgunLine = 0;
 
 	if (AvP.PlayerType == I_Marine && LoadGameRequest == SAVELOAD_REQUEST_NONE)
 	{
-		SayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);
+		SayTheShotgunLine = 1;
+
+		if (TheHostAllowsTheShotgun())
+		{
+			StartWithTheShotgunToo(playerStatusPtr);
+		}
 	}
 }
 
