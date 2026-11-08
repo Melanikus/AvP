@@ -5,6 +5,8 @@
 // of the game: the decisions are all in the header. The last rows read winmain.cpp, to check that the game asks them the way the header
 // says, and that the short switches are read as whole words there.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 #include <string.h>
 
@@ -15,6 +17,7 @@
 #include <vector>
 
 #include "level_switch.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -189,20 +192,10 @@ static bool ComesBefore(std::string const &text, std::string const &first, std::
 	return one != std::string::npos && two != std::string::npos && one < two;
 }
 
-// The text from one marker up to the next one after it. Empty if either isn't there, so a row looking inside it fails instead of passing
-// on nothing.
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(std::string const &text, std::string const &from, std::string const &to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void SourceOfTheGame()

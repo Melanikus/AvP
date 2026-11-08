@@ -4,12 +4,15 @@
 // WHAT IT'S FOR: net_stats.h says what the lines are for. This tries them on made-up numbers, and reads networking.cpp to see that it
 // writes them once a game is on, by connection number and never by address. Run it from the top of the repository, because that's where
 // the source it reads is found from.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "net_stats.h"
 
 #include <string.h>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -48,18 +51,10 @@ static bool Has(const std::string &text, const char *what)
 	return text.find(what) != std::string::npos;
 }
 
-// The part of text from the first copy of from up to the next copy of to, or nothing
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	size_t const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	size_t const end = text.find(to, start + strlen(from));
-	return end == std::string::npos ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndAfterTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static NetStats_Connection Numbers(unsigned int roundTrip, unsigned int lossPercent)

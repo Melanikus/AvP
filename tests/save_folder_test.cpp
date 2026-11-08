@@ -11,6 +11,8 @@
 //
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the backslash check hands in a folder that really has a backslash, now that this run's folder is a bare name with no slash in it
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "save_folder.h"
 #include "save_file_write.h"
 
@@ -21,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -54,18 +57,10 @@ static std::string ReadSourceFile(const char *name)
 	return withoutReturns;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	size_t const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return std::string();
-	}
-
-	size_t const end = text.find(to, start);
-
-	return end == std::string::npos ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool Has(const std::string &text, const char *words)
