@@ -19,6 +19,7 @@
 #include <string>
 
 #include "coop_in_game.h"
+#include "memory_wall.h"
 
 static int checksFailed = 0;
 
@@ -64,6 +65,14 @@ static void TestTheHostsList(void)
 	memset(manyAreReady, 0, sizeof(manyAreReady));
 
 	Check(CoopWaiting_Places(manyHavePlayers, manyAreReady, kCoopMostPlayers + 4, -1, true) == 0xff, "and past the last bit it has, it stops");
+
+	// The game's own lists have exactly as many places as the list has bits. This one ends where readable memory does, so if the walk went on
+	// past its last place, as it would if it only stopped at the number it's given, it would read past the end and the test would crash.
+	bool *const wallHasPlayers = (bool *)MemoryEndingAtAWall(kCoopMostPlayers * sizeof(bool));
+
+	memset(wallHasPlayers, 1, kCoopMostPlayers * sizeof(bool));
+
+	Check(CoopWaiting_Places(wallHasPlayers, manyAreReady, kCoopMostPlayers + 4, -1, true) == 0xff, "and it never reads a place past the last bit");
 }
 
 static std::string Waiting(unsigned char places, int myPlace, size_t room = 64, const char *const *names = NULL, size_t nameBytes = 13)
@@ -211,9 +220,13 @@ static void TestTheGameUsesIt(void)
 	Check(Has(pages, "lastWord = CoopLastWord_AtTheEnd(campaign != kCampaignNone, campaign == kCampaignCustom, Coop_TheCampaignIsOver(), Net_WasRemovedByTheHost(), hostHasGone);"), "why a game ended comes from the rule");
 	Check(Has(pages, "\t// Said once: the next game starts with nothing to say\n\tlastWord = kCoopLastWordNone;"), "and is said once");
 	Check(Has(pages, "if (AvP.Network == I_Host)\n\t{\n\t\tquit->ElementID = AVPMENU_ELEMENT_GOTOMENU;\n\t\tquit->MenuToGoTo = AVPMENU_COOP_HOSTQUITS;"), "a host is asked before leaving ends the game for everyone");
-	Check(Has(pages, "changed = HostRemoveRows(&AvPMenu_CoopPlayers[rows], playerRemoveRowsShown);"), "only the host's Players page has Remove rows");
+	Check(Has(pages, "\tif (AvP.Network == I_Host)\n\t{\n\t\tchanged = HostRemoveRows(&AvPMenu_CoopPlayers[rows], playerRemoveRowsShown);"), "only the host's Players page has Remove rows");
 
-	Check(winmain.find("CoopMenu_TheGameIsEnding();") < winmain.find("EndAVPNetGame();\n\t\t\t//EndOfNetworkGameScreen();"), "why a game ended is noted before the game is wiped");
+	// Both have to be found first: a search that finds nothing gives back the largest number there is, which would come "after" anything
+	size_t const gameEndNoted = winmain.find("CoopMenu_TheGameIsEnding();");
+	size_t const gameWiped = winmain.find("EndAVPNetGame();\n\t\t\t//EndOfNetworkGameScreen();");
+
+	Check(gameEndNoted != std::string::npos && gameWiped != std::string::npos && gameEndNoted < gameWiped, "why a game ended is noted before the game is wiped");
 	Check(Has(menus, "if (CoopMenu_HasALastWord())\n\t{"), "and the page that says so comes first after the game");
 	Check(Has(menus, "menuID = SameAsSinglePlayer() ? AVPMENU_INCOOPGAME : AVPMENU_INNETGAME;"), "a campaign's pause menu is its own, and every other network game's is as it was");
 

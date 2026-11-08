@@ -164,7 +164,7 @@ static void TestTheChoice()
 	{
 		choice = CustomChoice();
 		memset(choice.mapName, 0, sizeof(choice.mapName));
-		strcpy(choice.mapName, name);
+		snprintf(choice.mapName, sizeof(choice.mapName), "%s", name);
 		Check(Refused(choice, kCoopRefusedName), std::string("the name \"") + name + "\" breaks the rule");
 	}
 
@@ -479,6 +479,7 @@ static void TestTheGameUsesIt()
 	Check(Has(hears, "// Nothing goes from one joiner to another in the lobby, and an answer about the map is only ever for the host\n\tif (Net_CoopLobbyState() != kCoopLobbyNone || Net_MessageIsForTheHostAlone(data, size))\n\t{\n\t\treturn true;\n\t}\n"), "and nothing is passed on in the lobby, nor is an answer ever");
 	Check(hears.find("Net_CoopLobbyState() != kCoopLobbyNone") < hears.find("SendToClients(packet, from)"), "that comes before the passing on");
 	Check(Has(hears, "// In the lobby only what the lobby takes counts as being heard from"), "a joiner sending only what's refused still counts as silent");
+	Check(Has(hears, "if (connection <= kMostClients && Net_CoopLobbyState() == kCoopLobbyNone)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();"), "before a message is checked, it keeps a seat only outside the lobby");
 
 	std::string const forget = Between(networking, "static void ForgetConnectionsNotLetIn()\n{", "\n}\n");
 
@@ -498,6 +499,7 @@ static void TestTheGameUsesIt()
 	Check(Has(choice, "int const levels = messagePtr->campaign == kCoopChoiceCustomCampaign ? 1 : Campaign_LevelCount(messagePtr->campaign);"), "each number in it is checked against the real campaign");
 	Check(Has(choice, "CoopChoice_WhyRefused(*messagePtr, levels)"), "by the rule in coop_lobby.h");
 	Check(choice.find("CoopChoice_WhyRefused") < choice.find("coopChoice = *messagePtr;"), "and nothing of it is kept until all of it has been checked");
+	Check(Has(choice, "if (why)\n\t{\n\t\tNet_NoteRefused(why);\n\t\treturn;\n\t}"), "a refused choice is dropped, all of it, once it's counted");
 	Check(Has(choice, "netGameData.coopCustomMap[sizeof(netGameData.coopCustomMap) - 1] = 0;"), "the name ends inside the game's copy, whatever came before");
 	Check(Has(pldnet, "CustomMaps_SizeAndSum(CustomMaps_Named(coopChoice.mapName, sizeof(coopChoice.mapName)), &size, sum)"), "a joiner only looks the name up among the maps it listed itself");
 

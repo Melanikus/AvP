@@ -137,6 +137,9 @@ static void TestGunsNotToMix()
 
 	longer.gun[1].possessed = 1;
 	longer.gun[1].primaryRounds = 12;
+	// A slot past the end of the level's list can still hold a number, from before. It's the kept one's here, so only the list's length can
+	// keep it out.
+	shorter.gun[1].weapon = 101;
 	CampaignKit_Keep(shorter, longer);
 	Check(shorter.gun[1].possessed == 0 && shorter.gun[1].primaryRounds == 0, "a slot past the end of the level's list is left alone");
 
@@ -170,6 +173,20 @@ static void TestTheLauncher()
 	{
 		Check(level.launcherRounds[kind] == (unsigned int)(6 + kind), "kind " + std::to_string(kind) + ": their rounds where they're more");
 		Check(level.launcherMagazines[kind] == 9, "kind " + std::to_string(kind) + ": the level's magazines where they're more");
+	}
+
+	// And the other way round: the magazines they kept are more, so only the line that keeps them can give them back
+	for (int kind = 0; kind < kCampaignKitLauncherKinds; kind++)
+	{
+		level.launcherMagazines[kind] = 1;
+		kept.launcherMagazines[kind] = 5 + kind;
+	}
+
+	CampaignKit_Keep(level, kept);
+
+	for (int kind = 0; kind < kCampaignKitLauncherKinds; kind++)
+	{
+		Check(level.launcherMagazines[kind] == (unsigned int)(5 + kind), "kind " + std::to_string(kind) + ": their magazines where they're more");
 	}
 }
 
