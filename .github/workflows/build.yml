@@ -125,7 +125,8 @@ jobs:
         run: |
           $root = (Resolve-Path -LiteralPath 'libraries').Path
           $list = Join-Path $root 'SHA256SUMS.txt'
-          $listed = @{}
+          # Names compared exactly, capitals and all, as the Linux runner's files are
+          $listed = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
           foreach ($line in Get-Content -LiteralPath $list) {
             $hash, $name = $line -split '  ', 2
             # The list was written by the job that ran the libraries' own build scripts, so it's read as hostile: each line is a hash and a
@@ -134,15 +135,15 @@ jobs:
             if ([System.IO.Path]::IsPathRooted($name) -or $name.Contains(':') -or $name.Contains('\') -or @($name.Split('/') | Where-Object { $_ -in '', '.', '..' }).Count -gt 0) {
               throw "The list names something outside the libraries: $name"
             }
-            if ($listed.ContainsKey($name)) { throw "$name is listed twice" }
+            if ($listed.Contains($name)) { throw "$name is listed twice" }
             $file = Join-Path $root $name
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "$name is listed and isn't there" }
             if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLower() -cne $hash) { throw "$name isn't what the list says" }
-            $listed[$name] = $true
+            [void]$listed.Add($name)
           }
           foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File) {
             $name = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
-            if ($name -cne 'SHA256SUMS.txt' -and -not $listed.ContainsKey($name)) { throw "$name is there and isn't listed" }
+            if ($name -cne 'SHA256SUMS.txt' -and -not $listed.Contains($name)) { throw "$name is there and isn't listed" }
           }
           if ($listed.Count -eq 0) { throw 'The list names no files, so there is nothing to vouch for' }
           "All $($listed.Count) files match. The list itself: " + (Get-FileHash -Algorithm SHA256 -LiteralPath $list).Hash.ToLower()
