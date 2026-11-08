@@ -356,6 +356,16 @@ jobs:
         shell: pwsh
         run: ./tests/release-test.ps1 -OnlyNewFunctions
 
+      # tools/net-relay.js stands between two copies of the game in the lag runs (#88, #120). Its self-test checks what decides each packet's
+      # fate: the random numbers, the order, the bursts, the copies, the settings and the run's file names. It opens no socket and writes no
+      # file. It runs with the Node that comes with this machine's image, and says which, so a change of image shows in the log.
+      # Added 2026-11-08 by Melanikus for the AvP port.
+      - name: Test the network relay
+        shell: bash
+        run: |
+          node --version
+          node tools/net-relay.js --self-test
+
       # CODING-STANDARD.md, rule 1: const goes first for an enum type and for a type from inside a template. Write "const WEAPON_SLOT slot", not
       # "enum WEAPON_SLOT const slot", and "const auto found", not "std::map<...>::const_iterator const found". Snyk Code can't read a file with
       # either "no" form, and skips all of it. The count in snyk.yml then fails, but it can't say which file, so this names the file and the line.
