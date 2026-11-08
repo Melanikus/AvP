@@ -1550,6 +1550,9 @@
     <ClInclude Include="..\..\3dc\custom_map_name.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\level_switch.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\level_kind.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>

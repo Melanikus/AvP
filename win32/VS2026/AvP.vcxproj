@@ -670,6 +670,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h" />
     <ClInclude Include="..\..\3dc\coop_lobby.h" />
     <ClInclude Include="..\..\3dc\custom_map_name.h" />
+    <ClInclude Include="..\..\3dc\level_switch.h" />
     <ClInclude Include="..\..\3dc\level_kind.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\user_profile.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp" />
