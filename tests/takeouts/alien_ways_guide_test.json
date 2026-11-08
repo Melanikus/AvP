@@ -1044,6 +1044,46 @@
 					"to": "nullptr, next);"
 				}
 			]
+		},
+		{
+			"name": "an alien always aims at the next point",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tAlienWays_AimAlong(follower.points, follower.count, follower.heading, ask.at, aimAheadMm, &aim);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the aim's setting isn't used",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "ask.at, aimAheadMm, &aim);",
+					"to": "ask.at, 0, &aim);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: aliens aim at the next point unless a switch says otherwise",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;",
+					"to": "int AlienWaysAimAheadMm = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the guide is never told the aim",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.SetAimAhead(AlienWaysAimAheadMm);\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

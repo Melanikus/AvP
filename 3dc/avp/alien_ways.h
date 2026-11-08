@@ -28,9 +28,15 @@
 #include <stddef.h>
 
 #include "alien_ways_map.h"
+#include "alien_ways_lookahead.h"
 
 // 1 when -alienways was given with -dev. Set once, at start, by winmain.cpp.
 extern int AlienWaysSwitchedOn;
+
+// How far along its way an alien aims, in mm, so it curves round bends instead of running corner to corner (alien_ways_lookahead.h).
+// kAlienWaysAimAheadMm, 1.5 m, unless -alienwaysaim=N gives another, from 0 to 10000; 0 aims at the way's next point, as before, for a film
+// to compare the two. Set once, at start, by winmain.cpp; the guide is given it at each level's start.
+extern int AlienWaysAimAheadMm;
 
 void AlienWays_LevelStart();
 void AlienWays_Frame();

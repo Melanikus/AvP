@@ -124,6 +124,7 @@ bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool 
 }
 
 AlienWaysGuide::AlienWaysGuide()
+	: aimAheadMm(0)
 {
 	Clear();
 }
@@ -696,8 +697,12 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 		return false;
 	}
 
+	// It aims a little further along the way than the next point, so it curves round bends (alien_ways_lookahead.h), but never past a step
+	// onto another kind of surface it hasn't made, nor round a sharp bend. With the setting at 0, or a way it can't use, it's the next point.
 	AlienWaysPoint const &next = follower.points[follower.heading];
-	*towards = AlienWaysXYZ{ next.x, next.y, next.z };
+	AlienWaysXYZ aim = { next.x, next.y, next.z };
+	AlienWays_AimAlong(follower.points, follower.count, follower.heading, ask.at, aimAheadMm, &aim);
+	*towards = aim;
 	follower.guided = true;
 	return true;
 }

@@ -36,6 +36,7 @@
 extern int NormalFrameTime;
 
 int AlienWaysSwitchedOn = 0;
+int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 
 namespace
 {
@@ -358,6 +359,9 @@ void AlienWays_LevelStart()
 {
 	// Whatever was left of the last level goes first
 	AlienWays_LevelEnd();
+
+	// How far ahead along their ways the aliens aim (-alienwaysaim)
+	theGuide.SetAimAhead(AlienWaysAimAheadMm);
 
 	if (!AlienWays_On())
 	{

@@ -37,6 +37,7 @@
 #include <stdint.h>
 
 #include "alien_ways_map.h"
+#include "alien_ways_lookahead.h"
 
 // Who an alien is, in two numbers the game picks. The game uses where the alien is kept and its name, so a new alien kept where a dead one was
 // is never taken for it.
@@ -174,6 +175,11 @@ public:
 	// give it its usual gravity back. An alien the guide doesn't have gives back false.
 	bool Forget(const AlienWaysWho &who);
 
+	// How far along its way Steer aims an alien, in mm (alien_ways_lookahead.h): from its nearest place on the way, a little further on, so it
+	// curves round bends instead of running corner to corner. 0, as a guide starts, aims at the way's next point itself, as before. Whether a
+	// point is reached, and whether the alien is stuck, still go by the next point. Kept through Clear: it's a setting, not part of a level.
+	void SetAimAhead(int mm) { aimAheadMm = mm; }
+
 private:
 	struct Follower
 	{
@@ -230,6 +236,8 @@ private:
 	// them the searches go as they did before. An alien's place here is its place in followers.
 	AlienWaysClaims claims;
 	bool claimsTried, claimsOn;
+
+	int aimAheadMm;                     // SetAimAhead
 	static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims have room for every alien the guide has");
 };
 

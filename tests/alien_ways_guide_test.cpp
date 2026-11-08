@@ -318,6 +318,25 @@ static void TakenUpWhereItIs()
 		"an alien that's gone on while its way was searched takes it up at the stretch it's on, and isn't off the way");
 }
 
+// The aim (alien_ways_lookahead.h): with the setting at 1.5 m, an alien halfway along the wall aims 1.5 m on from its nearest place on the
+// way, not at the way's next point 4 m away; at 0 it aims at the next point, as before
+static void AimAhead()
+{
+	printf("Where an alien on its way aims\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	GuidedAlien(guide, Alien(1));
+	AlienWaysAsk halfway = Ask(Alien(1), Beside(0, -1500, 5000), kGoal, 13);
+	halfway.down = IntoTheWall();
+	guide.SetAimAhead(kAlienWaysAimAheadMm);
+	Check(guide.Steer(&map, halfway, &towards) && Same(towards, AlienWaysXYZ{ kWallX, -1500, 6500 }),
+		"aiming 1.5 m ahead, an alien halfway along the wall aims 1.5 m further along it");
+	guide.SetAimAhead(0);
+	Check(guide.Steer(&map, halfway, &towards) && Same(towards, kAlongTheWall), "aiming 0 ahead, it aims at the way's next point, as before");
+}
+
 static void OffTheWay()
 {
 	printf("Off the way\n");
@@ -968,6 +987,11 @@ static void SourceOfTheGame()
 	Check(Has(readDoors, "bool through = false;"), "SOURCE: a door that can't be read is taken as shut");
 	Check(Has(level, "map->SetDoorShut(static_cast<int>(d) + 1, !through);"), "SOURCE: and the map is told each door's state, by the number its polygons carry");
 
+	// The aim: 1.5 m ahead unless -alienwaysaim says otherwise, given to the guide at each level's start
+	Check(Has(ways, "int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;"), "SOURCE: aliens aim 1.5 m along their ways unless a switch says otherwise");
+	Check(Has(Between(ways, "void AlienWays_LevelStart()", "if (!AlienWays_On())"), "\ttheGuide.SetAimAhead(AlienWaysAimAheadMm);\n"),
+		"SOURCE: and the guide is told it at each level's start");
+
 	// Kept through a gap (KeptThroughAGap): each kept alien is found by LiveAlien; one in a state that never asks is let go at once, with its
 	// gravity back; one in a state that asks is counted for the once-a-second line
 	Check(Has(frame, "\t\tSTRATEGYBLOCK *const alien = LiveAlien(missed[i]);"), "SOURCE: an alien kept through a gap is only read once it's found alive and the same");
@@ -995,6 +1019,7 @@ int main()
 	GuidedThisFrame();
 	KeptThroughAGap();
 	DifferentWays();
+	AimAhead();
 	WhoIsWho();
 	Allowance();
 	NoBetterThanToday();
