@@ -40,6 +40,19 @@ The checks run on GitHub's machines, and their own machine may have a copy of a 
 itself on a clean Windows, so a person has to. `RELEASE-BLOCKERS.md` lists that until someone has done it the first time. Do it again for
 each release, with the zip from the draft, before you press Publish.
 
+## When Microsoft fixes its C runtime
+
+The game has Microsoft's C and C++ runtime built in, so a player needs no Visual C++ install: see `vcpkg-overlay-triplets/x86-windows-static.cmake`.
+OpenAL Soft's DLL has it built in too. The other side of that is that Windows Update can't fix it for us. When Microsoft announces a security fix in
+the Visual C++ runtime (MSVC's C runtime, C++ standard library or vcruntime), the copy inside our release still has the hole until we build again.
+So:
+
+1. Update GitHub's runner image, or the pinned Visual Studio version, to one with the fixed runtime.
+2. Make a new release from the same commit, or a newer one, and publish it.
+3. Say in the release notes which Microsoft fix it carries.
+
+Until that new release is out, the old one counts as having an open hole, and `RELEASE-BLOCKERS.md` says so (AvP Tao #1).
+
 ## How someone checks a copy they downloaded
 
 - `SHA256SUMS` beside the zip has the zip's hash, and `SHA256SUMS.txt` inside the zip has the hash of every file in it.
