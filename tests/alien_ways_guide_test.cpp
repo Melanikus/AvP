@@ -692,6 +692,20 @@ static void SourceOfTheGame()
 		"SOURCE: on a way, it sticks to what it's touching and goes towards the way's next point");
 	Check(Has(approach, "\t}\n\telse if(curveToPlayer)\n\t{"), "SOURCE: without a way, the game's own steering is left as it was");
 
+	// On a frame the way steers it, the game's tests that would send it off to avoid the wall it's climbing don't act (the Colony film), and
+	// the log says when they would have
+	std::string const tests = Between(near, "static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)\n{", "/* still here?... make some noise */");
+	Check(Has(tests, "\t\tonAWay = true;\n\t}\n\telse if(curveToPlayer)"), "SOURCE: an alien steered by its way this frame is marked so");
+	Check(Has(tests, "\t\tif (onAWay)\n\t\t{\n\t\t\tif (obstruction.environment || obstruction.destructableObject)\n\t\t\t{\n\t\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t\t}\n\t\t}\n\t\telse if(obstruction.environment)"),
+		"SOURCE: then running into the wall it climbs doesn't send it off, and the log says it would have");
+	Check(Has(tests, "\t\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t\t}\n\t\telse if(!onAWay && NPC_CannotReachTarget("),
+		"SOURCE: nor does turning back as it goes round by the walls, and the log says so");
+	Check(Has(tests, "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)\n\t{"), "SOURCE: and the other avoidance, switched off in this game, is kept off a way too");
+
+	std::string const would = Between(ways, "void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)", "bool AlienWays_Following(");
+	Check(Has(would, "if (!w || clockMs - w->lastWouldHaveMs < 1000)"), "SOURCE: the line comes at most once a second for each alien");
+	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");
+
 	std::string const crawling = Between(near, "int AlienShouldBeCrawling(STRATEGYBLOCK *sbPtr)", "int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr)");
 	Check(Has(crawling, "\tif (AlienWays_Following(sbPtr)) {\n\t\treturn(1);\n\t}"), "SOURCE: an alien on a way crawls");
 

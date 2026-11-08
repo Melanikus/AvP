@@ -59,6 +59,7 @@ namespace
 		bool hasGoal = false;
 		VECTORCH goal = {};
 		unsigned int lastAsked = 0;   // the frame it last asked, by frameNumber
+		long long lastWouldHaveMs = -1000000;   // when the log last said a test would have sent it off (AlienWays_WouldHaveAvoided)
 	};
 
 	Watched watched[kAlienWaysMostFollowers];
@@ -66,6 +67,12 @@ namespace
 
 	// How many lines this level has had about aliens let go (kAlienWaysMostLetGoLines at most)
 	int letGoLines = 0;
+
+	// The game's time this level, in ms, from the frames' own lengths, and how many lines it has had about a test that would have sent an
+	// alien off (AlienWays_WouldHaveAvoided)
+	long long clockMs = 0;
+	int const kAlienWaysMostWouldHaveLines = 200;
+	int wouldHaveLines = 0;
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -390,6 +397,7 @@ void AlienWays_Frame()
 
 	// The frame's time is in 65536ths of a second
 	int const stepMs = static_cast<int>((static_cast<long long>(NormalFrameTime) * 1000) >> 16);
+	clockMs += std::max(0, stepMs);
 
 	// Each watched alien's state this frame, whatever state it's in, so a stuck line can say where its last frames went. One that's gone is
 	// taken off the list.
@@ -515,6 +523,38 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	return true;
 }
 
+void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)
+{
+	if (!alien || !alien->DynPtr || !AlienWays_On() || wouldHaveLines >= kAlienWaysMostWouldHaveLines)
+	{
+		return;
+	}
+
+	// At most once a second for each alien. One not on the watched list (it always is, once it's asked for a way) isn't told of at all.
+	Watched *const w = WatchedFor(WhoIs(alien), false);
+
+	if (!w || clockMs - w->lastWouldHaveMs < 1000)
+	{
+		return;
+	}
+
+	w->lastWouldHaveMs = clockMs;
+	wouldHaveLines++;
+	AlienWaysXYZ const at = { alien->DynPtr->Position.vx, alien->DynPtr->Position.vy, alien->DynPtr->Position.vz };
+	const char *const module = alien->containingModule && alien->containingModule->name ? alien->containingModule->name : "no module";
+	char text[384];
+	snprintf(text, sizeof(text), "alien ways: an alien on its way at %s, in %s, would have been sent off to avoid something: %s. Its body's down is (%d, %d, %d)",
+		Metres(at).c_str(), module,
+		turnedBack ? "it turned back twice towards the same point (NPC_CannotReachTarget)" : "it ran into something for more than 10 frames in a row (NPC_IsObstructed)",
+		alien->DynPtr->OrientMat.mat21, alien->DynPtr->OrientMat.mat22, alien->DynPtr->OrientMat.mat23);
+	LogString(text);
+
+	if (wouldHaveLines == kAlienWaysMostWouldHaveLines)
+	{
+		LogString("alien ways: " + std::to_string(kAlienWaysMostWouldHaveLines) + " lines about tests that would have sent an alien off, so no more until the next level");
+	}
+}
+
 bool AlienWays_Following(STRATEGYBLOCK *alien)
 {
 	return alien && AlienWays_On() && ReadyMap() && theGuide.Guided(WhoIs(alien));
@@ -563,4 +603,6 @@ void AlienWays_LevelEnd()
 
 	frameNumber = 0;
 	letGoLines = 0;
+	clockMs = 0;
+	wouldHaveLines = 0;
 }

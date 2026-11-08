@@ -504,6 +504,66 @@
 					"to": "\t\tcase 99:\n\t\t\tsnprintf(text, sizeof(text), \"alien ways: alien %u was at %s, going to %s"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: an alien on a way is never marked so, and is sent off to avoid the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tonAWay = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien on a way is sent off when it runs into the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (onAWay)\n\t\t{\n\t\t\tif (obstruction.environment || obstruction.destructableObject)\n\t\t\t{\n\t\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t\t}\n\t\t}\n\t\telse if(obstruction.environment)",
+					"to": "\t\tif(obstruction.environment)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien on a way is sent off when it turns back going round by the walls",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t\t}\n\t\telse if(!onAWay && NPC_CannotReachTarget(",
+					"to": "\t\tif(NPC_CannotReachTarget("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the other avoidance acts on an alien on a way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)\n\t{",
+					"to": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the would-have line comes every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (!w || clockMs - w->lastWouldHaveMs < 1000)",
+					"to": "if (!w)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the would-have line has no most for a level",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": " || wouldHaveLines >= kAlienWaysMostWouldHaveLines)",
+					"to": ")"
+				}
+			]
 		}
 	]
 }

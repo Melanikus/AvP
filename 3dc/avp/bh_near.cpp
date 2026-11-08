@@ -6,7 +6,8 @@
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a standard alien coming for its target follows its way up the walls and along the ceilings, when the alien ways map
-//   has one for it (alien_ways.h), and crawls while it does; without one it moves as it always has (#109)
+//   has one for it (alien_ways.h), and crawls while it does; without one it moves as it always has (#109);
+//   on a frame its way steers it, the tests that would send it off to avoid something don't act, since running into a wall is how it climbs
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -864,6 +865,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	//   to the point picked above, when the alien ways map has one for it. The floor is dear on that map, so the way keeps off it.
 	//   Without one, it's steered below as it always was. The last stretch, the attack and the pounce stay as they were.
 	VECTORCH wayDirection;
+	bool onAWay = false;
 
 	if ((alienStatusPointer->Type == AT_Standard) && (distanceToPlayer > ALIEN_ATTACKDISTANCE_MIN) && AlienIsAbleToClimb(sbPtr)
 		&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &targetPos, &wayDirection))
@@ -872,6 +874,7 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		dynPtr->UseStandardGravity=0;
 		NPCSetVelocity(sbPtr, &wayDirection, alienStatusPointer->MaxSpeed);
 		alienStatusPointer->CurveTimeOut=0; /* forces curve init next time curving is used */
+		onAWay = true;
 	}
 	else if(curveToPlayer)
 	{
@@ -1139,7 +1142,16 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* test here for impeding collisions, and not being able to reach target... */
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   on a frame its way steers it (onAWay), these tests still run, but they don't send the alien off to avoid anything. To climb, an alien on
+	//   a way runs straight into the foot of a wall, and its body takes a few frames to turn onto it. These tests count that as being blocked,
+	//   or as turning back, and would send it off for 2 s before it could climb: the films showed an alien 9 seconds in 10 in Avoidance. When
+	//   one would have acted, the log says which (AlienWays_WouldHaveAvoided), so a film still shows whether it's real. An alien on a way that
+	//   really can't get on is handed back by the alien ways' own rule (no headway for 1.5 s, then 3 s of the game's own steering), and these
+	//   tests act again then. While on a way it also doesn't break a breakable thing it presses against, or give up its target for one; that's
+	//   only with -alienways.
 	#if ALL_NEW_AVOIDANCE_ALIEN
+	if (!onAWay)
 	{
 		if (New_NPC_IsObstructed(sbPtr,&alienStatusPointer->avoidanceManager)) {
 			/* Go to all new avoidance. */
@@ -1154,7 +1166,14 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		STRATEGYBLOCK *destructableObject = NULL;
 		NPC_OBSTRUCTIONREPORT obstruction;
 		NPC_IsObstructed(sbPtr,&(alienStatusPointer->moveData),&obstruction,&destructableObject);
-		if(obstruction.environment)
+		if (onAWay)
+		{
+			if (obstruction.environment || obstruction.destructableObject)
+			{
+				AlienWays_WouldHaveAvoided(sbPtr, false);
+			}
+		}
+		else if(obstruction.environment)
 		{
 			#if 1
 			NPC_InitMovementData(&(alienStatusPointer->moveData));
@@ -1176,7 +1195,11 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		VECTORCH velocityDirection = dynPtr->LinVelocity;
 		Normalise(&velocityDirection);
 
-		if(NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
+		if (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
+		{
+			AlienWays_WouldHaveAvoided(sbPtr, true);
+		}
+		else if(!onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &targetPos, &velocityDirection))
 		{
 			/* go to avoidance */
 			NPC_OBSTRUCTIONREPORT obstruction = {1,0,0};

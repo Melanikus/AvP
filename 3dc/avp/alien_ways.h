@@ -62,4 +62,10 @@ bool AlienWays_Steer(struct strategyblock *alien, struct strategyblock *target, 
 // Whether this alien's last AlienWays_Steer gave back true. An alien on a way crawls (AlienShouldBeCrawling, bh_near.cpp).
 bool AlienWays_Following(struct strategyblock *alien);
 
+// On a frame its way steers an alien, the game's own tests that would send it off to avoid something are kept from acting, because running
+// into a wall is how it climbs (AlienNearState_Approach, bh_near.cpp). When one of them would have acted, this says so in the log: which one,
+// where the alien is, and its module, at most once a second for each alien and kAlienWaysMostWouldHaveLines times a level. turnedBack means
+// the test for turning back (NPC_CannotReachTarget); otherwise it's the test for running into something (NPC_IsObstructed).
+void AlienWays_WouldHaveAvoided(struct strategyblock *alien, bool turnedBack);
+
 #endif
