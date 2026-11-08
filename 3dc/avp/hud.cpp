@@ -20,6 +20,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   every frame asks how big the HUD is drawn, so a new screen size or HUD size shows at once, and the Predator's symbols are drawn at
 //   that size (HUD-SCALE-1, see hud_scale.h). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   restarting a level forgets the target the sight had locked, as starting one does (ReInitHUD)
 
 
 /*
@@ -276,6 +277,11 @@ void ReInitHUD(void)
 	HUD_SecondaryRounds = 0;
 	HUD_PrimaryRoundsTimeLeftOver = 0;
 	HUD_SecondaryRoundsTimeLeftOver = 0;
+
+	// The target the sight had locked was something in the level as it was before the restart, and none of that is there any more.
+	// Starting a level forgets it (InitMarineHUD and the others above); restarting one has to as well, before anything can aim at it.
+	SmartTarget_Object = NULL;
+	Old_SmartTarget_Object = NULL;
 
 	/* KJL 14:21:54 17/11/98 - Predator */
 	InitialiseGrapplingHook();
