@@ -121,7 +121,7 @@ param(
     [string]$Every = '',    # seconds between the aliens of -Together, like 0.5, as a level's generator sends them. Left out, they all come at once
     [int]$Together = 0,     # 2 to 8: a watched fight has this many aliens at once, a few metres apart, each followed once a second. Needs -Watch alien
     [ValidateSet('', 'side', 'eyes')][string]$WatchFrom = '', # where a watched fight is filmed from: side (beside the alien, as without it) or eyes (his own eyes, turned to the alien)
-    [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it
+    [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it. Several, with / between them, are -Together's aliens
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
     [string]$UserCopy = '', # the folder of a copy of the game the user is playing at the same time. A game running from there, or from inside it, doesn't stop this run; any other still does. Needs -WhileInUse

@@ -8445,6 +8445,86 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "alienat= reads only its first place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->alienAtPlaces++;\n\t\t\t\tstart = end + 1;",
+					"to": "\t\t\t\tplan->alienAtPlaces++;\n\t\t\t\tstart = valueLength + 1;"
+				}
+			]
+		},
+		{
+			"name": "alienat= takes any number of places",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tif (plan->alienAtPlaces >= kHudsonMostTogether)\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedTooManyPlaces;",
+					"to": "\t\t\t\tif (false)\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedTooManyPlaces;"
+				}
+			]
+		},
+		{
+			"name": "alienat= reads every place into the first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tint *const x = plan->alienAtPlaces == 0 ? &plan->alienAtX : &plan->alienAtMore[plan->alienAtPlaces - 1][0];",
+					"to": "\t\t\t\tint *const x = &plan->alienAtX;"
+				}
+			]
+		},
+		{
+			"name": "alienat='s places go without watching",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (plan->alienAtPlaces > 1 && !plan->watchAlien)",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "alienat='s places can say another number than together=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (plan->alienAtPlaces > 1 && seenTogether && plan->watchTogether != plan->alienAtPlaces)",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "alienat='s places don't say how many",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\tif (plan->alienAtPlaces > 1 && !seenTogether)\n\t{\n\t\tplan->watchTogether = plan->alienAtPlaces;",
+					"to": "\tif (false)\n\t{\n\t\tplan->watchTogether = plan->alienAtPlaces;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others never go at alienat='s places",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tif (plan.alienAtPlaces > 1)\n\t\t{\n\t\t\tspot.vx = plan.alienAtMore[i][0];",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tspot.vx = plan.alienAtMore[i][0];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others go inside the floor at alienat='s places",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\tspot.vy = plan.alienAtMore[i][1] - kAlienStartsAboveTheFloor;",
+					"to": "\t\t\tspot.vy = plan.alienAtMore[i][1];"
+				}
+			]
 		}
 	]
 }

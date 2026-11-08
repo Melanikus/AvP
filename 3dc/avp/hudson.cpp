@@ -3743,7 +3743,8 @@ static void LookFromHisEyesAtTheAlien(const STRATEGYBLOCK *marine, VECTORCH *pla
 	MakeMatrixFromDirection(&look, turn);
 }
 
-// together=: the other aliens of a watched fight, round the first on the same floor: 2 m to each side, in front, behind, and then on the corners.
+// together=: the other aliens of a watched fight, at the places alienat= names after the first, or else round the first on the same floor: 2 m to each
+// side, in front, behind, and then on the corners.
 // Without every= they're all made at the same moment as the first. With it, one comes each every= after the first, as a level's generator sends
 // them, and this is asked each frame to make the ones whose turn has come. One that would be in no room isn't made, and the log says so, so the
 // count made is always in the log. Each is followed once a second (see WatchTheOtherAliens), and its first blow on him ends the run as the first
@@ -3759,6 +3760,14 @@ static void MakeTheOtherAliens(LONG frame)
 	{
 		int const i = togetherTried++;
 		VECTORCH spot = { togetherFirst.vx + offsets[i][0], togetherFirst.vy, togetherFirst.vz + offsets[i][1] };
+
+		// alienat= with a place for each: just above that place, as the first is
+		if (plan.alienAtPlaces > 1)
+		{
+			spot.vx = plan.alienAtMore[i][0];
+			spot.vy = plan.alienAtMore[i][1] - kAlienStartsAboveTheFloor;   // in the game's numbers, up is smaller
+			spot.vz = plan.alienAtMore[i][2];
+		}
 
 		if (!ModuleFromPosition(&spot, (MODULE *)0))
 		{

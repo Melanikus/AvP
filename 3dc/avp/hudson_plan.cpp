@@ -211,6 +211,9 @@ const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks o
 const char *const kHudsonRefusedTogetherNotANumber = "together= is how many aliens at once, from 2 to 8";
 const char *const kHudsonRefusedEveryNotASecond = "every= is seconds from 0.1 to 10, with at most one figure after the dot, like 0.5";
 const char *const kHudsonRefusedEveryWithoutTogether = "every= is how long between the aliens of together=, so it needs together=";
+const char *const kHudsonRefusedTooManyPlaces = "alienat= has at most 8 places, with / between them";
+const char *const kHudsonRefusedPlacesWithoutWatch = "alienat= with more than one place is for the aliens of a watched fight, so it needs watch=alien";
+const char *const kHudsonRefusedTogetherNotThePlaces = "together= and the number of places in alienat= say different numbers of aliens";
 const char *const kHudsonRefusedTogetherWithoutWatch = "together= is how many aliens a watched fight has at once, so it needs watch=alien";
 const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or rooms=: with rooms= the camera goes to a marine who isn't the player";
 
@@ -1010,9 +1013,36 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			seenAlienAt = true;
 
-			if (!ReadPlace(value, valueLength, &plan->alienAtX, &plan->alienAtY, &plan->alienAtZ))
+			// One place, or several with / between them: the first is the watched alien's, the others are together='s, in order
+			size_t start = 0;
+
+			plan->alienAtPlaces = 0;
+
+			while (start <= valueLength)
 			{
-				return kHudsonRefusedPlaceNotThreeNumbers;
+				size_t end = start;
+
+				while (end < valueLength && value[end] != '/')
+				{
+					end++;
+				}
+
+				if (plan->alienAtPlaces >= kHudsonMostTogether)
+				{
+					return kHudsonRefusedTooManyPlaces;
+				}
+
+				int *const x = plan->alienAtPlaces == 0 ? &plan->alienAtX : &plan->alienAtMore[plan->alienAtPlaces - 1][0];
+				int *const y = plan->alienAtPlaces == 0 ? &plan->alienAtY : &plan->alienAtMore[plan->alienAtPlaces - 1][1];
+				int *const z = plan->alienAtPlaces == 0 ? &plan->alienAtZ : &plan->alienAtMore[plan->alienAtPlaces - 1][2];
+
+				if (!ReadPlace(value + start, end - start, x, y, z))
+				{
+					return kHudsonRefusedPlaceNotThreeNumbers;
+				}
+
+				plan->alienAtPlaces++;
+				start = end + 1;
 			}
 
 			plan->alienAtSaid = true;
@@ -2429,6 +2459,22 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenEvery && !seenTogether)
 	{
 		return kHudsonRefusedEveryWithoutTogether;
+	}
+
+	// Several places in alienat= are together='s aliens: they say how many, or have to agree with together=
+	if (plan->alienAtPlaces > 1 && !plan->watchAlien)
+	{
+		return kHudsonRefusedPlacesWithoutWatch;
+	}
+
+	if (plan->alienAtPlaces > 1 && seenTogether && plan->watchTogether != plan->alienAtPlaces)
+	{
+		return kHudsonRefusedTogetherNotThePlaces;
+	}
+
+	if (plan->alienAtPlaces > 1 && !seenTogether)
+	{
+		plan->watchTogether = plan->alienAtPlaces;
 	}
 
 	if (seenTogether && !plan->watchAlien)

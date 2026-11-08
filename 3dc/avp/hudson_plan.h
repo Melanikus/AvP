@@ -261,6 +261,8 @@ struct HudsonPlan
 	bool holdFire;        // holdfire=yes: in a watched fight, he never fires, so that the alien gets to him
 	bool alienAtSaid;     // alienat=x,y,z: the alien is made 300 mm above this place, instead of somewhere in sight of him
 	int alienAtX, alienAtY, alienAtZ;
+	int alienAtPlaces;    // alienat= can name up to kHudsonMostTogether places with / between them: the first is the watched alien's, the rest together='s, in order
+	int alienAtMore[kHudsonMostTogether - 1][3];
 	bool standAtSaid;     // standat=x,y,z: he stands here, instead of where the level starts the player
 	int standAtX, standAtY, standAtZ;
 	char follow[kHudsonLongestStrategyName + 1];   // follow=: the name of one thing in the level, often an NPC, whose place and state the log says once a second. Nothing means none. For #126's floating facehugger
@@ -513,6 +515,9 @@ extern const char *const kHudsonRefusedTogetherNotANumber;
 extern const char *const kHudsonRefusedTogetherWithoutWatch;
 extern const char *const kHudsonRefusedEveryNotASecond;
 extern const char *const kHudsonRefusedEveryWithoutTogether;
+extern const char *const kHudsonRefusedTooManyPlaces;
+extern const char *const kHudsonRefusedPlacesWithoutWatch;
+extern const char *const kHudsonRefusedTogetherNotThePlaces;
 
 // A run must never touch the player's own copy of the game. So it won't start from anything that looks like a Steam folder. This is against a slip, not against someone determined.
 bool HudsonPlan_FolderIsRefused(const char *folder);
