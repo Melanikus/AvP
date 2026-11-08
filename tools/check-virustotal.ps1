@@ -6,8 +6,9 @@ about to put out. It saves each answer to a file exactly as it came, and runs th
 script never goes on the network and never sees the key: the scan job keeps both.
 
 Why: an answer comes from outside our code, so it's treated as hostile (AvP Tao #3). It's read as strict JSON, every part this uses is
-checked for its type and its range, VirusTotal's hash of the file has to be ours, and nothing VirusTotal wrote is ever printed: GitHub
-reads a line that starts with :: as an order, so only numbers and words this script has checked go into the log.
+checked for its type and its range, and VirusTotal's hash of the file has to be ours. GitHub reads a line that starts with :: as an order,
+so only numbers and words this script has checked go into the log. The one thing VirusTotal wrote that's printed is an analysis's number,
+on its ANSWER: line, and only once it's been checked to be letters, digits, + / and =: nothing that can start an order or break a line.
 
 What it checks, by what it's given:
 - -Package <zip> -Sha256 <hash>: the zip is the one the build made (that's its SHA-256), and small enough for VirusTotal's upload.

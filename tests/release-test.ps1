@@ -900,7 +900,7 @@ $releaseForm = '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\z
 $betaForm = '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})-beta\.(0|[1-9][0-9]{0,3})\z'
 $buildScript = Get-Content -Raw (Join-Path $repository 'tools/build-and-package.ps1')
 
-foreach ($place in @(@{ Name = 'tools/check-release.ps1'; Text = $checkScript }, @{ Name = "release.yml's last job"; Text = $publishJob }, @{ Name = 'tools/build-and-package.ps1'; Text = $buildScript }))
+foreach ($place in @(@{ Name = 'tools/check-release.ps1'; Text = $checkScript }, @{ Name = "release.yml's scan"; Text = $scanJob }, @{ Name = "release.yml's last job"; Text = $publishJob }, @{ Name = 'tools/build-and-package.ps1'; Text = $buildScript }))
 {
     Check ($place.Text.Contains("-cmatch '$betaForm'") -and ($place.Text.Contains("-cmatch '$releaseForm'") -or $place.Text.Contains("-cnotmatch '$releaseForm'"))) "$($place.Name) lets a version through in the same two forms"
     Check (-not $place.Text.Contains('betarelease[0-9]')) "and no longer lets a beta through named the old way"
@@ -923,14 +923,40 @@ Check ($scanJob -match '(?m)^    permissions:\n      contents: read( +#[^\n]*)?\
 Check ($scanJob.Contains('actions/checkout@') -and $scanJob.Contains('persist-credentials: false')) 'it has the code, for the checker, and leaves no token behind'
 $secretUses = @([regex]::Matches($withoutComments, 'secrets\.[A-Za-z_]+') | ForEach-Object { $_.Value })
 Check ($secretUses.Count -eq 1 -and $scanJob.Contains('          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}')) 'the VirusTotal key is the only secret, and only the scan step has it, as a setting'
-Check-Order $scanJob 'Remove-Item Env:VIRUSTOTAL_API_KEY' '& pwsh -NoProfile -File ./tools/check-virustotal.ps1' 'the key is taken out of the environment before any program starts, so none can read it'
+Check-Order $scanJob 'Remove-Item Env:VIRUSTOTAL_API_KEY' '& pwsh -NoProfile -File ./tools/check-virustotal.ps1' 'the key is taken out of the environment before any program starts, so the programs it starts are not given it'
+
+# On Linux any program of the same user can still read the step's own starting environment, the key included, so the step may start
+# only the checker. Every way PowerShell can start a program is looked for in the step's code: the call operator once, for the checker,
+# and nothing else. A program named bare, as a command, is the one way this can't see, so the names of the programs a runner has that
+# could reach the network are looked for too.
+$askStep = [regex]::Match($scanJob, '(?s)- name: Ask VirusTotal about the package\n.*\z').Value
+Check ($askStep.Length -gt 0) 'the step that asks VirusTotal can be read'
+Check ([regex]::Matches($askStep, '(?:^|[\s(=;{])&\s').Count -eq 1 -and $askStep.Contains('& pwsh -NoProfile -File ./tools/check-virustotal.ps1 ')) 'it starts one program, the checker, and calls nothing else with &'
+foreach ($starts in 'Start-Process', 'Invoke-Expression', 'iex ', 'Invoke-Item', 'Invoke-Command', 'Start-Job', 'Start-ThreadJob', 'Diagnostics.Process', '.Invoke(', 'bash', 'sh -c', 'cmd', 'gh ', 'git ', 'curl', 'wget', 'python', 'node ', '.exe', '.sh ')
+{
+    Check (-not $askStep.Contains($starts)) "and nothing that starts another: no $starts"
+}
+
+# SHA256SUMS comes from the build, which runs other people's code, so the jobs after it read it as hostile: one line, a hash, and exactly
+# the zip this version makes, before the name is used
+$nameRule = 'if ($name -cne "AvP-$env:VERSION-windows-x86.zip") { throw'
+Check ($scanJob.Contains($nameRule) -and $scanJob.Contains("if (`$sums.Count -ne 1) { throw") -and $scanJob.Contains("if (`$sha -cnotmatch '^[0-9a-f]{64}\z') { throw")) 'the scan sends only the zip this version makes'
+Check-Order $scanJob $nameRule '$zip = "release/$name"' 'and checks its name before it uses it'
+Check ($scanJob -match '(?m)^          VERSION: \$\{\{ inputs\.version \}\}$') 'with the version, as a setting'
+Check (([regex]::Matches($publishJob, [regex]::Escape($nameRule))).Count -eq 2 -and ([regex]::Matches($publishJob, [regex]::Escape("if (`$sums.Count -ne 1) { throw"))).Count -eq 2) 'the draft checks it too, in both its steps that read it'
+Check-Order $publishJob $nameRule 'Get-FileHash -Algorithm SHA256 "release/$name"' 'before it hashes it'
+Check-Order $publishJob $nameRule 'attest-build-provenance' 'and before it records how it was built'
+
+# Asked too often (429): every question waits a minute and asks again, inside one time limit for the whole step
+Check ($askStep.Contains('if ($answeredWith -ne 429) { return $answeredWith }') -and $askStep.Contains("if ((Get-Date) -gt `$giveUp) { throw")) 'a question VirusTotal says came too often is asked again, until the time is up'
+Check (-not $askStep.Contains('$status -eq 429')) 'and no question deals with that on its own'
 Check ([regex]::Matches($scanJob, '\$key\b').Count -eq 3 -and $scanJob.Contains("`$headers = @{ 'x-apikey' = `$key }")) 'and it goes nowhere but the header'
 Check ($scanJob.Contains('MaximumRedirection = 0')) 'a redirect is not followed, so the header cannot go anywhere else'
 $addresses = @([regex]::Matches($scanJob, 'https?://[^\s"/]+') | ForEach-Object { $_.Value } | Sort-Object -Unique)
 Check ($addresses.Count -eq 1 -and $addresses[0] -ceq 'https://www.virustotal.com') "it asks VirusTotal and nothing else. It names: $addresses"
 Check (-not $scanJob.Contains('ConvertFrom-Json') -and -not $scanJob.Contains('Get-Content $answers') -and -not $scanJob.Contains('Get-Content "$answers')) 'it never reads an answer itself: only the checker does'
 Check-Order $scanJob "Ask-Checker @('-Package', `$zip)" "Ask-VirusTotal 'Post' 'files'" 'the zip is checked before it is sent'
-Check ($scanJob.Contains("if (`$status -eq 404) {") -and $scanJob.Contains("while (`$answer -ceq 'waiting')") -and $scanJob.Contains('AddMinutes(20)')) 'it sends the zip only when VirusTotal does not know it, and waits for the analysis, for a while'
+Check ($scanJob.Contains("if (`$status -eq 404) {") -and $scanJob.Contains("while (`$answer -ceq 'waiting')") -and $scanJob.Contains('$giveUp = (Get-Date).AddMinutes(25)')) 'it sends the zip only when VirusTotal does not know it, and waits for the analysis, for a while'
 
 $fewest = [regex]::Match($virustotalScript, '(?m)^\$fewestScanners = ([0-9]+)\r?$').Groups[1].Value
 Check ($fewest.Length -gt 0 -and $publishJob.Contains("[int]`$env:SCAN_ANSWERED -lt $fewest) { throw")) 'the draft asks for as many scanners as the checker does'

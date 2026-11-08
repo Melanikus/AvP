@@ -45,6 +45,9 @@ Read `RELEASE-BLOCKERS.md`. If anything is listed there, the workflow will refus
      2026-11-08).
 5. The fourth job waits for you too. Approve it, and it makes a draft release. Its text says what VirusTotal found, with the link to the
    report. If any scanner flagged the zip, the text starts by saying so, in bold: don't publish it before reading the report.
+   - **Approve it within a day of the build.** The package the build made is kept for one day (`retention-days: 1` in `release.yml`), and
+     this job downloads it after you approve. A day later it's gone, and the job stops with no draft. Nothing is harmed: start the run
+     again.
 6. Go to **Releases** and open the draft. Nobody without write access can see it. Check the commit it names, write what changed, and try the
    zip if you can.
    - **For a beta, the text gives the install steps first, then a short list of what's fixed or added** (the user's ruling, 2026-11-08).
@@ -114,6 +117,8 @@ again before the first release.
 
 - **An environment called `release`,** under Settings, Environments. Add the owner as a required reviewer, so that the last two jobs wait for
   them. Leave "Prevent self-review" off, because the owner is also who starts the run. Under deployment branches, allow only `avpx_main`.
+  **Turn "Allow administrators to bypass configured protection rules" off.** With it on, an admin could run the scan, which holds the
+  VirusTotal key, and the last job, which can write to the repository, without the review these rules are there for.
 - **The secret `VIRUSTOTAL_API_KEY`, in the `release` environment** (not the repository's own secrets), so that only a job under that
   environment can read it: the scan job. It's a VirusTotal account's API key; a free one allows 4 questions a minute and 500 a day, and a
   release asks a few dozen. GitHub never shows a secret again once it's saved, but anyone who can change the environment can replace it,

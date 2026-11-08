@@ -137,7 +137,8 @@ jobs:
 
   # VirusTotal runs about 70 virus scanners on a file. The zip is looked up there by its hash, sent if VirusTotal hasn't seen it, and the
   # analysis waited for. What comes back is from outside our code, so tools/check-virustotal.ps1 reads every answer before anything here
-  # believes it (AvP Tao #3), and nothing VirusTotal wrote is printed: GitHub takes a line starting :: as an order.
+  # believes it (AvP Tao #3). Nothing VirusTotal wrote is printed but an analysis's number, which may only be letters, digits, + / and =,
+  # so it can't start an order to GitHub (a line starting ::) or break a line, and it's escaped before it goes into an address.
   #
   # The user's ruling, 2026-11-08: if any scanner flags it, the draft is still made, its text starts by saying so, and the run ends red, so
   # nobody publishes it before reading the report. An answer that can't be trusted stops the run here, with no draft.
@@ -152,7 +153,7 @@ jobs:
     environment: release    # where the VirusTotal key is kept. See RELEASING.md
     permissions:
       contents: read        # to read the code, for tools/check-virustotal.ps1. Nothing else
-    # What it found, for the last job, which checks them again: our own hash, and numbers that have been checked. Nothing VirusTotal wrote.
+    # What it found, for the last job, which checks them again: our own hash, and numbers that have been checked. No text VirusTotal wrote.
     outputs:
       sha256: ${{ steps.ask.outputs.sha256 }}
       malicious: ${{ steps.ask.outputs.malicious }}
@@ -170,25 +171,40 @@ jobs:
           name: release-package
           path: release
 
-      # The key reaches only this step, through its environment, and is taken out of the environment before anything else starts, so no
-      # program this step runs can read it. It's only ever sent in the x-apikey header to www.virustotal.com, never written on a command
-      # line, and GitHub hides it if it ever shows in the log. A redirect isn't followed, so the header can't be sent anywhere else.
+      # The key reaches only this step, through its environment. It's taken out of that environment before anything starts, so the
+      # programs this step starts aren't given it. That isn't everything: on Linux, any program running as the same user can still read
+      # this step's own starting environment (/proc/<its number>/environ), and the key is in it. So this step starts one program only,
+      # tools/check-virustotal.ps1 from this commit, and nothing else may be started here: tests/release-test.ps1 checks that it isn't.
+      # The key is only ever sent in the x-apikey header to www.virustotal.com, never written on a command line, and GitHub hides it if it
+      # ever shows in the log. A redirect isn't followed, so the header can't be sent anywhere else.
       - name: Ask VirusTotal about the package
         id: ask
         shell: pwsh
         env:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          VERSION: ${{ inputs.version }}
         run: |
           $key = $env:VIRUSTOTAL_API_KEY
           if (-not $key) { throw 'The VIRUSTOTAL_API_KEY secret is missing from the release environment' }
           Remove-Item Env:VIRUSTOTAL_API_KEY
           $headers = @{ 'x-apikey' = $key }
 
-          $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
-          $sha, $name = $line -split '  ', 2
+          # SHA256SUMS came from the build job, which runs other people's code: the libraries' own build scripts. So it's read as hostile
+          # too. It has one line, a SHA-256 and the name of the zip this version makes, and nothing else, so the file sent is that zip.
+          # The version is one of the two forms tools/check-release.ps1 lets through, written here letter for letter as there.
+          $isBeta = $env:VERSION -cmatch '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})-beta\.(0|[1-9][0-9]{0,3})\z'
+          if (-not $isBeta -and $env:VERSION -cnotmatch '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\z') { throw 'The version is not one this workflow makes' }
+          $sums = @(Get-Content release/SHA256SUMS)
+          if ($sums.Count -ne 1) { throw 'SHA256SUMS should have one line, for the zip' }
+          $sha, $name = $sums[0] -split '  ', 2
+          if ($sha -cnotmatch '^[0-9a-f]{64}\z') { throw 'The hash in SHA256SUMS is not a SHA-256' }
+          if ($name -cne "AvP-$env:VERSION-windows-x86.zip") { throw 'SHA256SUMS names a file that is not the zip this version makes' }
           $zip = "release/$name"
           $answers = Join-Path $env:RUNNER_TEMP 'virustotal'
           New-Item -ItemType Directory -Force $answers | Out-Null
+
+          # Every question to VirusTotal, waits included, has to be done by this time, inside the job's 30 minutes
+          $giveUp = (Get-Date).AddMinutes(25)
 
           # tools/check-virustotal.ps1 checks the zip, or one saved answer, prints what it found, and gives back the line starting
           # ANSWER:. Anything wrong stops this step with its reason, and so the run, with no draft.
@@ -204,17 +220,24 @@ jobs:
           }
 
           # One question to VirusTotal, its answer saved as it came, for the checker. At most one every 20 seconds, so this stays inside
-          # the free key's 4 a minute. Gives back the answer's HTTP status.
+          # the free key's 4 a minute. If VirusTotal says the key has asked too often (429, which a key already busy elsewhere can get),
+          # it waits a minute and asks again, until the time is up. Gives back the answer's HTTP status.
           $script:lastAsked = [datetime]::MinValue
           function Ask-VirusTotal([string]$method, [string]$path, [string]$saveAs, $form)
           {
-            $wait = 20 - ((Get-Date) - $script:lastAsked).TotalSeconds
-            if ($wait -gt 0) { Start-Sleep -Seconds ([math]::Ceiling($wait)) }
-            $script:lastAsked = Get-Date
-            $asking = @{ Uri = "https://www.virustotal.com/api/v3/$path"; Method = $method; Headers = $headers; OutFile = $saveAs; TimeoutSec = 300; MaximumRedirection = 0; SkipHttpErrorCheck = $true; StatusCodeVariable = 'answeredWith' }
-            if ($form) { $asking.Form = $form }
-            Invoke-RestMethod @asking
-            return $answeredWith
+            while ($true)
+            {
+              if ((Get-Date) -gt $giveUp) { throw 'VirusTotal had not answered in time' }
+              $wait = 20 - ((Get-Date) - $script:lastAsked).TotalSeconds
+              if ($wait -gt 0) { Start-Sleep -Seconds ([math]::Ceiling($wait)) }
+              $script:lastAsked = Get-Date
+              $asking = @{ Uri = "https://www.virustotal.com/api/v3/$path"; Method = $method; Headers = $headers; OutFile = $saveAs; TimeoutSec = 300; MaximumRedirection = 0; SkipHttpErrorCheck = $true; StatusCodeVariable = 'answeredWith' }
+              if ($form) { $asking.Form = $form }
+              Invoke-RestMethod @asking
+              if ($answeredWith -ne 429) { return $answeredWith }
+              Write-Host 'VirusTotal says the key has asked too often. Waiting a minute.'
+              Start-Sleep -Seconds 60
+            }
           }
 
           # The zip is the one the build made, and small enough to send
@@ -226,7 +249,7 @@ jobs:
           elseif ($status -eq 404) { 'VirusTotal has never seen this zip.'; $answer = 'not-analysed' }
           else { throw "VirusTotal answered the question about the zip with HTTP $status" }
 
-          # If not: send it, and wait for the analysis to finish. It's asked about every 30 seconds or so, for up to 20 minutes.
+          # If not: send it, and wait for the analysis to finish. It's asked about every 30 seconds or so, until the time is up.
           if ($answer -ceq 'not-analysed')
           {
             $status = Ask-VirusTotal 'Post' 'files' "$answers/upload.json" @{ file = Get-Item -LiteralPath $zip }
@@ -235,14 +258,11 @@ jobs:
             if ($answer -cnotmatch '^analysis [A-Za-z0-9+/=]{1,200}\z') { throw 'The upload gave no analysis' }
             $id = $answer.Substring('analysis '.Length)
 
-            $giveUp = (Get-Date).AddMinutes(20)
             $answer = 'waiting'
             while ($answer -ceq 'waiting')
             {
-              if ((Get-Date) -gt $giveUp) { throw 'VirusTotal had not finished its analysis after 20 minutes' }
               Start-Sleep -Seconds 10
               $status = Ask-VirusTotal 'Get' "analyses/$([uri]::EscapeDataString($id))" "$answers/analysis.json"
-              if ($status -eq 429) { 'VirusTotal says the key has asked too often. Waiting a minute.'; Start-Sleep -Seconds 60; continue }
               if ($status -ne 200) { throw "VirusTotal answered the question about the analysis with HTTP $status" }
               $answer = Ask-Checker @('-Answer', "$answers/analysis.json", '-Kind', 'analysis', '-AnalysisId', $id)
             }
@@ -308,8 +328,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the list of releases' }
           if ($releases -ccontains $env:TAG) { throw "There is already a release of $env:TAG, maybe a draft" }
 
-          $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
-          $wanted, $name = $line -split '  ', 2
+          # SHA256SUMS came from the build job, which runs other people's code, so it's read as hostile: one line, a SHA-256 and the name
+          # of the zip this version makes, and nothing else. Then the zip has to be what it says.
+          $sums = @(Get-Content release/SHA256SUMS)
+          if ($sums.Count -ne 1) { throw 'SHA256SUMS should have one line, for the zip' }
+          $wanted, $name = $sums[0] -split '  ', 2
+          if ($wanted -cnotmatch '^[0-9a-f]{64}\z') { throw 'The hash in SHA256SUMS is not a SHA-256' }
+          if ($name -cne "AvP-$env:VERSION-windows-x86.zip") { throw 'SHA256SUMS names a file that is not the zip this version makes' }
           if ((Get-FileHash -Algorithm SHA256 "release/$name").Hash.ToLower() -cne $wanted) { throw 'The package is not what the build made' }
 
           # What VirusTotal found came from the scan job, which checked its answers. It's looked at again here, before the draft uses it:
@@ -331,6 +356,7 @@ jobs:
       - name: Make the draft
         shell: pwsh
         env:
+          VERSION: ${{ inputs.version }}
           TAG: ${{ needs.check.outputs.tag }}
           PRERELEASE: ${{ needs.check.outputs.prerelease }}
           SCAN_MALICIOUS: ${{ needs.scan.outputs.malicious }}
@@ -340,8 +366,13 @@ jobs:
         run: |
           $tag = $env:TAG
           $preRelease = $env:PRERELEASE -ceq 'true'
-          $line = (Get-Content release/SHA256SUMS | Select-Object -First 1)
-          $hash, $name = $line -split '  ', 2
+
+          # Read again as the step above read it, since this step uses the name too
+          $sums = @(Get-Content release/SHA256SUMS)
+          if ($sums.Count -ne 1) { throw 'SHA256SUMS should have one line, for the zip' }
+          $hash, $name = $sums[0] -split '  ', 2
+          if ($hash -cnotmatch '^[0-9a-f]{64}\z') { throw 'The hash in SHA256SUMS is not a SHA-256' }
+          if ($name -cne "AvP-$env:VERSION-windows-x86.zip") { throw 'SHA256SUMS names a file that is not the zip this version makes' }
 
           $report = "https://www.virustotal.com/gui/file/$hash"
           $flagged = [int]$env:SCAN_MALICIOUS + [int]$env:SCAN_SUSPICIOUS
