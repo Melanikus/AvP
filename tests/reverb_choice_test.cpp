@@ -204,8 +204,10 @@ static void TheMenus()
 	// The ids come last among ours, and the words last in the list, so each id gets its own words. The compiler checks how many there are.
 	std::string const ids = ReadSourceFile("3dc/avp/langenum.h");
 	std::string const words = ReadSourceFile("3dc/avp/language.cpp");
-	Check(Has(ids, "\tTEXTSTRING_AVOPTIONS_ROOMECHO,      // the sound pages' Room echo row, and its help line (REVERB-TOGGLE-1)\n\tTEXTSTRING_AVOPTIONS_ROOMECHO_HELP,\n\n\tMAX_NO_OF_TEXTSTRINGS"), "SOURCE: the row's two ids are the last of ours");
-	Check(Has(words, "\t\"Room echo\",\n\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n};"), "SOURCE: and its words are the last two in the list");
+	Check(Has(ids, "\tTEXTSTRING_COOP_MAP_COMPLETE,\n\tTEXTSTRING_AVOPTIONS_ROOMECHO,      // the sound pages' Room echo row, and its help line (REVERB-TOGGLE-1)\n\tTEXTSTRING_AVOPTIONS_ROOMECHO_HELP,\n"),
+		"SOURCE: the row's two ids come right after the co-op pages' ones");
+	Check(Has(words, "\t\"Map complete\",\n\t\"Room echo\",\n\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n"),
+		"SOURCE: and its words come right after theirs too, so each id has its own words");
 }
 
 int main()

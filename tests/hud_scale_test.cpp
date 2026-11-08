@@ -381,8 +381,8 @@ static void TestJoiningTheGame()
 
 	// Its words come after everything the player's language.txt holds, at the end of the list that's compiled
 	std::string const ids = Between(langenum, "#if (1)", "#else");
-	Check(Has(ids, "TEXTSTRING_COOP_MAP_COMPLETE,\n\tTEXTSTRING_RENDERING_HUDSIZE,\n\tTEXTSTRING_RENDERING_HUDSIZE_HELP,\n\n\tMAX_NO_OF_TEXTSTRINGS"), "the line's two text ids are at the end of the list");
-	Check(Has(language, "\t\"Map complete\",\n\t\"HUD size\",\n\t\"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.\",\n};"), "and its words, as approved, at the end of ours");
+	Check(Has(ids, "\tTEXTSTRING_RENDERING_HUDSIZE,\n\tTEXTSTRING_RENDERING_HUDSIZE_HELP,\n\tMAX_NO_OF_TEXTSTRINGS"), "the line's two text ids are at the end of the list");
+	Check(Has(language, "\t\"HUD size\",\n\t\"How big the health, ammo, motion tracker and other on-screen readings are. The middle is the usual size.\",\n};"), "and its words, as approved, at the end of ours");
 
 	// The settings file is hostile
 	std::string const loading = Between(settings, "void ViewSettings_Load()", "void ViewSettings_MenuFrame()");
