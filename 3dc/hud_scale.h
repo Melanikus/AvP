@@ -67,7 +67,8 @@ bool HUDSize_FromSavedWord(const char *word, int *size);
 // Where the alien's health bar goes on the screen. Its full length is the width of a 4:3 screen of this height, and never wider than the
 // screen itself, centred. That's how it looked on the 4:3 screens it was drawn for. Its full thickness follows the scale, so the player's HUD
 // size makes it thicker or thinner, but never longer. As health goes down, the bar gets shorter and thinner towards its own middle, as it
-// always has. A health of 100 or more is the whole bar.
+// always has. A health of 100 or more is the whole bar. On a 1280 by 1024 screen at the usual size, it's exactly the old bar at every
+// health, to the pixel.
 struct HUDBar
 {
 	int left;        // the bar's left edge, in pixels from the screen's left

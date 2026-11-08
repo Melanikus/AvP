@@ -3,7 +3,8 @@
 #include "hud_scale.h"
 
 // The same as the game's MUL_FIXED (mathline.cpp): a whole number times a fixed-point one, with the fraction dropped. It's written out
-// here so this file needs nothing from the game. Every number it's given here is positive, so dropping the fraction rounds down.
+// here so this file needs nothing from the game. For a positive scale, dropping the fraction rounds down. A scale of nothing or less
+// draws no bar at all (HUDAlienBar_Place), so what it gives for one doesn't matter.
 static int TimesFixed(int number, int fixed)
 {
 	return static_cast<int>((static_cast<long long>(number) * fixed) >> 16);
@@ -103,7 +104,7 @@ bool HUDSize_FromSavedWord(const char *word, int *size)
 
 HUDBar HUDAlienBar_Place(int screenWidth, int screenHeight, int scale, unsigned int health)
 {
-	HUDBar bar;
+	HUDBar bar = { 0, 0, 0, 0 };
 
 	// The width of a 4:3 screen of this height, but never wider than the screen: a 5:4 screen, 1280 by 1024, is narrower than 4:3
 	long long fullLength = static_cast<long long>(screenHeight) * 4 / 3;
@@ -113,28 +114,28 @@ HUDBar HUDAlienBar_Place(int screenWidth, int screenHeight, int scale, unsigned 
 		fullLength = screenWidth;
 	}
 
-	if (fullLength < 0)
+	long long const fullThickness = TimesFixed(kAlienBarThickness, scale);
+
+	// No screen, or no bar to draw: nothing to work out, and it keeps the sums below from dividing by nothing
+	if (fullLength <= 0 || fullThickness <= 0)
 	{
-		fullLength = 0;
+		return bar;
 	}
 
-	int const fullThickness = TimesFixed(kAlienBarThickness, scale);
+	long long const length = (health >= 100) ? fullLength : fullLength * health / 100;
 
-	if (health >= 100)
-	{
-		bar.length = static_cast<int>(fullLength);
-		bar.thickness = fullThickness;
-	}
-	else
-	{
-		bar.length = static_cast<int>(fullLength * health / 100);
-		bar.thickness = static_cast<int>(static_cast<long long>(fullThickness) * health / 100);
-	}
+	// How far in the shorter bar starts from each end of the whole bar
+	long long const inset = (fullLength - length) / 2;
 
-	// Centred across the screen. Down the screen, the whole bar's bottom edge is the screen's bottom, and a shorter one sits on the whole
-	// bar's middle line, so it shrinks towards that line as well as towards the middle.
-	bar.left = (screenWidth - bar.length) / 2;
-	bar.top = screenHeight - (fullThickness + bar.thickness) / 2;
+	// The bar keeps its shape as it shrinks: it gets thinner in step with getting shorter, and it moves down by the same share of its
+	// thickness as it moves in from each end, so it stays on the whole bar's middle line. These are the sums the game did in 1999
+	// (thickness = length / 32, top = bottom - whole thickness + inset / 32, d3d_hud.cpp), with the old 1 / 32 written as the whole bar's
+	// thickness / its length. On a 1280 by 1024 screen at the usual size that's 40 / 1280, which is 1 / 32 exactly, so there every health
+	// gives exactly the bar it always had, to the pixel.
+	bar.length = static_cast<int>(length);
+	bar.thickness = static_cast<int>(length * fullThickness / fullLength);
+	bar.left = static_cast<int>((screenWidth - length) / 2);
+	bar.top = static_cast<int>(screenHeight - fullThickness + inset * fullThickness / fullLength);
 
 	return bar;
 }

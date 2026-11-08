@@ -10,6 +10,8 @@
 //   the co-op pause menu, its Players page, and the host's question before leaving
 //   the single player Custom maps page, and the way to it. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 //   the co-op campaign pages, and the way to them from the multiplayer page. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the rendering page's last line, the HUD size (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #include "3dc.h"
 #include "marine_classes.h"
 #include "module.h"
@@ -21,6 +23,7 @@
 #include "user_io.h"
 #include "menu_data.h"
 #include "view_settings.h"
+#include "hud_scale.h"
 #include "menus.h"
 #include "user_profile.h"
 #include "gammacontrol.h"
@@ -251,6 +254,8 @@ static AVPMENU_ELEMENT AvPMenu_Rendering[] =
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_RENDERING},	{kViewKeyRendering},	{0},	{0},	TEXTSTRING_RENDERING_KEY_RENDERING_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_SHADOWS},	{kViewKeyShadows},	{0},	{0},	TEXTSTRING_RENDERING_KEY_SHADOWS_HELP},
 	{AVPMENU_ELEMENT_VIEWKEY,	{TEXTSTRING_RENDERING_KEY_DEVVIEWS},	{kViewKeyDevViews},	{0},	{0},	TEXTSTRING_RENDERING_KEY_DEVVIEWS_HELP},
+	// The HUD size: a slider with a place for each size, which left and right move one place at a time (hud_scale.h, view_settings.cpp)
+	{AVPMENU_ELEMENT_SLIDER,	{TEXTSTRING_RENDERING_HUDSIZE},	{kHUDSizeSliderPlaces},	{&MenuHUDSize},	{0},	TEXTSTRING_RENDERING_HUDSIZE_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
