@@ -344,6 +344,9 @@ static void TestSizeAndSum()
 	Check(!CustomMaps_SizeAndSum(1, &size, sum), "a file that has gone since the list was made has none");
 
 	Write("avp_rifs\\Custom\\Ab.rif", level);
+	// A fresh list, made with the file as a level should be, so its sum hasn't been tried yet. Then the file grows, as a file can after the
+	// list is made, and the first look at it has to read it.
+	CustomMaps_Find();
 
 	FILE *const huge = fopen("avp_rifs\\Custom\\Ab.rif", "wb");
 
