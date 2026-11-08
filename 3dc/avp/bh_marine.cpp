@@ -17843,11 +17843,6 @@ static void	Marine_MirrorSuspectPoint(STRATEGYBLOCK *sbPtr) {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
 
-	// A drop shouldn't end a run, or splash blood across what's being looked at
-	if (HudsonMarineIsOn) {
-		return;
-	}
-
 	LOCALASSERT(sbPtr);
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
 	LOCALASSERT(marineStatusPointer);
@@ -17939,6 +17934,11 @@ void SendRequestToMarine(STRATEGYBLOCK* sbPtr,BOOL state,int extended_data)
 static void	Marine_ConsiderFallingDamage(STRATEGYBLOCK *sbPtr) {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
+
+	// A drop shouldn't end a run, or splash blood across what's being looked at
+	if (HudsonMarineIsOn) {
+		return;
+	}
 
 	LOCALASSERT(sbPtr);
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
