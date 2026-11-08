@@ -347,7 +347,7 @@ void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName)
 
 	if (!NpcLevelNames_Add(&TheNpcLevelNames, levelName, sbPtr->SBname))
 	{
-		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again.");
+		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again until the level starts again.");
 	}
 }
 
