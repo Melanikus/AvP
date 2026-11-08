@@ -158,7 +158,7 @@ AlienWaysKind AlienWays_KindOf(float up)
 float AlienWays_HowMuchItFacesUp(const AlienWaysPolygon &polygon)
 {
 	// Newell's sums over every corner give the polygon's facing, however its first three corners lie. y goes down in the game, so "up" is the
-	// part of the facing towards smaller y. The minus was measured on the stock levels: AvP-docs, engine/pathfinding-study/level.js.
+	// part of the facing towards smaller y. The minus was measured, with no game running, against the normals the stock levels store.
 	double nx = 0.0, ny = 0.0, nz = 0.0;
 	int const n = polygon.corners;
 

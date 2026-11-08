@@ -31,7 +31,7 @@
 // physics decides the rest. A door it knows only as some polygons with the door's number, and whether that door is shut only by being told
 // (DOORS, in the class below).
 //
-// HOW IT WAS CHOSEN. Measured with no game running on the 32 stock levels (AvP-docs, engine/pathfinding-study/alien-ways.js). On 1,636 route
+// HOW IT WAS CHOSEN. Measured with no game running on the 32 stock levels, with an offline copy of this map. On 1,636 route
 // legs, a floor price of 10 left 79% less floor between a leg's ends than price 1, with ways 41% longer, and past 10 almost no more floor was
 // left behind. The map keeps 4.6 MB on an average level and 8 MB at most. A grid of every surface would have been 251 MB on average.
 //
@@ -100,8 +100,8 @@ int const kAlienWaysMostDoors = 4096;
 int const kAlienWaysMostFloorPrice = 1000;
 size_t const kAlienWaysMostWayPoints = 256;             // a longer way is cut short there, and says so
 
-// THE LIMITS. What the stock levels need is in brackets: the most on any of the 32, measured with no game running (AvP-docs,
-// engine/pathfinding-study). The ceilings in bytes stop a level that's too big. The counts of work stop one that would take too long: corners
+// THE LIMITS. What the stock levels need is in brackets: the most on any of the 32, measured with no game running,
+// with an offline copy of this map. The ceilings in bytes stop a level that's too big. The counts of work stop one that would take too long: corners
 // piled into one place make the joining slow even when there's memory for it, so that's limited twice, by how many share a place and by the
 // work in all.
 struct AlienWaysLimits
@@ -155,7 +155,7 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 
 // How much a polygon faces up, worked out from all its corners, for a polygon with no normal stored with it. It has to be all of them: a level's
 // polygon can begin with three corners in a line. Which way round the corners go was measured on the stock levels, not worked out from first
-// principles (AvP-docs, engine/pathfinding-study/level.js). The game's own stored normal is better, where a polygon has one.
+// principles: with no game running, against the normals those levels store. The game's own stored normal is better, where a polygon has one.
 float AlienWays_HowMuchItFacesUp(const AlienWaysPolygon &polygon);
 
 struct AlienWaysXYZ

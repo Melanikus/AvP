@@ -1,7 +1,7 @@
 // What the log says about an alien the alien ways guide finds stuck, or lets go. Written 2026-11-08 by Melanikus for the AvP port (#109).
 //
 // WHY: in the user's first play an alien sat still on its way, and every 5 seconds the guide said it was stuck, dropped its way, and found
-// it the same one again (AvP-docs, floor-is-lava-stuck-read-primary.md). Reading the code gives several things that could hold an alien:
+// it the same one again (Primary's read of that play's log, 2026-11-08). Reading the code gives several things that could hold an alien:
 // its speed coming out as nothing once its own down is taken off, an obstruction test sending it to Avoidance, another state taking it off
 // its way, or its gravity pointing somewhere it isn't. This says which, from the game, at the moment it happens:
 //

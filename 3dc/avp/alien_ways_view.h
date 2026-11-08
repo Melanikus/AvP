@@ -3,12 +3,12 @@
 // gives the ways (AlienWays_WaysToShow); this turns them into lines; d3d_render.cpp draws them.
 //
 // WHAT IT SHOWS: for each alien following a way, a line from each point of its way to the next, in the colour of what that stretch is
-// on: gold for the floor, blue for a wall, purple for a ceiling. They're the offline page's colours (AvP-docs/engine/floor-is-lava-view.html,
-// its darker set, because the game is dark), so a film and the page read the same. A small cross marks each point. The stretch the alien is
+// on: gold for the floor, blue for a wall, purple for a ceiling. They're the colours of the offline study's pictures (their darker
+// set, because the game is dark), so a film and those pictures read the same. A small cross marks each point. The stretch the alien is
 // on now, and the point it's heading for, are white, and that point's cross is twice the size.
 //
-// WHO SEES IT: only a developer, with -dev and -alienways (DrawAlienWays, d3d_render.cpp), and never in a network game, where seeing an alien's way through a wall
-// would be cheating (KeepDeveloperToolsOutOfNetworkGames, d3d_render.cpp).
+// WHO SEES IT: only a developer, with -dev and -alienways (DrawAlienWays, d3d_render.cpp), and never in a network game, where seeing an
+// alien's way through a wall would be cheating (KeepDeveloperToolsOutOfNetworkGames, d3d_render.cpp).
 //
 // This file needs nothing from the rest of the game, so tests/alien_ways_view_test.cpp can try every case.
 

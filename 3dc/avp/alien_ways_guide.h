@@ -53,7 +53,7 @@ struct AlienWaysRange
 	size_t first, end;
 };
 
-// The rules. Each is a first guess, to be tuned from the log's lines and from film (AvP-docs, engine/floor-is-lava-plan.md).
+// The rules. Each is a first guess, to be tuned from the log's lines and from film.
 int const kAlienWaysFloorPrice = 10;              // the floor costs 10 times as much as a wall or a ceiling. Step 2c's knee.
 size_t const kAlienWaysMostFollowers = 64;        // aliens with a way at once. One more is steered by the game's own code.
 int const kAlienWaysLooksPerFrame = 500;          // polygons all the searches may look at in one frame, between them
