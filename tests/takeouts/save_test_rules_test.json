@@ -1,0 +1,118 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "it runs without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (!ask.dev)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "it runs in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (ask.networkGame)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "-savetest and -savetest-make together are taken",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (ask.load && ask.make)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a predator's levels can't be made",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (ask.species < 0 || ask.species > 2)",
+					"to": "if (ask.species < 0 || ask.species > 1)"
+				}
+			]
+		},
+		{
+			"name": "one past a species' last level is made",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (ask.episode < 0 || ask.episode >= ask.episodesOf[ask.species])",
+					"to": "if (ask.episode < 0 || ask.episode > ask.episodesOf[ask.species])"
+				}
+			]
+		},
+		{
+			"name": "a level before the first is made",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (ask.episode < 0 || ask.episode >= ask.episodesOf[ask.species])",
+					"to": "if (ask.episode >= ask.episodesOf[ask.species])"
+				}
+			]
+		},
+		{
+			"name": "an empty name is taken for a bad one, not for none",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (!ask.name || ask.nameRoom == 0 || ask.name[0] == '\\0')",
+					"to": "if (!ask.name || ask.nameRoom == 0)"
+				}
+			]
+		},
+		{
+			"name": "a name starting with a dot is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (!CustomMapName_IsSafe(ask.name, ask.nameRoom))",
+					"to": "if (!CustomMapName_IsSafe(ask.name, ask.nameRoom) && ask.name[0] != '.')"
+				}
+			]
+		},
+		{
+			"name": "a path that doesn't fit is cut short and used",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "if (wrote < 0 || static_cast<size_t>(wrote) >= pathRoom)",
+					"to": "if (wrote < 0)"
+				}
+			]
+		},
+		{
+			"name": "the path uses / where Windows uses \\",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "\"%s\\\\%s.sav\"",
+					"to": "\"%s/%s.sav\""
+				}
+			]
+		},
+		{
+			"name": "two refusals give the same reason",
+			"changes": [
+				{
+					"file": "3dc/avp/save_test_rules.h",
+					"from": "case kSaveTestBoth: return \"save test: -savetest or -savetest-make, not both\";",
+					"to": "case kSaveTestBoth: return \"save test: not in a network game\";"
+				}
+			]
+		}
+	]
+}
