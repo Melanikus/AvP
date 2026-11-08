@@ -42,6 +42,10 @@ void AlienWays_LevelStart();
 void AlienWays_Frame();
 void AlienWays_LevelEnd();
 
+// The level restarts (RestartLevel, system.cpp): every alien is made again, so nothing the guide knew of the ones before is kept, their ways
+// and claims included. The map and the doors stay, because the level's shape is the same. Secondary's read of 9e8c30fb.
+void AlienWays_LevelRestarts();
+
 // One alien's way, for the developer view to draw (alien_ways_view.h): its points from where it started to where it's going, each one's kind
 // saying what the way is on from there to the next, and which point the alien is heading for now.
 struct AlienWaysShown

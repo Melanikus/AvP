@@ -204,6 +204,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the aliens' ways",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\t\tAlienWays_LevelRestarts();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the guide as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.Clear();\n\ttoldTurnedAway = false;\n}",
+					"to": "\ttoldTurnedAway = false;\n}"
+				}
+			]
 		}
 	]
 }

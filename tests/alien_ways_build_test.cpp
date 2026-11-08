@@ -259,6 +259,14 @@ static void SourceOfTheGame()
 	Check(Has(destroy, "AlienWays_LevelEnd();\n\tKillFarModuleLocs();"), "SOURCE: a level's end stops the build and lets the map go, with the other AI's");
 	Check(CountOf(game, "AlienWays_LevelStart();") + CountOf(system, "AlienWays_LevelStart();") == 2, "SOURCE: and the build is started from those two places only");
 
+	// A restart makes every alien again: their ways and claims go, and the map stays (Secondary's read of 9e8c30fb)
+	std::string const restart = Between(system, "void RestartLevel()", "create_strategies_from_list();");
+	Check(Has(restart, "DestroyAllStrategyBlocks();") && Has(restart, "AlienWays_LevelRestarts();")
+		&& restart.find("DestroyAllStrategyBlocks();") < restart.find("AlienWays_LevelRestarts();"),
+		"SOURCE: a restart forgets the aliens' ways once the aliens are gone, before they're made again");
+	std::string const restarts = Between(ways, "void AlienWays_LevelRestarts()", "\n}\n");
+	Check(Has(restarts, "\ttheGuide.Clear();") && !Has(restarts, "theBuild.Stop();"), "SOURCE: it clears the guide, and keeps the map");
+
 	Check(Has(game, "AiPheromoneSystem();\n\n\t// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual\n"
 		"\t// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.\n\tAlienWays_Frame();"),
 		"SOURCE: each frame, with the other AI systems and before any alien moves, the alien ways have their turn");

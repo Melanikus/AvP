@@ -245,6 +245,10 @@ void RestartLevel()
 			ActiveStBlockList[i] = NULL;
 		}
 
+		// Modified 2026-11-08 by Melanikus for the AvP port:
+		//   the aliens' ways go with the aliens; the alien ways map stays, as the level's shape does (alien_ways.h)
+		AlienWays_LevelRestarts();
+
 		i = maxobjects;
 		InitialiseObjectBlocks();
 		while (i --)

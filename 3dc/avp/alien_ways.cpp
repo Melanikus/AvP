@@ -724,3 +724,11 @@ void AlienWays_LevelEnd()
 	missedFrames = 0;
 	std::fill(missedByState, missedByState + kAlienWaysStateKinds, 0);
 }
+
+void AlienWays_LevelRestarts()
+{
+	// Every alien, its way and its claims go; the build, the map, the modules' ranges and the doors stay. The log's counts and its caps run
+	// on, since it's the same level, and the stuck line's watch list lets go of the old aliens itself, each frame, as it finds them gone.
+	theGuide.Clear();
+	toldTurnedAway = false;
+}
