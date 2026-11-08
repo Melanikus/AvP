@@ -116,7 +116,7 @@ jobs:
           types='\.(c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+|inl|ipp|tpp|inc)$'
           # The first form: "enum", then a type's name, then "const", each a whole word. The second: a type named from inside a template,
           # such as a map's iterator ("...>::iterator"), then "const" as a whole word. Either one is a line written this way.
-          form='(^|[^A-Za-z0-9_])enum[[:space:]]+[A-Za-z_][A-Za-z0-9_:]*[[:space:]]+const([^A-Za-z0-9_]|$)|>(::[A-Za-z_][A-Za-z0-9_]*)+[[:space:]]+const([^A-Za-z0-9_]|$)'
+          form='(^|[^A-Za-z0-9_])enum[[:space:]]+[A-Za-z_][A-Za-z0-9_:]*[[:space:]]+const([^A-Za-z0-9_]|$)|>[[:space:]]*(::[A-Za-z_][A-Za-z0-9_]*)+[[:space:]]+const([^A-Za-z0-9_]|$)'
           looked=0
           found=0
 
