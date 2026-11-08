@@ -109,8 +109,8 @@
 			"changes": [
 				{
 					"file": "3dc/RimLoader.cpp",
-					"from": "if (index < numColours)",
-					"to": "if (colourMap)"
+					"from": "if (index < colourMap.size())",
+					"to": "if (!colourMap.empty())"
 				}
 			]
 		},
@@ -140,7 +140,7 @@
 				{
 					"file": "3dc/RimLoader.cpp",
 					"from": "uint32_t nEntries = chunkSize / 3;\n",
-					"to": "uint32_t nEntries = chunkSize / 3;\n\tif (colourMap) { file.Seek(chunkSize, FileStream::SeekCurrent); return true; }\n"
+					"to": "uint32_t nEntries = chunkSize / 3;\n\tif (!colourMap.empty()) { file.Seek(chunkSize, FileStream::SeekCurrent); return true; }\n"
 				}
 			]
 		},

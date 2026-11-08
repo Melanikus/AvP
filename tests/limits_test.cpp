@@ -464,11 +464,25 @@ static void CheckShapeAnimation()
 {
 	printf("Animated shapes:\n");
 
-	static int framePoints[4][3];
-	static int frameNormals[4][3];
+	// Modified 2026-11-08 by Melanikus for the AvP port: a frame either side of the three, so a frame number outside them is seen every time.
+	// The sequences have three frames. Next to them, one before and one after, is a frame no sequence has, with points of its own. If the
+	// game ever copied a frame from outside the three, it would copy one of those two, and the checks below would see the wrong points every
+	// time. Without them it would copy whatever happened to be in memory next to the list, and a check could pass by luck.
+	static int framePoints[3][3];
+	static int frameNormals[3][3];
+	static int pointsOutsideTheFrames[3];
+	static int normalsOutsideTheFrames[3];
 
-	SHAPEANIMATIONFRAME frames[3];
-	memset(frames, 0, sizeof(frames));
+	SHAPEANIMATIONFRAME framesAndOneEitherSide[1 + 3 + 1];
+	memset(framesAndOneEitherSide, 0, sizeof(framesAndOneEitherSide));
+
+	for (int i = 0; i < 1 + 3 + 1; i++)
+	{
+		framesAndOneEitherSide[i].vertices = pointsOutsideTheFrames;
+		framesAndOneEitherSide[i].item_normals = normalsOutsideTheFrames;
+	}
+
+	SHAPEANIMATIONFRAME *const frames = framesAndOneEitherSide + 1;
 
 	for (int i = 0; i < 3; i++)
 	{
