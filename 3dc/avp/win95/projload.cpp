@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a set of a model's clothes can be named by its number, so another machine can draw the same one;
+//   in a game that plays as single player, a Predator's starting equipment is the level's, not the host's Allow rows
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   text is copied using the exact length measured when its space was made, and the debug decal save
 //   makes its new chunk from data laid out as in a level file, removing any old chunks first; a level file's
@@ -266,7 +269,7 @@ void set_environment_properties(Environment_Data_Chunk* edc)
 	StartingEquipment.predator_grappling_hook=env_set->settings->predator_grappling_hook;
 	StartingEquipment.predator_num_spears=env_set->settings->predator_num_spears;
 
-	if(AvP.Network != I_No_Network)
+	if(!SameAsSinglePlayer())
 	{
 		StartingEquipment.predator_pistol=netGameData.allowPistol;	
 		StartingEquipment.predator_plasmacaster=netGameData.allowPlasmaCaster;	
@@ -1757,6 +1760,41 @@ HIERARCHY_VARIANT_DATA* GetHierarchyAlternateShapeSetCollectionFromLibrary(const
 			collection_index%=hier->num_shape_collections;
 			GLOBALASSERT(hier->shape_collections);
 			return &hier->shape_collections[collection_index];
+		}
+	}
+	return(0);
+}
+
+// Which of its model's sets this one is, to tell another machine. -1 if it isn't one of that model's.
+int GetHierarchyAlternateShapeSetCollectionNumber(const char* rif_name, HIERARCHY_VARIANT_DATA const* variant)
+{
+	for (LIF<Global_Hierarchy_Store *> ghli(&Global_Hierarchy_Library); !ghli.done(); ghli.next())
+	{
+		if (!_stricmp (ghli()->riffname, rif_name))
+		{
+			Global_Hierarchy_Store * hier=ghli();
+
+			if (variant >= hier->shape_collections && variant < hier->shape_collections + hier->num_shape_collections)
+			{
+				return (int)(variant - hier->shape_collections);
+			}
+		}
+	}
+	return(-1);
+}
+
+// The set with this number, for a number another machine sent. It never picks at random, unlike the one above, and any number comes out as a set the model really has.
+HIERARCHY_VARIANT_DATA* GetHierarchyAlternateShapeSetCollectionNumbered(const char* rif_name, int number)
+{
+	for (LIF<Global_Hierarchy_Store *> ghli(&Global_Hierarchy_Library); !ghli.done(); ghli.next())
+	{
+		if (!_stricmp (ghli()->riffname, rif_name))
+		{
+			Global_Hierarchy_Store * hier=ghli();
+
+			if(hier->num_shape_collections<=0 || number<0) return 0;
+
+			return &hier->shape_collections[number % hier->num_shape_collections];
 		}
 	}
 	return(0);

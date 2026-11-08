@@ -1,4 +1,6 @@
 // The graphics card's side of the level's still polygons. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   with -dev, keeps what it sent to the card, for the NORMAL LINES view
 //
 // static_level.cpp makes the lists, and knows nothing about the game or the card. This hands it the level's modules, and sends what comes back to the card.
 // It happens once, when a level has finished loading. The card's copies are managed, which means Direct3D keeps its own copy and puts them back after a
@@ -245,9 +247,14 @@ void StaticLevel_BuildThisLevel()
 		(unsigned int)theLevel.ranges.size(), indicesAre32Bit ? "32-bit" : "16-bit");
 	LogString(line);
 
-	// the card has them now, and each frame only needs the ranges
-	std::vector<StaticVertex>().swap(theLevel.vertices);
-	std::vector<uint32_t>().swap(theLevel.indices);
+	// The card has them now, and each frame only needs the ranges. With -dev they're kept, because the NORMAL LINES view reads them: these are the very numbers the card was sent.
+	extern int DevMode;
+
+	if (!DevMode)
+	{
+		std::vector<StaticVertex>().swap(theLevel.vertices);
+		std::vector<uint32_t>().swap(theLevel.indices);
+	}
 	std::vector<uint32_t>().swap(theLevel.colours);
 
 	ready = true;
@@ -306,6 +313,18 @@ bool StaticLevel_ModuleIsWhole(int moduleNumber)
 bool StaticLevel_PolygonIsIn(int moduleNumber, int polygonNumber)
 {
 	return ready && theLevel.PolygonIsIn(moduleNumber, polygonNumber);
+}
+
+const StaticVertex *StaticLevel_KeptVertices(size_t *count)
+{
+	*count = theLevel.vertices.size();
+	return theLevel.vertices.empty() ? 0 : &theLevel.vertices[0];
+}
+
+const uint32_t *StaticLevel_KeptIndices(size_t *count)
+{
+	*count = theLevel.indices.size();
+	return theLevel.indices.empty() ? 0 : &theLevel.indices[0];
 }
 
 IDirect3DVertexBuffer9 *StaticLevel_VertexBuffer()

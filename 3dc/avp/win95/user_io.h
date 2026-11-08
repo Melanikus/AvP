@@ -1,5 +1,7 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the marine's shoulder lamp has a key, in a byte the marine wasn't using, so a saved profile stays the same size
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the marine has a reload key, in a byte he wasn't using
 #ifndef _usr_io_h_
 #define _usr_io_h_ 1
 /*-------------- Patrick 21/10/96 -----------------
@@ -70,9 +72,9 @@ enum PLAYER_INPUT_ID
 #endif
 
 #if MARINE_DEMO||DEATHMATCH_DEMO
-#define NUMBER_OF_MARINE_INPUTS	28
+#define NUMBER_OF_MARINE_INPUTS	29
 #else
-#define NUMBER_OF_MARINE_INPUTS	28
+#define NUMBER_OF_MARINE_INPUTS	29
 #endif
 
 #if ALIEN_DEMO||DEATHMATCH_DEMO
@@ -187,7 +189,11 @@ typedef struct
 		unsigned char Predator_Say;        // Predator
 		unsigned char Marine_ShoulderLamp; // Marine. A profile saved before the lamp holds Escape here, because nothing ever wrote to this byte: see ShoulderLamp_KeyFromProfile
 	};
-	unsigned char Predator_SpeciesSay;
+	union
+	{
+		unsigned char Predator_SpeciesSay; // Predator
+		unsigned char Marine_Reload;       // Marine. Like the lamp's: a profile saved before there was a reload key holds Escape here. See SettleMarineNewKeys in user_profile.cpp.
+	};
 	unsigned char Predator_ShowScores;
 	unsigned char ExpansionSpace7;
 	unsigned char ExpansionSpace8;

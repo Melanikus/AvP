@@ -1,0 +1,898 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a kind past the end is known",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return kind >= 0 && kind < kNpcKindCount;",
+					"to": "return kind >= 0;"
+				}
+			]
+		},
+		{
+			"name": "a kind below nothing is known",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return kind >= 0 && kind < kNpcKindCount;",
+					"to": "return kind < kNpcKindCount;"
+				}
+			]
+		},
+		{
+			"name": "the last kind isn't known",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "kind < kNpcKindCount;",
+					"to": "kind < kNpcKindCount - 1;"
+				}
+			]
+		},
+		{
+			"name": "a player's name is good",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return guid >= 0;",
+					"to": "return guid >= -1;"
+				}
+			]
+		},
+		{
+			"name": "the top bit is good",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return guid >= 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the lowest name isn't good",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return guid >= 0;",
+					"to": "return guid > 0;"
+				}
+			]
+		},
+		{
+			"name": "no length is good",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return length > 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a timer below nothing is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "if (timer < 0)\n\t{\n\t\treturn 0;\n\t}",
+					"to": "if (false)\n\t{\n\t\treturn 0;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a timer past the end isn't held",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "(timer > 65535 ? 65535 : timer) >> 8",
+					"to": "timer >> 8"
+				}
+			]
+		},
+		{
+			"name": "the byte is the bottom of the timer",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "(timer > 65535 ? 65535 : timer) >> 8",
+					"to": "(timer > 65535 ? 65535 : timer) & 255"
+				}
+			]
+		},
+		{
+			"name": "coming back isn't scaled",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "static inline int NpcDelta_FromByte(unsigned char byte)\n{\n\treturn (int)byte << 8;",
+					"to": "static inline int NpcDelta_FromByte(unsigned char byte)\n{\n\treturn (int)byte;"
+				}
+			]
+		},
+		{
+			"name": "a new facehugger's target is whatever was in its memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "facehuggerStatus->Target = NULL;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new facehugger's target name is whatever was in its memory",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "memset(facehuggerStatus->Target_SBname, 0, sizeof(facehuggerStatus->Target_SBname));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new facehugger isn't emptied",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "memset(facehuggerStatus, 0, sizeof(FACEHUGGER_STATUS_BLOCK));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new queen isn't emptied",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "memset(queenStatus, 0, sizeof(QUEEN_STATUS_BLOCK));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new ghost isn't emptied",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldghost.cpp",
+					"from": "memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a block used again stays marked as placed in the level",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "sptr->SBflags.placed_in_the_level = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a corpse may last longer than any the game gives",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return deathTime > 0 && deathTime <= kNpcLongestDeathTime;",
+					"to": "return deathTime > 0;"
+				}
+			]
+		},
+		{
+			"name": "a corpse may last no time at all",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return deathTime > 0 && deathTime <= kNpcLongestDeathTime;",
+					"to": "return deathTime >= 0 && deathTime <= kNpcLongestDeathTime;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's death sends a timer nothing has set yet",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_corpse.cpp",
+					"from": "this_death->Multiplayer_Code, PRED_DIETIME, corpseDataPtr->GibbFactor",
+					"to": "this_death->Multiplayer_Code, corpseDataPtr->timer, corpseDataPtr->GibbFactor"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a death's time from another machine isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NpcDeathTime_IsGood(messagePtr->death_time))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the least bit of cloak counts as none",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "(byte < 1 ? 1 : byte)",
+					"to": "byte"
+				}
+			]
+		},
+		{
+			"name": "a full cloak wraps round",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "(unsigned char)(byte > 255 ? 255 : (byte < 1 ? 1 : byte))",
+					"to": "(unsigned char)(byte < 1 ? 1 : byte)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost's cloak goes back to being on or off",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "NpcCloak_FromByte(state->extra1)",
+					"to": "state->extra1 ? 1 : 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead predator's ghost stays cloaked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\tghostData->CloakingEffectiveness = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a ghost's cloak coming back isn't scaled",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "static inline int NpcCloak_FromByte(unsigned char byte)\n{\n\treturn (int)byte << 8;",
+					"to": "static inline int NpcCloak_FromByte(unsigned char byte)\n{\n\treturn (int)byte;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's message doesn't say which clothes he has",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "state->clothes = (unsigned char)marine->ClothesSet;",
+					"to": "state->clothes = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's ghost doesn't put his clothes on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "DressTheMarine(ghostData, state->clothes);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a sound's pitch may be any number",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return pitch >= -32768 && pitch <= 32767;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's voice stays on the host",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "AddNetMsg_NpcSound(kNpcSoundMarine, voice, category, pitch, place);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's voice stays on the host",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "AddNetMsg_NpcSound(kNpcSoundPredator, voice, category, pitch, place);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a queen's voice stays on the host",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "AddNetMsg_NpcSound(kNpcSoundQueen, voice, category, pitch, place);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a queen's ghost doesn't show her swipe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "ShowTheSwipe(ghostData, state);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a swipe her model doesn't have is asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "state->extra2 == 0 || !HModelSequence_Exists(model, type, number)",
+					"to": "state->extra2 == 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost never changes to the second model",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "// The same call a real corpse makes. Any part the new model doesn't have falls off as debris.\n\t\t\tTransmogrify_HModels(ghost, &ghostData->HModelController, templateModel, 1, 0, 0);",
+					"to": "// The same call a real corpse makes. Any part the new model doesn't have falls off as debris."
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost doesn't look at whether this way of dying needs it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "if (thisDeath && thisDeath->Template)",
+					"to": "if (thisDeath)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level without the second model still asks for the animation",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "thisDeath = deaths;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's second model doesn't go with his gun",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "GetNamedHierarchyFromLibrary(weapon->Riffname, weapon->TemplateName)",
+					"to": "GetNamedHierarchyFromLibrary(weapon->Riffname, weapon->HierarchyName)"
+				}
+			]
+		},
+		{
+			"name": "any bit is taken for a beam",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return (beams & ~kNpcXenoBeamsThatExist) == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a sixth beam counts as one of the five",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "kNpcXenoBeamsThatExist = 31",
+					"to": "kNpcXenoBeamsThatExist = 63"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host never says which beams are on",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "deltas->beams = (unsigned char)NpcGhosts_XenoBeamsOf(sbPtr);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a beam he hasn't got is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NpcXenoBeams_AreGood(messagePtr->beams))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ghost doesn't remember them",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "ghostData->npcXenoBeams = deltas->beams;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a beam stays on for ever if the messages stop",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "ghostData->integrity < GHOST_INTEGRITY - kLongestABeamStaysOnWithoutWord",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ghost's beams aren't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "NpcGhosts_XenoBeamsToDraw(sbPtr, aiming, &leftGun, &rightGun)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real one's beams aren't drawn",
+			"changes": [
+				{
+					"file": "3dc/avp/particle.cpp",
+					"from": "DrawXenoborgBeams(statusPtr->TargetingLaser, &statusPtr->LeftMainBeam, &statusPtr->RightMainBeam);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the queen never says when one moves",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "AddNetMsg_NpcThrownObject(QueenObjectList[i]);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first place it's said to be isn't set",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "QueenObjectLastSaidAt[NumQueenObjects]=sbPtr->DynPtr->Position;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: this message can move anything that can be picked up",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": " || !strstr(object->name, \"QueenAmmo\"))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: this message can move a light or a lift",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "object->I_SBtype != I_BehaviourInanimateObject || !object->DynPtr",
+					"to": "!object->DynPtr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it can be put outside the level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a thrown object's message put it outside the level\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an angle from the network reaches the table as it came",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "messagePtr->yOrient & 4095",
+					"to": "messagePtr->yOrient"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it's still in the room it left",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "object->containingModule = room;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shoulder cannon can't lock on to a xenoborg's ghost",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "if (ghostDataPtr->type==I_BehaviourXenoborg)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an NPC predator's ghost goes by the game type",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "if (ghostDataPtr->type==I_BehaviourPredator)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: friendly fire off reads an NPC's block as a ghost's",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "if (SameAsSinglePlayer()) {",
+					"to": "if (false) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a smart gun can't lock on to a marine's ghost",
+			"changes": [
+				{
+					"file": "3dc/avp/targeting.cpp",
+					"from": "case I_BehaviourXenoborg:\n\t\t\t\t\tcase I_BehaviourMarine:\n\t\t\t\t\t\treturn(1);",
+					"to": "case I_BehaviourXenoborg:\n\t\t\t\t\t\treturn(1);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a generator's rate is the network game's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_generator.cpp",
+					"from": "if(UseGeneratorBalance && AvP.Network != I_No_Network && !SameAsSinglePlayer())\n\t{\n\t\tgenBlock->Timer",
+					"to": "if(UseGeneratorBalance && AvP.Network != I_No_Network)\n\t{\n\t\tgenBlock->Timer"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien on another machine leaves no trail",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "ghostData->type==I_BehaviourAlienPlayer && SameAsSinglePlayer()",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ghost of an alien lying in wait is on the tracker",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "ghostData->HModelController.Sub_Sequence == ASSS_Dormant",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine can't hear another machine's player",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "((NETGHOSTDATABLOCK *)otherPlayer->SBdataptr)->myGunFlash",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he looks at the player here whoever he heard",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatusPointer->suspect_point=playerHeardAt;",
+					"to": "marineStatusPointer->suspect_point=Player->ObStrategyBlock->DynPtr->Position;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a self-destruct stays on this machine",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "(SbPtr->I_SBtype==I_BehaviourNetGhost && NPC_IsAPlayer(SbPtr))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger's ghost keeps running when it's dead",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "UpdateAlienAIGhostAnimSequence(ghost, HMSQT_Hugger, ghost->SBDamageBlock.IsOnFire ? HSS_DieOnFire : HSS_Dies, FACEHUGGER_DYINGTIME >> 3, ONE_FIXED >> 3);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's ghost keeps all its pieces",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "KillRandomSections(ghostData->HModelController.section_data, ONE_FIXED >> 1);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's ghost keeps its animation going",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "ghostData->HModelController.Looped = 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger's ghost outlasts the real one",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "ghostData->integrity = deathTime;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host sends a place outside every room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\t\tplace = startOfFrame;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host sends the place mid-fall",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "int const x = place.vx, y = place.vy, z = place.vz;",
+					"to": "int const x = dynPtr->Position.vx, y = dynPtr->Position.vy, z = dynPtr->Position.vz;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ghost whose place is outside the level goes 8 seconds later",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\tghostData->integrity = GHOST_INTEGRITY;\n\n\t// A marine changes model",
+					"to": "\t// A marine changes model"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a message with a place outside the level is thrown away whole",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\tif (module)\n\t{\n\t\tghost->containingModule = module;\n\t\tdynPtr->Position = *position;\n\t}",
+					"to": "\tif (!module)\n\t{\n\t\treturn;\n\t}\n\n\tghost->containingModule = module;\n\tdynPtr->Position = *position;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's ghost can't play the self-destruct",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "if (templateModel && HModelSequence_Exists_FromRoot(templateModel, state->sequence_type, state->sub_sequence))",
+					"to": "if (templateModel && state->sequence_type == 255)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's ghost keeps its model for the self-destruct",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\t\t\tRemoveAllDeltas(&ghostData->HModelController);\n\t\t\tTransmogrify_HModels(ghost, &ghostData->HModelController, templateModel, 1, 0, 0);\n",
+					"to": "\t\t\tRemoveAllDeltas(&ghostData->HModelController);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's death message doesn't say its animation",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "AddNetMsg_NpcKilled(sbPtr, agunStatusPointer->HModelController.Sub_Sequence, AGUN_DYINGTIME, 0);",
+					"to": "AddNetMsg_NpcKilled(sbPtr, 0, AGUN_DYINGTIME, 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's ghost keeps its last animation as a wreck",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\t\t\tUpdateAlienAIGhostAnimSequence(ghost, (HMODEL_SEQUENCE_TYPES)sequenceType, deathCode, -1, ONE_FIXED >> 3);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a gun's ghost takes any animation number it's sent",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "if (HModelSequence_Exists(&ghostData->HModelController, sequenceType, deathCode))",
+					"to": "if (deathCode >= 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead facehugger's ghost stays on the player's face",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "\t\t\tPlayerStatusPtr->MyFaceHugger = NULL;\n\t\t\tghost->maintainVisibility = 1;\n",
+					"to": "\t\t\tghost->maintainVisibility = 1;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a generator's most NPCs at once is the network game's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_generator.cpp",
+					"from": "if(UseGeneratorBalance && AvP.Network != I_No_Network && !SameAsSinglePlayer())\n\t{\n\t\tif(genBlock->use_own_max_npc)",
+					"to": "if(UseGeneratorBalance && AvP.Network != I_No_Network)\n\t{\n\t\tif(genBlock->use_own_max_npc)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game's balance is kept in one that plays as single player",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_generator.cpp",
+					"from": "if(AvP.Network != I_No_Network && !SameAsSinglePlayer())\n\t{\n\t\tGeneratorBalance_PerFrameMaintenance",
+					"to": "if(AvP.Network != I_No_Network)\n\t{\n\t\tGeneratorBalance_PerFrameMaintenance"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift sync message naming something that isn't a platform lift is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a lift's sync message named something that isn't a platform lift\");\n\t\treturn;\n",
+					"to": "Net_NoteRefused(\"a lift's sync message named something that isn't a platform lift\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift sync message naming a shared name is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a lift's sync message named a lift whose name another lift shares\");\n\t\treturn;\n",
+					"to": "Net_NoteRefused(\"a lift's sync message named a lift whose name another lift shares\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift sync message naming a state lifts don't have is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a lift's sync message named a state lifts don't have\");\n\t\treturn;\n",
+					"to": "Net_NoteRefused(\"a lift's sync message named a state lifts don't have\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift sync message naming an end a lift doesn't have is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a lift's sync message named an end a lift doesn't have\");\n\t\treturn;\n",
+					"to": "Net_NoteRefused(\"a lift's sync message named an end a lift doesn't have\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift sync message naming a car off its track is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "Net_NoteRefused(\"a lift's sync message put the car off its track\");\n\t\treturn;\n",
+					"to": "Net_NoteRefused(\"a lift's sync message put the car off its track\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's car moves by itself and follows the host's at once",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "\telse switch(platformliftdata->state)\n",
+					"to": "\tswitch(platformliftdata->state)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host never says where a lift is",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "if ((int)platformliftdata->state != platformliftdata->syncLastSentState || platformliftdata->syncSinceSent >= ONE_FIXED)",
+					"to": "if (FALSE)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a car with someone on it jumps to the host's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "if (!someoneOnIt && (gap > MAXIMUM_STEP_HEIGHT || -gap > MAXIMUM_STEP_HEIGHT))",
+					"to": "if (gap > MAXIMUM_STEP_HEIGHT || -gap > MAXIMUM_STEP_HEIGHT)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the old state message moves the car as well",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "\tif (SameAsSinglePlayer() && platformliftdata->syncHeard)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level whose lifts share a name says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "LogString(\"lift: two platform lifts in this level share a name, so a network game can't keep their cars together\");",
+					"to": ""
+				}
+			]
+		}
+	]
+}

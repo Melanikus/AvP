@@ -159,6 +159,9 @@
     <ClCompile Include="..\..\3dc\pixel_lights.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\pixel_look.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\shadow_reach.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -456,6 +459,30 @@
     <ClCompile Include="..\..\3dc\avp\weapons.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_hooks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_shotgun.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_sniper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_pulse_counter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_revolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_m79.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_staff.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\weapon_scope.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -538,6 +565,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\pldghost.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\npc_ghosts.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\pldnet.cpp">
@@ -1037,6 +1067,9 @@
     <ClInclude Include="..\..\3dc\avp\psndproj.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_sound_bank.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\pvisible.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1071,6 +1104,54 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\weapons.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_hooks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_shotgun.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_sniper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_pulse_counter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_pulse_counter_sums.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\hud_rounds_number.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_sniper_sums.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_revolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_m79.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_staff.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\marine_classes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_scope.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_slots.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\weapon_reload.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\revolver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\shotgun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp">
@@ -1254,6 +1335,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_agun.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_level_names.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\npc_kinds.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bh_xeno.h">

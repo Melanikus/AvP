@@ -25,6 +25,7 @@ HRESULT PixelLights_AddShareToMask(LPDIRECT3DDEVICE9 device, const float *light,
 
 // For a light added per pixel: adds its light to the picture being drawn on, wherever the mask says it isn't blocked. softWidth and
 // softStaysWideTo say how soft the shadow's edge is: its width in pixels up close, and how far away it stays that wide.
+void PixelLights_AddLampGlint(LPDIRECT3DDEVICE9 device, IDirect3DTexture9 *depth, const float *lampSwingSpotPlace);
 void PixelLights_AddLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3DTexture9 *mask, IDirect3DTexture9 *depth, float softWidth, float softStaysWideTo);
 
 // LightSourcesInRangeOfObject tells this which lights it left out of the object it's working on, because they're being added per pixel.

@@ -5,6 +5,8 @@
 //   a saved door has to be on a frame of its own morph
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
+//   the M79's three grenades join the list of things the game can make and run, and so does a thrown staff
+//   a sentry gun's ghost doesn't hold a door open
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 //   NpcModelIsLoaded: a character whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1;
@@ -70,6 +72,9 @@
 #include "pldghost.h"
 #include "bh_corpse.h"
 #include "logString.h"
+
+extern void M79GrenadeBehaviour(STRATEGYBLOCK *sbPtr);
+extern void ThrownStaffBehaviour(STRATEGYBLOCK *sbPtr);
 
 /*
 	our functions for doing stuff to objects
@@ -1490,6 +1495,11 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 		case I_BehaviourGrenade:
 			GrenadeBehaviour(sbptr);
 			break;
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
+			M79GrenadeBehaviour(sbptr);
+			break;
 		case I_BehaviourMolotov:
 			MolotovBehaviour(sbptr);
 			break;
@@ -1582,6 +1592,10 @@ void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 
 		case I_BehaviourSpeargunBolt:
 			SpeargunBoltBehaviour(sbptr);
+			break;
+
+		case I_BehaviourThrownStaff:
+			ThrownStaffBehaviour(sbptr);
 			break;
 
 		case I_BehaviourPredatorEnergyBolt:
@@ -2021,11 +2035,15 @@ static int AnythingNearProxDoor(MODULE *doorModulePtr,PROXDOOR_BEHAV_BLOCK *door
 			(sbPtr->I_SBtype ==	I_BehaviourPredatorAlien)||
 			(sbPtr->I_SBtype ==	I_BehaviourFaceHugger)||
 			(sbPtr->I_SBtype == I_BehaviourGrenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79Grenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79FireGrenade)||
+			(sbPtr->I_SBtype == I_BehaviourM79FragGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourRocket)||
 			(sbPtr->I_SBtype == I_BehaviourFrisbee)||
 			(sbPtr->I_SBtype == I_BehaviourPulseGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourProximityGrenade)||
-			(sbPtr->I_SBtype == I_BehaviourNetGhost)||
+			/* A sentry gun's ghost stands still, and a real one doesn't open doors */
+			(sbPtr->I_SBtype == I_BehaviourNetGhost && ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type != I_BehaviourAutoGun)||
 //			(sbPtr->I_SBtype == I_BehaviourFlareGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourFragmentationGrenade)||
 			(sbPtr->I_SBtype == I_BehaviourPredatorDisc_SeekTrack)||
@@ -2732,6 +2750,9 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 
 		case I_BehaviourPulseGrenade: /* need a new shape */
 		case I_BehaviourGrenade:
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
 		{
 			CreateShapeInstance(mmbptr,"Shell");
 			break;
@@ -2762,6 +2783,12 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 		case I_BehaviourSpeargunBolt:
 		{
 			CreateShapeInstance(mmbptr,"spear");
+			break;
+		}
+		case I_BehaviourThrownStaff:
+		{
+			// If the staff's model isn't there, it flies looking like a spear, and nothing else changes.
+			CreateShapeInstance(mmbptr,GetLoadedShapeMSL("StaffPickup") >= 0 ? "StaffPickup" : "spear");
 			break;
 		}
 		case I_BehaviourPPPlasmaBolt:
@@ -2857,11 +2884,15 @@ DISPLAYBLOCK *MakeObject(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 		case I_BehaviourRocket:
 		case I_BehaviourPulseGrenade:
 		case I_BehaviourGrenade:
+		case I_BehaviourM79Grenade:
+		case I_BehaviourM79FireGrenade:
+		case I_BehaviourM79FragGrenade:
 		case I_BehaviourFlareGrenade:
 		case I_BehaviourFragmentationGrenade:
 		case I_BehaviourClusterGrenade:
 		case I_BehaviourProximityGrenade:
 		case I_BehaviourSpeargunBolt:
+		case I_BehaviourThrownStaff:
 		case I_BehaviourPPPlasmaBolt:
 		case I_BehaviourFrisbeeEnergyBolt:
 		case I_BehaviourPredatorEnergyBolt:
@@ -3296,6 +3327,7 @@ void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr)
 					if(ghostData->SoundHandle!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
 					if(ghostData->SoundHandle2!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle2);
 					if(ghostData->SoundHandle3!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle3);
+					// A playing sound remembers where this number lives and writes to it when it ends. If the block were freed first, that write would land in freed memory.
 					if(ghostData->SoundHandle4!=SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle4);
 					Dispel_HModel(&ghostData->HModelController);
 				}

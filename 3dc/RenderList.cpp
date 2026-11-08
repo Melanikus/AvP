@@ -28,6 +28,8 @@
 //   also says when a list passes each quarter of its room. GetNumIndices moved here from d3d_render.cpp, because
 //   this file is the one that writes the index numbers it counts. A shape with any number of corners gets its index
 //   numbers, a list's buffers can be missing without harm, and index numbers can't go past the end of their buffer
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   DrawOpaqueAgain can draw the list backwards, to find where polygons tie in the surface pictures
 
 #include "RenderList.h"
 #include "TextureManager.h"
@@ -413,7 +415,9 @@ void RenderList::Reset()
 // Draws this list's solid polygons a second time, for a pass that adds light to them. The caller has set the shaders and
 // the blending. This goes straight to the device, because the caller puts the device back afterwards, and the game's own
 // record of its settings has to stay true.
-void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief, bool withHeight)
+// backwards draws every polygon in the opposite order, for the check in static_frame.cpp that finds where two polygons tie. It's only for that: the
+// polygons of one item normally go to the card in one draw, and here each goes in a draw of its own, because the order inside an item matters as well.
+void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief, bool withHeight, bool backwards)
 {
 	declaration->Set();
 	(**vb).Set();
@@ -421,7 +425,7 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 
 	for (size_t i = 0; i < listIndex; i++)
 	{
-		RenderItem *it = &Items[i];
+		RenderItem *it = &Items[backwards ? listIndex - 1 - i : i];
 		uint32_t numPrimitives = (it->indexEnd - it->indexStart) / 3;
 
 		if (get_command(it->sortKey) || !numPrimitives || get_transType(it->sortKey) != TRANSLUCENCY_OFF)
@@ -462,7 +466,17 @@ void RenderList::DrawOpaqueAgain(VertexDeclaration *declaration, bool withRelief
 			d3d.lpD3DDevice->SetSamplerState(2, D3DSAMP_ADDRESSV, addressing);
 		}
 
-		R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
+		if (backwards)
+		{
+			for (uint32_t triangle = numPrimitives; triangle-- > 0;)
+			{
+				R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart + triangle * 3, 1);
+			}
+		}
+		else
+		{
+			R_DrawIndexedPrimitive(0, 0, (**vb).GetSize(), it->indexStart, numPrimitives);
+		}
 	}
 
 	if (withRelief)

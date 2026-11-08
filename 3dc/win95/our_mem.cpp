@@ -66,6 +66,9 @@ static void StopGameOutOfMemory(size_t size)
 	avp_exit(OUT_OF_MEMORY_EXIT_CODE);
 }
 
+// In psnd.cpp. A sound may be holding an address inside memory that's about to go.
+extern void Sound_ForgetAddressesInside(const void *start, size_t bytes);
+
 // The thread the game started on: the only one that may shut Direct3D down.
 static DWORD mainThreadId = 0;
 

@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79's grenades go into a save when they are in the air, and a thrown staff goes in too
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every block of a save file is checked before it is read: its header, its size and the compressed data;
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
@@ -10,6 +12,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
 //   a save that can't be written whole leaves the old one as it was, where before a full disk destroyed it and still said GAME SAVED
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a save from when there were 11 weapon slots keeps its statistics
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
 #include "3dc.h"
@@ -221,6 +225,10 @@ extern void Load_MessageHistory(SAVE_BLOCK_HEADER* header);
 extern void Save_MessageHistory();
 
 extern void LoadStrategy_Grenade(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void LoadStrategy_M79Grenade(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void SaveStrategy_M79Grenade(STRATEGYBLOCK* sbPtr);
+extern void LoadStrategy_ThrownStaff(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void SaveStrategy_ThrownStaff(STRATEGYBLOCK* sbPtr);
 extern void SaveStrategy_Grenade(STRATEGYBLOCK* sbPtr);
 
 extern void LoadStrategy_FlareGrenade(SAVE_BLOCK_STRATEGY_HEADER* header);
@@ -1074,6 +1082,12 @@ static void SaveStrategies()
 				SaveStrategy_Grenade(sbPtr);
 				break;
 
+			case I_BehaviourM79Grenade :
+			case I_BehaviourM79FireGrenade :
+			case I_BehaviourM79FragGrenade :
+				SaveStrategy_M79Grenade(sbPtr);
+				break;
+
 			case I_BehaviourFlareGrenade :
 				SaveStrategy_FlareGrenade(sbPtr);
 				break;
@@ -1116,6 +1130,10 @@ static void SaveStrategies()
 
 			case I_BehaviourSpeargunBolt :
 				SaveStrategy_SpearBolt(sbPtr);
+				break;
+
+			case I_BehaviourThrownStaff :
+				SaveStrategy_ThrownStaff(sbPtr);
 				break;
 
 			case I_BehaviourGrapplingHook :
@@ -1266,6 +1284,12 @@ static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 			LoadStrategy_Grenade(header);
 			break;
 
+		case I_BehaviourM79Grenade :
+		case I_BehaviourM79FireGrenade :
+		case I_BehaviourM79FragGrenade :
+			LoadStrategy_M79Grenade(header);
+			break;
+
 		case I_BehaviourFlareGrenade :
 			LoadStrategy_FlareGrenade(header);
 			break;
@@ -1308,6 +1332,10 @@ static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 		case I_BehaviourSpeargunBolt :
 			LoadStrategy_SpearBolt(header);
+			break;
+
+		case I_BehaviourThrownStaff :
+			LoadStrategy_ThrownStaff(header);
 			break;
 
 		case I_BehaviourGrapplingHook :
@@ -1386,6 +1414,8 @@ extern unsigned int IncrementalSBname;
 extern int PlayersMaxHeightWhilstNotInContactWithGround;
 
 
+#include "weapon_slots.h"
+
 typedef struct misc_global_save_block
 {
 	SAVE_BLOCK_HEADER header;
@@ -1404,6 +1434,22 @@ static void LoadMiscGlobalStuff(SAVE_BLOCK_HEADER* header)
 {
 	MISC_GLOBAL_SAVE_BLOCK* block;
 	block = (MISC_GLOBAL_SAVE_BLOCK*) header;
+
+	// In a save from when there were 11 weapon slots, the statistics have three shorter lists. Without this, the size check below would quietly lose his statistics and his saves left.
+	MISC_GLOBAL_SAVE_BLOCK upgraded[2];
+	if(block->header.size == (int)(sizeof(*block) - 3 * kSlotsAddedSinceOlderSaves * sizeof(unsigned int)))
+	{
+		size_t size = block->header.size;
+
+		size = Slots_UpgradeArray(block, size, &upgraded[0], sizeof(upgraded[0]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.WeaponTimes), sizeof(unsigned int));
+		size = Slots_UpgradeArray(&upgraded[0], size, &upgraded[1], sizeof(upgraded[1]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.ShotsFired), sizeof(unsigned int));
+		size = Slots_UpgradeArray(&upgraded[1], size, &upgraded[0], sizeof(upgraded[0]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.ShotsHit), sizeof(unsigned int));
+
+		if(size != sizeof(*block)) return;
+
+		upgraded[0].header.size = (int)size;
+		block = &upgraded[0];
+	}
 
 	if(block->header.size != sizeof(*block)) return;
 

@@ -12,6 +12,11 @@
 //   the object a saved Queen is holding has to be one of the objects in the level
 //   a saved Queen's biases are divided by, so they have to be 1 or more
 //   a value a save has refused is counted for the log
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   an NPC's voice is heard on other machines in a game that plays as single player;
+//   a network game that plays the same as single player has a queen, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   in a network game the queen goes after the nearest player on any machine, leaves one who has gone, and the hangar ends when every living player is in the locker
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a queen whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
 //   avp-forever, commit 207704e)
@@ -37,6 +42,8 @@
 #include "bh_predator.h"
 #include "bh_paq.h"
 #include "bh_queen.h"
+#include "pldghost.h"
+#include "bh_ais.h"
 #include "bh_debris.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -52,6 +59,8 @@
 #include "los.h"
 #include "bh_track.h"
 #include "scream.h"
+#include "npc_kinds.h"
+#include "pldnet.h"
 
 // logString.cpp; declared here rather than by including logString.h, whose C++ headers would change which sqrt
 // overload this file's float code calls
@@ -88,9 +97,12 @@ static STRATEGYBLOCK* LockerDoorSbptr=0;
 #define QUEEN_MAX_OBJECT 10
 int NumQueenObjects;
 STRATEGYBLOCK* QueenObjectList[QUEEN_MAX_OBJECT];
+static VECTORCH QueenObjectLastSaidAt[QUEEN_MAX_OBJECT]; // where the other machines were last told each one is
+extern void AddNetMsg_NpcThrownObject(STRATEGYBLOCK *object);
 
 
 void SetQueenShapeAnimSequence_Core(STRATEGYBLOCK *sbPtr,HMODEL_SEQUENCE_TYPES type, int subtype, int length, int tweeningtime);
+static void Queen_SetTarget(QUEEN_STATUS_BLOCK *queenStatusPointer, STRATEGYBLOCK *target);
 void QueenMove_Standby(STRATEGYBLOCK *sbPtr);
 void QueenMove_StepForward(STRATEGYBLOCK *sbPtr);
 void QueenMove_StepBack(STRATEGYBLOCK *sbPtr);
@@ -209,6 +221,18 @@ void QComm_Charge(void) {
 	Queen_Target_Point=Player->ObStrategyBlock->DynPtr->Position;
 }
 
+// One of his voice's sounds, here and, in a game that plays as single player, on every other machine, where only a ghost of him is.
+// A sound already playing on this handle isn't played again, so it isn't told again either.
+static void QueenSoundOnEveryMachine(int voice, int category, int pitch, int *handle, VECTORCH *place)
+{
+	if (!handle || *handle == SOUND_NOACTIVEINDEX)
+	{
+		AddNetMsg_NpcSound(kNpcSoundQueen, voice, category, pitch, place);
+	}
+
+	PlayQueenSound(voice, category, pitch, handle, place);
+}
+
 static void QueenSoundHiss(STRATEGYBLOCK* sbPtr)
 {
 	QUEEN_STATUS_BLOCK *queenStatusPointer;
@@ -217,7 +241,7 @@ static void QueenSoundHiss(STRATEGYBLOCK* sbPtr)
 
 	if(queenStatusPointer->soundHandle==SOUND_NOACTIVEINDEX)
 	{
-		PlayQueenSound(0,QSC_Hiss,0,&queenStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
+		QueenSoundOnEveryMachine(0,QSC_Hiss,0,&queenStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 		queenStatusPointer->lastSoundCategory=QSC_Hiss;		
 	}
 }
@@ -241,7 +265,7 @@ static void QueenSoundHurt(STRATEGYBLOCK* sbPtr)
 	
 	if(queenStatusPointer->soundHandle==SOUND_NOACTIVEINDEX)
 	{
-		PlayQueenSound(0,QSC_Scream_Hurt,0,&queenStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
+		QueenSoundOnEveryMachine(0,QSC_Scream_Hurt,0,&queenStatusPointer->soundHandle,&sbPtr->DynPtr->Position);
 		queenStatusPointer->lastSoundCategory=QSC_Scream_Hurt;		
 	}
 }
@@ -251,7 +275,7 @@ static void ThrownObjectBounceNoise(int object_index,VECTORCH* location)
 	static int QueenObjectSoundHandles[QUEEN_MAX_OBJECT]={SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX,SOUND_NOACTIVEINDEX};
 	GLOBALASSERT(location);
 
-	PlayQueenSound(0,QSC_Object_Bounce,0,&QueenObjectSoundHandles[object_index],location);
+	QueenSoundOnEveryMachine(0,QSC_Object_Bounce,0,&QueenObjectSoundHandles[object_index],location);
 }
 
 void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
@@ -268,18 +292,18 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 	Queen_Next_Command=QM_Standby;
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network) 
+	/* A network game has no queen, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
 	}
 
-	/* make the assumption that the loader has initialised the strategy 
-	block sensibly... 
+	/* make the assumption that the loader has initialised the strategy
+	block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapeIndex;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -329,6 +353,9 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		SECTION *root_section;
 		
 		queenStatus = (QUEEN_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// New memory holds whatever was there before
+		memset(queenStatus, 0, sizeof(QUEEN_STATUS_BLOCK));
 		NPC_InitMovementData(&(queenStatus->moveData));
 		NPC_InitWanderData(&(queenStatus->wanderData));
 
@@ -399,7 +426,7 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 			//int he predator version , make it more likely for the queen to go after the player
 			queenStatus->QueenPlayerBias=5;
 		}
-		queenStatus->QueenTargetSB=Player->ObStrategyBlock;
+		Queen_SetTarget(queenStatus, Player->ObStrategyBlock);
 		queenStatus->QueenTauntTimer=0;
 		queenStatus->QueenFireTimer=0;
 		
@@ -1831,7 +1858,7 @@ void QueenMove_Charge(STRATEGYBLOCK *sbPtr) {
 		#if 1
 		{
 			VECTORCH v;
-			if(queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock && !queenStatusPointer->TempTarget && queenStatusPointer->TargetDistance>5000)
+			if(NPC_IsAPlayer(queenStatusPointer->QueenTargetSB) && !queenStatusPointer->TempTarget && queenStatusPointer->TargetDistance>5000)
 			{
 				//if charging at player don't go in a straight line
 				#define QUEEN_COS 63302
@@ -1965,7 +1992,7 @@ void QueenMove_Charge(STRATEGYBLOCK *sbPtr) {
 			queenStatusPointer->moveTimer=0;
 			if(queenStatusPointer->current_move==QM_Standby)
 			{
-				if(queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock && !queenStatusPointer->TempTarget)
+				if(NPC_IsAPlayer(queenStatusPointer->QueenTargetSB) && !queenStatusPointer->TempTarget)
 					queenStatusPointer->current_move=QM_Close;
 				else
 					queenStatusPointer->current_move=QM_ComeToPoint;
@@ -2349,6 +2376,55 @@ void QueenMove_Climb(STRATEGYBLOCK* sbPtr)
 #define Queen_Swipe_Left_Low 2
 #define Queen_Swipe_Right_Low 3
 
+// The player she's after: the nearest one still alive, on this machine or another. In single player that's always the one player. If they're all dead, it's the one on this machine, as it
+// always was.
+static STRATEGYBLOCK *Queen_PickPlayer(STRATEGYBLOCK *sbPtr)
+{
+	STRATEGYBLOCK *nearest = Player->ObStrategyBlock;
+
+	if (AvP.Network == I_No_Network)
+	{
+		return nearest;
+	}
+
+	int nearestDistance = NPC_IsDead(nearest) ? -1 : VectorDistance(&sbPtr->DynPtr->Position, &nearest->DynPtr->Position);
+
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK *const other = ActiveStBlockList[i];
+
+		if (other->I_SBtype == I_BehaviourNetGhost && other->DynPtr && NPC_IsAPlayer(other) && !NPC_IsDead(other)
+			&& ((NETGHOSTDATABLOCK *)other->SBdataptr)->type != I_BehaviourAlienPlayer)
+		{
+			int const distance = VectorDistance(&sbPtr->DynPtr->Position, &other->DynPtr->Position);
+
+			if (nearestDistance < 0 || distance < nearestDistance)
+			{
+				nearest = other;
+				nearestDistance = distance;
+			}
+		}
+	}
+
+	return nearest;
+}
+
+static void Queen_SetTarget(QUEEN_STATUS_BLOCK *queenStatusPointer, STRATEGYBLOCK *target)
+{
+	queenStatusPointer->QueenTargetSB = target;
+
+	if (target)
+	{
+		COPY_NAME(queenStatusPointer->QueenTarget_SBname, target->SBname);
+	}
+}
+
+// Where a player is. The display block's place for the one on this machine, as she has always used, and the dynamics block's for a ghost, which may have no display block.
+static VECTORCH Queen_PlaceOfPlayer(STRATEGYBLOCK *player)
+{
+	return player == Player->ObStrategyBlock ? Player->ObWorld : player->DynPtr->Position;
+}
+
 void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 {
 	QUEEN_STATUS_BLOCK *queenStatusPointer;
@@ -2428,7 +2504,18 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 			return;
 		}
 
-		GetTargetingPointOfObject(Player,&targetpos);
+		{
+			STRATEGYBLOCK *const swipedAt = Queen_PickPlayer(sbPtr);
+
+			if (swipedAt == Player->ObStrategyBlock)
+			{
+				GetTargetingPointOfObject(Player,&targetpos);
+			}
+			else
+			{
+				GetTargetingPointOfObject_Far(swipedAt,&targetpos);
+			}
+		}
 		vectohand.vx=targetpos.vx-hand_section->World_Offset.vx;
 		vectohand.vy=0;//targetpos.vy-hand_section->World_Offset.vy;
 		vectohand.vz=targetpos.vz-hand_section->World_Offset.vz;
@@ -2471,7 +2558,7 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 		if (range_to_player<QueenAttackRange) 
 		{
 			//do from .75 to 1.25 times base damage
-			CauseDamageToObject(Player->ObStrategyBlock,&TemplateAmmo[AMMO_NPC_PAQ_CLAW].MaxDamage[AvP.Difficulty],(ONE_FIXED*.75)+(FastRandom()&0x7fff),NULL);
+			CauseDamageToObject(Queen_PickPlayer(sbPtr),&TemplateAmmo[AMMO_NPC_PAQ_CLAW].MaxDamage[AvP.Difficulty],(ONE_FIXED*.75)+(FastRandom()&0x7fff),NULL);
 			//set the taunt timer
 			queenStatusPointer->QueenTauntTimer=ONE_FIXED/2;						
 		}
@@ -2742,6 +2829,7 @@ void KillQueen(STRATEGYBLOCK *sbPtr,DAMAGE_PROFILE *damage, int multiple,SECTION
 	if(queenStatusPointer->death_target_sbptr)
 	{
 		RequestState(queenStatusPointer->death_target_sbptr,queenStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 	/* Queens never gibb, they're that hard. */
 	
@@ -2812,7 +2900,8 @@ void FindQueenObjects()
 				//the queen moves these through their DynPtr (GLOBALASSERT is empty in Release): skip one without
 				if(NumQueenObjects<QUEEN_MAX_OBJECT && sbPtr->DynPtr)
 				{
-					QueenObjectList[NumQueenObjects++]=sbPtr;	
+					QueenObjectLastSaidAt[NumQueenObjects]=sbPtr->DynPtr->Position;
+					QueenObjectList[NumQueenObjects++]=sbPtr;
 					GLOBALASSERT(sbPtr->DynPtr);
 					sbPtr->SBflags.preserve_until_end_of_level=1;
 				}
@@ -3006,7 +3095,7 @@ void QueenForceReconsider(STRATEGYBLOCK* sbPtr)
 
 	queenStatusPointer->CurrentQueenObject=-1;
 	queenStatusPointer->QueenState=QBS_Reconsider;
-	queenStatusPointer->QueenTargetSB=Player->ObStrategyBlock;
+	Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
 	queenStatusPointer->TempTarget=FALSE;
 	queenStatusPointer->TargetInfoValid=FALSE;
 	queenStatusPointer->TargetPos=queenStatusPointer->QueenTargetSB->DynPtr->Position;					
@@ -3219,11 +3308,43 @@ void QueenPickupTargetObject(STRATEGYBLOCK *sbPtr)
 	queenStatusPointer->QueenStateTimer=0;
 									
 	//now heading for the player
-	queenStatusPointer->QueenTargetSB=Player->ObStrategyBlock;
+	Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
 	queenStatusPointer->TargetPos=queenStatusPointer->QueenTargetSB->DynPtr->Position;					
 	queenStatusPointer->TargetInfoValid=FALSE;
 	queenStatusPointer->next_move=QM_Close;
 	
+}
+
+// For the end of the hangar level: are all the players still alive inside the locker? In single player that's just the one.
+static BOOL Queen_EveryPlayerIsInLocker(void)
+{
+	if (AvP.Network == I_No_Network || !NPC_IsDead(Player->ObStrategyBlock))
+	{
+		if (!(Player->ObWorld.vx > HangarLockerMinX && Player->ObWorld.vx < HangarLockerMaxX && Player->ObWorld.vz > HangarLockerMinZ && Player->ObWorld.vz < HangarLockerMaxZ))
+		{
+			return FALSE;
+		}
+	}
+
+	if (AvP.Network != I_No_Network)
+	{
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			STRATEGYBLOCK *const other = ActiveStBlockList[i];
+
+			if (other->I_SBtype == I_BehaviourNetGhost && other->DynPtr && NPC_IsAPlayer(other) && !NPC_IsDead(other))
+			{
+				VECTORCH const *const place = &other->DynPtr->Position;
+
+				if (!(place->vx > HangarLockerMinX && place->vx < HangarLockerMaxX && place->vz > HangarLockerMinZ && place->vz < HangarLockerMaxZ))
+				{
+					return FALSE;
+				}
+			}
+		}
+	}
+
+	return TRUE;
 }
 
 void QueenBehaviour(STRATEGYBLOCK *sbPtr)
@@ -3252,11 +3373,27 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		queenStatusPointer->QueenRightHand=GetThisSectionData(queenStatusPointer->HModelController.section_data,"rrrr fing");
 	}
 
+	// In a network game a player can leave at any time, and his block goes with him. A block that's gone doesn't have the name it had, so this can't read one that has gone. The same goes for
+	// one who has died: she chooses again. In single player her target has never needed this.
+	if(AvP.Network!=I_No_Network && queenStatusPointer->QueenTargetSB)
+	{
+		STRATEGYBLOCK *const target=queenStatusPointer->QueenTargetSB;
+
+		if(!NAME_ISEQUAL(target->SBname,queenStatusPointer->QueenTarget_SBname) || (NPC_IsAPlayer(target) && NPC_IsDead(target)))
+		{
+			Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
+			queenStatusPointer->TempTarget=FALSE;
+			queenStatusPointer->QueenState=QBS_Reconsider;
+		}
+	}
+
 	if(!queenStatusPointer->QueenActivated)
 	{
 		//is the queen in a visible module?
 		GLOBALASSERT(sbPtr->containingModule);
-		if(ModuleCurrVisArray[sbPtr->containingModule->m_index]==2)
+		// 2 is what this machine's player can see. In a network game another player seeing her counts as well.
+		if(ModuleCurrVisArray[sbPtr->containingModule->m_index]==2 ||
+		   (AvP.Network!=I_No_Network && ModuleCurrVisArray[sbPtr->containingModule->m_index]!=0))
 		{
 			queenStatusPointer->QueenActivated=TRUE;
 		}
@@ -3276,11 +3413,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		if(!stricmp(LevelName,"hangar"))
 		{
 			//is the player in the locker ('hangar')
-			if(Player->ObWorld.vx> HangarLockerMinX && Player->ObWorld.vx < HangarLockerMaxX &&
-			   Player->ObWorld.vz> HangarLockerMinZ && Player->ObWorld.vz < HangarLockerMaxZ)	
-				PlayerInLocker=TRUE;
-			else
-				PlayerInLocker=FALSE;
+			PlayerInLocker=Queen_EveryPlayerIsInLocker();
 
 			//In the marine level the player can only win if he is inside the locker room area ,and 
 			//the locker door is shut
@@ -3351,7 +3484,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		if(!stricmp(LevelName,"hangar"))
 		{
 			//is the player in the trench
-			if((dynPtr->Position.vy+1500)<Player->ObWorld.vy)
+			if((dynPtr->Position.vy+1500)<Queen_PlaceOfPlayer(Queen_PickPlayer(sbPtr)).vy)
 			{
 				PlayerInTrench=TRUE;
 				if(queenStatusPointer->QueenState!=QBS_Engagement)
@@ -3364,8 +3497,10 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				PlayerInTrench=FALSE;
 			}
 			//is the player in the locker ('hangar')
-			if(Player->ObWorld.vx> HangarLockerMinX && Player->ObWorld.vx < HangarLockerMaxX &&
-			   Player->ObWorld.vz> HangarLockerMinZ && Player->ObWorld.vz < HangarLockerMaxZ)	
+			VECTORCH const placeOfPlayer = Queen_PlaceOfPlayer(Queen_PickPlayer(sbPtr));
+
+			if(placeOfPlayer.vx> HangarLockerMinX && placeOfPlayer.vx < HangarLockerMaxX &&
+			   placeOfPlayer.vz> HangarLockerMinZ && placeOfPlayer.vz < HangarLockerMaxZ)
 				PlayerInLocker=TRUE;
 			else
 				PlayerInLocker=FALSE;
@@ -3375,7 +3510,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 			if(UpperAirlockDoorOpen && !LowerAirlockDoorOpen)
 			{
 				//has the queen fallen into the airlock
-				if(ObjectIsInAirlock(sbPtr) && !ObjectIsInAirlock(Player->ObStrategyBlock) && queenStatusPointer->QueenState!=QBS_ClimbingOutOfAirlock)
+				if(ObjectIsInAirlock(sbPtr) && !ObjectIsInAirlock(Queen_PickPlayer(sbPtr)) && queenStatusPointer->QueenState!=QBS_ClimbingOutOfAirlock)
 				{
 					QueenForceReconsider(sbPtr);
 				}
@@ -3388,7 +3523,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 	queenStatusPointer->QueenStateTimer+=NormalFrameTime;
 
 	{
-		VECTORCH pos=Player->ObWorld;
+		VECTORCH pos=Queen_PlaceOfPlayer(Queen_PickPlayer(sbPtr));
 		SubVector(&dynPtr->Position,&pos);
 		DistanceToPlayer=Approximate3dMagnitude(&pos);
 	}
@@ -3494,7 +3629,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 							}
 						}
 
-						if(nextReport->ObstacleSBPtr==Player->ObStrategyBlock)
+						if(NPC_IsAPlayer(nextReport->ObstacleSBPtr))
 						{
 							ConsiderJumpingForThisObject=FALSE;
 
@@ -3509,20 +3644,27 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 									//knock the player back
 									VECTORCH* player_impulse;
 									player_impulse=&Player->ObStrategyBlock->DynPtr->LinImpulse;
-									player_impulse->vx+=dynPtr->OrientMat.mat31/4;
-									player_impulse->vy-=6000;
-									player_impulse->vz+=dynPtr->OrientMat.mat33/4;
+
+									if(nextReport->ObstacleSBPtr==Player->ObStrategyBlock)
+									{
+										player_impulse->vx+=dynPtr->OrientMat.mat31/4;
+										player_impulse->vy-=6000;
+										player_impulse->vz+=dynPtr->OrientMat.mat33/4;
+									}
 								}
 								{
 									//do some damage
-									CauseDamageToObject(Player->ObStrategyBlock,&QueenButtDamage, ONE_FIXED,NULL);
+									CauseDamageToObject(nextReport->ObstacleSBPtr,&QueenButtDamage, ONE_FIXED,NULL);
 
 								}
 							}
 							else if(queenStatusPointer->current_move==QM_Climbing)
 							{
 								//need to push he player out of the way
-								Player->ObStrategyBlock->DynPtr->LinImpulse.vx=min(Player->ObStrategyBlock->DynPtr->LinImpulse.vx,-3000);
+								if(nextReport->ObstacleSBPtr==Player->ObStrategyBlock)
+								{
+									Player->ObStrategyBlock->DynPtr->LinImpulse.vx=min(Player->ObStrategyBlock->DynPtr->LinImpulse.vx,-3000);
+								}
 							}
 							else if(queenStatusPointer->QueenState!=QBS_Engagement &&
 							   queenStatusPointer->QueenState!=QBS_CarryingObject)
@@ -3558,7 +3700,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		//if the queen is approaching the player in the locker
 		//ignore obstacles to allow the quuen to get to the player
 		if(PlayerInLocker && !queenStatusPointer->TempTarget &&
-		   queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock)
+		   NPC_IsAPlayer(queenStatusPointer->QueenTargetSB))
 		{
 			QueenCalculateTargetInfo(sbPtr);
 			if(queenStatusPointer->TargetDistance<12000)	
@@ -3611,7 +3753,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				{
 					if(LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourInanimateObject ||
 					   LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourTrackObject ||
-					   LOS_ObjectHitPtr==Player)
+					   LOS_ObjectHitPtr==Player || NPC_IsAPlayer(LOS_ObjectHitPtr->ObStrategyBlock))
 					{
 						//not an obstacle
 						centre_dist=1000000;
@@ -3631,7 +3773,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				{
 					if(LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourInanimateObject ||
 					   LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourTrackObject ||
-					   LOS_ObjectHitPtr==Player)
+					   LOS_ObjectHitPtr==Player || NPC_IsAPlayer(LOS_ObjectHitPtr->ObStrategyBlock))
 					{
 						//not an obstacle
 						right_dist=1000000;
@@ -3652,7 +3794,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				{
 					if(LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourInanimateObject ||
 					   LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype==I_BehaviourTrackObject ||
-					   LOS_ObjectHitPtr==Player)
+					   LOS_ObjectHitPtr==Player || NPC_IsAPlayer(LOS_ObjectHitPtr->ObStrategyBlock))
 					{
 						//not an obstacle
 						left_dist=1000000;
@@ -3745,12 +3887,12 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 					if(ObjectIsInAirlock(sbPtr))
 					{
 						//the queen is in the airlock
-						if(ObjectIsInAirlock(Player->ObStrategyBlock))
+						if(ObjectIsInAirlock(Queen_PickPlayer(sbPtr)))
 						{
 							//player is in the airlock with the queen
 							//splat him
 							queenStatusPointer->QueenState=QBS_Engagement;
-							queenStatusPointer->QueenTargetSB=Player->ObStrategyBlock;
+							Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
 							queenStatusPointer->TargetPos=queenStatusPointer->QueenTargetSB->DynPtr->Position;					
 						}
 						else
@@ -3814,7 +3956,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 						//go for the object
 						queenStatusPointer->QueenState=QBS_GoingForObject;
 						queenStatusPointer->CurrentQueenObject=closest;
-						queenStatusPointer->QueenTargetSB=QueenObjectList[queenStatusPointer->CurrentQueenObject];
+						Queen_SetTarget(queenStatusPointer, QueenObjectList[queenStatusPointer->CurrentQueenObject]);
 
 						if(!stricmp(LevelName,"hangar"))
 						{
@@ -3834,7 +3976,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 						//go for the player
 						queenStatusPointer->QueenState=QBS_Engagement;
 						queenStatusPointer->CurrentQueenObject=-1;
-						queenStatusPointer->QueenTargetSB=Player->ObStrategyBlock;
+						Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
 						queenStatusPointer->QueenObjectBias++;
 						queenStatusPointer->QueenPlayerBias--;
 						if(queenStatusPointer->QueenPlayerBias==0)queenStatusPointer->QueenPlayerBias=1;
@@ -3954,8 +4096,8 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 			//Time to throw object at player.
 			VECTORCH impulse;
 			if(CalculateTrajectory(&QueenObjectList[queenStatusPointer->CurrentQueenObject]->DynPtr->Position,
-								   &Player->ObStrategyBlock->DynPtr->Position,
-								   &Player->ObStrategyBlock->DynPtr->LinVelocity,
+								   &Queen_PickPlayer(sbPtr)->DynPtr->Position,
+								   &Queen_PickPlayer(sbPtr)->DynPtr->LinVelocity,
 								   QUEEN_THROWN_OBJECT_SPEED,
 								   &impulse))
 			{
@@ -3970,7 +4112,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				}
 				//queen will need to choose a new objective
 				queenStatusPointer->QueenState=QBS_Reconsider;
-				queenStatusPointer->QueenTargetSB=Player->ObStrategyBlock;
+				Queen_SetTarget(queenStatusPointer, Queen_PickPlayer(sbPtr));
 				queenStatusPointer->TargetInfoValid=FALSE;
 				
 			}
@@ -4004,7 +4146,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		   queenStatusPointer->TargetDirection.vz>-queenStatusPointer->TargetDirection.vx)
 		{
 			queenStatusPointer->next_move=QM_Charge;
-			if(queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock)
+			if(NPC_IsAPlayer(queenStatusPointer->QueenTargetSB))
 			{
 				//going for player. possibility of butting player
 				//Nb. queen can't actually colide with player , if the player is in the locker area
@@ -4020,7 +4162,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		} 
 		else if (queenStatusPointer->TargetDistance>3000 || queenStatusPointer->TargetRelSpeed>0) 
 		{
-			if(queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock && !queenStatusPointer->TempTarget)
+			if(NPC_IsAPlayer(queenStatusPointer->QueenTargetSB) && !queenStatusPointer->TempTarget)
 				queenStatusPointer->next_move=QM_Close;
 			else
 				queenStatusPointer->next_move=QM_ComeToPoint;
@@ -4090,7 +4232,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		**-------------------------------------------------------------------*/
 
 	if(!queenStatusPointer->TempTarget && 
-		queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock &&
+		NPC_IsAPlayer(queenStatusPointer->QueenTargetSB) &&
 		PlayerInLocker)
 	{
 		//is the queen in line with the locker area?
@@ -4116,7 +4258,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 	if(queenStatusPointer->QueenTauntTimer>0 )
 	{
 		queenStatusPointer->QueenTauntTimer-=NormalFrameTime;
-		if(queenStatusPointer->QueenTargetSB==Player->ObStrategyBlock && DistanceToPlayer>10000)
+		if(NPC_IsAPlayer(queenStatusPointer->QueenTargetSB) && DistanceToPlayer>10000)
 		{
 			QueenCalculateTargetInfo(sbPtr);
 	   		if(queenStatusPointer->TargetDirection.vz>queenStatusPointer->TargetDirection.vx &&
@@ -4480,6 +4622,19 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 			if(!QueenObjectList[i]->SBflags.destroyed_but_preserved)
 			{
 				BOOL doneBounceNoise=FALSE;
+
+				// Only this machine runs her, so the others are told when it moves. That's only while she has it or it's flying.
+				{
+					VECTORCH const *const place=&QueenObjectList[i]->DynPtr->Position;
+					VECTORCH *const saidAt=&QueenObjectLastSaidAt[i];
+
+					if(place->vx!=saidAt->vx || place->vy!=saidAt->vy || place->vz!=saidAt->vz)
+					{
+						AddNetMsg_NpcThrownObject(QueenObjectList[i]);
+						*saidAt=*place;
+					}
+				}
+
 				COLLISIONREPORT *nextReport;
 
 				nextReport = QueenObjectList[i]->DynPtr->CollisionReportPtr;
@@ -4499,7 +4654,7 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 						if(nextReport->ObstacleSBPtr)
 						{
 							
-							if(nextReport->ObstacleSBPtr==Player->ObStrategyBlock ||
+							if(NPC_IsAPlayer(nextReport->ObstacleSBPtr) ||
 							   nextReport->ObstacleSBPtr->I_SBtype==I_BehaviourInanimateObject ||
 							   (nextReport->ObstacleSBPtr->name && !strcmp(nextReport->ObstacleSBPtr->name,"locker door")))
 							{
@@ -5146,7 +5301,7 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	
 
 	//load target
-	queenStatusPointer->QueenTargetSB = FindSBWithName(block->Target_SBname);
+	Queen_SetTarget(queenStatusPointer, FindSBWithName(block->Target_SBname));
 
 
 	//copy strategy block stuff

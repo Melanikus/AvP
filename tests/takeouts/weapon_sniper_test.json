@@ -1,0 +1,818 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "zooming in is too slow",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperZoomInSpeed = 10.0f",
+					"to": "kSniperZoomInSpeed = 5.0f"
+				}
+			]
+		},
+		{
+			"name": "the quick zoom is too slow",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperZoomQuickSpeed = 70.0f",
+					"to": "kSniperZoomQuickSpeed = 7.0f"
+				}
+			]
+		},
+		{
+			"name": "the zoom goes on past 20",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (zoom > kSniperMostZoom) ? kSniperMostZoom : zoom;",
+					"to": "return zoom;"
+				}
+			]
+		},
+		{
+			"name": "the most zoom is 25",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperMostZoom = 20.0f",
+					"to": "kSniperMostZoom = 25.0f"
+				}
+			]
+		},
+		{
+			"name": "zooming out goes below 1",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (zoom < kSniperLeastZoom) ? kSniperLeastZoom : zoom;",
+					"to": "return zoom;"
+				}
+			]
+		},
+		{
+			"name": "going back overshoots",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (zoom > zoomToGoBackTo) ? zoomToGoBackTo : zoom;",
+					"to": "return zoom;"
+				}
+			]
+		},
+		{
+			"name": "the view scale is the zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return 1.0f / zoom;",
+					"to": "return zoom;"
+				}
+			]
+		},
+		{
+			"name": "a saved zoom of anything is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (zoom >= kSniperLeastZoom && zoom <= kSniperMostZoom)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a saved zoom only has a floor",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (zoom >= kSniperLeastZoom && zoom <= kSniperMostZoom)",
+					"to": "if (zoom >= kSniperLeastZoom)"
+				}
+			]
+		},
+		{
+			"name": "a saved zoom only has a ceiling",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (zoom >= kSniperLeastZoom && zoom <= kSniperMostZoom)",
+					"to": "if (zoom <= kSniperMostZoom)"
+				}
+			]
+		},
+		{
+			"name": "a saved zoom that isn't a number gets through",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (zoom >= kSniperLeastZoom && zoom <= kSniperMostZoom)",
+					"to": "if (!(zoom < kSniperLeastZoom) && !(zoom > kSniperMostZoom))"
+				}
+			]
+		},
+		{
+			"name": "a saved zoom out of range gives the most",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\treturn kSniperLeastZoom;\n}\n\n// A saved game's copy",
+					"to": "\treturn kSniperMostZoom;\n}\n\n// A saved game's copy"
+				}
+			]
+		},
+		{
+			"name": "moving at full zoom is a tenth",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperFullZoomMoving = 13107;",
+					"to": "kSniperFullZoomMoving = 6553;"
+				}
+			]
+		},
+		{
+			"name": "turning at full zoom is a fifth",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperFullZoomTurning = 6553;",
+					"to": "kSniperFullZoomTurning = 13107;"
+				}
+			]
+		},
+		{
+			"name": "jumping at full zoom is a quarter",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "kSniperFullZoomJumping = 32768;",
+					"to": "kSniperFullZoomJumping = 16384;"
+				}
+			]
+		},
+		{
+			"name": "the slowdown is all or nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return free - (int)((float)(free - fullZoom) * howFar);",
+					"to": "return (howFar > 0.0f) ? fullZoom : free;"
+				}
+			]
+		},
+		{
+			"name": "the slowdown is measured from nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "float const howFar = (zoom - kSniperLeastZoom) / (kSniperMostZoom - kSniperLeastZoom);",
+					"to": "float const howFar = zoom / kSniperMostZoom;"
+				}
+			]
+		},
+		{
+			"name": "the trigger doesn't hold the scope up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return !primaryHeld;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "letting go of secondary doesn't stop the zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return !secondaryHeld;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "going back ends at once",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return rifle->zoom == rifle->zoomToGoBackTo;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "zooming out ends at once",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return rifle->zoom == kSniperLeastZoom;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a shot through the scope works the bolt with the scope up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (rifle->scopeIsUp)\n\t{\n\t\treturn kSniperWaitingForTrigger;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shot throws out no case",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->spentCaseToThrow = true;\n\treturn kSniperWorkingBolt;",
+					"to": "\treturn kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "a shot through the scope throws out no case",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->spentCaseToThrow = true;\n\trifle->scopeShouldComeBack = true;",
+					"to": "\trifle->scopeShouldComeBack = true;"
+				}
+			]
+		},
+		{
+			"name": "the scope doesn't come back after a bolt",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->scopeShouldComeBack = true;\n\trifle->afterLowering = kSniperWorkingBolt;",
+					"to": "\trifle->afterLowering = kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "the bolt is forgotten after the scope comes down",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->afterLowering = kSniperWorkingBolt;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a reload starts with the scope up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (rifle->scopeIsUp)\n\t{\n\t\trifle->scopeShouldComeBack = true;\n\t\trifle->afterLowering = kSniperReloading;\n\t\treturn kSniperZoomingOut;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the scope doesn't come back after a reload",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->scopeShouldComeBack = true;\n\t\trifle->afterLowering = kSniperReloading;",
+					"to": "\t\trifle->afterLowering = kSniperReloading;"
+				}
+			]
+		},
+		{
+			"name": "the reload is forgotten after the scope comes down",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->afterLowering = kSniperReloading;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a reload never notes that it's from empty",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "rifle->reloadBeganEmpty = !roundsLeftInTheGun;",
+					"to": "rifle->reloadBeganEmpty = false;"
+				}
+			]
+		},
+		{
+			"name": "a reload always notes that it's from empty",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "rifle->reloadBeganEmpty = !roundsLeftInTheGun;",
+					"to": "rifle->reloadBeganEmpty = true;"
+				}
+			]
+		},
+		{
+			"name": "a change of weapon after a reload is ignored",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (changingWeapon)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the bolt isn't owed after being put away",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\t\trifle->boltOwedWhenDrawn = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the owed bolt is owed twice",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\t\trifle->boltOwedWhenDrawn = true;\n\t\t\trifle->reloadBeganEmpty = false;",
+					"to": "\t\t\trifle->boltOwedWhenDrawn = true;"
+				}
+			]
+		},
+		{
+			"name": "no bolt after a reload from empty",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->reloadBeganEmpty = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;",
+					"to": "\t\trifle->reloadBeganEmpty = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperIdle;"
+				}
+			]
+		},
+		{
+			"name": "a reload from empty throws out a case",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->reloadBeganEmpty = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;",
+					"to": "\t\trifle->reloadBeganEmpty = false;\n\t\treturn kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "the bolt after a reload runs twice",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->reloadBeganEmpty = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;",
+					"to": "\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "the scope doesn't rise straight after a reload",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return rifle->scopeShouldComeBack ? kSniperScopeRising : kSniperIdle;",
+					"to": "return kSniperIdle;"
+				}
+			]
+		},
+		{
+			"name": "putting away ignores the scope",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (rifle->scopeIsUp)\n\t{\n\t\trifle->afterLowering = kSniperPuttingAway;\n\t\treturn kSniperZoomingOut;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "putting away is forgotten after the scope comes down",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->afterLowering = kSniperPuttingAway;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an owed bolt is never worked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (rifle->boltOwedWhenDrawn)\n\t{",
+					"to": "\tif (false)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "an owed bolt is worked every time",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->boltOwedWhenDrawn = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;",
+					"to": "\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "an owed bolt throws out a case",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->boltOwedWhenDrawn = false;\n\t\trifle->spentCaseToThrow = false;\n\t\treturn kSniperWorkingBolt;",
+					"to": "\t\trifle->boltOwedWhenDrawn = false;\n\t\treturn kSniperWorkingBolt;"
+				}
+			]
+		},
+		{
+			"name": "the scope never counts as up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->scopeIsUp = true;\n\n\tif (rifle->scopeShouldComeBack)",
+					"to": "\tif (rifle->scopeShouldComeBack)"
+				}
+			]
+		},
+		{
+			"name": "the scope doesn't go back to its zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (rifle->scopeShouldComeBack)\n\t{\n\t\treturn kSniperZoomingBack;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "holding secondary doesn't zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (secondaryHeld)\n\t{\n\t\treturn kSniperZoomingIn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a tap keeps the zoom from before",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->zoomToGoBackTo = kSniperLeastZoom;\n\treturn kSniperIdle;",
+					"to": "\treturn kSniperIdle;"
+				}
+			]
+		},
+		{
+			"name": "the zoom chosen isn't remembered",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->zoomToGoBackTo = rifle->zoom;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the scope still counts as up after zooming out",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->scopeIsUp = false;\n\treturn kSniperScopeLowering;",
+					"to": "\treturn kSniperScopeLowering;"
+				}
+			]
+		},
+		{
+			"name": "what the scope came down for is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->afterLowering = kSniperIdle;\n\treturn next;",
+					"to": "\treturn next;"
+				}
+			]
+		},
+		{
+			"name": "the scope comes back with no reason",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (rifle->scopeShouldComeBack && !rifle->scopeIsUp)",
+					"to": "if (!rifle->scopeIsUp)"
+				}
+			]
+		},
+		{
+			"name": "the scope rises when it's already up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "if (rifle->scopeShouldComeBack && !rifle->scopeIsUp)",
+					"to": "if (rifle->scopeShouldComeBack)"
+				}
+			]
+		},
+		{
+			"name": "secondary works without being pressed",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (!secondaryJustPressed)\n\t{\n\t\treturn kSniperIdle;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "taking the scope down still means to come back",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->scopeShouldComeBack = false;\n\t\trifle->afterLowering = kSniperIdle;\n\t\treturn kSniperZoomingOut;",
+					"to": "\t\trifle->afterLowering = kSniperIdle;\n\t\treturn kSniperZoomingOut;"
+				}
+			]
+		},
+		{
+			"name": "a press with the scope up raises it again",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\trifle->scopeShouldComeBack = false;\n\t\trifle->afterLowering = kSniperIdle;\n\t\treturn kSniperZoomingOut;",
+					"to": "\t\treturn kSniperScopeRising;"
+				}
+			]
+		},
+		{
+			"name": "a new rifle isn't at no zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->zoom = kSniperLeastZoom;\n\trifle->zoomToGoBackTo = kSniperLeastZoom;",
+					"to": "\trifle->zoom = kSniperMostZoom;\n\trifle->zoomToGoBackTo = kSniperLeastZoom;"
+				}
+			]
+		},
+		{
+			"name": "a new rifle goes back to a zoom",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->zoom = kSniperLeastZoom;\n\trifle->zoomToGoBackTo = kSniperLeastZoom;",
+					"to": "\trifle->zoom = kSniperLeastZoom;\n\trifle->zoomToGoBackTo = kSniperMostZoom;"
+				}
+			]
+		},
+		{
+			"name": "a new rifle has its scope up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->scopeIsUp = false;\n\trifle->scopeShouldComeBack = false;",
+					"to": "\trifle->scopeIsUp = true;\n\trifle->scopeShouldComeBack = false;"
+				}
+			]
+		},
+		{
+			"name": "a new rifle's scope means to come back",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->scopeIsUp = false;\n\trifle->scopeShouldComeBack = false;",
+					"to": "\trifle->scopeIsUp = false;\n\trifle->scopeShouldComeBack = true;"
+				}
+			]
+		},
+		{
+			"name": "a new rifle owes things",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\trifle->spentCaseToThrow = false;\n\trifle->reloadBeganEmpty = false;\n\trifle->boltOwedWhenDrawn = false;\n}",
+					"to": "\trifle->spentCaseToThrow = true;\n\trifle->reloadBeganEmpty = false;\n\trifle->boltOwedWhenDrawn = true;\n}"
+				}
+			]
+		},
+		{
+			"name": "a reload that's due doesn't go first",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (reloadIsDue)\n\t{\n\t\treturn kSniperIdle;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's zoom isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "SniperZoom_FromSave(rifle->zoom) == rifle->zoom && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's zoom to go back to isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": " && SniperZoom_FromSave(rifle->zoomToGoBackTo) == rifle->zoomToGoBackTo;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a save's scope-up isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "(rifle->scopeIsUp == 0 || rifle->scopeIsUp == 1)\n\t\t&& ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's coming-back isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\t&& (rifle->scopeShouldComeBack == 0 || rifle->scopeShouldComeBack == 1)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's case isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\t&& (rifle->spentCaseToThrow == 0 || rifle->spentCaseToThrow == 1)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's empty reload isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\t\t&& (rifle->reloadBeganEmpty == 0 || rifle->reloadBeganEmpty == 1)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save's owed bolt isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\n\t\t&& (rifle->boltOwedWhenDrawn == 0 || rifle->boltOwedWhenDrawn == 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a yes or no only has to be 0 or more",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "(rifle->scopeIsUp == 0 || rifle->scopeIsUp == 1)",
+					"to": "(rifle->scopeIsUp >= 0)"
+				}
+			]
+		},
+		{
+			"name": "a save's reason isn't looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return zoomsAreGood && yesesAndNosAreGood && reasonIsGood;",
+					"to": "return zoomsAreGood && yesesAndNosAreGood;"
+				}
+			]
+		},
+		{
+			"name": "a reason of idle is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "rifle->afterLowering == kSniperIdle || rifle->afterLowering == kSniperWorkingBolt",
+					"to": "rifle->afterLowering == kSniperWorkingBolt"
+				}
+			]
+		},
+		{
+			"name": "a reason of the bolt is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "rifle->afterLowering == kSniperIdle || rifle->afterLowering == kSniperWorkingBolt",
+					"to": "rifle->afterLowering == kSniperIdle"
+				}
+			]
+		},
+		{
+			"name": "a reason of a reload is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "|| rifle->afterLowering == kSniperReloading || rifle->afterLowering == kSniperPuttingAway;",
+					"to": "|| rifle->afterLowering == kSniperPuttingAway;"
+				}
+			]
+		},
+		{
+			"name": "a reason of putting away is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "|| rifle->afterLowering == kSniperReloading || rifle->afterLowering == kSniperPuttingAway;",
+					"to": "|| rifle->afterLowering == kSniperReloading;"
+				}
+			]
+		},
+		{
+			"name": "every reason is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return zoomsAreGood && yesesAndNosAreGood && reasonIsGood;",
+					"to": "return zoomsAreGood && yesesAndNosAreGood && (reasonIsGood || true);"
+				}
+			]
+		},
+		{
+			"name": "a reload always takes a whole magazine",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (room < spares) ? room : spares;",
+					"to": "return (int)holds;"
+				}
+			]
+		},
+		{
+			"name": "a reload takes all his spares",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (room < spares) ? room : spares;",
+					"to": "return spares;"
+				}
+			]
+		},
+		{
+			"name": "a reload ignores what he has",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "return (room < spares) ? room : spares;",
+					"to": "return room;"
+				}
+			]
+		},
+		{
+			"name": "a reload ignores what's in the gun",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "int const room = (has >= holds) ? 0 : (int)(holds - has);",
+					"to": "int const room = (int)holds;"
+				}
+			]
+		},
+		{
+			"name": "too much in the gun gives a number below nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "int const room = (has >= holds) ? 0 : (int)(holds - has);",
+					"to": "int const room = (int)(holds - has);"
+				}
+			]
+		},
+		{
+			"name": "spares below nothing are taken",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_sniper_sums.h",
+					"from": "\tif (spares <= 0)\n\t{\n\t\treturn 0;\n\t}\n\n\treturn (room < spares)",
+					"to": "\treturn (room < spares)"
+				}
+			]
+		}
+	]
+}

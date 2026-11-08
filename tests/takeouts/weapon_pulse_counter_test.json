@@ -1,0 +1,598 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the spin is too slow",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "kPulseCounterSpinSpeed = 512;",
+					"to": "kPulseCounterSpinSpeed = 256;"
+				}
+			]
+		},
+		{
+			"name": "the most it shows is 100",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "kPulseCounterMost = 99;",
+					"to": "kPulseCounterMost = 100;"
+				}
+			]
+		},
+		{
+			"name": "out of a reload it keeps spinning",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\tif (!reloading)\n\t{\n\t\tcounter->spinningDown = false;",
+					"to": "\tif (!reloading)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "out of a reload it keeps the new magazine's number",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->newMagazineIn = false;\n\t\tcounter->shown = PulseCounter_Following(counter, roundsInGun, roundsOnTheScreen);",
+					"to": "\t\tcounter->shown = PulseCounter_Following(counter, roundsInGun, roundsOnTheScreen);"
+				}
+			]
+		},
+		{
+			"name": "out of a reload it stops following the rounds",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->newMagazineIn = false;\n\t\tcounter->shown = PulseCounter_Following(counter, roundsInGun, roundsOnTheScreen);\n\t\treturn;",
+					"to": "\t\tcounter->newMagazineIn = false;\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "a mark outside a reload counts",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\tif (!reloading)\n\t{",
+					"to": "\tif (!reloading && !magazineOut && !magazineIn)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "the magazine coming out doesn't spin",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->spinningDown = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a mark after the new magazine's in spins again",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "if (magazineOut && !counter->newMagazineIn)",
+					"to": "if (magazineOut)"
+				}
+			]
+		},
+		{
+			"name": "the new magazine doesn't stop the spin",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->spinningDown = false;\n\t\tcounter->newMagazineIn = true;",
+					"to": "\t\tcounter->newMagazineIn = true;"
+				}
+			]
+		},
+		{
+			"name": "the new magazine doesn't show",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->spinningDown = false;\n\t\tcounter->newMagazineIn = true;",
+					"to": "\t\tcounter->spinningDown = false;"
+				}
+			]
+		},
+		{
+			"name": "it shows the gun, not the new magazine",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->shown = afterTheReload;",
+					"to": "\t\tcounter->shown = roundsInGun;"
+				}
+			]
+		},
+		{
+			"name": "the spin ignores the frame's time",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(frameTime > 0) ? (unsigned long long)frameTime * (unsigned int)kPulseCounterSpinSpeed : 0;",
+					"to": "(unsigned int)kPulseCounterSpinSpeed;"
+				}
+			]
+		},
+		{
+			"name": "a long frame wraps round in 32 bits",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(frameTime > 0) ? (unsigned long long)frameTime * (unsigned int)kPulseCounterSpinSpeed : 0;",
+					"to": "(frameTime > 0) ? (unsigned int)((unsigned int)frameTime * (unsigned int)kPulseCounterSpinSpeed) : 0;"
+				}
+			]
+		},
+		{
+			"name": "a frame of less than no time counts",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(frameTime > 0) ? (unsigned long long)frameTime * (unsigned int)kPulseCounterSpinSpeed : 0;",
+					"to": "(unsigned long long)(long long)frameTime * (unsigned int)kPulseCounterSpinSpeed;"
+				}
+			]
+		},
+		{
+			"name": "the spin wraps round below nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->shown = (fall >= counter->shown) ? 0 : counter->shown - (unsigned int)fall;",
+					"to": "counter->shown -= (unsigned int)fall;"
+				}
+			]
+		},
+		{
+			"name": "part of a round counts as nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(rounds >> 16) + (((rounds & 0xffff) != 0) ? 1 : 0);",
+					"to": "rounds >> 16;"
+				}
+			]
+		},
+		{
+			"name": "a whole round counts as two",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(rounds >> 16) + (((rounds & 0xffff) != 0) ? 1 : 0);",
+					"to": "(rounds >> 16) + 1;"
+				}
+			]
+		},
+		{
+			"name": "rounding up wraps round at the top",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(rounds >> 16) + (((rounds & 0xffff) != 0) ? 1 : 0);",
+					"to": "(rounds + 0xffff) >> 16;"
+				}
+			]
+		},
+		{
+			"name": "over 99 isn't held at 99",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "return (whole > (unsigned int)kPulseCounterMost) ? kPulseCounterMost : (int)whole;",
+					"to": "return (int)whole;"
+				}
+			]
+		},
+		{
+			"name": "the tens are wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "return wholeRounds / 10;",
+					"to": "return wholeRounds % 10;"
+				}
+			]
+		},
+		{
+			"name": "the units are wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "return wholeRounds % 10;",
+					"to": "return wholeRounds / 10;"
+				}
+			]
+		},
+		{
+			"name": "a digit past the model's frames reads past the end",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(digit >= 0 && digit < framesInThePatch) ? (digit << 16) : 0;",
+					"to": "(digit >= 0) ? (digit << 16) : 0;"
+				}
+			]
+		},
+		{
+			"name": "a digit below nothing is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(digit >= 0 && digit < framesInThePatch) ? (digit << 16) : 0;",
+					"to": "(digit < framesInThePatch) ? (digit << 16) : 0;"
+				}
+			]
+		},
+		{
+			"name": "the frame isn't in the game's numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(digit >= 0 && digit < framesInThePatch) ? (digit << 16) : 0;",
+					"to": "(digit >= 0 && digit < framesInThePatch) ? digit : 0;"
+				}
+			]
+		},
+		{
+			"name": "the last digit is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "digit < framesInThePatch)",
+					"to": "digit < framesInThePatch - 1)"
+				}
+			]
+		},
+		{
+			"name": "it doesn't start at nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->shown = 0;\n\tcounter->spinningDown = false;",
+					"to": "counter->shown = 1;\n\tcounter->spinningDown = false;"
+				}
+			]
+		},
+		{
+			"name": "it starts spinning",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->shown = 0;\n\tcounter->spinningDown = false;",
+					"to": "counter->shown = 0;\n\tcounter->spinningDown = true;"
+				}
+			]
+		},
+		{
+			"name": "it starts with a new magazine in",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\tcounter->spinningDown = false;\n\tcounter->newMagazineIn = false;\n\tcounter->waitingForTheScreen = false;\n}",
+					"to": "\tcounter->spinningDown = false;\n\tcounter->newMagazineIn = true;\n\tcounter->waitingForTheScreen = false;\n}"
+				}
+			]
+		},
+		{
+			"name": "the spin starts from the gun's count, so the reload key loses it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->spinningDown = true;\n",
+					"to": "\t\tcounter->spinningDown = true;\n\t\tcounter->shown = roundsInGun;\n"
+				}
+			]
+		},
+		{
+			"name": "in a reload it follows the gun's count until the magazine comes out",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->shown = (fall >= counter->shown) ? 0 : counter->shown - (unsigned int)fall;\n\t}\n}",
+					"to": "\t\tcounter->shown = (fall >= counter->shown) ? 0 : counter->shown - (unsigned int)fall;\n\t}\n\telse\n\t{\n\t\tcounter->shown = roundsInGun;\n\t}\n}"
+				}
+			]
+		},
+		{
+			"name": "it jumps to the gun's rounds and doesn't climb with the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "return counter->waitingForTheScreen ? roundsInGun : onTheScreen << 16;",
+					"to": "return roundsInGun;"
+				}
+			]
+		},
+		{
+			"name": "after a reload it goes back to climb with the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "return counter->waitingForTheScreen ? roundsInGun : onTheScreen << 16;",
+					"to": "return onTheScreen << 16;"
+				}
+			]
+		},
+		{
+			"name": "the end of a reload doesn't start the wait",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->waitingForTheScreen = counter->waitingForTheScreen || counter->newMagazineIn;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the wait lasts only one frame",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->waitingForTheScreen = counter->waitingForTheScreen || counter->newMagazineIn;",
+					"to": "counter->waitingForTheScreen = counter->newMagazineIn;"
+				}
+			]
+		},
+		{
+			"name": "a reload with no mark starts the wait too",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "counter->waitingForTheScreen = counter->waitingForTheScreen || counter->newMagazineIn;",
+					"to": "counter->waitingForTheScreen = true;"
+				}
+			]
+		},
+		{
+			"name": "the wait never ends",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\t\tcounter->waitingForTheScreen = false;\n\t\treturn roundsInGun;",
+					"to": "\t\treturn roundsInGun;"
+				}
+			]
+		},
+		{
+			"name": "it starts out waiting",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\tcounter->newMagazineIn = false;\n\tcounter->waitingForTheScreen = false;\n}",
+					"to": "\tcounter->newMagazineIn = false;\n\tcounter->waitingForTheScreen = true;\n}"
+				}
+			]
+		},
+		{
+			"name": "a screen on the same number hasn't got there",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "if (onTheScreen >= wholeInGun)",
+					"to": "if (onTheScreen > wholeInGun)"
+				}
+			]
+		},
+		{
+			"name": "part of a round in the gun counts as nothing against the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(roundsInGun >> 16) + (((roundsInGun & 0xffff) != 0) ? 1 : 0);\n\tunsigned int const onTheScreen",
+					"to": "(roundsInGun >> 16);\n\tunsigned int const onTheScreen"
+				}
+			]
+		},
+		{
+			"name": "a screen number below nothing wraps round",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "(roundsOnTheScreen > 0) ? (unsigned int)roundsOnTheScreen : 0",
+					"to": "(unsigned int)roundsOnTheScreen"
+				}
+			]
+		},
+		{
+			"name": "the screen's number is taken as if it were the game's numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "onTheScreen << 16",
+					"to": "onTheScreen"
+				}
+			]
+		},
+		{
+			"name": "the number climbs too fast",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "kHudRoundsClimbTime = 512;",
+					"to": "kHudRoundsClimbTime = 256;"
+				}
+			]
+		},
+		{
+			"name": "the time left over is thrown away, as it used to be",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "*timeLeftOver = (int)(time % kHudRoundsClimbTime);",
+					"to": "*timeLeftOver = 0;"
+				}
+			]
+		},
+		{
+			"name": "the time left over outlasts the climb",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "\t\t*shown = rounds;\n\t\t*timeLeftOver = 0;\n\t\treturn;\n\t}\n\n\t// In 64 bits",
+					"to": "\t\t*shown = rounds;\n\t\treturn;\n\t}\n\n\t// In 64 bits"
+				}
+			]
+		},
+		{
+			"name": "the number goes past what the gun holds",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "if (climbed >= (long long)rounds - *shown)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a long frame wraps round the number's time",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "long long const time = (long long)*timeLeftOver + ((frameTime > 0) ? frameTime : 0);",
+					"to": "long long const time = (int)((unsigned int)*timeLeftOver + (unsigned int)((frameTime > 0) ? frameTime : 0));"
+				}
+			]
+		},
+		{
+			"name": "a frame of less than no time counts for the number",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "((frameTime > 0) ? frameTime : 0)",
+					"to": "frameTime"
+				}
+			]
+		},
+		{
+			"name": "the time isn't left at nothing once it's got there",
+			"changes": [
+				{
+					"file": "3dc/avp/hud_rounds_number.h",
+					"from": "\t\t// It's got there, and it stops there rather than going past\n\t\t*shown = rounds;\n\t\t*timeLeftOver = 0;",
+					"to": "\t\t// It's got there, and it stops there rather than going past\n\t\t*shown = rounds;\n\t\t*timeLeftOver = 511;"
+				}
+			]
+		},
+		{
+			"name": "the jump always shows a full magazine",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\n\treturn roundsInGun;\n}\n\n// What it shows outside a reload",
+					"to": "\n\treturn fullMagazine;\n}\n\n// What it shows outside a reload"
+				}
+			]
+		},
+		{
+			"name": "the sum loads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_pulse_counter_sums.h",
+					"from": "\tReload_FillGun(&roundsInGun, &pile, &magazines, fullMagazine);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the gun in his hands ignores our file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "GetHierarchicalWeapon(Weapon_ModelFileFor(twPtr),twPtr->HierarchyName,",
+					"to": "GetHierarchicalWeapon(twPtr->RiffName,twPtr->HierarchyName,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: our file is never loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "\t\t\tLoadedNPC tempnpc(\"MelPyth_MarWep.rif\");\n",
+					"to": "\t\t\tLoadedNPC tempnpc(\"MelPyth_MarHUD.rif\");\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: our file is looked for under another name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "avp_fopen(\"avp_huds/MelPyth_MarWep.rif\", \"r\");",
+					"to": "avp_fopen(\"avp_huds/MelPyth_MarWeps.rif\", \"r\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: our file is kept even when it did not read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npcsetup.cpp",
+					"from": "\t\t\tLoadedNPC tempnpc(\"MelPyth_MarWep.rif\");\n\t\t\tif (tempnpc.IsValid())\n",
+					"to": "\t\t\tLoadedNPC tempnpc(\"MelPyth_MarWep.rif\");\n\t\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: our file has the wrong internal name",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_hooks.cpp",
+					"from": "static char kOwnMarineGunsFile[] = \"MelPyth_MarWep\";",
+					"to": "static char kOwnMarineGunsFile[] = \"MelPyth_MarWeps\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: marwep.rif has the wrong internal name",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_hooks.cpp",
+					"from": "static const char kGameMarineGunsFile[] = \"MarineWeapons\";",
+					"to": "static const char kGameMarineGunsFile[] = \"MarineWeapon\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any gun at all can come from our file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_hooks.cpp",
+					"from": "_stricmp(row->RiffName, kGameMarineGunsFile) == 0 &&",
+					"to": "row->RiffName != kGameMarineGunsFile &&"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: our file is used even without that gun in it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_hooks.cpp",
+					"from": "GetNamedHierarchyFromLibrary(kOwnMarineGunsFile, row->HierarchyName) != 0",
+					"to": "GetNamedHierarchyFromLibrary(kGameMarineGunsFile, row->HierarchyName) != 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: without our file the gun has no file",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_hooks.cpp",
+					"from": "\t\treturn kOwnMarineGunsFile;\n\t}\n\n\treturn row->RiffName;\n",
+					"to": "\t\treturn kOwnMarineGunsFile;\n\t}\n\n\treturn kOwnMarineGunsFile;\n"
+				}
+			]
+		}
+	]
+}

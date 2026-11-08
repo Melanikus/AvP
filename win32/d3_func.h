@@ -5,6 +5,8 @@
 //   holds the shader for shadow prisms kept between frames
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   holds the shader for the shoulder lamp
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the painted lamp's glint has a shader of its own
 #ifdef _WIN32
 
 #ifndef _included_d3_func_h_
@@ -238,6 +240,7 @@ typedef struct D3DInfo
 	effectID_t				lightTotalEffect;
 	effectID_t				lightShareEffect;
 	effectID_t				lightOneEffect;
+	effectID_t				lightLampShineEffect;
 	class IndexBuffer		*mainIB;
 
 	class VertexBuffer		*orthoVB;

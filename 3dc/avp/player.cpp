@@ -2,6 +2,10 @@
 //   a player dying when the game has no block left for a corpse still dies, and everyone hears of it
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the marine's shoulder lamp starts off
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a save from when there were 11 weapon slots still loads, each gun's own state goes into a save, and a save can't choose the weapon in a slot, a slot that has none, or a weapon state that isn't real
+//   a slot's leftover rounds go into a save, and are checked coming back
+//   in the mode that plays as single player does, the sound fades in as a level starts
 /* KJL 16:23:20 10/25/96 - I'm moved all the weapon stuff to the newly created weapon.c,
 so player.c is looking a bit bare at the moment. */
 // AvP port by Barry Duncan.
@@ -13,6 +17,8 @@ so player.c is looking a bit bare at the moment. */
 //   a save can't choose which weapon is in a slot, or pick a slot, weapon state, vision mode or grenade that doesn't exist
 //   a value a save has refused is counted for the log
 //   a save can't have the selected weapon being put away with no slot to go to
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   declarations written so the security scanner can read this file (CODING-STANDARD.md, rule 1)
 
 #include "3dc.h"
 #include "module.h"
@@ -373,7 +379,7 @@ void InitPlayer(STRATEGYBLOCK* sbPtr, int sb_type)
 	/* thou art mortal */
 	psPtr->IsImmortal = 0;
 
-	if (AvP.Network==I_No_Network)
+	if (SameAsSinglePlayer())
 	{
 		SoundSys_FadeIn();
 	}
@@ -1863,6 +1869,15 @@ void ShowAdjacencies(void) {
 **---------------------------*/
 
 
+#include "weapon_hooks.h"
+#include "weapon_slots.h"
+#include "weapon_reload.h"
+
+// The pile went into two bytes that were spare, so that a slot, and so a saved game, stays the same size
+static_assert(offsetof(PLAYER_WEAPON_DATA, PositionOffset) - offsetof(PLAYER_WEAPON_DATA, PrimaryMagazinesRemaining) == 4, "a saved game's slots would change size");
+
+static_assert(MAX_NO_OF_WEAPON_SLOTS == kSlotsToday && WEAPON_FINISHED_SWAPPING == kNotSwappingToday, "weapon_slots.h has to agree with the list in equipment.h");
+
 typedef struct player_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -2005,6 +2020,7 @@ void SaveStrategy_Player(STRATEGYBLOCK* sbPtr)
 		block->WeaponSlot[i].SecondaryRoundsRemaining = playerStatusPtr->WeaponSlot[i].SecondaryRoundsRemaining;
 		block->WeaponSlot[i].PrimaryMagazinesRemaining = playerStatusPtr->WeaponSlot[i].PrimaryMagazinesRemaining;
 		block->WeaponSlot[i].SecondaryMagazinesRemaining = playerStatusPtr->WeaponSlot[i].SecondaryMagazinesRemaining;
+		block->WeaponSlot[i].PrimaryLeftoverRounds = playerStatusPtr->WeaponSlot[i].PrimaryLeftoverRounds;
 		block->WeaponSlot[i].PositionOffset = playerStatusPtr->WeaponSlot[i].PositionOffset;
 		block->WeaponSlot[i].DirectionOffset = playerStatusPtr->WeaponSlot[i].DirectionOffset;
 		block->WeaponSlot[i].Possessed = playerStatusPtr->WeaponSlot[i].Possessed;
@@ -2036,6 +2052,14 @@ void SaveStrategy_Player(STRATEGYBLOCK* sbPtr)
 	Save_SoundState(&playerStatusPtr->soundHandle3);
 	Save_SoundState(&playerStatusPtr->soundHandle5);
 	Save_SoundState(&playerStatusPtr->soundHandleForPredatorCloakDamaged);
+
+	Guns_SaveOwnStates();
+}
+
+// Can this number from a save be used to pick the player's weapon? It has to be a slot, and the slot has to hold a weapon.
+static bool SavedSlotHoldsAWeapon(const PLAYER_STATUS *playerStatusPtr, int slot)
+{
+	return slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS && playerStatusPtr->WeaponSlot[slot].WeaponIDNumber != NULL_WEAPON;
 }
 
 // Can this number from a save be used to pick the player's weapon? It has to be a slot, and the slot has to hold a weapon. The rest of the
@@ -2062,6 +2086,23 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	STRATEGYBLOCK* sbPtr = Player->ObStrategyBlock;
 	PLAYER_STATUS *playerStatusPtr= (PLAYER_STATUS *) (sbPtr->SBdataptr);
 	int i;
+
+	// A save from when there were 11 weapon slots has a shorter block. It's made into today's shape first, because the size check below would quietly lose his weapons, health and position. See weapon_slots.h.
+	static PLAYER_SAVE_BLOCK upgraded;
+	bool const fromAnOlderSave = block->header.size == (int)(sizeof(*block) - kSlotsAddedSinceOlderSaves * sizeof(PLAYER_WEAPON_DATA));
+
+	if(fromAnOlderSave)
+	{
+		size_t const size = Slots_UpgradeArray(block, block->header.size, &upgraded, sizeof(upgraded), offsetof(PLAYER_SAVE_BLOCK, WeaponSlot), sizeof(PLAYER_WEAPON_DATA));
+
+		if(size != sizeof(upgraded)) return;
+
+		upgraded.header.size = (int)size;
+		upgraded.SelectedWeaponSlot = (enum WEAPON_SLOT)Slots_FromOlderSave(block->SelectedWeaponSlot);
+		upgraded.SwapToWeaponSlot = (enum WEAPON_SLOT)Slots_FromOlderSave(block->SwapToWeaponSlot);
+		upgraded.PreviouslySelectedWeaponSlot = (enum WEAPON_SLOT)Slots_FromOlderSave(block->PreviouslySelectedWeaponSlot);
+		block = &upgraded;
+	}
 
 	if(block->header.size != sizeof(*block)) return;
 
@@ -2131,6 +2172,12 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	for(i=0;i<MAX_NO_OF_WEAPON_SLOTS;i++)
 	{
+		// An older save knows nothing about the new slots, so they stay as the level set them up
+		if(fromAnOlderSave && Slots_IsNewSinceOlderSaves(i))
+		{
+			continue;
+		}
+
 		//The weapon in a slot isn't loaded. Each species has a fixed list, and the level has already set it up, so a real save holds the
 		//same number anyway.
 		if(Save_WeaponStateIsValid(block->WeaponSlot[i].CurrentState))
@@ -2142,6 +2189,14 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 		playerStatusPtr->WeaponSlot[i].SecondaryRoundsRemaining = block->WeaponSlot[i].SecondaryRoundsRemaining;
 		playerStatusPtr->WeaponSlot[i].PrimaryMagazinesRemaining = block->WeaponSlot[i].PrimaryMagazinesRemaining;
 		playerStatusPtr->WeaponSlot[i].SecondaryMagazinesRemaining = block->WeaponSlot[i].SecondaryMagazinesRemaining;
+
+		// The pile is only as good as its check: in a save from before it, these bytes hold nothing that means anything, and a save is a file anybody could change
+		{
+			const WEAPON_ID gun = playerStatusPtr->WeaponSlot[i].WeaponIDNumber;
+			const AMMO_ID ammo = gun == NULL_WEAPON ? AMMO_NONE : TemplateWeapon[gun].PrimaryAmmoID;
+
+			playerStatusPtr->WeaponSlot[i].PrimaryLeftoverRounds = ammo == AMMO_NONE ? 0 : Reload_PileFromASave(block->WeaponSlot[i].PrimaryLeftoverRounds, TemplateAmmo[ammo].AmmoPerMagazine, block->WeaponSlot[i].PrimaryMagazinesRemaining);
+		}
 		playerStatusPtr->WeaponSlot[i].PositionOffset = block->WeaponSlot[i].PositionOffset;
 		playerStatusPtr->WeaponSlot[i].DirectionOffset = block->WeaponSlot[i].DirectionOffset;
 		playerStatusPtr->WeaponSlot[i].Possessed = block->WeaponSlot[i].Possessed;
@@ -2217,5 +2272,17 @@ void LoadStrategy_Player(SAVE_BLOCK_STRATEGY_HEADER* header)
 	Load_SoundState(&playerStatusPtr->soundHandle5);
 	Load_SoundState(&playerStatusPtr->soundHandleForPredatorCloakDamaged);
 
+	Guns_LoadOwnStates();
+
+	// A gun may hold onto parts of its model, and those were found when it was brought up, so it finds them again
+	{
+		PLAYER_WEAPON_DATA *const weaponPtr = &playerStatusPtr->WeaponSlot[playerStatusPtr->SelectedWeaponSlot];
+		TEMPLATE_WEAPON_DATA const *const twPtr = &TemplateWeapon[weaponPtr->WeaponIDNumber];
+
+		if(twPtr->Hooks && twPtr->WeaponInitFunction)
+		{
+			(*twPtr->WeaponInitFunction)(weaponPtr);
+		}
+	}
 }
 
