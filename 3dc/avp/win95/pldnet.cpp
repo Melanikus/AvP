@@ -7,6 +7,7 @@
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   the disc is checked before use, because a save file can leave that part out
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
@@ -2665,9 +2666,8 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}
@@ -2851,9 +2851,8 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}

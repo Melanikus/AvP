@@ -5,6 +5,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
 //   a generator copes with times of nothing and with being placed outside every module
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved generation rate has to be one the game could have reached
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -804,6 +806,7 @@ void SetHiveParamaters(int enemytype,int max,int genpermin,int deltagenpermin,in
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct generator_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -842,7 +845,14 @@ void LoadStrategy_Generator(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	COPYELEMENT_LOAD(Timer)
 	COPYELEMENT_LOAD(Active)
-	COPYELEMENT_LOAD(GenerationRate)
+
+	//ResetGeneratorTimer divides by the rate, and then by a quarter of the answer, so it can't be 0 and can't be so big that the answer is
+	//under 4. That sum is the largest that's safe, and it's far above any rate the game reaches.
+	if(Save_NumberIsInRange(block->GenerationRate, 1, (60 * ONE_FIXED * 100) / 4))
+	{
+		COPYELEMENT_LOAD(GenerationRate)
+	}
+
 	COPYELEMENT_LOAD(RateIncreaseTimer)
 }
 
@@ -895,7 +905,12 @@ void LoadHiveSettings(SAVE_BLOCK_HEADER* header)
 	COPYELEMENT_LOAD(currentState)
 	COPYELEMENT_LOAD(hiveStateTimer)
 	COPYELEMENT_LOAD(genRateTimer)
-	COPYELEMENT_LOAD(generatorNPCsPerMinute)
+
+	//the game keeps this between these limits, and ResetGeneratorTimer divides by it and then by a quarter of the answer
+	if(Save_NumberIsInRange(block->generatorNPCsPerMinute, GENSPERMINUTE_MIN, GENSPERMINUTE_MAX))
+	{
+		COPYELEMENT_LOAD(generatorNPCsPerMinute)
+	}
 }
 
 void SaveHiveSettings()

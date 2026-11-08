@@ -1,6 +1,8 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
+//   an NPC with no movement data stops speeding up, instead of crashing
+//   a saved place on a path has to be a real path and a real step on it
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a queen's death is read from her own block
 
@@ -18,6 +20,7 @@
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -727,6 +730,8 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
         } else {
                 int accelerationThisFrame,deltaVMag,dotProduct;
                 VECTORCH deltaV,targetV,yDirection,movementOffset;
+                /* These lookups can't fail today: each one is in the table in movement.cpp. If one were taken out of
+                   that table, the NPC would stop speeding up, and the game would carry on. */
                 const MOVEMENT_DATA *movementData;
 
                 /* Mode 2, for marines 'n' predators.  And xenoborgs. */
@@ -745,11 +750,11 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                                 ||((predatorStatusPointer->behaviourState==PBS_Avoidance)&&(predatorStatusPointer->lastState==PBS_Wandering))) {
                                                 movementData=GetThisMovementData(MDI_Casual_Predator);
                                                 /* Fix reduced max speed. */
-                                                speed=movementData->maxSpeed;
+                                                if (movementData) speed=movementData->maxSpeed;
                                         } else {
                                                 movementData=GetThisMovementData(MDI_Predator);
                                         }
-                                        accelerationThisFrame=movementData->acceleration;
+                                        accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 }
                                 break;
                         case I_BehaviourMarine:
@@ -764,7 +769,7 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                 break;
                         case I_BehaviourXenoborg:
                                 movementData=GetThisMovementData(MDI_Xenoborg);
-                                accelerationThisFrame=movementData->acceleration;
+                                accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 break;
                         default:
                                 GLOBALASSERT(0);
@@ -2059,6 +2064,19 @@ AIMODULE *GetNextModuleForLink_Core(AIMODULE *source,AIMODULE *target, int max_d
 bool PathCanBeFollowed(int path)
 {
 	return PathArray && path >= 0 && path < PathArraySize && PathArray[path].path_length > 0;
+}
+
+// A path and a step come from a save, and they pick entries in lists that are only checked in a debug build. -1 means no path, and the code
+// that walks a path already goes off wandering when it sees that, so a place that isn't real becomes no path.
+void NPC_CheckSavedPath(int *path, int *stepnumber)
+{
+	*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;
+	*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;
+
+	if (*stepnumber < 0)
+	{
+		*path = -1;
+	}
 }
 
 int GetNextModuleInPath(int current_module, int path) {

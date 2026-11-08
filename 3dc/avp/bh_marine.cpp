@@ -12,6 +12,14 @@
 //   and never compiled, so code scanners can read the file; the game runs the same code as before;
 //   a burning android no longer reads sound slot -1 (one place before the start of the sound list)
 //   a request can only send a marine along a path that exists
+//   a sentry sent back to a spot outside every module keeps the module it has
+//   a marine with no muzzle in its model fires no rocket or frisbee, and two pistols keep the muzzle they have
+//   a save file can no longer give a marine an unknown weapon, or a model that does not suit its weapon
+//   the head and the elevation animation are checked before use, because either can be missing
+//   a save can no longer put someone with no firing code into a firing state
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved marine has to be on a real path
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine firing with no target no longer works out its aim from numbers nothing set;
 //   a target standing exactly on the marine no longer divides by nothing
@@ -25,6 +33,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "Player.h"
@@ -2328,7 +2337,11 @@ void SetMarineElevation(STRATEGYBLOCK *sbPtr) {
 
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -2386,7 +2399,11 @@ void CentreMarineElevation(STRATEGYBLOCK *sbPtr) {
 	}
 
 	elevation_controller=Get_Delta_Sequence(&marineStatusPointer->HModelController,"Elevation");
-	GLOBALASSERT(elevation_controller);
+
+	// the game removes this animation in some states, and a save file can leave it out
+	if (!elevation_controller) {
+		return;
+	}
 
 	if (marineStatusPointer->IAmCrouched) {
 		elevation_controller->sequence_type=HMSQT_MarineCrouch;
@@ -5953,7 +5970,14 @@ static STATE_RETURN_CONDITION Execute_MFS_SentryMode(STRATEGYBLOCK *sbPtr)
 
 			if (dist>SENTRY_SENSITIVITY) {
 				sbPtr->DynPtr->Position=marineStatusPointer->my_spot;
-				sbPtr->containingModule = (ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule));
+				// the spot comes from the level and may be outside every module. Then it keeps the module it has
+				{
+					MODULE *spotModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), sbPtr->containingModule);
+					if (spotModule)
+					{
+						sbPtr->containingModule = spotModule;
+					}
+				}
 
 			}
 		}
@@ -9219,17 +9243,19 @@ static STATE_RETURN_CONDITION Execute_MNS_SentryMode(STRATEGYBLOCK *sbPtr) {
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}
@@ -9498,17 +9524,19 @@ static STATE_RETURN_CONDITION Execute_MNS_Wait(STRATEGYBLOCK *sbPtr)
 				VECTORCH sight_vec;
 
 				head_sec=GetThisSectionData(marineStatusPointer->HModelController.section_data,"head");
-				GLOBALASSERT(head_sec);
 
 				sight_vec.vx=sbPtr->DynPtr->OrientMat.mat31;
 				sight_vec.vy=sbPtr->DynPtr->OrientMat.mat32;
 				sight_vec.vz=sbPtr->DynPtr->OrientMat.mat33;
 
-				FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
-				if (LOS_ObjectHitPtr) {
-					if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
-						if (LOS_Lambda<2000) {
-							Marine_MirrorSuspectPoint(sbPtr);
+				// a part of a model can be gone. Without a head there's nothing to look from
+				if (head_sec) {
+					FindPolygonInLineOfSight(&sight_vec,&head_sec->World_Offset,0,sbPtr->SBdptr);
+					if (LOS_ObjectHitPtr) {
+						if (SBIsEnvironment(LOS_ObjectHitPtr->ObStrategyBlock)) {
+							if (LOS_Lambda<2000) {
+								Marine_MirrorSuspectPoint(sbPtr);
+							}
 						}
 					}
 				}
@@ -13284,9 +13312,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSADAR(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateRocketKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;
@@ -18152,6 +18182,80 @@ typedef struct marine_save_block
 #define SAVELOAD_BEHAV marineStatusPointer
 
 
+// Can a marine carry this weapon, in this level? Each level only loads the model files it uses, and the save file can
+// name any number at all.
+static BOOL Marine_Weapon_Is_Usable(int weapon_id)
+{
+	MARINE_WEAPON_DATA *weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(weapon_id));
+
+	return weapon && GetNamedHierarchyFromLibrary(weapon->Riffname, weapon->HierarchyName);
+}
+
+// Can this marine carry on with what a save file left it? The code that fires a gun uses the tip of the gun without
+// checking. In the game that's safe, for three reasons:
+// - A limb that holds a gun kills a marine or civilian when it's cut off. Androids survive that, but the game moves them
+//   to a model with the gun in the other hand straight away.
+// - A marine with a SADAR or Skeeter takes the gun apart to reload, and the tip goes with it until the reload puts it back
+//   (see Execute_MNS_Reloading). A game saved in between loads without the tip, so it's put back here, the way the reload
+//   does it. The marine then finishes reloading with the gun already whole.
+// - The only model with no gun at all is the weapon's plain model, which a marine wears while burning to death, and
+//   nothing a burning marine does fires a weapon (see RunAroundOnFireMission_Control).
+static BOOL Marine_Can_Carry_On(STRATEGYBLOCK *sbPtr, MARINE_STATUS_BLOCK *marineStatusPointer)
+{
+	HMODELCONTROLLER *controller = &marineStatusPointer->HModelController;
+	SECTION *model = controller->Root_Section;
+	MARINE_WEAPON_DATA *weapon = marineStatusPointer->My_Weapon;
+
+	if (!model || !weapon)
+	{
+		return FALSE;
+	}
+
+	// Someone with no firing code must never reach it, and every mission's firing state calls it unchecked. In the game
+	// they're always a non-combatant, or on fire, and never in that state.
+	if (weapon->WeaponFireFunction == NULL
+		&& ((marineStatusPointer->Mission != MM_NonCom && marineStatusPointer->Mission != MM_RunAroundOnFire)
+			|| marineStatusPointer->behaviourState == MBS_Firing))
+	{
+		return FALSE;
+	}
+
+	if (_stricmp(model->Rif_Name, weapon->Riffname) != 0)
+	{
+		return FALSE;
+	}
+
+	if (strcmp(model->Hierarchy_Name, weapon->HierarchyName) != 0)
+	{
+		return (strcmp(model->Hierarchy_Name, weapon->TemplateName) == 0) && (marineStatusPointer->Mission == MM_RunAroundOnFire);
+	}
+
+	if (weapon->GunflashName == NULL)
+	{
+		return TRUE;
+	}
+
+	if (marineStatusPointer->My_Gunflash_Section == NULL)
+	{
+		SECTION_DATA *clip = GetThisSectionData(controller->section_data, weapon->ClipName);
+
+		if (clip)
+		{
+			clip->flags &= ~(section_data_terminate_here|section_data_notreal);
+		}
+
+		// the first of these only tells the model code which object it's working on
+		ProveHModel_Far(controller, sbPtr);
+		Transmogrify_HModels(sbPtr, controller, model, 0, 1, 1);
+		ProveHModel_Far(controller, sbPtr);
+
+		marineStatusPointer->My_Gunflash_Section = GetThisSectionData(controller->section_data, weapon->GunflashName);
+		marineStatusPointer->My_Elevation_Section = GetThisSectionData(controller->section_data, weapon->ElevationSection);
+	}
+
+	return (marineStatusPointer->My_Gunflash_Section != NULL);
+}
+
 void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 {
 	STRATEGYBLOCK* sbPtr;
@@ -18168,6 +18272,9 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 		NoteRefusedFromAFile("a save named a marine weapon that isn't on the list, so that marine's part of the save is left out");
 		return;
 	}
+
+	// And this level has to have loaded that weapon's model: each level only loads the model files it uses. He stays as the level made him.
+	if(!Marine_Weapon_Is_Usable(block->weapon_id)) return;
 
 	//find the existing strategy block
 	sbPtr = FindSBWithName(header->SBname);
@@ -18230,6 +18337,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(lastframe_fallingspeed)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);
 	COPYELEMENT_LOAD(stateTimer)
 	COPYELEMENT_LOAD(internalState)
 	COPYELEMENT_LOAD(weaponTarget)		/* position for firing weapon at */
@@ -18280,7 +18388,7 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 	marineStatusPointer->My_Weapon = GetThisNPCMarineWeapon(static_cast<enum marine_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -18302,6 +18410,12 @@ void LoadStrategy_Marine(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	Load_SoundState(&marineStatusPointer->soundHandle);
 	Load_SoundState(&marineStatusPointer->soundHandle2);
+
+	//a marine that can't work with what the save file gave it is left out of the game
+	if(!Marine_Can_Carry_On(sbPtr, marineStatusPointer))
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Marine(STRATEGYBLOCK* sbPtr)
@@ -18662,10 +18776,19 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeTwoPistols(STRATEGYBLOCK *sbP
 		marineStatusPointer->roundsForThisTarget++;
 
 		/* Alternate gun flash. */
-		if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
-		} else {
-			marineStatusPointer->My_Gunflash_Section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+		// the other muzzle is a named part of the model. If it's missing, the marine goes on firing from this one
+		{
+			SECTION_DATA *otherFlash;
+
+			if (strcmp(marineStatusPointer->My_Gunflash_Section->sempai->Section_Name,"dum flash")==0) {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum L flash");
+			} else {
+				otherFlash=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
+			}
+
+			if (otherFlash) {
+				marineStatusPointer->My_Gunflash_Section=otherFlash;
+			}
 		}
 
 		/* look after the gun flash */
@@ -19007,9 +19130,11 @@ static STATE_RETURN_CONDITION Execute_MNS_DischargeSkeeter(STRATEGYBLOCK *sbPtr)
 
 			rocket_section=GetThisSectionData(marineStatusPointer->HModelController.section_data,"dum flash");
 
-			LOCALASSERT(rocket_section);
-
-			CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			// the muzzle is a named part of the model. It may be missing, and then nothing is fired
+			if (rocket_section)
+			{
+				CreateFrisbeeKernel(&rocket_section->World_Offset, &rocket_section->SecMat,0);
+			}
 
 			if (marineStatusPointer->clipammo>0) {
 				marineStatusPointer->clipammo--;

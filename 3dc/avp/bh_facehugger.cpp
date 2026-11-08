@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved curve of no length is worked out again, because the game divides by its length
+//   a value a save has refused is counted for the log
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a facehugger whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
 //   Bobblen's avp-forever, commit 207704e)
@@ -12,6 +17,7 @@
 #include "gamedef.h"
 #include "game_statistics.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "bh_types.h"
@@ -1254,10 +1260,16 @@ void LoadStrategy_FaceHugger(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(CurveRadius)
 	COPYELEMENT_LOAD(CurveLength)
 	COPYELEMENT_LOAD(CurveTimeOut)
+	if(huggerStatusPointer->CurveLength <= 0)
+	{
+		//the length gets divided by, so this makes the facehugger work out a new curve
+		Save_NoteRefused("a curve with no length");
+		huggerStatusPointer->CurveTimeOut = 0;
+	}
 	COPYELEMENT_LOAD(jumping)
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

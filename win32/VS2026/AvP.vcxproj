@@ -302,6 +302,8 @@
     <ClCompile Include="..\..\3dc\avp\game_commands.cpp" />
     <ClCompile Include="..\..\3dc\avp\game_statistics.cpp" />
     <ClCompile Include="..\..\3dc\avp\hmodel.cpp" />
+    <ClCompile Include="..\..\3dc\avp\model_needs.cpp" />
+    <ClCompile Include="..\..\3dc\avp\save_checks.cpp" />
     <ClCompile Include="..\..\3dc\avp\hud.cpp" />
     <ClCompile Include="..\..\3dc\avp\inventory.cpp" />
     <ClCompile Include="..\..\3dc\avp\language.cpp" />
@@ -556,6 +558,8 @@
     <ClInclude Include="..\..\3dc\avp\gameflow.h" />
     <ClInclude Include="..\..\3dc\avp\game_statistics.h" />
     <ClInclude Include="..\..\3dc\avp\hmodel.h" />
+    <ClInclude Include="..\..\3dc\avp\model_needs.h" />
+    <ClInclude Include="..\..\3dc\avp\save_checks.h" />
     <ClInclude Include="..\..\3dc\avp\huddefs.h" />
     <ClInclude Include="..\..\3dc\avp\inventory.h" />
     <ClInclude Include="..\..\3dc\avp\langenum.h" />

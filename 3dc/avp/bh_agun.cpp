@@ -3,6 +3,11 @@
 // RWH moved out here to provide easier access
 
 /* CDF 25/7/98 - A completely new file. */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a sentry gun left without its animations by a save file is left out of the game
+//   the gun part is checked before use, because a save file can leave it out
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 #include "3dc.h"
 #include "inline.h"
@@ -12,6 +17,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "weapons.h"
 #include "compiled_shapes.h"
@@ -1283,7 +1289,12 @@ void Execute_AGun_Target(STRATEGYBLOCK *sbPtr) {
 		SECTION_DATA *gun_section;
 
 		gun_section=GetThisSectionData(agunStatusPointer->HModelController.section_data,"gun");
-		GLOBALASSERT(gun_section);
+
+		// a part of a model can be missing from a save file, and without this one there's nothing to aim
+		if (!gun_section)
+		{
+			return;
+		}
 
 		AGun_GetRelativeAngles(sbPtr,&anglex,&angley,&gun_section->World_Offset);
 
@@ -1655,7 +1666,7 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -1674,6 +1685,12 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 	Load_SoundState(&agunStatusPointer->soundHandle);
 	Load_SoundState(&agunStatusPointer->soundHandle2);
 
+	//these two animations are used without checking. They're added when the gun is made, and nothing removes them, so a
+	//gun without them comes from a damaged or made-up save file, and is left out of the game
+	if(!agunStatusPointer->gun_pan || !agunStatusPointer->gun_tilt)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Autogun(STRATEGYBLOCK* sbPtr)

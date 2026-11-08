@@ -1,5 +1,7 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a light whose shape has fewer animation sequences than expected is no longer an assert, because looking one up now copes with that
+//   a light can only be set to a sequence of its own texture animation
 
 #include "3dc.h"
 #include "inline.h"
@@ -9,6 +11,7 @@
 #include "bh_types.h"
 #include "bh_light.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pldghost.h"
 #include "io.h"
@@ -27,8 +30,13 @@ void SetTextureAnimationSequence(int shapeindex, TXACTRLBLK* tac, int sequence)
 {
 	while (tac)
 	{
-		tac->tac_sequence = sequence;
-		tac->tac_txah_s = GetTxAnimHeaderFromShape(tac, shapeindex);
+		// the sequence can come from a save, and it picks an entry in a list the game later writes through
+		if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))
+		{
+			tac->tac_sequence = sequence;
+			tac->tac_txah_s = GetTxAnimHeaderFromShape(tac, shapeindex);
+		}
+
 		tac = tac->tac_next;
 	}
 }

@@ -1,4 +1,11 @@
 /* bh_corpse.c 19/8/98 */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a corpse in a save that cannot get a dynamics block is left out, instead of crashing
+//   a corpse that a save file leaves without a model is left out of the game
+//   a corpse with no plain model to trim to is left as it is
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved corpse has to name one of the hit location tables
 #include "3dc.h"
 
 #include "inline.h"
@@ -9,6 +16,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "pfarlocs.h"
@@ -648,10 +656,7 @@ void CorpseBehaveFun(STRATEGYBLOCK *sbPtr)
 		
 		/* Do we want to trim off the weapons? */
 		
-		if (corpseDataPtr->HModelController.keyframe_flags) {
-		
-			GLOBALASSERT(corpseDataPtr->TemplateRoot);
-
+		if (corpseDataPtr->HModelController.keyframe_flags && corpseDataPtr->TemplateRoot) {
 			TrimToTemplate(sbPtr,&corpseDataPtr->HModelController,corpseDataPtr->TemplateRoot, 1);
 		}
 	}
@@ -834,6 +839,7 @@ void CorpseIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct corpse_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -936,6 +942,13 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//get a dynamics block
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
 
+	// there is a fixed number of these, and a save can hold more corpses than there are left. This one is then left out
+	if (!sbPtr->DynPtr)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
+
 
 	//start copying stuff
 	
@@ -955,18 +968,21 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 					 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
 	//hit location table
-	if(block->hltable_index>=0)
 	{
-		corpseDataPtr->hltable = &Global_Hitlocation_Tables[block->hltable_index];
-	}
-	else
-	{
-		corpseDataPtr->hltable = NULL;
+		//the tables end with one that has no name
+		int numberOfTables = 0;
+		while(Global_Hitlocation_Tables[numberOfTables].id != NULL)
+		{
+			numberOfTables++;
+		}
+
+		int const place = Save_PlaceInListOrNone(block->hltable_index, numberOfTables);
+		corpseDataPtr->hltable = (place >= 0) ? &Global_Hitlocation_Tables[place] : NULL;
 	}
 
 	// get death_data
@@ -995,6 +1011,11 @@ void LoadStrategy_Corpse(SAVE_BLOCK_STRATEGY_HEADER* header)
 	Load_SoundState(&corpseDataPtr->SoundHandle3);
 	Load_SoundState(&corpseDataPtr->SoundHandle4);
 
+	//a corpse is made from nothing as it loads, and its model comes from the save file. Without one it can't go on
+	if(!corpseDataPtr->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 

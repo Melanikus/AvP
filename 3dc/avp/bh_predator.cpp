@@ -8,6 +8,13 @@ Source file for predator AI
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the debug text names an unknown state "Unknown", instead of using a pointer that was never set
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a dormant predator keeps its own copy of its level data, not a pointer to it
+//   a predator with no muzzle in its model fires no plasma bolt, energy bolt or spear
+//   a save file can no longer give a predator a weapon that does not exist
+//   the elevation animation and the pistol muzzle are checked before use, because either can be missing
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved predator has to be on a real path, and its personal number has to pick one of the predators' settings
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -15,6 +22,7 @@ Source file for predator AI
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -914,7 +922,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
         pred_bhv=(DORMANT_PREDATOR_STATUS_BLOCK*)AllocateMem(sizeof(DORMANT_PREDATOR_STATUS_BLOCK));
 
         pred_bhv->bhvr_type=I_BehaviourDormantPredator;
-        pred_bhv->toolsData=bhdata;
+        pred_bhv->toolsData=*(TOOLS_DATA_PREDATOR*)bhdata;
 
         sbPtr->SBdataptr=(void*) pred_bhv;
 
@@ -923,7 +931,7 @@ void InitDormantPredatorBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
 {
         DORMANT_PREDATOR_STATUS_BLOCK* pred_bhv;
-        void* toolsData;
+        TOOLS_DATA_PREDATOR toolsData;
 
         GLOBALASSERT(sbPtr);
         GLOBALASSERT(sbPtr->SBdataptr);
@@ -934,7 +942,7 @@ void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)
         DeallocateMem(pred_bhv);
         InitialiseSBValues(sbPtr);
         sbPtr->I_SBtype = I_BehaviourPredator;
-        EnableBehaviourType(sbPtr,I_BehaviourPredator ,toolsData );
+        EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );
 
         //find strategyblock of death target
         {
@@ -1001,7 +1009,12 @@ void SetPredatorElevation(STRATEGYBLOCK *sbPtr) {
         GLOBALASSERT(angle1<=1024);
 
         elevation_controller=Get_Delta_Sequence(&predatorStatusPointer->HModelController,"Elevation");
-        GLOBALASSERT(elevation_controller);
+
+        // the game removes this animation in some states, and a save file can leave it out
+        if (!elevation_controller) {
+                return;
+        }
+
         {
                 int fake_timer;
 
@@ -2509,7 +2522,11 @@ static PRED_RETURN_CONDITION Execute_PNS_DischargePistol(STRATEGYBLOCK *sbPtr)
 
                         muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                        CreatePPPlasmaBoltKernel(&muzzle->World_Offset, &muzzle->SecMat,0);
+                        // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                        if (muzzle)
+                        {
+                                CreatePPPlasmaBoltKernel(&muzzle->World_Offset, &muzzle->SecMat,0);
+                        }
                         predatorStatusPointer->volleySize++;
                 }
 
@@ -2699,7 +2716,11 @@ static PRED_RETURN_CONDITION Execute_PNS_AttackWithPlasmaCaster(STRATEGYBLOCK *s
 
                                 muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                                InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&TemplateAmmo[AMMO_PRED_ENERGY_BOLT].MaxDamage[AvP.Difficulty],65536);
+                                // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                                if (muzzle)
+                                {
+                                        InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&TemplateAmmo[AMMO_PRED_ENERGY_BOLT].MaxDamage[AvP.Difficulty],65536);
+                                }
                                 predatorStatusPointer->volleySize++;
                         }
                         predatorStatusPointer->stateTimer=(ONE_FIXED);
@@ -6214,22 +6235,27 @@ static PRED_RETURN_CONDITION Execute_PNS_DischargeSpeargun(STRATEGYBLOCK *sbPtr)
 
                         muzzle=GetThisSectionData(predatorStatusPointer->HModelController.section_data,"dum flash");
 
-                        shotVector.vx=muzzle->SecMat.mat31;
-                        shotVector.vy=muzzle->SecMat.mat32;
-                        shotVector.vz=muzzle->SecMat.mat33;
+                        // the muzzle is a named part of the model. It may be missing, and then no spear is fired, but the
+                        // count below still goes up, so the predator moves on from firing
+                        if (muzzle)
+                        {
+                                shotVector.vx=muzzle->SecMat.mat31;
+                                shotVector.vy=muzzle->SecMat.mat32;
+                                shotVector.vz=muzzle->SecMat.mat33;
 
-                        FindPolygonInLineOfSight(&shotVector,&muzzle->World_Offset,0,sbPtr->SBdptr);
+                                FindPolygonInLineOfSight(&shotVector,&muzzle->World_Offset,0,sbPtr->SBdptr);
 
-                        /* Now deal with LOS_ObjectHitPtr. */
-                        if (LOS_ObjectHitPtr) {
-                                if (LOS_HModel_Section) {
-                                        if (LOS_ObjectHitPtr->ObStrategyBlock) {
-                                                if (LOS_ObjectHitPtr->ObStrategyBlock->SBdptr) {
-                                                        GLOBALASSERT(LOS_ObjectHitPtr->ObStrategyBlock->SBdptr->HModelControlBlock==LOS_HModel_Section->my_controller);
+                                /* Now deal with LOS_ObjectHitPtr. */
+                                if (LOS_ObjectHitPtr) {
+                                        if (LOS_HModel_Section) {
+                                                if (LOS_ObjectHitPtr->ObStrategyBlock) {
+                                                        if (LOS_ObjectHitPtr->ObStrategyBlock->SBdptr) {
+                                                                GLOBALASSERT(LOS_ObjectHitPtr->ObStrategyBlock->SBdptr->HModelControlBlock==LOS_HModel_Section->my_controller);
+                                                        }
                                                 }
                                         }
+                                        HandleSpearImpact(&LOS_Point,LOS_ObjectHitPtr->ObStrategyBlock,AMMO_PRED_RIFLE,&shotVector, 1, LOS_HModel_Section);
                                 }
-                                HandleSpearImpact(&LOS_Point,LOS_ObjectHitPtr->ObStrategyBlock,AMMO_PRED_RIFLE,&shotVector, 1, LOS_HModel_Section);
                         }
 
                         predatorStatusPointer->volleySize++;
@@ -6434,7 +6460,11 @@ static PRED_RETURN_CONDITION Execute_PNS_AttackBrutallyWithPlasmaCaster(STRATEGY
                                 Pred_Weapon_Damage.BlowUpSections=1;
                                 Pred_Weapon_Damage.Special=0;
 
-                                InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&Pred_Weapon_Damage,65536);
+                                // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                                if (muzzle)
+                                {
+                                        InitialiseEnergyBoltBehaviourKernel(&muzzle->World_Offset, &muzzle->SecMat,0,&Pred_Weapon_Damage,65536);
+                                }
                                 predatorStatusPointer->volleySize++;
                         }
                         predatorStatusPointer->enableSwap=1;
@@ -6670,9 +6700,11 @@ static PRED_RETURN_CONDITION Execute_PNS_NewDischargePistol(STRATEGYBLOCK *sbPtr
                         null_vec.vy=0;
                         null_vec.vz=0;
 
-                        GLOBALASSERT(muzzle);
-
-                        FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        // the muzzle is a named part of the model. It may be missing, and then nothing is fired
+                        if (muzzle)
+                        {
+                                FirePredPistolFlechettes(&muzzle->World_Offset,&null_vec,&muzzle->SecMat,0,&predatorStatusPointer->internalState,TRUE);
+                        }
 
                 }
 
@@ -7123,7 +7155,10 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(obstruction)
 	COPYELEMENT_LOAD(wanderData)
 	COPYELEMENT_LOAD(IAmCrouched)
-	COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))
+	{
+		COPYELEMENT_LOAD(personalNumber)				/* for predator personalisation */
+	}
 	COPYELEMENT_LOAD(nearSpeed)
 	COPYELEMENT_LOAD(GibbFactor)
 	COPYELEMENT_LOAD(incidentFlag)
@@ -7139,6 +7174,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Explode)
 	COPYELEMENT_LOAD(path)
 	COPYELEMENT_LOAD(stepnumber)
+	NPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);
 
 	//load ai module pointers
 	predatorStatusPointer->missionmodule = GetPointerFromAIModuleIndex(block->missionmodule_index);
@@ -7155,7 +7191,7 @@ void LoadStrategy_Predator(SAVE_BLOCK_STRATEGY_HEADER* header)
 	predatorStatusPointer->Selected_Weapon = GetThisNPCPredatorWeapon(static_cast<enum predator_npc_weapons>(block->weapon_id));
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

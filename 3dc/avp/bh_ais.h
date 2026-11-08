@@ -172,6 +172,7 @@ extern void CastLOSProjectile(STRATEGYBLOCK *sbPtr, VECTORCH *muzzlepos, VECTORC
 extern int VerifyHitShot(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target, VECTORCH *muzzlepos, VECTORCH *in_shotvector, enum AMMO_ID AmmoID, int multiple, int maxrange);
 extern AIMODULE *GetNextModuleForLink(AIMODULE *source,AIMODULE *target,int max_depth,int alien);
 extern AIMODULE *GetNextModuleForLink_Core(AIMODULE *source,AIMODULE *target,int max_depth,int visibility_check,int alien);
+extern void NPC_CheckSavedPath(int *path, int *stepnumber);
 extern int GetNextModuleInPath(int current_module, int path);
 extern AIMODULE *TranslatePathIndex(int current_module, int path);
 extern int GetClosestStepInPath(int path,MODULE* current_module);

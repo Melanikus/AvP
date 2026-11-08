@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a lift station with a bad controller or floor number from the level file is left out of its lift
 //   a switch door is only linked to another switch door, and nothing that doesn't exist has a state
+//   a saved door has to be on a frame of its own morph
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -65,6 +66,7 @@
 #include "psnd.h"
 #include "plat_shp.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "pldghost.h"
 #include "bh_corpse.h"
 #include "logString.h"
@@ -3654,7 +3656,7 @@ void LoadStrategy_ProxDoor(SAVE_BLOCK_STRATEGY_HEADER* header)
 	doorbhv->door_state = block->door_state;
 	doorbhv->door_locked = block->door_locked;
 	doorbhv->triggeredByMarine = block->triggeredByMarine;
-	doorbhv->PDmctrl->ObMorphCurrFrame = block->ObMorphCurrFrame;
+	doorbhv->PDmctrl->ObMorphCurrFrame = Save_MorphFrameOrOwn(block->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphCurrFrame, doorbhv->PDmctrl->ObMorphHeader->mph_maxframes);
 	doorbhv->PDmctrl->ObMorphFlags = block->ObMorphFlags;
 	doorbhv->PDmctrl->ObMorphSpeed = block->ObMorphSpeed;
 

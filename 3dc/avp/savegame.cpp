@@ -4,6 +4,9 @@
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save; the buffer a save is
 //   built in grows through ReallocMem
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save can't list the player as dead and take their strategy block away
+//   each load says in the log how many values it refused, and by which check
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
 //   a save that can't be written whole leaves the old one as it was, where before a full disk destroyed it and still said GAME SAVED
@@ -37,6 +40,7 @@
 #include "game_statistics.h"
 #include "user_profile.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "huffman.hpp"
 #include "fmvCutscenes.h"
 #define UseLocalAssert TRUE
@@ -586,6 +590,8 @@ void LoadSavedGame()
 	//we can now clear the load request
 	LoadGameRequest = SAVELOAD_REQUEST_NONE;
 
+	Save_StartCountingRefusals();
+
 	//load the file
 	file = avp_CreateFile(filename,GENERIC_READ, 0, 0, OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
 
@@ -804,6 +810,14 @@ void LoadSavedGame()
 		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_ERRORLOADING));
 	}
 
+	//on a save the player really made, this has to say none: see save_checks.h
+	{
+		char refusals[600] = { 0 };
+
+		Save_DescribeRefusals(refusals, sizeof(refusals));
+		LogString(refusals);
+	}
+
 	EndLoadGame();
 
 	RemoveDestroyedStrategyBlocks();
@@ -900,6 +914,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	//the fixed part (which holds the count) must be inside the block before the count is read
 	if(header->size < fixedSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + " is smaller than its header");
 		return FALSE;
 	}
@@ -907,6 +922,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	count = *countPtr;
 	if(count < 0 || count > capacity || count > (header->size - fixedSize) / elemSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + ": invalid count " + Util::IntToString(count));
 		return FALSE;
 	}
@@ -1339,10 +1355,15 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 	//the name is read from the block, so it must be all there
 	if(header->size < (int)sizeof(*block)) return;
 
+	//The game runs on the player's block being there, so a save can't take it away. A dead player is never saved.
 	STRATEGYBLOCK* sbPtr = FindSBWithName(block->SBname);
-	if(sbPtr)
+	if(sbPtr && sbPtr != Player->ObStrategyBlock)
 	{
 		DestroyAnyStrategyBlock(sbPtr);
+	}
+	else if(sbPtr)
+	{
+		Save_NoteRefused("the player's block being taken away");
 	}
 }
 

@@ -3,6 +3,15 @@
 //   a level without the hangar airlock or locker doors no longer crashes the queen's code: those doors are
 //   simply skipped;
 //   a swipe the game does not know is skipped, instead of using a pointer that was never set
+//   the Queen copes with a model missing a foot or a swiping hand; her hit animation is the
+//   one set to not playing when she is made, where the attack was set twice
+//   a Queen left without her two animations by a save file is left out of the game
+//   her hand is checked before use; a game saved while she carries something no longer indexes the list with -1
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   the object a saved Queen is holding has to be one of the objects in the level
+//   a saved Queen's biases are divided by, so they have to be 1 or more
+//   a value a save has refused is counted for the log
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a queen whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
 //   avp-forever, commit 207704e)
@@ -19,6 +28,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pvisible.h"
@@ -367,11 +377,15 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		queenStatus->attack_delta=Add_Delta_Sequence(&queenStatus->HModelController,"attack",
 			(int)HMSQT_QueenRightStanceTemplate,(int)QRSTSS_LeftSwipe,Queen_Step_Time);
-		queenStatus->attack_delta->Playing=0;
+		if (queenStatus->attack_delta) {
+			queenStatus->attack_delta->Playing=0;
+		}
 
 		queenStatus->hit_delta=Add_Delta_Sequence(&queenStatus->HModelController,"hit",
 			(int)HMSQT_QueenRightStanceTemplate,(int)QRSTSS_LeftHit,Queen_Step_Time);
-		queenStatus->attack_delta->Playing=0;
+		if (queenStatus->hit_delta) {
+			queenStatus->hit_delta->Playing=0;
+		}
 
 		queenStatus->TempTarget=FALSE;
 		queenStatus->CurrentQueenObject=-1;
@@ -444,15 +458,19 @@ void SetQueenFoot(STRATEGYBLOCK *sbPtr, QUEEN_FOOT foot) {
 			queenStatusPointer->fixed_foot=LeftFoot;
 			queenStatusPointer->fixed_foot_section=GetThisSectionData(queenStatusPointer->HModelController.section_data,
 				"left foot");
-			GLOBALASSERT(queenStatusPointer->fixed_foot_section);
-			queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			// the foot is a named part of the model and may be missing: SetQueenMovement_FromFoot allows for that too
+			if (queenStatusPointer->fixed_foot_section) {
+				queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			}
 			break;
 		case (RightFoot):
 			queenStatusPointer->fixed_foot=RightFoot;
 			queenStatusPointer->fixed_foot_section=GetThisSectionData(queenStatusPointer->HModelController.section_data,
 				"right foot");
-			GLOBALASSERT(queenStatusPointer->fixed_foot_section);
-			queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			// the foot is a named part of the model and may be missing: SetQueenMovement_FromFoot allows for that too
+			if (queenStatusPointer->fixed_foot_section) {
+				queenStatusPointer->fixed_foot_oldpos=queenStatusPointer->fixed_foot_section->World_Offset;
+			}
 			break;
 		default:
 			GLOBALASSERT(0);
@@ -565,6 +583,11 @@ void SetQueenMovement_FromFoot(STRATEGYBLOCK *sbPtr) {
 
 	dPtr=sbPtr->SBdptr;
 	GLOBALASSERT(dPtr);
+
+	// a model with no foot gives her nothing to move by, and this also covers one read from a save
+	if (!queenStatusPointer->fixed_foot_section) {
+		return;
+	}
 
 	real_pos=queenStatusPointer->fixed_foot_section->World_Offset;
 
@@ -2331,7 +2354,7 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 	QUEEN_STATUS_BLOCK *queenStatusPointer;
 	VECTORCH vectohand,targetpos;
 	int range_to_player;
-	SECTION_DATA *hand_section;
+	SECTION_DATA *hand_section = NULL;
 
 
 	
@@ -2399,6 +2422,11 @@ void Queen_Do_Swipe(STRATEGYBLOCK *sbPtr,int side)
 				return;
 		}
 			
+
+		// the hand is a named part of the model and may be missing. The rest of this function needs it, so the swipe does nothing
+		if (!hand_section) {
+			return;
+		}
 
 		GetTargetingPointOfObject(Player,&targetpos);
 		vectohand.vx=targetpos.vx-hand_section->World_Offset.vx;
@@ -3214,9 +3242,14 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 		//find all objects that the queen can chuck
 		FindQueenObjects();
 		queenStatusPointer->CurrentQueenObject=-1;
+		//she starts with nothing in her hand, even in a game saved while she was carrying something, so she can't go on
+		//carrying it: the code for that uses the number just cleared to pick the object, and -1 isn't one
+		if(queenStatusPointer->QueenState==QBS_CarryingObject)
+		{
+			queenStatusPointer->QueenState=QBS_Reconsider;
+		}
 		//get the queens hand section
 		queenStatusPointer->QueenRightHand=GetThisSectionData(queenStatusPointer->HModelController.section_data,"rrrr fing");
-		GLOBALASSERT(queenStatusPointer->QueenRightHand);
 	}
 
 	if(!queenStatusPointer->QueenActivated)
@@ -4424,7 +4457,8 @@ void QueenBehaviour(STRATEGYBLOCK *sbPtr)
 				** 	Update object queen is carrying **
 				**----------------------------------*/
 	
-	if(queenStatusPointer->QueenState==QBS_CarryingObject)
+	//the hand is a named part of the model, and may be missing
+	if(queenStatusPointer->QueenState==QBS_CarryingObject && queenStatusPointer->QueenRightHand)
 	{
 		ProveHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr->SBdptr);
 				
@@ -5060,10 +5094,26 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(TempTarget)//going for an intermediate point
 	COPYELEMENT_LOAD(TempTargetTimer)//time before queen gives up going for intermediate point
 
-	COPYELEMENT_LOAD(CurrentQueenObject)
+	//this picks an entry in QueenObjectList, and the Queen writes to whatever is there, so it has to be one of them
+	queenStatusPointer->CurrentQueenObject = Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects);
 	COPYELEMENT_LOAD(QueenStateTimer)
-	COPYELEMENT_LOAD(QueenObjectBias)
-	COPYELEMENT_LOAD(QueenPlayerBias)
+	//the game divides by these two, and keeps them at 1 or more
+	if(block->QueenObjectBias >= 1)
+	{
+		COPYELEMENT_LOAD(QueenObjectBias)
+	}
+	else
+	{
+		Save_NoteRefused("the Queen's bias");
+	}
+	if(block->QueenPlayerBias >= 1)
+	{
+		COPYELEMENT_LOAD(QueenPlayerBias)
+	}
+	else
+	{
+		Save_NoteRefused("the Queen's bias");
+	}
 	COPYELEMENT_LOAD(QueenTauntTimer)
 	COPYELEMENT_LOAD(QueenFireTimer)
 	COPYELEMENT_LOAD(LastVelocity)
@@ -5100,7 +5150,7 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5136,8 +5186,13 @@ void LoadStrategy_Queen(SAVE_BLOCK_STRATEGY_HEADER* header)
 	queenStatusPointer->QueenRightHand=GetThisSectionData(queenStatusPointer->HModelController.section_data,"rrrr fing");
 
 	Load_SoundState(&queenStatusPointer->soundHandle);
-	
 
+	//these two animations are used every frame without checking. They're added when the Queen is made, and nothing
+	//removes them, so a Queen without them comes from a damaged or made-up save file, and is left out of the game
+	if(!queenStatusPointer->attack_delta || !queenStatusPointer->hit_delta)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Queen(STRATEGYBLOCK* sbPtr)

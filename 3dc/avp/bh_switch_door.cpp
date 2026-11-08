@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved door has to be on a frame of its own morph
 /*------------------------------Patrick 12/3/97-----------------------------------
   Source for Switch Operated Doors
   --------------------------------------------------------------------------------*/
@@ -15,6 +18,7 @@
 #include "pvisible.h"
 #include "bh_switch_door.h"
 #include "savegame.h"
+#include "save_checks.h"
 
 /*---------------------Patrick 12/3/97-------------------------
   Initialisation of a switch door....
@@ -308,7 +312,7 @@ void LoadStrategy_SwitchDoor(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(requestOpen)
 	COPYELEMENT_LOAD(requestClose)
 
-	COPYELEMENT_LOAD_EXT(block->ObMorphCurrFrame,doorbhv->morfControl->ObMorphCurrFrame)
+	doorbhv->morfControl->ObMorphCurrFrame = Save_MorphFrameOrOwn(block->ObMorphCurrFrame, doorbhv->morfControl->ObMorphCurrFrame, doorbhv->morfControl->ObMorphHeader->mph_maxframes);
 	COPYELEMENT_LOAD_EXT(block->ObMorphFlags , doorbhv->morfControl->ObMorphFlags)
 	COPYELEMENT_LOAD_EXT(block->ObMorphSpeed , doorbhv->morfControl->ObMorphSpeed)
 

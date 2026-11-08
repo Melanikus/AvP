@@ -5,7 +5,11 @@
 //   removed switched-off code that could never run: four weapon messages, which wrote into a "tempstring"
 //   this file never declares, and a never-compiled #else branch;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   the alien tail copes with a model missing its aiming animations
+//   the disc and an alien's chest are checked before use, because a save file can leave them out
 //   a request for a weapon slot that isn't there is ignored, where only an assert stood before
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a weapon being put away with no slot to go to stays in the hands, and nothing is written past the list of slots
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -960,6 +964,16 @@ void UpdateWeaponStateMachine(void)
 		        
 				case WEAPONSTATE_UNREADYING:
 		        {
+					// The game always chooses the next slot before it starts putting a weapon away, so this needs one. The number that means "no swap" isn't a place in the list of slots,
+					// and the sums below write through what they find there. The swapping states above ask this same question.
+					if (playerStatusPtr->SwapToWeaponSlot == WEAPON_FINISHED_SWAPPING)
+					{
+						weaponPtr->CurrentState = WEAPONSTATE_IDLE;
+						weaponPtr->StateTimeOutCounter = 0;
+						playerStatusPtr->Encumberance = twPtr->Encum_Idle;
+						break;
+					}
+
 					if (SimilarPredWeapons(weaponPtr,&playerStatusPtr->WeaponSlot[playerStatusPtr->SwapToWeaponSlot])) {
            		       	
            		       	PLAYER_WEAPON_DATA *newWeaponPtr;
@@ -1554,9 +1568,10 @@ static void WeaponStateIdle(PLAYER_STATUS *playerStatusPtr,PLAYER_WEAPON_DATA *w
 
 		/* You should have a disc. */
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Force Appear Disc. */
-		disc_section->flags&=~section_data_notreal;
+		if (disc_section) {
+			disc_section->flags&=~section_data_notreal;
+		}
 
 	} else {
 		/* Wow, genuinely idle! */
@@ -3282,7 +3297,12 @@ void GetHierarchicalWeapon(char *riffname, char *hierarchyname, int sequence_typ
 
 	root_section = GetNamedHierarchyFromLibrary(riffname,hierarchyname);
 
-	GLOBALASSERT(root_section);
+	// the weapon table names one model the game's files don't have (the Predator's staff), and a save file can select it.
+	// The player then keeps the weapon model they have
+	if (!root_section)
+	{
+		return;
+	}
 
 	Dispel_HModel(&PlayersWeaponHModelController);
 	Create_HModel(&PlayersWeaponHModelController, root_section);
@@ -5126,8 +5146,12 @@ int MeleeWeapon_90Degree_Front_Core(DAMAGE_PROFILE *damage,int multiple,int rang
 											if (sbPtr->I_SBtype==I_BehaviourAlien) {
 												SECTION_DATA *chest;
 												chest=GetThisSectionData(sbPtr->SBdptr->HModelControlBlock->section_data,"chest");
-												GLOBALASSERT(chest);
-												CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												/* A part can be gone. The blow then lands like any other. */
+												if (chest) {
+													CauseDamageToHModel(sbPtr->SBdptr->HModelControlBlock,sbPtr,damage,real_multiple,chest,&attack_dir,NULL,0);
+												} else {
+													HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
+												}
 											} else {
 												HtoHDamageToHModel(sbPtr, damage, real_multiple, NULL, &attack_dir);
 											}
@@ -7114,6 +7138,14 @@ void AlienClaw_SwapOut(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	/* ...Nothing? */
 }
 
+/* Centres one of the tail's two aiming animations, which are looked up by name and may be missing from the model. */
+static void CentreTailDelta(DELTA_CONTROLLER *delta)
+{
+	if (delta) {
+		delta->timer=32767;
+	}
+}
+
 void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 	/* ...Nothing? */
@@ -7135,8 +7167,8 @@ void AlienClaw_Idle(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7184,8 +7216,8 @@ void AlienClaw_Recoil(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 		XDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"XDelta");
 		YDelta=Get_Delta_Sequence(&PlayersWeaponHModelController,"YDelta");
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 	}
 }
 
@@ -7516,8 +7548,8 @@ void AlienTail_Poise(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 
 		}
 
-		XDelta->timer=32767;
-		YDelta->timer=32767;
+		CentreTailDelta(XDelta);
+		CentreTailDelta(YDelta);
 
 		InitHModelTweening(&PlayersWeaponHModelController,(ONE_FIXED>>4),HMSQT_AlienHUD,
 			(int)AHSS_TailCome,ONE_FIXED,0);
@@ -7574,6 +7606,11 @@ void ComputeTailDeltaValues(DELTA_CONTROLLER *XDelta,DELTA_CONTROLLER *YDelta)
 {
 	int temp_timer,screenX,screenY;
 	VECTORCH target_pos;
+
+	/* both are looked up by name and may be missing from the model */
+	if (!XDelta || !YDelta) {
+		return;
+	}
 
 	VIEWDESCRIPTORBLOCK *VDBPtr = ActiveVDBList[0];
 
@@ -7642,8 +7679,8 @@ void AlienTail_Strike(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr)
 		}
 		else
 		{
-			XDelta->timer=32767;
-			YDelta->timer=32767;
+			CentreTailDelta(XDelta);
+			CentreTailDelta(YDelta);
 		}
 		
 		/* Don't bother with the next bit. */
@@ -9303,9 +9340,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9335,9 +9371,8 @@ void PredatorDisc_Throwing(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 	if (PlayersWeaponHModelController.keyframe_flags&1) {
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 		/* Throw Disc. */
-		if (FirePredatorDisc(weaponPtr,disc_section)) {
+		if (disc_section && FirePredatorDisc(weaponPtr,disc_section)) {
 			/* Mask disc. */
 			disc_section->flags|=section_data_notreal;
 		}
@@ -9474,9 +9509,10 @@ void PredatorDisc_Reload(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr) {
 			weaponPtr->StateTimeOutCounter = 0;
 		} else {
 			disc_section=GetThisSectionData(PlayersWeaponHModelController.section_data,"disk");
-			GLOBALASSERT(disc_section);
 			/* Appear Disc. */
-			disc_section->flags&=~section_data_notreal;
+			if (disc_section) {
+				disc_section->flags&=~section_data_notreal;
+			}
 
 			time=DIV_FIXED(ONE_FIXED,(twPtr->TimeOutRateForState[WEAPONSTATE_RELOAD_PRIMARY]<<1));
 			time-=(ONE_FIXED>>4);

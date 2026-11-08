@@ -1,3 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved curve of no length is worked out again, because the game divides by its length
+//   a value a save has refused is counted for the log
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -14,6 +19,7 @@
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "load_shape.h"
@@ -2390,6 +2396,12 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(CurveRadius)
 	COPYELEMENT_LOAD(CurveLength)
 	COPYELEMENT_LOAD(CurveTimeOut)
+	if(alienStatusPointer->CurveLength <= 0)
+	{
+		//the length gets divided by, so this makes the alien work out a new curve
+		Save_NoteRefused("a curve with no length");
+		alienStatusPointer->CurveTimeOut = 0;
+	}
 	COPYELEMENT_LOAD(FarStateTimer)
 	COPYELEMENT_LOAD(NearStateTimer)
 	COPYELEMENT_LOAD(IAmCrouched)
@@ -2412,7 +2424,7 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//get the alien's attack from the attack code
 	alienStatusPointer->current_attack = GetThisAttack_FromUniqueCode(block->currentAttackCode);
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

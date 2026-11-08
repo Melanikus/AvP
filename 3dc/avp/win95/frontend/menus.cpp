@@ -12,6 +12,8 @@
 //   a client whose host has gone goes back to the main menus
 //   a network game's loading screen has all five of its lines, where some could be left unset
 // Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
+//   the log says when a save slot is listed as empty because its numbers are wrong
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
 #include "3dc.h"
@@ -41,6 +43,7 @@
 #include "menu_data.h"
 #include "psnd.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "networking.h"
 #include "utilities.h"
 #include "tables.h"
@@ -5293,6 +5296,14 @@ static void GetHeaderInfoForSaveSlot(SAVE_SLOT_HEADER* save_slot, const char* fi
 		strncmp(block.AvP_Save_String,"AVPSAVE0",8))
 	{
 		//no good.
+		return;
+	}
+
+	// These three pick a level, a table entry and a line of text, so they have to be ones the game can write. A file that fails looks like
+	// an empty slot.
+	if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))
+	{
+		LogString("save: a save slot's numbers aren't ones the game could have written, so it's listed as empty");
 		return;
 	}
 

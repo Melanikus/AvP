@@ -13,6 +13,8 @@
 //   a shape records how many baked colours it holds
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a texture's name from a level file has to pass the check in level_file_name.h before it's opened
+//   number is left out; when two sounds have the same number, the earlier one is given back
+//   a model that lacks a part the game needs stops the game with a message naming the part
 //   baked colours has a place for every point, even if the file has fewer colours; the list of shapes grows through
 //   ReallocMem
 //   a model's frame with no length gets the shortest length there is, because a sequence of them would hang the game
@@ -20,6 +22,7 @@
 //   a placed decal's texture offset is turned from the level file's 16.16 into pixels as it's read, and back as the
 //   debug decal save writes it, and a decal whose offset isn't one of its kind's pictures is left out (decal_offset.h).
 //   The fix follows Bobblen's avp-forever (282ebb1, 8a0e408), rewritten
+//   a model's name is copied with the 0 that ends it written on a line of its own
 #define DB_LEVEL 2
 
 #include "3dc.h"
@@ -76,6 +79,8 @@
 #include "surface_normals.h"
 #include "shadow_reach.h"
 #include "level_file_name.h"
+#include "model_needs.h"
+#include <string>
 
 // store texture handles for ingame textures
 std::vector<texID_t> ingameTextureList;
@@ -621,6 +626,23 @@ Global_Hierarchy_Store::~Global_Hierarchy_Store()
 	#endif
 }
 
+void ChangeWindowsSize(uint32_t width, uint32_t height);
+SECTION * GetNamedHierarchyFromLibrary(const char * rif_name, const char * hier_name);
+
+// A model file doesn't hold what the game needs from it (the list, and the reasons, are in model_needs.cpp). The game stops
+// here, the way it does for a file that won't load at all. An empty part means the whole model isn't in the file.
+static void Stop_On_Bad_Model(const char * file, const char * hierarchy, const char * part)
+{
+	// the names come from the file, so they can be any length: no fixed-size buffer
+	std::string message = std::string("Error loading model \"") + hierarchy + "\" from file " + file + ": ";
+	message += part ? std::string("it has no part called \"") + part + "\"" : std::string("it isn't in the file");
+
+	LogErrorString(message);
+	ChangeWindowsSize(1, 1);
+	avp_MessageBox(message.c_str(), MB_OK + MB_SYSTEMMODAL);
+	avp_exit(0x111);
+}
+
 void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp_lst, Object_Hierarchy_Chunk * ohc)
 {
 	List <Object_Hierarchy_Chunk *> ohcl = ohc->list_h_children();
@@ -648,9 +670,11 @@ void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp
 	Object_Hierarchy_Name_Chunk * ohnc = ohc->get_name();
 	if (ohnc)
 	{
-		size_t const hierarchy_name_size = strlen (ohnc->hierarchy_name) + 1;
-		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_size);
-		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_size);
+		// The name's letters, then the 0 that ends them on a line of its own, so the copy is always ended whatever was read
+		size_t const hierarchy_name_length = strlen (ohnc->hierarchy_name);
+		hd->hierarchy_name = (char*)PoolAllocateMem(hierarchy_name_length + 1);
+		memcpy (hd->hierarchy_name, ohnc->hierarchy_name, hierarchy_name_length);
+		hd->hierarchy_name[hierarchy_name_length] = 0;
 	}
 	else
 	{ // throw back from old system, no new hierarchies should be created with no name
@@ -667,6 +691,14 @@ void Global_Hierarchy_Store::add_hierarchy (List <Object_ShapeNum_Pair *> & osnp
 	}
 
 	hd->hierarchy_root->flags |= section_is_master_root;
+
+	// a model without the parts the game needs goes no further
+	const char * const missing_part = Model_First_Missing_Part(hd->hierarchy_root, riffname, hd->hierarchy_name);
+
+	if (missing_part)
+	{
+		Stop_On_Bad_Model(riffname, hd->hierarchy_name, missing_part);
+	}
 
 	hierarchy_list.add_entry (hd);
 
@@ -1634,6 +1666,18 @@ static BOOL copy_rif_data_as_hierarchy (RIFFHANDLE h, int flags,int progress_sta
 	}
 
 	Global_Hierarchy_Library.add_entry(ghs);
+
+	// a model can also be left out of its file altogether. A file that isn't loaded at all is another matter: each level
+	// only loads the files it uses, so a model that can't be found is normal then.
+	for (int row = 0; row < model_needs_count; row++)
+	{
+		const MODEL_NEEDS * needs = &model_needs[row];
+
+		if (!_stricmp(needs->file, ghs->riffname) && !GetNamedHierarchyFromLibrary(needs->file, needs->hierarchy))
+		{
+			Stop_On_Bad_Model(needs->file, needs->hierarchy, NULL);
+		}
+	}
 
 	Set_Progress_Bar_Position((int)(progress_start+progress_interval*.9));
 

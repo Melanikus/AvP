@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   carrying objects to the next level stops if the strategy blocks run out
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a level with no block left to carry something over goes on
 #include "3dc.h"
