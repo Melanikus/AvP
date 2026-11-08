@@ -194,6 +194,8 @@ void AlienWaysGuide::Clear()
 		followers[f].ranked = false;
 		followers[f].flanker = false;
 		followers[f].mapNext = false;
+		followers[f].restUntil = 0;
+		followers[f].stuckUntil = 0;
 	}
 }
 
@@ -225,6 +227,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.queued = false;
 			follower.askedAt = 0;
 			follower.restUntil = 0;
+			follower.stuckUntil = 0;
 			follower.count = 0;
 			follower.heading = 0;
 			follower.fresh = false;
@@ -288,6 +291,12 @@ bool AlienWaysGuide::GuidedThisFrame(const AlienWaysWho &who) const
 {
 	int const f = Find(who);
 	return f >= 0 && followers[f].steered && followers[f].guided;
+}
+
+bool AlienWaysGuide::RestingAfterStuck(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && now < followers[f].stuckUntil;
 }
 
 size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
@@ -908,6 +917,7 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 			DropTheWay(&follower);
 			follower.queued = false;
 			follower.restUntil = now + kAlienWaysRestAfterStuck;
+			follower.stuckUntil = follower.restUntil;
 			return false;
 		}
 	}

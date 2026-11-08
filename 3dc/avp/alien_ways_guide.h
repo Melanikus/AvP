@@ -218,6 +218,11 @@ public:
 	// false in a frame nothing asked Steer for it, even before the next Frame lets it go.
 	bool GuidedThisFrame(const AlienWaysWho &who) const;
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: for the mover (alien_ways.cpp, #149).
+	// Whether this alien was found stuck lately and is still in the kAlienWaysRestAfterStuck that follows, when the game's own code has it.
+	// The mover leaves it to that code then, rather than heading it straight for its goal again, which is how it got stuck.
+	bool RestingAfterStuck(const AlienWaysWho &who) const;
+
 	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
 	// has: up to most of them, for the log's once-a-second line (lanes, #138)
 	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
@@ -256,6 +261,7 @@ private:
 		bool queued;                        // it wants a search
 		long long askedAt;                  // when it last asked for one
 		long long restUntil;                // no way, and no asking, till then
+		long long stuckUntil;               // found stuck: the game's own code has it till then (RestingAfterStuck)
 		AlienWaysAsk last;                  // what it last told Steer: a search starts from this
 
 		int count, heading;                 // the way: count points, heading for point heading

@@ -41,6 +41,9 @@ extern int AlienWaysSwitchedOn;
 // of the polygon map. The map is still built, first, and is what they search when the grid can't be had. Each level's build makes the grid
 // right after the map, on the same thread, and the guide is told each frame which one to search (alien_ways_guide.h, UseGrid). Set once,
 // at start, by winmain.cpp.
+// Modified 2026-11-08 by Melanikus for the AvP port: the mover (#149). With it, where an alien heads is picked by alien ways itself, the same
+// in Approach, Hunt and Wander (its target, where it last saw it, or the strongest scent of the marines), and with no way to follow it heads
+// straight for that goal instead of the game's own steering. How, in alien_ways.cpp above AlienWays_Steer.
 extern int AlienWaysGridSwitchedOn;
 
 // How far along its way an alien aims, in mm, so it curves round bends instead of running corner to corner (alien_ways_lookahead.h).
