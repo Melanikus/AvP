@@ -1,3 +1,6 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79's three grenades have numbers of their own, and so does a thrown staff
+//   NameFromTheLevel and BehaviourIsAnNpcTheHostRuns
 #ifndef _stratdef_h_
 #define _stratdef_h_ 1
 
@@ -163,6 +166,14 @@ typedef enum bhvr_type
 	I_BehaviourFrisbee,
 	I_BehaviourFrisbeeEnergyBolt,
 
+	// The M79's three grenades. They come last, so that no number already in a save file moves.
+	I_BehaviourM79Grenade,
+	I_BehaviourM79FireGrenade,
+	I_BehaviourM79FragGrenade,
+
+	// A staff the Predator has thrown. It comes last for the same reason.
+	I_BehaviourThrownStaff,
+
 }AVP_BEHAVIOUR_TYPE;
 
 
@@ -182,6 +193,7 @@ typedef struct sb_flags_bitfield
 	unsigned int please_destroy_me :1;
 	unsigned int no_displayblock :1;
 	unsigned int request_operate :1;
+	unsigned int placed_in_the_level:1;	/* an NPC with a name in the level: see NameFromTheLevel */
 	unsigned int preserve_until_end_of_level:1; /*strategy block targeted by something else , so must stay until end of level*/
 	unsigned int destroyed_but_preserved:1;
 	unsigned int not_on_motiontracker :1;
@@ -229,6 +241,16 @@ typedef struct strategyblock
 
 
 extern void AssignNewSBName(STRATEGYBLOCK *sbPtr);
+
+// A placed NPC's name. In single player it's the name the level gives it. In a network game it's a new one, which the network messages use, and FindSBWithName still
+// finds it by the level's name, so a switch aimed at it works. See npc_level_names.h.
+extern void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName);
+
+// The name this NPC has in the level, which is what's the same on every machine. It's only different from its own name in a network game.
+extern const char *NpcNameInTheLevel(const STRATEGYBLOCK *sbPtr);
+
+// Is this kind one that only the host runs in a network game, with everyone else seeing what the host tells them?
+extern bool BehaviourIsAnNpcTheHostRuns(AVP_BEHAVIOUR_TYPE type);
 extern STRATEGYBLOCK * AttachNewStratBlock(struct module* moptr,
 											 struct modulemapblock* momptr,
 											 struct displayblock* dptr);

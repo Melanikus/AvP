@@ -7,6 +7,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the limit on fixed decals moved to decal.h, so the code that loads them from a level can use it;
 //   the number of decals (marks on walls) and their ids read from a save file are checked before use
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved decal in a module that does not exist is left out
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -26,6 +28,7 @@
 #include "paintball.h"
 #include "detaillevels.h"
 #include "savegame.h"
+#include "save_checks.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "tables.h"
@@ -1128,6 +1131,13 @@ void Load_Decals(SAVE_BLOCK_HEADER* header)
 
 	for(i=0;i<block->NumActiveDecals;i++)
 	{
+		//the module picks an entry in the list of what's on screen, so a decal that isn't in a real module is left out
+		if(Save_PlaceInListOrNone(saved_decal->ModuleIndex, ModuleArraySize) < 0)
+		{
+			saved_decal++;
+			continue;
+		}
+
 		DECAL* decal = AllocateDecal();
 		if(decal)
 		{

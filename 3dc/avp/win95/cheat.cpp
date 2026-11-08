@@ -1,3 +1,7 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   GIVEALLWEAPONS leaves the sniper rifle out of a network game, unless it's the mode that plays as single player does
+//   GIVEALLWEAPONS gives ammunition for every gun, however many slots there are, and all three kinds for the M79
+//   it gives the Predator the staff, now that it has a model
 /* KJL 11:24:31 03/21/97 - quick cheat mode stuff */
 #include "3dc.h"
 #include "module.h"
@@ -10,6 +14,10 @@
 #include "language.h"
 #include "cheat.h"
 #include "weapons.h"
+#include "equipment.h"
+#include "pldnet.h"
+#include "weapon_hooks.h"
+#include "weapon_m79.h"
 #include "gameflow.h"
 #include "equipment.h"
 
@@ -101,20 +109,24 @@ void GiveAllWeaponsCheat(void)
    	 	 	//if (slot == WEAPON_PLASMAGUN || slot == WEAPON_SONICCANNON) continue;
 			  
 			if (wdPtr->WeaponIDNumber==NULL_WEAPON) continue;
+
+			// The sniper rifle stays in single player for now
+			if (!SameAsSinglePlayer() && wdPtr->WeaponIDNumber==WEAPON_SONICCANNON) continue;
 			
 			if (wdPtr->Possessed==-1) continue; /* This weapon not allowed! */
 
 	 		wdPtr->Possessed=1;
 
-			/* KJL 21:49:47 05/15/97 - give ammo for weapons, apart from
-			experimental weapons */
-			if (slot<=WEAPON_SLOT_10)	{
-				if (wdPtr->WeaponIDNumber==WEAPON_CUDGEL) {
-					wdPtr->PrimaryMagazinesRemaining=0;
-				} else {
-					wdPtr->PrimaryMagazinesRemaining=50;
-				}
-			} else wdPtr->PrimaryMagazinesRemaining=0;
+			/* Every gun gets ammunition, apart from the cudgel, which doesn't use any. */
+			if (wdPtr->WeaponIDNumber==WEAPON_CUDGEL) {
+				wdPtr->PrimaryMagazinesRemaining=0;
+			} else {
+				wdPtr->PrimaryMagazinesRemaining=50;
+			}
+
+			if (wdPtr->WeaponIDNumber==WEAPON_MYSTERYGUN) {
+				M79_FillEveryKind(wdPtr);
+			}
 
 			if (wdPtr->WeaponIDNumber==WEAPON_PULSERIFLE) {
 				wdPtr->SecondaryRoundsRemaining=(ONE_FIXED*99);
@@ -161,8 +173,9 @@ void GiveAllWeaponsCheat(void)
 				continue;
 			}
 	
+			// The staff holds one, which a throw looks for. LoadAllWeapons puts it in its hands below.
 			if (wdPtr->WeaponIDNumber==WEAPON_PRED_STAFF) {
-				continue;
+				wdPtr->PrimaryMagazinesRemaining=2;
 			}
 
 	 		wdPtr->Possessed=1;

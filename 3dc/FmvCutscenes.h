@@ -1,5 +1,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   says what size a video screen's picture has to be
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   whatever is called for each frame of a film can stop it, as a key would
+//   something can be done for each frame of a film
 #ifndef _fmvCutscenes_h_
 #define _fmvCutscenes_h_
 #define HAVE_STRUCT_TIMESPEC
@@ -36,6 +39,11 @@ extern FMVTEXTURE FMVTexture[MAX_NO_FMVTEXTURES];
 // functions
 void PlayMenuMusic(void);
 extern void PlayFMV(const char *filenamePtr);
+
+// Called once for each frame of a film that PlayFMV is showing, unless it's 0. A network game needs its
+// connection looked after while a film plays, or the others decide this machine has gone.
+// If it says false, the film stops, as if someone had pressed a key.
+extern bool (*WhileAFilmPlays)(void);
 void StartMenuMusic();
 extern void StartTriggerPlotFMV(int number);
 void UpdateAllFMVTextures();

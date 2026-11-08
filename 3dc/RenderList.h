@@ -25,6 +25,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   AddItem now says no when the list's buffers are full or closed, and the list keeps count of what it left out.
 //   Its buffers can be missing without harm
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   DrawOpaqueAgain can draw the list backwards, to find where polygons tie in the surface pictures
 
 #include <stdint.h>
 #include <vector>
@@ -98,7 +100,7 @@ class RenderList
 
 		void Reset();
 		void Init(size_t size);
-		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false);
+		void DrawOpaqueAgain(class VertexDeclaration *declaration, bool withRelief = false, bool withHeight = false, bool backwards = false);
 
 //		size_t GetCapacity() const { return capacity; }
 		size_t GetSize()     const { return listIndex; }

@@ -1,0 +1,149 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "a file larger than any level is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (size < 12 || size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)",
+					"to": "if (size < 12 || _fseeki64(file, 0, SEEK_SET) != 0)"
+				}
+			]
+		},
+		{
+			"name": "a file too short to be a level is read",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (size < 12 || size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)",
+					"to": "if (size > kCustomMapMostFileBytes || _fseeki64(file, 0, SEEK_SET) != 0)"
+				}
+			]
+		},
+		{
+			"name": "a packed file is unpacked whatever size it claims",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (package->UncompressedDataSize < 12 || package->UncompressedDataSize > kCustomMapMostLevelBytes)",
+					"to": "if (package->UncompressedDataSize < 12)"
+				}
+			]
+		},
+		{
+			"name": "a name that breaks the rule isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "SayLeftOut(found.name, \"its name breaks the rule for a map's name (see custom_map_name.h)\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "folders are taken for files",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (found.attrib & (_A_SUBDIR | _A_SYSTEM | _A_HIDDEN))",
+					"to": "if (found.attrib & (_A_SYSTEM | _A_HIDDEN))"
+				}
+			]
+		},
+		{
+			"name": "a file that is no level is listed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (kind == kLevelKindUnreadable)\n\t\t{\n\t\t\tSayLeftOut(entry.name, RefusalWords(refusal));\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a multiplayer map is listed for single player",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (kind == kLevelKindMultiplayer)\n\t\t{\n\t\t\tcontinue; // a multiplayer map",
+					"to": "if (false)\n\t\t{\n\t\t\tcontinue; // a multiplayer map"
+				}
+			]
+		},
+		{
+			"name": "a map left out is said every time the list is made",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (std::find(mapsAlreadySaidLeftOut.begin(), mapsAlreadySaidLeftOut.end(), line) == mapsAlreadySaidLeftOut.end())",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the list keeps the order Windows finds the files in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "std::sort(customMaps.begin(), customMaps.end(), ByName);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a number that isn't one of the maps is loaded anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "const char *const name = CustomMaps_Name(which);\n\n\tif (!name)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": "const char *const name = CustomMaps_Name(which);\n"
+				}
+			]
+		},
+		{
+			"name": "a picture too big is shown",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "if (width > kCustomMapPictureMostWide || height > kCustomMapPictureMostHigh)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a picture too big is kept after it's refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "\t\t\t\t\tTex_Release(entry.picture);\n\t\t\t\t\tentry.picture = MISSING_TEXTURE;",
+					"to": "\t\t\t\t\tentry.picture = MISSING_TEXTURE;"
+				}
+			]
+		},
+		{
+			"name": "Bobblen's place for a picture isn't looked in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "for (size_t p = 0; p < 2 && entry.picture == MISSING_TEXTURE; p++)",
+					"to": "for (size_t p = 0; p < 1 && entry.picture == MISSING_TEXTURE; p++)"
+				}
+			]
+		},
+		{
+			"name": "the pictures shown are never let go",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
+					"from": "\t\tif (customMaps[i].pictureTried && customMaps[i].picture != MISSING_TEXTURE)\n\t\t{\n\t\t\tTex_Release(customMaps[i].picture);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 /* KJL 16:14:35 09/09/98 - BonusAbilities.c */
 #include "3dc.h"
 #include "module.h"
@@ -9,6 +12,7 @@
 #include "tables.h"
 #include "weapons.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "view.h"
 #include "load_shape.h"
 #include "kzsort.h"
@@ -418,7 +422,7 @@ void LoadStrategy_Grapple(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Position)
 	COPYELEMENT_LOAD(Orientation)
 	
-	*GrapplingHook.DispPtr->ObStrategyBlock->DynPtr = block->dynamics;
+	Save_RestoreDynamics(GrapplingHook.DispPtr->ObStrategyBlock->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_Grapple(STRATEGYBLOCK* sbPtr)

@@ -1,5 +1,5 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
-//   an empty module is checked for before it is read
+//   an empty module is checked for before it is read, and in a game that plays the same as single player another player being near any NPC wakes it, not only an alien
 /*
 	Modules - AvP is an entirely module-based engine. Modules are defined as regular orthogonal boxes within the
 	gameworld. Modules contain the polygons which make up the rooms & corridors - module size is defined by the
@@ -26,6 +26,7 @@
 #include "ourasert.h"
 #include "pldghost.h"
 #include "pheromone.h"
+#include "gamedef.h"
 #if SupportModules
 
 /* imported externs */
@@ -112,8 +113,8 @@ void AllNewModuleHandler(void)
 				for(sbIndex2=0;sbIndex2<NumActiveStBlocks;sbIndex2++)
 				{
 					STRATEGYBLOCK *alienSbPtr = ActiveStBlockList[sbIndex2];
-					/*Is it an alien?*/
-					if(alienSbPtr->I_SBtype!=I_BehaviourAlien) continue;
+					/*Is it an alien? Or, in a game that plays the same as single player, any of the NPCs the host runs?*/
+					if(alienSbPtr->I_SBtype!=I_BehaviourAlien && !(SameAsSinglePlayer() && BehaviourIsAnNpcTheHostRuns(alienSbPtr->I_SBtype))) continue;
 					if(!alienSbPtr->containingModule) continue;
 
 					if(IsModuleVisibleFromModule(playerSbPtr->containingModule,alienSbPtr->containingModule))

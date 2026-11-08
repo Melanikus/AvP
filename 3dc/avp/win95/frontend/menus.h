@@ -124,7 +124,8 @@ enum AVPMENU_ID
 	AVPMENU_INGAMEVIDEOMODE, // bjd - added for ingame resolution changing
 
 	AVPMENU_RENDERING,        // the same page, reached from the main menus or from a level, so that going back goes to where it came from
-	AVPMENU_INGAMERENDERING
+	AVPMENU_INGAMERENDERING,
+	AVPMENU_CUSTOMMAPS         // the custom maps for single player: see custom_maps.h
 };
 
 enum AVPMENU_FONT_ID
@@ -207,6 +208,7 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_SAVEGAME,
 	AVPMENU_ELEMENT_LOADGAME,
 	AVPMENU_ELEMENT_VIEWKEY,   // a key on the rendering page. Its MaxValue is which of ViewKeyLine it is
+	AVPMENU_ELEMENT_CUSTOMMAP_START, // starts the custom map chosen on the Custom maps page
 };
 
 

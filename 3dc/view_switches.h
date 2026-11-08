@@ -34,6 +34,12 @@ extern int LightingNow;      // one of the choices above. It's what was asked fo
 extern int ShadowVolumesOn;  // 1 draws shadows, 0 doesn't
 extern int ShadowAmbientOn;  // 1 lets the map's lights with no corona cast shadows too, 0 doesn't. See light_choice.h
 
+// What's really being drawn, whatever was asked for. Only for the thread that draws, because asking can make the pictures if they aren't there yet.
+int LightingReallyDrawn();
+
+// At the game's start, before any frame: the two switches and the view that goes with them.
+void ViewSwitches_SetAtStart(int lighting, int volumes);
+
 // The two commands, for the console to call
 void ShadowsCommand(char *words);
 void LightingCommand(char *words);
@@ -45,6 +51,11 @@ void LampFollowCommand(char *words);
 // How big and how strong its spot is, for this run of the game, playing alone. A network game keeps them as built. See shoulder_lamp.h.
 void LampSpotSizeCommand(char *words);
 void LampIntensityCommand(char *words);
+
+// How a lamp's light looks per pixel, for this run of the game, playing alone with -dev. See pixel_look.h.
+void PixelGlowCommand(char *words);
+void PixelCurveCommand(char *words);
+void PixelLevelCommand(char *words);
 
 // For developers, to judge a depth map or a normal map on the spot: which way round is it, and how deep should it be? They do nothing without -dev, or in a network game, and the tag shows them.
 //   RELIEFFLIP          swaps which of black and white is the polygon's level, in the depth map

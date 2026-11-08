@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   can give a shape's name from its position, for the NORMAL LINES view's log
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the "Error loading" message is built in text that grows as needed, instead of a fixed 200-byte box;
 //   text is copied using its exact measured length, so it always fits
@@ -1550,6 +1552,14 @@ SHAPEHEADER *CopyNamedShape(char const *shapename)
 ////////////////////////////////////////////////
 // Functions retrieving data about loaded shapes
 ////////////////////////////////////////////////
+
+// The other way round, for a developer's log: a shape's name from its position, or nothing if there's no such shape
+char const *GetLoadedShapeName(int position)
+{
+	ShapeInMSL const *const sim = (position >= 0) ? ShapeInMSL::GetByMSL(position) : 0;
+
+	return sim ? sim->Name() : 0;
+}
 
 // gets the main shape list position of a shape loaded into the msl
 int GetLoadedShapeMSL(char const *shapename)

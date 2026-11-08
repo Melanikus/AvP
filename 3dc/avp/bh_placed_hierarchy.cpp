@@ -1,6 +1,11 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a sequence number the list does not have is ignored
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved placed hierarchy has to hold all the numbers it says it holds
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a placed hierarchy whose model the level names but doesn't have isn't made, and the log says which (MODEL-NULL-1;
+//   found through Bobblen's avp-forever, commit 207704e)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -54,8 +59,16 @@ void* PlacedHierarchyBehaveInit(void* bhdata,STRATEGYBLOCK* sbptr)
 	ph_bhv->num_special_track_points=ph_tt->num_special_track_points;
 	ph_bhv->special_track_points=ph_tt->special_track_points;
 	
+	// The file and the model are named by the level itself, so they may not be there. Then nothing is made: its block
+	// goes back, and the caller takes it out (bh_types.cpp), because everything that works it reads that block.
 	root_section=GetNamedHierarchyFromLibrary(ph_tt->file_name,ph_tt->hier_name);
-	GLOBALASSERT(root_section);
+
+	if (!NpcModelIsLoaded(root_section, "a placed hierarchy the level names", ph_tt->file_name, ph_tt->hier_name))
+	{
+		DeallocateMem(ph_bhv);
+		return ((void *)NULL);
+	}
+
 	Create_HModel(&ph_bhv->HModelController,root_section);
 	
 	ph_bhv->current_seq=ph_tt->first_sequence;
@@ -366,6 +379,9 @@ void LoadStrategy_PlacedHierarchy(SAVE_BLOCK_STRATEGY_HEADER* header)
 	
 	ph_bhv = (PLACED_HIERARCHY_BEHAV_BLOCK*)sbPtr->SBdataptr;
 	
+	//after the header come a sequence number, a count, and that many numbers, and all of them are read one after another
+	if(!SaveBlockArrayFits((SAVE_BLOCK_HEADER*)header, (int)sizeof(*header) + 2 * (int)sizeof(int), (int*)(buffer + sizeof(int)), (int)sizeof(int), ph_bhv->num_sounds)) return;
+
 	{
 		int sequence_index;
 		sequence_index = *(int*) buffer;

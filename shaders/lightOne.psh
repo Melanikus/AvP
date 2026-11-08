@@ -12,7 +12,8 @@ sampler2D Mask   : register(s4);       // where this light is blocked, 0 to 1
 float4    Light  : register(c1);       // this light: x y z, and one over its range
 float4    Colour : register(c2);       // its colour in x y z
 float4    Soft   : register(c3);       // x: how wide the soft edge is, in pixels, up close. y: how far away it stays that wide
-float4    Mine   : register(c4);       // x: how bright it is. y: 0 for a flare, 1 for any other
+float4    Look   : register(c5);       // how a lamp's light looks: x the part with no texture, y the power on dim tones, z its strength. The game sends 0.25, 1 and 1 unless a console word changes them: see 3dc/pixel_look.h
+float4    Mine   : register(c4);       // x: how bright it is. y: 0 for a flare, 1 for any other. z: 1 for the marine's shoulder lamp, which is lit like any other but has its own shape
 
 // where to look around a pixel: spread evenly over a circle of radius 1
 static const float2 kPlaces[12] =
@@ -56,7 +57,7 @@ float BlockedHere(float2 place, float here)
 // shares, blocking a light always takes out exactly its part, so each one shows.
 //
 // A flare is the dim red the user chose: all of them together light a pixel up to its own texture, in the flare's own colour. Any other
-// light gives what the game would give: the texture lit by it, each colour stopping at full, plus a quarter of it again with no texture,
+// light gives what the game would give: the texture lit by it, each colour stopping at full, plus Look.x of it again with no texture,
 // which is the glow.
 
 float4 ps_main(in PS_INPUT In) : COLOR0
@@ -70,14 +71,21 @@ float4 ps_main(in PS_INPUT In) : COLOR0
     float3 position = PositionHere(In.ScreenPlace, distance);
     float3 normal   = NormalHere(place);
     float  all      = tex2Dlod(Totals, place).g;
-    float  mine     = Mine.x * LightShape(Light, lerp(kShapeFlare, kShapeGame, Mine.y), position, normal);
+    float  mine     = Mine.x * LightShape(Light, (Mine.z > 0.5f) ? kShapeCone : lerp(kShapeFlare, kShapeGame, Mine.y), position, normal);
     float  share    = (all > 0.0001f) ? saturate(mine / all) : 0.0f;
+    float  open     = saturate(1.0f - BlockedHere(place.xy, distance));
 
-    share *= saturate(1.0f - BlockedHere(place.xy, distance));
+    share *= open;
+
+    // The glint isn't a share of anything. It goes on top, in the light's own colour, only where this light reaches, and a shadow takes it away too.
+    float3 glint = Colour.rgb * mine * open * kShineStrength * ShineHere(Light.xyz - position, position, normal);
 
     float3 lit   = all * Colour.rgb;
     float3 flare = surface.rgb * Colour.rgb * saturate(all);
-    float3 game  = surface.rgb * saturate(lit) + saturate(lit * 0.25f);
 
-    return float4(lerp(flare, game, Mine.y) * share, 0.0f);
+    // The shoulder lamp has numbers of its own, so it takes none of these. Not below a very small number, because some cards can't raise exactly 0 to a power.
+    float3 shown = pow(max(saturate(lit), 0.0001f), lerp(Look.y, 1.0f, Mine.z));
+    float3 game  = (surface.rgb * shown + saturate(lit * Look.x) * (1.0f - Mine.z)) * lerp(Look.z, 1.0f, Mine.z);
+
+    return float4(lerp(flare, game, Mine.y) * share + glint, 0.0f);
 }

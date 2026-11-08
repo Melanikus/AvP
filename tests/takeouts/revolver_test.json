@@ -1,0 +1,648 @@
+{
+	"copy": [
+		"3dc/avp",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "going past the last chamber doesn't come back to the first",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (((place + steps) % kRevolverChambers) + kRevolverChambers) % kRevolverChambers;",
+					"to": "return place + steps;"
+				}
+			]
+		},
+		{
+			"name": "going back before the first chamber stays negative",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (((place + steps) % kRevolverChambers) + kRevolverChambers) % kRevolverChambers;",
+					"to": "return (place + steps) % kRevolverChambers;"
+				}
+			]
+		},
+		{
+			"name": "going back turns forward",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "Revolver_PlaceForward(place, -(steps % kRevolverChambers))",
+					"to": "Revolver_PlaceForward(place, steps % kRevolverChambers)"
+				}
+			]
+		},
+		{
+			"name": "emptying leaves the something-in flags",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\t\tcylinder->somethingIn[i] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "emptying leaves the live flags",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\t\tcylinder->live[i] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "filling has no limit of its own, so a huge count never ends",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "i <= kRevolverChambers && i <= rounds",
+					"to": "i <= rounds"
+				}
+			]
+		},
+		{
+			"name": "filling takes no notice of the count",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "i <= kRevolverChambers && i <= rounds",
+					"to": "i <= kRevolverChambers"
+				}
+			]
+		},
+		{
+			"name": "filling isn't behind the place",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "int const chamber = Revolver_PlaceBack(cylinder->place, i);",
+					"to": "int const chamber = Revolver_PlaceForward(cylinder->place, i);"
+				}
+			]
+		},
+		{
+			"name": "filling starts at the place itself",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "int const chamber = Revolver_PlaceBack(cylinder->place, i);",
+					"to": "int const chamber = Revolver_PlaceBack(cylinder->place, i - 1);"
+				}
+			]
+		},
+		{
+			"name": "a filled chamber isn't marked as holding something",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\t\tcylinder->somethingIn[chamber] = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a filled chamber isn't live",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\t\tcylinder->live[chamber] = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the next shot comes from the place, not behind it",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return Revolver_PlaceBack(cylinder->place, 1);",
+					"to": "return cylinder->place;"
+				}
+			]
+		},
+		{
+			"name": "a shot doesn't turn the cylinder",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->place = Revolver_ChamberToFire(cylinder);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shot leaves the round live",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->live[cylinder->place] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shot takes the case out as well",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->live[cylinder->place] = 0;\n",
+					"to": "\tcylinder->live[cylinder->place] = 0;\n\tcylinder->somethingIn[cylinder->place] = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a loaded round isn't marked as something in the chamber",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->somethingIn[cylinder->place] = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a loaded round isn't live",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->live[cylinder->place] = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "loading doesn't turn the cylinder",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tcylinder->place = Revolver_PlaceForward(cylinder->place, 1);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a live round counts as a spent case",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "if (cylinder->somethingIn[i] && !cylinder->live[i])",
+					"to": "if (cylinder->somethingIn[i])"
+				}
+			]
+		},
+		{
+			"name": "an empty chamber counts as a spent case",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "if (cylinder->somethingIn[i] && !cylinder->live[i])",
+					"to": "if (!cylinder->live[i])"
+				}
+			]
+		},
+		{
+			"name": "a live round comes out as a case",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\t\treturn kRevolverLiveRoundComesOut;",
+					"to": "\t\treturn kRevolverSpentCaseComesOut;"
+				}
+			]
+		},
+		{
+			"name": "a spent case comes out as nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->somethingIn[chamber] ? kRevolverSpentCaseComesOut : kRevolverNothingComesOut",
+					"to": "kRevolverNothingComesOut"
+				}
+			]
+		},
+		{
+			"name": "an empty chamber gives a case",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->somethingIn[chamber] ? kRevolverSpentCaseComesOut : kRevolverNothingComesOut",
+					"to": "kRevolverSpentCaseComesOut"
+				}
+			]
+		},
+		{
+			"name": "a negative count of rounds takes spares away",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (rounds < 0)\n\t{\n\t\trounds = 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the spares go past what a byte can hold",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (spare >= most - rounds) ? most : spare + rounds;",
+					"to": "return spare + rounds;"
+				}
+			]
+		},
+		{
+			"name": "the live rounds that fall out are lost",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (spare >= most - rounds) ? most : spare + rounds;",
+					"to": "return (spare >= most - rounds) ? most : spare;"
+				}
+			]
+		},
+		{
+			"name": "a frame that ran long loads no more than one",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "int const overrun = (counter < 0) ? -(counter / kRevolverOne) : 0;",
+					"to": "int const overrun = 0;"
+				}
+			]
+		},
+		{
+			"name": "a clock above zero takes rounds off",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "int const overrun = (counter < 0) ? -(counter / kRevolverOne) : 0;",
+					"to": "int const overrun = -(counter / kRevolverOne);"
+				}
+			]
+		},
+		{
+			"name": "more goes in than there's room for",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (rounds > room)\n\t{\n\t\trounds = room;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "more goes in than there are spares",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (rounds > spare)\n\t{\n\t\trounds = spare;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a negative count of rounds to load is handed back",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (rounds < 0) ? 0 : rounds;",
+					"to": "return rounds;"
+				}
+			]
+		},
+		{
+			"name": "a full gun keeps loading",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(roundsInGun < mostInGun) && (spare > 0) && !stopAsked",
+					"to": "(spare > 0) && !stopAsked"
+				}
+			]
+		},
+		{
+			"name": "no spares keeps loading",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(roundsInGun < mostInGun) && (spare > 0) && !stopAsked",
+					"to": "(roundsInGun < mostInGun) && !stopAsked"
+				}
+			]
+		},
+		{
+			"name": "the player asking for something else is ignored",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(roundsInGun < mostInGun) && (spare > 0) && !stopAsked",
+					"to": "(roundsInGun < mostInGun) && (spare > 0)"
+				}
+			]
+		},
+		{
+			"name": "a clock past the end goes off the end of the animation",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (counter <= 0)\n\t{\n\t\treturn kRevolverLastMoment;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a clock above the start goes before the animation",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (counter >= kRevolverOne)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the animation runs backwards",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "((long long)kRevolverLastMoment * (kRevolverOne - counter)) / kRevolverOne",
+					"to": "((long long)kRevolverLastMoment * counter) / kRevolverOne"
+				}
+			]
+		},
+		{
+			"name": "more shown than loaded asks for a negative number",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (loaded < shown)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the round in the hand appears a moment late",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(animationTime >= momentItGoesIn) ? 1 : 0",
+					"to": "(animationTime > momentItGoesIn) ? 1 : 0"
+				}
+			]
+		},
+		{
+			"name": "the round in the hand never appears",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(animationTime >= momentItGoesIn) ? 1 : 0",
+					"to": "0"
+				}
+			]
+		},
+		{
+			"name": "rounds a long frame loaded don't appear",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (loaded - shown) + ((animationTime",
+					"to": "return ((animationTime"
+				}
+			]
+		},
+		{
+			"name": "a place outside the ring turns the cylinder too far",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "(Revolver_PlaceForward(place, 0) * kRevolverLastMoment)",
+					"to": "(place * kRevolverLastMoment)"
+				}
+			]
+		},
+		{
+			"name": "the cylinder's turn isn't divided by its chambers",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "* kRevolverLastMoment) / kRevolverChambers;",
+					"to": "* kRevolverLastMoment);"
+				}
+			]
+		},
+		{
+			"name": "the zoom goes past its target going up",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (zoom + step > target) ? target : zoom + step;",
+					"to": "return zoom + step;"
+				}
+			]
+		},
+		{
+			"name": "the zoom goes past its target going down",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "return (zoom - step < target) ? target : zoom - step;",
+					"to": "return zoom - step;"
+				}
+			]
+		},
+		{
+			"name": "the zoom walks the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tif (zoom < target)\n",
+					"to": "\tif (zoom > target)\n"
+				}
+			]
+		},
+		{
+			"name": "a saved place below the first chamber is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->place < 0 || cylinder->place >= kRevolverChambers",
+					"to": "cylinder->place >= kRevolverChambers"
+				}
+			]
+		},
+		{
+			"name": "a saved place past the last chamber is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->place < 0 || cylinder->place >= kRevolverChambers",
+					"to": "cylinder->place < 0"
+				}
+			]
+		},
+		{
+			"name": "a saved something-in flag can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->somethingIn[i] != 0 && cylinder->somethingIn[i] != 1",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a saved live flag can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->live[i] != 0 && cylinder->live[i] != 1",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a saved live round can sit in an empty chamber",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "cylinder->live[i] && !cylinder->somethingIn[i]",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "only the first chamber of a save is looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tfor (int i = 0; i < kRevolverChambers; i++)\n\t{\n\t\tif (cylinder->somethingIn[i] != 0",
+					"to": "\tfor (int i = 0; i < 1; i++)\n\t{\n\t\tif (cylinder->somethingIn[i] != 0"
+				}
+			]
+		},
+		{
+			"name": "the live rounds are counted from the wrong list",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "rounds += cylinder->live[i] ? 1 : 0;",
+					"to": "rounds += cylinder->somethingIn[i] ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "the last chamber is left out of the count",
+			"changes": [
+				{
+					"file": "3dc/avp/revolver.h",
+					"from": "\tint rounds = 0;\n\n\tfor (int i = 0; i < kRevolverChambers; i++)",
+					"to": "\tint rounds = 0;\n\n\tfor (int i = 0; i < kRevolverChambers - 1; i++)"
+				}
+			]
+		},
+		{
+			"name": "a wide screen is treated as a tall one",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "if (screenWidth * 3 >= screenHeight * 4)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a tall screen is treated as a wide one",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "if (screenWidth * 3 >= screenHeight * 4)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "the view takes the whole width, so the ring goes out of round",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.viewWidth = (screenHeight * 4) / 3;",
+					"to": "layout.viewWidth = screenWidth;"
+				}
+			]
+		},
+		{
+			"name": "the view takes the whole height of a tall screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.viewHeight = (screenWidth * 3) / 4;",
+					"to": "layout.viewHeight = screenHeight;"
+				}
+			]
+		},
+		{
+			"name": "the picture stays at the left of a wide screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureX = screenWidth / 2 - (layout.viewWidth * 129) / 256;",
+					"to": "layout.pictureX = 0;"
+				}
+			]
+		},
+		{
+			"name": "the picture stays at the top of a tall screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureY = screenHeight / 2 - (layout.viewHeight * 95) / 192;",
+					"to": "layout.pictureY = 0;"
+				}
+			]
+		},
+		{
+			"name": "the picture is drawn the same height as the view, so the cross is too high",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureHeight = (layout.viewHeight * 4) / 3;",
+					"to": "layout.pictureHeight = layout.viewHeight;"
+				}
+			]
+		},
+		{
+			"name": "the picture is narrower than the view",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureWidth = layout.viewWidth;",
+					"to": "layout.pictureWidth = layout.viewHeight;"
+				}
+			]
+		},
+		{
+			"name": "OLD: the picture is placed by its edges across, and the cross is 4 pixels off",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureX = screenWidth / 2 - (layout.viewWidth * 129) / 256;",
+					"to": "layout.pictureX = (screenWidth - layout.viewWidth) / 2;"
+				}
+			]
+		},
+		{
+			"name": "OLD: and by its edges down",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_scope.h",
+					"from": "layout.pictureY = screenHeight / 2 - (layout.viewHeight * 95) / 192;",
+					"to": "layout.pictureY = (screenHeight - layout.viewHeight) / 2;"
+				}
+			]
+		}
+	]
+}

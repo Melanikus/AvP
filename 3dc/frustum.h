@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   DecalWithinFrustum is gone: nothing called it (see frustum.cpp)
 #ifndef _frustum_h_ /* Is this your first time? */
 #define _frustum_h_ 1
 
@@ -47,7 +49,6 @@ extern int (*ObjectCompletelyWithinFrustum)(DISPLAYBLOCK *dbPtr);
 extern int (*VertexWithinFrustum)(RENDERVERTEX *vertexPtr);
 extern void (*TestVerticesWithFrustum)(void);
 
-extern int DecalWithinFrustum(DECAL *decalPtr);
 extern int QuadWithinFrustum(void);
 extern int TriangleWithinFrustum(void);
 

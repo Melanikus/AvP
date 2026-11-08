@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a lift keeps what the host last said about it, so a joiner's car follows the host's in a game that plays the same as single player
 #include "track.h"
 /*------------------------------Patrick 14/3/97-----------------------------------
   Header for platform lift stuff
@@ -30,6 +32,17 @@ typedef struct platformlift_behaviour_type
 
 	int netMsgCount;
 
+	// The lift sync, in the mode that plays as single player (NETMESSAGE_LIFTSTATE). On the host: how long since it last sent, and
+	// the state it sent. On a joiner: whether the host has spoken yet, what it last said, and how long ago, which his car follows.
+	// syncMessages is how many lift sync messages this machine has sent (the host) or had (a joiner) about this lift.
+	int syncSinceSent;
+	int syncLastSentState;
+	BOOL syncHeard;
+	int syncHeight;
+	int syncState;
+	int syncEnd;
+	int syncAge;
+	int syncMessages;
 } PLATFORMLIFT_BEHAVIOUR_BLOCK;
 
 typedef struct platformlift_tools_template
@@ -59,3 +72,8 @@ void ActivatePlatformLift(STRATEGYBLOCK *sbPtr);
 void SendPlatformLiftUp(STRATEGYBLOCK *sbPtr);
 void SendPlatformLiftDown(STRATEGYBLOCK *sbPtr);
 void StopPlatformLift(STRATEGYBLOCK *sbPtr);
+
+// The lift sync, in the mode that plays as single player: see NETMESSAGE_LIFTSTATE in pldnet.h
+int PlatformLift_EndItsGoingTo(STRATEGYBLOCK *sbPtr);
+BOOL PlatformLift_NameIsShared(STRATEGYBLOCK *sbPtr);
+void PlatformLift_TakeTheHostsCar(STRATEGYBLOCK *sbPtr, int height, int state, int end);
