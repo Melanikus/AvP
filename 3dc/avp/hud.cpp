@@ -14,6 +14,7 @@
 //   zoom-level search stops at the last zoom level
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   an Observer's world isn't drawn as if it were the gun
+//   a Hudson run has no messages on the screen, because they would be in its pictures
 //   asks for the marine's shoulder lamp on each frame of the game, and tells it where he's looking
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a gun can say not to draw it, and draw over the screen. See weapon_hooks.h
@@ -75,6 +76,7 @@
 ****************************************************************************************KJL*/
 
 #include "RenderList.h"
+#include "hudson.h"
 extern bool gunLayer;
 
 extern DISPLAYBLOCK* Player;
@@ -2024,6 +2026,12 @@ int Fast2dMagnitude(int dx, int dy)
 
 extern void NewOnScreenMessage(char *messagePtr)
 {
+	// Words on the screen would be in a run's pictures, so two pictures of the same thing wouldn't match. A hostile run is testing the words themselves.
+	if (HudsonRunIsOn && !Hudson_NetIsHostile())
+	{
+		return;
+	}
+
 	GADGET_NewOnScreenMessage(messagePtr);
 }
 
