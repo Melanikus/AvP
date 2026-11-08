@@ -174,7 +174,7 @@ struct Pair
 
 NpcGrid::NpcGrid()
 	: searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0), searchMostLooks(0),
-	searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
+	piecesSkipped(nullptr), searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
 	  searchClaimMost(kAlienWaysClaimMostPriceFactor), searchShut(nullptr), cutShort(false),
 	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
 	  ready(false), stopAsked(false), looksAtStop(0), stopAtLook(0)
@@ -216,6 +216,8 @@ void NpcGrid::LetGo()
 	GiveBack(&fallTo);
 	surfaceCells = steps = rayTests = squareTests = boxEntries = 0;
 	bytesKept = bytesBuilding = bytesBuildingUsed = 0;
+	pieces.LetGo();
+	piecesSkipped = nullptr;
 }
 
 // Every loop of the build asks this. It also counts the asking, so a test can make the build stop at a chosen point.
@@ -1531,6 +1533,38 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		fallTo[k] = falls[k].to;
 	}
 
+	// The build's own lists are done with, and their room goes back before the pieces are found
+	size_t const listBytes = (links.capacity() + falls.capacity()) * sizeof(Pair);
+	GiveBack(&links);
+	GiveBack(&falls);
+	bytesBuilding -= std::min(bytesBuilding, listBytes);
+
+	// 12. THE PIECES an alien's cells make (npc_grid_pieces.h, Secondary's), so a search between cells that don't join is refused at once.
+	// They're worked out through the grid's own calls, a set number of cells at a time, with a stop looked at between. If they can't be
+	// had (no room while building, or they'd keep more than the cap allows), the grid goes without: nothing is refused, and every search
+	// runs as it would have. An alien doesn't fall, so falls aren't joined.
+	size_t const pieceRoom = limits.mostBytesBuilding > bytesBuilding ? limits.mostBytesBuilding - bytesBuilding : 0;
+
+	if (pieces.Begin(flags.size(), kNpcGridClings, false, kNpcGridPiecesMostKnown, pieceRoom) == nullptr)
+	{
+		while (!pieces.Step(*this, kNpcGridPieceStep))
+		{
+			if (StopNow())
+			{
+				return Fail("asked to stop");
+			}
+		}
+
+		bytesBuildingUsed = std::max(bytesBuildingUsed, bytesBuilding + pieces.BytesHeld());
+	}
+
+	if (pieces.GaveUp() || pieces.BytesKept() > limits.mostBytesKept - std::min(limits.mostBytesKept, bytesKept))
+	{
+		piecesSkipped = pieces.GaveUp() ? pieces.WhyGaveUp() : "they would keep more than the cap allows";
+		pieces.LetGo();
+	}
+
+	bytesKept += pieces.BytesKept();
 	bytesBuilding = 0;
 	ready = true;
 	return nullptr;
@@ -1583,6 +1617,13 @@ const char *NpcGrid::StartSearch(AlienWaysXYZ start, AlienWaysXYZ goal, NpcGridB
 	{
 		BeginCells(kNpcGridNoCell, kNpcGridNoCell, body, floorPrice, mostLooks);
 		return from == kNpcGridNoCell ? "no cell near the start" : "no cell near the goal";
+	}
+
+	// The pieces are an alien's (step 12 of Build): a marine's search isn't refused by them
+	if (body == kNpcGridAlien && pieces.CertainlyApart(from, to))
+	{
+		BeginCells(kNpcGridNoCell, kNpcGridNoCell, body, floorPrice, mostLooks);
+		return "the start and the goal are in pieces that don't join";
 	}
 
 	BeginCells(from, to, body, floorPrice, mostLooks);

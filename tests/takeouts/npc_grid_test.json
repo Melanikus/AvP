@@ -503,6 +503,26 @@
 					"to": "(advancedAI ? 250u : 250u)"
 				}
 			]
+		},
+		{
+			"name": "a search between pieces that don't join isn't refused",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "if (body == kNpcGridAlien && pieces.CertainlyApart(from, to))",
+					"to": "if (false && pieces.CertainlyApart(from, to))"
+				}
+			]
+		},
+		{
+			"name": "the pieces aren't counted in what the grid keeps",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_grid.cpp",
+					"from": "\tbytesKept += pieces.BytesKept();\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
