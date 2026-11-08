@@ -319,9 +319,13 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			break;
 
 		case kAlienWaysOutcomeNoPolygon:
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: not searched, as it or where it's going is more than %.1f m from any polygon it could start on",
-				static_cast<unsigned>(line.follower), where.c_str(), kAlienWaysNearEnough / 1000.0);
+		{
+			// Which end had no polygon near, so a film shows it by name
+			const char *const which = line.fromKind < 0 && line.toKind < 0 ? "both it and where it's going are" : (line.fromKind < 0 ? "it is" : "where it's going is");
+			snprintf(text, sizeof(text), "alien ways: alien %u %s: not searched, as %s more than %.1f m from any polygon of the map",
+				static_cast<unsigned>(line.follower), where.c_str(), which, kAlienWaysNearEnough / 1000.0);
 			break;
+		}
 
 		case kAlienWaysOutcomeStuck:
 			snprintf(text, sizeof(text), "alien ways: alien %u stuck at %s, heading for %s (%.1f m away), with no headway for %.1f s: the game's own code has it for %.1f s",

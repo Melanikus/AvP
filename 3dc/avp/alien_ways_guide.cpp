@@ -453,7 +453,10 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		line.waitedMs = now - follower.askedAt;
 
 		// It starts on a polygon of the kind it's standing on: an alien low on a wall starts on the wall, not the floor just below it.
-		// If there's none of that kind near, the nearest of any kind.
+		// If there's none of that kind near, the nearest of any kind. Its own module's polygons are looked through first. If none of them is
+		// near, every polygon of the map is, the same two ways: what it stands on can be a still object, which is no module's, or a
+		// neighbouring module's floor.
+		AlienWaysRange const everywhere = { 0, map->PolygonsGiven() };
 		int from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, KindUnder(follower.last.down));
 
 		if (from < 0)
@@ -461,8 +464,27 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 			from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, -1);
 		}
 
-		int const to = NearestIn(*map, follower.last.goal, follower.last.goalPolygons, 2, -1);
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &everywhere, 1, KindUnder(follower.last.down));
+		}
+
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &everywhere, 1, -1);
+		}
+
+		// The goal's polygon: in the two modules it's looked for in first, then anywhere. At Third's 5-alien spot (2026-11-08) every way to
+		// the target was refused, because no polygon of the target's own room, nor of the alien's, was within 2 m of where it stood.
+		int to = NearestIn(*map, follower.last.goal, follower.last.goalPolygons, 2, -1);
+
+		if (to < 0)
+		{
+			to = NearestIn(*map, follower.last.goal, &everywhere, 1, -1);
+		}
+
 		line.fromKind = from >= 0 ? static_cast<int>(map->KindOf(from)) : -1;
+		line.toKind = to >= 0 ? static_cast<int>(map->KindOf(to)) : -1;
 
 		if (from < 0 || to < 0)
 		{

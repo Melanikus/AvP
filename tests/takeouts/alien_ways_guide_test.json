@@ -1154,6 +1154,36 @@
 					"to": "\treturn points[heading - 1].kind == points[heading].kind;"
 				}
 			]
+		},
+		{
+			"name": "the goal's polygon is looked for only in its modules",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (to < 0)\n\t\t{\n\t\t\tto = NearestIn(*map, follower.last.goal, &everywhere, 1, -1);",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tto = NearestIn(*map, follower.last.goal, &everywhere, 1, -1);"
+				}
+			]
+		},
+		{
+			"name": "the start's polygon is looked for only in its module",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (from < 0)\n\t\t{\n\t\t\tfrom = NearestIn(*map, follower.last.at, &everywhere, 1, -1);",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\tfrom = NearestIn(*map, follower.last.at, &everywhere, 1, -1);"
+				}
+			]
+		},
+		{
+			"name": "a refused search doesn't say whether the goal was found",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tline.toKind = to >= 0 ? static_cast<int>(map->KindOf(to)) : -1;\n",
+					"to": "\t\tline.toKind = 0;\n"
+				}
+			]
 		}
 	]
 }

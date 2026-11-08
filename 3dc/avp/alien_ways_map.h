@@ -225,6 +225,9 @@ public:
 	// list given to Build became, or -1 if it was left out.
 	int MapNumberOf(size_t given) const;
 
+	// How many polygons were handed to Build, those left out included: the range that takes in every polygon of the map, for NearestPolygon
+	size_t PolygonsGiven() const { return mapNumber.size(); }
+
 	size_t Polygons() const { return kind.size(); }
 	size_t Joins() const { return stretchA.size(); }
 	size_t PolygonsLeftOut() const { return leftOut; }

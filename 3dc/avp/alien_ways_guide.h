@@ -134,6 +134,7 @@ struct AlienWaysReport
 	bool cutShort;                  // the way was longer than the map gives, and stops short of the goal
 	bool toTheTarget;               // the goal was the target itself (AlienWaysAsk::goalIsTheTarget)
 	int fromKind;                   // the kind of polygon the search started on (an AlienWaysKind), or -1 if none was near
+	int toKind;                     // the kind of polygon the goal is on, or -1 if none was near: so a refused line can say which end it was
 	double floorMm, wallMm, ceilingMm;
 	int polygons[kAlienWaysMostWayPoints];   // the map polygons the way is on, in order, each once in a row, for measuring how ways stack
 	int polygonCount;

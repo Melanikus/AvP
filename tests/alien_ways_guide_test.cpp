@@ -478,9 +478,29 @@ static void FailedRenewal()
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, nowhere, 13), &towards), "the goal moves to where there's no polygon: the alien is still guided");
 	Frame(guide, map, 16);
 	Check(ReportsOf(guide, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeNoPolygon, "its search isn't started, and the report says why");
+	Check(ReportsOf(guide, &reports) == 1 && reports[0].fromKind >= 0 && reports[0].toKind < 0, "and which end it was: the goal, not the alien");
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, nowhere, 13), &towards) && Same(towards, kOntoTheWall), "it keeps the way it had, so nothing lets go of a wall");
 	Frame(guide, map, 16);
 	Check(ReportsOf(guide, &reports) == 0, "and the goal it failed for isn't searched for again in the next frame");
+}
+
+// Where neither the alien's module nor the goal's has a polygon near, the whole map is looked through. At Third's 5-alien spot (2026-11-08)
+// every way to the target was refused because no polygon of the target's own room was within 2 m of where it stood.
+static void FoundAnywhere()
+{
+	printf("Polygons looked for anywhere when the modules have none near\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const AlienWaysReport *reports = nullptr;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	AlienWaysAsk lost = Ask(Alien(1), kStart, kGoal, 13);
+	lost.atPolygons = AlienWaysRange{ 0, 0 };
+	lost.goalPolygons[0] = lost.goalPolygons[1] = AlienWaysRange{ 0, 0 };
+	guide.Steer(&map, lost, &towards);
+	Frame(guide, map, 16);
+	Check(ReportsOf(guide, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeFound,
+		"an alien and a goal whose modules have no polygons at all still get a way, from the polygons of the whole map");
 }
 
 static void LetGo()
@@ -1062,6 +1082,7 @@ int main()
 	Stuck();
 	AskingAgain();
 	FailedRenewal();
+	FoundAnywhere();
 	LetGo();
 	GuidedThisFrame();
 	KeptThroughAGap();
