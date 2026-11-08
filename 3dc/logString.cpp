@@ -33,11 +33,14 @@
 //   the last logs are kept as avp_log.1.txt to avp_log.5.txt, and only a plain file is ever written to (log_files.h); a crash writes what
 //   it was and the places on the stack, as file names and distances, straight to the file without waiting for a lock
 //   every line, and the crash lines, leave out the player's Windows user name, computer name, folders and network addresses
+//   every line is handed to the level's own log too, once the player is left out of it; the level's log keeps lines only while a level
+//   is loading (level_log.h)
 
 #include "logString.h"
 #include "renderer.h"
 #include "utilities.h"
 #include "frame_timing.h"
+#include "level_log.h"
 #include "log_files.h"
 
 #ifdef _XBOX
@@ -207,6 +210,9 @@ public:
 	void Add(const std::string &line, bool mustGoIn)
 	{
 		std::string const written = LogFiles_LeaveOutThePlayer(line, privateThings);
+
+		// The level's own log gets the line as it's written here, with the player already left out (level_log.h). An error is one that must go in.
+		LevelLog_NoteLine(written, mustGoIn);
 
 		EnterCriticalSection(&listLock);
 

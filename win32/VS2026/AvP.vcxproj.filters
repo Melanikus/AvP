@@ -93,6 +93,9 @@
     <ClCompile Include="..\..\3dc\kshape.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\level_log.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\light_choice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
