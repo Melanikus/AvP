@@ -2,10 +2,11 @@
 // AvP port.
 //
 // WHY: aliens find their way by a scent (the pheromones) that spreads from one AI module to the next, unless a door between them is shut.
-// An AI module is a list of the level's own modules, made from the level file (projload.cpp), and it counts as a door if any module on
-// the list is one: AIModuleIsADoor in pfarlocs.cpp looks through the whole list. But whether that door was shut was then asked of the
+// An AI module is a list of the level's own modules, made from the level file (projload.cpp), and it counted as a door if any module on
+// the list was one: AIModuleIsADoor in pfarlocs.cpp looked through the whole list. But whether that door was shut was then asked of the
 // list's first module, whatever that was, and the first module's block was read as a door's without a look at what it was, or whether
-// it had one. Now the door is found once, by AIModuleDoor_Find, and only the module that is the door is asked about it.
+// it had one. Now the door is found once, by AIModuleDoor_Find, and only the module that is the door is asked about it. AIModuleIsADoor
+// had no other caller, so it went.
 //
 // The kinds, and how a module answers, come from the game (pfarlocs.cpp and pheromone.cpp), so this knows nothing of it, and
 // tests/ai_module_door_test.cpp can try it with stand-ins for the game's modules.

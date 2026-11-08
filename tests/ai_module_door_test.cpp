@@ -6,8 +6,9 @@
 // - The header, with stand-ins for the game's modules and blocks: the door is the first module on the list that is one, wherever it is on
 //   the list; only that module is asked whether it's locked or open; a list whose first module has no block, and a door after it, is
 //   answered from the door; a door that can't be read lets the scent through; and an empty list or no list is no door.
-// - By reading the game's files: AIModuleIsADoor finds the door this way, the kinds agree with the game's, and the scent test asks only
-//   that door, checking its block is a proximity door's, with data, before reading it.
+// - By reading the game's files: the kinds agree with the game's, and the scent test asks only that door, never the list's first module
+//   itself, checking its block is a proximity door's, with data, before reading it. The pieces of source are taken by tests/source_slice.h,
+//   so a marker that has moved fails by name.
 //
 // HOW IT RUNS
 //
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "ai_module_door.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -34,6 +36,12 @@ static void Check(bool good, std::string const &what)
 	{
 		checksFailed++;
 	}
+}
+
+// How tests/source_slice.h fails a check when a marker isn't there
+static void FailBecause(std::string const &why)
+{
+	Check(false, why);
 }
 
 // A file of the game's, with its line ends written \n whatever the checkout made them. /FC in this test's settings makes __FILE__ this
@@ -62,19 +70,10 @@ static bool Has(std::string const &text, char const *words)
 	return text.find(words) != std::string::npos;
 }
 
-// The text from one mark up to the next one after it, or nothing if either isn't there, so a check inside it fails instead of passing on nothing
+// The text from one marker up to the next one after it, by tests/source_slice.h: a marker that isn't there is a failed check of its own
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return end == std::string::npos ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, FailBecause);
 }
 
 // Stand-ins for the game's blocks and modules, with only what the header's callers read: a block's kind (a kAIModule... number here),
@@ -198,12 +197,6 @@ static void TestTheGameUsesIt()
 	Check(Has(far, "static_assert(MDT_NotADoor == kAIModuleNotADoor && MDT_ProxDoor == kAIModuleProxDoor && MDT_LiftDoor == kAIModuleLiftDoor && MDT_SecurityDoor == kAIModuleSecurityDoor,"),
 		"the kinds are the game's, in its order");
 	Check(Has(Between(far, "int AIModuleDoorKindOf(MODULE *module)", "\n}\n"), "return static_cast<int>(ModuleIsADoor(module));"), "a module's kind is the game's own test of it");
-	Check(Has(Between(far, "MODULE *AIModuleTheDoor(AIMODULE *target)", "\n}\n"), "return AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);"),
-		"the game's door of an AI module is found this way");
-
-	std::string const isADoor = Between(far, "MODULEDOORTYPE AIModuleIsADoor(AIMODULE* target)", "\n}\n");
-	Check(Has(isADoor, "AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);") && Has(isADoor, "return static_cast<MODULEDOORTYPE>(kind);")
-		&& !Has(isADoor, "m_module_ptrs)"), "and AIModuleIsADoor gives that door's kind, from the same search");
 
 	std::string const scent = ReadSourceFile("3dc/avp/pheromone.cpp");
 	std::string const admits = Between(scent, "int AIModuleAdmitsPheromones(AIMODULE *targetModule)", "\n}\n");

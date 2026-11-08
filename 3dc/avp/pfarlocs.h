@@ -3,7 +3,7 @@
   Header file for FAR AI alien module locations
   --------------------------------------------------------------------*/
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   AIModuleDoorKindOf and AIModuleTheDoor (ai_module_door.h)
+//   AIModuleDoorKindOf (ai_module_door.h); AIModuleIsADoor is taken out, as nothing calls it any more
 
 #ifndef _pfarlocs_h_
 	#define _pfarlocs_h_ 1
@@ -78,13 +78,10 @@ FADT stands for Far Alien Door Type*/
 void BuildFarModuleLocs(void);
 void KillFarModuleLocs(void);
 MODULEDOORTYPE ModuleIsADoor(MODULE* target);
-MODULEDOORTYPE AIModuleIsADoor(AIMODULE* target);
 
 // ModuleIsADoor as a number, for ai_module_door.h
 int AIModuleDoorKindOf(MODULE *module);
 
-// The module on an AI module's list that makes it a door, or nothing: the one AIModuleIsADoor names the kind of (ai_module_door.h)
-MODULE *AIModuleTheDoor(AIMODULE *target);
 int ModuleIsPhysical(MODULE* target);
 int AIModuleIsPhysical(AIMODULE* target);
 int ModuleInModule(MODULE* target1, MODULE* target2);
