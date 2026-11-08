@@ -1,0 +1,58 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a side's size is worked out in 32 bits",
+			"changes": [
+				{
+					"file": "3dc/arctan_index.h",
+					"from": "return side < 0 ? -static_cast<long long>(side) : static_cast<long long>(side);",
+					"to": "return side < 0 ? static_cast<long long>(-side) : static_cast<long long>(side);"
+				}
+			]
+		},
+		{
+			"name": "the place in the table is worked out in 32 bits",
+			"changes": [
+				{
+					"file": "3dc/arctan_index.h",
+					"from": "return static_cast<int>((shorter << 8) / longer);",
+					"to": "return (static_cast<int>(shorter) << 8) / static_cast<int>(longer);"
+				}
+			]
+		},
+		{
+			"name": "sides the wrong way round are let through",
+			"changes": [
+				{
+					"file": "3dc/arctan_index.h",
+					"from": "if (!(shorter >= 0 && longer > shorter))",
+					"to": "if (!(shorter >= 0 && longer > 0))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: ArcTan works out its place in the table itself, without the bounded helper",
+			"changes": [
+				{
+					"file": "3dc/maths.cpp",
+					"from": "angle = ArcTan_TableIndex(abs_width_z, abs_height_x);",
+					"to": "angle = static_cast<int>((abs_width_z << 8) / abs_height_x);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: ArcTan keeps its sizes in 32 bits",
+			"changes": [
+				{
+					"file": "3dc/maths.cpp",
+					"from": "long long abs_height_x, abs_width_z, temp;",
+					"to": "int abs_height_x, abs_width_z, temp;"
+				}
+			]
+		}
+	]
+}
