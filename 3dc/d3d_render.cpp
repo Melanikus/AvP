@@ -44,6 +44,9 @@
 //   the NORMAL LINES view, after NORMALS on J, stands the normals the surface pass gets up as lines in the level. See normal_lines.h
 //   the painted lamp has a wet glint, worked out per pixel, where its spot lands
 //   the PIXELGLOW, PIXELCURVE and PIXELLEVEL commands change how a lamp's light looks per pixel, playing alone, and the tag shows them. A network game keeps them as built
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   other marines' lamp beams are added onto the finished picture of the world, before the gun, and nothing changes in a frame with none
+//   the beams are added up in a picture of their own first, so that where they cross they're hardly brighter than one
 
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
@@ -122,6 +125,7 @@
 #include "shadow_volumes.h"
 #include "shadow_volumes_card.h"
 #include "bh_types.h"
+#include "lamp_volume.h"
 
 // This file's name in the error log, written by hand. __FILE__ would give the whole folder it was built in (C:\Users\<name>\...),
 // and that would go into the game for anyone to read. tools/check-package-imports.ps1 refuses a package that names any such folder.
@@ -518,6 +522,8 @@ static bool toyFinalFlush = false;
 static bool surfacePicturesAreFromThisFrame = false;
 
 static void DrawShoulderLamp();
+static void DrawLampBeams();
+void LampBeams_Forget();
 static void DrawLampGlint(float strength, float wide, const float *aim, const float *spot);
 static void DrawSurfacePicturesForTheLamp();
 bool ToyShadows_ShoulderLampIsChosen();
@@ -668,6 +674,13 @@ static bool ExecuteBuffer()
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
 		DrawShoulderLamp();
+	}
+
+	// Other marines' lamp beams, on the finished picture of the world and before the gun, which they mustn't shine through. Only on the last
+	// drawing of a frame, like the lamp above.
+	if (toyFinalFlush)
+	{
+		DrawLampBeams();
 	}
 
 	// draw player weapon
@@ -2957,6 +2970,9 @@ void ThisFramesRenderingHasFinished()
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 		Mark_EndFrame(d3d.lpD3DDevice);
 	}
+
+	// Whether or not it could be drawn, this frame is over, and its beams with it
+	LampBeams_Forget();
 
 	// The game goes on whether or not this frame could be drawn, so what's below happens either way
 	Tex_CheckMemoryUsage();
@@ -5403,15 +5419,24 @@ template <class T> static void ToyRelease(T *&thing)
 // copying everything into it. It holds on to whatever was set when it last took its copy, so it has to go before the device can be reset.
 static IDirect3DStateBlock9 *savedCardSettings = 0;
 
+// The picture other marines' lamp beams are added up in, before it goes onto the screen once: see DrawLampBeams. Made when first needed, at the
+// screen's size.
+static IDirect3DTexture9 *lampBeamTexture = 0;
+static IDirect3DSurface9 *lampBeamSurface = 0;
+static bool lampBeamPictureFailed = false;
+
 static void ReleaseShadowPictures()
 {
 	ToyRelease(toyMaskSurface);
 	ToyRelease(toyDepthSurface);
 	ToyRelease(toyMaskTexture);
 	ToyRelease(toyDepthTexture);
+	ToyRelease(lampBeamSurface);
+	ToyRelease(lampBeamTexture);
 	SurfacePictures_Release();
 	PixelLights_Release();
 	toyTargetsFailed = false;
+	lampBeamPictureFailed = false;
 }
 
 void ToyShadows_ReleaseTargets()
@@ -5419,6 +5444,239 @@ void ToyShadows_ReleaseTargets()
 	ToyRelease(savedCardSettings);
 	ReleaseShadowPictures();
 	ShadowShoot_ReleaseCardThings();
+}
+
+// Other marines' lamp beams: see lamp_volume.h. Each is a faint shape, its light at its corners. The walls hide it where they're nearer, and it
+// writes no depth, so things behind it still show. A frame with no lamp shown leaves here at once, so it's drawn exactly as before. Every setting
+// of the card it changes is put back afterwards.
+//
+// WHERE BEAMS CROSS. Added straight onto the screen, two beams crossing would add up to twice as bright, and the user asked that they don't. The
+// screen itself has nowhere to count how much has been added already, so the beams are added up in a picture of their own first. That picture
+// stops at its brightest, which stands for kLampVolumeMostTogether, and then it's added onto the screen once. If the card can't make the
+// picture, the beams go straight onto the screen as before, crossing beams add up, and the log says so once.
+int LampBeams_Count();
+int LampBeams_Make(int which, LampVolumeVertex *vertices, unsigned short *indices, int *first);
+int LampBeams_WallsKept();
+int LampBeams_WallsLeftOut();
+
+// Makes the beams' picture the size of the screen, if it isn't already. It shares the game's depth buffer, so that walls hide beams in it the same
+// way, and a card needs that to be at least as big, with neither of them anti-aliased. False if any of that isn't so.
+static bool LampBeams_MakePicture(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *screen)
+{
+	D3DSURFACE_DESC screenSize, pictureSize, depthSize;
+
+	if (FAILED(screen->GetDesc(&screenSize)))
+	{
+		return false;
+	}
+
+	// The screen has changed size since it was made
+	if (lampBeamSurface && (FAILED(lampBeamSurface->GetDesc(&pictureSize)) || pictureSize.Width != screenSize.Width || pictureSize.Height != screenSize.Height))
+	{
+		ToyRelease(lampBeamSurface);
+		ToyRelease(lampBeamTexture);
+	}
+
+	if (lampBeamSurface)
+	{
+		return true;
+	}
+
+	if (lampBeamPictureFailed)
+	{
+		return false;
+	}
+
+	IDirect3DSurface9 *depth = 0;
+	bool const depthFits = SUCCEEDED(device->GetDepthStencilSurface(&depth)) && SUCCEEDED(depth->GetDesc(&depthSize))
+		&& depthSize.Width >= screenSize.Width && depthSize.Height >= screenSize.Height
+		&& depthSize.MultiSampleType == D3DMULTISAMPLE_NONE && screenSize.MultiSampleType == D3DMULTISAMPLE_NONE;
+
+	ToyRelease(depth);
+
+	// Made into these first, and only kept once both are there, so a failure never leaves half a picture behind
+	IDirect3DTexture9 *texture = 0;
+	IDirect3DSurface9 *surface = 0;
+
+	if (depthFits && SUCCEEDED(device->CreateTexture(screenSize.Width, screenSize.Height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &texture, NULL)))
+	{
+		if (SUCCEEDED(texture->GetSurfaceLevel(0, &surface)))
+		{
+			lampBeamTexture = texture;
+			lampBeamSurface = surface;
+			return true;
+		}
+
+		texture->Release();
+	}
+
+	lampBeamPictureFailed = true;
+	LogString("lamp beams: the card couldn't make the picture they're added up in, so they go straight onto the screen, and where two cross they add up");
+	return false;
+}
+
+// The beams' picture, added onto the whole screen once, pixel for pixel, in the lamp's colour at the most the beams may add together
+static void LampBeams_AddPictureToScreen(LPDIRECT3DDEVICE9 device, int red, int green, int blue)
+{
+	struct PictureCorner
+	{
+		float x, y, z, rhw;
+		float u, v;
+	};
+
+	D3DSURFACE_DESC size;
+
+	if (FAILED(lampBeamSurface->GetDesc(&size)))
+	{
+		return;
+	}
+
+	// Half a pixel back, which is how Direct3D 9 lines a picture's pixels up with the screen's
+	float const w = (float)size.Width - 0.5f, h = (float)size.Height - 0.5f;
+
+	PictureCorner const quad[4] =
+	{
+		{ -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f },
+		{ w,     -0.5f, 0.0f, 1.0f, 1.0f, 0.0f },
+		{ -0.5f, h,     0.0f, 1.0f, 0.0f, 1.0f },
+		{ w,     h,     0.0f, 1.0f, 1.0f, 1.0f },
+	};
+
+	int const most[3] = { (int)(red * kLampVolumeMostTogether + 0.5f), (int)(green * kLampVolumeMostTogether + 0.5f), (int)(blue * kLampVolumeMostTogether + 0.5f) };
+
+	device->SetVertexShader(NULL);
+	device->SetPixelShader(NULL);
+	device->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+	device->SetTexture(0, lampBeamTexture);
+	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	device->SetRenderState(D3DRS_TEXTUREFACTOR, D3DCOLOR_ARGB(255, most[0], most[1], most[2]));
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TFACTOR);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+
+	device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(PictureCorner));
+}
+
+static void DrawLampBeams()
+{
+	if (LampBeams_Count() == 0)
+	{
+		return;
+	}
+
+	ProcessorStageClock clock(kProcessorLampBeams);
+
+	FrameTiming_CountLampBeams(LampBeams_Count(), LampBeams_WallsKept(), LampBeams_WallsLeftOut());
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+
+	if (FAILED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))
+	{
+		return;
+	}
+
+	// The screen, to go back to after the beams' picture. The card's saved settings don't hold which picture is being drawn on.
+	IDirect3DSurface9 *screen = 0;
+	D3DVIEWPORT9 view;
+
+	if (FAILED(device->GetRenderTarget(0, &screen)))
+	{
+		return;
+	}
+
+	if (FAILED(device->GetViewport(&view)))
+	{
+		ToyRelease(screen);
+		return;
+	}
+
+	bool usingThePicture = false;
+
+	// The same drawing the shadows' shapes use, with its colour from the corners and no texture, but added onto the picture
+	ToySetVolumeProgram(device);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// The lamp's own colour, as the player's shoulder lamp has it: see shoulder_lamp.h
+	int const red = kShoulderLampRed * 255 / 65536, green = kShoulderLampGreen * 255 / 65536, blue = kShoulderLampBlue * 255 / 65536;
+
+	for (int beam = 0; beam < LampBeams_Count(); beam++)
+	{
+		LampVolumeVertex shape[kLampVolumeVertices];
+		unsigned short indices[kLampVolumeTriangles * 3];
+		int first = 0;
+		int const triangles = LampBeams_Make(beam, shape, indices, &first);
+
+		if (triangles <= 0 || first < 0 || first + triangles > kLampVolumeTriangles)
+		{
+			continue;
+		}
+
+		// The first beam that has something to draw starts the picture, empty, with the screen's own view of it. Going over to a picture sets the
+		// view to the whole of it, which is why it's cleared before the view is put back.
+		if (!usingThePicture && LampBeams_MakePicture(device, screen) && SUCCEEDED(device->SetRenderTarget(0, lampBeamSurface)))
+		{
+			device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 0, 0), 1.0f, 0);
+			device->SetViewport(&view);
+			usingThePicture = true;
+		}
+
+		D3DLVERTEX corners[kLampVolumeVertices];
+
+		for (int i = 0; i < kLampVolumeVertices; i++)
+		{
+			// How much light is added comes in as the corner's alpha, from 0 to 255. In the picture it's white, and a share of the most all the
+			// beams may add together, so that the picture's brightest is that most. Straight onto the screen it's the lamp's colour, and a share of all of it.
+			float const share = usingThePicture ? shape[i].strength / kLampVolumeMostTogether : shape[i].strength;
+			int const alpha = (int)(share * 255.0f + 0.5f);
+
+			corners[i].x = shape[i].place[0];
+			corners[i].y = shape[i].place[1];
+			corners[i].z = shape[i].place[2];
+			corners[i].color = usingThePicture ? D3DCOLOR_ARGB(alpha < 0 ? 0 : alpha > 255 ? 255 : alpha, 255, 255, 255)
+				: D3DCOLOR_ARGB(alpha < 0 ? 0 : alpha > 255 ? 255 : alpha, red, green, blue);
+			corners[i].specular = 0;
+			corners[i].u = 0.0f;
+			corners[i].v = 0.0f;
+		}
+
+		device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, kLampVolumeVertices, triangles, indices + first * 3, D3DFMT_INDEX16, corners, sizeof(D3DLVERTEX));
+	}
+
+	if (usingThePicture)
+	{
+		device->SetRenderTarget(0, screen);
+		device->SetViewport(&view);
+		LampBeams_AddPictureToScreen(device, red, green, blue);
+	}
+
+	ToyRelease(screen);
+	savedCardSettings->Apply();
 }
 
 // The mask is added to many times, in small amounts, so eight bits would round them away. A float picture is better, but only if

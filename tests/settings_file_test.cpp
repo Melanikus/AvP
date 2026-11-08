@@ -48,7 +48,8 @@ int main()
 	Check(utilities.find("\"CommandLine\"") == std::string::npos, "and a command line doesn't come from there either");
 
 	// Every file that reads text from the settings. A number or a yes or no can't name a place, but text can.
-	// view_settings.cpp is on the list because it takes only four exact words and three keys' numbers, and no file or folder is named by them.
+	// view_settings.cpp is on the list because it takes only four exact words, three keys' numbers and the HUD size's number (1 to 3 digits, hud_scale.cpp),
+	// and no file or folder is named by them.
 	std::set<std::string> const allowed = { "ConfigFile.cpp", "ConfigFile.h", "view_settings.cpp" };
 	int filesLookedAt = 0;
 

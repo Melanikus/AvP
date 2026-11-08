@@ -1,4 +1,6 @@
 // The test for how many lights can cast shadows, the light total's passes, and what a card that can't do them gets. Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   each lamp in the light total is drawn with its own aim
 //
 // WHAT IT TESTS
 //
@@ -227,7 +229,9 @@ static void CheckTheTotalsPasses()
 	Check(Has(total, "SetRectangleState(device, false, true);"), "what a light writes goes on top of what's there");
 	Check(Has(total, "device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);"), "and only on its own part of the screen");
 	Check(Has(total, "device->SetScissorRect(&reach[i]);"), "which is its own, for each light");
-	Check(Has(total, "device->SetScissorRect(&reach[i]);\n\t\tdevice->SetPixelShaderConstantF(1, constants, 2);\n\t\tDrawRectangle(device);"), "and each light is drawn on its own, with both lines of its numbers");
+	Check(Has(total, "device->SetScissorRect(&reach[i]);\n\t\tdevice->SetPixelShaderConstantF(1, constants, 2);\n\n\t\t// Each lamp points its own way\n"
+		"\t\tif (perPixel && light[kLightLook] == kLookCone)\n\t\t{\n\t\t\tSetLampAimConstant(device, light);\n\t\t}\n\n\t\tDrawRectangle(device);"),
+		"and each light is drawn on its own, with both lines of its numbers, and a lamp with its own aim");
 	Check(Has(total, "LightOnListIsDark(light) || !reachesScreen[i]"), "a dark place, or a light that reaches nothing, is left out");
 	Check(Has(total, "reach[i].right <= reach[i].left || reach[i].bottom <= reach[i].top"), "and so is a rectangle with nothing in it");
 	Check(Has(total, "Largest(light[kLightRed], light[kLightGreen], light[kLightBlue]) : (light[kLightRed] + light[kLightGreen] + light[kLightBlue]) / 3.0f"), "a light added per pixel counts by its brightest colour, and a baked one by the average");

@@ -1,4 +1,5 @@
 // Lighting each pixel from the surface pictures. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-07 by Melanikus for the AvP port: each lamp is aimed its own way, from its place on the light list.
 //
 // surface_pictures.cpp draws the frame's solid polygons once, so three pictures say how far away each pixel is, which way it faces and what
 // colour its texture is. Everything here reads those. No light draws a polygon: each one is a rectangle on the screen, and the pictures say
@@ -268,12 +269,10 @@ static float Largest(float a, float b, float c)
 	return (larger > c) ? larger : c;
 }
 
-// The same register in both, because lightShapes.fxh says so
-static void SetLampAimConstant(LPDIRECT3DDEVICE9 device)
+// A lamp's own aim, from its place on the light list (see kToyLightAim). The same register in both shaders, because lightShapes.fxh says so.
+static void SetLampAimConstant(LPDIRECT3DDEVICE9 device, const float *light)
 {
-	float const aim[4] = { ShoulderLamp_AimAcross(), ShoulderLamp_AimDown(), 0.0f, 0.0f };
-
-	device->SetPixelShaderConstantF(25, aim, 1);
+	device->SetPixelShaderConstantF(25, &light[kToyLightAim], 1);
 }
 
 float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int numLights, const RECT *reach, const bool *reachesScreen, IDirect3DTexture9 *depth)
@@ -286,7 +285,6 @@ float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int n
 
 	d3d.effectSystem->SetActive(d3d.lightTotalEffect);
 	SetScreenConstant(device);
-	SetLampAimConstant(device);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());
@@ -321,6 +319,13 @@ float PixelLights_DrawTotal(LPDIRECT3DDEVICE9 device, const float *lights, int n
 
 		device->SetScissorRect(&reach[i]);
 		device->SetPixelShaderConstantF(1, constants, 2);
+
+		// Each lamp points its own way
+		if (perPixel && light[kLightLook] == kLookCone)
+		{
+			SetLampAimConstant(device, light);
+		}
+
 		DrawRectangle(device);
 
 		pixelsAsked += (double)(reach[i].right - reach[i].left) * (double)(reach[i].bottom - reach[i].top);
@@ -381,7 +386,7 @@ void PixelLights_AddLight(LPDIRECT3DDEVICE9 device, const float *light, IDirect3
 	d3d.effectSystem->SetActive(d3d.lightOneEffect);
 	SetScreenConstant(device);
 	device->SetPixelShaderConstantF(1, constants, 5);
-	SetLampAimConstant(device);
+	SetLampAimConstant(device, light);
 
 	ReadPicture(device, kSamplerDepth, depth);
 	ReadPicture(device, kSamplerNormals, SurfacePictures_Normal());

@@ -8,10 +8,12 @@
 //   refused (level_log.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a lift into another environment builds that environment's alien ways map, and a level's end stops the build and lets the map go
-//   (alien_ways.h)
+//   (alien_ways.h);
+//   the log says which level file was loaded, with its size and MD5 sum (level_file_sum.h)
 
 #include "3dc.h"
 #include "alien_ways.h"
+#include "level_file_sum.h"
 #include "level_log.h"
 #include "texture_relief.h"
 #include "RimLoader.h"
@@ -514,6 +516,10 @@ void LoadRifFile()
 //		finiObjects();
 		exit(0x3421);
 	};
+
+	// Which level file this machine loaded, with its size and MD5 sum, as the loader worked them out from its own reads of it. Every
+	// machine in a network game should load the same file, and this line lets testers' logs be compared (level_file_sum.h).
+	LogString(LevelFileSum_Line(file_and_path, avp_rif_file_sum(env_rif)));
 
 	copy_rif_data(env_rif, CCF_ENVIRONMENT, PBAR_LEVEL_START+PBAR_LEVEL_INTERVAL*.4, PBAR_LEVEL_INTERVAL*.6);
 

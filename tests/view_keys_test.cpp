@@ -298,7 +298,11 @@ static void TestJoiningTheGame()
 	Check(ComesBefore(page, "TEXTSTRING_RENDERING_AUTOGENERATE}", "{AVPMENU_ELEMENT_VIEWKEY,\t{TEXTSTRING_RENDERING_KEY_RENDERING},\t{kViewKeyRendering},"), "the page has the rendering key, after its other lines");
 	Check(ComesBefore(page, "{kViewKeyRendering},", "{AVPMENU_ELEMENT_VIEWKEY,\t{TEXTSTRING_RENDERING_KEY_SHADOWS},\t{kViewKeyShadows},"), "then the shadows key");
 	Check(ComesBefore(page, "{kViewKeyShadows},", "{AVPMENU_ELEMENT_VIEWKEY,\t{TEXTSTRING_RENDERING_KEY_DEVVIEWS},\t{kViewKeyDevViews},"), "then the dev views key");
-	Check(Has(menuData, "AVPMENU_ELEMENT &element = AvPMenu_Rendering[kFirstViewKeyElement + line];") && CountOf(Between(page, "{", "AVPMENU_ELEMENT_VIEWKEY"), "AVPMENU_ELEMENT_TEXTSLIDER") == 3 && Has(menuData, "kFirstViewKeyElement = 3"), "and what a line says is changed on the right one");
+	// However many other lines the page has, the key lines start right after them
+	int const otherLines = CountOf(Between(page, "{", "AVPMENU_ELEMENT_VIEWKEY"), "AVPMENU_ELEMENT_TEXTSLIDER");
+
+	Check(Has(menuData, "AVPMENU_ELEMENT &element = AvPMenu_Rendering[kFirstViewKeyElement + line];") && otherLines >= 3
+		&& Has(menuData, ("static const int kFirstViewKeyElement = " + std::to_string(otherLines) + ";").c_str()), "and what a line says is changed on the right one");
 	Check(Has(menuNames, "AVPMENU_ELEMENT_LOADGAME,\n\tAVPMENU_ELEMENT_VIEWKEY,"), "it's a new kind of line, at the end, so nothing else's number changes");
 	Check(Has(menuNames, "unsigned int\t\tUserChangingViewKey :1;"), "with its own state");
 	Check(Has(menus, "AvPMenus.UserChangingKeyConfig = 0;\n\tAvPMenus.UserChangingViewKey = 0;"), "which is cleared along with the controls page's");

@@ -7,8 +7,8 @@ static bool lampIsOn = false;
 static bool lampIsAskedFor = false;
 static long framesDrawn = 0;
 static bool playerCouldHaveALamp = false;
-// Nothing in this build asks for the real light: the setting that does comes with the lamp work. So the lamp is always the painted version.
-static const bool realLightIsWanted = false;
+static bool realLightIsWanted = false;
+static bool beamsAreWanted = true;
 
 // The robot arm. See ShoulderLamp_FollowTheView.
 static bool aimIsKnown = false;
@@ -75,6 +75,26 @@ long ShoulderLamp_FramesDrawn()
 bool ShoulderLamp_CanBeALight()
 {
 	return lampIsOn && playerCouldHaveALamp && realLightIsWanted;
+}
+
+void ShoulderLamp_SetRealLightWanted(bool wanted)
+{
+	realLightIsWanted = wanted;
+}
+
+bool ShoulderLamp_RealLightIsWanted()
+{
+	return realLightIsWanted;
+}
+
+void ShoulderLamp_SetBeamsWanted(bool wanted)
+{
+	beamsAreWanted = wanted;
+}
+
+bool ShoulderLamp_BeamsAreWanted()
+{
+	return beamsAreWanted;
 }
 
 const float *ShoulderLamp_PlaceFromEyes()

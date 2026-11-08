@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   HUD_FollowTheScreen and HUDScaleFactor are here, for hud.cpp (HUD-SCALE-1). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
 #include "langenum.h"
 #include "TextureManager.h"
 extern void D3D_HUDQuad_Output(texID_t textureID, struct VertexTag *quadVerticesPtr, uint32_t colour, enum FILTERING_MODE_ID filteringType);
@@ -76,6 +78,13 @@ void D3D_DrawHUDPredatorDigit(HUDCharDesc *charDescPtr, int scale);
 void D3D_BLTMotionTrackerToHUD(int scanLineSize);
 void Draw_HUDImage(HUDImageDesc *imageDescPtr);
 extern void D3D_BlitWhiteChar(int x, int y, unsigned char c);
+
+// How big the HUD is drawn, in the game's fixed-point numbers, where 65536 means 1: HUD_FollowTheScreen sets it, for every species
+extern fixed_t HUDScaleFactor;
+
+// Works out how big the HUD is drawn, for the screen as it is now and the HUD size the player chose (see d3d_hud.cpp). A level's start asks
+// with evenIfUnchanged true, and MaintainHUD asks with it false on every frame, which changes nothing unless the screen or the size has.
+void HUD_FollowTheScreen(bool evenIfUnchanged);
 
 /* KJL 17:55:48 18/04/98 - called by HUD.c */
 extern void Render_HealthAndArmour(unsigned int health, unsigned int armour);

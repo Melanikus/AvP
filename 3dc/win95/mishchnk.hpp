@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a file chunk read from a file keeps that file's size and MD5 sum, for the log (level_file_sum.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   an empty file chunk remembers its version chunk, so that who owns it is plain to read
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -12,6 +14,7 @@
 #include "chunk.hpp"
 
 #include "chunk_type.hpp"
+#include "level_file_sum.h"
 
 #define UseLocalAssert FALSE
 #include "ourasert.h"
@@ -111,6 +114,10 @@ public:
 	// A file chunk that starts empty starts with a version chunk, and this remembers it. A chunk joins its parent's list of children as it's made,
 	// and the parent's destructor deletes everything on that list (chunk.cpp), so this is not to be freed here. It's 0 in a file chunk read from a file.
 	Chunk * version_chunk;
+
+	// The size and MD5 sum of the file this was read from, worked out from the same reads that loaded it, so that the log can say
+	// which file was loaded (level_file_sum.h). Both stay 0 in a file chunk that starts empty.
+	LevelFileSum file_sum;
 
 
 	// some easy access functions

@@ -10,7 +10,8 @@
 //   a standard alien that's hunting, or wandering from module to module, follows its way across the walls and ceilings too, to the
 //   point the game picked for it, and a wandering alien crawls when it should, as a hunting one does (#109);
 //   on a frame its way steers it, in any of those states, the tests that would send it off to avoid something don't act, since running
-//   into a wall is how it climbs
+//   into a wall is how it climbs;
+//   an alien coming for its target measures how far away the target is only once it knows it has one
 #include "3dc.h"
 #include "io.h"
 #include "inline.h"
@@ -821,8 +822,6 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 	LOCALASSERT(alienStatusPointer);
 	LOCALASSERT(dynPtr);
 
-	distanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));
-
 	if (alienStatusPointer->Target==NULL) {
 		/* Approach what? */
 		AlienHandleMovingAnimation(sbPtr);
@@ -831,6 +830,10 @@ static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
 		return;
 	}
+
+	// Modified 2026-11-08 by Melanikus for the AvP port:
+	//   this used to come before the check above, so an alien with no target read through an empty pointer and the game crashed
+	distanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));
 
 	/* Update sequence! */
 	AlienHandleMovingAnimation(sbPtr);

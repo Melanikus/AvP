@@ -407,6 +407,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\npcsetup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\object_setup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\openal_audio.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\openal_stream.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\path_chunk.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\platsup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldghost.cpp" />
@@ -455,6 +456,7 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
+    <ClCompile Include="..\..\3dc\avp\other_lamps.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
@@ -469,6 +471,7 @@
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\view_keys.cpp" />
+    <ClCompile Include="..\..\3dc\hud_scale.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -683,7 +686,9 @@
     <ClInclude Include="..\..\3dc\coop_lobby.h" />
     <ClInclude Include="..\..\3dc\custom_map_name.h" />
     <ClInclude Include="..\..\3dc\level_switch.h" />
+    <ClInclude Include="..\..\3dc\reverb_choice.h" />
     <ClInclude Include="..\..\3dc\level_kind.h" />
+    <ClInclude Include="..\..\3dc\level_file_sum.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\user_profile.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\console_command.hpp" />
@@ -719,6 +724,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
     <ClInclude Include="..\..\3dc\avp\win95\projload.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\psndplat.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\openal_shared.h" />
     <ClInclude Include="..\..\3dc\avp\win95\screenshot.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\strategy_chunk.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\system.h" />

@@ -17,6 +17,10 @@
 //   asks for the marine's shoulder lamp on each frame of the game, and tells it where he's looking
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a gun can say not to draw it, and draw over the screen. See weapon_hooks.h
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   every frame asks how big the HUD is drawn, so a new screen size or HUD size shows at once, and the Predator's symbols are drawn at
+//   that size (HUD-SCALE-1, see hud_scale.h). Reported by Bobblen; follows his avp-forever (commit a53f482), rewritten
+//   restarting a level forgets the target the sight had locked, as starting one does (ReInitHUD)
 
 
 /*
@@ -66,6 +70,7 @@
 #include "assert.h"
 #include "shoulder_lamp.h"
 #include "hud_rounds_number.h"
+#include "hud_scale.h"
 
 #define DO_PREDATOR_OVERLAY FALSE
 #define DO_ALIEN_OVERLAY FALSE
@@ -273,6 +278,11 @@ void ReInitHUD(void)
 	HUD_PrimaryRoundsTimeLeftOver = 0;
 	HUD_SecondaryRoundsTimeLeftOver = 0;
 
+	// The target the sight had locked was something in the level as it was before the restart, and none of that is there any more.
+	// Starting a level forgets it (InitMarineHUD and the others above); restarting one has to as well, before anything can aim at it.
+	SmartTarget_Object = NULL;
+	Old_SmartTarget_Object = NULL;
+
 	/* KJL 14:21:54 17/11/98 - Predator */
 	InitialiseGrapplingHook();
 }
@@ -282,6 +292,9 @@ void MaintainHUD(void)
 {
 	PLAYER_STATUS *playerStatusPtr = (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
 	GLOBALASSERT(playerStatusPtr);
+
+	// Before anything is drawn: if the screen's size or the player's HUD size has changed, the HUD is drawn at the new size from this frame
+	HUD_FollowTheScreen(false);
 
 	HandleParticleSystem();
 	HandleDecalSystem();
@@ -1343,8 +1356,12 @@ void DisplayPredatorHealthAndEnergy(void)
 	PLAYER_WEAPON_DATA *weaponPtr = &(PlayerStatusPtr->WeaponSlot[PlayerStatusPtr->SelectedWeaponSlot]);
 	int value;
 	int i;
-	int scale = DIV_FIXED(ScreenDescriptorBlock.SDB_Width,640);
-	int size = MUL_FIXED(51,scale);
+
+	// The symbols are drawn at the HUD's size (HUD_FollowTheScreen, d3d_hud.cpp), which in 1999 was worked out here from the screen's
+	// width. Each column is kPredatorColumnSymbols symbols of kPredatorSymbolRows rows (hud_scale.h), and the test checks that a column
+	// fits on the screen at the largest HUD size.
+	int scale = HUDScaleFactor;
+	int size = MUL_FIXED(kPredatorSymbolRows,scale);
 	{
 		NPC_DATA *NpcData = NULL;
 		switch (AvP.Difficulty) {
@@ -1365,7 +1382,7 @@ void DisplayPredatorHealthAndEnergy(void)
 		LOCALASSERT(NpcData);
 		value=MUL_FIXED(PlayerStatusPtr->Health/NpcData->StartingStats.Health,59);
 	}
-	for (i=0; i<6; i++)
+	for (i=0; i<kPredatorColumnSymbols; i++)
 	{
 		HUDCharDesc charDesc;
 		charDesc.X = 0;
@@ -1386,7 +1403,7 @@ void DisplayPredatorHealthAndEnergy(void)
 		D3D_DrawHUDPredatorDigit(&charDesc,scale);
 	}
 	value= MUL_FIXED(DIV_FIXED(PlayerStatusPtr->FieldCharge,PLAYERCLOAK_MAXENERGY),59);
-	for (i=0; i<6; i++)
+	for (i=0; i<kPredatorColumnSymbols; i++)
 	{
 		HUDCharDesc charDesc;
 		charDesc.X = ScreenDescriptorBlock.SDB_Width-size;

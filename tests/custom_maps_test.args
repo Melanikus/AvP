@@ -1,5 +1,5 @@
 /std:c++17 /EHsc /MT /J /W3 /sdl /FC
-/DUSE_D3D9 /D_WINDOWS /DUSE_OPENAL /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0
+/DUSE_D3D9 /D_WINDOWS /DUSE_OPENAL /DNDEBUG /D_CRT_SECURE_NO_DEPRECATE /D_WIN32_WINNT=0x0602 /D_SECURE_SCL=0 /D_HAS_ITERATOR_DEBUGGING=0 /D_MSVC_STL_HARDENING=1
 /Itests/custom_maps_test_stubs /I3dc /I3dc/video /I3dc/avp /I3dc/avp/support /I3dc/avp/win95 /I3dc/avp/win95/frontend /I3dc/avp/win95/gadgets /I3dc/include /I3dc/win95 /Iwin32
 tests/custom_maps_test.cpp
 3dc/avp/win95/frontend/custom_maps.cpp
