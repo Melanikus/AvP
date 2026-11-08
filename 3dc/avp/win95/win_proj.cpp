@@ -1,3 +1,4 @@
+// AvP port by Barry Duncan.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
@@ -100,6 +101,7 @@ bool mouseMoved = false;
 
 int inpcalls = 0;
 
+// What someone does with the keyboard, the mouse's buttons or its wheel, or the mouse passing over the window, which the game would hide the pointer for.
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	PAINTSTRUCT ps;
@@ -367,6 +369,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
 		case WM_ACTIVATE:
 			return 0;
+
 		case WM_CREATE:
 			break;
 
@@ -467,14 +470,20 @@ bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinInitMode)
 
 		::AdjustWindowRect(&clientRect, ::GetWindowLongPtr(hWndMain, GWL_STYLE), FALSE);
 
-		hWndMain = ::CreateWindow(
+		int startLeft = clientRect.left;
+		int startTop = clientRect.top;
+		int startWidth = clientRect.right - clientRect.left;
+		int startHeight = clientRect.bottom - clientRect.top;
+
+		hWndMain = ::CreateWindowEx(
+			0,
 			className,
 			GetWindowTitle(),
 			0,
-			clientRect.left,
-			clientRect.top,
-			(clientRect.right - clientRect.left),
-			(clientRect.bottom - clientRect.top),
+			startLeft,
+			startTop,
+			startWidth,
+			startHeight,
 			0,
 			NULL,
 			hInstance,
@@ -517,6 +526,7 @@ bool InitialiseWindowsSystem(HINSTANCE hInstance, int nCmdShow, int WinInitMode)
 	// Update once (i.e. send WM_PAINT message to the window procedure)
 	::UpdateWindow(hWndMain);
 
+
 // Grab ALL mouse messages for our window.
 // Note this will only work if the window is
 // foreground (as it is... ).  This ensures that
@@ -553,7 +563,12 @@ void ChangeWindowsSize(uint32_t width, uint32_t height)
 		}
 	}
 
-	if (::SetWindowPos(hWndMain, 0, 0, 0, newWindowSize.right - newWindowSize.left, newWindowSize.bottom - newWindowSize.top, SWP_SHOWWINDOW) == 0)
+	int left = 0;
+	int top = 0;
+	int wide = newWindowSize.right - newWindowSize.left;
+	int tall = newWindowSize.bottom - newWindowSize.top;
+
+	if (::SetWindowPos(hWndMain, 0, left, top, wide, tall, SWP_SHOWWINDOW) == 0)
 	{
 		LastError = ::HRESULT_FROM_WIN32(::GetLastError());
 		LogDxError(LastError, __LINE__, kThisFile);
@@ -582,6 +597,7 @@ void InitialiseRawInput()
 	Rid[0].usUsage = HID_USAGE_GENERIC_MOUSE; 
 	Rid[0].dwFlags = RIDEV_INPUTSINK;   
 	Rid[0].hwndTarget = hWndMain;
+
 	::RegisterRawInputDevices(Rid, 1, sizeof(Rid[0]));
 #endif
 }

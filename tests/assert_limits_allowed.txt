@@ -7,12 +7,11 @@
 #
 # Some here are not yet safe, and say so. Each waits for a fix on its way in another PR, and that PR says more when it lands, and takes its row out.
 
-# ---- Not safe yet: each has a fix on another branch or a card of its own
-3dc/avp/hud.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET: waits for another PR
-3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | NOT SAFE YET: waits for another PR
-3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | NOT SAFE YET: waits for another PR
-3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | NOT SAFE YET: waits for another PR
-3dc/avp/win95/pldnet.cpp | GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES); | NOT SAFE YET: waits for another PR
+# ---- Checked before it gets here, where the number comes in
+3dc/avp/hud.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | the selected slot only ever takes the swap-to slot's value (weapons.cpp). The one number from outside that reaches either is a save's, and a save's selected, previous and swap-to slots only come in through SavedSlotHoldsAWeapon (player.cpp), which asks Save_WeaponSlotIsValid and that the slot holds a weapon. Every other value is a slot the game's own code works out from its own tables and the player's keys (inventory.cpp, weapons.cpp)
+3dc/avp/weapons.cpp | GLOBALASSERT(playerStatusPtr->SelectedWeaponSlot<MAX_NO_OF_WEAPON_SLOTS); | the same: a save's slots only come in through SavedSlotHoldsAWeapon (player.cpp)
+3dc/avp/bh_ais.cpp | GLOBALASSERT(current_module<PathArray[path].path_length); | a saved step goes through NPC_CheckSavedPath (bh_ais.cpp, called from bh_marine.cpp and bh_predator.cpp), which makes it a step on its path or no path at all; a level's comes from ConvertObjectIndexToPathIndex (projload.cpp), a place on that path; a step after it is (step + 1) % the path's length
+3dc/avp/bh_ais.cpp | GLOBALASSERT(path>=0 && path<PathArraySize); | a saved path goes through NPC_CheckSavedPath (bh_ais.cpp), which makes it a real path or -1; a level's path that isn't there gets no step (projload.cpp, ConvertObjectIndexToPathIndex), and the four places that walk a path (bh_marine.cpp, bh_predator.cpp) go off wandering before they get here when the path or step is -1; a switch's path is asked PathCanBeFollowed first (bh_marine.cpp)
 
 # ---- A real check is right beside it
 3dc/avp/decal.cpp | LOCALASSERT(sectionDataPtr->NumberOfDecals <= MAX_NO_OF_DECALS_PER_HIERARCHICAL_SECTION); | real checks further down this function keep the count and the next place in range, and nothing from outside sets them

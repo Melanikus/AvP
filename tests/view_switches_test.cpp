@@ -486,7 +486,7 @@ static void TheRealGame()
 
 	// A player shouldn't be able to reach a route nobody has proved, or change how a network game looks to them.
 	std::string const switches = ReadSourceFile("3dc/avp/win95/winmain.cpp");
-	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
+	char const *const devToggles[] = { "-shadowevengap", "-staticsurface", "-staticscene", "-staticnolivelights", "-staticcompare", "-staticcomparedrop", "-keptprismson", "-shadowdepthgap", "-keptsnapfar", "-keptsnap", "-shadowtest", "-shadowflicker", "-shadowshoot", "-shadowreport", "-shadownofloatblend" };
 	char const *const devNumbers[] = { "-shadowbiassteps=", "-shadowdark=", "-shadowsoft=", "-shadowpositions=", "-shadownearlights=", "-shadowlampsize=", "-shadowflaresize=", "-shadowmodelgap=", "-shadowflarereach=", "-shadowflare=", "-shadowworld=", "-shadowlights=", "-shadowbrief=", "-shadowcasters=" };
 
 	for (char const *const name : devToggles)
@@ -548,7 +548,7 @@ static void TheRealGame()
 
 	Check(Has(render, "int LightingNow = kLightingGouraud;"), "with nothing saved, the game starts in Gouraud");
 	Check(Has(render, "int ShadowVolumesOn = 0;"), "with shadows off");
-	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights())"), "the surface pass only asks for the maps when the choice reads them");
+	Check(Has(render, "SurfacePictures_Draw(device, toyDepthSurface, worldAxes, Lighting_UsesMaps(LightingNow), useStatic, MainDrawUsesHeights(), backwards)"), "the surface pass only asks for the maps when the choice reads them");
 	Check(Has(render, "ToyShadowsMode = View_AfterViewKey(ToyShadowsMode, kToyViewCount, kToyViewFinal, switchesWereAllOff);"), "J goes past FINAL when everything is off");
 
 	std::string const addsPerPixel = Between(render, "static bool ViewAddsLightsPerPixel()", "}");

@@ -1,0 +1,198 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a name that isn't there is read (this one crashes on purpose: it counts double)",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "static inline bool CustomMapName_IsSafe(const char *name, size_t room)\n{\n\tif (!name)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": "static inline bool CustomMapName_IsSafe(const char *name, size_t room)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "a name that doesn't end within its room is used",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length == room)\n\t{\n\t\treturn false; // it doesn't end within its room\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an empty name is used",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length == 0 || length > kCustomMapNameMost)",
+					"to": "if (length > kCustomMapNameMost)"
+				}
+			]
+		},
+		{
+			"name": "a name too long is used",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length == 0 || length > kCustomMapNameMost)",
+					"to": "if (length == 0)"
+				}
+			]
+		},
+		{
+			"name": "the letters are never looked at",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (!CustomMapName_LetterIsAllowed(name[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a dot is let in",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "c == '(' || c == ')';",
+					"to": "c == '(' || c == ')' || c == '.';"
+				}
+			]
+		},
+		{
+			"name": "a backslash is let in",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "c == '(' || c == ')';",
+					"to": "c == '(' || c == ')' || c == '\\\\';"
+				}
+			]
+		},
+		{
+			"name": "a colon is let in",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "c == '(' || c == ')';",
+					"to": "c == '(' || c == ')' || c == ':';"
+				}
+			]
+		},
+		{
+			"name": "letters past z are let in, and so is anything outside plain ASCII",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "return (c >= 'a' && c <= 'z') || (c >= 'A'",
+					"to": "return (c >= 'a') || (c >= 'A'"
+				}
+			]
+		},
+		{
+			"name": "control letters are let in",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "c == ' ' || c == '_'",
+					"to": "c <= ' ' || c == '_'"
+				}
+			]
+		},
+		{
+			"name": "a space at the start is let through",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[length - 1] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "a space at the end is let through",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (name[0] == ' ' || name[length - 1] == ' ')",
+					"to": "if (name[0] == ' ')"
+				}
+			]
+		},
+		{
+			"name": "device names are let through",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "return !CustomMapName_IsADevice(name, length);",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a device name in small letters is let through",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length == 3 && CustomMapName_Upper(name[0]) == devices[d][0]",
+					"to": "if (length == 3 && name[0] == devices[d][0]"
+				}
+			]
+		},
+		{
+			"name": "COM0 and LPT0 are taken for devices, which they are not",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length == 4 && name[3] >= '1' && name[3] <= '9')",
+					"to": "if (length == 4 && name[3] >= '0' && name[3] <= '9')"
+				}
+			]
+		},
+		{
+			"name": "a file name with no dot before rif is taken",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (length <= 4 || fileName[length - 4] != '.' || ",
+					"to": "if (length <= 4 || "
+				}
+			]
+		},
+		{
+			"name": "a name is written past the room given for it",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (nameLength + 1 > outRoom)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused name is left in the room",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "if (!CustomMapName_IsSafe(out, outRoom))\n\t{\n\t\tout[0] = 0;\n\t\treturn false;",
+					"to": "if (!CustomMapName_IsSafe(out, outRoom))\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the room isn't emptied before a file name is refused",
+			"changes": [
+				{
+					"file": "3dc/custom_map_name.h",
+					"from": "\tout[0] = 0;\n\n\tif (!fileName)",
+					"to": "\n\tif (!fileName)"
+				}
+			]
+		}
+	]
+}

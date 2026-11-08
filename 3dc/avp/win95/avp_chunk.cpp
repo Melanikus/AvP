@@ -8,6 +8,7 @@
 //   a Rainbow 6 generator's list of numbers is checked against its chunk before it's made
 //   a level's generators have to make aliens or marines
 //   a name is only read as far as the end of its chunk
+//   the environment settings are always one block of bytes, made and given back the same way
 //   a chunk too small for what its kind always reads is kept as plain bytes, and the level is refused
 #include <string>
 #include <limits.h>
@@ -557,7 +558,8 @@ AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Childr
 {
 	size_t size=max(data_size,sizeof(AVP_Environment_Settings));
 
-	settings=(AVP_Environment_Settings*)new unsigned char[size];
+	settings_block=new unsigned char[size];
+	settings=(AVP_Environment_Settings*)settings_block;
 	memcpy(settings,data,data_size);
 
 	if(settings->data_size<16)
@@ -585,7 +587,8 @@ AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Childr
 AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Children* parent)
 :Chunk(parent,"AVPENVIR")
 {
-	settings=new AVP_Environment_Settings;
+	settings_block=new unsigned char[sizeof(AVP_Environment_Settings)];
+	settings=(AVP_Environment_Settings*)settings_block;
 	settings->data_size=sizeof(AVP_Environment_Settings);
 	settings->sky_colour_red=200;
 	settings->sky_colour_green=200;
@@ -605,7 +608,7 @@ AVP_Environment_Settings_Chunk::AVP_Environment_Settings_Chunk(Chunk_With_Childr
 
 AVP_Environment_Settings_Chunk::~AVP_Environment_Settings_Chunk()
 {
-	delete[] settings;
+	delete[] settings_block;
 }
 
 void AVP_Environment_Settings_Chunk::fill_data_block (char * data_start)

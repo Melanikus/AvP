@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a track object can be broken in a network game, and then it stays on the list of strategies and does nothing more
 #ifndef _bh_track_h_
 #define _bh_track_h_ 1
 
@@ -63,7 +65,9 @@ typedef struct track_object_behav_block
 	char destruct_target_ID[SB_NAME_LENGTH];
 	STRATEGYBLOCK* destruct_target_sbptr;
 
-	int TimeUntilNetSynchAllowed; 
+	int TimeUntilNetSynchAllowed;
+
+	BOOL broken; // broken in a network game: it stays on the list of strategies, and does nothing more
 }TRACK_OBJECT_BEHAV_BLOCK;
 
 

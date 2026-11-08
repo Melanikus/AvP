@@ -1,10 +1,23 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79's grenades go into a save when they are in the air, and a thrown staff goes in too
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   every block of a save file is checked before it is read: its header, its size and the compressed data;
 //   the "saves left" message is written with a size limit; a game whose save file path cannot be made is not
 //   saved, instead of overwriting another slot, and that does not cost the player a save; the buffer a save is
 //   built in grows through ReallocMem
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a save can't list the player as dead and take their strategy block away
+//   each load says in the log how many values it refused, and by which check
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
+//   a save that can't be written whole leaves the old one as it was, where before a full disk destroyed it and still said GAME SAVED
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a save from when there were 11 weapon slots keeps its statistics
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
 #include "3dc.h"
+#include "save_file_write.h"
 #include "inline.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -33,6 +46,7 @@
 #include "game_statistics.h"
 #include "user_profile.h"
 #include "savegame.h"
+#include "save_checks.h"
 #include "huffman.hpp"
 #include "fmvCutscenes.h"
 #define UseLocalAssert TRUE
@@ -40,6 +54,7 @@
 #include <assert.h>
 #include "logString.h"
 #include "utilities.h"
+#include "custom_maps.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -210,6 +225,10 @@ extern void Load_MessageHistory(SAVE_BLOCK_HEADER* header);
 extern void Save_MessageHistory();
 
 extern void LoadStrategy_Grenade(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void LoadStrategy_M79Grenade(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void SaveStrategy_M79Grenade(STRATEGYBLOCK* sbPtr);
+extern void LoadStrategy_ThrownStaff(SAVE_BLOCK_STRATEGY_HEADER* header);
+extern void SaveStrategy_ThrownStaff(STRATEGYBLOCK* sbPtr);
 extern void SaveStrategy_Grenade(STRATEGYBLOCK* sbPtr);
 
 extern void LoadStrategy_FlareGrenade(SAVE_BLOCK_STRATEGY_HEADER* header);
@@ -354,6 +373,13 @@ static BOOL SaveGameAllowed()
 	if(!playerStatusPtr->IsAlive) return FALSE;
 	if(playerStatusPtr->MyFaceHugger) return FALSE;
 
+	// A save names its level by campaign and episode, so one made on a custom map would load a stock level instead
+	if (CustomMaps_Playing())
+	{
+		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));
+		return FALSE;
+	}
+
 	//cheating?
 	if(DebuggingCommandsActive || CheatMode_Active!=CHEATMODE_NONACTIVE)
 	{
@@ -402,8 +428,6 @@ static BOOL SaveGameAllowed()
 void SaveGame()
 {
 	char filename[MAX_PATH];
-	HANDLE file;
-	DWORD bytes_written;
 	int headerLength;
 	HuffmanPackage *packagePtr;
 
@@ -467,23 +491,28 @@ void SaveGame()
 	//clear the save request
 	SaveGameRequest = SAVELOAD_REQUEST_NONE;
 
-	//write the file
- 	file = avp_CreateFile(filename,GENERIC_WRITE, 0, 0, CREATE_ALWAYS,FILE_FLAG_RANDOM_ACCESS, 0);
-	
-	if (file == INVALID_HANDLE_VALUE)
-	{
-		GLOBALASSERT("Error saving file"==0);
-		return;
-	}
-
-	WriteFile(file,SaveInfo.BufferStart,headerLength,&bytes_written,0);
-
 	// bjd - check cast ok
 	packagePtr = HuffmanCompression(reinterpret_cast<unsigned char*>(SaveInfo.BufferStart+headerLength), SaveInfo.BufferSpaceUsed-headerLength);
 
-	WriteFile(file, packagePtr, packagePtr->CompressedDataSize+sizeof(HuffmanPackage), &bytes_written, 0);
+	// The new save goes in a file of its own, and only takes the old one's place once it's all there. See save_file_write.h.
+	bool const saved = packagePtr && SaveFile_WriteSafely(filename, SaveInfo.BufferStart, headerLength, packagePtr, packagePtr->CompressedDataSize + sizeof(HuffmanPackage));
 
-	CloseHandle(file);
+	if (packagePtr)
+	{
+		DeallocateMem(packagePtr);
+	}
+
+	// The player is told, and it doesn't cost them a save, because SaveGameAllowed took one off for a save that hasn't happened.
+	if (!saved)
+	{
+		if (!unlimitedSaves)
+		{
+			NumberOfSavesLeft++;
+		}
+
+		NewOnScreenMessage("GAME NOT SAVED: ITS FILE CANNOT BE WRITTEN");
+		return;
+	}
 
 	NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_GAMESAVED));
 	DisplaySavesLeft();
@@ -578,6 +607,8 @@ void LoadSavedGame()
 
 	//we can now clear the load request
 	LoadGameRequest = SAVELOAD_REQUEST_NONE;
+
+	Save_StartCountingRefusals();
 
 	//load the file
 	file = avp_CreateFile(filename,GENERIC_READ, 0, 0, OPEN_EXISTING,FILE_FLAG_RANDOM_ACCESS, 0);
@@ -797,6 +828,14 @@ void LoadSavedGame()
 		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_ERRORLOADING));
 	}
 
+	//on a save the player really made, this has to say none: see save_checks.h
+	{
+		char refusals[600] = { 0 };
+
+		Save_DescribeRefusals(refusals, sizeof(refusals));
+		LogString(refusals);
+	}
+
 	EndLoadGame();
 
 	RemoveDestroyedStrategyBlocks();
@@ -893,6 +932,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	//the fixed part (which holds the count) must be inside the block before the count is read
 	if(header->size < fixedSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + " is smaller than its header");
 		return FALSE;
 	}
@@ -900,6 +940,7 @@ BOOL SaveBlockArrayFits(const SAVE_BLOCK_HEADER* header, int fixedSize, const in
 	count = *countPtr;
 	if(count < 0 || count > capacity || count > (header->size - fixedSize) / elemSize)
 	{
+		Save_NoteRefused("a list's count");
 		LogErrorString("SaveBlockArrayFits - block type " + Util::IntToString(header->type) + ": invalid count " + Util::IntToString(count));
 		return FALSE;
 	}
@@ -1041,6 +1082,12 @@ static void SaveStrategies()
 				SaveStrategy_Grenade(sbPtr);
 				break;
 
+			case I_BehaviourM79Grenade :
+			case I_BehaviourM79FireGrenade :
+			case I_BehaviourM79FragGrenade :
+				SaveStrategy_M79Grenade(sbPtr);
+				break;
+
 			case I_BehaviourFlareGrenade :
 				SaveStrategy_FlareGrenade(sbPtr);
 				break;
@@ -1083,6 +1130,10 @@ static void SaveStrategies()
 
 			case I_BehaviourSpeargunBolt :
 				SaveStrategy_SpearBolt(sbPtr);
+				break;
+
+			case I_BehaviourThrownStaff :
+				SaveStrategy_ThrownStaff(sbPtr);
 				break;
 
 			case I_BehaviourGrapplingHook :
@@ -1233,6 +1284,12 @@ static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 			LoadStrategy_Grenade(header);
 			break;
 
+		case I_BehaviourM79Grenade :
+		case I_BehaviourM79FireGrenade :
+		case I_BehaviourM79FragGrenade :
+			LoadStrategy_M79Grenade(header);
+			break;
+
 		case I_BehaviourFlareGrenade :
 			LoadStrategy_FlareGrenade(header);
 			break;
@@ -1275,6 +1332,10 @@ static void LoadStrategy(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 		case I_BehaviourSpeargunBolt :
 			LoadStrategy_SpearBolt(header);
+			break;
+
+		case I_BehaviourThrownStaff :
+			LoadStrategy_ThrownStaff(header);
 			break;
 
 		case I_BehaviourGrapplingHook :
@@ -1332,10 +1393,15 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 	//the name is read from the block, so it must be all there
 	if(header->size < (int)sizeof(*block)) return;
 
+	//The game runs on the player's block being there, so a save can't take it away. A dead player is never saved.
 	STRATEGYBLOCK* sbPtr = FindSBWithName(block->SBname);
-	if(sbPtr)
+	if(sbPtr && sbPtr != Player->ObStrategyBlock)
 	{
 		DestroyAnyStrategyBlock(sbPtr);
+	}
+	else if(sbPtr)
+	{
+		Save_NoteRefused("the player's block being taken away");
 	}
 }
 
@@ -1347,6 +1413,8 @@ static void LoadDeadStrategy(SAVE_BLOCK_HEADER* header)
 extern unsigned int IncrementalSBname;
 extern int PlayersMaxHeightWhilstNotInContactWithGround;
 
+
+#include "weapon_slots.h"
 
 typedef struct misc_global_save_block
 {
@@ -1366,6 +1434,22 @@ static void LoadMiscGlobalStuff(SAVE_BLOCK_HEADER* header)
 {
 	MISC_GLOBAL_SAVE_BLOCK* block;
 	block = (MISC_GLOBAL_SAVE_BLOCK*) header;
+
+	// In a save from when there were 11 weapon slots, the statistics have three shorter lists. Without this, the size check below would quietly lose his statistics and his saves left.
+	MISC_GLOBAL_SAVE_BLOCK upgraded[2];
+	if(block->header.size == (int)(sizeof(*block) - 3 * kSlotsAddedSinceOlderSaves * sizeof(unsigned int)))
+	{
+		size_t size = block->header.size;
+
+		size = Slots_UpgradeArray(block, size, &upgraded[0], sizeof(upgraded[0]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.WeaponTimes), sizeof(unsigned int));
+		size = Slots_UpgradeArray(&upgraded[0], size, &upgraded[1], sizeof(upgraded[1]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.ShotsFired), sizeof(unsigned int));
+		size = Slots_UpgradeArray(&upgraded[1], size, &upgraded[0], sizeof(upgraded[0]), offsetof(MISC_GLOBAL_SAVE_BLOCK, CurrentGameStatistics.ShotsHit), sizeof(unsigned int));
+
+		if(size != sizeof(*block)) return;
+
+		upgraded[0].header.size = (int)size;
+		block = &upgraded[0];
+	}
 
 	if(block->header.size != sizeof(*block)) return;
 

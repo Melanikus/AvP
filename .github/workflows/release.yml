@@ -89,6 +89,9 @@ jobs:
       # The same script every pull request runs (game-build.yml), so this can't be the first time these steps have run.
       - name: Build the game and make its package
         shell: pwsh
+        env:
+          # So the game's log says which release it is (tools/build-and-package.ps1 writes it into 3dc/build_version.h)
+          VERSION: ${{ inputs.version }}
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
 
       - name: Refuse a package with anything missing

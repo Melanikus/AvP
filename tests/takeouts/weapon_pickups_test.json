@@ -1,0 +1,22 @@
+{
+	"copy": [ "3dc", "tests" ],
+	"rows": [
+		{ "name": "no name at all", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (!name)\n\t{\n\t\treturn kPlacedPickup_None;\n\t}\n", "to": "" } ] },
+		{ "name": "the word has to come first, and whole", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "return strncmp(name, word, strlen(word)) == 0;", "to": "return strstr(name, word) != NULL;" } ] },
+		{ "name": "anything may follow the word", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "return strncmp(name, word, strlen(word)) == 0;", "to": "return strcmp(name, word) == 0;" } ] },
+		{ "name": "the M79", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"WM79\")) return kPlacedPickup_M79;\n", "to": "" } ] },
+		{ "name": "the sniper rifle", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"WSNIPER\")) return kPlacedPickup_SniperRifle;\n", "to": "" } ] },
+		{ "name": "the revolver", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"WREVOLVER\")) return kPlacedPickup_Revolver;\n", "to": "" } ] },
+		{ "name": "fire grenades come before plain ones", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"AM79FIRE\")) return kPlacedPickup_M79FireGrenades;\n", "to": "" } ] },
+		{ "name": "frag grenades come before plain ones", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"AM79FRAG\")) return kPlacedPickup_M79FragGrenades;\n", "to": "" } ] },
+		{ "name": "plain grenades", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"AM79\")) return kPlacedPickup_M79Grenades;\n", "to": "" } ] },
+		{ "name": "sniper rounds", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"ASNIPER\")) return kPlacedPickup_SniperRounds;\n", "to": "" } ] },
+		{ "name": "revolver rounds", "changes": [ { "file": "3dc/avp/weapon_pickups.h", "from": "if (PlacedPickup_NameStartsWith(name, \"AREVOLVER\")) return kPlacedPickup_RevolverRounds;\n", "to": "" } ] },
+		{ "name": "SOURCE: the name is read", "changes": [ { "file": "3dc/avp/win95/object_setup.cpp", "from": "PlacedPickup_FromName(ob->object_data.o_name)", "to": "PlacedPickup_FromName(NULL)" } ] },
+		{ "name": "SOURCE: only data tapes", "changes": [ { "file": "3dc/avp/win95/object_setup.cpp", "from": "if (tdio->typeId == IOT_DataTape)", "to": "if (true)" } ] },
+		{ "name": "SOURCE: goggles are the shotgun", "changes": [ { "file": "3dc/avp/win95/object_setup.cpp", "from": "if (tdio->typeId == IOT_IRGoggles)", "to": "if (false)" } ] },
+		{ "name": "SOURCE: number 1 is shotgun shells", "changes": [ { "file": "3dc/avp/win95/object_setup.cpp", "from": "tdio->subType = AMMO_PLAYER_SHOTGUN;", "to": "tdio->subType = AMMO_SHOTGUN;" } ] },
+		{ "name": "SOURCE: shotgun shells can be picked up", "changes": [ { "file": "3dc/avp/inventory.cpp", "from": "case AMMO_PLAYER_SHOTGUN:", "to": "case AMMO_SHOTGUN_BLAST:" } ] },
+		{ "name": "SOURCE: sniper rounds can be picked up", "changes": [ { "file": "3dc/avp/inventory.cpp", "from": "case AMMO_SNIPER:", "to": "case AMMO_NONE:" } ] }
+	]
+}

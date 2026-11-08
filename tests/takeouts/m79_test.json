@@ -1,0 +1,468 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a kind below the list isn't real",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "return kind >= 0 && kind < kM79Kinds;",
+					"to": "return kind < kM79Kinds;"
+				}
+			]
+		},
+		{
+			"name": "a kind past the list isn't real",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "return kind >= 0 && kind < kM79Kinds;",
+					"to": "return kind >= 0;"
+				}
+			]
+		},
+		{
+			"name": "a loaded grenade counts as ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "(state.RoundsInGun[kind] > 0 || state.Spares[kind] > 0)",
+					"to": "(state.Spares[kind] > 0)"
+				}
+			]
+		},
+		{
+			"name": "spares count as ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "(state.RoundsInGun[kind] > 0 || state.Spares[kind] > 0)",
+					"to": "(state.RoundsInGun[kind] > 0)"
+				}
+			]
+		},
+		{
+			"name": "the search checks where it starts",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(after))\n\t{\n\t\treturn -1;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the search doesn't count this kind",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "for (int step = 1; step < kM79Kinds; step++)",
+					"to": "for (int step = 1; step <= kM79Kinds; step++)"
+				}
+			]
+		},
+		{
+			"name": "the search goes round",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "int const kind = (after + step) % kM79Kinds;",
+					"to": "int const kind = after + step;"
+				}
+			]
+		},
+		{
+			"name": "a change clears what was waiting",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.ChangeIsWaiting = 0;\n\tstate.ChangeCountdown = 0;\n\n\tif (!M79_KindIsReal(newKind)",
+					"to": "if (!M79_KindIsReal(newKind)"
+				}
+			]
+		},
+		{
+			"name": "a change refuses a kind that isn't real",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(newKind) || !M79_KindIsReal(state.Kind) || newKind == state.Kind)",
+					"to": "if (!M79_KindIsReal(state.Kind) || newKind == state.Kind)"
+				}
+			]
+		},
+		{
+			"name": "a change to the same kind does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(newKind) || !M79_KindIsReal(state.Kind) || newKind == state.Kind)",
+					"to": "if (!M79_KindIsReal(newKind) || !M79_KindIsReal(state.Kind))"
+				}
+			]
+		},
+		{
+			"name": "a change remembers an empty gun",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.GunWasEmptyAtChange = state.RoundsInGun[oldKind] > 0 ? 0 : 1;",
+					"to": "state.GunWasEmptyAtChange = 0;"
+				}
+			]
+		},
+		{
+			"name": "the loaded grenade goes back",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.Spares[oldKind] += state.RoundsInGun[oldKind];\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "and leaves the gun",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.RoundsInGun[oldKind] = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "going back can't go over the most",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.Spares[oldKind] > kM79MostSpares)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the kind changes",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.Kind = newKind;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new kind is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.RoundsInGun[newKind] = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "from its spares",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.Spares[newKind]--;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind already holding one doesn't load another",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.RoundsInGun[newKind] == 0 && state.Spares[newKind] > 0)",
+					"to": "if (state.Spares[newKind] > 0)"
+				}
+			]
+		},
+		{
+			"name": "a kind with none loads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.RoundsInGun[newKind] == 0 && state.Spares[newKind] > 0)",
+					"to": "if (state.RoundsInGun[newKind] == 0)"
+				}
+			]
+		},
+		{
+			"name": "a pickup refuses a kind that isn't real",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(kind) || state.Spares[kind] >= kM79MostSpares)",
+					"to": "if (state.Spares[(kind < 0 || kind >= kM79Kinds) ? 0 : kind] >= kM79MostSpares)"
+				}
+			]
+		},
+		{
+			"name": "a full count refuses a pickup",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(kind) || state.Spares[kind] >= kM79MostSpares)",
+					"to": "if (!M79_KindIsReal(kind))"
+				}
+			]
+		},
+		{
+			"name": "a pickup adds five",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.Spares[kind] += kM79SparesPerPickup;",
+					"to": "state.Spares[kind] += 1;"
+				}
+			]
+		},
+		{
+			"name": "a pickup stops at the most",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.Spares[kind] > kM79MostSpares)\n\t{\n\t\tstate.Spares[kind] = kM79MostSpares;",
+					"to": "if (false)\n\t{\n\t\tstate.Spares[kind] = kM79MostSpares;"
+				}
+			]
+		},
+		{
+			"name": "a second tap carries on",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "int const from = state.ChangeIsWaiting ? state.KindToChangeTo : state.Kind;",
+					"to": "int const from = state.Kind;"
+				}
+			]
+		},
+		{
+			"name": "a tap with nothing to go to does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (next < 0)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a tap makes it wait",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.ChangeIsWaiting = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a tap says where to",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.KindToChangeTo = next;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a tap starts the delay",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "state.ChangeCountdown = kM79ChangeDelay;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a save: the kind",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(state.Kind) || !M79_KindIsReal(state.KindToChangeTo))",
+					"to": "if (!M79_KindIsReal(state.KindToChangeTo))"
+				}
+			]
+		},
+		{
+			"name": "a save: the kind to change to",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (!M79_KindIsReal(state.Kind) || !M79_KindIsReal(state.KindToChangeTo))",
+					"to": "if (!M79_KindIsReal(state.Kind))"
+				}
+			]
+		},
+		{
+			"name": "a save: rounds below 0",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.RoundsInGun[kind] < 0 || state.RoundsInGun[kind] > 1 ||",
+					"to": "if (state.RoundsInGun[kind] > 1 ||"
+				}
+			]
+		},
+		{
+			"name": "a save: too many rounds",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "if (state.RoundsInGun[kind] < 0 || state.RoundsInGun[kind] > 1 ||",
+					"to": "if (state.RoundsInGun[kind] < 0 ||"
+				}
+			]
+		},
+		{
+			"name": "a save: spares below 0",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "|| state.Spares[kind] < 0 || state.Spares[kind] > kM79MostSpares)",
+					"to": "|| state.Spares[kind] > kM79MostSpares)"
+				}
+			]
+		},
+		{
+			"name": "a save: too many spares",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "|| state.Spares[kind] < 0 || state.Spares[kind] > kM79MostSpares)",
+					"to": "|| state.Spares[kind] < 0)"
+				}
+			]
+		},
+		{
+			"name": "a save: waiting",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "return (state.ChangeIsWaiting == 0 || state.ChangeIsWaiting == 1)\n\t\t&& ",
+					"to": "return "
+				}
+			]
+		},
+		{
+			"name": "a save: empty",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "&& (state.GunWasEmptyAtChange == 0 || state.GunWasEmptyAtChange == 1)\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "a save: countdown below 0",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "&& state.ChangeCountdown >= 0 && state.ChangeCountdown <= kM79ChangeDelay;",
+					"to": "&& state.ChangeCountdown <= kM79ChangeDelay;"
+				}
+			]
+		},
+		{
+			"name": "a save: countdown too long",
+			"changes": [
+				{
+					"file": "3dc/avp/m79.h",
+					"from": "&& state.ChangeCountdown >= 0 && state.ChangeCountdown <= kM79ChangeDelay;",
+					"to": "&& state.ChangeCountdown >= 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a saved state is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "return M79_OwnStateIsGood(*(const M79OwnState *)state) ? 1 : 0;",
+					"to": "return 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a grenade's timer from a save is held",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "behaviour->counter = block->counter < 0 ? 0 : (block->counter > 2 * ONE_FIXED ? 2 * ONE_FIXED : block->counter);",
+					"to": "behaviour->counter = block->counter;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a pointer from a save isn't used",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "sbPtr->DynPtr->CollisionReportPtr = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the row has its hooks",
+			"changes": [
+				{
+					"file": "3dc/avp/equipment.cpp",
+					"from": "&M79_Hooks,",
+					"to": "NULL,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the grenades run",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "M79GrenadeBehaviour(sbptr);",
+					"to": "GrenadeBehaviour(sbptr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the panel is drawn by the gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "twPtr->Hooks->DrawAmmoPanel(playerStatusPtr, weaponPtr);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list is the panel",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "M79_DrawList\n};",
+					"to": "NULL\n};"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list is at the right of the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_m79.cpp",
+					"from": "ScreenDescriptorBlock.SDB_Width - margin",
+					"to": "ScreenDescriptorBlock.SDB_Width / 2"
+				}
+			]
+		}
+	]
+}

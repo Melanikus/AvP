@@ -1,3 +1,11 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the new guns' settings are in the game description, so a joiner uses the host's
+//   in the same-as-single-player mode, a level starts for everyone together, with two new messages
+//   a campaign's difficulty and its one number for places, in the game's data and the game description
+//   the same-as-single-player mode: its one question, a campaign in the game description, and the message that moves everyone on
+//   the game description has the players' names, because a client has no other way to learn them
+//   three more marine classes from MelPyth M5, their limits and allow settings, and Allow Staff
+//   what a client can afford, and whether the blocks are short, can be asked here
 /* Patrick 10/7/97------------------------------------------------------
   Header for Multi-Player game support header
   ----------------------------------------------------------------------*/
@@ -96,8 +104,20 @@ typedef enum netmessagetype
 	NetMT_FrameTimer,
 	NetMT_SpeciesScores,
 	NetMT_FarAlienPosition,
-	NetMT_SpotOtherSound
+	NetMT_SpotOtherSound,
+	NetMT_CoopNextLevel,
+	NetMT_LevelEvent,
+	NetMT_LevelEventAsk,
+	NetMT_CoopReady,
+	NetMT_CoopGo,
+	NetMT_NpcState,
+	NetMT_NpcXenoDeltas,
+	NetMT_NpcKilled,
+	NetMT_NpcSound,
+	NetMT_NpcThrownObject,
+	NetMT_LiftState
 } NETMESSAGETYPE;
+
 
 /* ---------------------------------------------------------------------
   Enums of game types, and local game states
@@ -137,7 +157,7 @@ typedef enum netgame_charactertype
 	NGCT_AI_Praetorian
 } NETGAME_CHARACTERTYPE;
 
-#define NUM_PC_SUBTYPES 9
+#define NUM_PC_SUBTYPES 12
 typedef enum netgame_specialistcharactertype
 {
 	NGSCT_General,
@@ -148,7 +168,10 @@ typedef enum netgame_specialistcharactertype
 	NGSCT_GrenadeLauncher,
 	NGSCT_Minigun,
 	NGSCT_Frisbee,
-	NGSCT_Pistols
+	NGSCT_Pistols,
+	NGSCT_Shotgun,
+	NGSCT_Revolver,
+	NGSCT_M79
 } NETGAME_SPECIALISTCHARACTERTYPE;
 
 /* ---------------------------------------------------------------------
@@ -226,6 +249,9 @@ typedef struct netgame_gamedata
 	int maxMarineMinigun;
 	int maxMarineSmartDisc;
 	int maxMarinePistols;
+	int maxMarineShotgun;
+	int maxMarineRevolver;
+	int maxMarineM79;
 
 	//weapons allowed
 	BOOL allowSmartgun;
@@ -240,6 +266,10 @@ typedef struct netgame_gamedata
 	BOOL allowMedicomp;
 	BOOL allowSmartDisc;
 	BOOL allowPistols;
+	BOOL allowShotgun;
+	BOOL allowRevolver;
+	BOOL allowM79;
+	BOOL allowStaff;
 
 	//lives
 	int maxLives;
@@ -276,12 +306,111 @@ typedef struct netgame_gamedata
 
 	char customLevelName[40];
 
+	// Which campaign this game is playing, and how far it's got. See env_info.h. A campaign is the mode where everything plays as it does in single player: see SameAsSinglePlayer.
+	int coopCampaign;
+	int coopCampaignLevel;
+
+	// The difficulty a campaign is played at, chosen by the host, and only for a campaign. Every other network game is at Medium.
+	int coopDifficulty;
+
+	// One number for the whole game, chosen by the host, that things with several possible places take theirs from. See shared_roll.h.
+	int coopRollNumber;
+
 } NETGAME_GAMEDATA;
 
 /* ---------------------------------------------------------------------
   Individual message structures
   ----------------------------------------------------------------------*/
 #pragma pack(push, 1)
+
+// What the host says about an NPC near someone. Only for the kinds in npc_kinds.h: aliens have their own. See npc_ghosts.cpp.
+typedef struct netmessage_npcstate
+{
+	signed int Guid;
+
+	signed int xPos: 23;
+	signed int xOrient: 9;
+	signed int yPos: 23;
+	signed int yOrient: 9;
+	signed int zPos: 23;
+	signed int zOrient: 9;
+
+	unsigned char kind;
+	unsigned char model;    // a marine's or predator's weapon
+	unsigned char clothes;  // a marine's clothes and face: which of his model's sets
+	unsigned char flags;    // see npc_kinds.h
+
+	unsigned char sequence_type;
+	unsigned char sub_sequence;
+	unsigned short sequence_length;   // in 256ths of a second
+
+	unsigned short aim;     // how far up or down a marine or predator is aiming. A queen: how far through her swipe
+	unsigned char extra1;   // a predator: how cloaked he is, see NpcCloak_ToByte. A queen: the animation type of her swipe
+	unsigned char extra2;   // a queen: her swipe's number plus one, and 0 if she isn't swiping
+} NETMESSAGE_NPCSTATE;
+static_assert(sizeof(NETMESSAGE_NPCSTATE) == 28, "the messages are sized by hand: see the row in kNetPartRules");
+
+// Where a xenoborg's head, arms and body are turned, each in a byte, and which of his beams are on
+typedef struct netmessage_npcxenodeltas
+{
+	signed int Guid;
+	unsigned char headPan, headTilt;
+	unsigned char leftArmPan, leftArmTilt;
+	unsigned char rightArmPan, rightArmTilt;
+	unsigned char torsoTwist;
+	unsigned char beams;    // which of his five beams are on, one bit each: see kNpcXenoBeamHead
+} NETMESSAGE_NPCXENODELTAS;
+static_assert(sizeof(NETMESSAGE_NPCXENODELTAS) == 12, "the messages are sized by hand: see the row in kNetPartRules");
+
+// One of an NPC's voice sounds, at a place, for a machine that only has a ghost of it
+typedef struct netmessage_npcsound
+{
+	unsigned char species;   // kNpcSound..., see npc_kinds.h
+	unsigned char voice;
+	unsigned char category;
+	unsigned char spare;
+	int pitch;
+	int vx;
+	int vy;
+	int vz;
+} NETMESSAGE_NPCSOUND;
+// Where one of the things a queen throws has got to, for a machine that isn't running her. It's found by its name in the
+// level, which is the same on every machine.
+typedef struct netmessage_npcthrownobject
+{
+	char name[8];
+	int vx;
+	int vy;
+	int vz;
+	short xOrient;   // which way round it is, in the game's units of angle
+	short yOrient;
+	short zOrient;
+	short spare;
+} NETMESSAGE_NPCTHROWNOBJECT;
+static_assert(sizeof(NETMESSAGE_NPCTHROWNOBJECT) == 28, "the messages are sized by hand: see the table of them in pldnet.cpp");
+
+// Where a platform lift's car is, from the host, in the mode that plays as single player. Every other machine's car follows it
+// (bh_platform_lift.cpp). The lift is found by its name in the level, which is the same on every machine.
+typedef struct netmessage_liftstate
+{
+	char name[8];
+	int y;                // the car's height
+	unsigned char state;  // PLATFORMLIFT_STATES: 0 at rest, 1 about to move, 2 going up, 3 going down
+	unsigned char end;    // the end it's going to, or resting at: 0 the top (upHeight), 1 the bottom (downHeight)
+	unsigned short spare;
+} NETMESSAGE_LIFTSTATE;
+static_assert(sizeof(NETMESSAGE_LIFTSTATE) == 16, "the messages are sized by hand: see the table of them in pldnet.cpp");
+
+static_assert(sizeof(NETMESSAGE_NPCSOUND) == 20, "the messages are sized by hand: see the row in kNetPartRules");
+
+typedef struct netmessage_npckilled
+{
+	signed int Guid;
+	int death_code;
+	int death_time;
+	int GibbFactor;
+} NETMESSAGE_NPCKILLED;
+static_assert(sizeof(NETMESSAGE_NPCKILLED) == 16, "the messages are sized by hand: see the row in kNetPartRules");
 
 typedef struct netmessageheader
 {
@@ -294,6 +423,7 @@ typedef struct gamedescription_playerdata
 	unsigned char characterType: 2;
 	unsigned char characterSubType: 6;
 	unsigned char startFlag;
+	char name[NET_PLAYERNAMELENGTH];
 } GAMEDESCRIPTION_PLAYERDATA;
 
 typedef struct netmessage_gamedescription
@@ -301,6 +431,10 @@ typedef struct netmessage_gamedescription
 	GAMEDESCRIPTION_PLAYERDATA players[NET_MAXPLAYERS];
 	unsigned char gameType;
 	unsigned char levelNumber;
+	unsigned char coopCampaign;
+	unsigned char coopCampaignLevel;
+	unsigned char coopDifficulty;
+	int coopRollNumber;
 	int scoreLimit;
 	unsigned char timeLimit;
 	unsigned char invulnerableTime;
@@ -361,6 +495,16 @@ typedef struct netmessage_gamedescription
 	unsigned int fallingDamage: 1;
 	unsigned int pistolInfiniteAmmo: 1;
 	unsigned int specialistPistols: 1;
+
+	// The guns added later, the same as the older ones above. A joiner has to use the host's, or the two machines would take different pick-ups off the level as it loads, and their lists of objects, which the sync
+	// goes by, would then differ. They're in the room the last field had left, so the message is the same size.
+	unsigned int allowShotgun: 1;
+	unsigned int allowRevolver: 1;
+	unsigned int allowM79: 1;
+	unsigned int allowStaff: 1;
+	unsigned int maxMarineShotgun: 4;
+	unsigned int maxMarineRevolver: 4;
+	unsigned int maxMarineM79: 4;
 } NETMESSAGE_GAMEDESCRIPTION;
 
 typedef struct netmessage_playerdescription
@@ -590,6 +734,19 @@ typedef struct netmessage_damage_direction
 	int direction_z:10;
 } NETMESSAGE_DAMAGE_DIRECTION;
 //that was the last part of the local object damage stuff
+
+// From the host only: every machine goes on to this place in the campaign. The place just past the last level means the campaign is over.
+// Something that only happened on one machine, by the name of the object it happened to. Each machine then does what its own copy of the level says that object does. NetMT_LevelEvent is the host saying it has happened. NetMT_LevelEventAsk is a client asking the host to agree that it has.
+typedef struct netmessage_levelevent
+{
+	char source[8];
+} NETMESSAGE_LEVELEVENT;
+
+typedef struct netmessage_coopnextlevel
+{
+	unsigned char campaign;
+	unsigned char place;
+} NETMESSAGE_COOPNEXTLEVEL;
 
 typedef struct netmessage_lobdestroyed_request
 {
@@ -867,6 +1024,9 @@ extern int PlayerIdInPlayerList(NetID Id);
 extern void RecordFinalNetGameScores(void);
 extern void DoNetScoresForHostDeath(NETGAME_CHARACTERTYPE myType,NETGAME_CHARACTERTYPE killerType);
 extern void RemovePlayerFromGame(NetID id);
+extern bool AddPlayerToGame(NetID id, const char *name);
+extern void Net_PlayerHasGone(NetID id);
+extern void Net_HostHasGone(void);
 extern int EmptySlotInPlayerList(void);
 extern void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame);
 extern int AddUpPlayerFrags(int playerId);
@@ -904,6 +1064,57 @@ extern void AddNetMsg_MakePlasmaExplosion(VECTORCH *positionPtr, VECTORCH *fromP
 extern void AddNetMsg_PredatorLaserSights(VECTORCH *positionPtr, VECTORCH *normalPtr, DISPLAYBLOCK *dispPtr);
 extern void AddNetMsg_LocalObjectOnFire(STRATEGYBLOCK *sbPtr);
 extern void AddNetMsg_RestartNetworkGame(int seed);
+
+// THE ONE QUESTION for the mode where a network game plays as single player does. Anywhere a test on AvP.Network changes how a level behaves, that test asks this as well. True in single player, and in a game of this mode.
+extern bool SameAsSinglePlayer(void);
+
+// The host tells everyone that an NPC of the kinds in npc_kinds.h has died
+extern void AddNetMsg_NpcKilled(STRATEGYBLOCK *sbPtr, int deathCode, int deathTime, int gibbFactor);
+extern void AddNetMsg_NpcThrownObject(STRATEGYBLOCK *object);
+extern void AddNetMsg_LiftState(STRATEGYBLOCK *lift);
+extern void AddNetMsg_NpcSound(int species, int voice, int category, int pitch, VECTORCH const *place);
+// In the mode that plays as single player, a dead player is out until the next level. True when everyone is out.
+extern bool Coop_EveryoneIsDead(void);
+
+// Each frame that this machine's player is out. He watches someone who's alive, and "use" moves on to the next one.
+// On the host, this is also what starts the level again once everyone is out.
+extern void Coop_WhileOut(bool asksToChangeWhoHeWatches);
+
+// When a level loads, on every machine: this object, when its one-machine event happens, sets off this target. See level_events.h. Use the name in the level, before anything renames it, and call this even if the object itself won't be made on this machine.
+extern void LevelEvents_Note(const char *sourceName, const char *targetName, int request);
+
+// The same for an item, which a client may see picked up first. Where it is goes with it, for how near someone must be to ask.
+extern void LevelEvents_NoteItem(const char *sourceName, const char *targetName, int request, int x, int y, int z);
+
+// That event has just happened on this machine, whose own target has fired or is about to. This tells the others. It does nothing outside the mode, and each object's only counts once.
+extern void LevelEvents_Happened(const char *sourceName);
+
+// A new level's list starts empty.
+extern void LevelEvents_NewLevel(void);
+extern void LevelEvents_LevelStartsAgain(void);
+
+// A level's end was reached on this machine. Only the host's counts: it tells everyone to go on. A client's own chain reaching the end does nothing, because the same chain reaches it on the host.
+extern void Coop_LevelEndReached(void);
+
+// Whether the level that's just ended is going on to another, with everyone still connected. Then the game keeps its connection, and the menus are skipped.
+extern bool Coop_LevelChangeIsDue(void);
+
+// In a campaign everyone plays that campaign's species. Does nothing in a game with no campaign.
+extern void Coop_TakeCampaignSpecies(void);
+
+// Gets this machine ready to load the next level, and says it's underway.
+extern void Coop_LevelChangeHasStarted(void);
+// A message was refused, and why. It goes to the log, but only so often, because anyone can cause this as fast as they like.
+extern void Net_NoteRefused(const char *why);
+
+// Whether the level a host named is on the list for the game type it named. It says why in the log if not.
+extern bool Net_HostsLevelIsOnItsList();
+
+// Whether a client may send this message now, by the limits on the costly kinds of part. It says why in the log if not. connection is its place in the host's list.
+extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
+
+// In a network game, whether the blocks are down to what's kept back for this machine's own player. Anything a message asks for, or that's only for show, isn't made then.
+extern bool Net_BlocksAreShort();
 extern void AddNetMsg_FragmentalObjectsStatus(void);
 extern void AddNetMsg_StrategySynch(void);
 extern void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr);

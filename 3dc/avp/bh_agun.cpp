@@ -1,8 +1,19 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the other machines hear when a sentry gun is destroyed, and draw its own model
+//   a network game that plays the same as single player has the level's sentry guns, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   a sentry gun only shoots players on other machines who are its enemies, not everything they throw and leave behind
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   the other machines' copies of a destroyed sentry gun stop on the same animation as the real one
 //   a sentry gun's block starts cleared, and the pointers to its pan and tilt are set as soon as it's made, not on its first turn
 // RWH moved out here to provide easier access
 
 /* CDF 25/7/98 - A completely new file. */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a sentry gun left without its animations by a save file is left out of the game
+//   the gun part is checked before use, because a save file can leave it out
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 #include "3dc.h"
 #include "inline.h"
@@ -12,6 +23,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "weapons.h"
 #include "compiled_shapes.h"
@@ -333,8 +345,8 @@ void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {
 	toolsData = (AUTOGUN_TOOLS_TEMPLATE *)bhdata;
 	LOCALASSERT(sbPtr);
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no sentry guns from the level, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
@@ -343,7 +355,7 @@ void AutoGunBehaveInit(void *bhdata,STRATEGYBLOCK *sbPtr) {
 	/* make the assumption that the loader has initialised the strategy block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapenum;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 
 	/* create, initialise and attach a dynamics block */
@@ -740,14 +752,17 @@ int Autogun_TargetFilter(STRATEGYBLOCK *candidate) {
 		case I_BehaviourNetGhost:
 			{
 				NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+				/* A player on another machine goes by his own species, as the player on this one does. A grenade or a corpse isn't a target. */
 				switch (dataptr->type) {
-					case I_BehaviourMarinePlayer:
 					case I_BehaviourAlienPlayer:
 					case I_BehaviourPredatorPlayer:
 						return(1);
 						break;
+					case I_BehaviourMarinePlayer:
+						return(0);
+						break;
 					default:
-						return(1);
+						return(0);
 						break;
 				}
 			}
@@ -1283,7 +1298,12 @@ void Execute_AGun_Target(STRATEGYBLOCK *sbPtr) {
 		SECTION_DATA *gun_section;
 
 		gun_section=GetThisSectionData(agunStatusPointer->HModelController.section_data,"gun");
-		GLOBALASSERT(gun_section);
+
+		// a part of a model can be missing from a save file, and without this one there's nothing to aim
+		if (!gun_section)
+		{
+			return;
+		}
 
 		AGun_GetRelativeAngles(sbPtr,&anglex,&angley,&gun_section->World_Offset);
 
@@ -1513,6 +1533,15 @@ static void KillAGun(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int
 	/* make an explosion sound */
     Sound_Play(SID_SENTRYGUNDEST,"d",&sbPtr->DynPtr->Position);
 
+	// The other machines' copies stop now, and their sparks and bits are theirs to make
+	{
+		extern void AddNetMsg_NpcKilled(STRATEGYBLOCK *sbPtr, int deathCode, int deathTime, int gibbFactor);
+
+		// A gun has no list of ways of dying, so the message's way-of-dying number carries the animation it stops on instead.
+		// It holds the end of that one as a wreck, and so do the other machines' copies.
+		AddNetMsg_NpcKilled(sbPtr, agunStatusPointer->HModelController.Sub_Sequence, AGUN_DYINGTIME, 0);
+	}
+
 	agunStatusPointer->stateTimer=AGUN_DYINGTIME;
 	agunStatusPointer->HModelController.Looped=0;
 	agunStatusPointer->HModelController.LoopAfterTweening=0;
@@ -1527,6 +1556,7 @@ static void KillAGun(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int
  	if(agunStatusPointer->death_target_sbptr)
 	{
 		RequestState(agunStatusPointer->death_target_sbptr,agunStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 	if (agunStatusPointer->soundHandle!=SOUND_NOACTIVEINDEX) {
@@ -1655,7 +1685,7 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -1674,6 +1704,12 @@ void LoadStrategy_Autogun(SAVE_BLOCK_STRATEGY_HEADER* header)
 	Load_SoundState(&agunStatusPointer->soundHandle);
 	Load_SoundState(&agunStatusPointer->soundHandle2);
 
+	//these two animations are used without checking. They're added when the gun is made, and nothing removes them, so a
+	//gun without them comes from a damaged or made-up save file, and is left out of the game
+	if(!agunStatusPointer->gun_pan || !agunStatusPointer->gun_tilt)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Autogun(STRATEGYBLOCK* sbPtr)

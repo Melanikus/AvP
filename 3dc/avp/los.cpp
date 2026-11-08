@@ -1,9 +1,14 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a line of sight to a room with no display block left stops there
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   it notes which polygon of its shape a ray hit, for -shadowshoot
 /*KJL*************************
 * los.c - Line of sight code *
 *************************KJL*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-03 by Melanikus for the AvP port:
+//   the ray is kept as copies, and a hit always names the real object, never a temporary stand-in
 #include "3dc.h"
 #include "module.h"					  
 #include "inline.h"
@@ -27,7 +32,7 @@
 int IsThisObjectVisibleFromThisPosition(DISPLAYBLOCK *dPtr,VECTORCH *positionPtr,int maxRange);
 void CheckForVectorIntersectionWithHierarchicalObject(DISPLAYBLOCK *dPtr, VECTORCH *viewVectorAlphaPtr, VECTORCH *viewVectorBetaPtr);
 void CheckForRayIntersectionWithHierarchy(DISPLAYBLOCK *objectPtr, SECTION_DATA *sectionDataPtr);
-void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr);
+void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr, DISPLAYBLOCK *objectToReport, SECTION_DATA *sectionToReport);
 /*KJL****************************************************************************************
 * 										D E F I N E S 										*
 ****************************************************************************************KJL*/
@@ -131,8 +136,10 @@ extern int NumActiveBlocks;
 extern DISPLAYBLOCK *ActiveBlockList[];
 
 
-static VECTORCH *ViewpointDirectionPtr;
-static VECTORCH *ViewpointPositionPtr;
+// The ray being tested, for the functions below to read. These are copies, not pointers to the caller's vectors, which
+// are often local variables that no longer exist once the caller returns.
+static VECTORCH ViewpointDirection;
+static VECTORCH ViewpointPosition;
 
 static int ObjectVisiblityTest(DISPLAYBLOCK *objectPtr,VECTORCH *positionPtr,int maxRange);
 
@@ -205,9 +212,15 @@ int IsThisObjectVisibleFromThisPosition(DISPLAYBLOCK *objectPtr,VECTORCH *positi
 
 void CheckForVectorIntersectionWith3dObject(DISPLAYBLOCK *objectPtr, VECTORCH *viewVectorAlphaPtr, VECTORCH *viewVectorBetaPtr, int rigorous)
 {
-	ViewpointPositionPtr = viewVectorAlphaPtr;
-	ViewpointDirectionPtr = viewVectorBetaPtr;
+	ViewpointPosition = *viewVectorAlphaPtr;
+	ViewpointDirection = *viewVectorBetaPtr;
 	    
+	// A room near a computer player that the game had no display block left for
+	if (!objectPtr)
+	{
+		return;
+	}
+
 	if (objectPtr->HModelControlBlock)
 	{
 		SECTION_DATA *firstSectionPtr;
@@ -228,7 +241,7 @@ void CheckForVectorIntersectionWith3dObject(DISPLAYBLOCK *objectPtr, VECTORCH *v
 	}  
 	else
 	{
-		CheckForRayIntersectionWithObject(objectPtr);
+		CheckForRayIntersectionWithObject(objectPtr, objectPtr, 0);
 	}
 }
 
@@ -285,8 +298,8 @@ void FindPolygonInLineOfSight_TwoIgnores(VECTORCH *viewpointDirectionPtr, VECTOR
   	LOS_Lambda=10000000;
 	LOS_ObjectHitPtr = 0;
 	LOS_HModel_Section= 0;
-	ViewpointPositionPtr = viewpointPositionPtr;
-	ViewpointDirectionPtr = viewpointDirectionPtr;
+	ViewpointPosition = *viewpointPositionPtr;
+	ViewpointDirection = *viewpointDirectionPtr;
 
 	    
    	/* scan throught each object */
@@ -334,7 +347,7 @@ void FindPolygonInLineOfSight_TwoIgnores(VECTORCH *viewpointDirectionPtr, VECTOR
 		}  
 		else
 		{
-			CheckForRayIntersectionWithObject(objectPtr);
+			CheckForRayIntersectionWithObject(objectPtr, objectPtr, 0);
 		}
 	}
 }
@@ -403,14 +416,9 @@ void CheckForRayIntersectionWithHierarchy(DISPLAYBLOCK *objectPtr, SECTION_DATA 
 			
 		}
 		
-		CheckForRayIntersectionWithObject(&dummy_displayblock);
-		
-		if (LOS_ObjectHitPtr == &dummy_displayblock)
-		{
-			/* ah, we've hit this object */
-			LOS_ObjectHitPtr = objectPtr;
-			LOS_HModel_Section = sectionDataPtr;
-		}
+		// dummy_displayblock stands in for this body part, and it stops existing when this block ends. So a hit is
+		// reported as the real object and the section, and never as the stand-in.
+		CheckForRayIntersectionWithObject(&dummy_displayblock, objectPtr, sectionDataPtr);
 	}
 
 	/* Now call recursion... */
@@ -430,11 +438,13 @@ void CheckForRayIntersectionWithHierarchy(DISPLAYBLOCK *objectPtr, SECTION_DATA 
 
 
 
-void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr)
+// Tests the ray against dPtr. A hit is reported as objectToReport and sectionToReport, which are not always dPtr: see
+// CheckForRayIntersectionWithHierarchy.
+void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr, DISPLAYBLOCK *objectToReport, SECTION_DATA *sectionToReport)
 {
 	int numberOfItems;
-	VECTORCH viewVectorAlpha = *ViewpointPositionPtr;
-	VECTORCH viewVectorBeta = *ViewpointDirectionPtr;
+	VECTORCH viewVectorAlpha = ViewpointPosition;
+	VECTORCH viewVectorBeta = ViewpointDirection;
 	VECTORCH position;
 	int needToRotate;
 	
@@ -677,9 +687,9 @@ void CheckForRayIntersectionWithObject(DISPLAYBLOCK *dPtr)
 
 				LOS_Point=pointOnPlane;
 				LOS_PolygonNumber = polygonsInShape - 1 - numberOfItems;   /* the loop has already counted this one off */
-				LOS_ObjectHitPtr = dPtr;
+				LOS_ObjectHitPtr = objectToReport;
 				LOS_Lambda=lambda;
-				LOS_HModel_Section = 0;
+				LOS_HModel_Section = sectionToReport;
 			}
 		}
 	}

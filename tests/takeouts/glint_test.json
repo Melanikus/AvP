@@ -1,0 +1,350 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests",
+		"shaders"
+	],
+	"rows": [
+		{
+			"name": "the direction to the light can have no length",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "float3 toLightNow = toLight / max(length(toLight), 1.0f);",
+					"to": "float3 toLightNow = normalize(toLight);"
+				}
+			]
+		},
+		{
+			"name": "a surface turned away shines",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "if (dot(normal, toLightNow) <= 0.0f)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "halfway is the wrong way round",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "float3 halfway = toLightNow - position / max(length(position), 1.0f);",
+					"to": "float3 halfway = toLightNow + position / max(length(position), 1.0f);"
+				}
+			]
+		},
+		{
+			"name": "halfway can have no length",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "halfway / max(length(halfway), 0.0001f)",
+					"to": "normalize(halfway)"
+				}
+			]
+		},
+		{
+			"name": "0 can be raised to a power",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "halfway / max(length(halfway), 0.0001f)), 0.0001f)",
+					"to": "halfway / max(length(halfway), 0.0001f)), 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "how strong is nothing",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "static const float kShineStrength = 0.8f;",
+					"to": "static const float kShineStrength = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "how strong is far too much",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "static const float kShineStrength = 0.8f;",
+					"to": "static const float kShineStrength = 80.0f;"
+				}
+			]
+		},
+		{
+			"name": "how tight is nothing",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "static const float kShininess = 40.0f;",
+					"to": "static const float kShininess = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "how tight is far too much",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "static const float kShininess = 40.0f;",
+					"to": "static const float kShininess = 40000.0f;"
+				}
+			]
+		},
+		{
+			"name": "the glint is part of how much light a light gives",
+			"changes": [
+				{
+					"file": "shaders/lightShapes.fxh",
+					"from": "float  slant   = (turned + 0.25f) * 0.5f;",
+					"to": "float  slant   = (turned + 0.25f) * 0.5f + ShineHere(toLight, position, normal);"
+				}
+			]
+		},
+		{
+			"name": "the glint is in the total",
+			"changes": [
+				{
+					"file": "shaders/lightTotal.psh",
+					"from": "#include \"lightShapes.fxh\"",
+					"to": "#include \"lightShapes.fxh\"\n// ShineHere"
+				}
+			]
+		},
+		{
+			"name": "the glint is in the share",
+			"changes": [
+				{
+					"file": "shaders/lightShare.psh",
+					"from": "#include \"lightShapes.fxh\"",
+					"to": "#include \"lightShapes.fxh\"\n// ShineHere"
+				}
+			]
+		},
+		{
+			"name": "a shadow leaves the share alone",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "share *= open;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shadow leaves the glint alone",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "mine * open * kShineStrength",
+					"to": "mine * kShineStrength"
+				}
+			]
+		},
+		{
+			"name": "the glint is as bright wherever the light reaches",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "Colour.rgb * mine * open",
+					"to": "Colour.rgb * open"
+				}
+			]
+		},
+		{
+			"name": "the glint is white whatever the light",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "float3 glint = Colour.rgb * mine",
+					"to": "float3 glint = mine"
+				}
+			]
+		},
+		{
+			"name": "the glint looks from the wrong place",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "ShineHere(Light.xyz - position, position, normal)",
+					"to": "ShineHere(Light.xyz, position, normal)"
+				}
+			]
+		},
+		{
+			"name": "the glint never goes on",
+			"changes": [
+				{
+					"file": "shaders/lightOne.psh",
+					"from": "* share + glint, 0.0f)",
+					"to": "* share, 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "the lamp glints on nothing",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "clip(tex2Dlod(Colours, place).a - 0.5f);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the lamp glints from the eye",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "ShineHere(LampPlace.xyz - position, position, normal)",
+					"to": "ShineHere(-position, position, normal)"
+				}
+			]
+		},
+		{
+			"name": "the lamp glints outside its spot",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "kShineStrength * inSpot * Lamp.x",
+					"to": "kShineStrength * Lamp.x"
+				}
+			]
+		},
+		{
+			"name": "the lamp glints when it has flickered off",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "inSpot * Lamp.x * Spot.z",
+					"to": "inSpot * Spot.z"
+				}
+			]
+		},
+		{
+			"name": "the lamp glints as strongly when it is turned down",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "Lamp.x * Spot.z /",
+					"to": "Lamp.x /"
+				}
+			]
+		},
+		{
+			"name": "the lamp glints as strongly far away",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": " / (1.0f + away * away), 0.0f)",
+					"to": ", 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "the glint has a hard edge",
+			"changes": [
+				{
+					"file": "shaders/lightLampShine.psh",
+					"from": "saturate((Spot.x - fromAim) / (Spot.x * kGlintEdge))",
+					"to": "saturate((Spot.x - fromAim) * 1000.0f)"
+				}
+			]
+		},
+		{
+			"name": "the lamp asks for a glint with no normals",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (SurfacePictures_Normal())\n\t\t{\n\t\t\tDrawLampGlint(strength, wide, aim, spot);",
+					"to": "{\n\t\t\tDrawLampGlint(strength, wide, aim, spot);"
+				}
+			]
+		},
+		{
+			"name": "the lamp never asks for a glint",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\t\tDrawLampGlint(strength, wide, aim, spot);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the card settings are not kept",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (SUCCEEDED(savedCardSettings ? savedCardSettings->Capture() : device->CreateStateBlock(D3DSBT_ALL, &savedCardSettings)))\n\t{\n\t\tPixelLights_AddLampGlint(device, toyDepthTexture, numbers);",
+					"to": "{\n\t\tPixelLights_AddLampGlint(device, toyDepthTexture, numbers);"
+				}
+			]
+		},
+		{
+			"name": "the card settings are not put back",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "PixelLights_AddLampGlint(device, toyDepthTexture, numbers);\n\t\tsavedCardSettings->Apply();",
+					"to": "PixelLights_AddLampGlint(device, toyDepthTexture, numbers);"
+				}
+			]
+		},
+		{
+			"name": "the lamp is upside down",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "from[0], -from[1], from[2], 0.0f,",
+					"to": "from[0], from[1], from[2], 0.0f,"
+				}
+			]
+		},
+		{
+			"name": "a shader that failed is drawn with",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "if (d3d.lightLampShineEffect == kNullEffectID)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the shader gets three rows of four",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "device->SetPixelShaderConstantF(1, lampSwingSpotPlace, 4);",
+					"to": "device->SetPixelShaderConstantF(1, lampSwingSpotPlace, 3);"
+				}
+			]
+		},
+		{
+			"name": "the pictures are still being read afterwards",
+			"changes": [
+				{
+					"file": "3dc/pixel_lights.cpp",
+					"from": "DrawRectangle(device);\n\n\tStopReadingPictures(device);\n}\n\n// The lights left out of the object being lit.",
+					"to": "DrawRectangle(device);\n}\n\n// The lights left out of the object being lit."
+				}
+			]
+		},
+		{
+			"name": "the game never loads the shader",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "d3d.lightLampShineEffect = d3d.effectSystem->Add(\"lightLampShine\", \"shadowBlur.vsh\", \"lightLampShine.psh\", d3d.mainDecl);\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
