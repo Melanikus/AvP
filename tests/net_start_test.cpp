@@ -2474,32 +2474,36 @@ static void TestTheGameUsesThis()
 
 // The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
 // to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
-static void StartAgainWith(std::map<std::string, int> const &settings)
+// The three numbers the settings file holds, one per line, as a player's file has them
+static void StartAgainWith(int port, int incoming, int outgoing)
 {
 	EndTheGame();
 	Net_Deinitialise();
-	settingsFile = settings;
+	settingsFile.clear();
+	settingsFile["PortNumber"] = port;
+	settingsFile["IncomingBandwidth"] = incoming;
+	settingsFile["OutgoingBandwidth"] = outgoing;
 	logLines.clear();
 	Net_Initialise();
 }
 
 static void TestTheSettingsFile()
 {
-	StartAgainWith({ { "PortNumber", 0 }, { "IncomingBandwidth", -5 }, { "OutgoingBandwidth", -1 } });
+	StartAgainWith(0, -5, -1);
 	Check(LogHas("net: the settings file's PortNumber is 0, which the game can't use, so it uses 23513"), "a port of 0 isn't used, and the log says so");
 	Check(LogHas("net: the settings file's IncomingBandwidth is -5, which the game can't use, so it uses 0"), "nor a speed below nothing coming in");
 	Check(LogHas("net: the settings file's OutgoingBandwidth is -1, which the game can't use, so it uses 0"), "nor going out");
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "and a host plays on the game's own port");
 	Check(hostIncomingBandwidth == 0 && hostOutgoingBandwidth == 0, "with as much speed as there is, not four thousand million bytes a second");
 
-	StartAgainWith({ { "PortNumber", 23514 } });
+	StartAgainWith(23514, 0, 0);
 	Check(LogHas("net: the settings file's PortNumber is 23514, which the game can't use, so it uses 23513"), "the port a search uses isn't used for the game as well");
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "so the host still opens both");
 
-	StartAgainWith({ { "PortNumber", 65536 } });
+	StartAgainWith(65536, 0, 0);
 	Check(LogHas("net: the settings file's PortNumber is 65536, which the game can't use, so it uses 23513"), "nor a port past the last there is");
 
-	StartAgainWith({ { "PortNumber", 30000 }, { "IncomingBandwidth", 20000 }, { "OutgoingBandwidth", 10000 } });
+	StartAgainWith(30000, 20000, 10000);
 	Check(std::none_of(logLines.begin(), logLines.end(), [](std::string const &line) { return line.rfind("net: the settings file's", 0) == 0; }), "a port and speeds the game can use are used, with nothing in the log");
 	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 30000, "and the host plays on it");
 	Check(hostIncomingBandwidth == 20000 && hostOutgoingBandwidth == 10000, "with the speeds the file says");
