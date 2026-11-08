@@ -53,11 +53,37 @@ extern "C"
 
 static int checksFailed = 0;
 
-static void Check(bool good, const std::string &what)
+// Called HostileCheck, not Check: Snyk Code joins functions with the same name and signature across files, and many tests have a Check
+static void HostileCheck(bool good, const std::string &what)
 {
 	printf("%s  %s\n", good ? "ok    " : "FAILED", what.c_str());
 	fflush(stdout);
 	checksFailed += good ? 0 : 1;
+}
+
+// Skips the bytes a message carries after its command. A count that runs past the end of what came means the packet's reading
+// ends there. It's checked before it's added, so the sum can never pass the end. at + size is already inside the packet.
+// Sends one reliable message on a connection. ENet keeps a packet it takes, and frees it when it's been sent; one it won't take
+// is still ours, so it's freed here.
+static void SendOrFree(ENetPeer *peer, const void *data, size_t size)
+{
+	ENetPacket *const packet = enet_packet_create(data, size, ENET_PACKET_FLAG_RELIABLE);
+
+	if (packet != NULL && enet_peer_send(peer, 0, packet) < 0)
+	{
+		enet_packet_destroy(packet);
+	}
+}
+
+static bool SkippedItsBytes(size_t &at, size_t size, size_t length, enet_uint16 carried)
+{
+	if (carried > length - at - size)
+	{
+		return false;
+	}
+
+	at += carried;
+	return true;
 }
 
 // ENet's memory comes from here, so that a block's old contents can be seen: every new one starts as 0xAA bytes
@@ -188,7 +214,7 @@ static bool MakePair(Pair *pair, size_t channelsAsked)
 	// The host throws away any packet without the right checksum, so the client has to put one on
 	pair->client->checksum = enet_crc32;
 
-	Check(SocketIsOnThisMachine(pair->host->socket, "the host's socket is on") && SocketIsOnThisMachine(pair->client->socket, "the client's socket is on"), "both sockets are on 127.0.0.1 only");
+	HostileCheck(SocketIsOnThisMachine(pair->host->socket, "the host's socket is on") && SocketIsOnThisMachine(pair->client->socket, "the client's socket is on"), "both sockets are on 127.0.0.1 only");
 
 	if (enet_socket_get_address(pair->host->socket, &pair->hostAddress) != 0)
 	{
@@ -376,14 +402,22 @@ static int CountAnswers(Pair &pair, enet_uint16 first, enet_uint16 last, DWORD m
 				ENetProtocolSendReliable message;
 
 				memcpy(&message, bytes + at, sizeof(message));
-				at += ENET_NET_TO_HOST_16(message.dataLength);
+
+				if (!SkippedItsBytes(at, size, (size_t)length, ENET_NET_TO_HOST_16(message.dataLength)))
+				{
+					break;
+				}
 			}
 			else if (kind == ENET_PROTOCOL_COMMAND_SEND_FRAGMENT)
 			{
 				ENetProtocolSendFragment piece;
 
 				memcpy(&piece, bytes + at, sizeof(piece));
-				at += ENET_NET_TO_HOST_16(piece.dataLength);
+
+				if (!SkippedItsBytes(at, size, (size_t)length, ENET_NET_TO_HOST_16(piece.dataLength)))
+				{
+					break;
+				}
 			}
 
 			at += size;
@@ -398,9 +432,9 @@ static void TestTheGamesOneChannel()
 	Pair pair;
 	bool const connected = MakePair(&pair, 255);
 
-	Check(connected, "a client that asks for 255 channels connects to a host made the game's way");
-	Check(connected && pair.hostsSide->channelCount == 1, "and the host gives it the game's one channel: " + std::to_string(connected ? pair.hostsSide->channelCount : 0));
-	Check(connected && pair.clientsSide->channelCount == 1, "and tells the client so");
+	HostileCheck(connected, "a client that asks for 255 channels connects to a host made the game's way");
+	HostileCheck(connected && pair.hostsSide->channelCount == 1, "and the host gives it the game's one channel: " + std::to_string(connected ? pair.hostsSide->channelCount : 0));
+	HostileCheck(connected && pair.clientsSide->channelCount == 1, "and tells the client so");
 	EndPair(pair);
 }
 
@@ -409,7 +443,7 @@ static void TestEmptyMessagesBehindAMissingOne()
 	Pair pair;
 	bool const connected = MakePair(&pair, 1);
 
-	Check(connected, "a client connects, to send empty messages behind one it never sends");
+	HostileCheck(connected, "a client connects, to send empty messages behind one it never sends");
 
 	if (!connected)
 	{
@@ -443,7 +477,7 @@ static void TestEmptyMessagesBehindAMissingOne()
 
 	size_t const held = enet_list_size(&pair.hostsSide->channels[0].incomingReliableCommands);
 
-	Check(held > 0 && held < (size_t)sent && pair.hostsSide->totalWaitingData >= limit, "empty messages held behind a missing one count against the limit on what's waiting, and stop at it: " + std::to_string(held) + " of " + std::to_string(sent) + " held, " + std::to_string(pair.hostsSide->totalWaitingData) + " bytes counted against " + std::to_string(limit));
+	HostileCheck(held > 0 && held < (size_t)sent && pair.hostsSide->totalWaitingData >= limit, "empty messages held behind a missing one count against the limit on what's waiting, and stop at it: " + std::to_string(held) + " of " + std::to_string(sent) + " held, " + std::to_string(pair.hostsSide->totalWaitingData) + " bytes counted against " + std::to_string(limit));
 	EndPair(pair);
 }
 
@@ -452,7 +486,7 @@ static void TestPiecesStartCleared()
 	Pair pair;
 	bool const connected = MakePair(&pair, 1);
 
-	Check(connected, "a client connects, to send a message in pieces that don't cover it");
+	HostileCheck(connected, "a client connects, to send a message in pieces that don't cover it");
 
 	if (!connected)
 	{
@@ -477,8 +511,8 @@ static void TestPiecesStartCleared()
 		leftover += messages[0][i] != 0 ? 1 : 0;
 	}
 
-	Check(arrived, "a message in two 1-byte pieces that says it's 3,000 bytes long comes out 3,000 bytes long, with its 2 bytes");
-	Check(arrived && leftover == 0, "and the 2,998 bytes no piece covered are cleared, not left as they were in memory: " + std::to_string(leftover) + " weren't");
+	HostileCheck(arrived, "a message in two 1-byte pieces that says it's 3,000 bytes long comes out 3,000 bytes long, with its 2 bytes");
+	HostileCheck(arrived && leftover == 0, "and the 2,998 bytes no piece covered are cleared, not left as they were in memory: " + std::to_string(leftover) + " weren't");
 	EndPair(pair);
 }
 
@@ -487,7 +521,7 @@ static void TestTooManyCommandsInAPacket()
 	Pair pair;
 	bool const connected = MakePair(&pair, 1);
 
-	Check(connected, "a client connects, to send a packet of 40 commands");
+	HostileCheck(connected, "a client connects, to send a packet of 40 commands");
 
 	if (!connected)
 	{
@@ -510,7 +544,7 @@ static void TestTooManyCommandsInAPacket()
 
 	int const answers = CountAnswers(pair, 1000, 1040, 300);
 
-	Check(answers == 32, "a packet of 40 commands that each ask for an answer gets 32 answers, the most an honest ENet puts in a packet: " + std::to_string(answers));
+	HostileCheck(answers == 32, "a packet of 40 commands that each ask for an answer gets 32 answers, the most an honest ENet puts in a packet: " + std::to_string(answers));
 	EndPair(pair);
 }
 
@@ -519,7 +553,7 @@ static void TestAPacketShorterThanItsHeader()
 	Pair pair;
 	bool const connected = MakePair(&pair, 1);
 
-	Check(connected, "a client connects, to send a packet shorter than its own header");
+	HostileCheck(connected, "a client connects, to send a packet shorter than its own header");
 
 	if (!connected)
 	{
@@ -542,7 +576,7 @@ static void TestAPacketShorterThanItsHeader()
 	ENetAddress here = ThisMachine();
 	bool const otherIsHere = other != ENET_SOCKET_NULL && enet_socket_bind(other, &here) == 0 && SocketIsOnThisMachine(other, "the other socket is on");
 
-	Check(otherIsHere, "a second socket, on 127.0.0.1 only");
+	HostileCheck(otherIsHere, "a second socket, on 127.0.0.1 only");
 
 	std::vector<uint8_t> planted;
 	enet_uint16 const nobody = ENET_HOST_TO_NET_16(0x0FFE);
@@ -570,7 +604,7 @@ static void TestAPacketShorterThanItsHeader()
 
 	enet_uint32 const taken = pair.hostsSide->incomingDataTotal - before;
 
-	Check(otherIsHere && taken == 0, "a 2-byte packet, shorter than its own header, is dropped, even when the bytes after it would match its checksum: " + std::to_string(taken) + " bytes taken from it");
+	HostileCheck(otherIsHere && taken == 0, "a 2-byte packet, shorter than its own header, is dropped, even when the bytes after it would match its checksum: " + std::to_string(taken) + " bytes taken from it");
 
 	if (other != ENET_SOCKET_NULL)
 	{
@@ -585,7 +619,7 @@ static void TestHonestMessages()
 	Pair pair;
 	bool const connected = MakePair(&pair, 1);
 
-	Check(connected, "a client connects, to send honest messages");
+	HostileCheck(connected, "a client connects, to send honest messages");
 
 	if (!connected)
 	{
@@ -602,13 +636,13 @@ static void TestHonestMessages()
 
 	int const smallOnes = 500;
 
-	enet_peer_send(pair.clientsSide, 0, enet_packet_create(big.data(), big.size(), ENET_PACKET_FLAG_RELIABLE));
+	SendOrFree(pair.clientsSide, big.data(), big.size());
 
 	for (int i = 0; i < smallOnes; i++)
 	{
 		std::string const words = "message " + std::to_string(i);
 
-		enet_peer_send(pair.clientsSide, 0, enet_packet_create(words.data(), words.size(), ENET_PACKET_FLAG_RELIABLE));
+		SendOrFree(pair.clientsSide, words.data(), words.size());
 	}
 
 	std::vector<std::vector<uint8_t>> messages;
@@ -634,9 +668,9 @@ static void TestHonestMessages()
 		inOrder = messages[1 + i] == std::vector<uint8_t>(words.begin(), words.end());
 	}
 
-	Check(!messages.empty() && messages[0] == big, "an honest 3,000-byte message, which ENet sends in pieces, arrives whole");
-	Check(inOrder, "and 500 small messages after it arrive, in order: " + std::to_string(messages.empty() ? 0 : messages.size() - 1));
-	Check(pair.hostsSide->totalWaitingData == 0, "and once the host has read them all, nothing is counted as waiting: " + std::to_string(pair.hostsSide->totalWaitingData));
+	HostileCheck(!messages.empty() && messages[0] == big, "an honest 3,000-byte message, which ENet sends in pieces, arrives whole");
+	HostileCheck(inOrder, "and 500 small messages after it arrive, in order: " + std::to_string(messages.empty() ? 0 : messages.size() - 1));
+	HostileCheck(pair.hostsSide->totalWaitingData == 0, "and once the host has read them all, nothing is counted as waiting: " + std::to_string(pair.hostsSide->totalWaitingData));
 	EndPair(pair);
 }
 
@@ -857,7 +891,7 @@ static void TestTheTokensHash()
 		matching += memcmp(out, vectors_sip64[i], sizeof(out)) == 0 ? 1 : 0;
 	}
 
-	Check(matching == 64, "the SipHash our ENet is built with gives all 64 answers its authors published: " + std::to_string(matching));
+	HostileCheck(matching == 64, "the SipHash our ENet is built with gives all 64 answers its authors published: " + std::to_string(matching));
 }
 
 static void TestTheTokenForAConnect()
@@ -869,7 +903,7 @@ static void TestTheTokenForAConnect()
 	ENetSocket const stranger = SocketHere("a stranger's socket is on");
 	ENetSocket const other = SocketHere("another socket is on");
 
-	Check(hostIsHere && stranger != ENET_SOCKET_NULL && other != ENET_SOCKET_NULL, "a host made the game's way, and two plain sockets, all on 127.0.0.1 only");
+	HostileCheck(hostIsHere && stranger != ENET_SOCKET_NULL && other != ENET_SOCKET_NULL, "a host made the game's way, and two plain sockets, all on 127.0.0.1 only");
 
 	if (!hostIsHere || stranger == ENET_SOCKET_NULL || other == ENET_SOCKET_NULL)
 	{
@@ -883,30 +917,30 @@ static void TestTheTokenForAConnect()
 	size_t const asked = SendConnect(stranger, hostAddress, connectID, NULL, false);
 
 	LetItRead(host, 100);
-	Check(PlacesTaken(host) == 0, "a CONNECT with no token takes none of the host's places");
+	HostileCheck(PlacesTaken(host) == 0, "a CONNECT with no token takes none of the host's places");
 
 	size_t const answered = TokenIn(ReadAnswers(stranger, 200), connectID, token);
 
-	Check(answered > 0, "and gets a token back instead");
-	Check(answered > 0 && answered < asked, "which is smaller than the CONNECT, so made-up CONNECTs can't use the host to flood someone else: " + std::to_string(answered) + " bytes against " + std::to_string(asked));
+	HostileCheck(answered > 0, "and gets a token back instead");
+	HostileCheck(answered > 0 && answered < asked, "which is smaller than the CONNECT, so made-up CONNECTs can't use the host to flood someone else: " + std::to_string(answered) + " bytes against " + std::to_string(asked));
 
 	SendConnect(other, hostAddress, connectID, token, false);
 	LetItRead(host, 100);
-	Check(PlacesTaken(host) == 0, "the same token sent from another port takes no place");
+	HostileCheck(PlacesTaken(host) == 0, "the same token sent from another port takes no place");
 
 	uint8_t const madeUp[ENET_PROTOCOL_COOKIE_SIZE] = { 0x5A, 0xA5, 0x3C, 0xC3, 0x0F, 0xF0, 0x69, 0x96 };
 
 	SendConnect(stranger, hostAddress, connectID, madeUp, false);
 	LetItRead(host, 100);
-	Check(PlacesTaken(host) == 0, "a made-up token takes no place");
+	HostileCheck(PlacesTaken(host) == 0, "a made-up token takes no place");
 
 	SendConnect(stranger, hostAddress, connectID + 1, token, false);
 	LetItRead(host, 100);
-	Check(PlacesTaken(host) == 0, "a token given for another connection number takes no place");
+	HostileCheck(PlacesTaken(host) == 0, "a token given for another connection number takes no place");
 
 	SendConnect(stranger, hostAddress, connectID, token, false);
 	LetItRead(host, 100);
-	Check(PlacesTaken(host) == 1, "and the CONNECT that brings its own token back takes a place");
+	HostileCheck(PlacesTaken(host) == 1, "and the CONNECT that brings its own token back takes a place");
 
 	for (size_t i = 0; i < host->peerCount; i++)
 	{
@@ -926,7 +960,7 @@ static void TestTheTokenForAConnect()
 	enet_time_set(enet_time_get() + 30000);
 	SendConnect(stranger, hostAddress, connectID + 2, kept, false);
 	LetItRead(host, 100);
-	Check(gotOne && PlacesTaken(host) == 0, "a token kept 30 s takes no place: one is only good for 10 to 20 s");
+	HostileCheck(gotOne && PlacesTaken(host) == 0, "a token kept 30 s takes no place: one is only good for 10 to 20 s");
 	enet_time_set(enet_time_get() - 30000);
 
 	// The CONNECT of an ENet without the token
@@ -955,9 +989,9 @@ static void TestTheTokenForAConnect()
 		}
 	}
 
-	Check(PlacesTaken(host) == placesBefore && toldNo, "an older ENet's CONNECT takes no place, and is told no at once, with the reason");
-	Check(host->olderConnectsRefused == refusedBefore + 1, "and the host counts it, for the game's log");
-	Check(refusedWith > 0 && refusedWith < olderAsked, "and the refusal is smaller than the CONNECT it answers: " + std::to_string(refusedWith) + " bytes against " + std::to_string(olderAsked));
+	HostileCheck(PlacesTaken(host) == placesBefore && toldNo, "an older ENet's CONNECT takes no place, and is told no at once, with the reason");
+	HostileCheck(host->olderConnectsRefused == refusedBefore + 1, "and the host counts it, for the game's log");
+	HostileCheck(refusedWith > 0 && refusedWith < olderAsked, "and the refusal is smaller than the CONNECT it answers: " + std::to_string(refusedWith) + " bytes against " + std::to_string(olderAsked));
 
 	// A packet holding two CONNECTs, as a flood might send. ENet stops reading a packet at the first CONNECT that takes no place,
 	// so it sends one token back, not one for each: a made-up address can't use the host to send more packets than it was sent.
@@ -977,7 +1011,7 @@ static void TestTheTokenForAConnect()
 		}
 	}
 
-	Check(tokens == 1 && PlacesTaken(host) == placesBeforeTwo, "a packet with two CONNECTs gets one token back, not two, and takes no place: " + std::to_string(tokens) + " token(s)");
+	HostileCheck(tokens == 1 && PlacesTaken(host) == placesBeforeTwo, "a packet with two CONNECTs gets one token back, not two, and takes no place: " + std::to_string(tokens) + " token(s)");
 
 	enet_socket_destroy(stranger);
 	enet_socket_destroy(other);
@@ -997,7 +1031,7 @@ static void TestANewJoinerOnAnOlderHost()
 	ENetAddress olderHostAddress;
 	bool const ready = olderHost != ENET_SOCKET_NULL && joiner != NULL && SocketIsOnThisMachine(joiner->socket, "the joiner's socket is on") && enet_socket_get_address(olderHost, &olderHostAddress) == 0;
 
-	Check(ready, "a joining ENet and a plain socket standing in for an older host, on 127.0.0.1 only");
+	HostileCheck(ready, "a joining ENet and a plain socket standing in for an older host, on 127.0.0.1 only");
 
 	if (!ready)
 	{
@@ -1049,7 +1083,7 @@ static void TestANewJoinerOnAnOlderHost()
 		endsInNothing = bytes[i] == 0;
 	}
 
-	Check(isAConnect && endsInNothing, "a joining ENet's first packet is a CONNECT an older host reads as before: where an older CONNECT ends, the rest is all 0, which an older ENet reads as \"nothing\" and stops");
+	HostileCheck(isAConnect && endsInNothing, "a joining ENet's first packet is a CONNECT an older host reads as before: where an older CONNECT ends, the rest is all 0, which an older ENet reads as \"nothing\" and stops");
 
 	enet_socket_destroy(olderHost);
 	enet_host_destroy(joiner);
