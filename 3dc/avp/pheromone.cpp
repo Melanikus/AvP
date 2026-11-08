@@ -1,5 +1,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a game that plays as single player, an alien on another machine leaves a trail NPCs can follow
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   whether the scent goes through an AI module is asked of the module that is its door, the one AIModuleIsADoor finds, and that
+//   module's block is checked before it's read (ai_module_door.h)
 /*-----------------------Patrick 12/11/96--------------------------
   Source for AVP Pheromone system
   -----------------------------------------------------------------*/
@@ -21,6 +24,7 @@
 #include "bh_generator.h"
 #include "showcmds.h"
 #include "pldghost.h"
+#include "ai_module_door.h"
 
 #if 1
 static unsigned int *Pher_Player1;
@@ -198,86 +202,30 @@ void CleanUpPheromoneSystem(void)
 }
 
 
-int AIModuleAdmitsPheromones(AIMODULE *targetModule) {
+// Whether a proximity door is locked: 1 or 0, or -1 when it can't be read. Only the module that is the door is asked, and its block has
+// to be a proximity door's, with its data, before door_locked is read.
+static int ProxDoorIsLocked(MODULE *door)
+{
+	STRATEGYBLOCK *const block = door ? door->m_sbptr : 0;
 
-	/* Check state. */
-
-	MODULEDOORTYPE doorStatus;
-
-	doorStatus = (AIModuleIsADoor(targetModule));
-
-	switch(doorStatus)
+	if (!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr)
 	{
-		case(MDT_ProxDoor):
-		{	
-			/* Go thru UNLOCKED proxdoors... */
-			MODULE *renderModule;
-			PROXDOOR_BEHAV_BLOCK *pdbblk;
-			
-			renderModule=*(targetModule->m_module_ptrs);
-			pdbblk=((PROXDOOR_BEHAV_BLOCK *)renderModule->m_sbptr->SBdataptr);
-
-			if (pdbblk->door_locked) 
-			{
-				return 0;
-			} 
-			else 
-			{
-				return 1;
-			}
-/*
-			if (pdbblk->lockable_door) {
-				if (pdbblk->door_locked) {
-					return(0);
-				} else {
-					return(1);
-				}
-			} else {
-				if (pdbblk->door_locked) {
-					return(0);
-				} else {
-					return(1);
-				}
-			}
-*/
-		}
-
-		case(MDT_LiftDoor):
-		{	
- 			GLOBALASSERT(targetModule->m_module_ptrs);
- 			GLOBALASSERT(*(targetModule->m_module_ptrs));
- 			if(GetState((*(targetModule->m_module_ptrs))->m_sbptr)) {
-				/* Open. */
- 				return (1);
-			} else {
-				/* Closed. */
-				return (0);
-			}
-			break;
-		}
-
-		case(MDT_SecurityDoor):
-		{	
- 			GLOBALASSERT(targetModule->m_module_ptrs);
- 			GLOBALASSERT(*(targetModule->m_module_ptrs));
- 			if(GetState((*(targetModule->m_module_ptrs))->m_sbptr)) {
-				/* Open. */
- 				return (1);
-			} else {
-				/* Closed. */
-				return (0);
-			}
-			break;
-		}
-
-		default:
-		{
-			LOCALASSERT(doorStatus==MDT_NotADoor);
-			return(1);
-		}
-
+		return -1;
 	}
 
+	return static_cast<PROXDOOR_BEHAV_BLOCK const *>(block->SBdataptr)->door_locked ? 1 : 0;
+}
+
+// Whether a lift door or a switch door is open. GetState knows each kind, and says no for no block.
+static bool DoorIsOpen(MODULE *door)
+{
+	return door && GetState(door->m_sbptr);
+}
+
+// The scent goes through an AI module unless it's a locked proximity door, or a lift or switch door that isn't open (ai_module_door.h)
+int AIModuleAdmitsPheromones(AIMODULE *targetModule)
+{
+	return AIModuleDoor_LetsScentThrough(targetModule->m_module_ptrs, AIModuleDoorKindOf, ProxDoorIsLocked, DoorIsOpen) ? 1 : 0;
 }
 
 #if SUPER_PHEROMONE_SYSTEM

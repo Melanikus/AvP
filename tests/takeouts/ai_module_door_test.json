@@ -1,0 +1,158 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the scent test asks the list's first module, not the door",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\tModule *const door = AIModuleDoor_Find(list, kindOf, &kind);",
+					"to": "\tAIModuleDoor_Find(list, kindOf, &kind);\n\tModule *const door = list ? list[0] : 0;"
+				}
+			]
+		},
+		{
+			"name": "only the list's first module can be the door",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t\t\treturn *at;\n\t\t}\n",
+					"to": "\t\t\treturn *at;\n\t\t}\n\n\t\treturn 0;\n"
+				}
+			]
+		},
+		{
+			"name": "no list leaves the kind as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t*kind = kAIModuleNotADoor;\n\n\tif (!list)\n\t{\n\t\treturn 0;\n\t}\n",
+					"to": "\tif (!list)\n\t{\n\t\treturn 0;\n\t}\n\n\t*kind = kAIModuleNotADoor;\n"
+				}
+			]
+		},
+		{
+			"name": "a proximity door that can't be read stops the scent",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t\t\treturn lockedOf(door) != 1;",
+					"to": "\t\t\treturn lockedOf(door) == 0;"
+				}
+			]
+		},
+		{
+			"name": "a locked proximity door lets the scent through",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t\t\treturn lockedOf(door) != 1;",
+					"to": "\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a lift or switch door lets the scent through shut",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t\t\treturn openOf(door);",
+					"to": "\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "something that isn't a door stops the scent",
+			"changes": [
+				{
+					"file": "3dc/avp/ai_module_door.h",
+					"from": "\t\tdefault:\n\t\t\treturn true;",
+					"to": "\t\tdefault:\n\t\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the kinds aren't checked against the game's",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "static_assert(MDT_NotADoor == kAIModuleNotADoor && MDT_ProxDoor == kAIModuleProxDoor && MDT_LiftDoor == kAIModuleLiftDoor && MDT_SecurityDoor == kAIModuleSecurityDoor,\n\t\"ai_module_door.h lists the kinds of door in MODULEDOORTYPE's order\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a module's kind isn't the game's own test",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "\treturn static_cast<int>(ModuleIsADoor(module));",
+					"to": "\treturn module->m_sbptr ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's door is found some other way",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "\treturn AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);",
+					"to": "\treturn *target->m_module_ptrs;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: AIModuleIsADoor gives the first module's kind",
+			"changes": [
+				{
+					"file": "3dc/avp/pfarlocs.cpp",
+					"from": "\tAIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);\n\treturn static_cast<MODULEDOORTYPE>(kind);",
+					"to": "\treturn ModuleIsADoor(*(target->m_module_ptrs));"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the scent test reads the list's first module itself",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "\treturn AIModuleDoor_LetsScentThrough(targetModule->m_module_ptrs, AIModuleDoorKindOf, ProxDoorIsLocked, DoorIsOpen) ? 1 : 0;",
+					"to": "\treturn ProxDoorIsLocked(*(targetModule->m_module_ptrs)) != 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door's block isn't checked to be a proximity door's",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr",
+					"to": "!block || !block->SBdataptr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door's block isn't checked for its data",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr",
+					"to": "!block || block->I_SBtype != I_BehaviourProximityDoor"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift or switch door that isn't there is asked anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "\treturn door && GetState(door->m_sbptr);",
+					"to": "\treturn GetState(door->m_sbptr);"
+				}
+			]
+		}
+	]
+}

@@ -6,6 +6,8 @@
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed debug logging code that was switched off and could never run
 //   the room for far locations is counted the same way it's shared out
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an AI module's door is found by AIModuleDoor_Find (ai_module_door.h), the one the scent test asks too
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -19,6 +21,10 @@
 #include "bh_alien.h"
 #include "bh_far.h"
 #include "pfarlocs.h"
+#include "ai_module_door.h"
+
+static_assert(MDT_NotADoor == kAIModuleNotADoor && MDT_ProxDoor == kAIModuleProxDoor && MDT_LiftDoor == kAIModuleLiftDoor && MDT_SecurityDoor == kAIModuleSecurityDoor,
+	"ai_module_door.h lists the kinds of door in MODULEDOORTYPE's order");
 
 #define UseLocalAssert TRUE
 #include "ourasert.h"
@@ -370,33 +376,25 @@ MODULEDOORTYPE ModuleIsADoor(MODULE* target)
 	return MDT_NotADoor;
 }
 
+int AIModuleDoorKindOf(MODULE *module)
+{
+	return static_cast<int>(ModuleIsADoor(module));
+}
+
+MODULE *AIModuleTheDoor(AIMODULE *target)
+{
+	int kind = kAIModuleNotADoor;
+
+	return AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);
+}
+
+// An AI module is a door if any module on its list is one, and it's the kind of the first that is
 MODULEDOORTYPE AIModuleIsADoor(AIMODULE* target)
 {
-	/* A bit rough and ready at this point. */
-	int a;
-	MODULE **renderModule;
+	int kind = kAIModuleNotADoor;
 
-	GLOBALASSERT(target->m_module_ptrs);
-
-	renderModule=target->m_module_ptrs;
-	a=0;
-
-	while ((*renderModule)!=NULL) {
-
-		if(((*renderModule)->m_sbptr) && ((*renderModule)->m_sbptr->I_SBtype == I_BehaviourProximityDoor))
-			return MDT_ProxDoor;
-		if(((*renderModule)->m_sbptr) && ((*renderModule)->m_sbptr->I_SBtype == I_BehaviourLiftDoor))	
-			return MDT_LiftDoor;
-		if(((*renderModule)->m_sbptr) && ((*renderModule)->m_sbptr->I_SBtype == I_BehaviourSwitchDoor))	
-			return MDT_SecurityDoor;
-
-		GLOBALASSERT(a<300);
-
-		renderModule++;
-		a++;
-	}
-
-	return MDT_NotADoor;
+	AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);
+	return static_cast<MODULEDOORTYPE>(kind);
 }
 
 /*-----------------------Patrick 20/12/96---------------------------
