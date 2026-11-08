@@ -57,6 +57,19 @@ if ($programs.Count -gt 0)
     Stop-Release "$($programs[0].FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') is in the package, and the only program in it should be the game, bin/AvP_Classic.exe"
 }
 
+# Nothing else Windows runs may be anywhere in the package but the game's own libraries, directly in bin beside it. The package's top
+# is the game folder, the folder the game starts in, and Windows looks for a library there too.
+$runnable = '.exe', '.dll', '.com', '.scr', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi', '.lnk', '.cpl', '.ocx', '.sys'
+$runnableOutsideBin = @(Get-ChildItem -LiteralPath $Package -Recurse -File | Where-Object {
+    $relative = $_.FullName.Substring($packageRoot.Length + 1) -replace '\\', '/'
+    ($runnable -contains $_.Extension.ToLowerInvariant()) -and $relative -cne 'bin/AvP_Classic.exe' -and $relative -notmatch '^bin/[^/]+\.dll$'
+})
+
+if ($runnableOutsideBin.Count -gt 0)
+{
+    Stop-Release "$($runnableOutsideBin[0].FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') is something Windows runs, and only the game and its own libraries, in bin, may be in the package"
+}
+
 if (-not (Get-Content -LiteralPath (Join-Path $Package 'BUILD.txt') -Raw).Contains($Commit))
 {
     Stop-Release "BUILD.txt doesn't say this package came from $Commit"
@@ -104,8 +117,10 @@ foreach ($line in $gameFiles)
     $hash, $name = $line -split '  ', 2
 
     # A line names a plain file inside the game folder: parts of letters, digits, _ . - and spaces, between /, each starting with a
-    # letter, a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard.
-    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$')
+    # letter, a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard. And it's one of the
+    # game files' own kinds (.rif, .rim, .ffl) in one of their own folders (avp_huds, graphics, MelPyth), so it can't stand for the notes,
+    # a shader or the program.
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$' -or "$name" -notmatch '(?i)^(avp_huds|graphics|MelPyth)/.+\.(rif|rim|ffl)$')
     {
         Stop-Release "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the game folder: $line"
     }

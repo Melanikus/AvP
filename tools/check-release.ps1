@@ -132,7 +132,7 @@ if (-not (Test-Path -LiteralPath $assertList))
     Stop-Release 'tests/assert_limits_allowed.txt is missing, so nothing says every assert on a limit is safe'
 }
 
-$notYetSafe = @(Get-Content -LiteralPath $assertList | Where-Object { -not $_.StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
+$notYetSafe = @(Get-Content -LiteralPath $assertList | Where-Object { -not $_.TrimStart().StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
 
 if ($notYetSafe.Count -gt 0)
 {

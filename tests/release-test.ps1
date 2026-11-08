@@ -244,7 +244,7 @@ function Make-GoodRepository
 {
     Clear-Work
     Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') "# Title`n`nWords.`n`n## What's in the way`n`nNothing.`n"
-    Write-File (Join-Path $work 'tests/assert_limits_allowed.txt') "# Rows marked NOT SAFE YET wait for a fix. This header says so, and doesn't count.`n3dc/a.cpp | assert(i < kMost); | the number is checked before it gets here`n"
+    Write-File (Join-Path $work 'tests/assert_limits_allowed.txt') "# Rows marked NOT SAFE YET wait for a fix. This header says so, and doesn't count.`n   # | NOT SAFE YET, in a note with spaces in front, doesn't count either`n3dc/a.cpp | assert(i < kMost); | the number is checked before it gets here`n"
     Write-File (Join-Path $work 'PLAYTEST.md') "# Playing it`n`nEverything here is true today.`n"
     $project = '<Project>'
 
@@ -352,7 +352,7 @@ Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-
 # code whether we write it down or not. Failing every pull request that records one would push people to leave it out, which is the
 # opposite of writing things down for whoever comes later, and it would gain no security: check-release.ps1 refuses any release while
 # one is listed. So a pull request can record one with a card, and nothing ships with one.
-$realUnsafe = @(Get-Content (Join-Path $repository 'tests/assert_limits_allowed.txt') | Where-Object { -not $_.StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
+$realUnsafe = @(Get-Content (Join-Path $repository 'tests/assert_limits_allowed.txt') | Where-Object { -not $_.TrimStart().StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
 Write-Host "  The real assert list marks $($realUnsafe.Count) row(s) NOT SAFE YET. A release is refused until that's 0."
 
 $realBlockers = Get-Content (Join-Path $repository 'RELEASE-BLOCKERS.md')
@@ -521,7 +521,7 @@ Make-GoodPackage
 New-Item -ItemType SymbolicLink -Path (Join-Path $packageRepository 'package-files/avp_huds/Linked.rif') -Target (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') | Out-Null
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'package-files/avp_huds/Linked.rif is a link' 'a link among the game files is refused'
 
-foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif', ('0' * 64) + '  avp_huds/a[1].rif', ('0' * 64) + '  /root.rif'))
+foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif', ('0' * 64) + '  avp_huds/a[1].rif', ('0' * 64) + '  /root.rif', ('0' * 64) + '  PLAYTEST.md', ('0' * 64) + '  shaders/reliefMain.psh', ('0' * 64) + '  avp_huds/run.bat', ('0' * 64) + '  bin/AvP_Classic.exe'))
 {
     Make-GoodPackage
     Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') $badLine
@@ -537,6 +537,14 @@ Make-GoodPackage
 Write-File (Join-Path $package 'other.exe') 'a program'
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'other.exe is in the package' 'a second program is refused'
+
+foreach ($stray in 'evil.dll', 'bin/run.bat', 'bin/more/extra.dll', 'shaders/start.cmd')
+{
+    Make-GoodPackage
+    Write-File (Join-Path $package $stray) 'something Windows runs'
+    Write-Sums
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "$stray is something Windows runs, and only the game and its own libraries, in bin, may be in the package" "something Windows runs is refused outside bin: $stray"
+}
 
 Make-GoodPackage
 Write-File (Join-Path $package 'AvP_Classic.exe') 'the game, but not in bin'

@@ -104,8 +104,10 @@ foreach ($line in $gameFiles) {
     $hash, $name = $line -split '  ', 2
 
     # A line names a plain file inside the folder: parts of letters, digits, _ . - and spaces, between /, each starting with a letter,
-    # a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard.
-    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$') {
+    # a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard. And it's one of the game
+    # files' own kinds (.rif, .rim, .ffl) in one of their own folders, so a line can't name the notes, a shader or the program and have
+    # it written over, since the game files are copied in last.
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$' -or "$name" -notmatch '(?i)^(avp_huds|graphics|MelPyth)/.+\.(rif|rim|ffl)$') {
         throw "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the folder: $line"
     }
 
