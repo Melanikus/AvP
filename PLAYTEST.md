@@ -18,7 +18,7 @@ From the release page, download `AvP-<version>-windows-x86.zip` and `SHA256SUMS`
 1. **The zip is what the release says.** In PowerShell, in that folder:
    ```powershell
    $hash, $name = (Get-Content SHA256SUMS) -split '  ', 2
-   if ((Get-FileHash -Algorithm SHA256 $name).Hash.ToLower() -eq $hash) { "SAME: $name" } else { "DIFFERENT: $name" }
+   if ((Get-FileHash -Algorithm SHA256 -LiteralPath $name).Hash.ToLower() -eq $hash) { "SAME: $name" } else { "DIFFERENT: $name" }
    ```
    `DIFFERENT` means don't use it.
 2. **GitHub built it, from this repository's release workflow.** With the GitHub CLI (`gh`), signed in with `gh auth login`:
@@ -28,45 +28,40 @@ From the release page, download `AvP-<version>-windows-x86.zip` and `SHA256SUMS`
    Look for **Verification succeeded**, naming `Melanikus/AvP` and `.github/workflows/release.yml`. Anything else, don't use
    it, and tell us. [PENDING: this wording is from gh's documentation, not seen yet. The first real pre-release checks it once,
    and this line is corrected to match.]
-3. **Every file inside is whole.** Unzip, then in the unzipped folder:
+3. **Every file inside is whole.** After you've unzipped it (section 2), in PowerShell, in the game folder:
    ```powershell
    Get-Content SHA256SUMS.txt | ForEach-Object {
      $hash, $file = $_ -split '  ', 2
-     if ((Get-FileHash -Algorithm SHA256 $file).Hash.ToLower() -ne $hash) { "DIFFERENT: $file" }
+     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLower() -ne $hash) { "DIFFERENT: $file" }
    }
    ```
    Nothing printed means every file matches.
 
-## 2. Where to paste (Steam)
+## 2. Where to unzip (Steam)
 Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, inside your Steam library. It holds `bin`,
-`avp_rifs`, `avp_huds` and the rest.
+`avp_rifs`, `avp_huds` and the rest. The zip is laid out the same way.
 
-1. **Back up** what you're about to replace, somewhere outside the game folder:
-   - `bin\AvP_Classic.exe`
-   - any file in `bin` with the same name as a `.dll` in the zip
-   - the `shaders` folder in the game folder, if there is one
-2. **Paste `AvPx.exe` and every `.dll`** from the zip into `bin`.
-3. **Rename** `bin\AvPx.exe` to `AvP_Classic.exe`, replacing Steam's, which you backed up.
-4. **Paste the `shaders` folder** into the **game folder**, beside `bin` and `avp_rifs`, not inside `bin`. The game reads its
-   shaders from the folder Steam starts it in, which is the game folder.
-5. **The M5 guns' files:** paste the zip's `avp_huds`, `MelPyth` and `graphics` folders into the **game folder**, beside
-   `shaders`. Windows asks whether to merge `avp_huds` with the one already there: say yes. These are new files: none of them
-   replaces one of Steam's, and your own `marwep.rif` is left as it is.
+1. **Unzip everything into the game folder.** When Windows asks, say yes to replacing files and merging folders.
+   - `bin\AvP_Classic.exe` replaces Steam's, and the game's DLLs go beside it in `bin`.
+   - `shaders` goes in the game folder itself, beside `bin`: the game reads its shaders from the folder Steam starts it in.
+   - The M5 guns' files go into `avp_huds`, `MelPyth` and `graphics`. They're new files: none of them replaces one of
+     Steam's, and your own `marwep.rif` is left as it is.
 
-   | Folder in the zip | What's in it |
+   | Folder | What the zip puts there |
    |---|---|
+   | `bin` | `AvP_Classic.exe` and the game's DLLs |
+   | `shaders` | the shaders |
    | `avp_huds` | `MelPyth_MarHUD.RIF`, `MelPyth_MarWep.rif`, `ShotgunPickup.rif`, `Staff_Hud.RIF`, `StaffPickup.RIF` |
    | `MelPyth\fastfile` | `common.ffl`, the new guns' sounds |
    | `graphics\MelPyth\HUDs\Marine` | the 15 pictures (`.rim`) |
+   | the game folder itself | `PLAYTEST.md` (this guide), `License.txt`, `BUILD.txt` and `SHA256SUMS.txt` |
 
    `MelPyth_MarWep.rif` holds the M5 versions of the pulse rifle, with its ammo counter, and of the pistols. With it the game
    draws those guns from it; without it, from your own `marwep.rif`, as before.
-
-6. **Press Play** in Steam.
-
-**To undo it,** in Steam: the game's **Properties**, **Installed Files**, **Verify integrity of game files**. That puts back
-Steam's own files that you replaced. The files we added stay until you delete them, and the original game doesn't use them.
-Don't verify while you're testing: it puts Steam's exe back over ours.
+2. **Press Play** in Steam.
+3. **To undo it,** in Steam: the game's **Properties**, **Installed Files**, **Verify integrity of game files**. That puts
+   back Steam's own files. The files we added stay until you delete them, and the original game doesn't use them.
+   Don't verify while you're testing: it puts Steam's exe back over ours.
 
 ## 3. Co-op in five lines
 1. **The host** chooses **Co-op campaign** on the Multiplayer page, picks the campaign, the level and the difficulty, and
@@ -102,7 +97,9 @@ pieces. If a game stalls only over a VPN, try without it.
 - **The M5 guns:**
   - **In single player or the co-op campaign, as a marine:** open the console (the key under Esc, left of 1) and type
     `GIVEALLWEAPONS`, in capitals. It gives every marine gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest.
-    It's the only way to get the sniper rifle for now: no level places one yet.
+    It's the only way to get the sniper rifle for now: no level places one yet. [PENDING: the console's debug commands are
+    being turned on for beta builds. Until that's in, this needs `-debug` in the game's Steam launch options, and this line
+    is rewritten to match what ships.]
   - **In other multiplayer games:** a marine picks the shotgun, revolver or M79 class. There's no sniper rifle there.
   - **The Predator's staff:** the host turns **Allow Staff** on, in a multiplayer game that isn't co-op.
 - **Send the log folder** when you're done, as below.
