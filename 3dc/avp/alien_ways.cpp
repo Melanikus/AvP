@@ -2,6 +2,8 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   an alien found stuck has its state, its last frames' states, its speed, gravity and body's down, its obstruction count, its module and
 //   the game's own goal for it in the log, and an alien let go has its state (alien_ways_stuck.h). One function finds a live alien by who it is.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the map is told each frame which of the level's doors won't let an alien through, so a way never goes through a locked door (#118)
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -40,6 +42,9 @@ namespace
 
 	// Which polygons of the map are each module's, by the module's own number (alien_ways_level.h)
 	std::vector<AlienWaysRange> theModules;
+
+	// The level's doors, whose state the map is told each frame (AlienWaysLevel_ReadDoors)
+	std::vector<AlienWaysLevelDoor> theDoors;
 
 	// Every alien's way. Kept here, not made with new, for the same reason as the build.
 	AlienWaysGuide theGuide;
@@ -353,9 +358,10 @@ void AlienWays_LevelStart()
 
 	std::vector<AlienWaysPolygon> polygons;
 	AlienWaysLevelCounts counts;
-	const char *const why = AlienWaysLevel_List(&polygons, &theModules, &counts);
+	const char *const why = AlienWaysLevel_List(&polygons, &theModules, &theDoors, &counts);
 
-	LogString("alien ways: listed " + std::to_string(counts.polygons) + " polygons from " + std::to_string(counts.modules) + " modules and "
+	LogString("alien ways: listed " + std::to_string(counts.polygons) + " polygons from " + std::to_string(counts.modules) + " modules ("
+		+ std::to_string(counts.doors) + " of them doors) and "
 		+ std::to_string(counts.objects) + " still objects. Left out: " + std::to_string(counts.badCorner) + " with a corner that isn't one of its shape's, "
 		+ std::to_string(counts.farCorner) + " with a corner more than 64 km out, " + std::to_string(counts.noEnd) + " whose corners have no end, "
 		+ std::to_string(counts.tooFewCorners) + " with under 3 corners, " + std::to_string(counts.tooManyCorners) + " with over 8. "
@@ -437,6 +443,9 @@ void AlienWays_Frame()
 
 		AlienWaysStateHistory_Note(&w.history, StateOf(alien));
 	}
+
+	// The doors as they are now, before this frame's searches carry on: a search keeps off a door that won't let an alien through (#118)
+	AlienWaysLevel_ReadDoors(theDoors, ReadyMap());
 
 	// Every alien that stopped being guided since the last frame gets its usual gravity back, before any alien moves this frame. The log says
 	// what state it left for, up to kAlienWaysMostLetGoLines times a level.
@@ -637,6 +646,7 @@ void AlienWays_LevelEnd()
 	theGuide.Clear();
 	theBuild.Stop();
 	std::vector<AlienWaysRange>().swap(theModules);
+	std::vector<AlienWaysLevelDoor>().swap(theDoors);
 	told = true;
 	toldTurnedAway = false;
 

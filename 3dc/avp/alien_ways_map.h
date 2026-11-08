@@ -1,9 +1,9 @@
 // A map of a level's surfaces for an alien, and a search across it that can make the floor dear: "floor is lava", issue #109.
 // Written 2026-11-08 by Melanikus for the AvP port.
 //
-// WHY. Aliens can run on walls and ceilings, but nothing in the game plans a way over them. Today an alien climbs only when it happens to run
-// into a wall while it's allowed to (AlienNearState_Approach, bh_near.cpp). This map lets an alien ask for a way that keeps off the floor where
-// it can. Nothing in the game uses it yet: that's the next step, after review.
+// WHY. Aliens can run on walls and ceilings, but nothing in the 1999 game plans a way over them: there, an alien climbs only when it happens to
+// run into a wall while it's allowed to (AlienNearState_Approach, bh_near.cpp). This map lets an alien ask for a way that keeps off the floor
+// where it can. The game asks it through alien_ways.h, only while the -alienways switch is on.
 //
 // WHAT THE MAP IS. Every polygon an alien could cling to is a place on the map. Each one is a FLOOR, a WALL or a CEILING, by which way it faces,
 // using the game's own floor angle (FLOOR_THRESHOLD in dynamics.cpp: facing up by at least 30000 of 65536). Two polygons are JOINED where they
@@ -27,8 +27,9 @@
 //        floor is lava (10):      A                           B
 //                                  \_________________________/            up the wall, along it, and back down
 //
-// WHAT IT DOESN'T KNOW: the alien's width, jumps across air, doors that are shut, and lifts. A way here means the surfaces join up, not that an
-// alien fits. The game's physics decides the rest.
+// WHAT IT DOESN'T KNOW: the alien's width, jumps across air, and lifts. A way here means the surfaces join up, not that an alien fits. The game's
+// physics decides the rest. A door it knows only as some polygons with the door's number, and whether that door is shut only by being told
+// (DOORS, in the class below).
 //
 // HOW IT WAS CHOSEN. Measured with no game running on the 32 stock levels (AvP-docs, engine/pathfinding-study/alien-ways.js). On 1,636 route
 // legs, a floor price of 10 left 79% less floor between a leg's ends than price 1, with ways 41% longer, and past 10 almost no more floor was
@@ -75,6 +76,10 @@ long long const kAlienWaysMostFlatArea = 5000000000LL;  // a polygon bigger than
 int const kAlienWaysMostWallHeight = 50000;             // a wall taller than 50 m: stock's biggest are 549 m tall, the view outside on stat101 and breakout
 int const kAlienWaysMostCoordinate = 64000000;          // a corner more than 64 km from the middle of the world
 
+// The most doors a level's polygons can name (AlienWaysPolygon::door). A polygon naming a door past this is refused, and so is the level. A
+// stock level has a few dozen; a level has no more doors than modules, and genshd1 has 294 modules.
+int const kAlienWaysMostDoors = 4096;
+
 // What a search may be asked for
 int const kAlienWaysMostFloorPrice = 1000;
 size_t const kAlienWaysMostWayPoints = 256;             // a longer way is cut short there, and says so
@@ -104,6 +109,8 @@ struct AlienWaysPolygon
 	int y[kAlienWaysMostCorners];
 	int z[kAlienWaysMostCorners];
 	float up;                              // how much it faces up (towards smaller y), from 1 (flat, facing up) to -1 (facing down)
+	int door;                              // 0 if it's part of no door. Otherwise which door it's part of, numbered from 1 up to
+	                                       // kAlienWaysMostDoors. They're numbered from 1 so that a polygon filled with zeros is part of no door.
 };
 
 enum AlienWaysKind
@@ -116,9 +123,9 @@ enum AlienWaysKind
 // Which kind a polygon is, by how much it faces up
 AlienWaysKind AlienWays_KindOf(float up);
 
-// A game polygon's list of corners ends at a negative number. This adds one to a list for the map, and never cuts one down: with 3 to
-// kAlienWaysMostCorners corners it goes in as it is, and with fewer or more it's left out, and the answer says which. A level file's polygons
-// have at most 4 corners (its polygon records have room for 4), so one with more than 8 can only be a broken file.
+// A game polygon's list of corners ends at a negative number. This adds one to a list for the map, as part of no door, and never cuts one
+// down: with 3 to kAlienWaysMostCorners corners it goes in as it is, and with fewer or more it's left out, and the answer says which. A level
+// file's polygons have at most 4 corners (its polygon records have room for 4), so one with more than 8 can only be a broken file.
 enum AlienWaysAdded
 {
 	kAlienWaysAddedAsItIs,
@@ -217,6 +224,24 @@ public:
 	// The same, looking only at polygons of one kind (an AlienWaysKind), or at every kind if kind is -1
 	int NearestPolygonOfKind(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar, int kind) const;
 
+	// DOORS. Some polygons are part of a door (AlienWaysPolygon::door). The game says which doors won't let an alien through at the moment (a
+	// locked door, say), and a search keeps off every polygon of a door that's shut. Two exceptions, so an alien is never trapped by this:
+	// the polygon the search starts on, so an alien already in a doorway can leave it, and the goal's own polygon. A search sees the doors as
+	// they were when it started, so a door that shuts while one runs can't leave it half seeing the door shut: the next search sees it.
+	//
+	//      room A            door 1 (shut)          room B
+	//      floor  ------------+==========+------------  floor        a way from A to B goes round, if there's another way,
+	//                         |          |                            and if there isn't, there's no way at all
+	//
+	// How many doors the polygons name: the highest door number among them, and 0 if none, or if there's no map
+	int Doors() const { return doorShut.empty() ? 0 : static_cast<int>(doorShut.size()) - 1; }
+
+	// Says whether a door is shut now. A number that isn't one of the map's doors is ignored, and door 0 (no door) is never shut.
+	void SetDoorShut(int door, bool shut);
+
+	// Whether a door is shut now, as the game last said. False for a number that isn't one of the map's doors.
+	bool DoorShut(int door) const;
+
 	// Starts a search for a way from start, on polygon fromPolygon, to goal, on polygon toPolygon, with the floor at floorPrice times a wall's
 	// price. It gives back nothing if it started, or why not, in words. A search that's running is dropped.
 	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice);
@@ -271,6 +296,11 @@ private:
 	std::vector<int> firstJoin;
 	std::vector<int> joinOther, joinStretch;
 	std::vector<AlienWaysXYZ> stretchA, stretchB;
+
+	// Doors: which door each polygon is part of (0 for none), and for each door, from 0 up to Doors(), whether it's shut now and whether it was
+	// shut when the search that's running started. Place 0 is no door, and is never shut, so a search can read any polygon's door straight off.
+	std::vector<int> doorOf;
+	std::vector<uint8_t> doorShut, doorShutInSearch;
 
 	// Only while building: every corner of every polygon kept, and where each polygon's start in that list, and what touches what.
 	// A corner, by the metre box it's in:

@@ -469,8 +469,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "long long const wanted = std::max(highest, lowest - kAlienWaysClimbHeight);",
-					"to": "long long const wanted = lowest - kAlienWaysClimbHeight;"
+					"from": "double const t = std::max(0.0, std::min(1.0, (static_cast<double>(wanted) - a.y) / (static_cast<double>(b.y) - a.y)));",
+					"to": "double const t = (static_cast<double>(wanted) - a.y) / (static_cast<double>(b.y) - a.y);"
 				}
 			]
 		},
@@ -511,6 +511,116 @@
 					"file": "3dc/avp/alien_ways_map.cpp",
 					"from": "\t\tif (downIsNew)\n\t\t{\n\t\t\tpoints[count++] = down;\n\t\t}\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shut door is walked through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tif (other != toNode && doorShutInSearch[doorOf[other]] != 0)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the goal's own polygon is kept off when its door is shut",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
+					"to": "if (doorShutInSearch[doorOf[other]] != 0)"
+				}
+			]
+		},
+		{
+			"name": "a search reads the doors as they are now, not as they were when it started",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
+					"to": "if (other != toNode && doorShut[doorOf[other]] != 0)"
+				}
+			]
+		},
+		{
+			"name": "a search never takes the doors as they are when it starts",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tstd::copy(doorShut.begin(), doorShut.end(), doorShutInSearch.begin());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "door 0, no door, can be shut",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (door > 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;",
+					"to": "if (door >= 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "a door one past the map's last can be set",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (door > 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;",
+					"to": "if (door > 0 && door <= static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "a door below 0 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < -1 || p.door > kAlienWaysMostDoors)"
+				}
+			]
+		},
+		{
+			"name": "a door past the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < 0 || p.door > kAlienWaysMostDoors + 1)"
+				}
+			]
+		},
+		{
+			"name": "the most doors itself is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < 0 || p.door >= kAlienWaysMostDoors)"
+				}
+			]
+		},
+		{
+			"name": "the doors aren't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\thighestDoor = std::max(highestDoor, p.door);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon's door isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tdoorOf.push_back(p.door);\n",
+					"to": "\t\tdoorOf.push_back(0);\n"
 				}
 			]
 		},

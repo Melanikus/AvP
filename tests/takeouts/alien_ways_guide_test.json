@@ -696,6 +696,146 @@
 			]
 		},
 		{
+			"name": "a locked proximity door lets an alien through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tcase kAlienWaysProximityDoor:\n\t\t\treturn !locked;",
+					"to": "\t\tcase kAlienWaysProximityDoor:\n\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a shut lift's or switch's door lets an alien through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tcase kAlienWaysSwitchDoor:\n\t\t\treturn open;",
+					"to": "\t\tcase kAlienWaysSwitchDoor:\n\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a kind of door that isn't known lets an alien through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t// Not one of the kinds: taken as shut, so no way is planned through it\n\treturn false;",
+					"to": "\t// Not one of the kinds: taken as shut, so no way is planned through it\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map isn't told about the doors each frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tAlienWaysLevel_ReadDoors(theDoors, ReadyMap());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the level's doors are kept after it ends",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tstd::vector<AlienWaysLevelDoor>().swap(theDoors);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door's polygons don't carry its number",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\t(*listing->polygons)[p].door = door;",
+					"to": "\t\t\t\t(*listing->polygons)[p].door = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's door isn't listed as a door",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "case I_BehaviourSwitchDoor:    isADoor = true; kind = kAlienWaysSwitchDoor;    break;",
+					"to": "case I_BehaviourSwitchDoor:    break;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door with no block is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "if (door && door->SBdataptr)",
+					"to": "if (door)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a proximity door's block is read before its kind is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\t\tif (door->I_SBtype == I_BehaviourProximityDoor)\n",
+					"to": "\t\t\t\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift's door's block is read before its kind is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\t\tif (door->I_SBtype == I_BehaviourLiftDoor)\n",
+					"to": "\t\t\t\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's door's block is read before its kind is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\t\t\tif (door->I_SBtype == I_BehaviourSwitchDoor)\n",
+					"to": "\t\t\t\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a proximity door is judged without its lock",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "kAlienWaysProximityDoor, block->door_locked != 0, GetState(door) != 0);",
+					"to": "kAlienWaysProximityDoor, false, GetState(door) != 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door that can't be read is taken as open",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\tbool through = false;\n",
+					"to": "\t\tbool through = true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map is told about the wrong door",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "map->SetDoorShut(static_cast<int>(d) + 1, !through);",
+					"to": "map->SetDoorShut(static_cast<int>(d), !through);"
+				}
+			]
+		},
+		{
 			"name": "a search's report leaves out the polygons its way is on",
 			"changes": [
 				{

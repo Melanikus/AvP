@@ -36,6 +36,7 @@ namespace
 	// The reasons, word for word. tests/alien_ways_map_test.cpp checks each one.
 	const char *const kWhyCorners = "a polygon has fewer than 3 corners, or more than 8";
 	const char *const kWhyFacing = "a polygon's facing isn't a number from -1 to 1";
+	const char *const kWhyDoor = "a polygon names a door below 0 or past the most doors the map takes";
 	const char *const kWhyPolygons = "the level has more polygons than the map takes";
 	const char *const kWhyCrowded = "too many corners lie close together in one place";
 	const char *const kWhyEdgeSteps = "the polygons' edges are too long to join them up";
@@ -97,10 +98,11 @@ namespace
 
 	// A point on the stretch from a to b, moved up it to at least kAlienWaysClimbHeight above the stretch's lowest point, or to its highest
 	// point if that's lower. y goes down, so up is a smaller y. A stretch that's level all along can't take a point any higher, so it's left.
+	// How far along the stretch the point goes is kept from 0 to 1 (t, below), so on a stretch shorter than the climb it goes to the top.
 	AlienWaysXYZ LiftedOn(AlienWaysXYZ a, AlienWaysXYZ b, AlienWaysXYZ p)
 	{
-		long long const lowest = std::max(a.y, b.y), highest = std::min(a.y, b.y);
-		long long const wanted = std::max(highest, lowest - kAlienWaysClimbHeight);
+		long long const lowest = std::max(a.y, b.y);
+		long long const wanted = lowest - kAlienWaysClimbHeight;
 
 		if (p.y <= wanted || a.y == b.y)
 		{
@@ -246,6 +248,7 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 	}
 
 	p.up = up;
+	p.door = 0;
 	list->push_back(p);
 	return kAlienWaysAddedAsItIs;
 }
@@ -275,6 +278,7 @@ void AlienWaysMap::LetGo()
 	GiveBack(&firstJoin);
 	GiveBack(&joinOther); GiveBack(&joinStretch);
 	GiveBack(&stretchA); GiveBack(&stretchB);
+	GiveBack(&doorOf); GiveBack(&doorShut); GiveBack(&doorShutInSearch);
 	GiveBack(&cornerX); GiveBack(&cornerY); GiveBack(&cornerZ);
 	GiveBack(&firstCorner);
 	GiveBack(&buckets);
@@ -323,6 +327,20 @@ bool AlienWaysMap::Count(size_t bytes, size_t *total, size_t most)
 
 	*total += bytes;
 	return true;
+}
+
+void AlienWaysMap::SetDoorShut(int door, bool shut)
+{
+	// Place 0 is no door, so it's never set; and a number past the list is no door of this map's
+	if (door > 0 && door < static_cast<int>(doorShut.size()))
+	{
+		doorShut[door] = shut ? 1 : 0;
+	}
+}
+
+bool AlienWaysMap::DoorShut(int door) const
+{
+	return door > 0 && door < static_cast<int>(doorShut.size()) && doorShut[door] != 0;
 }
 
 int AlienWaysMap::MapNumberOf(size_t given) const
@@ -442,6 +460,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 
 	// --- 1. Look at every polygon. Refuse a level with one that can't be right, and leave out scenery.
 	size_t kept = 0, corners = 0;
+	int highestDoor = 0;
 	std::vector<uint8_t> keep;
 
 	if (!Count(polygons.size(), &bytesBuilding, limits.mostBytesBuilding))
@@ -470,6 +489,15 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 		{
 			return kWhyFacing;
 		}
+
+		// A door's number picks a place in the doors' lists below, so one that's out of range is refused, whatever else the polygon is. Every
+		// polygon counts towards how many doors there are, even one left out as scenery, so the doors keep the numbers they were given.
+		if (p.door < 0 || p.door > kAlienWaysMostDoors)
+		{
+			return kWhyDoor;
+		}
+
+		highestDoor = std::max(highestDoor, p.door);
 
 		bool outside = false;
 		long long lowX = LLONG_MAX, highX = LLONG_MIN, lowY = LLONG_MAX, highY = LLONG_MIN, lowZ = LLONG_MAX, highZ = LLONG_MIN;
@@ -502,8 +530,11 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	}
 
 	// --- 2. Copy the polygons kept, and sort their corners into boxes. Everything is counted against its ceiling before it's made. Kept: which
-	// number each given polygon became, and each polygon's middle, kind and box. Only while building: the corners, and the boxes they're sorted into.
-	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t) + 2 * sizeof(AlienWaysXYZ));
+	// number each given polygon became, each polygon's middle, kind, box and door, and two lists of the doors. Only while building: the corners,
+	// and the boxes they're sorted into.
+	size_t const doors = static_cast<size_t>(highestDoor) + 1;
+	size_t const keptBytes = polygons.size() * sizeof(int) + kept * (3 * sizeof(int) + sizeof(uint8_t) + 2 * sizeof(AlienWaysXYZ) + sizeof(int))
+		+ doors * 2 * sizeof(uint8_t);
 	size_t const buildBytes = corners * 3 * sizeof(int) + (kept + 1) * sizeof(int) + corners * sizeof(Corner);
 
 	if (!Count(keptBytes, &bytesKept, limits.mostBytesKept))
@@ -519,6 +550,9 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	mapNumber.assign(polygons.size(), -1);
 	middleX.reserve(kept); middleY.reserve(kept); middleZ.reserve(kept);
 	kind.reserve(kept);
+	doorOf.reserve(kept);
+	doorShut.assign(doors, 0);
+	doorShutInSearch.assign(doors, 0);
 	boxLow.reserve(kept); boxHigh.reserve(kept);
 	cornerX.reserve(corners); cornerY.reserve(corners); cornerZ.reserve(corners);
 	firstCorner.reserve(kept + 1);
@@ -536,6 +570,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 		mapNumber[i] = number;
 		firstCorner.push_back(static_cast<int>(cornerX.size()));
 		kind.push_back(static_cast<uint8_t>(AlienWays_KindOf(p.up)));
+		doorOf.push_back(p.door);
 
 		// The middle is the average of the corners. The sums can't overflow: each corner is at most 64 km out, and there are at most 8.
 		long long sx = 0, sy = 0, sz = 0;
@@ -871,7 +906,6 @@ const char *AlienWaysMap::JoinEdge(int polygon, AlienWaysXYZ a, AlienWaysXYZ b)
 	return 0;
 }
 
-// What a metre on a node costs: a floor's at the search's price, and anything else 1. The goal node is never left, so its price never counts.
 // A point on a wall polygon, moved straight up to kAlienWaysClimbHeight above the wall's lowest point, or to the wall's top if that's lower.
 // A point that's already that high, or on a polygon that isn't a wall, is left as it is. y goes down, so up is a smaller y.
 AlienWaysXYZ AlienWaysMap::LiftOnWall(int node, AlienWaysXYZ p) const
@@ -950,6 +984,7 @@ double AlienWaysMap::CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) co
 	return length * PriceOf(node);
 }
 
+// What a metre on a node costs: a floor's at the search's price, and anything else 1. The goal node is never left, so its price never counts.
 double AlienWaysMap::PriceOf(int node) const
 {
 	if (node < static_cast<int>(Polygons()) && kind[node] == kAlienWaysFloor)
@@ -1001,6 +1036,9 @@ const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int t
 	wayPolygons.clear();
 	cutShort = false;
 	price = floorPrice;
+
+	// The doors as they are now, for the whole of this search. Both lists were made the same length when the map was built.
+	std::copy(doorShut.begin(), doorShut.end(), doorShutInSearch.begin());
 	fromNode = fromPolygon;
 	toNode = toPolygon;
 	goalAt = goal;
@@ -1082,6 +1120,12 @@ AlienWaysSearch AlienWaysMap::Work(int polygonsAllowed)
 			int const other = joinOther[k];
 
 			if (closed[other] == searchNumber)
+			{
+				continue;
+			}
+
+			// A door that was shut when this search started is kept off, unless it's the goal's own polygon (DOORS, in alien_ways_map.h)
+			if (other != toNode && doorShutInSearch[doorOf[other]] != 0)
 			{
 				continue;
 			}
