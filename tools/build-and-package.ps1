@@ -134,32 +134,32 @@ foreach ($name in $licences.Keys) {
     Copy-Item -LiteralPath $from -Destination (Join-Path $licenceFolder $name)
 }
 
-# Where OpenAL Soft's source is. vcpkg's record of what it built (vcpkg.spdx.json) names the place its source came from, at which version,
-# and the vcpkg commit whose port built it. Each is checked for its shape before it's written down.
+# Where OpenAL Soft's source is. vcpkg's record of what it built (vcpkg.spdx.json) names the place its source came from, and at which
+# version, checked for its shape before it's written down. It's built from this project's own port, vcpkg-overlay-ports/openal-soft,
+# which changes it, so that folder, at this commit, is the rest of its source.
 $record = Get-Content -LiteralPath "$installed\openal-soft\vcpkg.spdx.json" -Raw | ConvertFrom-Json
 $places = @($record.packages | ForEach-Object { "$($_.downloadLocation)" })
 $openalSource = @($places | Where-Object { $_ -cmatch '^git\+https://github\.com/kcat/openal-soft@[0-9A-Za-z._-]+$' })
-$openalPort = @($places | Where-Object { $_ -cmatch '^git\+https://github\.com/microsoft/vcpkg@[0-9a-f]{40}$' })
-if ($openalSource.Count -ne 1 -or $openalPort.Count -ne 1) { throw "vcpkg's record of OpenAL Soft doesn't say where its source came from: $($places -join ', ')" }
+if ($openalSource.Count -ne 1) { throw "vcpkg's record of OpenAL Soft doesn't say where its source came from: $($places -join ', ')" }
 $openalVersion = $openalSource[0].Split('@')[1]
-$openalPortCommit = $openalPort[0].Split('@')[1]
 
-# Where this repository is, so the source of our own two film libraries can be found at the very commit this package was built from
+# Where this repository is, so our own changes to OpenAL Soft, and our two film libraries, can be found at the very commit this package
+# was built from
 $here = if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) { "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" } else { 'https://github.com/Melanikus/AvP' }
 
 $whatEachIs = @{
     'avp_classic.exe'    = "the game. Rebellion's and Barry Duncan's terms for it are in License.txt, at the top. Built into it: ENet (licences/ENet.txt, MIT), changed by this project's own patches, which are in its source in vcpkg-overlay-ports/enet, and the reference SipHash that one of them adds (licences/SipHash.txt, CC0)."
-    'openal32.dll'       = "OpenAL Soft $openalVersion (licences/OpenAL-Soft.txt, the GNU Library General Public License, version 2). Its source: https://github.com/kcat/openal-soft at $openalVersion, built by vcpkg's port at https://github.com/microsoft/vcpkg/tree/$openalPortCommit/ports/openal-soft. You may put your own build of OpenAL Soft in its place."
+    'openal32.dll'       = "OpenAL Soft $openalVersion (licences/OpenAL-Soft.txt: the GNU Library General Public License, version 2, and then the licences of some of its parts). Its source: https://github.com/kcat/openal-soft at $openalVersion, with this project's own changes, which are in $here/tree/$commit/vcpkg-overlay-ports/openal-soft. You may put your own build of OpenAL Soft in its place."
     'fmt.dll'            = 'fmt, which OpenAL Soft uses (licences/fmt.txt, MIT).'
     'ogg.dll'            = 'libogg (licences/libogg.txt, BSD).'
-    'vorbis.dll'         = 'libvorbis (licences/libvorbis.txt, BSD).'
-    'vorbisfile.dll'     = 'libvorbis (licences/libvorbis.txt, BSD).'
-    'vorbisenc.dll'      = 'libvorbis (licences/libvorbis.txt, BSD).'
-    'pthreadvc3.dll'     = 'PThreads4W (licences/PThreads4W.txt, the Apache License 2.0).'
+    'vorbis.dll'         = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'vorbisfile.dll'     = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'vorbisenc.dll'      = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'pthreadvc3.dll'     = 'PThreads4W, built by this project''s own port in vcpkg-overlay-ports/pthreads (licences/PThreads4W.txt, the Apache License 2.0).'
     'libbinkdec.dll'     = "libbinkdec, Barry Duncan's player for Bink films (licences/libbinkdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libbinkdec. You may put your own build of it in its place."
     'libsmackerdec.dll'  = "libsmackerdec, Barry Duncan's player for Smacker films (licences/libsmackerdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libsmackerdec. You may put your own build of it in its place."
-    'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it)."
-    'd3dcompiler_43.dll' = "Microsoft's D3DX shader compiler (licences/D3DX.txt, Microsoft's licence terms for it)."
+    'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
+    'd3dcompiler_43.dll' = "Microsoft's D3DX shader compiler (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
 }
 
 $aboutLines = @(foreach ($binary in @(Get-ChildItem -LiteralPath $programFolder -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object Name)) {
