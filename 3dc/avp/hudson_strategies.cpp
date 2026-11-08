@@ -21,6 +21,7 @@
 #include "bh_track.h"
 #include "bh_marine.h"
 #include "bh_alien.h"
+#include "bh_facehugger.h"
 #include "pvisible.h"
 #include "hudson_plan.h"
 #include "hudson_strategies.h"
@@ -163,6 +164,19 @@ std::string HudsonStrategies_State(const STRATEGYBLOCK *target)
 		{
 			PLATFORMLIFT_BEHAVIOUR_BLOCK const *const lift = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)target->SBdataptr;
 			_snprintf(text, sizeof(text) - 1, "%s, state %d", lift->Enabled ? "enabled" : "disabled", (int)lift->state);
+			break;
+		}
+
+		// #126: a level's facehugger can float, asleep, until a switch wakes it. Its own near state says which, and whether it has anyone to go for
+		case I_BehaviourFaceHugger:
+		{
+			static const char *const states[] = { "approaching", "attacking", "waiting", "avoiding", "dying", "floating", "jumping", "about to jump" };
+			FACEHUGGER_STATUS_BLOCK const *const hugger = (FACEHUGGER_STATUS_BLOCK *)target->SBdataptr;
+			int const state = (int)hugger->nearBehaviourState;
+			bool const hasTarget = hugger->Target && NAME_ISEQUAL(hugger->Target->SBname, hugger->Target_SBname);
+
+			_snprintf(text, sizeof(text) - 1, "%s (near state %d), %s, health %d", (state >= 0 && state < (int)(sizeof(states) / sizeof(states[0]))) ? states[state] : "a state with no word",
+				state, hasTarget ? "going for someone" : "going for nobody", target->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 			break;
 		}
 

@@ -785,6 +785,47 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watchfrom=side", kHudsonRefusedWatchFromWithoutWatch);
 	Refused("-hudson level=a frames=1 rooms=1 watchfrom=eyes", kHudsonRefusedWatchWordsWithoutCombat);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=eyes watchfrom=side", kHudsonRefusedAskedTwice);
+	// The user's alien films have the lamp on at the biggest spot it has: lampsize=
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.35", &plan) == 0 && plan.lampOn && plan.lampSizeHundredths == 35, "lampsize=0.35 is the most the spot goes to");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.05", &plan) == 0 && plan.lampSizeHundredths == 5, "and 0.05 the least");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=blink lampsize=0.2", &plan) == 0 && plan.lampSizeHundredths == 20, "one digit after the dot is tenths, and a blinking lamp has a size too");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on", &plan) == 0 && plan.lampSizeHundredths == 0, "without it the spot is as built");
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.36", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.04", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=1", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0,35", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=.35", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.355", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.3x", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=", kHudsonRefusedLampSizeNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 lampsize=0.35", kHudsonRefusedLampSizeWithoutLamp);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=off lampsize=0.35", kHudsonRefusedLampSizeWithoutLamp);
+	Refused("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.35 lampsize=0.35", kHudsonRefusedAskedTwice);
+	// #126: follow= names one thing in the level whose place and state the log says once a second
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 follow=hugger1", &plan) == 0 && strcmp(plan.follow, "hugger1") == 0, "follow= names one thing to follow");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 follow=locker_area_switch", &plan) == 0 && strcmp(plan.follow, "locker_area_switch") == 0, "with _ for a space in its name");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 follow=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", &plan) == 0 && strlen(plan.follow) == 59, "up to 59 letters");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1", &plan) == 0 && plan.follow[0] == 0, "and a run that doesn't say follows nothing");
+	Refused("-hudson level=a frames=1 rooms=1 follow=", kHudsonRefusedFollowName);
+	Refused("-hudson level=a frames=1 rooms=1 follow=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", kHudsonRefusedFollowName);
+	Refused("-hudson level=a frames=1 rooms=1 follow=hug.ger", kHudsonRefusedFollowName);
+	Refused("-hudson level=a frames=1 rooms=1 follow=hug/ger", kHudsonRefusedFollowName);
+	Refused("-hudson level=a frames=1 rooms=1 follow=hugger1 follow=hugger1", kHudsonRefusedAskedTwice);
+	// #126: a walk, as a player walks, through a walk-in switch, and where he looks once he's there
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 dieat=5 walkfrom=-45280,5363,8000 walkto=-45280,5363,11000 lookat=-51005,4671,17506", &plan) == 0 && plan.walkSaid && plan.lookAtSaid
+		&& plan.walkFromX == -45280 && plan.walkFromY == 5363 && plan.walkFromZ == 8000 && plan.walkToX == -45280 && plan.walkToY == 5363 && plan.walkToZ == 11000
+		&& plan.lookAtX == -51005 && plan.lookAtY == 4671 && plan.lookAtZ == 17506 && plan.dieAtSeconds == 5, "a walk from one place to another, and a place to look at after it, in the level's own millimetres");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6", &plan) == 0 && plan.walkSaid && !plan.lookAtSaid, "a walk doesn't need a place to look at");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1", &plan) == 0 && !plan.walkSaid && !plan.lookAtSaid, "and a run that doesn't say has no walk");
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3", kHudsonRefusedWalkNeedsBoth);
+	Refused("-hudson level=a frames=1 rooms=1 walkto=1,2,3", kHudsonRefusedWalkNeedsBoth);
+	Refused("-hudson level=a frames=1 rooms=1 lookat=1,2,3", kHudsonRefusedLookAtWithoutWalk);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2 walkto=1,2,3", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=1,2,3,4", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6 lookat=x,y,z", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6 walkto=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedWalkNotAlone);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3 standat=1,2,3", kHudsonRefusedAskedTwice);
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && plan.combatAliens == 1, "one alien unless it says");
@@ -1144,6 +1185,27 @@ static void TestTheRealGame()
 		Check(Has(watchCode, "_snprintf(what, sizeof(what) - 1, \"watch-second-%03d\", seconds);\n\t\t\tAskForAFightPicture(what);"), "SOURCE: named by its second");
 		Check(ComesBefore(watchCode, "hudson: a run starts: level %s", "hudson: the shoulder lamp is off in this run, as it is unless a run asks"), "SOURCE: every run's log says whether the lamp is on, as it starts");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchFrom) { $arguments += \" watchfrom=$WatchFrom\" }"), "SOURCE: the script can ask for watchfrom=");
+		Check(Has(watchCode, "ShoulderLamp_SetSpotSize(plan.lampSizeHundredths / 100.0);"), "SOURCE: lampsize= sets the lamp's spot");
+		Check(Has(watchCode, "int const lampSize = (int)(ShoulderLamp_SpotSize() * 100.0 + 0.5);"), "SOURCE: and the result says the size the lamp really had, in hundredths, the same in any language");
+		Check(Has(watchCode, "\tDieIfItIsTime();\n\tFollowTheNamedThing();"), "SOURCE: follow= is looked at every frame");
+		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "if (lastSaid != 0 && now - lastSaid < 1000)"), "SOURCE: and said once a second");
+		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, because a restart makes it again");
+		Check(Has(watchCode, "if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)\n\t{\n\t\tWalkHim((PLAYER_STATUS *)playerStatus);"), "SOURCE: a walk is the player's own input");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "\t\tHudson_FaceThePlace(status, to);\n\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;"), "SOURCE: facing walkto=, with the forward key, as a person walks");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "bool const there = away <= kWalkCloseEnough;"), "SOURCE: until he's close to it");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt"), "SOURCE: only once it may start");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "if (walkMayStartAt == 0 && plan.dieAtSeconds == 0)"), "SOURCE: which is soon after the start without dieat=");
+		Check(Has(watchCode, "if (plan.walkSaid && plan.dieAtSeconds != 0)\n\t{\n\t\twalkMayStartAt = GetTickCount() + 3000;"), "SOURCE: and after the restart with it");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"2s\");"), "SOURCE: a picture 2 seconds after he gets there");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"5s\");"), "SOURCE: and 5");
+		Check(Has(watchCode, "_snprintf(name, sizeof(name) - 1, \"walk-%s.png\", walkPictureName);"), "SOURCE: named for the walk");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "EndTheLevel(\"the walk is done, and he has looked\", kHudsonExitFinished);"), "SOURCE: and then the run ends");
+		Check(Has(watchCode, "if (!plan.walkSaid)\n\t\t\t{\n\t\t\t\tendAfterLookingAt"), "SOURCE: meets= doesn't end a walk's run before the walk");
+		Check(Has(ReadSourceFile("3dc/avp/hudson_strategies.cpp"), "\t\tcase I_BehaviourFaceHugger:\n\t\t{\n\t\t\tstatic const char *const states[] = { \"approaching\", \"attacking\", \"waiting\", \"avoiding\", \"dying\", \"floating\", \"jumping\", \"about to jump\" };"), "SOURCE: a facehugger's state is said in words");
+		Check(Has(ReadSourceFile("3dc/avp/bh_facehugger.h"), "\tFHNS_Approach,\n\tFHNS_Attack,\n\tFHNS_Wait,\n\tFHNS_Avoidance,\n\tFHNS_Dying,\n\tFHNS_Floating,\n\tFHNS_Jumping,\n\tFHNS_AboutToJump,"), "SOURCE: in the order the game has them");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LampSize) { $arguments += \" lampsize=$LampSize\" }"), "SOURCE: the script can ask for lampsize=");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Follow) { $arguments += \" follow=$Follow\" }"), "SOURCE: and follow=");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WalkFrom) { $arguments += \" walkfrom=$($WalkFrom -replace 'm', '-')\" }"), "SOURCE: and a walk");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
 		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
@@ -1159,7 +1221,7 @@ static void TestTheRealGame()
 	Check(Has(marineCode, "if ( (weapon<=0)||(weapon>(int)MNPCW_End)) {") && Has(marineCode, "marineStatus->My_Weapon=GetThisNPCMarineWeapon(weapon-1);"), "which is what that plus 1 is for, so if the game's rule ever changes this says so");
 	Check(ComesBefore(Between(hudson, "void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)", "static const char *HowTheFightRanOut()"), "if (kind == AMMO_ALIEN_FRAG)", "InterlockedIncrement(&blowsOnHim)"), "acid is counted apart, before it could count as a blow, because a drop counts every frame it touches him");
 	Check(Has(hudson, "blows=%ld acid=%ld killed="), "and the result line says both");
-	Check(Has(Between(marineCode, "int Marine_TargetFilter(STRATEGYBLOCK *candidate) {", "switch (candidate->I_SBtype)"), "if (HudsonMarineIsOn && !HudsonWorldIsLive)"), "with nobody fighting back, a marine has nothing to aim at");
+	Check(Has(Between(marineCode, "int Marine_TargetFilter(STRATEGYBLOCK *candidate) {", "switch (candidate->I_SBtype)"), "if (HudsonMarineIsOn && (!HudsonWorldIsLive || HudsonMarineHoldsFire))"), "with nobody fighting back, a marine has nothing to aim at");
 	Check(Has(Between(marineCode, "STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon)\n{", "void Marine_GuardAndFace"), "return sbPtr;"), "CreateMarineBot gives back who it made");
 	Check(!Has(Between(marineCode, "STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon)\n{", "void Marine_GuardAndFace"), "return;"), "and every way out of it gives back something");
 
@@ -1314,7 +1376,7 @@ static void TestTheRealGame()
 
 	Check(Has(script, "wall=$Wall") && Has(script, "wallrank=$WallRank") && Has(script, "wallroom=$WallRoom") && Has(script, "compare=$Compare") && Has(script, "combat=$Combat") && Has(script, "aliens=$Aliens"), "the script passes on the wall and the comparing");
 	Check(!Has(settings, "ShaderPath"), "the known settings don't say where shaders come from, which the game no longer reads");
-	Check(Has(settings, "[Video]\nAutoGenerateMaps = false\nRendering = GOURAUD\nShadows = false"), "and they start as a new player does, with no maps worked out, so the only map on a wall is one that's in a file");
+	Check(Has(settings, "[Video]\nAutoGenerateMaps = false\nDevViewsKey = 20\nRendering = GOURAUD\nRenderingKey = 22\nShadows = false\nShadowsKey = 18"), "and they start as a new player does, with no maps worked out, so the only map on a wall is one that's in a file");
 
 	std::string const levelStart = Between(menus, "static int StartLevelForHudsonRun(void)", "int AvP_MainMenus(void)");
 
@@ -1590,7 +1652,7 @@ static void TestTourAndSharedMachine()
 		Check(Has(frames, "bool const wanted = plan.lampOn || (plan.lampBlink && (GetTickCount() / 1500) % 2 == 0);\n\n\t\tif (wanted != ShoulderLamp_IsOn())\n\t\t{\n\t\t\tShoulderLamp_Toggle();"), "a run switches the lamp through the same call as the key");
 		Check(Has(frames, "ShoulderLamp_SetRealLightWanted(plan.lampReal);"), "and asks for the real light");
 		Check(Has(frames, "if (plan.lampWide)\n\t\t{\n\t\t\tShoulderLamp_SetPlaceFromEyes(kHudsonLampWideAcross, kHudsonLampWideUp, 0.0f);"), "and moves it");
-		Check(Has(hudson, "\"lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld\\n\""), "the result always says whether a run had the lamp");
+		Check(Has(hudson, "\"lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld lamp_size=%d.%02d\\n\""), "the result always says whether a run had the lamp");
 		{
 			std::string const shapes = ReadSourceFile("3dc/kshape.cpp");
 			std::string const noting = Between(shapes, "void ShadowLights_NoteFrame(int frame, int passes, float milliseconds)", "// The same numbers, for a Hudson run's result.");

@@ -193,6 +193,7 @@ struct HudsonPlan
 	bool lampBlink;       // lamp=blink: it goes on and off every second and a half, so that a film shows the difference in the same view
 	bool lampReal;        // lampkind=real: the lamp is a real light with real shadows, rather than the painted version. See shoulder_lamp.h
 	bool lampWide;        // lampat=wide: the real lamp sits further from his eyes, where more of its shadows show
+	int lampSizeHundredths; // lampsize=0.05 to 0.35: how big the lamp's spot is, as LAMPSPOTSIZE says it, in hundredths. 0 means as built. The user's alien films have 0.35, the most it goes to
 	bool playAsAlien;     // species=alien: a meets=yes run plays as an Alien, for comparing with a campaign's level
 	bool levelFilms;      // levelfilms=yes: a level's own films play, which a run otherwise skips, to prove a network game stays up under one
 	int filmSkipSeconds;  // filmskip=: a film stops this many seconds in, as if a key had been pressed. Needs levelfilms=yes
@@ -259,6 +260,12 @@ struct HudsonPlan
 	int alienAtX, alienAtY, alienAtZ;
 	bool standAtSaid;     // standat=x,y,z: he stands here, instead of where the level starts the player
 	int standAtX, standAtY, standAtZ;
+	char follow[kHudsonLongestStrategyName + 1];   // follow=: the name of one thing in the level, often an NPC, whose place and state the log says once a second. Nothing means none. For #126's floating facehugger
+	bool walkSaid;        // walkfrom=x,y,z and walkto=x,y,z: he's put at walkfrom= and walks to walkto= as a player does, with the forward key. With dieat=, only once the level has started again. See "A WALK" in hudson.cpp
+	int walkFromX, walkFromY, walkFromZ;
+	int walkToX, walkToY, walkToZ;
+	bool lookAtSaid;      // lookat=x,y,z: once he's at walkto=, he looks at this place, and with record=pictures a picture is taken 2 and 5 seconds later
+	int lookAtX, lookAtY, lookAtZ;
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -492,6 +499,13 @@ extern const char *const kHudsonRefusedHoldFireWithoutWatch;
 extern const char *const kHudsonRefusedWatchWithAliens;
 extern const char *const kHudsonRefusedWatchFromUnknown;
 extern const char *const kHudsonRefusedWatchFromWithoutWatch;
+extern const char *const kHudsonRefusedLampSizeNotANumber;
+extern const char *const kHudsonRefusedLampSizeWithoutLamp;
+extern const char *const kHudsonRefusedFollowName;
+extern const char *const kHudsonRefusedWalkPlaceNotThreeNumbers;
+extern const char *const kHudsonRefusedWalkNeedsBoth;
+extern const char *const kHudsonRefusedLookAtWithoutWalk;
+extern const char *const kHudsonRefusedWalkNotAlone;
 
 // A run must never touch the player's own copy of the game. So it won't start from anything that looks like a Steam folder. This is against a slip, not against someone determined.
 bool HudsonPlan_FolderIsRefused(const char *folder);

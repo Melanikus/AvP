@@ -137,6 +137,11 @@ param(
     [string]$Lamp = '',
     [string]$LampKind = '',
     [string]$LampAt = '',
+    [string]$LampSize = '', # how big the lamp's spot is, 0.05 to 0.35, written like 0.35. Needs -Lamp on or blink. The user's alien films have 0.35, the most it goes to
+    [string]$Follow = '',   # the name of one thing in the level (an NPC, a door, a switch): the log says its place and state once a second
+    [string]$WalkFrom = '', # x,y,z in the level's own mm, where an m stands for a minus sign: he's put here and walks to -WalkTo. With -DieAt, only after the level starts again
+    [string]$WalkTo = '',
+    [string]$LookAt = '',   # x,y,z the same way: once he's walked, he looks here, and with -Record pictures a picture comes 2 and 5 seconds later
     [switch]$Bright,
     [switch]$Flare,
     [int]$Gun = 0,
@@ -284,6 +289,11 @@ if ($Net) { $arguments += " net=$Net" }
 if ($Lamp) { $arguments += " lamp=$Lamp" }
 if ($LampKind) { $arguments += " lampkind=$LampKind" }
 if ($LampAt) { $arguments += " lampat=$LampAt" }
+if ($LampSize) { $arguments += " lampsize=$LampSize" }
+if ($Follow) { $arguments += " follow=$Follow" }
+if ($WalkFrom) { $arguments += " walkfrom=$($WalkFrom -replace 'm', '-')" }
+if ($WalkTo) { $arguments += " walkto=$($WalkTo -replace 'm', '-')" }
+if ($LookAt) { $arguments += " lookat=$($LookAt -replace 'm', '-')" }
 if ($Bright) { $arguments += " bright=yes" }
 if ($Flare) { $arguments += " flare=yes" }
 if ($Gun -gt 0) { $arguments += " gun=$Gun" }

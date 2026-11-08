@@ -7745,6 +7745,416 @@
 					"to": "int distance = Approximate3dMagnitude(&ahead) * 2;"
 				}
 			]
+		},
+		{
+			"name": "lampsize= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampSizeHundredths = hundredths;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "lampsize= goes past the lamp's most",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "hundredths < fewest || hundredths > most",
+					"to": "hundredths < fewest"
+				}
+			]
+		},
+		{
+			"name": "lampsize= goes under the lamp's least",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "hundredths < fewest || hundredths > most",
+					"to": "hundredths > most"
+				}
+			]
+		},
+		{
+			"name": "lampsize= takes a comma for the dot",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "value[1] == '.'",
+					"to": "(value[1] == '.' || value[1] == ',')"
+				}
+			]
+		},
+		{
+			"name": "lampsize= goes without the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLampSize && !plan->lampOn && !plan->lampBlink)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "lampsize= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLampSize)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "follow= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->follow[i] = c;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "follow= takes any character",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedFollowName;",
+					"to": "if (false)\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedFollowName;"
+				}
+			]
+		},
+		{
+			"name": "follow= takes an empty name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0 || valueLength > kHudsonLongestStrategyName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFollowName;",
+					"to": "if (valueLength > kHudsonLongestStrategyName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFollowName;"
+				}
+			]
+		},
+		{
+			"name": "follow= takes a name too long to keep",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0 || valueLength > kHudsonLongestStrategyName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFollowName;",
+					"to": "if (valueLength == 0 || valueLength > kHudsonLongestStrategyName + 1)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFollowName;"
+				}
+			]
+		},
+		{
+			"name": "follow= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFollow)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "walkfrom= is read into walkto=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "int *const x = from ? &plan->walkFromX : to ? &plan->walkToX : &plan->lookAtX;",
+					"to": "int *const x = from ? &plan->walkToX : to ? &plan->walkToX : &plan->lookAtX;"
+				}
+			]
+		},
+		{
+			"name": "a walk place takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\treturn kHudsonRefusedWalkPlaceNotThreeNumbers;",
+					"to": "\t\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "a walk place can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (*seen)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "walkfrom= goes without walkto=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWalkFrom != seenWalkTo)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a walk is never on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->walkSaid = seenWalkFrom && seenWalkTo;",
+					"to": "plan->walkSaid = false;"
+				}
+			]
+		},
+		{
+			"name": "lookat= is forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lookAtSaid = seenLookAt;",
+					"to": "plan->lookAtSaid = false;"
+				}
+			]
+		},
+		{
+			"name": "lookat= goes without a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLookAt && !plan->walkSaid)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a walk goes with a fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->walkSaid && (plan->combatAlien || seenStrategy",
+					"to": "if (plan->walkSaid && (seenStrategy"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp's size is never set",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ShoulderLamp_SetSpotSize(plan.lampSizeHundredths / 100.0);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result doesn't say the lamp's size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " lamp_size=%d.%02d",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing is followed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tDieIfItIsTime();\n\tFollowTheNamedThing();",
+					"to": "\tDieIfItIsTime();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: follow= says it every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (lastSaid != 0 && now - lastSaid < 1000)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: follow= is looked for only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);",
+					"to": "static STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the input never walks him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "WalkHim((PLAYER_STATUS *)playerStatus);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk never presses forward",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk never faces walkto=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tHudson_FaceThePlace(status, to);",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk is there at once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const there = away <= kWalkCloseEnough;",
+					"to": "bool const there = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk doesn't wait for the restart",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.walkSaid && plan.dieAtSeconds != 0)\n\t{\n\t\twalkMayStartAt = GetTickCount() + 3000;",
+					"to": "if (false)\n\t{\n\t\twalkMayStartAt = GetTickCount() + 3000;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: without dieat= the walk never starts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (walkMayStartAt == 0 && plan.dieAtSeconds == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk doesn't wait at all",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "walkMayStartAt == 0 || now < walkMayStartAt || !me",
+					"to": "walkMayStartAt == 0 || !me"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk takes no first picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"2s\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk takes no second picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"5s\");",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk's pictures have no name of their own",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "_snprintf(name, sizeof(name) - 1, \"walk-%s.png\", walkPictureName);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walk never ends the run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(\"the walk is done, and he has looked\", kHudsonExitFinished);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: meets= ends a walk's run first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.walkSaid)\n\t\t\t{\n\t\t\t\tendAfterLookingAt",
+					"to": "if (true)\n\t\t\t{\n\t\t\t\tendAfterLookingAt"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger's state has no words",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_strategies.cpp",
+					"from": "\t\tcase I_BehaviourFaceHugger:\n\t\t{",
+					"to": "\t\tcase 99999:\n\t\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facehugger's words are in the wrong order",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_strategies.cpp",
+					"from": "\"floating\", \"jumping\"",
+					"to": "\"jumping\", \"floating\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for lampsize=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($LampSize) { $arguments += \" lampsize=$LampSize\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for follow=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Follow) { $arguments += \" follow=$Follow\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for a walk",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($WalkFrom) { $arguments += \" walkfrom=$($WalkFrom -replace 'm', '-')\" }\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

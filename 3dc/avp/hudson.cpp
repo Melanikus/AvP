@@ -400,6 +400,7 @@ static int alienHealthLastFrame = 0;
 static DWORD thisPartOfTheFightStartedAt = 0;
 static bool saidTheFirstShot = false;
 static char fightPictureName[32] = { 0 };
+static char walkPictureName[16] = { 0 };   // a walk's pictures: see "A WALK"
 
 // What was really drawn at the end of the last frame, for the result, which another thread can be writing. Asking the game itself is only for the thread that draws. -1 is before there's been a frame.
 static volatile LONG lightingDrawn = -1;
@@ -596,7 +597,11 @@ static void WriteResult(const char *howItEnded, int code)
 		}
 
 		// Always, so that nobody has to guess whether a run had it
-		fprintf(file, "lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld\n", plan.lampOn ? "on" : plan.lampBlink ? "blink" : "off", plan.lampReal ? "real" : "painted", plan.lampWide ? "wide" : "shoulder", ShoulderLamp_FramesDrawn(), ShoulderLamp_FramesAsARealLight());
+		// The size is written as hundredths by hand, so that a computer whose language writes 0,35 still writes 0.35 here
+		int const lampSize = (int)(ShoulderLamp_SpotSize() * 100.0 + 0.5);
+
+		fprintf(file, "lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld lamp_size=%d.%02d\n", plan.lampOn ? "on" : plan.lampBlink ? "blink" : "off", plan.lampReal ? "real" : "painted", plan.lampWide ? "wide" : "shoulder", ShoulderLamp_FramesDrawn(), ShoulderLamp_FramesAsARealLight(),
+			lampSize / 100, lampSize % 100);
 		fprintf(file, "flares_thrown=%ld\n", flaresThrown);
 
 		// Always, like the lamp's. shadow_light_frames says whether it means anything: with shadows off, the shadow pass never ran.
@@ -959,6 +964,15 @@ int Hudson_CheckBeforeStarting()
 	// Said in every run, so that a picture or a film with a lamp's light in it can be told from one without
 	LogString(plan.lampOn ? "hudson: the shoulder lamp is on in this run, because it asked (lamp=on)" : plan.lampBlink ? "hudson: the shoulder lamp blinks in this run, because it asked (lamp=blink)"
 		: "hudson: the shoulder lamp is off in this run, as it is unless a run asks");
+
+	if (plan.lampSizeHundredths != 0)
+	{
+		char lampLine[160] = { 0 };
+
+		_snprintf(lampLine, sizeof(lampLine) - 1, "hudson: the lamp's spot is 0.%02d across, as lampsize= asks. 0.%02d is the most it goes to", plan.lampSizeHundredths,
+			(int)(kShoulderLampMostSpotSize * 100.0 + 0.5));
+		LogString(lampLine);
+	}
 
 	// It's never waited for: the game's normal way out ends it with the process, and until then it has to be able to stop anything.
 	uintptr_t const thread = _beginthreadex(NULL, 0, WatchdogThread, NULL, 0, NULL);
@@ -4826,6 +4840,10 @@ void Hudson_TakePictureIfDue()
 	{
 		_snprintf(name, sizeof(name) - 1, "combat-%s.png", fightPictureName);
 	}
+	else if (plan.walkSaid)
+	{
+		_snprintf(name, sizeof(name) - 1, "walk-%s.png", walkPictureName);
+	}
 	else if (plan.compareRelief)
 	{
 		_snprintf(name, sizeof(name) - 1, "room%ld-view%d-%s.png", roomsReached, viewNow + 1, HudsonPlan_CompareCase(caseNow).name);
@@ -5051,9 +5069,17 @@ extern NetID MultiplayerObservedPlayer;
 static bool levelStartedAgain = false;
 static DWORD endAfterLookingAt = 0;
 
+static DWORD walkMayStartAt = 0;   // when a walk can start: see "A WALK". 0 is not yet
+
 void Hudson_TheLevelStartedAgain()
 {
 	levelStartedAgain = true;
+
+	// With dieat=, the walk is for after the restart
+	if (plan.walkSaid && plan.dieAtSeconds != 0)
+	{
+		walkMayStartAt = GetTickCount() + 3000;
+	}
 }
 
 bool Hudson_PlaysLevelFilms()
@@ -5193,6 +5219,55 @@ static void SayIfHisAmmunitionChanged()
 
 	lastTotal = total;
 	levelSeen = netGameData.coopCampaignLevel;
+}
+
+// follow=: once a second, the named thing's place and state, so that a log shows whether it moved, and when. It's looked for afresh each time,
+// because a level that starts again makes all its things again. #126: a facehugger floating in a locker, which a switch should wake.
+static void FollowTheNamedThing()
+{
+	static DWORD firstAt = 0;
+	static DWORD lastSaid = 0;
+
+	if (plan.follow[0] == 0 || !AvP.MainLoopRunning)
+	{
+		return;
+	}
+
+	DWORD const now = GetTickCount();
+
+	if (firstAt == 0)
+	{
+		firstAt = now;
+	}
+
+	if (lastSaid != 0 && now - lastSaid < 1000)
+	{
+		return;
+	}
+
+	lastSaid = now;
+
+	STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);
+	char line[400] = { 0 };
+
+	if (!thing)
+	{
+		_snprintf(line, sizeof(line) - 1, "follow: %lu s: there's no %s in the level now", (unsigned long)((now - firstAt) / 1000), plan.follow);
+	}
+	else if (!thing->DynPtr)
+	{
+		_snprintf(line, sizeof(line) - 1, "follow: %lu s: %s, which has no place of its own: %s", (unsigned long)((now - firstAt) / 1000), HudsonStrategies_Title(thing).c_str(),
+			HudsonStrategies_State(thing).c_str());
+	}
+	else
+	{
+		VECTORCH const at = thing->DynPtr->Position;
+
+		_snprintf(line, sizeof(line) - 1, "follow: %lu s: %s at %d %d %d, in room %s: %s", (unsigned long)((now - firstAt) / 1000), HudsonStrategies_Title(thing).c_str(),
+			at.vx, at.vy, at.vz, (thing->containingModule && thing->containingModule->name) ? thing->containingModule->name : "(none)", HudsonStrategies_State(thing).c_str());
+	}
+
+	LogString(line);
 }
 
 static void DieIfItIsTime()
@@ -5592,6 +5667,7 @@ void Hudson_EndOfFrame()
 	}
 
 	DieIfItIsTime();
+	FollowTheNamedThing();
 	ReachTheEndIfItIsTime();
 
 	// After dying, in single player or in the mode that plays like it: the same lines, for comparing with the first
@@ -5607,7 +5683,11 @@ void Hudson_EndOfFrame()
 			// With someone else in the game it goes on for a while: the other machine has to start again too and say
 			// so, and each should see the other back in the level. The one who joined stops first, so that neither
 			// run is cut short by the other leaving.
-			endAfterLookingAt = GetTickCount() + (plan.netMode == kHudsonNetHost ? 15000 : plan.netMode == kHudsonNetJoin ? 8000 : 0);
+			// A walk ends the run itself, once it has looked
+			if (!plan.walkSaid)
+			{
+				endAfterLookingAt = GetTickCount() + (plan.netMode == kHudsonNetHost ? 15000 : plan.netMode == kHudsonNetJoin ? 8000 : 0);
+			}
 		}
 	}
 
@@ -5653,6 +5733,12 @@ void Hudson_EndOfFrame()
 		}
 
 		ShoulderLamp_SetRealLightWanted(plan.lampReal);
+
+		// lampsize=: the user's alien films have the spot at 0.35, the most LAMPSPOTSIZE allows
+		if (plan.lampSizeHundredths != 0)
+		{
+			ShoulderLamp_SetSpotSize(plan.lampSizeHundredths / 100.0);
+		}
 
 		if (plan.lampWide)
 		{
@@ -9650,8 +9736,141 @@ static void Hudson_RateTestFlame(PLAYER_STATUS *status, STRATEGYBLOCK *me)
 	}
 }
 
+// A WALK (walkfrom=, walkto=, lookat=). #126: a walk-in switch only fires when a player walks into it, so this is the player walking, with the forward
+// key, as a person would. He's put at walkfrom=, turns to face walkto= every frame, and walks until he's within half a metre of it, through whatever
+// the level has on the way. With dieat=, the walk waits for the level to start again after he dies, because what's tested is what a restart leaves
+// behind; without it, the walk starts 3 seconds into the level. Once he's there he looks at lookat=, and with record=pictures a picture is taken
+// from his eyes 2 and 5 seconds later. The run ends a second after that. If he isn't there in 30 seconds, the log says where he stuck, and the
+// pictures are taken from there.
+enum WalkStage
+{
+	kWalkWaiting,
+	kWalkWalking,
+	kWalkThere,
+	kWalkDone
+};
+
+static WalkStage walkStage = kWalkWaiting;
+static DWORD walkStageSince = 0;
+static DWORD walkSecondsLogged = 0;
+static bool walkTookTheFirstPicture = false;
+static bool walkTookTheSecondPicture = false;
+static const DWORD kWalkWaitAfterAStart = 3000;
+static const DWORD kWalkLongest = 30000;
+static const int kWalkCloseEnough = 500;   // mm, along the ground
+
+static void WalkHim(PLAYER_STATUS *status)
+{
+	DWORD const now = GetTickCount();
+	STRATEGYBLOCK *const me = Player->ObStrategyBlock;
+
+	if (walkMayStartAt == 0 && plan.dieAtSeconds == 0)
+	{
+		walkMayStartAt = now + kWalkWaitAfterAStart;
+	}
+
+	if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt || !me || !me->DynPtr || me->SBDamageBlock.Health <= 0)
+	{
+		return;
+	}
+
+	VECTORCH const to = { plan.walkToX, plan.walkToY, plan.walkToZ };
+	char line[240] = { 0 };
+
+	if (walkStage == kWalkWaiting)
+	{
+		VECTORCH from = { plan.walkFromX, plan.walkFromY, plan.walkFromZ };
+		MODULE *const room = ModuleFromPosition(&from, (MODULE *)0);
+
+		if (!room)
+		{
+			walkStage = kWalkDone;
+			EndTheLevel("walkfrom= isn't in any of this level's rooms", kHudsonExitBadArguments);
+			return;
+		}
+
+		me->DynPtr->Position = from;
+		me->DynPtr->PrevPosition = from;
+		me->containingModule = room;
+		walkStage = kWalkWalking;
+		walkStageSince = now;
+		walkSecondsLogged = 0;
+		_snprintf(line, sizeof(line) - 1, "walk: he's put at %d %d %d, in room %s, and walks to %d %d %d", from.vx, from.vy, from.vz, room->name ? room->name : "(none)", to.vx, to.vy, to.vz);
+		LogString(line);
+		return;
+	}
+
+	VECTORCH const at = me->DynPtr->Position;
+	float const acrossX = (float)(to.vx - at.vx);
+	float const acrossZ = (float)(to.vz - at.vz);
+	int const away = (int)sqrtf(acrossX * acrossX + acrossZ * acrossZ);
+	char const *const roomName = (me->containingModule && me->containingModule->name) ? me->containingModule->name : "(none)";
+
+	if (walkStage == kWalkWalking)
+	{
+		bool const there = away <= kWalkCloseEnough;
+
+		if (there || now - walkStageSince > kWalkLongest)
+		{
+			_snprintf(line, sizeof(line) - 1, there ? "walk: he got to walkto= after %lu ms, at %d %d %d, in room %s" : "walk: he didn't get to walkto= in %lu ms. He stuck at %d %d %d, in room %s",
+				(unsigned long)(now - walkStageSince), at.vx, at.vy, at.vz, roomName);
+			LogString(line);
+			walkStage = kWalkThere;
+			walkStageSince = now;
+			return;
+		}
+
+		Hudson_FaceThePlace(status, to);
+		status->Mvt_InputRequests.Flags.Rqst_Forward = 1;
+
+		// Once a second, so that the log shows the way he went
+		if ((now - walkStageSince) / 1000 > walkSecondsLogged)
+		{
+			walkSecondsLogged = (now - walkStageSince) / 1000;
+			_snprintf(line, sizeof(line) - 1, "walk: %lu s: he's at %d %d %d, in room %s, %d mm from walkto=", (unsigned long)walkSecondsLogged, at.vx, at.vy, at.vz, roomName, away);
+			LogString(line);
+		}
+
+		return;
+	}
+
+	// There: he looks at lookat=, every frame in case anything turns him
+	if (plan.lookAtSaid)
+	{
+		VECTORCH const look = { plan.lookAtX, plan.lookAtY, plan.lookAtZ };
+
+		Hudson_FaceThePlace(status, look);
+	}
+
+	DWORD const since = now - walkStageSince;
+
+	if (plan.pictures && !walkTookTheFirstPicture && since >= 2000)
+	{
+		walkTookTheFirstPicture = true;
+		_snprintf(walkPictureName, sizeof(walkPictureName) - 1, "2s");
+		pictureIsDue = true;
+	}
+	else if (plan.pictures && !walkTookTheSecondPicture && since >= 5000)
+	{
+		walkTookTheSecondPicture = true;
+		_snprintf(walkPictureName, sizeof(walkPictureName) - 1, "5s");
+		pictureIsDue = true;
+	}
+	else if (since >= 6000)
+	{
+		walkStage = kWalkDone;
+		EndTheLevel("the walk is done, and he has looked", kHudsonExitFinished);
+	}
+}
+
 void Hudson_NetInput(void *playerStatus)
 {
+	if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)
+	{
+		WalkHim((PLAYER_STATUS *)playerStatus);
+		return;
+	}
+
 	if (HudsonRunIsOn && plan.rateTest != kHudsonRateTestNone && !levelHasEnded)
 	{
 		if (plan.rateTest == kHudsonRateTestFall)

@@ -23,6 +23,7 @@
 #include "hudson_plan.h"
 #include "marine_classes.h"
 #include "command_line_word.h"
+#include "shoulder_lamp.h"
 
 #include <ctype.h>
 #include <math.h>
@@ -201,6 +202,13 @@ const char *const kHudsonRefusedHoldFireWithoutWatch = "holdfire= is for watchin
 const char *const kHudsonRefusedWatchWithAliens = "watch=alien follows one alien, and its first blow ends the run, so it doesn't go with aliens=";
 const char *const kHudsonRefusedWatchFromUnknown = "watchfrom= is side or eyes";
 const char *const kHudsonRefusedWatchFromWithoutWatch = "watchfrom= says where the camera watches the alien from, so it needs watch=alien";
+const char *const kHudsonRefusedLampSizeNotANumber = "lampsize= is a number from 0.05 to 0.35, as LAMPSPOTSIZE takes it, written like 0.35";
+const char *const kHudsonRefusedLampSizeWithoutLamp = "lampsize= is the size of the lamp's spot, so it needs lamp=on or lamp=blink";
+const char *const kHudsonRefusedFollowName = "follow= is a name from the level: 1 to 59 letters, digits, _ (for a space) or -";
+const char *const kHudsonRefusedWalkPlaceNotThreeNumbers = "walkfrom=, walkto= and lookat= are three whole numbers with commas between them, x,y,z in mm, as the level has them";
+const char *const kHudsonRefusedWalkNeedsBoth = "walkfrom= and walkto= go together: one says where he starts, the other where he walks to";
+const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks once he has walked, so it needs walkfrom= and walkto=";
+const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or more than one room";
 
 static bool IsSpace(char c)
 {
@@ -375,6 +383,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
 	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
+	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
 
@@ -977,6 +986,54 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 			plan->standAtSaid = true;
 		}
+		else if (WordIs(place, nameLength, "follow"))
+		{
+			if (seenFollow)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenFollow = true;
+
+			if (valueLength == 0 || valueLength > kHudsonLongestStrategyName)
+			{
+				return kHudsonRefusedFollowName;
+			}
+
+			// Only ever compared with the names of the level's own things, but nothing on the command line is believed
+			for (size_t i = 0; i < valueLength; i++)
+			{
+				char const c = value[i];
+
+				if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
+				{
+					return kHudsonRefusedFollowName;
+				}
+
+				plan->follow[i] = c;
+			}
+		}
+		else if (WordIs(place, nameLength, "walkfrom") || WordIs(place, nameLength, "walkto") || WordIs(place, nameLength, "lookat"))
+		{
+			bool const from = WordIs(place, nameLength, "walkfrom");
+			bool const to = WordIs(place, nameLength, "walkto");
+			bool *const seen = from ? &seenWalkFrom : to ? &seenWalkTo : &seenLookAt;
+			int *const x = from ? &plan->walkFromX : to ? &plan->walkToX : &plan->lookAtX;
+			int *const y = from ? &plan->walkFromY : to ? &plan->walkToY : &plan->lookAtY;
+			int *const z = from ? &plan->walkFromZ : to ? &plan->walkToZ : &plan->lookAtZ;
+
+			if (*seen)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			*seen = true;
+
+			if (!ReadPlace(value, valueLength, x, y, z))
+			{
+				return kHudsonRefusedWalkPlaceNotThreeNumbers;
+			}
+		}
 		else if (WordIs(place, nameLength, "aliens"))
 		{
 			if (seenAliens)
@@ -1449,6 +1506,28 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			{
 				return kHudsonRefusedLampAtUnknown;
 			}
+		}
+		else if (WordIs(place, nameLength, "lampsize"))
+		{
+			if (seenLampSize)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenLampSize = true;
+
+			// Read by hand: "0." and one or two digits, so 0.35 is 35 hundredths. Nothing else, so no "1e9" and no comma for a dot. The limits are the lamp's own.
+			int const fewest = (int)(kShoulderLampFewestSpotSize * 100.0 + 0.5);
+			int const most = (int)(kShoulderLampMostSpotSize * 100.0 + 0.5);
+			bool const shaped = (valueLength == 3 || valueLength == 4) && value[0] == '0' && value[1] == '.' && isdigit((unsigned char)value[2]) && (valueLength == 3 || isdigit((unsigned char)value[3]));
+			int const hundredths = shaped ? (value[2] - '0') * 10 + (valueLength == 4 ? value[3] - '0' : 0) : 0;
+
+			if (!shaped || hundredths < fewest || hundredths > most)
+			{
+				return kHudsonRefusedLampSizeNotANumber;
+			}
+
+			plan->lampSizeHundredths = hundredths;
 		}
 		else if (WordIs(place, nameLength, "bright"))
 		{
@@ -2126,6 +2205,12 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedLampSpoilsComparing;
 	}
 
+	// A size for a lamp that isn't on would say something about the run that isn't so
+	if (seenLampSize && !plan->lampOn && !plan->lampBlink)
+	{
+		return kHudsonRefusedLampSizeWithoutLamp;
+	}
+
 	if (plan->lampWide && !plan->lampReal)
 	{
 		return kHudsonRefusedLampWordsWithoutReal;
@@ -2296,6 +2381,25 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (seenWatchFrom && !plan->watchAlien)
 	{
 		return kHudsonRefusedWatchFromWithoutWatch;
+	}
+
+	// A walk is the player walking, so it needs both ends, and nothing else moving him or the camera
+	if (seenWalkFrom != seenWalkTo)
+	{
+		return kHudsonRefusedWalkNeedsBoth;
+	}
+
+	plan->walkSaid = seenWalkFrom && seenWalkTo;
+	plan->lookAtSaid = seenLookAt;
+
+	if (seenLookAt && !plan->walkSaid)
+	{
+		return kHudsonRefusedLookAtWithoutWalk;
+	}
+
+	if (plan->walkSaid && (plan->combatAlien || seenStrategy || seenNav || seenRoute || plan->rooms > 1))
+	{
+		return kHudsonRefusedWalkNotAlone;
 	}
 
 	// One alien is followed, and its first blow ends the run, so aliens made one after another would never be seen
