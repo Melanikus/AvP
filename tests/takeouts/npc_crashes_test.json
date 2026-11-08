@@ -718,6 +718,56 @@
 					"to": "\tLOCALASSERT(dynPtr);\n\n\tdistanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));\n\n\tif (alienStatusPointer->Target==NULL) {\n\t\t/* Approach what? */\n"
 				}
 			]
+		},
+		{
+			"name": "things placed in a level aren't marked to be kept until it ends",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/object_setup.cpp",
+					"from": "\t\tsbPtr->SBflags.preserve_until_end_of_level=1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a marked block is handed back for something else when it's gone",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\t\t\t\tif(!sb->SBflags.preserve_until_end_of_level)\n",
+					"to": "\t\t\t\tif(true)\n"
+				}
+			]
+		},
+		{
+			"name": "starting a block afresh no longer clears the mark, so nothing says why the predator puts it back",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\tsptr->SBflags.preserve_until_end_of_level = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a woken predator's mark is read after its block has started afresh",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "        bool const keptUntilTheLevelEnds = sbPtr->SBflags.preserve_until_end_of_level != 0;\n\n        //convert this strategyblock to a predator\n        DeallocateMem(pred_bhv);\n        InitialiseSBValues(sbPtr);\n",
+					"to": "        //convert this strategyblock to a predator\n        DeallocateMem(pred_bhv);\n        InitialiseSBValues(sbPtr);\n        bool const keptUntilTheLevelEnds = sbPtr->SBflags.preserve_until_end_of_level != 0;\n"
+				}
+			]
+		},
+		{
+			"name": "a woken predator's mark is never put back",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "        sbPtr->SBflags.preserve_until_end_of_level = keptUntilTheLevelEnds ? 1 : 0;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
