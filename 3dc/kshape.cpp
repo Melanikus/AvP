@@ -31,10 +31,14 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   when you play the alien, a marine's glow no longer reads his details as if he were another player's stand-in.
 //   Found while reading Bobblen's avp-forever fork
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an animated texture's corners between two frames are worked out in 16.16 again, exactly, so flowing ones move smoothly (#97,
+//   reported by Bobblen). See texture_animation.h
 #include "3dc.h"
 #include "surface_normals.h"
 #include "static_scene.h"
 #include "logString.h"
+#include "texture_animation.h"
 #include <math.h>
 #include <vector>
 #include "module.h"
@@ -2684,8 +2688,6 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	TXANIMFRAME *txaf;
 	TXANIMFRAME *txaf0;
 	TXANIMFRAME *txaf1;
-	int *txaf0_uv;
-	int *txaf1_uv;
 	int CurrentFrame, NextFrame, Alpha, OneMinusAlpha;
 	int i;
 	int *iptr;
@@ -2749,29 +2751,10 @@ void CreateTxAnimUVArray(int *txa_data, int *uv_array, int *shapeitemptr)
 	*/
 	pheader->PolyColour &= ClrTxIndex;
 	pheader->PolyColour |= txaf0->txf_image;
-	txaf0_uv = txaf0->txf_uvdata;
-	txaf1_uv = txaf1->txf_uvdata;
-	/* Calculate UVs */
-	iptr = uv_array;
 
-	if (txah->txa_flags & txa_flag_interpolate_uvs) {
-		for (i = txaf0->txf_numuvs; i != 0; i--) {
-			iptr[0] = MUL_FIXED(txaf0_uv[0], OneMinusAlpha) + MUL_FIXED(txaf1_uv[0], Alpha);
-			iptr[1] = MUL_FIXED(txaf0_uv[1], OneMinusAlpha) + MUL_FIXED(txaf1_uv[1], Alpha);
-			/*textprint("%d, %d\n", iptr[0] >> 16, iptr[1] >> 16);*/
-			txaf0_uv += 2;
-			txaf1_uv += 2;
-			iptr += 2;
-		}
-	} else {
-		for (i = txaf0->txf_numuvs; i != 0; i--) {
-			iptr[0] = txaf0_uv[0];
-			iptr[1] = txaf0_uv[1];
-			/*textprint("%d, %d\n", iptr[0] >> 16, iptr[1] >> 16);*/
-			txaf0_uv += 2;
-			iptr += 2;
-		}
-	}
+	// The corners' places on the picture, in 16.16 fixed point, as in 1999, so that a flowing animation moves by less than a texel at a
+	// time. The two drawing functions that take an animated polygon read them that way (d3d_render.cpp). See texture_animation.h.
+	TextureAnimation_Corners(txaf0->txf_uvdata, txaf1->txf_uvdata, txaf0->txf_numuvs, Alpha, (txah->txa_flags & txa_flag_interpolate_uvs) != 0, uv_array);
 
 	/* Interpolate Orient and Scale */
 	o1 = txaf0->txf_orient;

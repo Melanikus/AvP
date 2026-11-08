@@ -186,6 +186,9 @@
     <ClCompile Include="..\..\3dc\view_keys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\texture_animation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\shadow_debug.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
