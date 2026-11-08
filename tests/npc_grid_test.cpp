@@ -392,6 +392,36 @@ static void Searches()
 	Check(onSide > 0, "along one of the pillar's other faces (" + Number(onSide) + " cells of it)");
 	Check(WayOnKind(grid, way, kAlienWaysFloor) == 0, "and none of it on the floor");
 
+	// The same kind of search spread over frames, as the guide asks for one: from an alien's middle, 500 above the floor, to another,
+	// 10 cells a frame
+	AlienWaysXYZ const startAt = { 1650, -500, 1650 }, goalAt = { 4350, -500, 4350 };
+	Check(grid.StartSearch(startAt, goalAt, kNpcGridAlien, 10, 100000) == nullptr, "a search from two positions starts");
+	int frames = 0;
+	NpcGridSearch state = kNpcGridSearching;
+
+	while (state == kNpcGridSearching && frames < 100000)
+	{
+		state = grid.Work(10);
+		frames++;
+	}
+
+	Check(state == kNpcGridFound && frames > 1, "spread over frames, 10 cells at a time, it finds its way (" + Number(frames) + " frames)");
+	Check(grid.Way().size() >= 2 && grid.Way().front().x == 1650 && grid.Way().front().y == -500 && grid.Way().back().x == 4350 &&
+		grid.Way().back().z == 4350, "its way runs from the start's position to the goal's");
+	Check(grid.Work(10) == kNpcGridFound && grid.LastSearchLooks() > 0, "asked again, it says the same");
+	bool faces = true;
+
+	for (size_t k = 0; k < grid.Way().size(); k++)
+	{
+		AlienWaysPoint const &p = grid.Way()[k];
+		faces = faces && (p.kind != kAlienWaysFloor || (p.facing[0] == 0 && p.facing[1] == -32767 && p.facing[2] == 0));
+	}
+
+	Check(faces, "a point on the floor faces straight up: (0, -32767, 0), as the level stores a facing");
+	AlienWaysXYZ const nowhere = { 100000, 0, 100000 };
+	Check(Says(grid.StartSearch(nowhere, goalAt, kNpcGridAlien, 10, 100000), "no cell near the start") && grid.Work(10) == kNpcGridNoWay && grid.Way().empty(),
+		"a start with no cell near it has no way");
+
 	// Searches that can't start
 	Check(grid.Search(kNpcGridNoCell, to, kNpcGridMarine, 1, 100000, &way, &looks) == kNpcGridNoWay, "a start that isn't a cell has no way");
 	Check(grid.Search(high, to, kNpcGridMarine, 1, 100000, &way, &looks) == kNpcGridNoWay, "nor a start a marine doesn't stand on");
