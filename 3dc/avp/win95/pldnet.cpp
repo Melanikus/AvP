@@ -1,10 +1,22 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
+//   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
+//   be in the list of far places as well as in the list of AI modules
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
+//   the buffer that receives a message has room for its header as well as what the game can send
+//   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
+//   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition, the weapons or the score tables are checked before they're used
+//   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
+//   a client may only send so many of the kinds of part that cost every machine something, what one player has alive is counted as well, and what's kept back of the blocks is for this machine's own player
+//   no network game has an autogun, so a message about one is refused by name, and what only such a message reached has gone
+//   a machine sends 60 times a second, not every frame, and what has to go out before it stops playing goes at once
+//   the build stops if a message or a level list changes while the multiplayer version doesn't
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -21,6 +33,9 @@
 #include "pvisible.h"
 #include "bh_platform_lift.h"
 #include "pldnet.h"
+#include "env_info.h"
+#include "net_checks.h"
+#include "logString.h"
 #include "pldghost.h"
 #include "equipment.h"
 #include "weapons.h"
@@ -35,7 +50,6 @@
 #include "bh_alien.h"
 #include "bh_marine.h"
 #include "bh_binary_switch.h"
-#include "bh_agun.h"
 #include "bh_weapon.h"
 #include "bh_corpse.h"
 #include "bh_light.h"
@@ -153,6 +167,9 @@ NETGAME_GAMEDATA netGameData =
 	0,  // int joiningGameStatus;
 	"", // char customLevelName[];
 };
+
+// How many times a second a machine sends what it has. Without a limit it was every frame, so traffic rose with frame rate, about 200 a second on a fast machine, and one lost packet holds up everything behind it. What's said between sends waits for the next one.
+static const int kSendsEachSecond = 60;
 
 void SetDefaultMultiplayerConfig()
 {
@@ -279,9 +296,7 @@ extern void PlayerGhostExtrapolation();
 /*----------------------------------------------------------------------
   Some protoypes for this file
   ----------------------------------------------------------------------*/
-static void ProcessSystemMessage(uint8_t *msgP, size_t msgSize);
 static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize);
-static void AddPlayerToGame(NetID id, char *name);
 static void AddPlayerAndObjectUpdateMessages(void);
 static void UpdateNetworkGameScores(NetID playerKilledId, NetID killerId, NETGAME_CHARACTERTYPE playerKilledType, NETGAME_CHARACTERTYPE killerType);
 static void InitFinalNetGameScores(void);
@@ -310,7 +325,6 @@ static void ProcessNetMsg_InanimateObjectDestroyed(NETMESSAGE_INANIMATEDESTROYED
 static void ProcessNetMsg_LOSRequestBinarySwitch(NETMESSAGE_LOSREQUESTBINARYSWITCH *msgPtr);
 static void ProcessNetMsg_PlatformLiftState(NETMESSAGE_PLATFORMLIFTSTATE *msgPtr);
 static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE *msgPtr);
-static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);
 static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, NetID senderId);
 static void ProcessNetMsg_MakeExplosion(NETMESSAGE_MAKEEXPLOSION *messagePtr);
 static void ProcessNetMsg_MakeFlechetteExplosion(NETMESSAGE_MAKEFLECHETTEEXPLOSION *messagePtr);
@@ -324,7 +338,7 @@ static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messageP
 static void ProcessNetMsg_SpotAlienSound(NETMESSAGE_SPOTALIENSOUND *messagePtr, NetID senderId);
 static void ProcessNetMsg_LocalObjectDestroyed_Request(NETMESSAGE_LOBDESTROYED_REQUEST *messagePtr, NetID senderId);
 static void ProcessNetMsg_ScoreChange(NETMESSAGE_SCORECHANGE *messagePtr);
-static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr);
+static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetID senderId);
 static void ProcessNetMsg_Gibbing(NETMESSAGE_GIBBING *messagePtr, NetID senderId);
 static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId);
 static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr);
@@ -361,7 +375,6 @@ static void Inform_AiHasDied(NetID killer, ALIEN_TYPE type, char weaponIcon);
 static void Inform_PlayerHasLeft(NetID player);
 static void Inform_PlayerHasJoined(NetID player);
 static void Inform_PlayerHasConnected(NetID player);
-static void Inform_NewHost(void);
 
 static void WriteFragmentStatus(int fragmentNumber, int status);
 static int ReadFragmentStatus(int fragmentNumber);
@@ -493,7 +506,7 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 		}
 		else
 		{
-			netGameData.sendFrequency = 0; //ONE_FIXED/15;
+			netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;
 			netGameData.sendDecals = TRUE;
 		}
 	}
@@ -600,7 +613,7 @@ void InitAVPNetGameForJoin(void)
 		}
 		else
 		{
-			netGameData.sendFrequency = 0; //ONE_FIXED/15;
+			netGameData.sendFrequency = ONE_FIXED / kSendsEachSecond;
 			netGameData.sendDecals = TRUE;
 		}
 
@@ -619,7 +632,7 @@ void InitAVPNetGameForJoin(void)
 	netGameData.joiningGameStatus = JOINNETGAME_WAITFORSTART;
 }
 
-static uint8_t msg[NET_MESSAGEBUFFERSIZE];
+static uint8_t msg[kMostMessageBytes];
 
 /*----------------------------------------------------------------------
   Core message collection function
@@ -651,13 +664,8 @@ void MinimalNetCollectMessages(void)
 					fromID = newHeader.fromID;
 					toID   = newHeader.toID;
 
-					// process last message, if there is one
-					if (newHeader.isSystemMessage) {
-						ProcessSystemMessage(msg, msgSize);
-					}
-					else {
-						ProcessGameMessage(fromID, msg, msgSize);
-					}
+					// Only game messages from someone who's been let in get this far. See WHO IS WHO in networking.cpp.
+					ProcessGameMessage(fromID, msg, msgSize);
 				}
 			}
 		}
@@ -707,13 +715,8 @@ void NetCollectMessages(void)
 					fromID = newHeader.fromID;
 					toID   = newHeader.toID;
 
-					// process last message, if there is one
-					if (newHeader.isSystemMessage) {
-						ProcessSystemMessage(msg, msgSize);
-					}
-					else {
-						ProcessGameMessage(fromID, msg, msgSize);
-					}
+					// Only game messages from someone who's been let in get this far. See WHO IS WHO in networking.cpp.
+					ProcessGameMessage(fromID, msg, msgSize);
 				}
 			}
 		}
@@ -901,173 +904,8 @@ void NetCollectMessages(void)
 	}
 }
 
-/*----------------------------------------------------------------------
-  Functions for processing system messages
-  ----------------------------------------------------------------------*/
-static void ProcessSystemMessage(uint8_t *msgP, size_t msgSize)
-{
-	NewOnScreenMessage("we're going to process a system message\n");
-
-	/* currently, only the host deals with system mesages */
-	/* check for invalid parameters */
-	if ((msgSize == 0) || (msgP == NULL)) {
-		NewOnScreenMessage("Invalid system message!");
-		return;
-	}
-
-	MemoryReadStream rs(msgP, msgSize);
-
-	MessageHeader newMessageHeader;
-	rs.GetBytes(&newMessageHeader, sizeof(MessageHeader));
-
-	switch (newMessageHeader.messageType)
-	{
-		case NET_ADDPLAYERTOGROUP:
-		{
-			break; // ignore
-		}
-
-		case NET_SETPLAYERID:
-		{
-			OutputDebugString("in NET_SETPLAYERID\n");
-			// FIXME
-			if ((AvP.Network != I_Host)) {
-				AvPNetID = rs.GetUint32LE();
-			}
-			break;
-		}
-
-		case NET_CREATEPLAYERORGROUP:
-		{
-			NewOnScreenMessage("in NET_CREATEPLAYERORGROUP");
-
-			/* only useful during startup: during main game, connecting player should
-			detect game state and exit immediately */
-			if ((AvP.Network == I_Host))
-			{
-				PlayerDetails newPlayer;
-
-				// copy message data to player struct
-				rs.GetBytes(&newPlayer, sizeof(PlayerDetails));
-
-				// give them their player ID
-				newPlayer.ID = Net_GetNextPlayerID();
-
-				AddPlayerToGame(newPlayer.ID, newPlayer.name);
-
-				// TODO - inform the player that they've joined
-				Net_SendSystemMessage(NET_SETPLAYERID, AvPNetID, 0, &newPlayer.ID, sizeof(newPlayer.ID));
-			}
-
-			LogNetInfo("system message:  NET_CREATEPLAYERORGROUP \n");
-			NewOnScreenMessage("A PLAYER HAS CONNECTED");
-			break;
-		}
-
-		case NET_DELETEPLAYERFROMGROUP:
-		{
-			NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-			/* ignore */
-			break;
-		}
-
-		case NET_DESTROYPLAYERORGROUP:
-		{
-			OutputDebugString("NET_DESTROYPLAYERORGROUP\n");
-
-			/* Aha. Either a player has left (should have sent a leaving message)
-			or s/he has exited abnormally. In either case, only need to act on
-			this during start-up. During the main game, the ghosts will time-out
-			anyway */
-
-			if ((AvP.Network == I_Host))
-			{
-				DestroyPlayerOrGroup destroyMessage;
-				rs.GetBytes(&destroyMessage, sizeof(DestroyPlayerOrGroup));
-
-				if (destroyMessage.type == NET_PLAYERTYPE_PLAYER)
-				{
-					OutputDebugString("going to drop a player as they disconnected\n");
-					RemovePlayerFromGame(destroyMessage.ID);
-					NewOnScreenMessage("A PLAYER HAS DISCONNECTED");
-				}
-			}
-
-			LogNetInfo("system message:  NET_DESTROYPLAYERORGROUP \n");
-			break;
-		}
-
-		case NET_HOST:
-		{
-			/* Aha... the host has died, then. This is a terminal game state,
-			as the host was managing the game. Thefore, temporarily adopt host
-			duties for the purpose of ending the game...
-			This is most important during the playing state, but also happens in
-			startup. In startup, peers keep a host timeout which should fire before
-			this message arrives anyway. */
-			LOCALASSERT(AvP.Network == I_Peer);
-
-			if ((netGameData.myGameState == NGS_StartUp) || (netGameData.myGameState == NGS_Playing) || (netGameData.myGameState == NGS_Joining) || (netGameData.myGameState == NGS_EndGameScreen))
-			{
-				AvP.Network = I_Host;
-				/* Eek, I guess the old AIs bite the dust? */
-				//but the new host can create some more
-				AvP.NetworkAIServer = (netGameData.gameType == NGT_Coop);
-				Inform_NewHost();
-				//              TransmitEndOfGameNetMsg();
-				//              netGameData.myGameState = NGS_EndGame;
-				//              AvP.MainLoopRunning = 0;
-
-				if (LobbiedGame)
-				{
-					// no longer a lowly client
-					LobbiedGame = LobbiedGame_Server;
-				}
-			}
-
-			LogNetInfo("system message:  NET_HOST \n");
-			break;
-		}
-
-		case NET_SESSIONLOST:
-		{
-			/* Aha. I have lost my connection. Time to exit the game gracefully.*/
-			NewOnScreenMessage("Session lost!!");
-			/*
-			if((netGameData.myGameState==NGS_StartUp)||(netGameData.myGameState==NGS_Joining)||(netGameData.myGameState==NGS_Playing))
-			{
-			    netGameData.myGameState = NGS_Error_HostLost;
-			}
-
-			LogNetInfo("system message:  NET_SESSIONLOST \n");
-			*/
-			break;
-		}
-/*
-		case NET_SETPLAYERORGROUPDATA:
-		{
-			// ignore
-			break;
-		}
-
-		case NET_SETPLAYERORGROUPNAME:
-		{
-			// ignore
-			break;
-		}
-*/
-		default:
-		{
-			char buf[100];
-			sprintf(buf, "invalid system message type: %u\n", newMessageHeader.messageType);
-			OutputDebugString(buf);
-			/* invalid system message type: ignore */
-			break;
-		}
-	}
-}
-
-static void AddPlayerToGame(NetID id, char *name)
+// A new player, once networking.cpp has let them in. False if there's no room for them.
+bool AddPlayerToGame(NetID id, const char *name)
 {
 	OutputDebugString("AddPlayerToGame() called\n");
 	LOCALASSERT(AvP.Network == I_Host);
@@ -1075,13 +913,28 @@ static void AddPlayerToGame(NetID id, char *name)
 	// find a free slot for the player
 	int freePlayerIndex = EmptySlotInPlayerList();
 	if (freePlayerIndex == NET_NOEMPTYSLOTINPLAYERLIST) {
-		return;
+		return false;
 	}
 
 	/* initialise the slot */
 	netGameData.playerData[freePlayerIndex].playerId = id;
 	strncpy(netGameData.playerData[freePlayerIndex].name, name, NET_PLAYERNAMELENGTH - 1);
 	netGameData.playerData[freePlayerIndex].name[NET_PLAYERNAMELENGTH - 1] = '\0';
+	NetCleanText(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH);
+
+	// Nobody else may have this name, or they could seem to speak for each other. Eight players can always find a number.
+	NetMakeNameUnique(netGameData.playerData[freePlayerIndex].name, NET_PLAYERNAMELENGTH, [freePlayerIndex](const char *candidate)
+	{
+		for (int i = 0; i < NET_MAXPLAYERS; i++)
+		{
+			if (i != freePlayerIndex && netGameData.playerData[i].playerId != 0 && _strnicmp(netGameData.playerData[i].name, candidate, NET_PLAYERNAMELENGTH) == 0)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}, NET_MAXPLAYERS + 1);
 
 	//  ConvertNetNameToUpperCase(netGameData.playerData[freePlayerIndex].name);
 	netGameData.playerData[freePlayerIndex].characterType = NGCT_Marine;
@@ -1105,6 +958,34 @@ static void AddPlayerToGame(NetID id, char *name)
 		netGameData.playerData[freePlayerIndex].lastKnownPosition.vz = 0;
 	}
 	Inform_PlayerHasConnected(id);
+	return true;
+}
+
+// A client's connection has closed, however that happened. If it said it was leaving first, it has already gone, and this changes nothing.
+void Net_PlayerHasGone(NetID id)
+{
+	if (PlayerIdInPlayerList(id) != NET_IDNOTINPLAYERLIST)
+	{
+		ProcessNetMsg_PlayerLeaving(id);
+	}
+}
+
+// A client's connection to its host has closed, so its game is over: clients can only talk to each other through the host. In the menus nothing is running, and the menus see this themselves.
+void Net_HostHasGone(void)
+{
+	if (netGameData.myGameState == NGS_Error_HostLost)
+	{
+		return;
+	}
+
+	bool const inTheMenus = netGameData.myGameState == NGS_Joining;
+
+	netGameData.myGameState = NGS_Error_HostLost;
+
+	if (!inTheMenus)
+	{
+		AvP.MainLoopRunning = 0;
+	}
 }
 
 void RemovePlayerFromGame(NetID id)
@@ -1152,6 +1033,250 @@ void RemovePlayerFromGame(NetID id)
 }
 
 /*----------------------------------------------------------------------
+  What a game message is allowed to be. See WHAT A GAME MESSAGE IS MADE OF in net_checks.h
+  ----------------------------------------------------------------------*/
+
+// What a client may send each second of the kinds that cost every machine something. Each is far more than a real game sends: nobody dies twice in a second, and a burst of cluster grenades is a few explosions. A big explosion alone makes about 4 pieces of flying debris, and a message can hold 180 of them.
+static const unsigned short kMostKillsEachSecond = 2;
+static const unsigned short kMostChatLinesEachSecond = 4;
+static const unsigned short kMostExplosionsEachSecond = 24;
+static const unsigned short kMostGibbingsEachSecond = 16;
+static const unsigned short kMostThingsDestroyedEachSecond = 60;
+static const unsigned short kMostHitsEachSecond = 240; // far more than any gun can land in a second
+static const unsigned short kMostLeavingsEachSecond = NET_MESSAGEITERATIONS; // a machine that's leaving says so this many times, because it gets no other chance
+
+// In the same order as NETMESSAGETYPE, which the compiler checks below. The last column is whether only the host may say it. A client has no way to send these in a real game, and whoever hears one believes it.
+static constexpr NetPartRule kNetPartRules[] =
+{
+	{ NetMT_GameDescription, sizeof(NETMESSAGE_GAMEDESCRIPTION), false, true },
+	{ NetMT_PlayerDescription, sizeof(NETMESSAGE_PLAYERDESCRIPTION), false, false },
+	{ NetMT_StartGame, 0, false, true },
+	{ NetMT_PlayerState, sizeof(NETMESSAGE_PLAYERSTATE), false, false },
+	{ NetMT_PlayerState_Minimal, sizeof(NETMESSAGE_PLAYERSTATE_MINIMAL), false, false },
+	{ NetMT_PlayerState_Medium, sizeof(NETMESSAGE_PLAYERSTATE_MEDIUM), false, false },
+	{ NetMT_PlayerKilled, sizeof(NETMESSAGE_PLAYERKILLED), false, false, kMostKillsEachSecond },
+	{ NetMT_PlayerLeaving, 0, false, false, kMostLeavingsEachSecond },
+	{ NetMT_AllGameScores, sizeof(NETMESSAGE_ALLGAMESCORES), false, true },
+	{ NetMT_PlayerScores, sizeof(NETMESSAGE_PLAYERSCORES), false, true },
+	{ NetMT_LocalRicochet, sizeof(NETMESSAGE_LOCALRICOCHET), false, false },
+	{ NetMT_LocalObjectState, sizeof(NETMESSAGE_LOBSTATE), false, false },
+	{ NetMT_LocalObjectDamaged, sizeof(NETMESSAGE_LOBDAMAGED_HEADER), true, false, kMostHitsEachSecond },
+	{ NetMT_LocalObjectDestroyed, sizeof(NETMESSAGE_LOBDESTROYED), false, false, kMostThingsDestroyedEachSecond },
+	{ NetMT_ObjectPickedUp, sizeof(NETMESSAGE_OBJECTPICKEDUP), false, false },
+	{ NetMT_InanimateObjectDamaged, sizeof(NETMESSAGE_INANIMATEDAMAGED_HEADER), true, false },
+	{ NetMT_InanimateObjectDestroyed, sizeof(NETMESSAGE_INANIMATEDESTROYED), false, true },
+	{ NetMT_LOSRequestBinarySwitch, sizeof(NETMESSAGE_LOSREQUESTBINARYSWITCH), false, false },
+	{ NetMT_PlatformLiftState, sizeof(NETMESSAGE_PLATFORMLIFTSTATE), false, true },
+	{ NetMT_RequestPlatformLiftActivate, sizeof(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE), false, false },
+	{ NetMT_PlayerAutoGunState, sizeof(NETMESSAGE_AGUNSTATE), false, true },
+	{ NetMT_MakeDecal, sizeof(NETMESSAGE_MAKEDECAL), false, false },
+	{ NetMT_ChatBroadcast, 2, true, false, kMostChatLinesEachSecond },
+	{ NetMT_MakeExplosion, sizeof(NETMESSAGE_MAKEEXPLOSION), false, false, kMostExplosionsEachSecond },
+	{ NetMT_MakeFlechetteExplosion, sizeof(NETMESSAGE_MAKEFLECHETTEEXPLOSION), false, false, kMostExplosionsEachSecond },
+	{ NetMT_MakePlasmaExplosion, sizeof(NETMESSAGE_MAKEPLASMAEXPLOSION), false, false, kMostExplosionsEachSecond },
+	{ NetMT_PredatorSights, sizeof(NETMESSAGE_PREDATORSIGHTS), false, false },
+	{ NetMT_LocalObjectOnFire, sizeof(NETMESSAGE_LOBONFIRE), false, false },
+	{ NetMT_RestartNetworkGame, sizeof(NETMESSAGE_RESTARTGAME), false, true },
+	{ NetMT_FragmentalObjectsStatus, sizeof(NETMESSAGE_FRAGMENTALOBJECTSSTATUS), false, true },
+	{ NetMT_AlienAIState, sizeof(NETMESSAGE_ALIENAISTATE), false, true },
+	{ NetMT_AlienAISequenceChange, sizeof(NETMESSAGE_ALIENSEQUENCECHANGE), false, true },
+	{ NetMT_AlienAIKilled, sizeof(NETMESSAGE_ALIENAIKILLED), false, true },
+	{ NetMT_GhostHierarchyDamaged, sizeof(NETMESSAGE_GHOSTHIERARCHYDAMAGED_HEADER), true, false, kMostHitsEachSecond },
+	{ NetMT_SpotAlienSound, sizeof(NETMESSAGE_SPOTALIENSOUND), false, true },
+	{ NetMT_LocalObjectDestroyed_Request, sizeof(NETMESSAGE_LOBDESTROYED_REQUEST), false, false },
+	{ NetMT_LastManStanding_Restart, sizeof(NETMESSAGE_LMS_RESTART), false, true },
+	{ NetMT_LastManStanding_RestartInfo, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_LastManStanding_RestartCountDown, sizeof(NETMESSAGE_LMS_RESTARTTIMER), false, true },
+	{ NetMT_LastManStanding_LastMan, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_PredatorTag_NewPredator, sizeof(NETMESSAGE_PLAYERID), false, true },
+	{ NetMT_EndGame, 0, false, true },
+	{ NetMT_CreateWeapon, sizeof(NETMESSAGE_CREATEWEAPON), false, false },
+	{ NetMT_RespawnPickups, 0, false, true },
+	{ NetMT_ScoreChange, sizeof(NETMESSAGE_SCORECHANGE), false, true },
+	{ NetMT_Gibbing, sizeof(NETMESSAGE_GIBBING), false, false, kMostGibbingsEachSecond },
+	{ NetMT_CorpseDeathAnim, sizeof(NETMESSAGE_CORPSEDEATHANIM), false, false, kMostKillsEachSecond },
+	{ NetMT_StrategySynch, sizeof(NETMESSAGE_STRATEGYSYNCH), false, true },
+	{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },
+	{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true },
+	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, true },
+	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, false }
+};
+
+// The build stops here if a message changes while the multiplayer version doesn't. See that file.
+#include "net_version_check.h"
+
+static constexpr bool NetPartRulesAreInOrder()
+{
+	for (size_t i = 0; i < sizeof(kNetPartRules) / sizeof(kNetPartRules[0]); i++)
+	{
+		if (kNetPartRules[i].kind != i)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static_assert(NetPartRulesAreInOrder(), "the table has to be in the same order as NETMESSAGETYPE, because a kind is looked up by its place");
+
+// How long a part whose length varies really is. The damage messages say with their flags what else they carry, and the rule has already made sure the flags are there.
+static size_t LengthOfANetPart(unsigned char kind, const unsigned char *part, size_t bytesLeft)
+{
+	char *const asRead = (char *)part;
+
+	switch (kind)
+	{
+		case NetMT_LocalObjectDamaged:
+			return (size_t)GetSizeOfLocalObjectDamagedMessage(asRead);
+
+		case NetMT_InanimateObjectDamaged:
+			return (size_t)GetSizeOfInanimateDamagedMessage(asRead);
+
+		case NetMT_GhostHierarchyDamaged:
+			return (size_t)GetSizeOfGhostHierarchyDamagedMessage(asRead);
+
+		case NetMT_ChatBroadcast:
+			return NetChatPartLength(part, bytesLeft);
+
+		default:
+			return 0;
+	}
+}
+
+// Asked by networking.cpp about everything that arrives, before any of it reaches the game. See WHO IS WHO there.
+void Net_NoteRefused(const char *why)
+{
+	static NetRefusalCounts refused;
+
+	unsigned long long const count = NetCountRefusal(refused, why);
+
+	if (NetLogThisRefusal(count))
+	{
+		LogString(std::string("net: refused: ") + why + " (number " + std::to_string(count) + " of these)");
+	}
+}
+
+// How long each list of levels is. The menus' own code fills these in.
+extern int NumMultiplayerLevels;
+extern int NumCoopLevels;
+
+bool Net_HostsLevelIsOnItsList()
+{
+	if (NetLevelIsOnItsList(netGameData.levelNumber, netGameData.gameType == NGT_Coop ? NumCoopLevels : NumMultiplayerLevels))
+	{
+		return true;
+	}
+
+	Net_NoteRefused("a host named a level that isn't on that game's list");
+	return false;
+}
+
+bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection)
+{
+	static NetPartsSpent spent[NET_MAXPLAYERS + 1];
+
+	if (connection >= sizeof(spent) / sizeof(spent[0]) || size < kMessageHeaderSize)
+	{
+		return false;
+	}
+
+	if (NetPartsFitTheBudget(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), LengthOfANetPart, spent[connection], timeGetTime()))
+	{
+		return true;
+	}
+
+	Net_NoteRefused("a client sent more of one kind of part in a second than any game does");
+	return false;
+}
+
+// What's kept back of the game's 1000 strategy blocks and 750 display blocks. A player's own corpse and shots come out of this. The sums for a crowded level, about 70 computer players near, use 70 of the first and up to 140 of the second.
+static const int kStrategyBlocksKeptBack = 100;
+static const int kDisplayBlocksKeptBack = 75;
+
+// In object.cpp: how many display blocks are in use
+extern int NumActiveBlocks;
+
+bool Net_BlocksAreShort()
+{
+	return AvP.Network != I_No_Network && (NetPoolIsShort(NumActiveStBlocks, maxstblocks, kStrategyBlocksKeptBack) || NetPoolIsShort(NumActiveBlocks, maxobjects, kDisplayBlocksKeptBack));
+}
+
+bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost)
+{
+	if (size < kMessageHeaderSize)
+	{
+		Net_NoteRefused("a message too short to have a header");
+		return false;
+	}
+
+	switch (NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))
+	{
+		case kNetPartsGood:
+			return true;
+		case kNetPartsOnlyFromTheHost:
+			Net_NoteRefused("a part only a host may send");
+			return false;
+		case kNetPartsUnknownKind:
+			Net_NoteRefused("a part of a kind that doesn't exist");
+			return false;
+		default:
+			Net_NoteRefused("a part that doesn't fit its message");
+			return false;
+	}
+}
+
+// How many new things other machines may make here in a second. Far more than a real battle. A limit on a second isn't enough by itself, because a spear lasts 20 seconds, so what one player has alive is counted as well.
+static const int kMostNewGhostsEachSecond = 60;
+static const int kMostLiveThingsOfOnePlayer = 48;
+static const int kMostDroppedGunsEachSecond = 16;
+
+// Each player has their own count, so one flooding can't stop anyone else's ghosts appearing
+static unsigned int newGhostsSecond[NET_MAXPLAYERS];
+static int newGhostsUsed[NET_MAXPLAYERS];
+static unsigned int droppedGunsSecond[NET_MAXPLAYERS];
+static int droppedGunsUsed[NET_MAXPLAYERS];
+
+static bool GhostKindCanBeMadeByMessage(AVP_BEHAVIOUR_TYPE type)
+{
+	switch (type)
+	{
+		case I_BehaviourRocket:
+		case I_BehaviourGrenade:
+		case I_BehaviourProximityGrenade:
+		case I_BehaviourPulseGrenade:
+		case I_BehaviourFragmentationGrenade:
+		case I_BehaviourClusterGrenade:
+		case I_BehaviourPredatorEnergyBolt:
+		case I_BehaviourFrisbeeEnergyBolt:
+		case I_BehaviourPPPlasmaBolt:
+		case I_BehaviourNPCPredatorDisc:
+		case I_BehaviourPredatorDisc_SeekTrack:
+		case I_BehaviourFrisbee:
+		case I_BehaviourAlienSpit:
+		case I_BehaviourSpeargunBolt:
+		case I_BehaviourFlareGrenade:
+		case I_BehaviourInanimateObject:
+			return true;
+		default:
+			return false;
+	}
+}
+
+// The alien messages find a ghost by its number, and any other kind has no alien's model to play
+static bool IsAnAlienGhost(STRATEGYBLOCK *sbPtr)
+{
+	return ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type == I_BehaviourAlien;
+}
+
+static bool IsAPlayersGhost(STRATEGYBLOCK *sbPtr)
+{
+	AVP_BEHAVIOUR_TYPE const type = ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type;
+
+	return type == I_BehaviourMarinePlayer || type == I_BehaviourAlienPlayer || type == I_BehaviourPredatorPlayer;
+}
+
+/*----------------------------------------------------------------------
   Core function for processing game messages
   ----------------------------------------------------------------------*/
 static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
@@ -1160,7 +1285,6 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 	uint8_t *endOfMessage = NULL;
 	NETMESSAGEHEADER *headerPtr = NULL;
 	LogNetInfo("Processing a game message \n");
-	NewOnScreenMessage("Processing a game message");
 
 	// check for invalid parameters
 	if ((msgSize == 0) || (msgP == NULL)) {
@@ -1354,7 +1478,8 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			case (NetMT_PlayerAutoGunState):
 			{
-				ProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);
+				// No network game has an autogun: a level's own are taken away as the game starts (AutoGunBehaveInit), and a player can't place one (CastSentrygun). So no honest game ever sends this.
+				Net_NoteRefused("an autogun message came, and no network game has autoguns");
 				subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);
 				break;
 			}
@@ -1528,7 +1653,7 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			case (NetMT_CreateWeapon):
 			{
-				ProcessNetMsg_CreateWeapon((NETMESSAGE_CREATEWEAPON *)subMessagePtr);
+				ProcessNetMsg_CreateWeapon((NETMESSAGE_CREATEWEAPON *)subMessagePtr, senderId);
 				subMessagePtr += sizeof(NETMESSAGE_CREATEWEAPON);
 				break;
 			}
@@ -1560,9 +1685,8 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			default:
 			{
-				OutputDebugString("default case hit in ProcessGameMessage\n");
-				LOCALASSERT(1 == 0);
-				break;
+				// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.
+				return;
 			}
 		}
 	}
@@ -1788,6 +1912,15 @@ void NetSendMessages(void)
 	LogNetInfo("...Finished sending net message \n");
 }
 
+// NetSendMessages sends only so many times a second, and between those times it keeps what it has for a later call.
+// Something that has to go out before this machine stops playing can't wait for that, because there may not be a later
+// call. This sends it now.
+static void NetSendMessagesNow(void)
+{
+	netGameData.sendTimer = 0;
+	NetSendMessages();
+}
+
 static void InitialiseSendMessageBuffer(void)
 {
 	/* NB the receive buffer is maintained internally to garry's dp-extension */
@@ -1877,14 +2010,6 @@ static void AddPlayerAndObjectUpdateMessages(void)
 				break;
 			}
 
-			case (I_BehaviourAutoGun):
-			{
-				/* this MUST be a player placed autogun */
-				/* the autogun update message */
-				AddNetMsg_PlayerAutoGunState(sbPtr);
-				break;
-			}
-
 			case (I_BehaviourAlien):
 			{
 				//only add alien details , if it is near (to someone)
@@ -1965,6 +2090,7 @@ void AddNetMsg_GameDescription(void)
 			messagePtr->players[i].characterType = (unsigned char)netGameData.playerData[i].characterType;
 			messagePtr->players[i].characterSubType = (unsigned char)netGameData.playerData[i].characterSubType;
 			messagePtr->players[i].startFlag = netGameData.playerData[i].startFlag;
+			NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);
 		}
 
 		messagePtr->gameType = (unsigned char)netGameData.gameType;
@@ -2103,6 +2229,12 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 	int playerIndex;
 
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// A host decides the list, and this game's place in it is used below. Not on it means nothing to say.
+	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
+		Net_NoteRefused("this game isn't on the list the host sent");
 		return;
 	}
 
@@ -2571,6 +2703,11 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 	}
 
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	if (PlayerIdInPlayerList(AvPNetID) == NET_IDNOTINPLAYERLIST) {
+		Net_NoteRefused("this game isn't on the list the host sent");
 		return;
 	}
 
@@ -4016,113 +4153,6 @@ void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr)
 	COPY_NAME((&messagePtr->name[0]), &(sbPtr->SBname));
 }
 
-void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)
-{
-	NETMESSAGEHEADER *headerPtr;
-	NETMESSAGE_AGUNSTATE *messagePtr;
-	int headerSize = sizeof(NETMESSAGEHEADER);
-	int messageSize = sizeof(NETMESSAGE_AGUNSTATE);
-
-	/* only send this if we are playing */
-	if (netGameData.myGameState != NGS_Playing) {
-		return;
-	}
-
-	/* check there's enough room in the send buffer */
-	{
-		int numBytesReqd = headerSize + messageSize;
-		int numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
-
-		if (numBytesReqd > numBytesLeft)
-		{
-			LOCALASSERT(1 == 0);
-			/* don't add it */
-			return;
-		}
-	}
-	/* set up pointers to header and message structures */
-	headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
-	endSendBuffer += headerSize;
-	messagePtr = (NETMESSAGE_AGUNSTATE *)endSendBuffer;
-	endSendBuffer += messageSize;
-	/* fill out the header */
-	headerPtr->type = (unsigned char)NetMT_PlayerAutoGunState;
-	/* fill out the message */
-	{
-		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
-		LOCALASSERT(dynPtr);
-		LOCALASSERT((dynPtr->Position.vx < 4194304) && (dynPtr->Position.vx > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->Position.vy < 4194304) && (dynPtr->Position.vy > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->Position.vz < 4194304) && (dynPtr->Position.vz > -4194304)); /* 23 bits of data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerX >= 0) && (dynPtr->OrientEuler.EulerX < 4096)); /* 9 bits of signed data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerY >= 0) && (dynPtr->OrientEuler.EulerY < 4096)); /* 9 bits of signed data */
-		LOCALASSERT((dynPtr->OrientEuler.EulerZ >= 0) && (dynPtr->OrientEuler.EulerZ < 4096));  /* 9 bits of signed data */
-
-		/* NB we can fit +-4194303 into 23 bits */
-		if (dynPtr->Position.vx < -4100000) {
-			messagePtr->xPos = -4100000;
-		}
-		else if (dynPtr->Position.vx > 4100000) {
-			messagePtr->xPos = 4100000;
-		}
-		else {
-			messagePtr->xPos = dynPtr->Position.vx;
-		}
-
-		messagePtr->xOrient = (dynPtr->OrientEuler.EulerX >> NET_EULERSCALESHIFT);
-
-		if (dynPtr->Position.vy < -4100000) {
-			messagePtr->yPos = -4100000;
-		}
-		else if (dynPtr->Position.vy > 4100000) {
-			messagePtr->yPos = 4100000;
-		}
-		else {
-			messagePtr->yPos = dynPtr->Position.vy;
-		}
-
-		messagePtr->yOrient = (dynPtr->OrientEuler.EulerY >> NET_EULERSCALESHIFT);
-
-		if (dynPtr->Position.vz < -4100000) {
-			messagePtr->zPos = -4100000;
-		}
-		else if (dynPtr->Position.vz > 4100000) {
-			messagePtr->zPos = 4100000;
-		}
-		else {
-			messagePtr->zPos = dynPtr->Position.vz;
-		}
-
-		messagePtr->zOrient = (dynPtr->OrientEuler.EulerZ >> NET_EULERSCALESHIFT);
-	}
-	/* add the object Id */
-	{
-		int obId = *((int *)(&(sbPtr->SBname[4])));
-		//      LOCALASSERT((obId >= -NET_MAXOBJECTID)&&(obId <= NET_MAXOBJECTID));
-		messagePtr->objectId = obId;
-	}
-	/* am I firing?? */
-	{
-		AUTOGUN_STATUS_BLOCK *agData;
-		agData = (AUTOGUN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-		LOCALASSERT(agData);
-
-		if (agData->Firing) {
-			messagePtr->IAmFiring = 1;
-		}
-		else {
-			messagePtr->IAmFiring = 0;
-		}
-
-		if (agData->behaviourState == I_disabled) {
-			messagePtr->IAmEnabled = 0;
-		}
-		else {
-			messagePtr->IAmEnabled = 1;
-		}
-	}
-}
-
 /* KJL 17:49:31 20/01/98 - transmit make decal info */
 void AddNetMsg_MakeDecal(enum DECAL_ID decalID, VECTORCH *normalPtr, VECTORCH *positionPtr, int moduleIndex)
 {
@@ -4240,14 +4270,14 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 		}
 		while (*ptr++);
 	}
-	// Show our own chat line on our screen as "NAME: message".
+	// Show our own chat line on our screen as "NAME says: message".
 	// OnScreenMessageBuffer holds 300 bytes: up to 299 characters (letters,
 	// digits, spaces and so on), then a zero byte that marks where the text
 	// stops (the "end marker").
 	// The check near the top of this function turns away a message of 254
 	// characters or more, and a player's name is kept in a 13-byte box (at
 	// most 12 characters and its end marker). So today the line is at most
-	// 12 + 2 + 253 = 267 characters long and always fits.
+	// 12 + 7 + 253 = 272 characters long and always fits.
 	// The limits are also put right here, so the line can never run past the
 	// end of the buffer, even if one of those checks is changed one day:
 	// - "%.*s" with NET_PLAYERNAMELENGTH reads no more than the 13 bytes of
@@ -4256,7 +4286,15 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 	//   short it leaves out the end marker, so we always write one ourselves
 	//   into the last byte.
 	// A line that fits comes out exactly as before.
-	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].name, string);
+	// A host's description can leave this machine off the list, and it would be read from before the list's start
+	int const myPlaceInTheList = PlayerIdInPlayerList(AvPNetID);
+
+	if (myPlaceInTheList == NET_IDNOTINPLAYERLIST)
+	{
+		return;
+	}
+
+	_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[myPlaceInTheList].name, string);
 	OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
@@ -5501,10 +5539,17 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 				playerChanged = 1;
 			}
 
+			// One that timed out never said goodbye, so its body is taken away here, even if someone else has its place already
+			if (netGameData.myGameState == NGS_Playing && netGameData.playerData[i].playerId != 0 && netGameData.playerData[i].playerId != messagePtr->players[i].playerId)
+			{
+				RemovePlayersGhosts(netGameData.playerData[i].playerId);
+				Inform_PlayerHasLeft(netGameData.playerData[i].playerId);
+			}
+
 			if (netGameData.myGameState == NGS_Playing && playerChanged)
 			{
 				if (messagePtr->players[i].playerId == 0) {
-					Inform_PlayerHasLeft(netGameData.playerData[i].playerId);
+					// Taken care of above
 				}
 				else if (messagePtr->players[i].startFlag) {
 					Inform_PlayerHasJoined(messagePtr->players[i].playerId);
@@ -5514,51 +5559,12 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 				}
 			}
 
-			if (netGameData.playerData[i].playerId != messagePtr->players[i].playerId)
-			{
-				// bjd - FIXME
-				if (messagePtr->players[i].playerId)
-				{
-/*
-					Net_SendSystemMessage(AVP_REQUEST_PLAYER_NAME, AvPNetID, messagePtr->players[i].playerId, NULL, 0);
-					strncpy(netGameData.playerData[i].name, "APLAYER", NET_PLAYERNAMELENGTH - 1);
-					netGameData.playerData[i].name[NET_PLAYERNAMELENGTH - 1] = '\0';
-*/
-					//AddNetMsg_PlayerGetName(messagePtr->players[i].playerId); // pass request through internal message system?
-					//tempPlayerDetails.
-#if 0 // i'm thinking we should do this differently..pass request through games message queue
-					DWORD size = 0;
-					char *data;
-					HRESULT hr;
-					//need to find out this player's name
-					//first find the size of buffer required
-					hr = IDirectPlayX_GetPlayerName(glpDP, messagePtr->players[i].playerId, 0, &size);
-
-					if (hr == NET_OK || hr == DPERR_BUFFERTOOSMALL)
-					{
-						//allocate buffer to receive the name
-						data = AllocateMem(size);
-						*data = 0;
-						hr = IDirectPlayX_GetPlayerName(glpDP, messagePtr->players[i].playerId, data, &size);
-
-						if (hr == NET_OK)
-						{
-							strncpy(netGameData.playerData[i].name,/*((DPNAME*)data)->lpszShortNameA*/data, NET_PLAYERNAMELENGTH - 1);
-							netGameData.playerData[i].name[NET_PLAYERNAMELENGTH - 1] = '\0';
-						}
-
-						DeallocateMem(data);
-					}
-
-#endif
-				}
-				else {
-					netGameData.playerData[i].name[0] = '\0'; // set this for now
-				}
-			}
+			// This is how a client learns the other players' names
+			NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);
 
 			netGameData.playerData[i].playerId = messagePtr->players[i].playerId;
-			netGameData.playerData[i].characterType = (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType;
+			// The message has room to say 3, which is no kind of player, and scores look things up by this
+			netGameData.playerData[i].characterType = NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;
 			netGameData.playerData[i].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType;
 			netGameData.playerData[i].startFlag = messagePtr->players[i].startFlag;
 		}
@@ -5703,6 +5709,12 @@ static void ProcessNetMsg_PlayerDescription(NETMESSAGE_PLAYERDESCRIPTION *messag
 			return;
 		}
 
+		// The message has room for more than there are kinds of player, and scores look things up by this
+		if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien))
+		{
+			return;
+		}
+
 		netGameData.playerData[id].characterType = (NETGAME_CHARACTERTYPE)messagePtr->characterType;
 		netGameData.playerData[id].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType;
 
@@ -5779,6 +5791,12 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 
 	// KJL 14:47:22 06/04/98 - we don't seem to know about this person yet... ignore them
 	if (playerIndex == NET_IDNOTINPLAYERLIST) {
+		return;
+	}
+
+	// The message has room to say 3, which is no kind of player, and scores look things up by these
+	if (!NetNumberFitsTable(messagePtr->characterType, NGCT_AI_Alien) || !NetNumberFitsTable(messagePtr->nextCharacterType, NGCT_AI_Alien))
+	{
 		return;
 	}
 
@@ -6080,6 +6098,13 @@ static void ProcessNetMsg_PlayerState_Minimal(NETMESSAGE_PLAYERSTATE_MINIMAL *me
 	}
 
 	STRATEGYBLOCK *sbPtr = FindGhost(senderId, GHOST_PLAYEROBJECTID);
+
+	if (sbPtr && !IsAPlayersGhost(sbPtr))
+	{
+		Net_NoteRefused("a player message named a ghost that isn't a player");
+		return;
+	}
+
 	// record whether the player is in the land of the living
 	netGameData.playerData[playerIndex].playerAlive = messagePtr->IAmAlive;
 	netGameData.playerData[playerIndex].playerHasLives = messagePtr->IHaveLifeLeft;
@@ -6199,6 +6224,11 @@ static void ProcessNetMsg_PlayerKilled(NETMESSAGE_PLAYERKILLED *messagePtr, NetI
 		return;
 	}
 
+	// These go on to be places in the tables of scores and deaths. The one who died is a player, one of the kinds before the computer's aliens, and the killer can be any kind there is.
+	if (!NetNumberFitsTable((int)messagePtr->myType, NGCT_AI_Alien) || !NetNumberFitsTable((int)messagePtr->killerType, NGCT_AI_Praetorian + 1)) {
+		return;
+	}
+
 	/* if this player is not in the play list, messages are probably out of order,
 	so just ignore it... */
 	int senderPlayerIndex = PlayerIdInPlayerList(senderId);
@@ -6212,6 +6242,13 @@ static void ProcessNetMsg_PlayerKilled(NETMESSAGE_PLAYERKILLED *messagePtr, NetI
 	{
 		/* we don't have a ghost for this player, which is odd, and implies that messages
 		have got dis-ordered... best just ignore it then */
+		return;
+	}
+
+	// The number names the new corpse. A corpse with the number of the player's body would go on being treated as the player's body, by later messages that were never meant for a corpse.
+	if (messagePtr->objectId == GHOST_PLAYEROBJECTID)
+	{
+		Net_NoteRefused("a kill message gave the corpse the number of a player's body");
 		return;
 	}
 
@@ -6331,8 +6368,13 @@ static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)
 		return;
 	}
 
-	// find the player...
+	// find the player. This is a place in the list, whatever it's called, and it's whatever the message says.
 	int playerId = (int)messagePtr->playerId;
+
+	if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))
+	{
+		return;
+	}
 
 	// fill in the player's scores from the message
 	for (int i = 0; i < NET_MAXPLAYERS; i++) {
@@ -6362,6 +6404,12 @@ static void ProcessNetMsg_ScoreChange(NETMESSAGE_SCORECHANGE *messagePtr)
 
 	// only do this if we're playing
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// These are places in the list, and they're whatever the message says. The killer can also be one past the end, which means an alien the computer plays.
+	if (!NetNumberFitsTable(messagePtr->victimIndex, NET_MAXPLAYERS) || !NetNumberFitsTable(messagePtr->killerIndex, NET_MAXPLAYERS + 1))
+	{
 		return;
 	}
 
@@ -6413,10 +6461,24 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 
 	/* get the object id from the message */
 	int objectId = (int)messagePtr->objectId;
+
+	// -1 means a player's own body, which has its own message, and this one could move it, or make a thing with its number. Either way nothing honest sends it.
+	if (objectId == GHOST_PLAYEROBJECTID)
+	{
+		Net_NoteRefused("a ghost message used the number of a player's body");
+		return;
+	}
+
 	STRATEGYBLOCK *sbPtr = FindGhost(senderId, objectId);
 
 	if (!sbPtr)
 	{
+		// Someone can later walk over this, and the game then uses this number as a place in its table of ammunition or of weapons. See inventory.cpp.
+		if ((messagePtr->IOType == IOT_Ammo && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_AMMO_TEMPLATES)) || (messagePtr->IOType == IOT_Weapon && !NetNumberFitsTable(messagePtr->subtype, MAX_NO_OF_WEAPON_TEMPLATES)))
+		{
+			return;
+		}
+
 		/* we don't seem to have a ghost for this object, so create one */
 		VECTORCH position;
 		EULER orientation;
@@ -6429,10 +6491,49 @@ static void ProcessNetMsg_LocalObjectState(NETMESSAGE_LOBSTATE *messagePtr, NetI
 		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
 		type = (AVP_BEHAVIOUR_TYPE)messagePtr->type;
 
+		// A corpse says where it is, as everything does, and this machine doesn't make corpses from that. One can arrive here honestly just after a level restarts, when the corpse has gone, so it isn't worth a line in the log.
 		if (type == I_BehaviourNetCorpse)
 		{
-			/* This *should* never happen... */
-			textprint("IGNORED A CREATE CORPSE COMMAND.\n");
+			return;
+		}
+
+		// The kind is the sender's word
+		if (!GhostKindCanBeMadeByMessage(type))
+		{
+			Net_NoteRefused("a ghost message named a kind that isn't on the list");
+			return;
+		}
+
+		// A flood of these would use up the game's 1000 blocks, which everything in a level needs
+		int const sender = PlayerIdInPlayerList(senderId);
+
+		if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &newGhostsSecond[sender], &newGhostsUsed[sender], kMostNewGhostsEachSecond))
+		{
+			Net_NoteRefused("too many new ghosts from one player in a second");
+			return;
+		}
+
+		// Only the kinds a message can make count. A player's body and the computer's fighters are made some other way, and don't use this up.
+		int liveThings = 0;
+
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			STRATEGYBLOCK *const block = ActiveStBlockList[i];
+
+			if (block && block->I_SBtype == I_BehaviourNetGhost && block->SBdataptr)
+			{
+				NETGHOSTDATABLOCK const *const liveGhost = (NETGHOSTDATABLOCK const *)block->SBdataptr;
+
+				if (liveGhost->playerId == senderId && GhostKindCanBeMadeByMessage(liveGhost->type))
+				{
+					liveThings++;
+				}
+			}
+		}
+
+		if (liveThings >= kMostLiveThingsOfOnePlayer)
+		{
+			Net_NoteRefused("a player has as many things alive as one player may");
 			return;
 		}
 
@@ -6555,6 +6656,23 @@ static int GetSizeOfLocalObjectDamagedMessage(char *messagePtr)
 	return size;
 }
 
+// A damage message says which ammunition did the damage, in a number that can be anything from -1024 to 1023, because another player's machine wrote it. If
+// the message leaves out its damage figures, they come from that number's place in the ammunition table, so a number with no place in the table would read
+// whatever is in memory there. A real game can't send one: for any number outside the table, the sender includes the figures. So a message like this didn't
+// come from a real game, and it's ignored. Anyone can send these as fast as they like, so the log only gets a few of them.
+static void LogIgnoredDamageMessage(int ammoNumber)
+{
+	static unsigned long long ignored = 0;
+
+	if (LogThisDrop(ignored))
+	{
+		char line[128];
+		_snprintf(line, sizeof(line) - 1, "network: ignored a damage message naming ammunition %d, which isn't in the table (%llu so far)", ammoNumber, ignored);
+		line[sizeof(line) - 1] = 0;
+		LogErrorStringC(line);
+	}
+}
+
 static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 {
 	NETMESSAGE_LOBDAMAGED_HEADER *messageHeader = 0;
@@ -6623,6 +6741,13 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 		return;
 	}
 
+	// This comes before anything is changed, so that a message that's ignored can't be blamed for a kill. This ammunition has its figures in a place of its own.
+	if (!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES))
+	{
+		LogIgnoredDamageMessage(messageHeader->ammo_id);
+		return;
+	}
+
 	// next we have to find this object in our strategyblock list
 	{
 		int objectId;
@@ -6683,7 +6808,7 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 				}
 				else
 				{
-					GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+					// the number has been checked above
 					damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 				}
 			}
@@ -6693,6 +6818,12 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 			}
 			else {
 				multiple = ONE_FIXED;
+			}
+
+			if (!NetDamageMultipleIsGood(multiple))
+			{
+				Net_NoteRefused("a damage message counted its hit a number of times it can't");
+				return;
 			}
 
 			section_data = NULL;
@@ -6919,7 +7050,12 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 		}
 		else
 		{
-			GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+			if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))
+			{
+				LogIgnoredDamageMessage(damage.Id);
+				return;
+			}
+
 			damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 		}
 
@@ -6929,6 +7065,12 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 		}
 		else {
 			multiple = ONE_FIXED;
+		}
+
+		if (!NetDamageMultipleIsGood(multiple))
+		{
+			Net_NoteRefused("a damage message counted its hit a number of times it can't");
+			return;
 		}
 
 		CauseDamageToObject(sbPtr, (&damage), multiple, NULL);
@@ -6973,7 +7115,13 @@ static void ProcessNetMsg_ObjectPickedUp(NETMESSAGE_OBJECTPICKEDUP *messagePtr)
 		return;    // couldn't find it
 	}
 
-	LOCALASSERT(objectPtr->I_SBtype == I_BehaviourInanimateObject);
+	// The name finds lights, switches and lifts as well as things that can be picked up. Treating one of those as a pick-up would write over its data.
+	if (objectPtr->I_SBtype != I_BehaviourInanimateObject)
+	{
+		Net_NoteRefused("a pick-up message named something that can't be picked up");
+		return;
+	}
+
 	// Play an appropriate sound?
 	{
 		INANIMATEOBJECT_STATUSBLOCK *objStatPtr = static_cast<INANIMATEOBJECT_STATUSBLOCK *>(objectPtr->SBdataptr);
@@ -7021,8 +7169,13 @@ static void ProcessNetMsg_EndGame(void)
 
 	/* only do this if we're playing or in startup */
 	/* check start flags on all players (including ourselves) */
-	if (netGameData.playerData[PlayerIdInPlayerList(AvPNetID)].startFlag) {
-		netGameData.myGameState = NGS_Playing;
+	{
+		// A client that isn't in the list has no place in it to look at
+		int const myIndex = PlayerIdInPlayerList(AvPNetID);
+
+		if (myIndex != NET_IDNOTINPLAYERLIST && netGameData.playerData[myIndex].startFlag) {
+			netGameData.myGameState = NGS_Playing;
+		}
 	}
 
 	if ((netGameData.myGameState != NGS_Playing) && (netGameData.myGameState != NGS_StartUp) && (netGameData.myGameState != NGS_Joining)) {
@@ -7145,58 +7298,22 @@ static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORM
 	}
 }
 
-static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *messagePtr, NetID senderId)
+static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
 {
-	// only do this if we're playing
 	if (netGameData.myGameState != NGS_Playing) {
 		return;
 	}
 
-	// get the object id from the message
-	int objectId = (int)messagePtr->objectId;
-	STRATEGYBLOCK *sbPtr = FindGhost(senderId, objectId);
-
-	if (!sbPtr)
-	{
-		// we don't seem to have a ghost for this autoGun, so create one
-		VECTORCH position;
-		EULER orientation;
-		position.vx = messagePtr->xPos;
-		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
-		position.vy = messagePtr->yPos;
-		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
-		position.vz = messagePtr->zPos;
-		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
-		// NB there is no sequence required for autoguns, so just pass zero
-		sbPtr = CreateNetGhost(senderId, objectId, &position, &orientation, I_BehaviourAutoGun, IOT_Non, 0);
-
-		if (sbPtr)
-		{
-			HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
-			HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
-		}
+	// The game uses this as a place in its table of decals
+	if (!NetNumberFitsTable((int)messagePtr->DecalID, MAX_NO_OF_DECAL_IDS)) {
+		return;
 	}
-	else
-	{
-		// update the autogun ghost...
-		VECTORCH position;
-		EULER orientation;
-		position.vx = messagePtr->xPos;
-		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
-		position.vy = messagePtr->yPos;
-		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
-		position.vz = messagePtr->zPos;
-		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
-		UpdateGhost(sbPtr, &position, &orientation, 0, 0);
-		HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
-		HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
-	}
-}
 
-
-static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
-{
-	if (netGameData.myGameState != NGS_Playing) {
+	// Which of the level's modules the decal is on. It's kept with the decal, so it's checked here, before anything
+	// can use it as a place in the module lists. The game that made the decal gives -1 when what it hit isn't one of
+	// the level's modules (ParticleDynamics in dynamics.cpp), so -1 is let in.
+	if (messagePtr->ModuleIndex != -1 && !NetNumberFitsTable(messagePtr->ModuleIndex, ModuleArraySize)) {
+		Net_NoteRefused("a decal message named a module this level doesn't have");
 		return;
 	}
 
@@ -7237,7 +7354,7 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 		}
 
 		// Another player's computer sent us this chat line over the network.
-		// We show it as "NAME: message" in OnScreenMessageBuffer, which holds 300
+		// We show it as "NAME says: message" in OnScreenMessageBuffer, which holds 300
 		// bytes: up to 299 characters, then the end marker (the zero byte that
 		// marks where the text stops).
 		// The check at the top of this function refuses a line of 254 characters
@@ -7248,8 +7365,10 @@ static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, 
 		// (_snprintf), and the end marker written by us into the last byte,
 		// because _snprintf leaves it out when it cuts the text short.
 		// A line that fits comes out exactly as before.
-		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
+		_snprintf(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer) - 1, "%.*s says: %s", NET_PLAYERNAMELENGTH, netGameData.playerData[playerIndex].name, subMessagePtr + 1);
 		OnScreenMessageBuffer[sizeof(OnScreenMessageBuffer) - 1] = '\0';
+		// Every chat line says who's speaking, and can't break into a line that looks like the game's own
+		NetCleanText(OnScreenMessageBuffer, sizeof(OnScreenMessageBuffer));
 		NewOnScreenMessage(OnScreenMessageBuffer);
 
 		/* KJL 99/2/5 - play 'incoming message' sound */
@@ -7287,12 +7406,26 @@ static void ProcessNetMsg_MakeExplosion(NETMESSAGE_MAKEEXPLOSION *messagePtr)
 		return;
 	}
 
+	// Only these go on the network. Any other would make damaging fire here as if this machine had started it.
+	if (messagePtr->ExplosionID != EXPLOSION_SMALL_NOCOLLISIONS && messagePtr->ExplosionID != EXPLOSION_PREDATORPISTOL && messagePtr->ExplosionID != EXPLOSION_HUGE && messagePtr->ExplosionID != EXPLOSION_PULSEGRENADE)
+	{
+		Net_NoteRefused("an explosion message named a kind no game sends");
+		return;
+	}
+
 	MakeVolumetricExplosionAt(&(messagePtr->Position), messagePtr->ExplosionID);
 }
 
 static void ProcessNetMsg_MakeFlechetteExplosion(NETMESSAGE_MAKEFLECHETTEEXPLOSION *messagePtr)
 {
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// A seed of 0 is how the machine that fired asks for a new one, and tells everyone else
+	if (messagePtr->Seed == 0)
+	{
+		Net_NoteRefused("a flechette message had no seed");
 		return;
 	}
 
@@ -7579,6 +7712,12 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 	// get the object id from the message
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
+
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
+		return;
+	}
 	position.vx = messagePtr->xPos;
 	orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
 	position.vy = messagePtr->yPos;
@@ -7677,6 +7816,12 @@ static void ProcessNetMsg_AlienAISequenceChange(NETMESSAGE_ALIENSEQUENCECHANGE *
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
 
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
+		return;
+	}
+
 	if (!sbPtr)
 	{
 		// Gordon Bennet.  Return, then.
@@ -7719,13 +7864,20 @@ static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, Ne
 	{
 		int killerIndex = PlayerIdInPlayerList(messagePtr->killerId);
 
-		if (killerIndex != NET_IDNOTINPLAYERLIST) {
+		// The message has room to say 3, and there are three kinds of alien, from 0
+		if (killerIndex != NET_IDNOTINPLAYERLIST && NetNumberFitsTable(messagePtr->AlienType, 3)) {
 			netGameData.playerData[killerIndex].aliensKilled[messagePtr->AlienType] = messagePtr->killCount;
 		}
 	}
 	// get the object id from the message
 	objectId = (int)messagePtr->Guid;
 	sbPtr = FindGhost(senderId, objectId);
+
+	if (sbPtr && !IsAnAlienGhost(sbPtr))
+	{
+		Net_NoteRefused("an alien message named a ghost that isn't an alien");
+		return;
+	}
 
 	if (!sbPtr)
 	{
@@ -7783,7 +7935,15 @@ static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messageP
 	}
 	else
 	{
-		// The alien is at one of the modules auxilary locations
+		// The alien is at one of the modules auxilary locations.
+		// The list of far places has one entry for each of the level's modules (InitFarLocDataAreas in pfarlocs.cpp),
+		// not one for each AI module. So the number checked above against the AI modules is checked against this
+		// list's own size too, and the list has to be there.
+		if (!FALLP_AuxLocs || !NetNumberFitsTable((int)messagePtr->targetModuleIndex, ModuleArraySize)) {
+			Net_NoteRefused("a far alien message named a module with no far places");
+			return;
+		}
+
 		int noOfAuxLocs = FALLP_AuxLocs[messagePtr->targetModuleIndex].numLocations;
 		VECTORCH *auxLocsList = FALLP_AuxLocs[messagePtr->targetModuleIndex].locationsList;
 
@@ -7946,7 +8106,12 @@ static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId
 		}
 		else
 		{
-			GLOBALASSERT(damage.Id > AMMO_NONE && damage.Id < MAX_NO_OF_AMMO_TEMPLATES);
+			if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))
+			{
+				LogIgnoredDamageMessage(damage.Id);
+				return;
+			}
+
 			damage = TemplateAmmo[damage.Id].MaxDamage[AvP.Difficulty];
 		}
 
@@ -7955,6 +8120,12 @@ static void ProcessNetMsg_GhostHierarchyDamaged(char *messagePtr, NetID senderId
 		}
 		else {
 			multiple = ONE_FIXED;
+		}
+
+		if (!NetDamageMultipleIsGood(multiple))
+		{
+			Net_NoteRefused("a damage message counted its hit a number of times it can't");
+			return;
 		}
 
 		if (sbPtr->DynPtr && messageDirection)
@@ -8062,10 +8233,30 @@ static void ProcessNetMsg_SpotAlienSound(NETMESSAGE_SPOTALIENSOUND *messagePtr, 
 	PlayAlienSound((int)messagePtr->alienType, (int)messagePtr->soundCategory, messagePtr->pitch, NULL, &position);
 }
 
-static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr)
+static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetID senderId)
 {
 	// if we're not playing, ignore it
 	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// It becomes a pickup, and the game uses this number as a place in its table of weapons when someone walks over it
+	if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {
+		return;
+	}
+
+	// Each one lasts 20 seconds and uses one of the game's 1000 blocks
+	int const sender = PlayerIdInPlayerList(senderId);
+
+	if (sender == NET_IDNOTINPLAYERLIST || !NetThisSecondHasRoom(timeGetTime(), &droppedGunsSecond[sender], &droppedGunsUsed[sender], kMostDroppedGunsEachSecond))
+	{
+		Net_NoteRefused("too many dropped guns from one player in a second");
+		return;
+	}
+
+	if (Net_BlocksAreShort())
+	{
+		Net_NoteRefused("the game is short of blocks, so a dropped gun wasn't made");
 		return;
 	}
 
@@ -8366,7 +8557,16 @@ static void UpdateNetworkGameScores(NetID playerKilledId, NetID killerId, NETGAM
 		if (netGameData.gameType == NGT_CoopDeathmatch)
 		{
 			// need to adjust the species scores as well
-			netGameData.teamScores[killerType] += scoreForKill;
+			// The killer can be the computer's aliens, which are numbered past the three species
+			if (NetNumberFitsTable(killerType, 3))
+			{
+				netGameData.teamScores[killerType] += scoreForKill;
+			}
+			else
+			{
+				Net_NoteRefused("a killer's kind has no species score");
+			}
+
 			AddNetMsg_SpeciesScores();
 		}
 	}
@@ -9244,7 +9444,7 @@ void TransmitEndOfGameNetMsg(void)
 	{
 		AddNetMsg_AllGameScores();
 		// AddNetMsg_EndGame();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 
 	netGameData.stateCheckTimeDelay = 3 * ONE_FIXED;
@@ -9259,7 +9459,7 @@ void TransmitPlayerLeavingNetMsg(void)
 	for (int i = 0; i < NET_MESSAGEITERATIONS; i++)
 	{
 		AddNetMsg_PlayerLeaving();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 }
 
@@ -9272,7 +9472,7 @@ void TransmitStartGameNetMsg(void)
 	for (int i = 0; i < NET_MESSAGEITERATIONS; i++)
 	{
 		AddNetMsg_StartGame();
-		NetSendMessages();
+		NetSendMessagesNow();
 	}
 }
 
@@ -10072,11 +10272,6 @@ static void Inform_PlayerHasConnected(NetID player)
 	}
 
 	NetworkGameConsoleMessage(TEXTSTRING_MULTIPLAYERCONSOLE_CONNECTGAME, netGameData.playerData[playerIndex].name, 0);
-}
-
-static void Inform_NewHost(void)
-{
-	NewOnScreenMessage(GetTextString(TEXTSTRING_MULTIPLAYERCONSOLE_NEWHOST));
 }
 
 static void WriteFragmentStatus(int fragmentNumber, int status)

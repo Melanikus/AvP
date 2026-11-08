@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a line of sight to a room with no display block left stops there
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   it notes which polygon of its shape a ray hit, for -shadowshoot
 /*KJL*************************
@@ -208,6 +210,12 @@ void CheckForVectorIntersectionWith3dObject(DISPLAYBLOCK *objectPtr, VECTORCH *v
 	ViewpointPositionPtr = viewVectorAlphaPtr;
 	ViewpointDirectionPtr = viewVectorBetaPtr;
 	    
+	// A room near a computer player that the game had no display block left for
+	if (!objectPtr)
+	{
+		return;
+	}
+
 	if (objectPtr->HModelControlBlock)
 	{
 		SECTION_DATA *firstSectionPtr;

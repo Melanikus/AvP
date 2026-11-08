@@ -9,6 +9,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   leaving the page of games found closes what the search has open on the network
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
+//   a client whose host has gone goes back to the main menus
+//   a network game's loading screen has all five of its lines, where some could be left unset
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
@@ -521,13 +523,11 @@ extern void AvP_UpdateMenus(void)
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 	{
 		MinimalNetCollectMessages();
-		if (AvP.Network == I_Host)
-		{	/*
-			We have become host while in the process of joining.
-			This is bad.
-			Best leave the game and return to the main menus.
-			*/
+		if (netGameData.myGameState == NGS_Error_HostLost)
+		{
+			// The host has gone, so there's no game to join. Back to the main menus.
 			Net_Disconnect();
+			AvP.Network = I_No_Network;
 			SetupNewMenu(AVPMENU_MAIN);
 			return;
 		}
@@ -2950,6 +2950,11 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
 			{
+				if (!Net_HostsLevelIsOnItsList())
+				{
+					break;
+				}
+
 				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
 				netGameData.myStartFlag = 1;
 
@@ -4889,6 +4894,9 @@ static BOOL IsSmartgunInLevel(int level)
 
 static void SetBriefingTextForMultiplayer()
 {
+	// Every line starts blank, because below only some of them get set, and the loading screen reads all five. A line nothing set would crash it.
+	SetBriefingTextToBlank();
+
 	int level = NumberForCurrentLevel();
 
 	int num_not_available = 0;
