@@ -5,7 +5,8 @@
 //
 // - level_file_sum.h on its own: which sizes a level file may be, the words of the line, with the sum the MD5 standard gives for
 //   its own example, and the words for a file refused for its size.
-// - The game's real level loader (File_Chunk, in mishchnk.cpp), on real files this test writes in a folder beside itself:
+// - The game's real level loader (File_Chunk, in mishchnk.cpp), on real files this test writes in a folder of its own, which it makes
+//   inside the folder it runs in and names by its own process number:
 //   - a plain level and a packed level both load, and the size and sum each one gives are those of the file as it is on disk;
 //   - a copy with one byte changed gives another sum;
 //   - a file too short to hold a level's heading is refused, and so is a file larger than any level the game can use, even though
@@ -406,7 +407,15 @@ static void SayABadArgumentStoppedIt(const wchar_t *, const wchar_t *, const wch
 	_exit(1);
 }
 
-int main(int argc, char **argv)
+// The folder for this run's files, ending in a backslash. It's inside the folder the test runs in, and named by nothing but this program's
+// number, as level_log_test's is: no setting from outside, and nothing the program was started with, can point it anywhere else. So every
+// file the test writes, reads and deletes is a name it built itself, inside a folder it made itself.
+static std::string TestFolder()
+{
+	return "level_file_sum_test_files_" + std::to_string(GetCurrentProcessId()) + "\\";
+}
+
+int main()
 {
 	// Every line goes out as soon as it's printed. The checks' output goes through a pipe, which would otherwise hold it back and lose it
 	// if the program were stopped by a crash, so the last line shown is always the last step reached.
@@ -414,12 +423,13 @@ int main(int argc, char **argv)
 	std::set_terminate(SayAnExceptionStoppedIt);
 	_set_invalid_parameter_handler(SayABadArgumentStoppedIt);
 
-	// The test's files go in a folder of their own beside the program, wherever that is (its own path is the first thing it's given)
-	std::string here = argc > 0 && argv[0] ? argv[0] : "";
-	size_t const slash = here.find_last_of("\\/");
-	std::string const folder = (slash == std::string::npos ? std::string(".\\") : here.substr(0, slash + 1)) + "level_file_sum_test_files\\";
+	std::string const folder = TestFolder();
 
-	CreateDirectoryA(folder.c_str(), NULL);
+	if (!CreateDirectoryA(folder.c_str(), NULL))
+	{
+		printf("  FAILED  the test couldn't make its own folder %s (a folder of that name may be left from an earlier run)\n", folder.c_str());
+		return 1;
+	}
 
 	TestTheRule();
 	TestTheLoader(folder);
