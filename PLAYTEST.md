@@ -25,9 +25,8 @@ From the release page, download `AvP-<version>-windows-x86.zip` and `SHA256SUMS`
    ```
    gh attestation verify AvP-<version>-windows-x86.zip --repo Melanikus/AvP
    ```
-   Look for **Verification succeeded**, naming `Melanikus/AvP` and `.github/workflows/release.yml`. Anything else, don't use
-   it, and tell us. [PENDING: this wording is from gh's documentation, not seen yet. The first real pre-release checks it once,
-   and this line is corrected to match.]
+   It should finish by saying the verification succeeded, naming `Melanikus/AvP` and `.github/workflows/release.yml`. If it
+   reports a failure or names anything else, don't use the download, and tell us.
 3. **Every file inside is whole.** After you've unzipped it (section 2), in PowerShell, in the game folder:
    ```powershell
    Get-Content SHA256SUMS.txt | ForEach-Object {
