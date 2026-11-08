@@ -409,8 +409,48 @@
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.cpp",
-					"from": "\t\t\tAddSleepersFrom(between->ls_targets[i].sbptr, box, sleepers, switchesBetween + 1);\n",
+					"from": "\t\t\tAddSleepersFrom(between->ls_targets[i].sbptr, between->ls_targets[i].request_message, box, sleepers, switchesBetween + 1);\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper the box asks off is woken",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tif ((message & 1) == 0)\n\t\t{\n\t\t\treturn;\n\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch between is taken to ask its sleepers on",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "AddSleepersFrom(between->bs_targets[i], between->request_messages[i], box",
+					"to": "AddSleepersFrom(between->bs_targets[i], 1, box"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box is taken to ask its sleepers on",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "AddSleepersFrom(own->bs_targets[i], own->request_messages[i], box",
+					"to": "AddSleepersFrom(own->bs_targets[i], 1, box"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an NPC asked off counts as waking it",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "Note(jobs, on ? kNearWakeJobWakesASleeper : kNearWakeJobAnythingElse);",
+					"to": "Note(jobs, kNearWakeJobWakesASleeper);"
 				}
 			]
 		},
@@ -519,8 +559,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.cpp",
-					"from": "\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);",
-					"to": "\t\tcase I_BehaviourAutoGun:\n\t\tcase I_BehaviourGenerator:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);"
+					"from": "\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, on ?",
+					"to": "\t\tcase I_BehaviourAutoGun:\n\t\tcase I_BehaviourGenerator:\n\t\t\tNote(jobs, on ?"
 				}
 			]
 		},
