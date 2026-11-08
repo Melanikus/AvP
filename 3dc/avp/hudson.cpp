@@ -7696,7 +7696,8 @@ static bool Hudson_WhereItIs(STRATEGYBLOCK const *block, VECTORCH *where)
 {
 	if (block->I_SBtype == I_BehaviourDormantPredator)
 	{
-		*where = ((TOOLS_DATA_PREDATOR const *)((DORMANT_PREDATOR_STATUS_BLOCK const *)block->SBdataptr)->toolsData)->position;
+		// The block keeps its own copy of the level's data for it (bh_predator.h), not a pointer to the level's
+		*where = ((DORMANT_PREDATOR_STATUS_BLOCK const *)block->SBdataptr)->toolsData.position;
 		return true;
 	}
 
