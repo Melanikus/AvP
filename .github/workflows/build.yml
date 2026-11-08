@@ -22,12 +22,8 @@ jobs:
   build:
     name: Make a test build
     runs-on: windows-2025-vs2026   # pinned: Windows Server 2025 with Visual Studio 2026, the compiler we build with
-    # A job's own list replaces the one above, so the first two are said again
-    permissions:
-      contents: read
-      checks: read          # to read the scan results of the commit being built
-      id-token: write       # to prove to the attestation service which workflow this is
-      attestations: write   # to record how the libraries were built (see "Record how the libraries were built")
+    # No right to record provenance here: this job runs vcpkg, which runs each library's own build scripts, and anything a step can reach
+    # they could ask for. The libraries' provenance is recorded by the next job, which builds nothing.
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,8 +73,8 @@ jobs:
 
       # The libraries this build was made with, for a developer's machine that can't build them itself (RELEASING.md, "Building on a
       # machine without vcpkg"). Only from here: this workflow builds only scanned code on avpx_main, and anyone can download what a
-      # public repository keeps. The log has a SHA-256 for every file and for the list, and the list's provenance is recorded, so a copy
-      # downloaded later can be checked with gh attestation verify. Libraries only, kept for a week.
+      # public repository keeps. The log has a SHA-256 for every file and for the list. The next job checks them and records the list's
+      # provenance, so a copy downloaded later can be checked with gh attestation verify. Libraries only, kept for a week.
       - name: List the libraries' hashes
         shell: pwsh
         run: |
@@ -89,11 +85,6 @@ jobs:
           } | Out-File -Encoding ascii -LiteralPath $list
           Get-Content -LiteralPath $list
           'The list itself: ' + (Get-FileHash -Algorithm SHA256 -LiteralPath $list).Hash.ToLower()
-
-      - name: Record how the libraries were built
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: vcpkg_installed/x86-windows-static/SHA256SUMS.txt
 
       - name: Keep the libraries
         id: libraries
@@ -109,3 +100,46 @@ jobs:
         env:
           DIGEST: ${{ steps.libraries.outputs.artifact-digest }}
         run: "\"The artifact's own SHA-256, of the zip GitHub keeps: $env:DIGEST\""
+
+  # The libraries' provenance, recorded by a job that builds nothing and runs nothing from the repository or from vcpkg, as release.yml's
+  # last job does. It holds the right to prove which workflow this is, so nothing that compiles a library ever does.
+  attest-libraries:
+    name: Record how the libraries were built
+    needs: build
+    runs-on: ubuntu-24.04   # pinned, so a runner-image migration never changes this
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write       # to prove to the attestation service which workflow this is
+      attestations: write   # to record how the libraries were built
+    steps:
+      - name: Get the libraries
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: static-libraries
+          path: libraries
+
+      # The list is only worth recording if it's true: every file it names is there with that hash, and nothing else is
+      - name: Refuse libraries that don't match their list
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path -LiteralPath 'libraries').Path
+          $list = Join-Path $root 'SHA256SUMS.txt'
+          $listed = @{}
+          foreach ($line in Get-Content -LiteralPath $list) {
+            $hash, $name = $line -split '  ', 2
+            $file = Join-Path $root $name
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "$name is listed and isn't there" }
+            if ((Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLower() -cne $hash) { throw "$name isn't what the list says" }
+            $listed[$name] = $true
+          }
+          foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File) {
+            $name = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+            if ($name -cne 'SHA256SUMS.txt' -and -not $listed.ContainsKey($name)) { throw "$name is there and isn't listed" }
+          }
+          "All $($listed.Count) files match. The list itself: " + (Get-FileHash -Algorithm SHA256 -LiteralPath $list).Hash.ToLower()
+
+      - name: Record how the libraries were built
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: libraries/SHA256SUMS.txt
