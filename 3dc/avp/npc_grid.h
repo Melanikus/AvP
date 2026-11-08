@@ -199,11 +199,13 @@ public:
 	// It gives back nothing if it started, or why not, in words. A search that's running is dropped. It looks at no more than mostLooks cells
 	// in all.
 	// claims, if given, makes a cell dearer where other aliens' ways are, by the map polygon under it (PolygonOf), as the map's own search
-	// does; searcher is the guide's place for the alien searching, whose own claims don't count. shut, if given, has a byte for each map
-	// polygon, not 0 for a polygon of a door that's shut now: the search keeps off its cells, but for the start's and the goal's. Both have
-	// to stay as they are until the search ends.
+	// does; searcher is the guide's place for the alien searching, whose own claims don't count, and claimStep and claimMost are what each
+	// claim adds and the most a cell can cost, as the map's search takes them (a flanker's are bigger). shut, if given, has a byte for each
+	// map polygon, not 0 for a polygon of a door that's shut now: the search keeps off its cells, but for the start's and the goal's. claims
+	// and shut have to stay as they are until the search ends.
 	const char *StartSearch(AlienWaysXYZ start, AlienWaysXYZ goal, NpcGridBody body, int floorPrice, size_t mostLooks,
-		const AlienWaysClaims *claims = nullptr, int searcher = -1, const std::vector<uint8_t> *shut = nullptr);
+		const AlienWaysClaims *claims = nullptr, int searcher = -1, const std::vector<uint8_t> *shut = nullptr,
+		double claimStep = kAlienWaysClaimPriceStep, double claimMost = kAlienWaysClaimMostPriceFactor);
 
 	// Carries on, looking at up to looksAllowed more cells, and says how it stands: kNpcGridSearching until it's done. Asked again after it's
 	// ended, it gives the same answer.
@@ -218,6 +220,10 @@ public:
 	// The cell under each point of Way(), one for each, for a log line; and every cell of the way, start to goal, for a smoother
 	const std::vector<uint32_t> &WayCells() const { return wayPointCells; }
 	const std::vector<uint32_t> &WayPath() const { return wayCells; }
+
+	// The map polygon under each point's cell, one for each point of Way(), as the map's own WayPolygons() is: for the claims a way puts on
+	// the polygons it's on. -1 for a cell on no polygon.
+	const std::vector<int> &WayPolygons() const { return wayPolygons; }
 	size_t LastSearchLooks() const { return searchLooks; }
 
 private:
@@ -270,9 +276,11 @@ private:
 	std::vector<uint32_t> wayCells;
 	std::vector<AlienWaysPoint> way;
 	std::vector<uint32_t> wayPointCells;
+	std::vector<int> wayPolygons;
 	AlienWaysXYZ searchStart, searchGoal;
 	const AlienWaysClaims *searchClaims;
 	int searchSearcher;
+	double searchClaimStep, searchClaimMost;
 	const std::vector<uint8_t> *searchShut;
 	bool cutShort;
 
