@@ -418,6 +418,13 @@ static void Searches()
 	}
 
 	Check(faces, "a point on the floor faces straight up: (0, -32767, 0), as the level stores a facing");
+	Check(grid.WayCells().size() == grid.Way().size() && grid.WayPath().size() >= grid.Way().size() && grid.WayPath().front() == grid.WayCells().front() &&
+		grid.WayPath().back() == grid.WayCells().back(), "a cell for each point of the way, and every cell of it, start to goal");
+	int sheet = -1, ci = -1, cj = -1;
+	uint32_t const first = grid.WayPath().front();
+	Check(grid.CellPlace(first, &sheet, &ci, &cj) && grid.CellAt(sheet, ci, cj) == first, "a cell's place on its sheet gives the cell back");
+	Check(!grid.CellPlace(static_cast<uint32_t>(grid.Cells()), &sheet, &ci, &cj) && grid.CellAt(sheet, -1, 0) == kNpcGridNoCell &&
+		grid.CellAt(-1, 0, 0) == kNpcGridNoCell, "and a place off a sheet, or a number past the cells, is none");
 	AlienWaysXYZ const nowhere = { 100000, 0, 100000 };
 	Check(Says(grid.StartSearch(nowhere, goalAt, kNpcGridAlien, 10, 100000), "no cell near the start") && grid.Work(10) == kNpcGridNoWay && grid.Way().empty(),
 		"a start with no cell near it has no way");

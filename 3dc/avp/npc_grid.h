@@ -173,6 +173,11 @@ public:
 	// it. -1 for a cell on no polygon, or a number that isn't a cell. A way's cells give a way's polygons, for the claims and the doors.
 	int PolygonOf(uint32_t cell) const { return cell < polygonOf.size() ? polygonOf[cell] : -1; }
 
+	// Where a cell is on its sheet: the sheet, and its place along the sheet's two axes, from 0. False, with nothing set, for a number that
+	// isn't a cell. CellAt is the other way round: kNpcGridNoCell outside the sheet's grid, or for a sheet that isn't one.
+	bool CellPlace(uint32_t cell, int *sheet, int *i, int *j) const;
+	uint32_t CellAt(int sheet, int i, int j) const;
+
 	// The cell nearest to a point, among those a body fits on, no further than within millimetres, or kNpcGridNoCell
 	uint32_t NearestCell(double x, double y, double z, NpcGridBody body, int within) const;
 
@@ -209,6 +214,10 @@ public:
 	// WayCutShort says whether it was cut there. Empty if there was no way.
 	const std::vector<AlienWaysPoint> &Way() const { return way; }
 	bool WayCutShort() const { return cutShort; }
+
+	// The cell under each point of Way(), one for each, for a log line; and every cell of the way, start to goal, for a smoother
+	const std::vector<uint32_t> &WayCells() const { return wayPointCells; }
+	const std::vector<uint32_t> &WayPath() const { return wayCells; }
 	size_t LastSearchLooks() const { return searchLooks; }
 
 private:
@@ -260,6 +269,7 @@ private:
 	NpcGridSearch searchState;
 	std::vector<uint32_t> wayCells;
 	std::vector<AlienWaysPoint> way;
+	std::vector<uint32_t> wayPointCells;
 	AlienWaysXYZ searchStart, searchGoal;
 	const AlienWaysClaims *searchClaims;
 	int searchSearcher;
