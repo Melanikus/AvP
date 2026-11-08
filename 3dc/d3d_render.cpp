@@ -26,6 +26,7 @@
 //   a new player starts with all of the new drawing off, and in that state no normals are written for it. The menu can ask for a change as the commands do
 //   the developer tools show what walls hide, so none of them run in a network game
 //   with Relief map, the solid polygons are drawn by a shader that marches through their height pictures, with the normals and tangents attached only for that draw
+//   a Hudson run can ask what lighting is really being drawn, and take a picture of a frame before it goes to the screen
 //   the marine's shoulder lamp is drawn on the finished picture of the world, under the HUD, and while it's on in Gouraud the surface pictures are drawn for it. See shoulder_lamp.h
 //   it goes on before the gun, because drawn over it the lamp added the colour of the wall behind the gun, and the gun looked see-through
 //   the developers' view moves from G to J, which no default control set uses, because G is now the marine's shoulder lamp
@@ -102,6 +103,7 @@
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
+#include "hudson.h"
 #include "light_choice.h"
 
 // The commit this was built from, for the tag on the screen. The build script writes this file, and it isn't in the repository.
@@ -111,6 +113,7 @@
 #define AVP_BUILD_COMMIT "not known"
 #endif
 #include "static_frame.h"
+#include "hudson_vision.h"
 #include "surface_static.h"
 #include "static_level.h"
 #include "normal_lines.h"
@@ -654,7 +657,20 @@ static bool ExecuteBuffer()
 
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
+		compareTheLamp = Hudson_LampCompareIsDue();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("before");
+		}
+
 		DrawShoulderLamp();
+
+		if (compareTheLamp)
+		{
+			Hudson_SaveLampCompareScreen("after");
+			Hudson_SaveLampCompareSurface(SurfacePictures_Colour());
+		}
 	}
 
 	// draw player weapon
@@ -679,6 +695,16 @@ static bool ExecuteBuffer()
 
 		// draw our main list (level geometry, player weapon etc)
 		weaponList->Draw();
+	}
+
+	if (compareTheLamp)
+	{
+		Hudson_SaveLampCompareScreen("final");
+	}
+
+	if (toyFinalFlush && Hudson_NetPictureIsDue())
+	{
+		Hudson_SaveLampCompareScreen(Hudson_NetPictureKind());
 	}
 
 	// render any orthographic quads
@@ -2943,6 +2969,11 @@ void ThisFramesRenderingHasFinished()
 		FrameTiming_EndFrame();
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
 		Mark_EndFrame(d3d.lpD3DDevice);
+
+		if (HudsonRunIsOn)
+		{
+			Hudson_TakePictureIfDue();
+		}
 	}
 
 	// The game goes on whether or not this frame could be drawn, so what's below happens either way
@@ -4866,11 +4897,21 @@ static void ToySetVolumeProgram(LPDIRECT3DDEVICE9 device)
 	device->SetPixelShader(NULL);
 }
 
+// For Hudson's vision: what this frame's shadow pass did.
+static HudsonVisionShadows visionShadows = { false, 0, 0, 0 };
+
 // the prisms in toyVerts, then whatever this light has kept on the card, under the same stencil and depth settings
 static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 {
 	HRESULT result = S_OK;
 
+	// break=prisms: a run breaks the shadows on purpose, to see that Hudson's finding really fires
+	if (HudsonBreaksPrisms)
+	{
+		return result;
+	}
+
+	visionShadows.corners += toyNumVerts;
 
 	FrameTiming_Mark(kStageShading);
 	FrameTiming_CountPrismCorners(toyNumVerts, 0);
@@ -4909,6 +4950,7 @@ static HRESULT ToyDrawVolumes(D3DCOLOR colour)
 
 		ToySetVolumeProgram(d3d.lpD3DDevice);
 		FrameTiming_CountPrismCorners(numWorldCorners, keptCornersThisPass);
+		visionShadows.corners += numWorldCorners + keptCornersThisPass;
 		FrameTiming_Mark(kStagePrismsKept);
 	}
 
@@ -5273,6 +5315,7 @@ static void DrawShoulderLamp()
 
 	if (isARealLight)
 	{
+		ShoulderLamp_NoteARealLightFrame();
 		return;
 	}
 
@@ -5654,6 +5697,51 @@ struct RoutePictures
 		return pictures;
 	}
 };
+
+// See hudson_vision.h. Reads what's drawn now, and doesn't draw anything or change what the card is doing.
+bool SurfacePictures_LookAtThisFrame(HudsonVisionCounts *counts, HudsonVisionView *view)
+{
+	RoutePictures pictures;
+
+	if (!toyDepthSurface || !SurfacePictures_Normal() || !SurfacePictures_Colour() || !pictures.Read(d3d.lpD3DDevice, toyDepthSurface))
+	{
+		return false;
+	}
+
+	view->width = (int)pictures.colour.description.Width;
+	view->height = (int)pictures.colour.description.Height;
+	view->projection11 = d3d.matProjection._11;
+	view->projection22 = d3d.matProjection._22;
+	ToyShadows_ViewMatrix(view->view);
+	view->shadows = visionShadows;
+
+	HudsonVision_Count(pictures.InMemory(), pictures.colour.description.Width, pictures.colour.description.Height, pictures.normal.description.Format == D3DFMT_A2R10G10B10, counts);
+
+	// Only if there's something to compare. Reading the screen stops the game for a moment too. A screen of another shape of pixel can't be read this way, and then there's just nothing to say.
+	view->screenPixels = 0;
+
+	IDirect3DSurface9 *screen = 0;
+
+	if (counts->samples > 0 && SUCCEEDED(d3d.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &screen)))
+	{
+		PictureInMemory finished;
+
+		if (finished.Read(d3d.lpD3DDevice, screen) && (finished.description.Format == D3DFMT_X8R8G8B8 || finished.description.Format == D3DFMT_A8R8G8B8))
+		{
+			for (int i = 0; i < counts->samples; i++)
+			{
+				if (HudsonVision_ScreenAt(finished.bits, finished.pitch, (int)finished.description.Width, (int)finished.description.Height, counts->sampleX[i], counts->sampleY[i], &view->screen[view->screenPixels]))
+				{
+					view->screenPixels++;
+				}
+			}
+		}
+
+		screen->Release();
+	}
+
+	return true;
+}
 
 // Two empty pictures match perfectly, so a line of zeros only means something if there was a surface to compare. An error goes in the log, so that this can't be read as a pass.
 static void SayIfNothingWasCompared(const char *which, int frame, const PictureDifferences &differences)
@@ -7918,6 +8006,11 @@ static bool MainDrawUsesHeights()
 	return mainDrawUsedHeights;
 }
 
+bool ViewSwitches_MainDrawWentThroughHeights()
+{
+	return mainDrawUsedHeights;
+}
+
 // The solid polygons, by the shader that marches through their height pictures. The normals and tangents are attached for this one draw, and taken off again straight after, so every other
 // draw sees the game's list of corners as it always has.
 static void DrawSolidsWithHeights()
@@ -8220,6 +8313,11 @@ static void ToyShadows_Draw()
 	float lights[kToyMostLights * kToyLightFloats];
 	void const *lightOwners[kToyMostLights];
 	report.lights = ToyWorldWasDrawn() ? ToyShadows_ChosenLights(lights, lightOwners) : 0;
+
+	visionShadows.volumesOn = volumesThisFrame;
+	visionShadows.lights = report.lights;
+	visionShadows.casters = report.casters;
+	visionShadows.corners = 0;
 
 
 	if (!report.lights)
