@@ -2727,7 +2727,7 @@
 			]
 		},
 		{
-			"name": "SOURCE: no new marine after one goes",
+			"name": "SOURCE: no new marine after one goes, with the whole line taken out",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
@@ -4437,42 +4437,22 @@
 			]
 		},
 		{
-			"name": "no run has the lamp unless it asks",
+			"name": "lamp=on is ignored",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "plan->lampOn = plan->machineShared && !plan->vision && !plan->compareRelief && plan->wall[0] == 0;",
-					"to": "plan->lampOn = false;"
+					"from": "\t\t\t\tplan->lampOn = true;\n\t\t\t}\n\t\t\telse if (WordIs(value, valueLength, \"blink\"))",
+					"to": "\t\t\t\tplan->lampOn = false;\n\t\t\t}\n\t\t\telse if (WordIs(value, valueLength, \"blink\"))"
 				}
 			]
 		},
 		{
-			"name": "a run that measures time has the lamp",
+			"name": "a run has the lamp without asking",
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "plan->lampOn = plan->machineShared && !plan->vision",
-					"to": "plan->lampOn = !plan->vision"
-				}
-			]
-		},
-		{
-			"name": "a run comparing the screen has the lamp",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "plan->machineShared && !plan->vision && !plan->compareRelief",
-					"to": "plan->machineShared && !plan->compareRelief"
-				}
-			]
-		},
-		{
-			"name": "a run judging a wall has the lamp",
-			"changes": [
-				{
-					"file": "3dc/avp/hudson_plan.cpp",
-					"from": " && plan->wall[0] == 0;",
-					"to": ";"
+					"from": "if (seenLamp && (plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief))\n\t{\n\t\treturn kHudsonRefusedLampSpoilsComparing;\n\t}",
+					"to": "if (seenLamp && (plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief))\n\t{\n\t\treturn kHudsonRefusedLampSpoilsComparing;\n\t}\n\n\tplan->lampOn = plan->lampOn || !seenLamp;"
 				}
 			]
 		},
@@ -5301,8 +5281,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked)",
-					"to": "(plan->coopEndSeconds != 0)"
+					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked && !plan->customMap[0])",
+					"to": "(plan->coopEndSeconds != 0 && !plan->customMap[0])"
 				}
 			]
 		},
@@ -5311,7 +5291,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked)",
+					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked && !plan->customMap[0])",
 					"to": "false"
 				}
 			]
@@ -5911,7 +5891,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if (plan->windowOnMainScreen && (seenWindowSlot || seenWindowsOf))",
+					"from": "if (plan->windowOnMainScreen && (seenWindowSlot || seenWindowsOf || seenWindowBig))",
 					"to": "if (false)"
 				}
 			]
@@ -7431,7 +7411,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt) && !plan->combatAlien)",
+					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom) && !plan->combatAlien)",
 					"to": "if (false)"
 				}
 			]
@@ -7501,7 +7481,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "bool const besideTheAlien = plan.watchAlien && PutTheCameraBesideTheAlien(marine, place, turn);",
+					"from": "bool const besideTheAlien = plan.watchAlien && !fromHisEyes && PutTheCameraBesideTheAlien(marine, place, turn);",
 					"to": "bool const besideTheAlien = false;"
 				}
 			]
@@ -7533,6 +7513,186 @@
 					"file": "3dc/avp/hudson.cpp",
 					"from": "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)",
 					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "watchfrom= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->watchFromEyes = true;",
+					"to": "plan->watchFromEyes = false;"
+				}
+			]
+		},
+		{
+			"name": "watchfrom= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"side\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWatchFromUnknown;",
+					"to": "else if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWatchFromUnknown;"
+				}
+			]
+		},
+		{
+			"name": "watchfrom=side means eyes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (WordIs(value, valueLength, \"eyes\"))\n\t\t\t{\n\t\t\t\tplan->watchFromEyes = true;",
+					"to": "if (true)\n\t\t\t{\n\t\t\t\tplan->watchFromEyes = true;"
+				}
+			]
+		},
+		{
+			"name": "watchfrom= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWatchFrom)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "watchfrom= goes without a fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "seenStandAt || seenWatchFrom) && !plan->combatAlien",
+					"to": "seenStandAt) && !plan->combatAlien"
+				}
+			]
+		},
+		{
+			"name": "watchfrom= goes without watching",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWatchFrom && !plan->watchAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the camera never goes to his eyes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const fromHisEyes = plan.watchAlien && plan.watchFromEyes;",
+					"to": "bool const fromHisEyes = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his eyes never turn to the alien",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tTurnHisEyesToTheAlien(*place, turn);",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: from his eyes the camera still goes behind him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.combatAlien && !besideTheAlien && !fromHisEyes)",
+					"to": "if (plan.combatAlien && !besideTheAlien)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his eyes look from his feet",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "eyes.vy += CollisionExtents[CE_MARINE].StandingTop + 200;",
+					"to": "eyes.vy += 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his eyes look but never turn the camera",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tNormalise(&look);\n\tMakeMatrixFromDirection(&look, turn);\n}\n\nstatic void MakeTheAlien(",
+					"to": "\tNormalise(&look);\n}\n\nstatic void MakeTheAlien("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: each second forgets the height and the animation",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "%d mm above what's below it, animation %s %d, crouched %d, ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the animation is read from the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "AlienAnimationWord(status->HModelController.Sequence_Type), status->HModelController.Sub_Sequence",
+					"to": "AlienAnimationWord(0), 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the height is measured upwards",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "VECTORCH down = { 0, ONE_FIXED, 0 };   // in the game's numbers, down is bigger y",
+					"to": "VECTORCH down = { 0, -ONE_FIXED, 0 };   // in the game's numbers, down is bigger y"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: record=pictures takes none in a watch",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.pictures)\n\t\t{\n\t\t\tchar what[32] = { 0 };",
+					"to": "if (false)\n\t\t{\n\t\t\tchar what[32] = { 0 };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pictures of a watch have no second in their name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "_snprintf(what, sizeof(what) - 1, \"watch-second-%03d\", seconds);",
+					"to": "_snprintf(what, sizeof(what) - 1, \"watch-second\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never says the lamp is off",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": ": \"hudson: the shoulder lamp is off in this run, as it is unless a run asks\");",
+					"to": ": \"hudson:\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for watchfrom=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($WatchFrom) { $arguments += \" watchfrom=$WatchFrom\" }\n",
+					"to": ""
 				}
 			]
 		}

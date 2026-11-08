@@ -24,7 +24,7 @@ Trying the route that draws walls from a fixed buffer. -Static is scene, for the
 
   powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level invasion -Frames 20000 -Rooms 1 -Views 4 -Hold 600 -Lighting perpixel -Shadows on -Static scene
 
-A run has the marine's shoulder lamp on if it uses -WhileInUse, unless it says -Lamp off. Runs that compare what's on the screen (-Vision, -Compare, -Wall) and runs that measure time have it off, and hudson-result.txt always says which. -Lamp blink switches it
+A run has the marine's shoulder lamp off unless it says -Lamp on (the user's word, 2026-11-08). Runs that compare what's on the screen (-Vision, -Compare) can't have it, and hudson-result.txt and the log always say which. -Lamp blink switches it
 every second and a half. -LampKind real makes it a real light with real shadows, in the three per-pixel lighting modes, with -LampAt wide to sit it further out.
 
 -Flare has him throw a flare as each hold starts, on a run that looks round and doesn't compare what's on the screen. Give it a -HoldSeconds long enough for the flare to land. hudson-result.txt says how many really went.
@@ -47,6 +47,8 @@ Following a route through the level and pressing what it says, from hudson-route
 Watching an alien find its way to him, from A to B, filmed, with him holding his fire, and with #109's ways where the build has them (-AlienWays):
 
   powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level derelict -Frames 30000 -Seconds 400 -Rooms 1 -Combat alien -Watch alien -HoldFire -AlienAt m43880,5490,m310070 -StandAt m50790,5490,m267890 -WhileInUse -TimingsDontMatter -AlienWays
+
+Add -WatchFrom eyes to film it from his own eyes instead, turned to the alien, as a player standing there would see it come.
 
 What it won't do:
 - Run from a Steam folder. A run is for a test copy of the game, and this script empties folders, so it never goes there. The game refuses as well, unless steam=yes is on its own command line, which is for a run the user starts from Steam. This script doesn't pass that word.
@@ -116,6 +118,7 @@ param(
     [int]$Aliens = 0,
     [string]$Watch = '',   # alien: in a fight, the camera follows the alien from the side and the log says where it goes. Needs -Combat alien
     [switch]$HoldFire,     # in a watched fight he never fires, so that the alien reaches him
+    [ValidateSet('', 'side', 'eyes')][string]$WatchFrom = '', # where a watched fight is filmed from: side (beside the alien, as without it) or eyes (his own eyes, turned to the alien)
     [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it
     [string]$StandAt = '', # x,y,z the same way: he stands there
     [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
@@ -330,6 +333,7 @@ if ($Combat) { $arguments += " combat=$Combat" }
 if ($Aliens -gt 0) { $arguments += " aliens=$Aliens" }
 if ($Watch) { $arguments += " watch=$Watch" }
 if ($HoldFire) { $arguments += " holdfire=yes" }
+if ($WatchFrom) { $arguments += " watchfrom=$WatchFrom" }
 if ($AlienAt) { $arguments += " alienat=$($AlienAt -replace 'm', '-')" }
 if ($StandAt) { $arguments += " standat=$($StandAt -replace 'm', '-')" }
 Write-Host "run-hudson: $exePath $arguments"

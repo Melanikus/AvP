@@ -773,6 +773,18 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watch=alien", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien holdfire=yes holdfire=yes", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien alienat=1,2,3 alienat=1,2,3", kHudsonRefusedAskedTwice);
+	// watchfrom=: where a watched fight is filmed from. eyes is his own, as a player standing there would see the alien come
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien", &plan) == 0 && !plan.watchFromEyes, "a watched fight is filmed from beside the alien unless it says");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=side", &plan) == 0 && plan.watchAlien && !plan.watchFromEyes, "and watchfrom=side says that");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien holdfire=yes watchfrom=eyes", &plan) == 0 && plan.watchAlien && plan.holdFire && plan.watchFromEyes, "watchfrom=eyes films it from his own eyes");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=eyes", &plan) == 0 && !plan.lampOn && !plan.lampBlink, "and a watched fight has no lamp unless it asks, wherever it is filmed from");
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=above", kHudsonRefusedWatchFromUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=", kHudsonRefusedWatchFromUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=Eyes", kHudsonRefusedWatchFromUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watchfrom=eyes", kHudsonRefusedWatchFromWithoutWatch);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watchfrom=side", kHudsonRefusedWatchFromWithoutWatch);
+	Refused("-hudson level=a frames=1 rooms=1 watchfrom=eyes", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=eyes watchfrom=side", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3 standat=1,2,3", kHudsonRefusedAskedTwice);
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && plan.combatAliens == 1, "one alien unless it says");
@@ -1115,7 +1127,19 @@ static void TestTheRealGame()
 		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "alienat= isn't in any of this level's rooms"), "SOURCE: and refuses a place in no room");
 		Check(Has(watchCode, "standat= isn't in any of this level's rooms"), "SOURCE: so does standat=");
 		Check(ComesBefore(Between(watchCode, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (plan.watchAlien)\n\t{\n\t\tif (!WatchTheAlien(marine, alien, frame)", "kMillisecondsBeforeAFightHasStalled"), "SOURCE: a watched fight is never taken away as stalled");
-		Check(Has(watchCode, "bool const besideTheAlien = plan.watchAlien && PutTheCameraBesideTheAlien(marine, place, turn);"), "SOURCE: the camera goes beside a watched alien");
+		Check(Has(watchCode, "bool const besideTheAlien = plan.watchAlien && !fromHisEyes && PutTheCameraBesideTheAlien(marine, place, turn);"), "SOURCE: the camera goes beside a watched alien");
+		Check(Has(watchCode, "bool const fromHisEyes = plan.watchAlien && plan.watchFromEyes;"), "SOURCE: unless watchfrom=eyes keeps it at his eyes");
+		Check(Has(watchCode, "if (fromHisEyes)\n\t{\n\t\tTurnHisEyesToTheAlien(*place, turn);"), "SOURCE: and turns them to the alien");
+		Check(Has(watchCode, "if (plan.combatAlien && !besideTheAlien && !fromHisEyes)"), "SOURCE: and doesn't move it behind him");
+		Check(Has(Between(watchCode, "static void TurnHisEyesToTheAlien(VECTORCH standing, MATRIXCH *turn)", "\n}\n"), "eyes.vy += CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: looking from where the game will put his eyes, not his feet");
+		Check(Has(Between(watchCode, "static void TurnHisEyesToTheAlien(VECTORCH standing, MATRIXCH *turn)", "\n}\n"), "MakeMatrixFromDirection(&look, turn);"), "SOURCE: and the look is what turns the camera");
+		Check(Has(watchCode, "%d mm above what's below it, animation %s %d, crouched %d, %d mm from him, his feet at y %d"), "SOURCE: each second says how high the alien is, what it's playing and where his feet are");
+		Check(Has(watchCode, "HeightAboveWhatsBelow(alien), AlienAnimationWord(status->HModelController.Sequence_Type), status->HModelController.Sub_Sequence, status->IAmCrouched,"), "SOURCE: from the alien's own animation and crouch");
+		Check(Has(Between(watchCode, "static int HeightAboveWhatsBelow(const STRATEGYBLOCK *alien)", "\n}\n"), "VECTORCH down = { 0, ONE_FIXED, 0 };"), "SOURCE: the height is measured straight down, where y gets bigger");
+		Check(Has(watchCode, "if (plan.pictures)\n\t\t{\n\t\t\tchar what[32] = { 0 };"), "SOURCE: record=pictures takes a picture each second of a watch");
+		Check(Has(watchCode, "_snprintf(what, sizeof(what) - 1, \"watch-second-%03d\", seconds);\n\t\t\tAskForAFightPicture(what);"), "SOURCE: named by its second");
+		Check(ComesBefore(watchCode, "hudson: a run starts: level %s", "hudson: the shoulder lamp is off in this run, as it is unless a run asks"), "SOURCE: every run's log says whether the lamp is on, as it starts");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WatchFrom) { $arguments += \" watchfrom=$WatchFrom\" }"), "SOURCE: the script can ask for watchfrom=");
 		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
 		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
 		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
@@ -1476,8 +1500,9 @@ static void TestTourAndSharedMachine()
 	Check(Has(looking, "atBacks += atItsBack ? 1 : 0;") && Has(looking, "InterlockedExchangeAdd(&visionRaysAtBacks, atBacks);"), "rays that stopped at a back are counted");
 	Check(Has(looking, "if (kind == kRayFoundAHole && RayStoppedAtABack(target, direction))\n\t\t{\n\t\t\tholesAtBacks++;") && Has(looking, "InterlockedExchangeAdd(&visionHolesAtBacks, holesAtBacks);"), "and so are holes that did");
 	Check(Has(hudson, "vision_door_rays_agree=%ld vision_door_rays_compared=%ld vision_rays_at_backs=%ld vision_holes_at_backs=%ld vision_screen_differs=%ld vision_screen_too_dark=%ld"), "the result says all that, and how many pixels were too dark to tell");
-	// Which runs have the shoulder lamp: the user's ruling is all of them, unless it would spoil what the run is for
-	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared", &plan) == 0 && plan.lampOn && !plan.lampBlink && !plan.lampReal && !plan.lampWide, "a shared run has the lamp on, painted, without asking");
+	// Which runs have the shoulder lamp: none unless it asks, by the user's word on 2026-11-08, and never a run it would spoil
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared", &plan) == 0 && !plan.lampOn && !plan.lampBlink && !plan.lampReal && !plan.lampWide, "a shared run has the lamp off unless it asks, by the user's word");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared lamp=on", &plan) == 0 && plan.lampOn && !plan.lampBlink && !plan.lampReal && !plan.lampWide, "and lamp=on has it, painted");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 machine=shared lamp=off", &plan) == 0 && !plan.lampOn && !plan.lampBlink, "and lamp=off turns it off");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1", &plan) == 0 && !plan.lampOn, "a run that measures time doesn't have it, so its numbers can be compared with older runs");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on", &plan) == 0 && plan.lampOn, "unless it asks");

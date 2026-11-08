@@ -199,6 +199,8 @@ const char *const kHudsonRefusedPlaceNotThreeNumbers = "alienat= and standat= ar
 const char *const kHudsonRefusedWatchWordsWithoutCombat = "watch=, holdfire=, alienat= and standat= are for a fight, so they need combat=alien";
 const char *const kHudsonRefusedHoldFireWithoutWatch = "holdfire= is for watching where an alien goes, so it needs watch=alien: in a fight he isn't watching, an alien nobody hurts is taken away as stalled";
 const char *const kHudsonRefusedWatchWithAliens = "watch=alien follows one alien, and its first blow ends the run, so it doesn't go with aliens=";
+const char *const kHudsonRefusedWatchFromUnknown = "watchfrom= is side or eyes";
+const char *const kHudsonRefusedWatchFromWithoutWatch = "watchfrom= says where the camera watches the alien from, so it needs watch=alien";
 
 static bool IsSpace(char c)
 {
@@ -372,7 +374,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenStrategies = false, seenStrategy = false, seenStrategySeconds = false, seenStrategyLook = false;
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
-	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false;
+	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
 
@@ -907,6 +909,25 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->watchAlien = true;
+		}
+		else if (WordIs(place, nameLength, "watchfrom"))
+		{
+			if (seenWatchFrom)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenWatchFrom = true;
+
+			// side is the camera beside the alien (the same as not saying it); eyes is his own eyes, where he stands
+			if (WordIs(value, valueLength, "eyes"))
+			{
+				plan->watchFromEyes = true;
+			}
+			else if (!WordIs(value, valueLength, "side"))
+			{
+				return kHudsonRefusedWatchFromUnknown;
+			}
 		}
 		else if (WordIs(place, nameLength, "holdfire"))
 		{
@@ -2097,13 +2118,10 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		}
 	}
 
-	// The lamp is on in a run unless it says otherwise, because the user wants it seen on every map. But it changes what's on the screen, so it's off for a run that compares that, and for one judging how a wall is drawn. And it costs a little, so
-	// it's off for a run that measures time, to keep that comparable with older runs. Asking for it by name still works on those last two, but not on a comparison, which it would quietly spoil.
-	if (!seenLamp)
-	{
-		plan->lampOn = plan->machineShared && !plan->vision && !plan->compareRelief && plan->wall[0] == 0;
-	}
-	else if ((plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief))
+	// The lamp is off in every run unless it asks with lamp=on or lamp=blink. The user, 2026-11-08: "Hudson tests weirdly show the marine shoulder lamp all the time,
+	// turn it off". The painted lamp is drawn from wherever the camera is, so in a run whose camera follows something else it lit that instead. A run that compares
+	// what's on the screen can't ask for it, because it would quietly spoil the comparison.
+	if (seenLamp && (plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief))
 	{
 		return kHudsonRefusedLampSpoilsComparing;
 	}
@@ -2265,7 +2283,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	}
 
 	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight
-	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt) && !plan->combatAlien)
+	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom) && !plan->combatAlien)
 	{
 		return kHudsonRefusedWatchWordsWithoutCombat;
 	}
@@ -2273,6 +2291,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->holdFire && !plan->watchAlien)
 	{
 		return kHudsonRefusedHoldFireWithoutWatch;
+	}
+
+	if (seenWatchFrom && !plan->watchAlien)
+	{
+		return kHudsonRefusedWatchFromWithoutWatch;
 	}
 
 	// One alien is followed, and its first blow ends the run, so aliens made one after another would never be seen

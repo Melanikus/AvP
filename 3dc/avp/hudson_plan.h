@@ -189,7 +189,7 @@ struct HudsonPlan
 	char tourFrom[kHudsonLongestWallName + 1];   // tourfrom=: the room a tour starts from, by name. Nothing means the room the player starts in
 	bool steamFolderAllowed;   // steam=yes: this run may go in a folder that's otherwise refused. See HudsonPlan_FolderIsAllowed
 	bool brightWorld;     // bright=yes: draw the whole world fully lit, the game's own way, so that a crack shows up against it. It needs vision=
-	bool lampOn;          // the marine's shoulder lamp is on for the whole run, switched the way the key does. A run has it on unless it says lamp=off, or it's a run the lamp would spoil: see HudsonPlan_Read
+	bool lampOn;          // the marine's shoulder lamp is on for the whole run, switched the way the key does. A run has it off unless it says lamp=on, and a run the lamp would spoil can't: see HudsonPlan_Read
 	bool lampBlink;       // lamp=blink: it goes on and off every second and a half, so that a film shows the difference in the same view
 	bool lampReal;        // lampkind=real: the lamp is a real light with real shadows, rather than the painted version. See shoulder_lamp.h
 	bool lampWide;        // lampat=wide: the real lamp sits further from his eyes, where more of its shadows show
@@ -253,6 +253,7 @@ struct HudsonPlan
 	bool combatAlien;     // run the world, and make an alien in front of him to fight
 	int combatAliens;     // aliens=: how many to make, one after another. 1 unless it says
 	bool watchAlien;      // watch=alien: in a fight, the camera follows the alien from the side, and the log says where it goes once a second. See "WATCHING AN ALIEN" in hudson.cpp
+	bool watchFromEyes;   // watchfrom=eyes: in a watched fight, the camera stays at his own eyes, as a player would see the alien come. watchfrom=side is the camera beside the alien, as without it
 	bool holdFire;        // holdfire=yes: in a watched fight, he never fires, so that the alien gets to him
 	bool alienAtSaid;     // alienat=x,y,z: the alien is made 300 mm above this place, instead of somewhere in sight of him
 	int alienAtX, alienAtY, alienAtZ;
@@ -489,6 +490,8 @@ extern const char *const kHudsonRefusedPlaceNotThreeNumbers;
 extern const char *const kHudsonRefusedWatchWordsWithoutCombat;
 extern const char *const kHudsonRefusedHoldFireWithoutWatch;
 extern const char *const kHudsonRefusedWatchWithAliens;
+extern const char *const kHudsonRefusedWatchFromUnknown;
+extern const char *const kHudsonRefusedWatchFromWithoutWatch;
 
 // A run must never touch the player's own copy of the game. So it won't start from anything that looks like a Steam folder. This is against a slip, not against someone determined.
 bool HudsonPlan_FolderIsRefused(const char *folder);
