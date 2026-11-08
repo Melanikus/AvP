@@ -193,6 +193,12 @@ const char *const kHudsonRefusedCombatNotAlone = "combat= is one fight where he 
 const char *const kHudsonRefusedAliensNotANumber = "aliens= isn't a number";
 const char *const kHudsonRefusedAliensOutOfRange = "aliens= is out of its range";
 const char *const kHudsonRefusedAliensWithoutCombat = "aliens= means nothing without combat=";
+const char *const kHudsonRefusedWatchUnknown = "watch= isn't alien";
+const char *const kHudsonRefusedHoldFireNotYes = "holdfire= can only be yes";
+const char *const kHudsonRefusedPlaceNotThreeNumbers = "alienat= and standat= are three whole numbers with commas between them, x,y,z in mm, as the level has them";
+const char *const kHudsonRefusedWatchWordsWithoutCombat = "watch=, holdfire=, alienat= and standat= are for a fight, so they need combat=alien";
+const char *const kHudsonRefusedHoldFireWithoutWatch = "holdfire= is for watching where an alien goes, so it needs watch=alien: in a fight he isn't watching, an alien nobody hurts is taken away as stalled";
+const char *const kHudsonRefusedWatchWithAliens = "watch=alien follows one alien, and its first blow ends the run, so it doesn't go with aliens=";
 
 static bool IsSpace(char c)
 {
@@ -366,6 +372,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	bool seenStrategies = false, seenStrategy = false, seenStrategySeconds = false, seenStrategyLook = false;
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
+	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
 
@@ -884,6 +891,70 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->combatAlien = true;
+		}
+		else if (WordIs(place, nameLength, "watch"))
+		{
+			if (seenWatch)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenWatch = true;
+
+			if (!WordIs(value, valueLength, "alien"))
+			{
+				return kHudsonRefusedWatchUnknown;
+			}
+
+			plan->watchAlien = true;
+		}
+		else if (WordIs(place, nameLength, "holdfire"))
+		{
+			if (seenHoldFire)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenHoldFire = true;
+
+			if (!WordIs(value, valueLength, "yes"))
+			{
+				return kHudsonRefusedHoldFireNotYes;
+			}
+
+			plan->holdFire = true;
+		}
+		else if (WordIs(place, nameLength, "alienat"))
+		{
+			if (seenAlienAt)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenAlienAt = true;
+
+			if (!ReadPlace(value, valueLength, &plan->alienAtX, &plan->alienAtY, &plan->alienAtZ))
+			{
+				return kHudsonRefusedPlaceNotThreeNumbers;
+			}
+
+			plan->alienAtSaid = true;
+		}
+		else if (WordIs(place, nameLength, "standat"))
+		{
+			if (seenStandAt)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenStandAt = true;
+
+			if (!ReadPlace(value, valueLength, &plan->standAtX, &plan->standAtY, &plan->standAtZ))
+			{
+				return kHudsonRefusedPlaceNotThreeNumbers;
+			}
+
+			plan->standAtSaid = true;
 		}
 		else if (WordIs(place, nameLength, "aliens"))
 		{
@@ -2191,6 +2262,23 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if ((seenStrategy ? 1 : 0) + (plan->combatAlien ? 1 : 0) + ((seenNav || seenRoute) ? 1 : 0) + (plan->rooms > 1 ? 1 : 0) > 1)
 	{
 		return kHudsonRefusedOneJobAtATime;
+	}
+
+	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight
+	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt) && !plan->combatAlien)
+	{
+		return kHudsonRefusedWatchWordsWithoutCombat;
+	}
+
+	if (plan->holdFire && !plan->watchAlien)
+	{
+		return kHudsonRefusedHoldFireWithoutWatch;
+	}
+
+	// One alien is followed, and its first blow ends the run, so aliens made one after another would never be seen
+	if (plan->watchAlien && seenAliens)
+	{
+		return kHudsonRefusedWatchWithAliens;
 	}
 
 	if (seenAliens && !plan->combatAlien)

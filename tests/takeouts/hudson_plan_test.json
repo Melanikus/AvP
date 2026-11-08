@@ -7345,6 +7345,196 @@
 					"to": "return false;"
 				}
 			]
+		},
+		{
+			"name": "watch= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->watchAlien = true;",
+					"to": "plan->watchAlien = false;"
+				}
+			]
+		},
+		{
+			"name": "holdfire= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFire = true;",
+					"to": "plan->holdFire = false;"
+				}
+			]
+		},
+		{
+			"name": "alienat= is forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->alienAtSaid = true;",
+					"to": "plan->alienAtSaid = false;"
+				}
+			]
+		},
+		{
+			"name": "standat= is forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->standAtSaid = true;",
+					"to": "plan->standAtSaid = false;"
+				}
+			]
+		},
+		{
+			"name": "standat= is read into alienat=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!ReadPlace(value, valueLength, &plan->standAtX, &plan->standAtY, &plan->standAtZ))",
+					"to": "if (!ReadPlace(value, valueLength, &plan->alienAtX, &plan->alienAtY, &plan->alienAtZ))"
+				}
+			]
+		},
+		{
+			"name": "watch= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"alien\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWatchUnknown;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWatchUnknown;"
+				}
+			]
+		},
+		{
+			"name": "holdfire= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedHoldFireNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedHoldFireNotYes;"
+				}
+			]
+		},
+		{
+			"name": "watch= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWatch)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a watch word goes without a fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt) && !plan->combatAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "holdfire= goes without watching",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->holdFire && !plan->watchAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "watch=alien goes with aliens=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->watchAlien && seenAliens)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine holding his fire still shoots",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (HudsonMarineIsOn && (!HudsonWorldIsLive || HudsonMarineHoldsFire)) {",
+					"to": "if (HudsonMarineIsOn && !HudsonWorldIsLive) {"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: holdfire= never reaches him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonMarineHoldsFire = plan.holdFire;",
+					"to": "HudsonMarineHoldsFire = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: alienat= makes the alien inside the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "spot.vy = plan.alienAtY - kAlienStartsAboveTheFloor;",
+					"to": "spot.vy = plan.alienAtY;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a watched fight is taken away as stalled",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.watchAlien)\n\t{\n\t\tif (!WatchTheAlien(marine, alien, frame)",
+					"to": "if (false)\n\t{\n\t\tif (!WatchTheAlien(marine, alien, frame)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the camera stays behind him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const besideTheAlien = plan.watchAlien && PutTheCameraBesideTheAlien(marine, place, turn);",
+					"to": "bool const besideTheAlien = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the camera forgets the eye height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;",
+					"to": "place->vy -= 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its first blow isn't noted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the run never ends after the blow",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)",
+					"to": "if (false)"
+				}
+			]
 		}
 	]
 }

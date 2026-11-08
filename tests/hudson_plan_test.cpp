@@ -748,6 +748,33 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 holdseconds=3 combat=alien", kHudsonRefusedCombatNotAlone);
 	Refused("-hudson level=a frames=1 rooms=2 combat=alien", kHudsonRefusedCombatNotAlone);
 
+	// watch=alien: a fight he doesn't take part in, for filming the way an alien takes to him
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && !plan.watchAlien && !plan.holdFire && !plan.alienAtSaid && !plan.standAtSaid, "a fight is watched only if it asks");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien", &plan) == 0 && plan.watchAlien && !plan.holdFire, "watch=alien goes with a fight");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien holdfire=yes alienat=-43880,5490,-310070 standat=-50790,5490,-267890", &plan) == 0
+		&& plan.holdFire && plan.alienAtSaid && plan.alienAtX == -43880 && plan.alienAtY == 5490 && plan.alienAtZ == -310070
+		&& plan.standAtSaid && plan.standAtX == -50790 && plan.standAtY == 5490 && plan.standAtZ == -267890, "with its two places, in the level's own millimetres, below zero too");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien alienat=0,-1,2", &plan) == 0 && plan.alienAtSaid && plan.alienAtX == 0 && plan.alienAtY == -1 && plan.alienAtZ == 2, "and a place can go with a fight that isn't watched");
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=marine", kHudsonRefusedWatchUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=", kHudsonRefusedWatchUnknown);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien holdfire=no", kHudsonRefusedHoldFireNotYes);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien holdfire=yes", kHudsonRefusedHoldFireWithoutWatch);
+	Refused("-hudson level=a frames=1 rooms=1 watch=alien", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 holdfire=yes", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 alienat=1,2,3", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 standat=1,2,3", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien aliens=2", kHudsonRefusedWatchWithAliens);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien alienat=1,2", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien alienat=1,2,3,4", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,,3", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3x", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,9999999999", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=+1,2,3", kHudsonRefusedPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watch=alien", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien holdfire=yes holdfire=yes", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien alienat=1,2,3 alienat=1,2,3", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3 standat=1,2,3", kHudsonRefusedAskedTwice);
+
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && plan.combatAliens == 1, "one alien unless it says");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien aliens=5", &plan) == 0 && plan.combatAliens == 5, "aliens= says how many");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien aliens=50", &plan) == 0 && plan.combatAliens == 50, "up to the most");
@@ -1076,6 +1103,23 @@ static void TestTheRealGame()
 	Check(Has(hudson, "block->DynPtr->DynamicsType = DYN_TYPE_NO_COLLISIONS;") && Has(ReadSourceFile("3dc/avp/los.cpp"), "if(sbPtr->DynPtr->DynamicsType == DYN_TYPE_NO_COLLISIONS)"), "and the player can't stand in the way of a look or a shot: the game's look along a line counts him unless he has no collisions");
 	Check(Has(Between(hudson, "static const char *HowTheFightRanOut()", "static void WatchTheMarine"), "he never took the alien as a target"), "a marine who never targets it is said in as many words, because that's the finding");
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (!hurtThisFrame)\n\t\t{\n\t\t\tInterlockedIncrement(&timesItWasHurt);"), "the blow that kills it counts, when it's no longer an alien to be seen being hurt");
+
+	// SOURCE: what a watched fight does in the game. These only show the lines are there; a run shows what they do.
+	{
+		std::string const watchCode = ReadSourceFile("3dc/avp/hudson.cpp");
+		std::string const marineCode = ReadSourceFile("3dc/avp/bh_marine.cpp");
+
+		Check(Has(marineCode, "if (HudsonMarineIsOn && (!HudsonWorldIsLive || HudsonMarineHoldsFire)) {"), "SOURCE: a marine holding his fire takes nothing as a target");
+		Check(Has(watchCode, "HudsonMarineHoldsFire = plan.holdFire;"), "SOURCE: and holdfire= is what tells him to");
+		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "spot.vy = plan.alienAtY - kAlienStartsAboveTheFloor;"), "SOURCE: alienat= makes the alien just above the place");
+		Check(Has(Between(watchCode, "static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)", "\n}\n"), "alienat= isn't in any of this level's rooms"), "SOURCE: and refuses a place in no room");
+		Check(Has(watchCode, "standat= isn't in any of this level's rooms"), "SOURCE: so does standat=");
+		Check(ComesBefore(Between(watchCode, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (plan.watchAlien)\n\t{\n\t\tif (!WatchTheAlien(marine, alien, frame)", "kMillisecondsBeforeAFightHasStalled"), "SOURCE: a watched fight is never taken away as stalled");
+		Check(Has(watchCode, "bool const besideTheAlien = plan.watchAlien && PutTheCameraBesideTheAlien(marine, place, turn);"), "SOURCE: the camera goes beside a watched alien");
+		Check(Has(watchCode, "place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;"), "SOURCE: and allows for the eye height the game adds afterwards");
+		Check(Has(watchCode, "if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)"), "SOURCE: its first blow on him is noted");
+		Check(Has(watchCode, "if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)"), "SOURCE: and ends the run a few seconds later");
+	}
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (aliensMade < plan.combatAliens)"), "the next alien comes until there have been as many as were asked for");
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "status->Courage = ONE_FIXED << 1;"), "he keeps his courage, because someone who can't die would otherwise only ever try to run");
 	Check(Has(Between(hudson, "static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)", "static const char *HowTheFightRanOut()"), "if (GetTickCount() - alienLastHurtAt >= kMillisecondsBeforeAFightHasStalled)"), "a fight where the alien isn't being hurt moves on, so a run can't hang on it");

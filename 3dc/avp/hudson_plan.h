@@ -252,6 +252,12 @@ struct HudsonPlan
 	bool compareRelief;   // draw each view every way in the list below, with a picture of each
 	bool combatAlien;     // run the world, and make an alien in front of him to fight
 	int combatAliens;     // aliens=: how many to make, one after another. 1 unless it says
+	bool watchAlien;      // watch=alien: in a fight, the camera follows the alien from the side, and the log says where it goes once a second. See "WATCHING AN ALIEN" in hudson.cpp
+	bool holdFire;        // holdfire=yes: in a watched fight, he never fires, so that the alien gets to him
+	bool alienAtSaid;     // alienat=x,y,z: the alien is made 300 mm above this place, instead of somewhere in sight of him
+	int alienAtX, alienAtY, alienAtZ;
+	bool standAtSaid;     // standat=x,y,z: he stands here, instead of where the level starts the player
+	int standAtX, standAtY, standAtZ;
 };
 
 // One way of drawing a view, in a run with compare=relief. Each says everything about itself, so that none depends on the one before.
@@ -477,6 +483,12 @@ extern const char *const kHudsonRefusedCombatNotAlone;
 extern const char *const kHudsonRefusedAliensNotANumber;
 extern const char *const kHudsonRefusedAliensOutOfRange;
 extern const char *const kHudsonRefusedAliensWithoutCombat;
+extern const char *const kHudsonRefusedWatchUnknown;
+extern const char *const kHudsonRefusedHoldFireNotYes;
+extern const char *const kHudsonRefusedPlaceNotThreeNumbers;
+extern const char *const kHudsonRefusedWatchWordsWithoutCombat;
+extern const char *const kHudsonRefusedHoldFireWithoutWatch;
+extern const char *const kHudsonRefusedWatchWithAliens;
 
 // A run must never touch the player's own copy of the game. So it won't start from anything that looks like a Steam folder. This is against a slip, not against someone determined.
 bool HudsonPlan_FolderIsRefused(const char *folder);

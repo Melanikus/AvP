@@ -1,3 +1,6 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   watch=alien, holdfire=, alienat= and standat= film the way an alien takes to reach him, with a camera beside it
+//   net= is refused on hudson-revive until its network code is written into main's
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   siege= has both players of a pair stand in a room against every kind of enemy the host can make, and a film of it has a clock on it
 //   every game of a pair run starts with a smoke test: the players turn to each other, and each checks it can see the other, before anything else the run does
@@ -87,6 +90,13 @@
 // run with five aliens ended with him standing still, not firing, being bitten for four minutes. And if the alien hasn't been hurt for a while, that fight has stalled: the log says so, the alien is taken away, and the next
 // one comes. The result line counts those as stalled=, so a run that did that can't be mistaken for one where he won them all.
 //
+// WATCHING AN ALIEN. watch=alien is a fight he doesn't take part in, for filming the way an alien takes to reach him. alienat=x,y,z makes the alien just
+// above that place, and standat=x,y,z has him stand at another, both in the level's own millimetres. holdfire=yes has him take nothing as a target, so the
+// alien reaches him. The camera follows the alien from one side, a few metres off and a little above, so that a film shows it on the floor, up a wall or
+// across a ceiling. When it's made, the log says whether its room and his can see each other, because a way planned for an alien may need that. Once a
+// second the log says where it is, what it's doing, which kind of surface it's on and how far it is from him. The run ends a few seconds after its first blow
+// lands on him, or when frames= runs out, and the result line says how long it took and how many metres it went on each kind of surface.
+//
 // A FLARE. flare=yes has him throw a flare as each hold starts, through the same call as the key, so that a picture and a film can show what a flare's light does to the room. It's a run that looks round and
 // nothing else, and never one that compares what's on the screen. The game allows only a few at a time and throws no more past that, without saying so, and that's why the result counts the ones that really went.
 //
@@ -150,6 +160,7 @@ extern int MultiplayerEpisodeForEnvironment(int environment);       // env_info.
 #include "bh_ais.h"
 #include "equipment.h"
 #include "los.h"
+#include "extents.h"
 #include "Player.h"
 #include "view_switches.h"
 #include "pvisible.h"
@@ -233,6 +244,7 @@ bool HudsonMarineIsOn = false;
 bool HudsonPeopleStandStill = false;
 int HudsonWayOfDying = -1;
 bool HudsonWorldIsLive = false;
+bool HudsonMarineHoldsFire = false;
 
 static const DWORD kWatchdogLooksEveryMilliseconds = 50;
 static const char kRunFolderName[] = "HudsonRun";
@@ -353,6 +365,25 @@ static LONG visionViews = 0, visionReadsFailed = 0, visionMirrored = 0, visionNo
 
 // The fight. The ones another thread can read are for the result line, which can be written from there.
 static char alienName[SB_NAME_LENGTH] = { 0 };
+
+// What a watched fight has found so far: see "WATCHING AN ALIEN", further down.
+enum WatchSurface
+{
+	kWatchFloor,
+	kWatchWall,
+	kWatchCeiling
+};
+
+static DWORD watchStartedAt = 0;
+static DWORD watchFirstBlowAt = 0;          // 0 until the alien's first blow lands on him
+static int watchSecondsLogged = 0;
+static VECTORCH watchLastPlace;
+static bool watchHasLastPlace = false;
+static LONG watchMillimetres[3] = { 0, 0, 0 };   // how far it went on each kind of surface, by WatchSurface
+static LONG watchReachedMilliseconds = -1;       // how long after it was made its first blow landed, or -1
+static LONG watchRoomsSeeEachOther = -1;         // 1 if his room and the alien's are the same or either is visible from the other when it's made, 0 if not, -1 before
+
+static const char *const kWatchSurfaceWords[3] = { "floor", "wall", "ceiling" };
 static volatile LONG enemyState = kEnemyNotMade;
 static volatile LONG tookTheAlienAsATarget = 0;
 static volatile LONG shotsFired = 0;
@@ -500,7 +531,7 @@ static void WriteResult(const char *howItEnded, int code)
 
 	char const *folder = GetSaveFolderPath();
 	std::string const path = std::string(folder ? folder : "") + kResultFileName;
-	char line[640] = { 0 };
+	char line[1024] = { 0 };   // room for every field, a watched fight's included, so that none at the end is cut off
 
 	if (!isTheFirst)
 	{
@@ -526,10 +557,17 @@ static void WriteResult(const char *howItEnded, int code)
 		FinishTheVideo(&videoFacts);
 	}
 
-	// Only in a run with a fight, so that the line from any other run stays as it was.
-	char fight[140] = { 0 };
+	// Only in a run with a fight, so that the line from any other run stays as it was. A watched fight adds what it found: see "WATCHING AN ALIEN".
+	char fight[300] = { 0 };
 
-	if (plan.combatAlien)
+	if (plan.combatAlien && plan.watchAlien)
+	{
+		_snprintf(fight, sizeof(fight) - 1, " target=%s shots=%ld hits=%ld blows=%ld acid=%ld killed=%ld/%d stalled=%ld enemy=%s watch=alien reached_seconds=%.1f floor_m=%.1f wall_m=%.1f ceiling_m=%.1f rooms_see=%s",
+			tookTheAlienAsATarget ? "yes" : "no", shotsFired, timesItWasHurt, blowsOnHim, acidOnHim, aliensKilled, plan.combatAliens, fightsStalled, WordForTheEnemy(),
+			watchReachedMilliseconds >= 0 ? watchReachedMilliseconds / 1000.0 : -1.0, watchMillimetres[kWatchFloor] / 1000.0, watchMillimetres[kWatchWall] / 1000.0, watchMillimetres[kWatchCeiling] / 1000.0,
+			watchRoomsSeeEachOther == 1 ? "yes" : watchRoomsSeeEachOther == 0 ? "no" : "unknown");
+	}
+	else if (plan.combatAlien)
 	{
 		_snprintf(fight, sizeof(fight) - 1, " target=%s shots=%ld hits=%ld blows=%ld acid=%ld killed=%ld/%d stalled=%ld enemy=%s", tookTheAlienAsATarget ? "yes" : "no", shotsFired, timesItWasHurt, blowsOnHim, acidOnHim, aliensKilled, plan.combatAliens, fightsStalled, WordForTheEnemy());
 	}
@@ -907,6 +945,7 @@ int Hudson_CheckBeforeStarting()
 		if (plan.combatAlien)
 		{
 			HudsonWorldIsLive = true;
+			HudsonMarineHoldsFire = plan.holdFire;
 			ForceLoad_Alien = TRUE;
 		}
 	}
@@ -2872,6 +2911,20 @@ static void MakeTheMarine(LONG frame)
 			MoveThePlayerTo(place);
 		}
 	}
+	else if (plan.standAtSaid)
+	{
+		// standat=: where a watched alien is to find him. The place came from the command line, so it's only used if it's in one of the level's rooms.
+		VECTORCH asked = { plan.standAtX, plan.standAtY, plan.standAtZ };
+
+		if (!ModuleFromPosition(&asked, (MODULE *)0))
+		{
+			EndTheLevel("standat= isn't in any of this level's rooms", kHudsonExitBadArguments);
+			return;
+		}
+
+		place = asked;
+		MoveThePlayerTo(place);
+	}
 
 	if (plan.rooms > 1 && tourRooms.empty())
 	{
@@ -3317,11 +3370,264 @@ static void AskForAFightPicture(const char *what)
 	}
 }
 
+// WATCHING AN ALIEN (watch=alien). A fight he doesn't take part in: the alien is made, often at alienat=, he stands at standat=, holds his fire with
+// holdfire=yes, and the camera follows the alien from one side, so that a film shows the way it takes to him: along the floor, or up a wall and across
+// a ceiling. Once a second the log says where it is and what it's doing. The run ends a few seconds after its first blow lands on him, so that the film
+// shows it reaching him, or when frames= runs out. Only the game's thread writes these. The counts the result line reads are LONGs, set whole.
+static const int kAlienStartsAboveTheFloor = 300;   // alienat= is a place on a floor, and an alien made inside a floor can fall through it
+static const int kWatchMostInAFrame = 2000;         // further than this in one frame is the game putting it somewhere, not a step, so it isn't counted
+static const int kMostlyThisWay = 46341;            // the cosine of 45 degrees, as a fraction of ONE_FIXED: closer than that to straight down or up
+
+
+// The game's own names for what an alien is doing, in the order of ALIEN_BHSTATE in bh_alien.h
+static const char *AlienStateWord(int state)
+{
+	static const char *const words[] = { "Wait", "Approach", "Hunt", "Wander", "Retreat", "Attack", "Avoidance", "Dying", "Pounce", "Jump", "Dormant", "Awakening", "Taunting" };
+
+	static_assert(sizeof(words) / sizeof(words[0]) == ABS_Taunting + 1, "a word for each of the alien's states in bh_alien.h, in its order");
+
+	return (state >= 0 && state <= (int)ABS_Taunting) ? words[state] : "not one of its states";
+}
+
+// What it's on. On standard gravity it's on a floor, or falling. On surface gravity, its gravity points into what it's holding on to: down, in the game's
+// numbers bigger y, for a floor; up for a ceiling; anything in between for a wall. It's worked out from the gravity, not from the level's polygons, so a
+// slope counts as whichever it's nearer to, and the metres can differ a little from a count made from the level.
+static WatchSurface SurfaceItsOn(const DYNAMICSBLOCK *body)
+{
+	if (body->UseStandardGravity)
+	{
+		return kWatchFloor;
+	}
+
+	if (body->GravityDirection.vy > kMostlyThisWay)
+	{
+		return kWatchFloor;
+	}
+
+	if (body->GravityDirection.vy < -kMostlyThisWay)
+	{
+		return kWatchCeiling;
+	}
+
+	return kWatchWall;
+}
+
+// Called as the alien is made. The time of day and the computer's tick count are both written, so that these lines can be lined up with any others in the log.
+static void WatchTheAlienStarts(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alien, LONG frame)
+{
+	SYSTEMTIME now;
+
+	GetLocalTime(&now);
+	watchStartedAt = GetTickCount();
+	watchFirstBlowAt = 0;
+	watchSecondsLogged = 0;
+	watchHasLastPlace = false;
+	InterlockedExchange(&watchMillimetres[kWatchFloor], 0);
+	InterlockedExchange(&watchMillimetres[kWatchWall], 0);
+	InterlockedExchange(&watchMillimetres[kWatchCeiling], 0);
+	InterlockedExchange(&watchReachedMilliseconds, -1);
+
+	// A way that's planned for the alien may need his room to be one the alien's can see, or the alien moves as it always has. Said here, so that a film
+	// of it moving as it always has can't be taken for a test of anything else.
+	MODULE *const hisRoom = marine->containingModule;
+	MODULE *const itsRoom = alien->containingModule;
+	bool const sameRoom = hisRoom && hisRoom == itsRoom;
+	bool const hisSeesIts = hisRoom && itsRoom && IsModuleVisibleFromModule(hisRoom, itsRoom);
+	bool const itsSeesHis = hisRoom && itsRoom && IsModuleVisibleFromModule(itsRoom, hisRoom);
+
+	InterlockedExchange(&watchRoomsSeeEachOther, (sameRoom || hisSeesIts || itsSeesHis) ? 1 : 0);
+
+	char line[400] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "hudson: watch: started at %02d:%02d:%02d.%03d (tick %lu), frame %ld. The alien is at %d %d %d, in room %d. He's at %d %d %d, in room %d. Same room: %s. His room sees the alien's: %s. The alien's room sees his: %s",
+		now.wHour, now.wMinute, now.wSecond, now.wMilliseconds, (unsigned long)watchStartedAt, frame,
+		alien->DynPtr->Position.vx, alien->DynPtr->Position.vy, alien->DynPtr->Position.vz, itsRoom ? itsRoom->m_index : -1,
+		marine->DynPtr->Position.vx, marine->DynPtr->Position.vy, marine->DynPtr->Position.vz, hisRoom ? hisRoom->m_index : -1,
+		sameRoom ? "yes" : "no", hisSeesIts ? "yes" : "no", itsSeesHis ? "yes" : "no");
+	LogString(line);
+}
+
+static void SayWhatTheWatchFound(const char *how)
+{
+	char when[60] = "never";
+
+	if (watchReachedMilliseconds >= 0)
+	{
+		_snprintf(when, sizeof(when) - 1, "%.1f seconds after it was made", watchReachedMilliseconds / 1000.0);
+	}
+
+	char line[300] = { 0 };
+
+	_snprintf(line, sizeof(line) - 1, "hudson: watch: %s. Floor %.1f m, wall %.1f m, ceiling %.1f m, by where its gravity pointed. Its first blow landed %s",
+		how, watchMillimetres[kWatchFloor] / 1000.0, watchMillimetres[kWatchWall] / 1000.0, watchMillimetres[kWatchCeiling] / 1000.0, when);
+	LogString(line);
+}
+
+// Every frame of a watched fight, while the alien's alive. Counts how far it went on each kind of surface, says once a second where it is, and ends the run
+// a few seconds after its first blow lands. True once it has ended the run, so that nothing else is done with this frame.
+static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alien, LONG frame)
+{
+	DWORD const now = GetTickCount();
+	VECTORCH const here = alien->DynPtr->Position;
+	WatchSurface const surface = SurfaceItsOn(alien->DynPtr);
+
+	if (watchHasLastPlace)
+	{
+		VECTORCH moved = { here.vx - watchLastPlace.vx, here.vy - watchLastPlace.vy, here.vz - watchLastPlace.vz };
+		int const step = Approximate3dMagnitude(&moved);
+
+		if (step < kWatchMostInAFrame)
+		{
+			InterlockedExchangeAdd(&watchMillimetres[surface], step);
+		}
+	}
+
+	watchLastPlace = here;
+	watchHasLastPlace = true;
+
+	int const seconds = (int)((now - watchStartedAt) / 1000);
+
+	if (seconds > watchSecondsLogged)
+	{
+		watchSecondsLogged = seconds;
+
+		VECTORCH apart = { marine->DynPtr->Position.vx - here.vx, marine->DynPtr->Position.vy - here.vy, marine->DynPtr->Position.vz - here.vz };
+		ALIEN_STATUS_BLOCK const *const status = (const ALIEN_STATUS_BLOCK *)alien->SBdataptr;
+		char line[300] = { 0 };
+
+		_snprintf(line, sizeof(line) - 1, "hudson: watch: second %d, frame %ld: the alien is at %d %d %d, %s, on %s, on %s gravity (pointing %d %d %d), %d mm from him",
+			seconds, frame, here.vx, here.vy, here.vz, AlienStateWord((int)status->BehaviourState), kWatchSurfaceWords[surface],
+			alien->DynPtr->UseStandardGravity ? "standard" : "surface", alien->DynPtr->GravityDirection.vx, alien->DynPtr->GravityDirection.vy, alien->DynPtr->GravityDirection.vz,
+			Approximate3dMagnitude(&apart));
+		LogString(line);
+	}
+
+	if (watchFirstBlowAt != 0 && now - watchFirstBlowAt >= kMillisecondsAfterTheKill)
+	{
+		SayWhatTheWatchFound("it reached him");
+		marineStage = kMarineFinished;
+		EndTheLevel("the watched alien reached him", kHudsonExitFinished);
+		return true;
+	}
+
+	return false;
+}
+
+// Beside the alien, looking at it, so that a film shows it from the side: at right angles to the line from it to him, along the ground, on whichever side has
+// more room, and a little above it, coming in short of a wall the way the camera behind him does. It moves a little way towards where it wants to be each frame,
+// so that it doesn't jump about with every step. False if there's no alien to look at, or no room beside it, and then the camera does what it would have.
+static bool PutTheCameraBesideTheAlien(const STRATEGYBLOCK *marine, VECTORCH *place, MATRIXCH *turn)
+{
+	static const int kCameraBesideIt = 3000;
+	static const int kCameraNearestBesideIt = 800;   // closer than this, the alien would fill the screen
+	static const int kCameraAboveIt = 600;
+	static const int kCameraJump = 4000;             // a camera this far from where it wants to be goes straight there
+	static VECTORCH smoothed;
+	static bool smoothedIsSet = false;
+
+	STRATEGYBLOCK *const found = FindSBWithName(alienName);
+
+	if (marineStage != kMarineFighting || !found || found->I_SBtype != I_BehaviourAlien || !found->DynPtr || !found->SBdptr)
+	{
+		smoothedIsSet = false;
+		return false;
+	}
+
+	VECTORCH const alien = found->DynPtr->Position;
+	VECTORCH towardHim = { marine->DynPtr->Position.vx - alien.vx, 0, marine->DynPtr->Position.vz - alien.vz };
+
+	if (towardHim.vx == 0 && towardHim.vz == 0)
+	{
+		return false;
+	}
+
+	Normalise(&towardHim);
+
+	VECTORCH const sides[2] = { { towardHim.vz, 0, -towardHim.vx }, { -towardHim.vz, 0, towardHim.vx } };
+	int bestDistance = 0;
+	VECTORCH bestSide = sides[0];
+
+	for (int s = 0; s < 2; s++)
+	{
+		VECTORCH way = sides[s];
+		VECTORCH from = alien;
+		int distance = kCameraBesideIt;
+
+		FindPolygonInLineOfSight(&way, &from, 0, found->SBdptr);
+
+		if (LOS_ObjectHitPtr && LOS_ObjectHitPtr->ObMyModule && LOS_Lambda - kCameraOffAWall < distance)
+		{
+			distance = LOS_Lambda - kCameraOffAWall;
+		}
+
+		if (distance > bestDistance)
+		{
+			bestDistance = distance;
+			bestSide = sides[s];
+		}
+	}
+
+	if (bestDistance < kCameraNearestBesideIt)
+	{
+		return false;
+	}
+
+	VECTORCH wanted = { alien.vx + MUL_FIXED(bestSide.vx, bestDistance), alien.vy - kCameraAboveIt, alien.vz + MUL_FIXED(bestSide.vz, bestDistance) };   // up is smaller
+
+	if (!ModuleFromPosition(&wanted, found->containingModule))
+	{
+		return false;
+	}
+
+	VECTORCH gap = { wanted.vx - smoothed.vx, wanted.vy - smoothed.vy, wanted.vz - smoothed.vz };
+
+	if (!smoothedIsSet || Approximate3dMagnitude(&gap) > kCameraJump)
+	{
+		smoothed = wanted;
+		smoothedIsSet = true;
+	}
+	else
+	{
+		smoothed.vx += gap.vx / 8;
+		smoothed.vy += gap.vy / 8;
+		smoothed.vz += gap.vz / 8;
+	}
+
+	VECTORCH look = { alien.vx - smoothed.vx, alien.vy - smoothed.vy, alien.vz - smoothed.vz };
+
+	if (look.vx == 0 && look.vy == 0 && look.vz == 0)
+	{
+		return false;
+	}
+
+	Normalise(&look);
+	MakeMatrixFromDirection(&look, turn);
+
+	// After this, the game raises the camera by the player's eye height (InteriorType_Body, view.cpp): the top of a standing marine, which a run's player
+	// is, plus 200. So it starts that much lower, to end up where it was meant to be.
+	*place = smoothed;
+	place->vy -= CollisionExtents[CE_MARINE].StandingTop + 200;
+	return true;
+}
+
 static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)
 {
 	VECTORCH spot;
 
-	if (!FindWhereTheAlienGoes(marine, &spot))
+	if (plan.alienAtSaid)
+	{
+		// alienat=: a little above the floor the place is on, so that it lands on it. The place came from the command line, so it's only used if it's in one of the level's rooms.
+		spot.vx = plan.alienAtX;
+		spot.vy = plan.alienAtY - kAlienStartsAboveTheFloor;   // in the game's numbers, up is smaller
+		spot.vz = plan.alienAtZ;
+
+		if (!ModuleFromPosition(&spot, (MODULE *)0))
+		{
+			EndTheLevel("alienat= isn't in any of this level's rooms", kHudsonExitBadArguments);
+			return;
+		}
+	}
+	else if (!FindWhereTheAlienGoes(marine, &spot))
 	{
 		EndTheLevel("there's nowhere in sight of him to put the alien", kHudsonExitNoEnemy);
 		return;
@@ -3354,6 +3660,11 @@ static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)
 
 	_snprintf(line, sizeof(line) - 1, "hudson: alien %d of %d is made at frame %ld, at %d %d %d, with %d health", aliensMade, plan.combatAliens, frame, spot.vx, spot.vy, spot.vz, alien->SBDamageBlock.Health >> ONE_FIXED_SHIFT);
 	LogString(line);
+
+	if (plan.watchAlien)
+	{
+		WatchTheAlienStarts(marine, alien, frame);
+	}
 }
 
 // The alien's still in the fight only while it's the same alien, whole and alive. When one dies, it can become something else, or be gone altogether.
@@ -3497,6 +3808,17 @@ static void WatchTheFight(STRATEGYBLOCK *marine, LONG frame)
 		return;
 	}
 
+	// A watched fight: see "WATCHING AN ALIEN". Nobody hurts the alien, so it's never taken away as stalled. Its first blow on him ends the run.
+	if (plan.watchAlien)
+	{
+		if (!WatchTheAlien(marine, alien, frame) && framesInThisStage % kFramesBetweenFightReports == 0)
+		{
+			ReportTheFight(marine, status, alien, frame);
+		}
+
+		return;
+	}
+
 	// Nothing in the game ends a fight like this one, so the run has to, or it would stand here until frames= ran out.
 	if (GetTickCount() - alienLastHurtAt >= kMillisecondsBeforeAFightHasStalled)
 	{
@@ -3537,6 +3859,18 @@ void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind)
 	}
 
 	LONG const blows = InterlockedIncrement(&blowsOnHim);
+
+	// A watched alien has reached him. The run goes on for a few seconds, so that the film shows it, and then ends: see WatchTheAlien.
+	if (plan.watchAlien && watchFirstBlowAt == 0 && marineStage == kMarineFighting)
+	{
+		watchFirstBlowAt = GetTickCount();
+		InterlockedExchange(&watchReachedMilliseconds, (LONG)(watchFirstBlowAt - watchStartedAt));
+
+		char reached[120] = { 0 };
+
+		_snprintf(reached, sizeof(reached) - 1, "hudson: watch: its first blow landed on him at frame %ld, %.1f seconds after it was made", framesDone, watchReachedMilliseconds / 1000.0);
+		LogString(reached);
+	}
 
 	if (blows <= kBlowsToLog)
 	{
@@ -4471,7 +4805,10 @@ void Hudson_PointTheCamera(VECTORCH *place, MATRIXCH *turn)
 	*place = marine->DynPtr->Position;
 	*turn = marine->DynPtr->OrientMat;
 
-	if (plan.combatAlien)
+	// watch=alien: beside the alien, while there's one and room for the camera. Otherwise, and in any other fight, behind him.
+	bool const besideTheAlien = plan.watchAlien && PutTheCameraBesideTheAlien(marine, place, turn);
+
+	if (plan.combatAlien && !besideTheAlien)
 	{
 		PutTheCameraBehindHim(marine, place);
 	}

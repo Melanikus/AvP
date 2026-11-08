@@ -35,6 +35,9 @@ extern int HudsonWayOfDying;
 // True only in a run that asked for a fight, with combat=. Then nothing in the world is kept still, and a marine can have a target like any other.
 extern bool HudsonWorldIsLive;
 
+// True only in a watched fight with holdfire=yes. Then a marine takes nothing as a target, so the alien being watched gets to him. False in a real game.
+extern bool HudsonMarineHoldsFire;
+
 // Something has hit a marine, in a run with a fight. He's kept alive, so his health can't show whether anything reached him, and this says so in the log. kind is what hit him: the game's number for it, from AMMO_ID in equipment.h.
 void Hudson_HeWasHit(STRATEGYBLOCK *block, int kind);
 

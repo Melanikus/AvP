@@ -11348,8 +11348,9 @@ int Validate_Strategy(STRATEGYBLOCK *target,char *SBname) {
 int Marine_TargetFilter(STRATEGYBLOCK *candidate) {
 
 	// The others in a Hudson run aren't running, so they can't fight back, and a marine would just stand there shooting them.
-	// A run that asked for a fight has everyone running, and this is what it's for.
-	if (HudsonMarineIsOn && !HudsonWorldIsLive) {
+	// A run that asked for a fight has everyone running, and this is what it's for. A watched fight with holdfire=yes is the
+	// exception: he's there to be reached, so the alien's way to him can be filmed, and he takes nothing as a target.
+	if (HudsonMarineIsOn && (!HudsonWorldIsLive || HudsonMarineHoldsFire)) {
 		return(0);
 	}
 
