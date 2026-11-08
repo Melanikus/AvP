@@ -7,6 +7,8 @@
 //   a player's ghost and a corpse stop all their sounds when they go. Some were left playing, and when one ended it wrote into freed memory.
 //   the M79's three grenades join the list of things the game can make and run, and so does a thrown staff
 //   a sentry gun's ghost doesn't hold a door open
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   in a Hudson run with a marine, other people and what makes them don't run
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an alien, facehugger or queen whose making stopped before its block existed is cleaned up without reading that block
 //   NpcModelIsLoaded: a character whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1;
@@ -21,6 +23,7 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "bonusabilities.h"
+#include "hudson.h"
 #include "weapons.h"
 #include "compiled_shapes.h"
 #include "inventory.h"
@@ -1435,6 +1438,16 @@ void ObjectBehaviours(void)
 void ExecuteBehaviour(STRATEGYBLOCK* sbptr)
 {
 	GLOBALASSERT(sbptr);
+
+	if (HudsonMarineIsOn && Hudson_KeepsStill(sbptr))
+	{
+		return;
+	}
+
+	if (HudsonPeopleStandStill && (sbptr->I_SBtype == I_BehaviourAlien || sbptr->I_SBtype == I_BehaviourMarine))
+	{
+		return;
+	}
 
 	switch(sbptr->I_SBtype)
 	{
