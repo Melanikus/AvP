@@ -186,6 +186,8 @@ struct AlienWaysPoint
 {
 	int x, y, z;
 	AlienWaysKind kind;
+	int16_t facing[3];   // the facing of the polygon the way is on from this point to the next, in 32767ths, as the level stores it;
+	                     // all 0 if that isn't known. For telling when a step onto a new polygon is made (AlienWays_StepMade).
 };
 
 enum AlienWaysSearch

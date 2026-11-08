@@ -1288,7 +1288,7 @@ void AlienWaysMap::MakeTheWay()
 
 	if (place < keep)
 	{
-		way[place] = AlienWaysPoint{ goalAt.x, goalAt.y, goalAt.z, KindOf(toNode) };
+		way[place] = AlienWaysPoint{ goalAt.x, goalAt.y, goalAt.z, KindOf(toNode), { facing[toNode].x, facing[toNode].y, facing[toNode].z } };
 		wayPolygons[place] = toNode;
 	}
 
@@ -1307,7 +1307,7 @@ void AlienWaysMap::MakeTheWay()
 			if (place < keep)
 			{
 				AlienWaysXYZ const at = across[i - 1];
-				way[place] = AlienWaysPoint{ at.x, at.y, at.z, KindOf(node) };
+				way[place] = AlienWaysPoint{ at.x, at.y, at.z, KindOf(node), { facing[node].x, facing[node].y, facing[node].z } };
 				wayPolygons[place] = node;
 			}
 		}

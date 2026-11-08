@@ -570,8 +570,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "return before == after || KindUnder(down) == static_cast<int>(after);",
-					"to": "return before == after || after == kAlienWaysFloor || KindUnder(down) == static_cast<int>(after);"
+					"from": "\treturn from.kind == onto.kind || KindUnder(down) == static_cast<int>(onto.kind);",
+					"to": "\treturn from.kind == onto.kind || onto.kind == kAlienWaysFloor || KindUnder(down) == static_cast<int>(onto.kind);"
 				}
 			]
 		},
@@ -1102,6 +1102,56 @@
 					"file": "3dc/avp/alien_ways_level.cpp",
 					"from": "\t\t\t\tlisting->polygons->back().facing[0] = facing[0];\n",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a step is made by kind only, never by the planes",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (fLength > 16384.0 && oLength > 16384.0)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "one surface a little turned counts as a step to make",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": ">= cos(kAlienWaysSamePlaneDegrees * pi / 180.0))",
+					"to": ">= 2.0)"
+				}
+			]
+		},
+		{
+			"name": "a step onto another plane is made without the alien on it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\treturn on >= cos(kAlienWaysOnThePlaneDegrees * pi / 180.0);",
+					"to": "\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a step onto another plane is made with no down known",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (!(dLength > 0.0))\n\t\t{\n\t\t\treturn false;",
+					"to": "\t\tif (!(dLength > 0.0))\n\t\t{\n\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the guide counts a step by kind, not by AlienWays_StepMade",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\treturn AlienWays_StepMade(points[heading - 1], points[heading], down);",
+					"to": "\treturn points[heading - 1].kind == points[heading].kind;"
 				}
 			]
 		}

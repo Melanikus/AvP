@@ -733,6 +733,16 @@
 					"to": "\t\tparts[2] = TimesFixed(turn->m31, facing.x) + TimesFixed(turn->m32, facing.y) + TimesFixed(turn->m33, facing.z);"
 				}
 			]
+		},
+		{
+			"name": "a way's points don't carry their polygon's facing",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "KindOf(node), { facing[node].x, facing[node].y, facing[node].z } };",
+					"to": "KindOf(node), { 0, 0, 0 } };"
+				}
+			]
 		}
 	]
 }

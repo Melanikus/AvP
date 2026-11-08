@@ -785,6 +785,17 @@ static void RoundTheCorner()
 	Check(map.Build(Pillar(true, true)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound, "a way is found round the block");
 	Check(HasStandOff(map.Way()), "round the corner, the crossing onto the second wall is followed by the stand-off point, 800 mm out along both facings");
 	Check(Near(MetresOf(map.Way()).floor, 2.118, 0.01), "and it's still the way by the walls, with no more floor");
+	bool facingsCarried = false;
+
+	for (size_t k = 1; k < map.Way().size(); k++)
+	{
+		AlienWaysPoint const &p = map.Way()[k - 1], &q = map.Way()[k];
+
+		// The crossing onto wall B, then the stand-off: both on B, which faces +z
+		facingsCarried = facingsCarried || (At(p, { 0, -1500, 0 }) && At(q, { 800, -1500, 800 }) && p.facing[2] == 32767 && q.facing[2] == 32767 && p.facing[0] == 0);
+	}
+
+	Check(facingsCarried, "each point of the way carries the facing of the polygon it's on from there, for telling when a step is made");
 
 	Check(map.Build(Pillar(true, false)) == nullptr && SearchAll(map, 0, start, 1, goal, 10) == kAlienWaysFound && !HasStandOff(map.Way()),
 		"walls that face into a room's corner, not out of a block's, get no stand-off: nothing is in the way there");

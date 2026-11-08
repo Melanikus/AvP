@@ -792,6 +792,41 @@ static void StartsOnItsOwnKind()
 	Check(ReportsOf(toTheTarget, &reports) == 1 && reports[0].toTheTarget, "when the goal is the target itself, the report says so");
 }
 
+// When a step onto a new polygon counts as made (AlienWays_StepMade): by the planes where both facings are known, by kind where not
+static AlienWaysPoint PointFacing(AlienWaysKind kind, double fx, double fy, double fz)
+{
+	AlienWaysPoint p = { 0, 0, 0, kind, { 0, 0, 0 } };
+	p.facing[0] = static_cast<int16_t>(lround(fx * 32767.0));
+	p.facing[1] = static_cast<int16_t>(lround(fy * 32767.0));
+	p.facing[2] = static_cast<int16_t>(lround(fz * 32767.0));
+	return p;
+}
+
+static void StepsMade()
+{
+	printf("When a step onto a new surface is made\n");
+	double const half = sqrt(0.5);
+	AlienWaysPoint const floor = PointFacing(kAlienWaysFloor, 0.0, -1.0, 0.0);              // y goes down, so a floor faces -y
+	AlienWaysPoint const wall = PointFacing(kAlienWaysWall, 1.0, 0.0, 0.0);
+	AlienWaysPoint const nextWall = PointFacing(kAlienWaysWall, 0.0, 0.0, 1.0);            // round an outside corner from wall
+	AlienWaysPoint const sameWall = PointFacing(kAlienWaysWall, 0.98, 0.0, 0.2);           // the same wall, a little turned
+	AlienWaysPoint const bevel = PointFacing(kAlienWaysFloor, half, -half, 0.0);           // half up: the map counts it as floor
+	AlienWaysXYZ const standing = { 0, 65536, 0 }, clingingToWall = { -65536, 0, 0 }, onBevel = { -46341, 46341, 0 };
+
+	Check(!AlienWays_StepMade(floor, wall, standing), "from the floor onto a wall: not while the alien stands on the floor");
+	Check(AlienWays_StepMade(floor, wall, clingingToWall), "made once it clings to the wall");
+	Check(AlienWays_StepMade(bevel, wall, onBevel),
+		"from a bevel onto the wall beside it, 45 degrees: made already, where by kind (floor to wall) it waited for a turn that never came");
+	Check(!AlienWays_StepMade(wall, nextWall, clingingToWall), "round an outside corner, 90 degrees: not made while it's on the first wall");
+	Check(AlienWays_StepMade(wall, sameWall, standing), "onto the same wall, a little turned: there's no step to make, whatever its down");
+
+	AlienWaysPoint unknownWall = wall;
+	unknownWall.facing[0] = 0;
+	Check(!AlienWays_StepMade(bevel, unknownWall, onBevel) && AlienWays_StepMade(bevel, unknownWall, clingingToWall),
+		"with a facing not known, it goes by kind, as before: the bevel counts as floor");
+	Check(!AlienWays_StepMade(floor, wall, AlienWaysXYZ{ 0, 0, 0 }), "with no down known, a step onto another plane isn't made");
+}
+
 // Which doors let an alien through: the rule the game's own routes for aliens follow (AIModuleAdmitsPheromones, pheromone.cpp)
 static void DoorRule()
 {
@@ -965,6 +1000,12 @@ static void SourceOfTheGame()
 	// Doors (#118): each frame the map is told which doors won't let an alien through, before the searches carry on, each door read from its own
 	// module's block once that's checked to be its kind
 	std::string const level = ReadSourceFile("3dc/avp/alien_ways_level.cpp");
+
+	// The guide's own step check goes by AlienWays_StepMade, which StepsMade tries: the ways in this file's corridor carry no facings, so
+	// only the source can show it's the one used
+	std::string const guideSource = ReadSourceFile("3dc/avp/alien_ways_guide.cpp");
+	Check(Has(Between(guideSource, "static bool OnTheKindNeeded(", "bool AlienWays_StepMade("), "\treturn AlienWays_StepMade(points[heading - 1], points[heading], down);"),
+		"SOURCE: the guide counts a step as made by AlienWays_StepMade");
 	Check(!level.empty(), "SOURCE: the level's lister can be read");
 	Check(ComesBefore(frame, "AlienWaysLevel_ReadDoors(theDoors, ReadyMap());", "theGuide.Frame(ReadyMap()"),
 		"SOURCE: each frame the map hears about the doors before the searches carry on");
@@ -1031,6 +1072,7 @@ int main()
 	NoBetterThanToday();
 	StartsOnItsOwnKind();
 	DoorRule();
+	StepsMade();
 	SourceOfTheGame();
 
 	if (checksFailed)

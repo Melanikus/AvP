@@ -104,8 +104,37 @@ static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWays
 		return true;
 	}
 
-	AlienWaysKind const before = points[heading - 1].kind, after = points[heading].kind;
-	return before == after || KindUnder(down) == static_cast<int>(after);
+	return AlienWays_StepMade(points[heading - 1], points[heading], down);
+}
+
+bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, AlienWaysXYZ down)
+{
+	double const fx = from.facing[0], fy = from.facing[1], fz = from.facing[2];
+	double const ox = onto.facing[0], oy = onto.facing[1], oz = onto.facing[2];
+	double const fLength = sqrt(fx * fx + fy * fy + fz * fz), oLength = sqrt(ox * ox + oy * oy + oz * oz);
+	double const pi = 3.14159265358979323846;
+
+	// Both facings known: by the planes
+	if (fLength > 16384.0 && oLength > 16384.0)
+	{
+		if ((fx * ox + fy * oy + fz * oz) / (fLength * oLength) >= cos(kAlienWaysSamePlaneDegrees * pi / 180.0))
+		{
+			return true;
+		}
+
+		double const dLength = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+
+		if (!(dLength > 0.0))
+		{
+			return false;
+		}
+
+		// Down points into the surface the alien clings to, and a facing points out of it: on the new polygon, the two point opposite ways
+		double const on = -(down.x * ox + down.y * oy + down.z * oz) / (dLength * oLength);
+		return on >= cos(kAlienWaysOnThePlaneDegrees * pi / 180.0);
+	}
+
+	return from.kind == onto.kind || KindUnder(down) == static_cast<int>(onto.kind);
 }
 
 bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open)
