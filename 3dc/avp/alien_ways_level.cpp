@@ -1,4 +1,6 @@
 // See alien_ways_level.h. Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   lists the level's doors, marks their polygons with the door's number, and reads each door's state for the map (#118)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -22,6 +24,7 @@ namespace
 	{
 		std::vector<AlienWaysPolygon> *polygons;
 		std::vector<AlienWaysRange> *modules;
+		std::vector<AlienWaysLevelDoor> *doors;
 		AlienWaysLevelCounts *counts;
 		bool tooMany;
 	};
@@ -220,6 +223,35 @@ static void AddModules(Listing *listing)
 		AddShape(GetShapeData(module->m_mapptr->MapShape), module->m_mapptr->MapWorld, 0, listing);
 		listing->counts->modules++;
 
+		// A door: the same three kinds the game's own ModuleIsADoor knows (pfarlocs.cpp). Its polygons carry its number, its place in the list of
+		// doors plus 1, so a search can keep off it while it won't let an alien through (AlienWaysLevel_ReadDoors). A level with more doors than
+		// the map takes is refused by the map, which checks every number it's given.
+		bool isADoor = false;
+		AlienWaysDoorKind kind = kAlienWaysProximityDoor;
+
+		if (module->m_sbptr)
+		{
+			switch (module->m_sbptr->I_SBtype)
+			{
+				case I_BehaviourProximityDoor: isADoor = true; kind = kAlienWaysProximityDoor; break;
+				case I_BehaviourLiftDoor:      isADoor = true; kind = kAlienWaysLiftDoor;      break;
+				case I_BehaviourSwitchDoor:    isADoor = true; kind = kAlienWaysSwitchDoor;    break;
+				default: break;
+			}
+		}
+
+		if (isADoor)
+		{
+			listing->doors->push_back(AlienWaysLevelDoor{ i, kind });
+			listing->counts->doors++;
+			int const door = static_cast<int>(listing->doors->size());
+
+			for (size_t p = first; p < listing->polygons->size(); p++)
+			{
+				(*listing->polygons)[p].door = door;
+			}
+		}
+
 		// A module whose number is outside the game's own list of modules gets no range, so no alien in it is guided
 		if (module->m_index >= 0 && static_cast<size_t>(module->m_index) < listing->modules->size())
 		{
@@ -271,13 +303,15 @@ static void AddStillObjects(Listing *listing)
 	}
 }
 
-const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::vector<AlienWaysRange> *modules, AlienWaysLevelCounts *counts)
+const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::vector<AlienWaysRange> *modules, std::vector<AlienWaysLevelDoor> *doors,
+	AlienWaysLevelCounts *counts)
 {
-	AlienWaysLevelCounts const none = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	AlienWaysLevelCounts const none = {};
 	*counts = none;
 	polygons->clear();
 	modules->clear();
-	Listing listing = { polygons, modules, counts, false };
+	doors->clear();
+	Listing listing = { polygons, modules, doors, counts, false };
 
 	try
 	{
@@ -288,6 +322,7 @@ const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::ve
 	{
 		std::vector<AlienWaysPolygon>().swap(*polygons);
 		std::vector<AlienWaysRange>().swap(*modules);
+		std::vector<AlienWaysLevelDoor>().swap(*doors);
 		return kWhyNoMemory;
 	}
 
@@ -295,8 +330,58 @@ const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::ve
 	{
 		std::vector<AlienWaysPolygon>().swap(*polygons);
 		std::vector<AlienWaysRange>().swap(*modules);
+		std::vector<AlienWaysLevelDoor>().swap(*doors);
 		return kWhyTooMany;
 	}
 
 	return 0;
+}
+
+void AlienWaysLevel_ReadDoors(const std::vector<AlienWaysLevelDoor> &doors, AlienWaysMap *map)
+{
+	if (!map)
+	{
+		return;
+	}
+
+	SCENEMODULE const *const scene = Global_ModulePtr ? Global_ModulePtr[Global_Scene] : 0;
+
+	for (size_t d = 0; d < doors.size(); d++)
+	{
+		int const place = doors[d].module;
+		MODULE const *const module = (scene && scene->sm_marray && place >= 0 && place < ModuleArraySize) ? scene->sm_marray[place] : 0;
+		STRATEGYBLOCK *const door = module ? module->m_sbptr : 0;
+		bool through = false;
+
+		// Each kind's block is read only once it's checked to be that kind, the way GetState reads them (bh_types.cpp)
+		if (door && door->SBdataptr)
+		{
+			switch (doors[d].kind)
+			{
+				case kAlienWaysProximityDoor:
+					if (door->I_SBtype == I_BehaviourProximityDoor)
+					{
+						PROXDOOR_BEHAV_BLOCK const *const block = (PROXDOOR_BEHAV_BLOCK const *)door->SBdataptr;
+						through = AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, block->door_locked != 0, GetState(door) != 0);
+					}
+					break;
+
+				case kAlienWaysLiftDoor:
+					if (door->I_SBtype == I_BehaviourLiftDoor)
+					{
+						through = AlienWays_DoorLetsAnAlienThrough(kAlienWaysLiftDoor, false, GetState(door) != 0);
+					}
+					break;
+
+				case kAlienWaysSwitchDoor:
+					if (door->I_SBtype == I_BehaviourSwitchDoor)
+					{
+						through = AlienWays_DoorLetsAnAlienThrough(kAlienWaysSwitchDoor, false, GetState(door) != 0);
+					}
+					break;
+			}
+		}
+
+		map->SetDoorShut(static_cast<int>(d) + 1, !through);
+	}
 }

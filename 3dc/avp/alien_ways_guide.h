@@ -61,6 +61,21 @@ int const kAlienWaysHeadway = 100;                // mm: getting this much neare
 int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this many ms, the alien is stuck: its way is dropped...
 int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
 
+// The kinds of door the game has (ModuleIsADoor, in pfarlocs.cpp), and whether one lets an alien through now. It's the rule the game's own
+// routes for aliens follow (AIModuleAdmitsPheromones, in pheromone.cpp), which is why a hunting alien never plans through a locked door:
+// - a proximity door opens by itself for an alien that comes near it, so it lets one through unless it's locked, open yet or not;
+// - a lift's door, and a door worked by a switch, only while they're open: an alien can't open either. open is as the game says it
+//   (GetState, in bh_types.cpp): for a lift's door, anything but shut; for a switch's door, only all the way open.
+// A search keeps off a door that doesn't (DOORS, in alien_ways_map.h).
+enum AlienWaysDoorKind
+{
+	kAlienWaysProximityDoor,
+	kAlienWaysLiftDoor,
+	kAlienWaysSwitchDoor
+};
+
+bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open);
+
 // What an alien tells Steer, every frame it's coming for its target
 struct AlienWaysAsk
 {

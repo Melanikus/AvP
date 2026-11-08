@@ -232,6 +232,40 @@ static void UpTheWalls()
 	Check(atTheTop, "it crosses from one to the other at their top, 1 m up");
 }
 
+// A floor stepped onto from a wall costs at least kAlienWaysLeastFloorStep. Here two walls 6 m tall stand in a line with a 20 mm gap between
+// them, too wide to touch, and under the gap is a strip of floor 40 mm wide that touches both. A ceiling joins their tops. Seen from the side:
+//
+//      y = -6000  +==================== ceiling ======================+
+//                 |      wall 1 (z 0 to 5000)  ||  wall 2 (5020 on)   |
+//      y = 0      +--+                     strip ^^                 +--+
+//                 start floor                                     goal floor
+//
+// Without the least step, dropping onto the strip costs 30 mm of floor, 0.3 at a price of 10: down 1.5 m and up 1.5 m again comes to 17.8
+// from the first wall to the second. Over the ceiling it's 20.5. With the least step the strip costs 5, so the ceiling wins.
+static void NoFreeStepDown()
+{
+	printf("A floor stepped onto from a wall costs at least half a metre\n");
+	std::vector<AlienWaysPolygon> world;
+	world.push_back(Polygon({ { 0, 0, 0 }, { 2000, 0, 0 }, { 2000, 0, 1000 }, { 0, 0, 1000 } }, kUp));               // 0: the start's floor
+	world.push_back(Polygon({ { 0, 0, 9000 }, { 2000, 0, 9000 }, { 2000, 0, 10000 }, { 0, 0, 10000 } }, kUp));       // 1: the goal's floor
+	world.push_back(Polygon({ { 0, 0, 4990 }, { 2000, 0, 4990 }, { 2000, 0, 5030 }, { 0, 0, 5030 } }, kUp));         // 2: the strip
+	world.push_back(Polygon({ { 0, 0, 0 }, { 0, -6000, 0 }, { 0, -6000, 5000 }, { 0, 0, 5000 } }, kUpright));         // 3: wall 1
+	world.push_back(Polygon({ { 0, 0, 5020 }, { 0, -6000, 5020 }, { 0, -6000, 10000 }, { 0, 0, 10000 } }, kUpright)); // 4: wall 2
+	world.push_back(Polygon({ { 0, -6000, 0 }, { 2000, -6000, 0 }, { 2000, -6000, 10000 }, { 0, -6000, 10000 } }, kDown)); // 5: the ceiling
+	AlienWaysMap map;
+	Check(map.Build(world) == nullptr && SearchAll(map, 0, { 1000, 0, 500 }, 1, { 1000, 0, 9500 }, 10) == kAlienWaysFound, "a way is found from one floor to the other");
+	bool onTheStrip = false;
+
+	for (AlienWaysPoint const &p : map.Way())
+	{
+		onTheStrip = onTheStrip || (p.y == 0 && p.z >= 4990 && p.z <= 5030);
+	}
+
+	// Up wall 1 to the ceiling at z = 500, 4.52 m along it to wall 2, and down that
+	Check(!onTheStrip && Near(MetresOf(map.Way()).ceiling, 4.52, 0.01),
+		"it doesn't drop off the wall onto the strip for 30 mm and climb back: it goes over the ceiling");
+}
+
 static void Kinds()
 {
 	printf("Which kind a polygon is\n");
@@ -678,6 +712,7 @@ static void Adding()
 	Check(AlienWays_AddPolygon(x, y, z, 4, 0.5f, &list) == kAlienWaysAddedAsItIs && list.size() == 1, "a polygon of 4 corners goes in as it is");
 	Check(list.size() == 1 && list[0].corners == 4 && list[0].x[2] == 1000 && list[0].z[3] == 500 && list[0].up == 0.5f, "with its own corners and facing");
 	Check(list.size() == 1 && list[0].x[4] == 0 && list[0].x[7] == 0, "and the places it doesn't use are 0");
+	Check(list.size() == 1 && list[0].door == 0, "it's part of no door");
 	Check(AlienWays_AddPolygon(x, y, z, 3, 1.0f, &list) == kAlienWaysAddedAsItIs && list.size() == 2, "3 corners goes in");
 	Check(AlienWays_AddPolygon(x, y, z, 8, 1.0f, &list) == kAlienWaysAddedAsItIs && list.size() == 3 && list[2].corners == 8, "8 corners goes in, all of them");
 	Check(AlienWays_AddPolygon(x, y, z, 9, 1.0f, &list) == kAlienWaysLeftOutTooManyCorners && list.size() == 3, "9 corners is left out, not cut down to 8");
@@ -698,6 +733,136 @@ static void BuiltAgain()
 	Check(!map.Ready() && map.Polygons() == 0, "Clear leaves no map");
 }
 
+// The door world, seen from above, all floor squares 1 m across at y = 0. Room A is square 0, room B square 2, and square 1 between them is
+// door 1. The way round goes up through squares 3 to 7, past the hole in the middle; squares that meet only at a corner touch there too.
+//
+//      z = 3000  +-----+-----+-----+
+//                |  4  |  5  |  6  |
+//      z = 2000  +-----+-----+-----+
+//                |  3  | hole|  7  |
+//      z = 1000  +-----+-----+-----+
+//                |  0 A|  1  |  2 B|
+//      z = 0     +-----+-----+-----+
+//              x = 0  1000  2000  3000
+static std::vector<AlienWaysPolygon> DoorWorld(bool wayRound)
+{
+	std::vector<AlienWaysPolygon> world = { Square(0, 0, 0, 1000), Square(1000, 0, 0, 1000), Square(2000, 0, 0, 1000) };
+	world[1].door = 1;
+
+	if (wayRound)
+	{
+		world.push_back(Square(0, 0, 1000, 1000));
+		world.push_back(Square(0, 0, 2000, 1000));
+		world.push_back(Square(1000, 0, 2000, 1000));
+		world.push_back(Square(2000, 0, 2000, 1000));
+		world.push_back(Square(2000, 0, 1000, 1000));
+	}
+
+	return world;
+}
+
+// Whether any stretch of the way runs across the inside of the door's square. A way is straight from point to point across each polygon, so
+// one that goes through the door has a stretch with its middle inside it.
+static bool ThroughTheDoor(std::vector<AlienWaysPoint> const &way)
+{
+	for (size_t k = 1; k < way.size(); k++)
+	{
+		double const x = (static_cast<double>(way[k - 1].x) + way[k].x) / 2.0, z = (static_cast<double>(way[k - 1].z) + way[k].z) / 2.0;
+
+		if (x > 1000.0 && x < 2000.0 && z > 0.0 && z < 1000.0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void Doors()
+{
+	printf("Doors\n");
+	AlienWaysXYZ const inA = { 500, 0, 500 }, inB = { 2500, 0, 500 }, inTheDoor = { 1500, 0, 500 };
+	AlienWaysMap map;
+	Check(map.Build(DoorWorld(true)) == nullptr && map.Doors() == 1, "the door world builds, with one door");
+	Check(!map.DoorShut(1), "a door is open until the game says it's shut");
+
+	// Open: straight through, 1 m to the door, 1 m across it, and 0.5 m on each side: 2 m
+	Check(SearchAll(map, 0, inA, 2, inB, 1) == kAlienWaysFound && ThroughTheDoor(map.Way()) && Near(MetresOf(map.Way()).floor, 2.0, 0.01),
+		"with the door open, the way goes straight through it: 2 m");
+
+	// Shut: round the hole instead, and further
+	map.SetDoorShut(1, true);
+	Check(map.DoorShut(1), "the game can say a door is shut");
+	Check(SearchAll(map, 0, inA, 2, inB, 1) == kAlienWaysFound && !ThroughTheDoor(map.Way()) && MetresOf(map.Way()).floor > 4.0,
+		"with the door shut, the way goes round it, over 4 m");
+
+	// Open again: the next search sees it
+	map.SetDoorShut(1, false);
+	Check(SearchAll(map, 0, inA, 2, inB, 1) == kAlienWaysFound && ThroughTheDoor(map.Way()), "opened again, the next search goes through it again");
+
+	// A search sees the doors as they were when it started
+	Check(map.StartSearch(0, inA, 2, inB, 1) == nullptr, "a search starts with the door open");
+	map.SetDoorShut(1, true);
+	AlienWaysSearch state = kAlienWaysSearching;
+
+	for (int calls = 0; calls < 1000 && state == kAlienWaysSearching; calls++)
+	{
+		state = map.Work(1);
+	}
+
+	Check(state == kAlienWaysFound && ThroughTheDoor(map.Way()), "a door shut while it runs is still open for that search, as it was when it started");
+	Check(SearchAll(map, 0, inA, 2, inB, 1) == kAlienWaysFound && !ThroughTheDoor(map.Way()), "and the next search sees it shut");
+
+	// The start's polygon and the goal's are never kept off, so an alien in a doorway can leave it, and one can head for a target in one
+	Check(SearchAll(map, 1, inTheDoor, 2, inB, 1) == kAlienWaysFound && Near(MetresOf(map.Way()).floor, 1.0, 0.01),
+		"an alien already in a shut doorway can leave it, onto the side it's facing");
+	Check(SearchAll(map, 1, inTheDoor, 0, inA, 1) == kAlienWaysFound && Near(MetresOf(map.Way()).floor, 1.0, 0.01), "or the other side");
+	Check(SearchAll(map, 0, inA, 1, inTheDoor, 1) == kAlienWaysFound && !map.Way().empty() && At(map.Way().back(), inTheDoor),
+		"and a way can end in a shut doorway, where the goal is");
+
+	// Numbers that aren't one of the map's doors change nothing. Door 0 is no door: if it could be shut, every polygon that's part of no
+	// door would be kept off, and from A to the far corner there'd be no way at all.
+	map.SetDoorShut(1, false);
+	map.SetDoorShut(0, true);
+	map.SetDoorShut(-1, true);
+	map.SetDoorShut(2, true);
+	map.SetDoorShut(INT_MAX, true);
+	map.SetDoorShut(INT_MIN, true);
+	Check(!map.DoorShut(0) && !map.DoorShut(-1) && !map.DoorShut(2) && !map.DoorShut(INT_MAX) && !map.DoorShut(1),
+		"shutting a door the map hasn't got does nothing, and door 0, no door, is never shut");
+	Check(SearchAll(map, 0, inA, 6, { 2500, 0, 2500 }, 1) == kAlienWaysFound, "so a way across polygons that are part of no door is still found");
+
+	// With no way round, a shut door means no way at all
+	AlienWaysMap only;
+	Check(only.Build(DoorWorld(false)) == nullptr && SearchAll(only, 0, inA, 2, inB, 1) == kAlienWaysFound, "with no way round, an open door is the way");
+	only.SetDoorShut(1, true);
+	Check(SearchAll(only, 0, inA, 2, inB, 1) == kAlienWaysNoWay && only.Way().empty(), "and a shut one leaves no way at all");
+
+	// Which numbers a polygon's door can have
+	char const *const refused = "a polygon names a door below 0 or past the most doors the map takes";
+	std::vector<AlienWaysPolygon> world = DoorWorld(true);
+	world[1].door = -1;
+	Check(Says(map.Build(world), refused) && !map.Ready() && map.Doors() == 0, "a door below 0 is refused, and nothing is kept");
+	world[1].door = kAlienWaysMostDoors + 1;
+	Check(Says(map.Build(world), refused), "and so is one past the most");
+	world[1].door = kAlienWaysMostDoors;
+	Check(map.Build(world) == nullptr && map.Doors() == kAlienWaysMostDoors, "the most itself is taken, and counted");
+	map.SetDoorShut(kAlienWaysMostDoors, true);
+	Check(map.DoorShut(kAlienWaysMostDoors) && SearchAll(map, 0, inA, 2, inB, 1) == kAlienWaysFound && !ThroughTheDoor(map.Way()),
+		"and that door can be shut like any other");
+
+	// A door all of whose polygons are left out as scenery still counts, so the doors keep the numbers they were given
+	world = DoorWorld(true);
+	AlienWaysPolygon sky = Square(-50000, -20000, -50000, 100000);
+	sky.door = 3;
+	world.push_back(sky);
+	Check(map.Build(world) == nullptr && map.PolygonsLeftOut() == 1 && map.Doors() == 3, "a door left out as scenery still counts in the doors' numbers");
+
+	Check(map.Build(Corridor(10, 1000)) == nullptr && map.Doors() == 0, "a world filled in with zeros has no doors");
+	map.Clear();
+	Check(map.Doors() == 0 && !map.DoorShut(1), "Clear leaves no doors");
+}
+
 int main()
 {
 	Kinds();
@@ -713,10 +878,12 @@ int main()
 	CornersPlaced();
 	Nearest();
 	UpTheWalls();
+	NoFreeStepDown();
 	Limits();
 	Stopping();
 	Adding();
 	BuiltAgain();
+	Doors();
 
 	if (checksFailed)
 	{

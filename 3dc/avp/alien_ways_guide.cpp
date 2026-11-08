@@ -108,6 +108,21 @@ static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWays
 	return before == after || KindUnder(down) == static_cast<int>(after);
 }
 
+bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open)
+{
+	switch (kind)
+	{
+		case kAlienWaysProximityDoor:
+			return !locked;
+		case kAlienWaysLiftDoor:
+		case kAlienWaysSwitchDoor:
+			return open;
+	}
+
+	// Not one of the kinds: taken as shut, so no way is planned through it
+	return false;
+}
+
 AlienWaysGuide::AlienWaysGuide()
 {
 	Clear();

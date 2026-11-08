@@ -7637,6 +7637,97 @@ static void AddTheFixedBufferToNormalLines(NormalLinesList &list, const float *v
 	}
 }
 
+// The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), whenever the developer
+// switch that makes the ways is on (-dev -alienways). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
+// frame of the game. The lines go through the same sums as the level's own polygons, by this frame's ViewMatrix, so a wall hides a way behind
+// it. Everything this changes on the card is put back afterwards, as DrawNormalLines does. Never in a network game: it would show where the
+// aliens are going, through the walls.
+static void DrawAlienWays()
+{
+	if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)
+	{
+		return;
+	}
+
+	static const size_t kMostShown = 64;
+	AlienWaysShown shown[kMostShown];
+	size_t const count = AlienWays_WaysToShow(shown, kMostShown);
+
+	static std::vector<AlienWaysViewEnd> ends;
+	ends.clear();
+
+	for (size_t i = 0; i < count && i < kMostShown; i++)
+	{
+		AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);
+	}
+
+	if (ends.empty())
+	{
+		return;
+	}
+
+	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
+	IDirect3DStateBlock9 *asItWas = 0;
+
+	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
+	{
+		return;
+	}
+
+	// The same settings as DrawNormalLines: plain coloured lines, no texture, tested against the level's depth but not written into it
+	d3d.effectSystem->SetActive(d3d.mainEffect);
+	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
+	d3d.mainDecl->Set();
+
+	device->SetPixelShader(NULL);
+	device->SetTexture(0, NULL);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	// Compared with the level's depth, so a wall hides a way behind it, and not written into it
+	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
+
+	static const size_t kMostLinesInOneDraw = 16000;
+	static std::vector<D3DLVERTEX> vertices;
+	vertices.resize(ends.size());
+
+	for (size_t i = 0; i < ends.size(); i++)
+	{
+		vertices[i].x = ends[i].x;
+		vertices[i].y = ends[i].y;
+		vertices[i].z = ends[i].z;
+		vertices[i].color = ends[i].colour;
+		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
+		vertices[i].u = 0.0f;
+		vertices[i].v = 0.0f;
+	}
+
+	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
+	{
+		size_t const left = ends.size() / 2 - line;
+
+		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
+	}
+
+	asItWas->Apply();
+	asItWas->Release();
+}
+
 // The NORMAL LINES view: see normal_lines.h. The lines go through the same sums as the level's own polygons, so the depth buffer can compare them with it, and that's what makes a wall hide them. Everything this changes
 // on the card is put back afterwards, because it's in the middle of the frame. Its pixel shader wants a texture and there's none, so it goes without. A network game gets none of this:
 // these views can show what's behind a wall.
@@ -7778,97 +7869,6 @@ static void DrawNormalLines()
 
 			device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
 		}
-	}
-
-	asItWas->Apply();
-	asItWas->Release();
-}
-
-// The ALIEN WAYS view: the way each alien is following, as coloured lines through the level (alien_ways_view.h), whenever the developer
-// switch that makes the ways is on (-dev -alienways). AlienWays_WaysToShow gives the ways, on this, the game's thread, good until the next
-// frame of the game. The lines go through the same sums as the level's own polygons, by this frame's ViewMatrix, so a wall hides a way behind
-// it. Everything this changes on the card is put back afterwards, as DrawNormalLines does. Never in a network game: it would show where the
-// aliens are going, through the walls.
-static void DrawAlienWays()
-{
-	if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)
-	{
-		return;
-	}
-
-	static const size_t kMostShown = 64;
-	AlienWaysShown shown[kMostShown];
-	size_t const count = AlienWays_WaysToShow(shown, kMostShown);
-
-	static std::vector<AlienWaysViewEnd> ends;
-	ends.clear();
-
-	for (size_t i = 0; i < count && i < kMostShown; i++)
-	{
-		AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);
-	}
-
-	if (ends.empty())
-	{
-		return;
-	}
-
-	LPDIRECT3DDEVICE9 const device = d3d.lpD3DDevice;
-	IDirect3DStateBlock9 *asItWas = 0;
-
-	if (FAILED(device->CreateStateBlock(D3DSBT_ALL, &asItWas)))
-	{
-		return;
-	}
-
-	// The same settings as DrawNormalLines: plain coloured lines, no texture, tested against the level's depth but not written into it
-	d3d.effectSystem->SetActive(d3d.mainEffect);
-	d3d.effectSystem->SetVertexShaderConstant(d3d.mainEffect, 0, CONST_MATRIX, &d3d.matProjection);
-	d3d.mainDecl->Set();
-
-	device->SetPixelShader(NULL);
-	device->SetTexture(0, NULL);
-	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
-	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
-	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-	device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
-
-	device->SetRenderState(D3DRS_LIGHTING, FALSE);
-	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-	device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-	device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
-	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-
-	// Compared with the level's depth, so a wall hides a way behind it, and not written into it
-	device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	ToySetFloatState(device, D3DRS_DEPTHBIAS, ShadowSurfaceBias);
-
-	static const size_t kMostLinesInOneDraw = 16000;
-	static std::vector<D3DLVERTEX> vertices;
-	vertices.resize(ends.size());
-
-	for (size_t i = 0; i < ends.size(); i++)
-	{
-		vertices[i].x = ends[i].x;
-		vertices[i].y = ends[i].y;
-		vertices[i].z = ends[i].z;
-		vertices[i].color = ends[i].colour;
-		vertices[i].specular = RGBA_MAKE(0, 0, 0, 0);
-		vertices[i].u = 0.0f;
-		vertices[i].v = 0.0f;
-	}
-
-	for (size_t line = 0; line < ends.size() / 2; line += kMostLinesInOneDraw)
-	{
-		size_t const left = ends.size() / 2 - line;
-
-		device->DrawPrimitiveUP(D3DPT_LINELIST, (UINT)(left < kMostLinesInOneDraw ? left : kMostLinesInOneDraw), &vertices[line * 2], sizeof(D3DLVERTEX));
 	}
 
 	asItWas->Apply();

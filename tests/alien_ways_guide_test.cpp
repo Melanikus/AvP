@@ -677,6 +677,22 @@ static void StartsOnItsOwnKind()
 	Check(ReportsOf(toTheTarget, &reports) == 1 && reports[0].toTheTarget, "when the goal is the target itself, the report says so");
 }
 
+// Which doors let an alien through: the rule the game's own routes for aliens follow (AIModuleAdmitsPheromones, pheromone.cpp)
+static void DoorRule()
+{
+	printf("Which doors let an alien through\n");
+	Check(AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, false, false),
+		"a proximity door that isn't locked lets an alien through while it's still shut: it opens as the alien comes near");
+	Check(AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, false, true), "and while it's open");
+	Check(!AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, true, false), "a locked one doesn't");
+	Check(!AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, true, true), "not even while it's still open, since a locked door shuts");
+	Check(!AlienWays_DoorLetsAnAlienThrough(kAlienWaysLiftDoor, false, false), "a lift's door that's shut doesn't");
+	Check(AlienWays_DoorLetsAnAlienThrough(kAlienWaysLiftDoor, false, true), "one that's open does");
+	Check(!AlienWays_DoorLetsAnAlienThrough(kAlienWaysSwitchDoor, false, false), "a switch's door that isn't all the way open doesn't");
+	Check(AlienWays_DoorLetsAnAlienThrough(kAlienWaysSwitchDoor, false, true), "one all the way open does");
+	Check(!AlienWays_DoorLetsAnAlienThrough(static_cast<AlienWaysDoorKind>(7), false, true), "a kind that isn't one of them is taken as shut");
+}
+
 // THE GAME'S SIDE, read from its own files, because only a running game reaches it
 
 // One source file, with Windows line ends made plain
@@ -827,6 +843,31 @@ static void SourceOfTheGame()
 
 	std::string const end = Between(ways, "void AlienWays_LevelEnd()", "told = true;");
 	Check(ComesBefore(end, "theGuide.Clear();", "theBuild.Stop();"), "SOURCE: at a level's end the ways go, before the map they're on");
+	Check(Has(end, "std::vector<AlienWaysLevelDoor>().swap(theDoors);"), "SOURCE: and so do its doors");
+
+	// Doors (#118): each frame the map is told which doors won't let an alien through, before the searches carry on, each door read from its own
+	// module's block once that's checked to be its kind
+	std::string const level = ReadSourceFile("3dc/avp/alien_ways_level.cpp");
+	Check(!level.empty(), "SOURCE: the level's lister can be read");
+	Check(ComesBefore(frame, "AlienWaysLevel_ReadDoors(theDoors, ReadyMap());", "theGuide.Frame(ReadyMap()"),
+		"SOURCE: each frame the map hears about the doors before the searches carry on");
+	Check(Has(ways, "AlienWaysLevel_List(&polygons, &theModules, &theDoors, &counts);"), "SOURCE: the doors are listed with the level's polygons");
+	Check(Has(level, "\t\t\tfor (size_t p = first; p < listing->polygons->size(); p++)\n\t\t\t{\n\t\t\t\t(*listing->polygons)[p].door = door;"),
+		"SOURCE: every polygon of a door's module carries the door's number");
+	Check(Has(level, "case I_BehaviourProximityDoor: isADoor = true; kind = kAlienWaysProximityDoor; break;")
+		&& Has(level, "case I_BehaviourLiftDoor:      isADoor = true; kind = kAlienWaysLiftDoor;      break;")
+		&& Has(level, "case I_BehaviourSwitchDoor:    isADoor = true; kind = kAlienWaysSwitchDoor;    break;"),
+		"SOURCE: the three kinds of door the game knows are listed as doors");
+	std::string const readDoors = Between(level, "void AlienWaysLevel_ReadDoors(", "map->SetDoorShut(");
+	Check(Has(readDoors, "if (door && door->SBdataptr)"), "SOURCE: a door with no block is never read");
+	Check(Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourProximityDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tPROXDOOR_BEHAV_BLOCK const *const block")
+		&& Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourLiftDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tthrough =")
+		&& Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourSwitchDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tthrough ="),
+		"SOURCE: each door's block is read only once it's checked to be that kind");
+	Check(Has(readDoors, "through = AlienWays_DoorLetsAnAlienThrough(kAlienWaysProximityDoor, block->door_locked != 0, GetState(door) != 0);"),
+		"SOURCE: a proximity door is judged by whether it's locked");
+	Check(Has(readDoors, "bool through = false;"), "SOURCE: a door that can't be read is taken as shut");
+	Check(Has(level, "map->SetDoorShut(static_cast<int>(d) + 1, !through);"), "SOURCE: and the map is told each door's state, by the number its polygons carry");
 
 	Check(Has(project, "<ClCompile Include=\"..\\..\\3dc\\avp\\alien_ways_guide.cpp\" />"), "SOURCE: the game's project builds the guide");
 }
@@ -846,6 +887,7 @@ int main()
 	Allowance();
 	NoBetterThanToday();
 	StartsOnItsOwnKind();
+	DoorRule();
 	SourceOfTheGame();
 
 	if (checksFailed)
