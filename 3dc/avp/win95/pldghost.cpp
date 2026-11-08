@@ -1,13 +1,19 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a dead player leaves no gun in a game that plays as single player
+//   a marine holding one of M5's guns has its model and firing sound, and a dropped one has a shape
 //   a ghost of a kind this game can't show, or with a shape it hasn't loaded, isn't made
+//   whether the model for a kind of alien is loaded can be asked before making a ghost from a message that names it
+//   ghosts for the NPCs the host runs in a game that plays the same as single player: see npc_ghosts.cpp
 //   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
-//   a corpse with no display block stays far, and what only an autogun's ghost used has gone, because no network game has one
+//   a corpse with no display block stays far
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   angles received from other players are kept between 0 and 4095 before a sine or cosine lookup
+//   a ghost whose model has no elevation animation no longer crashes
+//   the disc and gun flash parts are checked before use; a landed disc no longer reads a part after freeing it
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -37,6 +43,7 @@ d  ----------------------------------------------------------------------*/
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "tables.h"
+#include "npc_ghosts.h"
 
 /*----------------------------------------------------------------------
   Global Variables
@@ -72,6 +79,7 @@ void UpdateObjectTrails(STRATEGYBLOCK *sbPtr);
 void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon);
 void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType);
 void CreatePredatorHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon);
+static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation);
 void UpdateAlienAIGhostAnimSequence(STRATEGYBLOCK *sbPtr,HMODEL_SEQUENCE_TYPES type, int subtype, int length, int tweeningtime);
 void MakePlasmaTrailParticles(DYNAMICSBLOCK *dynPtr, int number);
 void MakeGrenadeTrailParticles(VECTORCH *prevPositionPtr, VECTORCH *positionPtr);
@@ -267,12 +275,21 @@ void UpdateObjectTrails(STRATEGYBLOCK *sbPtr)
 }
 
 
+extern PLAYER_STATUS *PlayerStatusPtr;
+
 /* removes a ghost */
 void RemoveGhost(STRATEGYBLOCK *sbPtr)
 {
 	NETGHOSTDATABLOCK *ghostData;
 
 	LOCALASSERT(sbPtr);
+
+	/* A facehugger on my face may be a ghost, and the HUD draws what this points at every frame, so it can't be left pointing at one that has gone */
+	if (PlayerStatusPtr && PlayerStatusPtr->MyFaceHugger == sbPtr)
+	{
+		PlayerStatusPtr->MyFaceHugger = NULL;
+	}
+
 	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
 	LOCALASSERT(ghostData);
 	
@@ -423,6 +440,7 @@ STRATEGYBLOCK *FindGhost(NetID Id, int obId)
 
 /* create a new ghost: doesn't do shape animation stuff: this is performed using a
 seperate set of functions */
+
 STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype)
 {
 	int i;
@@ -459,7 +477,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 
 		/* need different templates for objects and sprites */
 		#if EXTRAPOLATION_TEST
-		if(type==I_BehaviourMarinePlayer||type==I_BehaviourAlienPlayer||type==I_BehaviourPredatorPlayer || type==I_BehaviourAlien)
+		if(type==I_BehaviourMarinePlayer||type==I_BehaviourAlienPlayer||type==I_BehaviourPredatorPlayer || type==I_BehaviourAlien || NpcGhosts_TypeIsAnNpc(type))
 		{
 			dynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_MARINE_PLAYER);
 			if(dynPtr && (type==I_BehaviourAlienPlayer || type==I_BehaviourAlien))
@@ -494,7 +512,9 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 
 	/* data block */
 	{
-		NETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK)); 
+		NETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));
+		// New memory holds whatever was there before, and not every kind of ghost sets every field. AllocateMem stops the game rather than give back nothing.
+		memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));
 		if(!ghostData) 
 		{
 			/* allocation failed */
@@ -613,6 +633,24 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 				ProveHModel_Far(&ghostData->HModelController,sbPtr);
 				break;
 			}
+
+			// The kinds in npc_kinds.h. The caller has checked the model is loaded, but this checks it can really be made.
+			case(I_BehaviourMarine):
+			case(I_BehaviourPredator):
+			case(I_BehaviourXenoborg):
+			case(I_BehaviourQueenAlien):
+			case(I_BehaviourFaceHugger):
+			case(I_BehaviourAutoGun):
+			{
+				if (!NpcGhosts_MakeModel(ghostData, type, subtype))
+				{
+					RemoveBehaviourStrategy(sbPtr);
+					return NULL;
+				}
+
+				ProveHModel_Far(&ghostData->HModelController,sbPtr);
+				break;
+			}
 			
 			
 			case(I_BehaviourGrenade):
@@ -712,11 +750,23 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 						case WEAPON_FRISBEE_LAUNCHER:
 							sbPtr->shapeIndex=GetLoadedShapeMSL("sadar");
 							break;
+						case WEAPON_AUTOSHOTGUN:
+						case WEAPON_BEAMCANNON:
+						case WEAPON_MYSTERYGUN:
+							sbPtr->shapeIndex=GetLoadedShapeMSL("shotgunpick");
+							break;
 						default :
 							// The number came in a message, so it could be anything
 							sbPtr->shapeIndex = -1;
 							break;
 					}
+
+					// And the new guns' model file may not be there
+					if (sbPtr->shapeIndex<0)
+					{
+						sbPtr->shapeIndex=GetLoadedShapeMSL("pulse");
+					}
+
 					sbPtr->DynPtr->IsPickupObject=1;
 
 				}
@@ -816,7 +866,8 @@ void PlayerGhostExtrapolation()
 			if(ghostData->type==I_BehaviourMarinePlayer ||
 			   ghostData->type==I_BehaviourAlienPlayer ||
 			   ghostData->type==I_BehaviourAlien ||
-			   ghostData->type==I_BehaviourPredatorPlayer)
+			   ghostData->type==I_BehaviourPredatorPlayer ||
+			   NpcGhosts_TypeIsAnNpc(ghostData->type))
 			{
 				int time;
 				DYNAMICSBLOCK* dynPtr= sbPtr->DynPtr;
@@ -999,6 +1050,14 @@ void ChangeGhostMarineAccoutrementSet(HMODELCONTROLLER *HModelController, NetID 
 
 }
 
+// A marine holding one of M5's guns. Those models are in files that may not be there, and without one he holds the pulse rifle, rather than the game building a model from nothing.
+static SECTION *MarineWithNewGun(const char *name)
+{
+	SECTION *const found = GetNamedHierarchyFromLibrary("hnpcmarine", name);
+
+	return found ? found : GetNamedHierarchyFromLibrary("hnpcmarine","marine with pulse rifle");
+}
+
 // The body a marine's ghost needs to be holding this gun. Nothing, if this level didn't load it, and which gun came in a message.
 static SECTION *MarineBodyForGun(int weapon)
 {
@@ -1046,6 +1105,26 @@ static SECTION *MarineBodyForGun(int weapon)
 		case WEAPON_GRENADELAUNCHER:
 		{
 			root_section = GetNamedHierarchyFromLibrary("hnpcmarine","marine + grenade launcher");
+			break;
+		}
+		case WEAPON_AUTOSHOTGUN:
+		{
+			root_section = MarineWithNewGun("Marine with Shotgun");
+			break;
+		}
+		case WEAPON_SONICCANNON:
+		{
+			root_section = MarineWithNewGun("Sniper Marine");
+			break;
+		}
+		case WEAPON_BEAMCANNON:
+		{
+			root_section = MarineWithNewGun("Revolver Marine");
+			break;
+		}
+		case WEAPON_MYSTERYGUN:
+		{
+			root_section = MarineWithNewGun("M79 Marine");
 			break;
 		}
 		case WEAPON_CUDGEL:
@@ -1105,6 +1184,22 @@ void CreateMarineHModel(NETGHOSTDATABLOCK *ghostDataPtr, int weapon)
 	ghostDataPtr->hltable=(HITLOCATIONTABLE*)GetThisHitLocationTable("marine with pulse rifle");
 
 }
+// Is the model for this kind of alien loaded? A network message names the kind, and a level only loads the ones it uses, so this has to be asked before making a ghost from one.
+bool AlienModelIsLoaded(int alienType)
+{
+	switch(alienType)
+	{
+		case AT_Predalien :
+			return GetNamedHierarchyFromLibrary("hnpcpred_alien","TEMPLATE") != NULL;
+		case AT_Praetorian :
+			return GetNamedHierarchyFromLibrary("hnpcpretorian","Template") != NULL;
+		case AT_Standard :
+			return GetNamedHierarchyFromLibrary("hnpcalien","alien") != NULL;
+		default :
+			return false;
+	}
+}
+
 void CreateAlienHModel(NETGHOSTDATABLOCK *ghostDataPtr,int alienType)
 {
 	SECTION *root_section;
@@ -1316,6 +1411,7 @@ void MakeGhostNear(STRATEGYBLOCK *sbPtr)
     }
 	else if (
 		(ghostData->type == I_BehaviourAlien)||
+		NpcGhosts_TypeIsAnNpc(ghostData->type)||
 		(ghostData->type == I_BehaviourPredatorDisc_SeekTrack)||
 		(ghostData->type == I_BehaviourFrisbee)||
 		(ghostData->type == I_BehaviourNetCorpse)
@@ -1670,9 +1766,7 @@ void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn)
 		if(gunFlashOn)
 		{
 			/* Maintain existing gun flash */
-			LOCALASSERT(ghostData->GunflashSectionPtr);
-			
-			if (sbPtr->SBdptr)
+			if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 			{
 				ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 				MaintainNPCGunFlashEffect
@@ -1697,9 +1791,8 @@ void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn)
 		if(gunFlashOn)
 		{
 			/* new flash */
-			LOCALASSERT(ghostData->GunflashSectionPtr);
 			ghostData->GunFlashFrameStamp=GlobalFrameCounter;
-	 		if (sbPtr->SBdptr)
+	 		if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 	 		{
 			 	ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 
@@ -3078,7 +3171,23 @@ void HandlePlayerGhostWeaponSound(STRATEGYBLOCK *sbPtr, int weapon, int firingPr
 			LOCALASSERT(type==I_BehaviourMarinePlayer);
 			/* stop sound if we've got it */
 			if(ghostData->SoundHandle != SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
-			if(firingPrimary) Sound_Play(SID_SHOTGUN,"hd",&(sbPtr->DynPtr->Position));						
+			if(firingPrimary) Sound_Play(SID_WEAPON_SHOTGUN_FIRE,"hd",&(sbPtr->DynPtr->Position));
+			break;
+		}
+		case(WEAPON_BEAMCANNON):
+		{
+			LOCALASSERT(type==I_BehaviourMarinePlayer);
+			/* stop sound if we've got it */
+			if(ghostData->SoundHandle != SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
+			if(firingPrimary) Sound_Play(SID_WEAPON_REVOLVER_FIRE,"hd",&(sbPtr->DynPtr->Position));
+			break;
+		}
+		case(WEAPON_MYSTERYGUN):
+		{
+			LOCALASSERT(type==I_BehaviourMarinePlayer);
+			/* stop sound if we've got it */
+			if(ghostData->SoundHandle != SOUND_NOACTIVEINDEX) Sound_Stop(ghostData->SoundHandle);
+			if(firingPrimary) Sound_Play(SID_ROCKFIRE,"hd",&(sbPtr->DynPtr->Position));
 			break;
 		}
 		case(WEAPON_SMARTGUN):
@@ -3136,7 +3245,7 @@ void HandlePlayerGhostWeaponSound(STRATEGYBLOCK *sbPtr, int weapon, int firingPr
 			}
 			if (firingPrimary)
 			{
-				if (sbPtr->SBdptr)
+				if (sbPtr->SBdptr && ghostData->GunflashSectionPtr)
 				{
 					ProveHModel(&ghostData->HModelController,sbPtr->SBdptr);
 					FireNetGhostFlameThrower
@@ -3376,6 +3485,19 @@ int ExtractTimerFromElevation(int elevation) {
 }
 
 /* KJL 17:11:43 26/01/98 - weapon elevation */
+/*
+	Gets a ghost's elevation animation, which is looked up by name in its model. The long lists of settings below all
+	write to it, so a model without one gets a spare to write to instead. Nothing ever plays the spare.
+*/
+static DELTA_CONTROLLER *GetGhostElevation(HMODELCONTROLLER *controller)
+{
+	static DELTA_CONTROLLER spareElevation;
+
+	DELTA_CONTROLLER *elevation = Get_Delta_Sequence(controller, "Elevation");
+
+	return elevation ? elevation : &spareElevation;
+}
+
 void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 {
 	NETGHOSTDATABLOCK *ghostDataPtr;
@@ -3405,9 +3527,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
 	
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1;
 		switch(ghostDataPtr->currentAnimSequence) {
 			case MSQ_StandDieFront:
@@ -3595,9 +3716,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			CreatePredatorHModel(ghostDataPtr, weapon);
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1; /* enabled? */
 		switch(ghostDataPtr->currentAnimSequence) {
 			case PredSQ_Taunt:
@@ -3667,9 +3787,8 @@ void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon)
 			ProveHModel_Far(&ghostDataPtr->HModelController,sbPtr);
 		}
 		
-		elevation_controller=Get_Delta_Sequence(&ghostDataPtr->HModelController,"Elevation");
+		elevation_controller=GetGhostElevation(&ghostDataPtr->HModelController);
 		/* Deal with elevation sequence. */
-		GLOBALASSERT(elevation_controller);
 		elevation_controller->Active=1; /* enabled? */
 		switch(ghostDataPtr->currentAnimSequence) {
 			case ASQ_Pain:
@@ -3899,6 +4018,115 @@ void MaintainGhosts(void)
 	}	
 }
 
+/* Patrick 13/10/97 --------------------------------------------------
+Added for autogun ghost support
+---------------------------------------------------------------------*/
+#define AGUNGHOST_FIRINGPOINT_INFRONT	500
+#define AGUNGHOST_FIRINGPOINT_ACROSS	0
+#define AGUNGHOST_FIRINGPOINT_UP		200
+
+void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing)
+{
+	NETGHOSTDATABLOCK *ghostData;
+
+	LOCALASSERT(sbPtr);
+	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
+	LOCALASSERT(ghostData);
+	LOCALASSERT(ghostData->type == I_BehaviourAutoGun);
+
+	if(ghostData->myGunFlash)
+	{
+		/* I've already got a gun flash... */
+		if(firing)
+		{
+			/* Maintain existing gun flash */
+			VECTORCH position;
+			EULER orientation;
+			MATRIXCH mat;
+			CalculatePosnForGhostAutoGunMuzzleFlash(sbPtr, &position, &orientation);
+			
+			CreateEulerMatrix(&orientation, &mat);
+			TransposeMatrixCH(&mat);	
+
+			MaintainNPCGunFlashEffect(ghostData->myGunFlash, &position, &mat);
+		}
+		else
+		{
+			RemoveNPCGunFlashEffect(ghostData->myGunFlash);
+			ghostData->myGunFlash = NULL;
+		} 
+	}
+	else
+	{
+		if(firing)
+		{
+  			/* Need a new gun flash */
+			VECTORCH position;
+			EULER orientation;
+			MATRIXCH mat;
+			CalculatePosnForGhostAutoGunMuzzleFlash(sbPtr, &position, &orientation);
+			CreateEulerMatrix(&orientation, &mat);
+			TransposeMatrixCH(&mat);	
+			ghostData->myGunFlash = AddNPCGunFlashEffect(&position, &mat, SFX_MUZZLE_FLASH_AMORPHOUS);
+		}
+	}
+}
+
+void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing)
+{
+	NETGHOSTDATABLOCK *ghostData;
+	AVP_BEHAVIOUR_TYPE type;
+
+	LOCALASSERT(sbPtr);
+	LOCALASSERT(sbPtr->DynPtr);		
+
+	ghostData = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
+	LOCALASSERT(ghostData);
+	type = ghostData->type;
+	LOCALASSERT(type==I_BehaviourAutoGun);
+
+	if(firing)
+	{
+		if(ghostData->SoundHandle == SOUND_NOACTIVEINDEX)
+			Sound_Play(SID_SENTRY_GUN,"eld",&(ghostData->SoundHandle),&(sbPtr->DynPtr->Position));					
+		/* don't need sound update, as autoguns don't move */
+	}
+	else if(ghostData->SoundHandle != SOUND_NOACTIVEINDEX) 
+	{	
+		Sound_Stop(ghostData->SoundHandle);				
+		Sound_Play(SID_SENTRY_END,"hd",&(sbPtr->DynPtr->Position));					
+	}
+}
+
+static void CalculatePosnForGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr,VECTORCH *position, EULER *orientation)
+{
+	VECTORCH upNormal = {0,-65536,0};
+	VECTORCH inFrontVec = {0,0,0};
+	VECTORCH toSideVec = {0,0,0};
+	EULER firingOrient = {0,0,0};
+
+	/* orientation is easy */
+	firingOrient.EulerY = sbPtr->DynPtr->OrientEuler.EulerY;
+	*orientation = firingOrient;
+
+	/* vector in front */
+	inFrontVec.vx = GetSin(firingOrient.EulerY & wrap360);
+	inFrontVec.vz = GetCos(firingOrient.EulerY & wrap360);
+	Normalise(&inFrontVec);
+
+	/* vectors in front, to side, and up */
+	CrossProduct(&inFrontVec,&upNormal,&toSideVec);
+	LOCALASSERT(toSideVec.vy==0);
+	inFrontVec.vx = MUL_FIXED(inFrontVec.vx,AGUNGHOST_FIRINGPOINT_INFRONT);
+	inFrontVec.vz = MUL_FIXED(inFrontVec.vz,AGUNGHOST_FIRINGPOINT_INFRONT);
+	toSideVec.vx = MUL_FIXED(toSideVec.vx,AGUNGHOST_FIRINGPOINT_ACROSS);
+	toSideVec.vz = MUL_FIXED(toSideVec.vz,AGUNGHOST_FIRINGPOINT_ACROSS);
+
+	position->vx = sbPtr->DynPtr->Position.vx + inFrontVec.vx +	toSideVec.vx;
+	position->vy = sbPtr->DynPtr->Position.vy - AGUNGHOST_FIRINGPOINT_UP;
+	position->vz = sbPtr->DynPtr->Position.vz + inFrontVec.vz +	toSideVec.vz;
+}
+
 /* patrick 14/10/97 : added to support cloaked predators in net game */
 void MaintainGhostCloakingStatus(STRATEGYBLOCK *sbPtr, int IsCloaked)
 {
@@ -3910,7 +4138,7 @@ void MaintainGhostCloakingStatus(STRATEGYBLOCK *sbPtr, int IsCloaked)
 	LOCALASSERT(ghostData);
 	type = ghostData->type;
 
-	if(type!=I_BehaviourPredatorPlayer) 
+	if(type!=I_BehaviourPredatorPlayer && type!=I_BehaviourPredator)
 	{
 		ghostData->CloakingEffectiveness = 0;		
 		return;
@@ -4878,6 +5106,10 @@ STRATEGYBLOCK *MakeNewCorpse()
 				corpseData->hltable=GetThisHitLocationTable("marine with pulse rifle");
 				/* Select hierarchy from character's selected weapon. */
 				//while we're at it , also deal with creating the pickupable weapon
+				// (Not in a game that plays as single player, where a dead player leaves nothing behind. The game picks up
+				// anything within 1.6 m of a player, and the next player starts 1.5 m away, so a teammate would get its
+				// ammunition the moment he died.)
+				if (!SameAsSinglePlayer())
 			   	{
 
 			   		VECTORCH location=Player->ObStrategyBlock->DynPtr->Position;
@@ -4929,6 +5161,26 @@ STRATEGYBLOCK *MakeNewCorpse()
 					case WEAPON_GRENADELAUNCHER:
 					{
 						root_section = GetNamedHierarchyFromLibrary("hnpcmarine","marine + grenade launcher");
+						break;
+					}
+					case WEAPON_AUTOSHOTGUN:
+					{
+						root_section = MarineWithNewGun("Marine with Shotgun");
+						break;
+					}
+					case WEAPON_SONICCANNON:
+					{
+						root_section = MarineWithNewGun("Sniper Marine");
+						break;
+					}
+					case WEAPON_BEAMCANNON:
+					{
+						root_section = MarineWithNewGun("Revolver Marine");
+						break;
+					}
+					case WEAPON_MYSTERYGUN:
+					{
+						root_section = MarineWithNewGun("M79 Marine");
 						break;
 					}
 					case WEAPON_CUDGEL:
@@ -5154,14 +5406,19 @@ void Convert_DiscGhost_To_PickupGhost(STRATEGYBLOCK *sbPtr) {
 	{
 		SECTION_DATA *disc_section;
 		disc_section=GetThisSectionData(ghostData->HModelController.section_data,"disk");
-		GLOBALASSERT(disc_section);
 
-		sbPtr->shapeIndex=disc_section->sempai->ShapeNum;
-		Dispel_HModel(&ghostData->HModelController);
-		if (sbPtr->SBdptr) {
-			sbPtr->SBdptr->ObShape=disc_section->sempai->ShapeNum;
-			sbPtr->SBdptr->ObShapeData=disc_section->sempai->Shape;
-			sbPtr->SBdptr->HModelControlBlock=NULL;
+		if (disc_section) {
+			// Dispel_HModel frees disc_section, so what's needed from it is copied out first. The part it points to,
+			// in the model's own file data, stays
+			SECTION *disc=disc_section->sempai;
+
+			sbPtr->shapeIndex=disc->ShapeNum;
+			Dispel_HModel(&ghostData->HModelController);
+			if (sbPtr->SBdptr) {
+				sbPtr->SBdptr->ObShape=disc->ShapeNum;
+				sbPtr->SBdptr->ObShapeData=disc->Shape;
+				sbPtr->SBdptr->HModelControlBlock=NULL;
+			}
 		}
 	}
 

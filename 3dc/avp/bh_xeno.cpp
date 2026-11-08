@@ -1,8 +1,13 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a xenoborg's block starts cleared, and the pointers to its moving parts are set as soon as it's made, not on its
 //   first turn, so waking it before then can't write through whatever the memory last held
+//   a xenoborg whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
+//   Bobblen's avp-forever, commit 207704e)
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a network game that plays the same as single player has xenoborgs, on the host
+//   when this dies on the host, its death target reaches the other machines
 //   a xenoborg that has just been killed no longer has its freed block read and written
+//   a xenoborg only goes after the players on other machines, not everything they throw and leave behind
 /* Patrick 4/7/97 ----------------------------------------------------
   Source file for Xenoborg AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -11,6 +16,11 @@
 //   deleted an old, switched-off (#if 0) version of a few lines of the head-turning code, which was never
 //   compiled, so code scanners can read the file; the game runs the same code as before;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   a Xenoborg placed outside every module is left out, instead of crashing
+//   a Xenoborg left without its animations by a save file is left out of the game
+//   the neck is checked before use, because a save file can leave it out
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 
 /* ChrisF 6/7/98.  Hopeless.  I'll have to take off and nuke the
  entire site from orbit. */
@@ -23,6 +33,7 @@
 #include "bh_types.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pvisible.h"
@@ -214,6 +225,12 @@ void CreateXenoborg(VECTORCH *Position,int type)
 
 	sbPtr->maintainVisibility = 1;
 	sbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);
+	if (!sbPtr->containingModule)
+	{
+		/* it isn't inside any module, and the lines below need one, so it can't be placed */
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
 
 	/* create, initialise and attach an alien data block */
 	sbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));
@@ -478,8 +495,8 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	toolsData = (TOOLS_DATA_XENO *)bhdata;
 	LOCALASSERT(sbPtr);
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no xenoborgs, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
@@ -488,7 +505,7 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* make the assumption that the loader has initialised the strategy block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapeIndex;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_SPRITE_NPC);
@@ -512,6 +529,12 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 	sbPtr->maintainVisibility = 1;
 	sbPtr->containingModule = ModuleFromPosition(&(sbPtr->DynPtr->Position), (MODULE*)0);
+	if (!sbPtr->containingModule)
+	{
+		/* it isn't inside any module, and the lines below need one, so it can't be placed */
+		RemoveBehaviourStrategy(sbPtr);
+		return;
+	}
 
 	/* create, initialise and attach a xeno data block */
 	sbPtr->SBdataptr = (void *)AllocateMem(sizeof(XENO_STATUS_BLOCK));
@@ -653,7 +676,12 @@ void InitXenoborgBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		root_section=GetNamedHierarchyFromLibrary("hnpc_xenoborg","xenobasic");
 
-		GLOBALASSERT(root_section);
+		// Its model's parts and its sounds were set to none above, so taking it out here frees and stops nothing
+		if (!NpcModelIsLoaded(root_section, "a xenoborg the level places", "hnpc_xenoborg", "xenobasic"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 
 		Create_HModel(&xenoStatus->HModelController,root_section);
 		InitHModelSequence(&xenoStatus->HModelController,HMSQT_Xenoborg,XBSS_Powered_Down_Standard,ONE_FIXED);
@@ -1193,6 +1221,7 @@ static void KillXeno(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int
 	if(xenoStatusPointer->death_target_sbptr)
 	{
 		RequestState(xenoStatusPointer->death_target_sbptr,xenoStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 
@@ -1835,7 +1864,12 @@ void Xeno_TurnAndTarget(STRATEGYBLOCK *sbPtr, int *ref_anglex,int *ref_angley) {
 		SECTION_DATA *head_section;
 
 		head_section=GetThisSectionData(xenoStatusPointer->HModelController.section_data,"neck");
-		GLOBALASSERT(head_section);
+
+		// a part of a model can be missing from a save file. The first part of a model can't, so aim from that
+		if (!head_section)
+		{
+			head_section=xenoStatusPointer->HModelController.section_data;
+		}
 
 		Xenoborg_GetRelativeAngles(sbPtr,&anglex,&angley,&head_section->World_Offset);
 
@@ -2630,7 +2664,8 @@ int Xenoborg_TargetFilter(STRATEGYBLOCK *candidate) {
 						return(1);
 						break;
 					default:
-						return(1);
+						/* A grenade or a corpse isn't a target */
+						return(0);
 						break;
 				}
 			}
@@ -5189,7 +5224,7 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 	xenoStatusPointer->Target = FindSBWithName(xenoStatusPointer->Target_SBname);
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5208,6 +5243,16 @@ void LoadStrategy_Xenoborg(SAVE_BLOCK_STRATEGY_HEADER* header)
 
 	Load_SoundState(&xenoStatusPointer->soundHandle1);
 	Load_SoundState(&xenoStatusPointer->soundHandle2);
+
+	//these animations are used without checking. They're added when the Xenoborg is made, and nothing removes them, so
+	//one without them all comes from a damaged or made-up save file, and is left out of the game
+	if(!xenoStatusPointer->head_pan || !xenoStatusPointer->head_tilt
+		|| !xenoStatusPointer->left_arm_pan || !xenoStatusPointer->left_arm_tilt
+		|| !xenoStatusPointer->right_arm_pan || !xenoStatusPointer->right_arm_tilt
+		|| !xenoStatusPointer->torso_twist)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 

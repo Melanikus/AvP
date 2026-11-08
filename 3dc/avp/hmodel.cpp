@@ -7,7 +7,12 @@
 //   the animated-model data read from a save file is checked (sizes, counts, decal ids), and loading a save
 //   can no longer free a model part that is still in use; the shape-animation set-up is written as whole
 //   if-blocks in each #if branch, so code scanners can read it
+//   drawing a model keeps copies of two settings, not a pointer to an object that may stop existing
+//   a save file can only change a model for a whole model from the same file
+//   looking for a part in a model that is not there now gives back nothing
 //   an animation a part of the model doesn't have is skipped, where only an assert stood before
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   an angle worked out while blending two poses stays inside the sine table, whatever timers a save held
 
 #include "3dc.h"
 #include "io.h"
@@ -76,7 +81,10 @@ int GlobalLevelOfDetail_Hierarchical;
 
 STRATEGYBLOCK *Global_HModel_Sptr;
 HMODELCONTROLLER *Global_Controller_Ptr;
-static DISPLAYBLOCK *Global_HModel_DispPtr;
+// Two settings of the object being drawn, for Process_Section to hand to each body part. DoHModel copies them, because
+// some of the objects it draws are local variables that no longer exist once their function returns.
+static int Global_HModel_ObFlags2;
+static unsigned int Global_HModel_SpecialFXFlags;
 
 DAMAGEBLOCK Default_Damageblock =
 {
@@ -1387,7 +1395,7 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		dummy_displayblock.ObEuler.EulerZ = 0;
 		dummy_displayblock.ObMat = this_section_data->SecMat;
 		dummy_displayblock.ObFlags = ObFlag_VertexHazing | ObFlag_MultLSrc;
-		dummy_displayblock.ObFlags2 = Global_HModel_DispPtr->ObFlags2;
+		dummy_displayblock.ObFlags2 = Global_HModel_ObFlags2;
 		dummy_displayblock.ObFlags3 = 0;
 		dummy_displayblock.ObNumLights = 0;
 		dummy_displayblock.ObVDBPtr = NULL;
@@ -1412,7 +1420,7 @@ void Process_Section(HMODELCONTROLLER *controller, SECTION_DATA *this_section_da
 		dummy_displayblock.ShapeAnimControlBlock = this_section_data->sac_ptr;
 		dummy_displayblock.HModelControlBlock = NULL; /* Don't even want to think about that. */
 		dummy_displayblock.ObMyModule = NULL;
-		dummy_displayblock.SpecialFXFlags = Global_HModel_DispPtr->SpecialFXFlags;
+		dummy_displayblock.SpecialFXFlags = Global_HModel_SpecialFXFlags;
 		MakeVector(&dummy_displayblock.ObWorld, &Global_VDB_Ptr->VDB_World, &dummy_displayblock.ObView);
 		RotateVector(&dummy_displayblock.ObView, &Global_VDB_Ptr->VDB_Mat);
 		/* Whilst we're here... */
@@ -2113,7 +2121,8 @@ void DoHModel(HMODELCONTROLLER *controller, DISPLAYBLOCK *dptr)
 	GLOBALASSERT(dptr);
 
 	Global_HModel_Sptr    = dptr->ObStrategyBlock;
-	Global_HModel_DispPtr = dptr;
+	Global_HModel_ObFlags2 = dptr->ObFlags2;
+	Global_HModel_SpecialFXFlags = dptr->SpecialFXFlags;
 
 	/* Check the object is in a sensible place. */
 	if (!((dptr->ObWorld.vx < 1000000 && dptr->ObWorld.vx > -1000000)
@@ -2493,6 +2502,9 @@ void MulQuat(QUAT *q1, QUAT *q2, QUAT *output)
 	QNormalise(output);
 }
 
+// Blends two poses. lerp says how far between them, and it comes from an animation's timers, which a save can set to anything, so an angle
+// worked out here can be any number. The sine table has 4096 places, and an angle goes round in steps of 4096, so wrap360 keeps each lookup
+// in the table. A real animation's angles are in range already, so this changes nothing for them. Slerp2 below does the same.
 void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 {
 	int sclp, sclq;
@@ -2514,9 +2526,9 @@ void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 		output->quatz = ((int) - input->QOrient.quatw) << 1;
 		output->quatw = ((int)input->QOrient.quatz) << 1;
 		t1 = MUL_FIXED((ONE_FIXED - lerp), 1024);
-		sclp = GetSin(t1);
+		sclp = GetSin(t1 & wrap360);
 		t2 = MUL_FIXED(lerp, 1024);
-		sclq = GetSin(t2);
+		sclq = GetSin(t2 & wrap360);
 
 		// multiply sclp and sclq by 2 to make up for short quats
 		sclp <<= 1;
@@ -2538,10 +2550,10 @@ void Slerp(KEYFRAME_DATA *input, int lerp, QUAT *output)
 			int t1, t2;
 			int oneoversinomega = GetOneOverSin(omega);
 			t1 = MUL_FIXED((ONE_FIXED - lerp), omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclp = MUL_FIXED(t2, oneoversinomega);
 			t1 = MUL_FIXED(lerp, omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclq = MUL_FIXED(t2, oneoversinomega);
 		}
 
@@ -2580,9 +2592,9 @@ void Slerp2(SECTION_DATA *input, int lerp, QUAT *output)
 		output->quatz = -input->stored_quat.quatw;
 		output->quatw = input->stored_quat.quatz;
 		t1 = MUL_FIXED((ONE_FIXED - lerp), 1024);
-		sclp = GetSin(t1);
+		sclp = GetSin(t1 & wrap360);
 		t2 = MUL_FIXED(lerp, 1024);
-		sclq = GetSin(t2);
+		sclq = GetSin(t2 & wrap360);
 		output->quatx = (MUL_FIXED(input->stored_quat.quatx, sclp)) + (MUL_FIXED(output->quatx, sclq));
 		output->quaty = (MUL_FIXED(input->stored_quat.quaty, sclp)) + (MUL_FIXED(output->quaty, sclq));
 		output->quatz = (MUL_FIXED(input->stored_quat.quatz, sclp)) + (MUL_FIXED(output->quatz, sclq));
@@ -2599,10 +2611,10 @@ void Slerp2(SECTION_DATA *input, int lerp, QUAT *output)
 		{
 			int t1, t2;
 			t1 = MUL_FIXED((ONE_FIXED - lerp), input->omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclp = MUL_FIXED(t2, input->oneoversinomega);
 			t1 = MUL_FIXED(lerp, input->omega);
-			t2 = GetSin(t1);
+			t2 = GetSin(t1 & wrap360);
 			sclq = MUL_FIXED(t2, input->oneoversinomega);
 		}
 
@@ -4094,6 +4106,12 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	{
 		SECTION **child_list_ptr;
 
+		//a corpse loaded from a save file may have no plain model to look in
+		if (!this_section)
+		{
+			return(NULL);
+		}
+
 		if (strcmp(this_section->Section_Name, Name) == 0)
 		{
 			return(this_section);
@@ -4470,7 +4488,6 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 		/* */
 		Global_HModel_Sptr = sbPtr;
 		Global_Controller_Ptr = controller;
-		Global_HModel_DispPtr = sbPtr->SBdptr;
 		Verify_Positions_Recursion(controller, controller->section_data, &sbPtr->DynPtr->Position, callCode);
 	}
 
@@ -4791,6 +4808,7 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 	void LoadHierarchy(SAVE_BLOCK_HEADER *header, HMODELCONTROLLER *controller)
 	{
 		SECTION *root_section;
+		SECTION *whole_model;
 		const char *Rif_Name;
 		const char *Hierarchy_Name;
 		HIERARCHY_SAVE_BLOCK *block = (HIERARCHY_SAVE_BLOCK *) header;
@@ -4850,19 +4868,34 @@ DELTA_CONTROLLER *Add_Delta_Sequence(HMODELCONTROLLER *controller, char *id, int
 			if (needToCreateHModel)
 			{
 				extern SECTION *GetNamedHierarchyFromLibrary(const char * rif_name, const char * hier_name);
-				root_section = GetNamedHierarchyFromLibrary(Rif_Name, Hierarchy_Name);
+				whole_model = GetNamedHierarchyFromLibrary(Rif_Name, Hierarchy_Name);
+
+				if (!whole_model)
+				{
+					return;
+				}
+
+				//may not want the 'real' root (hierarchical debris)
+				root_section = GetThisSection_FromID(whole_model, block->root_section_id);
 
 				if (!root_section)
 				{
 					return;
 				}
 
-				//may not want the 'real' root (hierarchical debris)
-				root_section = GetThisSection_FromID(root_section, block->root_section_id);
-
-				if (!root_section)
+				/*
+				Something that already has a model is a character, a placed object or the player's weapon, and its code
+				relies on the kind of model it was given. In the game, such a model only ever changes for a whole model
+				from the same file. Debris, Molotovs and fragments on a spear use a piece of a model, and none of those
+				has a model when it gets here. A save file that asks for anything else is damaged or was made to do harm,
+				so the object keeps the model it has.
+				*/
+				if (controller->Root_Section)
 				{
-					return;
+					if (root_section != whole_model || _stricmp(Rif_Name, controller->Root_Section->Rif_Name) != 0)
+					{
+						return;
+					}
 				}
 
 				//reinitialise the hierarchy

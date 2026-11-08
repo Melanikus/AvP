@@ -29,6 +29,7 @@
 //   a network packet too big for the game's message buffer is dropped (and logged, a limited number of
 //   times), ENet is told the same size limit, and the list of games found on the LAN has a fixed size
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   a connection may stay silent for a named time, because nothing answers while a level loads
 //   a connection that never says who it is is dropped, answers to anyone asking about a game are limited, a second game found in one look is read properly, and a joiner must speak this version
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   a message with no network game running fails, where it used to hand ENet an empty pointer
@@ -47,6 +48,7 @@
 //   the log says when our ENet has told an older version of the game no
 //   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
+//   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
 //   the screen says which connection a joining player is, never their address or port
 
 #include "3dc.h"
@@ -71,6 +73,7 @@ static ENetPeer     *ServerPeer = NULL;
 static bool net_IsInitialised = false;
 
 static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
+
 
 // How long a machine that's stopped answering may go before ENet drops it. Nothing answers ENet while a level loads, and one machine can take much longer than another. ENet's own number was about 5 seconds, which a joiner on a big level can't meet. A machine that never comes back is still dropped when this runs out.
 static const enet_uint32 kConnectionPatienceMilliseconds = 15000;
@@ -105,6 +108,11 @@ static const int kMostSessionAnswersEachSecond = 30;
 // Anyone can send the question from an address that isn't theirs. This keeps one address from using up the answers meant for everyone.
 static const int kMostSessionAnswersToOneAddressEachSecond = 2;
 static NetAddressCount sessionAskers[32];
+
+// A search's question is as big as the answer it asks for, so an answer is never bigger than its question. Someone sending questions from an
+// address that isn't theirs could otherwise use our hosts to send more at that address than they sent themselves. The question is a header,
+// then nothing, to the answer's size, and a host answers no other size.
+static const size_t kSearchQuestionBytes = sizeof(MessageHeader) + sizeof(SessionDescription);
 
 // How long a connection has to say who it is. ENet's own handshake has finished by then, so a real client only takes a moment. Without this, seven silent connections would fill the game for good.
 static const unsigned int kMostMillisecondsToBeLetIn = 15000;
@@ -412,12 +420,9 @@ bool Net_UpdateSessionList(int &SelectedItem)
 				break;
 			}
 
-			// hack - I think we'll receive our own broadcast?
-			if (len == sizeof(MessageHeader)) {
-				OutputDebugString("We received our request back\n");
-			}
-
-			else if (len == sizeof(header) + sizeof(SessionDescription)) 
+			// An answer. Our own question, if it comes back to us, is this size too (see kSearchQuestionBytes): its header says it's a
+			// question, so it's skipped below.
+			if (len == sizeof(header) + sizeof(SessionDescription))
 			{
 				OutputDebugString("Got some session info\n");
 
@@ -586,6 +591,7 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 		if (!LobbiedGame)
 		{
 			ServerAddress.host = ENET_HOST_ANY;
+
 			ServerAddress.port = netPortNumber;
 
 			// The game's limits, a checksum on every packet and one channel: see net_host.h
@@ -733,12 +739,13 @@ static void Net_CheckForSessionRequest()
 		if (len > 0) {
 			Con_PrintDebugMessage("Got a packet of some sort..");
 		}
-		if (len == sizeof(MessageHeader))
+		// Only a question as big as its answer: see kSearchQuestionBytes. An older game's question, a header alone, gets nothing.
+		if (len == (int)kSearchQuestionBytes)
 		{
 			MessageHeader header;
 			memcpy(&header, packetBuffer, sizeof(MessageHeader));
 
-			// Anyone can send this, from an address that isn't theirs, and the answer is bigger than the question. So it has to look like ours, and this game only answers so many.
+			// Anyone can send this, from an address that isn't theirs. So it has to look like ours, and this game only answers so many.
 			static unsigned int secondStarted = 0;
 			static int answersThisSecond = 0;
 
@@ -923,6 +930,11 @@ void Net_ServiceNetwork()
 // only messages the rest of the game ever sees are game messages, whole ones.
 // On a client, who the host is: whoever gave it its ID. A host passes on what the others say, each saying who it's from, and only the host's own word counts as the host's.
 static NetID hostPlayerID = 0;
+
+NetID Net_HostPlayerID()
+{
+	return hostPlayerID;
+}
 
 static NetID IDOfConnection(const ENetPeer *peer)
 {
@@ -1533,9 +1545,15 @@ static bool AskAboutGames(enet_uint32 host)
 	newHeader.fromID      = kBroadcastID;
 	newHeader.toID        = kBroadcastID;
 
+	// The header, then nothing, to as many bytes as the answer it asks for: see kSearchQuestionBytes
+	uint8_t question[kSearchQuestionBytes];
+
+	memset(question, 0, sizeof(question));
+	memcpy(question, &newHeader, sizeof(newHeader));
+
 	ENetBuffer buf;
-	buf.data = &newHeader;
-	buf.dataLength = sizeof(MessageHeader);
+	buf.data = question;
+	buf.dataLength = sizeof(question);
 
 	return enet_socket_send(broadcastSocket, &destAddress, &buf, 1) >= 0;
 }

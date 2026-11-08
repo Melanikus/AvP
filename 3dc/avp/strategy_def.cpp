@@ -1,4 +1,8 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   carrying objects to the next level stops if the strategy blocks run out
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game a placed NPC can still be found by the name it has in the level: see npc_level_names.h
 //   a level with no block left to carry something over goes on
 #include "3dc.h"
 #include "inline.h"
@@ -16,6 +20,8 @@
 #include "bh_debris.h"
 #include "pldnet.h"
 #include "tables.h"
+#include "logString.h"
+#include "npc_level_names.h"
 
 /* 
 	this attaches runtime and precompiled object
@@ -37,6 +43,9 @@ STRATEGYBLOCK FreeStBlockData[maxstblocks];
 static STRATEGYBLOCK  **ActiveStBlockListPtr = &ActiveStBlockList[0];
 
 unsigned int IncrementalSBname;
+
+static NpcLevelNames TheNpcLevelNames;
+static_assert(kNpcNameLength == SB_NAME_LENGTH, "npc_level_names.h has to hold names of the game's length");
 
 /*
 
@@ -67,6 +76,7 @@ void InitialiseStrategyBlocks(void)
     ActiveStBlockListPtr = &ActiveStBlockList[0];
 
 	IncrementalSBname=0;
+	NpcLevelNames_Clear(&TheNpcLevelNames);
 }
 
 
@@ -116,6 +126,7 @@ void DeallocateStrategyBlock(STRATEGYBLOCK *sptr)
 STRATEGYBLOCK* CreateActiveStrategyBlock(void)
 {
 	STRATEGYBLOCK *sb;
+
 	sb = AllocateStrategyBlock();
 
 	if(sb) 
@@ -241,6 +252,8 @@ void InitialiseSBValues(STRATEGYBLOCK* sptr)
 	sptr->SBflags.preserve_until_end_of_level = 0;
 	sptr->SBflags.destroyed_but_preserved = 0;
 	sptr->SBflags.not_on_motiontracker = 0;
+	// These blocks get used again, so a generator's alien mustn't inherit "placed in the level" from the block's last owner, or the generator miscounts
+	sptr->SBflags.placed_in_the_level = 0;
 	
 	sptr->integrity = 0;
 
@@ -296,9 +309,71 @@ STRATEGYBLOCK* FindSBWithName(char* id_name)
 			}
 		}
 	}
-	// we have to return null for lifts - so that 
+	// A placed NPC has a different name in a network game, so anything aimed at it by the name in the level looks here.
+	// The new name it gets back can't be a name in this list that leads anywhere else, so this goes round once at most.
+	if (AvP.Network != I_No_Network)
+	{
+		char const *const newName = NpcLevelNames_NetworkNameFor(&TheNpcLevelNames, id_name);
+
+		if (newName)
+		{
+			return FindSBWithName(const_cast<char *>(newName));
+		}
+	}
+
+	// we have to return null for lifts - so that
 	// we know that the lift is outside the env
 	return(NULL);
+}
+
+void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName)
+{
+	if (AvP.Network == I_No_Network)
+	{
+		for (int i = 0; i < SB_NAME_LENGTH; i++)
+		{
+			sbPtr->SBname[i] = levelName[i];
+		}
+
+		return;
+	}
+
+	// The network messages use part of this name to say which NPC they mean, so it gets a new one, as aliens always have
+	AssignNewSBName(sbPtr);
+	sbPtr->SBflags.placed_in_the_level = 1;
+
+	if (!NpcLevelNames_Add(&TheNpcLevelNames, levelName, sbPtr->SBname))
+	{
+		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again.");
+	}
+}
+
+const char *NpcNameInTheLevel(const STRATEGYBLOCK *sbPtr)
+{
+	char const *const name = NpcLevelNames_LevelNameFor(&TheNpcLevelNames, sbPtr->SBname);
+
+	return name ? name : sbPtr->SBname;
+}
+
+bool BehaviourIsAnNpcTheHostRuns(AVP_BEHAVIOUR_TYPE type)
+{
+	switch (type)
+	{
+		case I_BehaviourAlien:
+		case I_BehaviourQueenAlien:
+		case I_BehaviourFaceHugger:
+		case I_BehaviourPredator:
+		case I_BehaviourDormantPredator:
+		case I_BehaviourXenoborg:
+		case I_BehaviourMarine:
+		case I_BehaviourSeal:
+		case I_BehaviourPredatorAlien:
+		case I_BehaviourAutoGun:
+			return true;
+
+		default:
+			return false;
+	}
 }
 
 static STRATEGYBLOCK SB_Preserved[MAX_PRESERVED_SB];

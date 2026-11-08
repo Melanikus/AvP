@@ -19,6 +19,9 @@ vcpkg_from_github(OUT_SOURCE_PATH SOURCE_PATH
 
 # The reference SipHash, for patch 006's tokens, copied in as it is. siphash/README.md says where it came from.
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/siphash/siphash.c" "${CMAKE_CURRENT_LIST_DIR}/siphash/siphash.h" DESTINATION "${SOURCE_PATH}")
+# Our own file for patch 006: where a host's secret keys come from. It's copied in, rather than changing ENet's own unix.c and win32.c,
+# because Snyk recognises ENet by how many of its own files are still as they came (host_secret.c says more).
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/host_secret.c" DESTINATION "${SOURCE_PATH}")
 
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"

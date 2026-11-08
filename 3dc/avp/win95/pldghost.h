@@ -1,5 +1,5 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
-//   what only an autogun's ghost used has gone, because no network game has one
+//   an NPC ghost remembers its clothes and its beams
 /*---------------------------Patrick 28/3/97----------------------------
   Header for Multi-Player ghost object support header
   ----------------------------------------------------------------------*/
@@ -13,12 +13,16 @@
   Structures for ghosts and ghost data blocks
   ----------------------------------------------------------------------*/
 
+extern bool AlienModelIsLoaded(int alienType);
+
 typedef struct netghostdatablock
 {
 	NetID playerId;
 	signed int playerObjectId; /* -1 == player, all other numbers used for objects */
 	AVP_BEHAVIOUR_TYPE type;
 	INANIMATEOBJECT_TYPE IOType;
+	int npcClothesDrawn;	/* an NPC marine's ghost: the set of clothes it has, plus one. 0 until it has been told. */
+	unsigned char npcXenoBeams;	/* an NPC xenoborg's ghost: which of his beams are on, one bit each: see kNpcXenoBeamHead */
 	int subtype;
 	SHAPEANIMATIONCONTROLLER ShpAnimCtrl;
 
@@ -80,6 +84,8 @@ extern void HandleGhostGunFlashEffect(STRATEGYBLOCK *sbPtr, int gunFlashOn);
 extern void HandlePlayerGhostWeaponSound(STRATEGYBLOCK *sbPtr, int weapon, int firingPrimary, int firingSecondary);
 extern void HandleWeaponElevation(STRATEGYBLOCK *sbPtr, int elevation, int weapon);
 extern void MaintainGhosts(void);
+extern void HandleGhostAutoGunMuzzleFlash(STRATEGYBLOCK *sbPtr, int firing);
+extern void HandleGhostAutoGunSound(STRATEGYBLOCK *sbPtr, int firing);
 extern void MaintainGhostCloakingStatus(STRATEGYBLOCK *sbPtr, int IsCloaked);
 extern void MaintainGhostFireStatus(STRATEGYBLOCK *sbPtr, int IsOnFire);
 

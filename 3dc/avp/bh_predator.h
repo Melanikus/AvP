@@ -1,6 +1,9 @@
 /*--------------Patrick 21/1/97-----------------------
   Header file for predator AI & NPC support functions
   ---------------------------------------------------*/
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a dormant predator keeps its own copy of its level data, not a pointer to it
 
 #ifndef _bhpred_h_
 #define _bhpred_h_ 1
@@ -188,12 +191,6 @@ typedef struct predatorStatusBlock
 
 }PREDATOR_STATUS_BLOCK;
 
-typedef struct dormantPredatorStatusBlock
-{
-	AVP_BEHAVIOUR_TYPE bhvr_type;
-	void* toolsData;
-}DORMANT_PREDATOR_STATUS_BLOCK;
-
 /* Tools data template */
 typedef struct tools_data_predator
 {
@@ -210,6 +207,13 @@ typedef struct tools_data_predator
 	int death_target_request;
 
 }TOOLS_DATA_PREDATOR;
+
+/* A predator that is waiting to be woken. It keeps its own copy of the level's data for it, for the day it wakes. */
+typedef struct dormantPredatorStatusBlock
+{
+	AVP_BEHAVIOUR_TYPE bhvr_type;
+	TOOLS_DATA_PREDATOR toolsData;
+}DORMANT_PREDATOR_STATUS_BLOCK;
 
 #define PRED_SELF_DESTRUCT_TIMER			(ONE_FIXED*3)
 #define PRED_WALKING_SPEED_MAX				(5000)

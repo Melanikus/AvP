@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in the same-as-single-player mode, a track object can be broken, for everyone; the code that was switched off is gone
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -6,6 +9,10 @@
 #include "gamedef.h"
 #include "bh_types.h"
 #include "bh_track.h"
+#include "pldnet.h"
+#include "net_checks.h"
+
+extern int InanimateDamageFromNetHost;
 #include "dynamics.h"
 #include "io.h"
 #define UseLocalAssert TRUE
@@ -88,6 +95,7 @@ void* TrackObjectBehaveInit(void* bhdata,STRATEGYBLOCK* sbptr)
 	}
 
 	to_bhv->request=track_no_request;
+	to_bhv->broken=FALSE;
 
 
 	to_bhv->num_special_track_points=to_tt->num_special_track_points;
@@ -192,7 +200,11 @@ void TrackObjectBehaveFun(STRATEGYBLOCK* sbptr)
 	GLOBALASSERT(to_bhv->to_track);
 	track=to_bhv->to_track;
 
-	
+	// Broken in a network game, where it stays on the list of strategies but does nothing more. See TrackObjectIsDamaged.
+	if (to_bhv->broken)
+	{
+		return;
+	}
 
 	//update texture animation if object has one
 	if(to_bhv->to_tac)
@@ -390,24 +402,24 @@ void TrackObjectIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int mult
 	TRACK_OBJECT_BEHAV_BLOCK* to_bhv = static_cast<TRACK_OBJECT_BEHAV_BLOCK*>(sbPtr->SBdataptr);
 	LOCALASSERT(to_bhv);
 
-	#if 0
-	
-	if((AvP.Network==I_Peer)&&(!InanimateDamageFromNetHost))
+	// A network game keeps every machine's track objects in step by their place in the list of strategies, so outside the
+	// mode that plays as single player does, they can't be broken at all. In that mode the host decides, as it does for other
+	// breakable things, and a machine that hits one tells the host.
+	switch (NetBreakableHitGoes(AvP.Network != I_No_Network, SameAsSinglePlayer(), AvP.Network == I_Peer, InanimateDamageFromNetHost != 0))
 	{
-		//add track damaged net message
-		return;
-	}
-	else if(AvP.Network==I_Host) 
-	{
-		//add track damaged net message
-		//if(sbPtr->SBDamageBlock.Health <= 0) AddNetMsg_InanimateObjectDestroyed(sbPtr);
-	}
-	#endif
+		case kNetHitIsIgnored:
+			return;
 
-	if(AvP.Network != I_No_Network)
+		case kNetHitGoesToTheHost:
+			AddNetMsg_InanimateObjectDamaged(sbPtr, damage, multiple);
+			return;
+
+		case kNetHitCounts:
+			break;
+	}
+
+	if (to_bhv->broken)
 	{
-		//I don't want to consider destructable track objects in net games for the moment
-		//would screw up the strategy synching
 		return;
 	}
 		
@@ -424,7 +436,28 @@ void TrackObjectIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int mult
 			}
 				
 			MakeFragments(sbPtr);
-			DestroyAnyStrategyBlock(sbPtr);
+
+			if (AvP.Network == I_No_Network)
+			{
+				DestroyAnyStrategyBlock(sbPtr);
+				return;
+			}
+
+			// Taking it off the list would put the later ones out of step with the other machines. So it stays on the list:
+			// nobody can see it or hit it, and it never moves again.
+			if (AvP.Network == I_Host)
+			{
+				AddNetMsg_InanimateObjectDestroyed(sbPtr);
+			}
+
+			to_bhv->broken = TRUE;
+			Stop_Track_Playing(to_bhv->to_track);
+			sbPtr->maintainVisibility = 0;
+
+			if (sbPtr->SBdptr)
+			{
+				MakeObjectFar(sbPtr);
+			}
 		}
 	}
 }
@@ -464,6 +497,11 @@ void TrackObjectSetSynchData(STRATEGYBLOCK* sbPtr,int status)
 	if(to_bhv->TimeUntilNetSynchAllowed>0)
 	{
 		//ignore this attempt to synch the switch
+		return;
+	}
+
+	if (to_bhv->broken)
+	{
 		return;
 	}
 

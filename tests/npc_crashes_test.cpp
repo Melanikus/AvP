@@ -1,5 +1,5 @@
 // The test for four crash fixes in the NPC code. Written 2026-11-06 by Melanikus for the AvP port. More were added since,
-// each in its own Test... function below: the weapon a file names, and a marine whose model isn't loaded (2026-11-07).
+// each in its own Test... function below: the weapon a file names, and a character whose model isn't loaded (2026-11-07).
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   it also checks how a marine's glow is chosen when you play the alien
 //
@@ -205,28 +205,97 @@ static void TestTheWeaponFromAFile()
 	Check(Has(predatorLoaded, "NoteRefusedFromAFile(\"a save named a predator weapon that isn't on the list, so that predator's part of the save is left out\");\n\t\treturn;"), "and the log says so in those words");
 }
 
-// MODEL-NULL-1. A marine's model comes from a file the level loads. If the level's lists and the file it loads don't
-// agree, the model isn't there, and the old code made him anyway: Create_HModel read through nothing. Bobblen's fork of
-// this game, avp-forever, crashed that way, making civilians in skirmish (his commit 207704e), which is how this was found. Both places that make a marine from a level have to check,
-// and before they check, nothing of his model may be left for the clean-up to free.
-static void TestTheMarineWithNoModel()
+// MODEL-NULL-1. A character's model comes from a file the level loads, and which files those are is worked out from
+// the level's own lists. If the two don't agree, the model isn't there, and the old code made the character anyway:
+// Create_HModel read through nothing. Bobblen's fork of this game, avp-forever, crashed that way, making civilians in
+// skirmish (his commit 207704e), which is how this was found. Every place that makes a character from a level has to
+// check, and before it checks, nothing the clean-up frees or stops may be left as whatever the memory last held.
+struct ModelMaker
 {
-	puts("A marine or civilian whose model isn't loaded:");
+	char const *file;          // the source file
+	char const *from;          // where the function that makes it starts
+	char const *to;            // where the next function starts
+	char const *check;         // its check, which has to come before its model is made
+	char const *made;          // where its model is made
+	char const *noneFirst[4];  // what has to be set to none before the check, so taking it out frees and stops nothing
+	char const *says;
+};
 
-	std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
-	std::string const placed = Between(marine, "void InitMarineBehaviour(", "void InitSealBehaviour(");
-	std::string const generated = Between(marine, "void CreateMarineDynamic(", "void SetMarineElevation(");
-	std::string const placedCheck = "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine the level places\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}";
-	std::string const generatedCheck = "if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, \"a marine a generator makes\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}";
+static void TestTheCharacterWithNoModel()
+{
+	puts("A character whose model isn't loaded:");
 
-	Check(Has(marine, "if (root)\n\t{\n\t\treturn true;\n\t}"), "a model that's there passes");
-	Check(Has(marine, "NoteRefusedFromAFile((std::string(who) + \" needs the model \" + model + \" from \" + file + \", which isn't loaded, so he isn't made\").c_str());\n\treturn false;"), "and one that isn't is refused, and the log names the model and its file");
+	std::string const types = ReadSourceFile("3dc/avp/bh_types.cpp");
 
-	Check(ComesBefore(placed, placedCheck, "Create_HModel(&marineStatus->HModelController,root_section);"), "a marine the level places is taken out before his model is made");
-	Check(ComesBefore(placed, "marineStatus->HModelController.section_data=NULL;", placedCheck) && ComesBefore(placed, "marineStatus->HModelController.Deltas=NULL;", placedCheck), "and nothing of his model is left for the clean-up to free");
+	Check(Has(types, "if (root)\n\t{\n\t\treturn true;\n\t}"), "a model that's there passes");
+	Check(Has(types, "LogString(std::string(\"npc: refused: \") + who + \" needs the model \" + modelName + \" from \" + fileName + \", which isn't loaded, so it isn't made\");\n\treturn false;"), "and one that isn't is refused, and the log names the model and its file");
+	Check(Has(Between(types, "case I_BehaviourPlacedHierarchy:", "case I_BehaviourPlacedLight:"), "if (!sbptr->SBdataptr && !memoryInitialisationFailure)\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbptr);\n\t\t\t}"), "a placed hierarchy that comes back with nothing is taken out, because everything that works it reads its block");
 
-	Check(ComesBefore(generated, generatedCheck, "Create_HModel(&marineStatus->HModelController,root_section);"), "a marine or civilian a generator makes is taken out before his model is made");
-	Check(ComesBefore(generated, "marineStatus->HModelController.section_data=NULL;", generatedCheck) && ComesBefore(generated, "marineStatus->HModelController.Deltas=NULL;", generatedCheck), "and nothing of his model is left for the clean-up to free");
+	ModelMaker const makers[] =
+	{
+		{ "3dc/avp/bh_marine.cpp", "void InitMarineBehaviour(", "void InitSealBehaviour(",
+			"if (!NpcModelIsLoaded(root_section, \"a marine the level places\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+			"Create_HModel(&marineStatus->HModelController,root_section);",
+			{ "marineStatus->HModelController.section_data=NULL;", "marineStatus->HModelController.Deltas=NULL;", "marineStatus->myGunFlash = (DISPLAYBLOCK *)0;", "marineStatus->soundHandle = SOUND_NOACTIVEINDEX;" },
+			"a marine the level places" },
+		{ "3dc/avp/bh_marine.cpp", "void CreateMarineDynamic(", "void SetMarineElevation(",
+			"if (!NpcModelIsLoaded(root_section, \"a marine or civilian a generator makes\", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+			"Create_HModel(&marineStatus->HModelController,root_section);",
+			{ "marineStatus->HModelController.section_data=NULL;", "marineStatus->HModelController.Deltas=NULL;", "marineStatus->myGunFlash = (DISPLAYBLOCK *)0;", "marineStatus->soundHandle = SOUND_NOACTIVEINDEX;" },
+			"a marine or civilian a generator makes" },
+		{ "3dc/avp/bh_alien.cpp", "void CreateAlienDynamic(", "void InitAlienBehaviour(",
+			"if (!NpcModelIsLoaded(root_section, \"an alien a generator makes\", modelFile, modelName))\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\t\treturn;\n\t\t\t}",
+			"Create_HModel(&alienStatus->HModelController,root_section);",
+			{ "alienStatus->HModelController.section_data=NULL;", "alienStatus->HModelController.Deltas=NULL;", 0, 0 },
+			"an alien a generator makes" },
+		{ "3dc/avp/bh_alien.cpp", "void InitAlienBehaviour(", "static BOOL PlayerIsDeadAndNoLivingNetghosts(",
+			"if (!NpcModelIsLoaded(root_section, \"an alien the level places\", modelFile, modelName))\n\t\t\t{\n\t\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\t\treturn;\n\t\t\t}",
+			"Create_HModel(&alienStatus->HModelController,root_section);",
+			{ "alienStatus->HModelController.section_data=NULL;", "alienStatus->HModelController.Deltas=NULL;", 0, 0 },
+			"an alien the level places" },
+		{ "3dc/avp/bh_facehugger.cpp", "void InitFacehuggerBehaviour(", "void FacehuggerBehaviour(",
+			"if (!NpcModelIsLoaded(root_section, \"a facehugger the level places\", \"hnpchugger\", \"Template\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+			"Create_HModel(&facehuggerStatus->HModelController,root_section);",
+			{ "facehuggerStatus->HModelController.section_data=NULL;", "facehuggerStatus->HModelController.Deltas=NULL;", "facehuggerStatus->soundHandle = SOUND_NOACTIVEINDEX;", "facehuggerStatus->soundHandle2 = SOUND_NOACTIVEINDEX;" },
+			"a facehugger the level places" },
+		{ "3dc/avp/bh_predator.cpp", "void InitPredatorBehaviour(", "void InitDormantPredatorBehaviour(",
+			"if (!NpcModelIsLoaded(root_section, \"a predator the level places\", predatorStatus->Selected_Weapon->Riffname, predatorStatus->Selected_Weapon->HierarchyName))\n                {\n                        RemoveBehaviourStrategy(sbPtr);\n                        return;\n                }",
+			"Create_HModel(&predatorStatus->HModelController,root_section);",
+			{ "predatorStatus->HModelController.section_data=NULL;", "predatorStatus->HModelController.Deltas=NULL;", "predatorStatus->soundHandle = SOUND_NOACTIVEINDEX;", 0 },
+			"a predator the level places" },
+		{ "3dc/avp/bh_queen.cpp", "void InitQueenBehaviour(", "static BOOL QueenPlayingStunAnimation(",
+			"if (!NpcModelIsLoaded(root_section, \"a queen the level places\", \"queen\", \"Template\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+			"Create_HModel(&queenStatus->HModelController,root_section);",
+			{ "queenStatus->HModelController.section_data=NULL;", "queenStatus->HModelController.Deltas=NULL;", "queenStatus->soundHandle=SOUND_NOACTIVEINDEX;", 0 },
+			"a queen the level places" },
+		{ "3dc/avp/bh_xeno.cpp", "void InitXenoborgBehaviour(", "void XenoborgBehaviour(",
+			"if (!NpcModelIsLoaded(root_section, \"a xenoborg the level places\", \"hnpc_xenoborg\", \"xenobasic\"))\n\t\t{\n\t\t\tRemoveBehaviourStrategy(sbPtr);\n\t\t\treturn;\n\t\t}",
+			"Create_HModel(&xenoStatus->HModelController,root_section);",
+			{ "xenoStatus->HModelController.section_data=NULL;", "xenoStatus->HModelController.Deltas=NULL;", "xenoStatus->soundHandle1=SOUND_NOACTIVEINDEX;", "xenoStatus->torso_whirr=SOUND_NOACTIVEINDEX;" },
+			"a xenoborg the level places" },
+		{ "3dc/avp/bh_placed_hierarchy.cpp", "void* PlacedHierarchyBehaveInit(", "void MakePlacedHierarchyNear(",
+			"if (!NpcModelIsLoaded(root_section, \"a placed hierarchy the level names\", ph_tt->file_name, ph_tt->hier_name))\n\t{\n\t\tDeallocateMem(ph_bhv);\n\t\treturn ((void *)NULL);\n\t}",
+			"Create_HModel(&ph_bhv->HModelController,root_section);",
+			{ 0, 0, 0, 0 },
+			"a placed hierarchy whose file and model the level names" },
+	};
+
+	for (ModelMaker const &maker : makers)
+	{
+		std::string const made = Between(ReadSourceFile(maker.file), maker.from, maker.to);
+		bool noneFirst = true;
+
+		for (char const *line : maker.noneFirst)
+		{
+			if (line && !ComesBefore(made, line, maker.check))
+			{
+				noneFirst = false;
+			}
+		}
+
+		Check(Has(made, maker.made) && ComesBefore(made, maker.check, maker.made), std::string(maker.says) + ": refused before its model is made");
+		Check(noneFirst, std::string(maker.says) + ": and nothing its clean-up frees or stops is left as old memory");
+	}
 }
 
 static void TestTheEmptyModule()
@@ -290,7 +359,7 @@ int main()
 	TestTheSentryGunJustMade();
 	TestTheHalfMadeNpc();
 	TestTheWeaponFromAFile();
-	TestTheMarineWithNoModel();
+	TestTheCharacterWithNoModel();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();

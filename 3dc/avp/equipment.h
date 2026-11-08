@@ -1,3 +1,6 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a gun can have states and hooks of its own, and there are 14 weapon slots. See weapon_hooks.h
+//   a slot keeps the rounds left over from a reload
 #ifndef _equipmnt_h_
 #define _equipmnt_h_ 1
 
@@ -41,6 +44,22 @@ enum WEAPON_STATE
 
 	WEAPONSTATE_READYING,
 	WEAPONSTATE_UNREADYING,
+
+	// States a gun with a file of its own can use for whatever it likes. The same number means different things on different guns: the gun's file names them, and its row in equipment.cpp gives each one its time and its function.
+	// To the common weapon code each is only a timer and a function. When the time is up, the gun's StateEnded hook says what comes next, and if it has no opinion he goes back to idle. A gun that doesn't use one has a time of 0 there, so it ends at once.
+	WEAPONSTATE_OWN_1,
+	WEAPONSTATE_OWN_2,
+	WEAPONSTATE_OWN_3,
+	WEAPONSTATE_OWN_4,
+	WEAPONSTATE_OWN_5,
+	WEAPONSTATE_OWN_6,
+	WEAPONSTATE_OWN_7,
+	WEAPONSTATE_OWN_8,
+	WEAPONSTATE_OWN_9,
+	WEAPONSTATE_OWN_10,
+	WEAPONSTATE_OWN_11,
+	WEAPONSTATE_OWN_12,
+	WEAPONSTATE_OWN_13,
 
 	MAX_NO_OF_WEAPON_STATES
 };
@@ -102,6 +121,9 @@ enum WEAPON_SLOT
 	WEAPON_SLOT_9,
 	WEAPON_SLOT_10,
 	WEAPON_SLOT_11,
+	WEAPON_SLOT_12,
+	WEAPON_SLOT_13,
+	WEAPON_SLOT_14,
 	MAX_NO_OF_WEAPON_SLOTS,
 
 	WEAPON_FINISHED_SWAPPING
@@ -182,6 +204,16 @@ enum AMMO_ID
 	AMMO_FRISBEE_BLAST,
 	AMMO_FRISBEE_FIRE,
 
+	// The new guns' own. The numbers are MelPyth M5's. The player's shotgun has its own row, so that the computer's shotgun marines stay as they are.
+	AMMO_PLAYER_SHOTGUN,
+	AMMO_SNIPER,
+	AMMO_REVOLVER,
+	AMMO_M79_STANDARD,
+	AMMO_M79_FIRE,
+	AMMO_M79_FRAG,
+	AMMO_M79_DIRECT_HIT,
+	AMMO_M79_FIRE_DIRECT_HIT,
+
 	MAX_NO_OF_AMMO_TEMPLATES,
 	AMMO_FLECHETTE_POSTMAX,
 	AMMO_FALLING_POSTMAX,
@@ -252,6 +284,9 @@ typedef struct
 	unsigned char		PrimaryMagazinesRemaining;
 	unsigned char		SecondaryMagazinesRemaining;
 
+	// The rounds left over from reloading part way through a magazine, so that none are lost. It's in whole rounds, and nobody sees it. See weapon_reload.h. It fits in the two bytes that were spare here, so the slot and a saved game stay the same size.
+	unsigned short		PrimaryLeftoverRounds;
+
 	VECTORCH			PositionOffset;
 	EULER				DirectionOffset;
 
@@ -261,6 +296,47 @@ typedef struct
 	/* general flags */
 	signed int		Possessed :2; /* meaning you are carrying the weapon, not that an evil spirit etc etc. */
 } PLAYER_WEAPON_DATA;
+
+// What a gun with a file of its own can do that the common weapon code doesn't. A gun fills in only what it needs. Any of it can be left out, and no other weapon has any of it. playerStatus is the PLAYER_STATUS, as it is for a state's function.
+typedef struct
+{
+	// A player has just started, or started again after dying. The gun forgets what it was doing, and puts back anything it changed for him, like the zoom.
+	void	(*AtPlayerStart)(void);
+
+	// Each frame while this gun is in his hands, just before the common code looks at the keys for an idle gun. Returning 1 means the gun has dealt with this frame itself, so the common code leaves the keys alone.
+	int		(*EveryFrame)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// The gun has just gone into a new state, from wherever. It can go straight on to another one from here.
+	void	(*StateBegan)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// A state's time is up. Returning 0 keeps it going, for a state that lasts as long as a key is held.
+	int		(*MayLeaveState)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// A state's time is up, and it may leave. Returning 1 means the gun has chosen what comes next. Returning 0 means the common code does what it does for any gun.
+	int		(*StateEnded)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// He's walked over ammunition for this gun: may it be added now? For a gun that's busy loading. Nothing calls this yet, and it goes in with the pickups.
+	int		(*MayTakeAmmo)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// Is the gun drawn in his hands? Returning 0 leaves it out, for looking through a scope.
+	int		(*DrawGun)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// Draws anything flat over the screen, like a scope's picture or a list of grenades. It comes after the world and the gun.
+	void	(*DrawOverHud)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+
+	// The gun's own state, which goes into a save: a block of plain numbers with no pointers in it, and how big it is.
+	void	*OwnState;
+	int		OwnStateSize;
+
+	// Is this copy of its own state, read from a save, safe to use? A save is a file that anybody could have changed, so each number is checked. A state that fails is left out, and the gun carries on as it started.
+	int		(*OwnStateIsGood)(const void *state);
+
+	// 1 if the slot's "magazines" count single rounds for this gun, not whole magazines, because it loads a round at a time. Then filling the gun takes as many as it holds, and not just one.
+	int		SparesAreSingleRounds;
+
+	// Draws the gun's own ammunition panel, in place of the usual rounds and magazines. For a gun whose count doesn't fit them.
+	void	(*DrawAmmoPanel)(void *playerStatus, PLAYER_WEAPON_DATA *weaponPtr);
+} WEAPON_HOOKS;
 
 typedef struct
 {
@@ -323,6 +399,9 @@ typedef struct
 	unsigned int		SecondaryMuzzleFlash:	1;
 	unsigned int		LogAccuracy:	1;
 	unsigned int		LogShots:	1;
+
+	// What this gun does that the common code doesn't. Only the guns with files of their own have one.
+	const WEAPON_HOOKS	*Hooks;
 
 } TEMPLATE_WEAPON_DATA;
 

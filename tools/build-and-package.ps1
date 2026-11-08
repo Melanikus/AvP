@@ -30,6 +30,8 @@ Set-Location $repository
 
 # --- vcpkg, at the manifest's baseline. bootstrap-vcpkg checks the signature of the vcpkg program it downloads.
 $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+# It goes to git, so it has to be a commit's full hash first: a value starting with a dash would be read by git as an option (BASELINE-1, added 2026-11-07)
+if ("$baseline" -cnotmatch '^[0-9a-f]{40}$') { throw "vcpkg.json's builtin-baseline isn't a commit's full hash: $baseline" }
 $temporary = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
 $vcpkgRoot = if ($UseVcpkgAt) { $UseVcpkgAt } else { Join-Path $temporary 'vcpkg' }
 
@@ -37,7 +39,7 @@ if (-not $UseVcpkgAt) {
     git init -q $vcpkgRoot
     git -C $vcpkgRoot fetch -q --depth 1 https://github.com/microsoft/vcpkg.git $baseline
     git -C $vcpkgRoot checkout -q FETCH_HEAD
-    if ((git -C $vcpkgRoot rev-parse HEAD) -ne $baseline) { throw 'vcpkg is not at the manifest baseline' }
+    if ((git -C $vcpkgRoot rev-parse HEAD) -cne $baseline) { throw 'vcpkg is not at the manifest baseline' }
 
     # The likeliest step to fail on a machine that guards its network, so it says what happened in plain words. Older PowerShell treats
     # the error text bootstrap prints as a failure of its own, which is why this asks both ways.
@@ -72,6 +74,18 @@ if ($LASTEXITCODE -ne 0) { throw 'The libraries did not build' }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
 if (-not $msbuild) { throw 'MSBuild was not found' }
+
+# --- Which build this is, for the top of the game's log (3dc/build_identity.cpp). The release workflow gives a version in VERSION; every
+# other build is a test build. Only three numbers with dots between are written, the same as tools/check-release.ps1 lets through, so
+# nothing in it can break the C++ it goes into. Never four: the log leaves out anything that looks like a network address (log_files.h).
+$commit = (git rev-parse HEAD).Trim()
+if ($commit -cnotmatch '^[0-9a-f]{40}$') { throw "The commit doesn't look like one: $commit" }
+$version = if ($env:VERSION -and $env:VERSION -cmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z') { $env:VERSION } else { 'a test build, not a release' }
+@(
+    '// Written by tools/build-and-package.ps1 for this build. Not in the repository.'
+    "#define AVP_RELEASE_VERSION `"$version`""
+    "#define AVP_RELEASE_COMMIT `"$commit`""
+) | Out-File -Encoding ascii '3dc\build_version.h'
 
 & $msbuild win32\VS2026\AvP.sln /nologo /v:minimal /m /p:Configuration=Release /p:Platform=Win32 /p:VcpkgManifestInstall=false
 if ($LASTEXITCODE -ne 0) { throw 'The game did not build' }

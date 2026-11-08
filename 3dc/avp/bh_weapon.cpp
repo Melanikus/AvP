@@ -1,9 +1,17 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the M79 fires its grenades through the same function as the grenade launcher, and sets their speed
+//   a grenade that bursts on contact bursts on a ghost of any NPC the host runs
+//   so does a mine, and the smart disc and the Predator's disc seek those ghosts as they seek the real NPCs
 //   running out of dynamics blocks or lights no longer crashes, and a molotov with no strategy block gives back its display block
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   deleted an old, switched-off (#if 0) version of the first line of one if-statement, which was never compiled,
 //   so code scanners can read the file; the game runs the same code as before
+//   a disc whose model has no disc part no longer crashes
+//   a thrown weapon that a save file leaves without a model is left out of the game
+//   a Molotov starts from cleared memory, so loading one no longer reads a model from random memory
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -20,6 +28,7 @@
 #include "bh_debris.h"
 #include "weapons.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "lighting.h"
 #include "bh_predator.h"
@@ -40,6 +49,7 @@
 #include "detaillevels.h"
 #include "pldghost.h"
 #include "pldnet.h"
+#include "npc_ghosts.h"
 
 #define FLAMETHROWER_PARTICLES_PER_FRAME (MUL_FIXED(120,NormalFrameTime))
 #define PREDPISTOLFLECHETTES_PARTICLES_PER_FRAME (MUL_FIXED(50,NormalFrameTime))
@@ -57,7 +67,7 @@
 *                                    P R O T O T Y P E S	                                *
 ****************************************************************************************KJL*/
 static void InitialiseRocketBehaviour(void);
-static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID);
+STRATEGYBLOCK *InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID);
 static STRATEGYBLOCK* InitialisePulseGrenadeBehaviour(void);
 static void InitialisePPPlasmaBoltBehaviour(void);
 static void InitialiseSpeargunBoltBehaviour(void);
@@ -337,7 +347,8 @@ int Frisbee_TargetFilter(STRATEGYBLOCK *candidate) {
 						return(1);
 						break;
 					default:
-						return(0);
+						// A copy of an NPC the host runs counts as the real one does, above: anything but a marine
+						return(NpcGhosts_TypeIsAnNpc(dataptr->type) && dataptr->type != I_BehaviourMarine);
 						break;
 				}
 			}
@@ -1079,7 +1090,7 @@ STRATEGYBLOCK* CreateGrenadeKernel(AVP_BEHAVIOUR_TYPE behaviourID, VECTORCH *pos
 	return dispPtr->ObStrategyBlock;
 }
 
-static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
+STRATEGYBLOCK *InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
 {
 	VECTORCH position;
 
@@ -1100,7 +1111,7 @@ static void InitialiseGrenadeBehaviour(AVP_BEHAVIOUR_TYPE behaviourID)
 		position.vz = position.vz/4 + VDBPtr->VDB_World.vz;
   	}
 
-	CreateGrenadeKernel(behaviourID,&position,&PlayersWeapon.ObMat,1);
+	return CreateGrenadeKernel(behaviourID,&position,&PlayersWeapon.ObMat,1);
 
 }
 
@@ -1165,7 +1176,7 @@ extern void GrenadeBehaviour(STRATEGYBLOCK *sbPtr)
 				if((ghostData->type == I_BehaviourMarinePlayer)||
 			   		(ghostData->type == I_BehaviourPredatorPlayer)||
 			   		(ghostData->type == I_BehaviourAlienPlayer)||
-			   		(ghostData->type == I_BehaviourAlien))
+			   		(ghostData->type == I_BehaviourAlien)||NpcGhosts_TypeIsAnNpc(ghostData->type))
 				{
 			   		explodeNow = 1;
 				}
@@ -1266,7 +1277,7 @@ extern void ClusterGrenadeBehaviour(STRATEGYBLOCK *sbPtr)
 				if((ghostData->type == I_BehaviourMarinePlayer)||
 			   		(ghostData->type == I_BehaviourPredatorPlayer)||
 			   		(ghostData->type == I_BehaviourAlienPlayer)||
-			   		(ghostData->type == I_BehaviourAlien))
+			   		(ghostData->type == I_BehaviourAlien)||NpcGhosts_TypeIsAnNpc(ghostData->type))
 				{
 			   		explodeNow = 1;
 				}
@@ -1531,7 +1542,8 @@ int ValidTargetForProxMine(STRATEGYBLOCK *obstaclePtr)
 		if (ghostDataPtr->type==I_BehaviourAlienPlayer
 		  ||ghostDataPtr->type==I_BehaviourMarinePlayer
 		  ||ghostDataPtr->type==I_BehaviourPredatorPlayer
-		  ||ghostDataPtr->type==I_BehaviourAlien)
+		  ||ghostDataPtr->type==I_BehaviourAlien
+		  ||NpcGhosts_TypeIsAnNpc(ghostDataPtr->type))
 		{
 			return 1;
 		}
@@ -3036,8 +3048,11 @@ void InitialiseDiscBehaviour(STRATEGYBLOCK *target,SECTION_DATA *disc_section) {
 
 		/* Match disks. */
 		local_disc=GetThisSectionData(bblk->HModelController.section_data,"disk");
-		local_disc->World_Offset=disc_section->World_Offset;
-		local_disc->SecMat=disc_section->SecMat;
+		// the disc is a named part of the model and may be missing
+		if (local_disc) {
+			local_disc->World_Offset=disc_section->World_Offset;
+			local_disc->SecMat=disc_section->SecMat;
+		}
 		InitHModelTweening(&bblk->HModelController,(ONE_FIXED>>2),HMSQT_MarineStand,MSSS_Minigun_Delta,ONE_FIXED,1);
 	}
 
@@ -4032,6 +4047,14 @@ int PredDisc_TargetFilter(STRATEGYBLOCK *candidate) {
 		case I_BehaviourNetGhost:
 			{
 				NETGHOSTDATABLOCK *dataptr = static_cast<NETGHOSTDATABLOCK*>(candidate->SBdataptr);
+
+				// In the mode that plays as single player does, the disc seeks what it seeks there: an NPC, which here may be a
+				// copy of one the host runs. The other players are on your side, so it leaves them alone.
+				if (SameAsSinglePlayer())
+				{
+					return(dataptr->type == I_BehaviourAlien || NpcGhosts_TypeIsAnNpc(dataptr->type));
+				}
+
 				switch (dataptr->type) {
 					case I_BehaviourMarinePlayer:
 					case I_BehaviourAlienPlayer:
@@ -4248,6 +4271,9 @@ DISPLAYBLOCK *SpawnMolotovCocktail(SECTION_DATA *root, MATRIXCH *master_orient)
 			RemoveBehaviourStrategy(sbPtr);
 			return (DISPLAYBLOCK*)NULL;
 		}
+
+		// new memory holds whatever was there before, and when loading, nothing below fills in the bottle's model
+		memset(sbPtr->SBdataptr, 0, sizeof(MOLOTOV_BEHAV_BLOCK));
 
 		((MOLOTOV_BEHAV_BLOCK * ) sbPtr->SBdataptr)->counter = 65536;//32767;//FastRandom()&32767;
 
@@ -4488,7 +4514,7 @@ void LoadStrategy_Grenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter);
 	COPYELEMENT_LOAD(bouncelastframe);
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_Grenade(STRATEGYBLOCK* sbPtr)
@@ -4541,7 +4567,7 @@ void LoadStrategy_ClusterGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter);
 	COPYELEMENT_LOAD(bouncelastframe);
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_ClusterGrenade(STRATEGYBLOCK* sbPtr)
@@ -4593,7 +4619,7 @@ void LoadStrategy_FlareGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(LifeTimeRemaining)
 	COPYELEMENT_LOAD(ParticleGenerationTimer)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 
 	Load_SoundState(&behav->SoundHandle);
 }
@@ -4648,7 +4674,7 @@ void LoadStrategy_ProxGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(LifeTimeRemaining)
 	COPYELEMENT_LOAD(SoundGenerationTimer)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 
 	Load_SoundState(&behav->SoundHandle);
 }
@@ -4703,7 +4729,7 @@ void LoadStrategy_Rocket(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_Rocket(STRATEGYBLOCK* sbPtr)
@@ -4755,7 +4781,7 @@ void LoadStrategy_PPPlasmaBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_PPPlasmaBolt(STRATEGYBLOCK* sbPtr)
@@ -4813,7 +4839,7 @@ void LoadStrategy_PredatorEnergyBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(damage)
 	COPYELEMENT_LOAD(blast_radius)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_PredatorEnergyBolt(STRATEGYBLOCK* sbPtr)
@@ -4869,7 +4895,7 @@ void LoadStrategy_PulseGrenade(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(counter)
 	COPYELEMENT_LOAD(player)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_PulseGrenade(STRATEGYBLOCK* sbPtr)
@@ -4921,7 +4947,7 @@ void LoadStrategy_Molotov(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//copy stuff over
 	COPYELEMENT_LOAD(counter)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 
 
 	//load the molotov hierarchy
@@ -4933,6 +4959,11 @@ void LoadStrategy_Molotov(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 
+	//the bottle's model only comes from the save file, and it can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Molotov(STRATEGYBLOCK* sbPtr)
@@ -5008,7 +5039,7 @@ void LoadStrategy_PredatorDisc(SAVE_BLOCK_STRATEGY_HEADER* header)
 	behav->Target = FindSBWithName(behav->Target_SBname);
 
 //strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5021,6 +5052,12 @@ void LoadStrategy_PredatorDisc(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 	Load_SoundState(&behav->soundHandle);
+
+	//the model only comes from the save file, and this can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_PredatorDisc(STRATEGYBLOCK* sbPtr)
@@ -5109,7 +5146,7 @@ void LoadStrategy_SpearBolt(/*SAVE_BLOCK_HEADER*/SAVE_BLOCK_STRATEGY_HEADER* hea
 	COPYELEMENT_LOAD(SpearThroughFragment)
 	COPYELEMENT_LOAD(Stuck)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 
 	{
 		SAVE_BLOCK_HEADER* hier_header = GetNextBlockIfOfType(SaveBlock_Hierarchy);
@@ -5184,7 +5221,7 @@ void LoadStrategy_Frisbee(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(bounces)
 
 //strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -5197,6 +5234,12 @@ void LoadStrategy_Frisbee(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 	Load_SoundState(&behav->soundHandle);
+
+	//the model only comes from the save file, and this can't go on without one
+	if(!behav->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_Frisbee(STRATEGYBLOCK* sbPtr)
@@ -5443,7 +5486,7 @@ void LoadStrategy_FrisbeeEnergyBolt(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(damage)
 	COPYELEMENT_LOAD(blast_radius)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 }
 
 void SaveStrategy_FrisbeeEnergyBolt(STRATEGYBLOCK* sbPtr)

@@ -1,0 +1,228 @@
+{
+	"copy": [
+		"3dc/avp",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a slot outside the list is looked up",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "\tif (from < 0 || from >= count)\n\t{\n\t\treturn from;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the cudgel counts though he isn't carrying it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(slots[i].isCudgel && slots[i].possessed) ? i : cudgel",
+					"to": "slots[i].isCudgel ? i : cudgel"
+				}
+			]
+		},
+		{
+			"name": "the cudgel counts as a gun with ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(!slots[i].isCudgel && slots[i].possessed && slots[i].mayBeChosen && slots[i].hasAmmo)",
+					"to": "(slots[i].possessed && slots[i].mayBeChosen && slots[i].hasAmmo)"
+				}
+			]
+		},
+		{
+			"name": "a gun he isn't carrying counts as having ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(!slots[i].isCudgel && slots[i].possessed && slots[i].mayBeChosen && slots[i].hasAmmo)",
+					"to": "(!slots[i].isCudgel && slots[i].mayBeChosen && slots[i].hasAmmo)"
+				}
+			]
+		},
+		{
+			"name": "a gun that may not be chosen counts as having ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(!slots[i].isCudgel && slots[i].possessed && slots[i].mayBeChosen && slots[i].hasAmmo)",
+					"to": "(!slots[i].isCudgel && slots[i].possessed && slots[i].hasAmmo)"
+				}
+			]
+		},
+		{
+			"name": "every gun counts as having ammunition",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(!slots[i].isCudgel && slots[i].possessed && slots[i].mayBeChosen && slots[i].hasAmmo)",
+					"to": "(!slots[i].isCudgel && slots[i].possessed && slots[i].mayBeChosen)"
+				}
+			]
+		},
+		{
+			"name": "the search goes round for ever if nothing can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "for (int tried = 0; tried < count - 1; tried++)",
+					"to": "for (int tried = 0; ; tried++)"
+				}
+			]
+		},
+		{
+			"name": "the search stops a slot short of the whole list",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "for (int tried = 0; tried < count - 1; tried++)",
+					"to": "for (int tried = 0; tried < count - 2; tried++)"
+				}
+			]
+		},
+		{
+			"name": "going past the start of the list goes outside it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(slot + step + count) % count",
+					"to": "(slot + step) % count"
+				}
+			]
+		},
+		{
+			"name": "the direction is ignored",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "(slot + step + count) % count",
+					"to": "(slot + 1 + count) % count"
+				}
+			]
+		},
+		{
+			"name": "the cudgel can be chosen by going past it",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "slots[slot].isCudgel || !slots[slot].possessed || !slots[slot].mayBeChosen",
+					"to": "!slots[slot].possessed || !slots[slot].mayBeChosen"
+				}
+			]
+		},
+		{
+			"name": "a gun he isn't carrying can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "slots[slot].isCudgel || !slots[slot].possessed || !slots[slot].mayBeChosen",
+					"to": "slots[slot].isCudgel || !slots[slot].mayBeChosen"
+				}
+			]
+		},
+		{
+			"name": "a gun that may not be chosen can be",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "slots[slot].isCudgel || !slots[slot].possessed || !slots[slot].mayBeChosen",
+					"to": "slots[slot].isCudgel || !slots[slot].possessed"
+				}
+			]
+		},
+		{
+			"name": "OLD: an empty gun can be chosen, and the game sends him straight back",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "if (emptyGunsMoveOn && !slots[slot].hasAmmo)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "another species passes over an empty gun as well",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "if (emptyGunsMoveOn && !slots[slot].hasAmmo)",
+					"to": "if (!slots[slot].hasAmmo)"
+				}
+			]
+		},
+		{
+			"name": "with ammunition somewhere, an empty gun still sends him to the cudgel",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "\t\t\tif (someGunHasAmmo)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "with no ammunition anywhere, the cudgel isn't where the search goes",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "\t\t\tif (cudgel != -1)\n\t\t\t{\n\t\t\t\treturn cudgel;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "nowhere to go gives the first slot, not where it started",
+			"changes": [
+				{
+					"file": "3dc/avp/weapon_slots.h",
+					"from": "\t\treturn slot;\n\t}\n\n\treturn from;",
+					"to": "\t\treturn slot;\n\t}\n\n\treturn 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine out of ammunition never falls back to the shotgun",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "\tWEAPON_AUTOSHOTGUN,\n\tWEAPON_SONICCANNON, // the sniper rifle\n",
+					"to": "\tWEAPON_SONICCANNON, // the sniper rifle\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: or the sniper rifle",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "\tWEAPON_SONICCANNON, // the sniper rifle\n\tWEAPON_BEAMCANNON, // the revolver\n\tWEAPON_MYSTERYGUN, // the M79\n\tWEAPON_CUDGEL,",
+					"to": "\tWEAPON_BEAMCANNON, // the revolver\n\tWEAPON_MYSTERYGUN, // the M79\n\tWEAPON_CUDGEL,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: or the revolver",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "\tWEAPON_BEAMCANNON, // the revolver\n\tWEAPON_MYSTERYGUN, // the M79\n\tWEAPON_CUDGEL,",
+					"to": "\tWEAPON_MYSTERYGUN, // the M79\n\tWEAPON_CUDGEL,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: or the M79",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "\tWEAPON_MYSTERYGUN, // the M79\n\tWEAPON_CUDGEL,",
+					"to": "\tWEAPON_CUDGEL,"
+				}
+			]
+		}
+	]
+}

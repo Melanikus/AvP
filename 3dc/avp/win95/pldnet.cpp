@@ -1,22 +1,44 @@
 // AvP port by Barry Duncan.
-// Modified 2026-11-07 by Melanikus for the AvP port:
-//   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
-//   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
-//   be in the list of far places as well as in the list of AI modules
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
 //   a pointer the compiler could not prove was set now starts at a safe value; the game runs the same as before
+//   the disc is checked before use, because a save file can leave that part out
 // Modified 2026-11-06 by Melanikus for the AvP port:
+//   the new guns' settings are in the game description, so a joiner uses the host's
+//   the room needed round a level's start is for however tall the player is
+//   what has to go out before a level stops goes at once, not at the next turn of the send clock; someone left behind in a level catches up; the places round a level's start are measured from the floor under it
+//   in a campaign only its species is on offer, and looking for an allowed species reaches every place on the slider
+//   a level with no multiplayer starts puts each player beside the level's own start, or beside a teammate who has gone on ahead
+//   in a campaign a dead player is out until the next level, and when everyone is out the level starts again
+//   a campaign has a difficulty chosen by the host, sent in the game description and checked
+//   and one number from the host for where things with several possible places go
+//   a campaign has no time or score limit, and no score on the screen
+//   the build stops if a message or a level list changes while the multiplayer version doesn't
+//   a press of a switch with a link group now reaches the other machines
+//   in the same-as-single-player mode, a level starts for everyone together
+//   in the same-as-single-player mode, the messages about damage to breakable things can name a track object
+//   the same-as-single-player mode: its one question, a campaign in the game description, and the message that moves everyone on
+//   others see a muzzle flash from the revolver, and a kill by M5's guns or the staff has its picture in the message
+//   three more marine classes from MelPyth M5, on the class slider, with their limits and allow settings, and Allow Staff
+//   a player on another machine can hit every kind of NPC the host runs, and which part of it he hit counts
+//   in a game that plays the same as single player, the host tells everyone about the NPCs it runs: see npc_ghosts.cpp
 //   system messages are all handled in networking.cpp now, so that the rest of this file only ever sees game messages from someone who has been let in; a client learns the other players' names from the game description
 //   the buffer that receives a message has room for its header as well as what the game can send
+//   in a game that plays as single player, a host says what its doors, switches and breakable things are doing 10 times a second, not once
+//   a level starting again keeps its list of what can happen, and forgets only what has; a new game starts a new list; a host says again what has happened, so that a joiner who came late, or a message with no room, does not lose it; a host's loading screen says the game's description once a second
 //   a message is checked from end to end before any of it is read, and what only a host should say is only believed from the host: see Net_GameMessageIsGood
 //   numbers in messages that are places in the player list, the alien kinds, the decals, the ammunition, the weapons or the score tables are checked before they're used
 //   a damage message naming ammunition that isn't in the table is ignored, where only an assert stood before, and that's compiled out of the game players run
 //   a client may only send so many of the kinds of part that cost every machine something, what one player has alive is counted as well, and what's kept back of the blocks is for this machine's own player
-//   no network game has an autogun, so a message about one is refused by name, and what only such a message reached has gone
+//   outside the campaign mode, which keeps a level's own autoguns, a message about an autogun is refused by name
 //   a machine sends 60 times a second, not every frame, and what has to go out before it stops playing goes at once
-//   the build stops if a message or a level list changes while the multiplayer version doesn't
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a platform lift's state from the host is checked before it's used, and the first one refused is written in the log
+//   a game description that comes after the word to go on to the next level can't put a campaign's place back, so a joiner
+//   loads the level the host loads, and the log says when one tried
+//   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
+//   be in the list of far places as well as in the list of AI modules
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -33,9 +55,14 @@
 #include "pvisible.h"
 #include "bh_platform_lift.h"
 #include "pldnet.h"
-#include "env_info.h"
 #include "net_checks.h"
+#include "env_info.h"
+#include "level_events.h"
+#include "extents.h"
 #include "logString.h"
+#include "marine_classes.h"
+#include "player_spots.h"
+#include "los.h"
 #include "pldghost.h"
 #include "equipment.h"
 #include "weapons.h"
@@ -50,6 +77,7 @@
 #include "bh_alien.h"
 #include "bh_marine.h"
 #include "bh_binary_switch.h"
+#include "bh_agun.h"
 #include "bh_weapon.h"
 #include "bh_corpse.h"
 #include "bh_light.h"
@@ -67,10 +95,17 @@
 int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISPLAYBLOCK *ignoredObjectPtr, VECTORCH *positionPtr, int maxRange);
 
 #include "networking.h"
+#include "level_lists.h"
 #include "lift_checks.h"
 #include "logString.h"
 #include "MemoryStream.h"
 #include <assert.h>
+#include "bh_xeno.h"
+#include "bh_queen.h"
+#include "bh_facehugger.h"
+#include "hmodel.h"
+#include "npc_kinds.h"
+#include "npc_ghosts.h"
 
 /*----------------------------------------------------------------------
   Some globals for use in this file
@@ -126,6 +161,9 @@ NETGAME_GAMEDATA netGameData =
 	8,  // unsigned int maxMarineMinigun;
 	8,  // unsigned int maxMarineSmartDisc;
 	8,  // unsigned int maxMarinePistols;
+	8,  // unsigned int maxMarineShotgun;
+	8,  // unsigned int maxMarineRevolver;
+	8,  // unsigned int maxMarineM79;
 
 	// weapons allowed
 	TRUE,   // BOOL allowSmartgun;
@@ -140,6 +178,10 @@ NETGAME_GAMEDATA netGameData =
 	TRUE,   // BOOL allowMedicomp;
 	TRUE,   // BOOL allowSmartDisc;
 	TRUE,   // BOOL allowPistols;
+	TRUE,   // BOOL allowShotgun;
+	TRUE,   // BOOL allowRevolver;
+	TRUE,   // BOOL allowM79;
+	FALSE,  // BOOL allowStaff;
 
 	0,         // int maxLives;
 	FALSE,     // BOOL useSharedLives;
@@ -197,6 +239,9 @@ void SetDefaultMultiplayerConfig()
 	netGameData.maxMarineMinigun = 8;
 	netGameData.maxMarineSmartDisc = 8;
 	netGameData.maxMarinePistols = 8;
+	netGameData.maxMarineShotgun = 8;
+	netGameData.maxMarineRevolver = 8;
+	netGameData.maxMarineM79 = 8;
 	netGameData.allowSmartgun = 1;
 	netGameData.allowFlamer = 1;
 	netGameData.allowSadar = 1;
@@ -209,9 +254,14 @@ void SetDefaultMultiplayerConfig()
 	netGameData.allowMedicomp = 1;
 	netGameData.allowSmartDisc = 1;
 	netGameData.allowPistols = 1;
+	netGameData.allowShotgun = 1;
+	netGameData.allowRevolver = 1;
+	netGameData.allowM79 = 1;
+	netGameData.allowStaff = 0;
 	netGameData.maxLives = 0;
 	netGameData.useSharedLives = 0;
 	netGameData.pointsForRespawn = 0;
+	netGameData.coopDifficulty = I_Medium;
 	netGameData.timeForRespawn = 40;
 	netGameData.gameSpeed = NETGAMESPEED_100PERCENT;
 	netGameData.preDestroyLights = FALSE;
@@ -325,6 +375,7 @@ static void ProcessNetMsg_InanimateObjectDestroyed(NETMESSAGE_INANIMATEDESTROYED
 static void ProcessNetMsg_LOSRequestBinarySwitch(NETMESSAGE_LOSREQUESTBINARYSWITCH *msgPtr);
 static void ProcessNetMsg_PlatformLiftState(NETMESSAGE_PLATFORMLIFTSTATE *msgPtr);
 static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORMLIFTACTIVATE *msgPtr);
+static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *msgPtr, NetID senderId);
 static unsigned char *ProcessNetMsg_ChatBroadcast(unsigned char *subMessagePtr, NetID senderId);
 static void ProcessNetMsg_MakeExplosion(NETMESSAGE_MAKEEXPLOSION *messagePtr);
 static void ProcessNetMsg_MakeFlechetteExplosion(NETMESSAGE_MAKEFLECHETTEEXPLOSION *messagePtr);
@@ -345,6 +396,14 @@ static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr);
 static void ProcessNetMsg_AlienAISequenceChange(NETMESSAGE_ALIENSEQUENCECHANGE *messagePtr, NetID senderId);
 static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, NetID senderId);
 static void ProcessNetMsg_SpotOtherSound(NETMESSAGE_SPOTOTHERSOUND *messagePtr, NetID senderId);
+static void ProcessNetMsg_CoopNextLevel(NETMESSAGE_COOPNEXTLEVEL *messagePtr);
+static void Coop_GoToPlace(int place);
+static void ProcessNetMsg_CoopReady(NetID senderId);
+static void LevelEvents_SayAgainWhatHappened(void);
+static const DWORD kMillisecondsBetweenObjectSynchs = 100;
+static void ProcessNetMsg_CoopGo(void);
+static void ProcessNetMsg_LevelEvent(NETMESSAGE_LEVELEVENT *messagePtr);
+static void ProcessNetMsg_LevelEventAsk(NETMESSAGE_LEVELEVENT *messagePtr, NetID senderId);
 void StartOfGame_PlayerPlacement(STRATEGYBLOCK *playerSbPtr, int seed);
 
 static void CheckLastManStandingState();
@@ -362,7 +421,17 @@ static int GetSizeOfGhostHierarchyDamagedMessage(char *messagePtr);
 static int GetSizeOfInanimateDamagedMessage(char *messagePtr);
 
 static STRATEGYBLOCK *FindObjectFromNetIndex(int obIndex);
+static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID senderId);
+static void ProcessNetMsg_NpcSound(NETMESSAGE_NPCSOUND *messagePtr, NetID senderId);
+static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr);
+static void ProcessNetMsg_LiftState(NETMESSAGE_LIFTSTATE *messagePtr);
+static void ProcessNetMsg_NpcXenoDeltas(NETMESSAGE_NPCXENODELTAS *messagePtr, NetID senderId);
+static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID senderId);
+static void AddNpcStateMessages(void);
+HMODELCONTROLLER *Npc_HModelController(STRATEGYBLOCK *sbPtr);
 static STRATEGYBLOCK *FindEnvironmentObjectFromName(char *name);
+static STRATEGYBLOCK *FindBreakableFromName(char *name);
+static STRATEGYBLOCK *FindSwitchFromName(char *name);
 static void InitialiseSendMessageBuffer(void);
 
 static MARINE_SEQUENCE GetMyMarineSequence(void);
@@ -405,6 +474,9 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 {
 	AvP.GameMode = I_GM_Playing;
 	AvP.Network = I_Host;
+
+	// A new game, so nothing that happened in the last one counts, even on the same level
+	LevelEvents_NewLevel();
 	AvP.NetworkAIServer = (gamestyle == NGT_Coop);
 	/* init the send message buffer */
 	InitialiseSendMessageBuffer();
@@ -475,6 +547,9 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 			case 8:
 			case 9:
 			case 10:
+			case 11:
+			case 12:
+			case 13:
 				netGameData.myCharacterType = NGCT_Marine;
 				netGameData.myNextCharacterType = NGCT_Marine;
 				netGameData.myCharacterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)(species - 2);
@@ -530,6 +605,12 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 	netGameData.LMS_AlienIndex = -1;
 	InitNetLog();
 
+	// A campaign runs at full speed as single player does, whatever speed a saved game of another kind left here
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		netGameData.gameSpeed = NETGAMESPEED_100PERCENT;
+	}
+
 	//make sure our time scale is set correctly
 	switch (netGameData.gameSpeed)
 	{
@@ -560,6 +641,9 @@ void InitAVPNetGameForJoin(void)
 {
 	AvP.GameMode = I_GM_Playing;
 	AvP.Network  = I_Peer;
+
+	// A new game, so nothing that happened in the last one counts, even on the same level
+	LevelEvents_NewLevel();
 	AvP.NetworkAIServer = 0;
 
 	// init the send message buffer
@@ -737,7 +821,8 @@ void NetCollectMessages(void)
 
 		if ((AvP.Network == I_Host) && (netGameData.myGameState == NGS_Playing))
 		{
-			if (netGameData.timeLimit > 0)
+			// A campaign ends when its levels do, as single player does, not on a time or a score
+			if (netGameData.timeLimit > 0 && !SameAsSinglePlayer())
 			{
 				if (((netGameData.GameTimeElapsed >> 16) / 60) >= netGameData.timeLimit)
 				{
@@ -748,7 +833,7 @@ void NetCollectMessages(void)
 				}
 			}
 
-			if (netGameData.scoreLimit > 0)
+			if (netGameData.scoreLimit > 0 && !SameAsSinglePlayer())
 			{
 				/* nb this doesn't check team scores */
 
@@ -774,7 +859,8 @@ void NetCollectMessages(void)
 				}
 			}
 
-			if (netGameData.maxLives > 0)
+			// (In a campaign, being out and starting again are in Coop_WhileOut. It has no lives to count.)
+			if (netGameData.maxLives > 0 && !SameAsSinglePlayer())
 			{
 				int numPlayers = 0;
 				int numPlayersWithLifeLeft = 0;
@@ -1099,7 +1185,18 @@ static constexpr NetPartRule kNetPartRules[] =
 	{ NetMT_FrameTimer, sizeof(NETMESSAGE_FRAMETIMER), false, false },
 	{ NetMT_SpeciesScores, sizeof(NETMESSAGE_SPECIESSCORES), false, true },
 	{ NetMT_FarAlienPosition, sizeof(NETMESSAGE_FARALIENPOSITION), false, true },
-	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, false }
+	{ NetMT_SpotOtherSound, sizeof(NETMESSAGE_SPOTOTHERSOUND), false, false },
+	{ NetMT_CoopNextLevel, sizeof(NETMESSAGE_COOPNEXTLEVEL), false, true },
+	{ NetMT_LevelEvent, sizeof(NETMESSAGE_LEVELEVENT), false, true },
+	{ NetMT_LevelEventAsk, sizeof(NETMESSAGE_LEVELEVENT), false, false },
+	{ NetMT_CoopReady, 0, false, false },
+	{ NetMT_CoopGo, 0, false, true },
+	{ NetMT_NpcState, sizeof(NETMESSAGE_NPCSTATE), false, true },
+	{ NetMT_NpcXenoDeltas, sizeof(NETMESSAGE_NPCXENODELTAS), false, true },
+	{ NetMT_NpcKilled, sizeof(NETMESSAGE_NPCKILLED), false, true },
+	{ NetMT_NpcSound, sizeof(NETMESSAGE_NPCSOUND), false, true },
+	{ NetMT_NpcThrownObject, sizeof(NETMESSAGE_NPCTHROWNOBJECT), false, true },
+	{ NetMT_LiftState, sizeof(NETMESSAGE_LIFTSTATE), false, true }
 };
 
 // The build stops here if a message changes while the multiplayer version doesn't. See that file.
@@ -1478,8 +1575,7 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 
 			case (NetMT_PlayerAutoGunState):
 			{
-				// No network game has an autogun: a level's own are taken away as the game starts (AutoGunBehaveInit), and a player can't place one (CastSentrygun). So no honest game ever sends this.
-				Net_NoteRefused("an autogun message came, and no network game has autoguns");
+				ProcessNetMsg_PlayerAutoGunState((NETMESSAGE_AGUNSTATE *)subMessagePtr, senderId);
 				subMessagePtr += sizeof(NETMESSAGE_AGUNSTATE);
 				break;
 			}
@@ -1609,6 +1705,81 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 				break;
 			}
 
+			case (NetMT_CoopNextLevel):
+			{
+				ProcessNetMsg_CoopNextLevel((NETMESSAGE_COOPNEXTLEVEL *)subMessagePtr);
+				subMessagePtr += sizeof(NETMESSAGE_COOPNEXTLEVEL);
+				break;
+			}
+
+			case (NetMT_CoopReady):
+			{
+				ProcessNetMsg_CoopReady(senderId);
+				break;
+			}
+
+			case (NetMT_CoopGo):
+			{
+				ProcessNetMsg_CoopGo();
+				break;
+			}
+
+			case (NetMT_NpcState):
+			{
+				ProcessNetMsg_NpcState((NETMESSAGE_NPCSTATE *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_NPCSTATE);
+				break;
+			}
+
+			case (NetMT_NpcXenoDeltas):
+			{
+				ProcessNetMsg_NpcXenoDeltas((NETMESSAGE_NPCXENODELTAS *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_NPCXENODELTAS);
+				break;
+			}
+
+			case (NetMT_NpcKilled):
+			{
+				ProcessNetMsg_NpcKilled((NETMESSAGE_NPCKILLED *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_NPCKILLED);
+				break;
+			}
+
+			case (NetMT_NpcSound):
+			{
+				ProcessNetMsg_NpcSound((NETMESSAGE_NPCSOUND *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_NPCSOUND);
+				break;
+			}
+
+			case (NetMT_NpcThrownObject):
+			{
+				ProcessNetMsg_NpcThrownObject((NETMESSAGE_NPCTHROWNOBJECT *)subMessagePtr);
+				subMessagePtr += sizeof(NETMESSAGE_NPCTHROWNOBJECT);
+				break;
+			}
+
+			case (NetMT_LiftState):
+			{
+				ProcessNetMsg_LiftState((NETMESSAGE_LIFTSTATE *)subMessagePtr);
+				subMessagePtr += sizeof(NETMESSAGE_LIFTSTATE);
+				break;
+			}
+
+			case (NetMT_LevelEvent):
+			{
+				ProcessNetMsg_LevelEvent((NETMESSAGE_LEVELEVENT *)subMessagePtr);
+				subMessagePtr += sizeof(NETMESSAGE_LEVELEVENT);
+				break;
+			}
+
+			case (NetMT_LevelEventAsk):
+			{
+				ProcessNetMsg_LevelEventAsk((NETMESSAGE_LEVELEVENT *)subMessagePtr, senderId);
+				subMessagePtr += sizeof(NETMESSAGE_LEVELEVENT);
+				break;
+			}
+
 			case (NetMT_LocalObjectDestroyed_Request):
 			{
 				ProcessNetMsg_LocalObjectDestroyed_Request((NETMESSAGE_LOBDESTROYED_REQUEST *)subMessagePtr, senderId);
@@ -1658,10 +1829,11 @@ static void ProcessGameMessage(NetID senderId, uint8_t *msgP, size_t msgSize)
 				break;
 			}
 
+			// (In a campaign nothing comes back, as in single player, whoever asks)
 			case (NetMT_RespawnPickups):
 			{
-				if (netGameData.myGameState == NGS_Playing ||
-				    netGameData.myGameState == NGS_EndGameScreen)
+				if (!SameAsSinglePlayer() && (netGameData.myGameState == NGS_Playing ||
+				    netGameData.myGameState == NGS_EndGameScreen))
 				{
 					RespawnAllPickups();
 					PrintStringTableEntryInConsole(TEXTSTRING_MULTIPLAYER_WEAPON_RESPAWN);
@@ -1800,6 +1972,21 @@ void NetSendMessages(void)
 				{
 					netGameData.gameDescriptionTimeDelay += ONE_FIXED;
 					AddNetMsg_GameDescription();
+					LevelEvents_SayAgainWhatHappened();
+
+					if (!SameAsSinglePlayer())
+					{
+						AddNetMsg_StrategySynch();
+						AddNetMsg_FragmentalObjectsStatus();
+					}
+				}
+
+				// Where a level has to be finished together, a door that's shut on one machine and open on another stops the game. Each message holds 16 objects, so this takes a level of 160 round in a second, for about 130 bytes a second to each machine. It's safe to say often: a machine ignores it for an object that's moving, or that it has just pressed itself.
+				static DWORD lastObjectSynch = 0;
+
+				if (SameAsSinglePlayer() && timeGetTime() - lastObjectSynch >= kMillisecondsBetweenObjectSynchs)
+				{
+					lastObjectSynch = timeGetTime();
 					AddNetMsg_StrategySynch();
 					AddNetMsg_FragmentalObjectsStatus();
 				}
@@ -1821,7 +2008,11 @@ void NetSendMessages(void)
 	         netGameData.myGameState == NGS_Joining ||
 	         netGameData.myGameState == NGS_StartUp)
 	{
-		if (AvP.Network == I_Host) {
+		// Once a second, as in play. A loading screen comes here every frame, and a joiner still loading can't take what that would pile up.
+		static DWORD lastDescription = 0;
+
+		if (AvP.Network == I_Host && timeGetTime() - lastDescription >= 1000) {
+			lastDescription = timeGetTime();
 			AddNetMsg_GameDescription();
 		}
 	}
@@ -1914,7 +2105,8 @@ void NetSendMessages(void)
 
 // NetSendMessages sends only so many times a second, and between those times it keeps what it has for a later call.
 // Something that has to go out before this machine stops playing can't wait for that, because there may not be a later
-// call. This sends it now.
+// call. This sends it now. (Without it, the message moving everyone to the next level could sit here unsent until the
+// level change threw it away, and the others would stay behind in the old level for good.)
 static void NetSendMessagesNow(void)
 {
 	netGameData.sendTimer = 0;
@@ -2010,6 +2202,19 @@ static void AddPlayerAndObjectUpdateMessages(void)
 				break;
 			}
 
+			case (I_BehaviourAutoGun):
+			{
+				/* this MUST be a player placed autogun */
+				/* the autogun update message */
+				// In the mode that plays like single player it's a level's own, and it goes out with the other NPCs
+				if (!SameAsSinglePlayer())
+				{
+					AddNetMsg_PlayerAutoGunState(sbPtr);
+				}
+
+				break;
+			}
+
 			case (I_BehaviourAlien):
 			{
 				//only add alien details , if it is near (to someone)
@@ -2024,6 +2229,8 @@ static void AddPlayerAndObjectUpdateMessages(void)
 				break;
 		}
 	}
+
+	AddNpcStateMessages();
 }
 
 
@@ -2043,6 +2250,10 @@ void EndAVPNetGame(void)
 	/* reset our game mode here */
 	AvP.Network = I_No_Network;
 	AvP.NetworkAIServer = 0;
+
+	// Or the next game hosted from the menus would still count as a campaign
+	netGameData.coopCampaign = kCampaignNone;
+	netGameData.coopCampaignLevel = 0;
 	netGameData.skirmishMode = FALSE;
 	TurnOffMultiplayerObserveMode();
 	//reset time scale to default value
@@ -2095,6 +2306,10 @@ void AddNetMsg_GameDescription(void)
 
 		messagePtr->gameType = (unsigned char)netGameData.gameType;
 		messagePtr->levelNumber = (unsigned char)netGameData.levelNumber;
+		messagePtr->coopCampaign = (unsigned char)netGameData.coopCampaign;
+		messagePtr->coopCampaignLevel = (unsigned char)netGameData.coopCampaignLevel;
+		messagePtr->coopDifficulty = (unsigned char)netGameData.coopDifficulty;
+		messagePtr->coopRollNumber = netGameData.coopRollNumber;
 		messagePtr->scoreLimit = netGameData.scoreLimit;
 		messagePtr->timeLimit = (unsigned char)netGameData.timeLimit;
 		messagePtr->invulnerableTime = (unsigned char)netGameData.invulnerableTime;
@@ -2121,6 +2336,10 @@ void AddNetMsg_GameDescription(void)
 		messagePtr->allowMedicomp = netGameData.allowMedicomp;
 		messagePtr->allowSmartDisc = netGameData.allowSmartDisc;
 		messagePtr->allowPistols = netGameData.allowPistols;
+		messagePtr->allowShotgun = netGameData.allowShotgun;
+		messagePtr->allowRevolver = netGameData.allowRevolver;
+		messagePtr->allowM79 = netGameData.allowM79;
+		messagePtr->allowStaff = netGameData.allowStaff;
 		messagePtr->maxPredator = netGameData.maxPredator;
 		messagePtr->maxAlien = netGameData.maxAlien;
 		messagePtr->maxMarine = netGameData.maxMarine;
@@ -2133,6 +2352,9 @@ void AddNetMsg_GameDescription(void)
 		messagePtr->maxMarineMinigun = netGameData.maxMarineMinigun;
 		messagePtr->maxMarineSmartDisc = netGameData.maxMarineSmartDisc;
 		messagePtr->maxMarinePistols = netGameData.maxMarinePistols;
+		messagePtr->maxMarineShotgun = netGameData.maxMarineShotgun;
+		messagePtr->maxMarineRevolver = netGameData.maxMarineRevolver;
+		messagePtr->maxMarineM79 = netGameData.maxMarineM79;
 		messagePtr->useSharedLives = netGameData.useSharedLives;
 		messagePtr->maxLives = netGameData.maxLives;
 		messagePtr->numDeaths[0] = (unsigned char) min(netGameData.numDeaths[0], 255);
@@ -2665,9 +2887,8 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}
@@ -2851,9 +3072,8 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 			{
 				SECTION_DATA *disc_section;
 				disc_section = GetThisSectionData(PlayersWeapon.HModelControlBlock->section_data, "disk");
-				GLOBALASSERT(disc_section);
 
-				if ((disc_section->flags & section_data_notreal) == 0) {
+				if (disc_section && (disc_section->flags & section_data_notreal) == 0) {
 					messagePtr->IHaveADisk = 1;
 				}
 			}
@@ -2969,6 +3189,8 @@ static int MyPlayerHasAMuzzleFlash(STRATEGYBLOCK *sbPtr)
 	    (weaponPtr->WeaponIDNumber == WEAPON_SMARTGUN) ||
 	    (weaponPtr->WeaponIDNumber == WEAPON_MINIGUN) ||
 	    (weaponPtr->WeaponIDNumber == WEAPON_FRISBEE_LAUNCHER) ||
+	    (weaponPtr->WeaponIDNumber == WEAPON_SONICCANNON) ||
+	    (weaponPtr->WeaponIDNumber == WEAPON_BEAMCANNON) ||
 	    (weaponPtr->WeaponIDNumber == WEAPON_PRED_PISTOL) ||
 	    (weaponPtr->WeaponIDNumber == WEAPON_PRED_RIFLE))
 	{
@@ -3025,6 +3247,20 @@ char GetWeaponIconFromDamage(DAMAGE_PROFILE *damage)
 		case AMMO_SADAR_TOW :
 		case AMMO_SADAR_BLAST :
 			return ICON_SADAR;
+
+		// M5's guns. There's no picture for a shotgun, so a kill by one says nothing here, as the game does for what it has no picture of.
+		case AMMO_M79_STANDARD :
+		case AMMO_M79_FIRE :
+		case AMMO_M79_FRAG :
+		case AMMO_M79_DIRECT_HIT :
+		case AMMO_M79_FIRE_DIRECT_HIT :
+			return ICON_GRENADE_STANDARD;
+
+		case AMMO_REVOLVER :
+			return ICON_MARINE_PISTOL;
+
+		case AMMO_PRED_STAFF :
+			return ICON_WRISTBLADE;
 
 		case AMMO_GRENADE :
 			return ICON_GRENADE_STANDARD;
@@ -3849,7 +4085,8 @@ void AddNetMsg_InanimateObjectDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *dama
 	LOCALASSERT(AvP.Network != I_Host);
 	/* only send for inanimate objects*/
 	LOCALASSERT(sbPtr->I_SBtype == I_BehaviourInanimateObject ||
-	            sbPtr->I_SBtype == I_BehaviourPlacedLight);
+	            sbPtr->I_SBtype == I_BehaviourPlacedLight ||
+	            sbPtr->I_SBtype == I_BehaviourTrackObject);
 	/* check there's enough room in the send buffer */
 	{
 		int numBytesReqd = headerSize + maxMessageSize;
@@ -3936,7 +4173,8 @@ void AddNetMsg_InanimateObjectDestroyed(STRATEGYBLOCK *sbPtr)
 	/* should only send if we're the host */
 	LOCALASSERT(AvP.Network == I_Host);
 	LOCALASSERT(sbPtr->I_SBtype == I_BehaviourInanimateObject ||
-	            sbPtr->I_SBtype == I_BehaviourPlacedLight);
+	            sbPtr->I_SBtype == I_BehaviourPlacedLight ||
+	            sbPtr->I_SBtype == I_BehaviourTrackObject);
 	/* check there's enough room in the send buffer */
 	{
 		int numBytesReqd = headerSize + messageSize;
@@ -4151,6 +4389,114 @@ void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr)
 	headerPtr->type = (unsigned char)NetMT_RequestPlatformLiftActivate;
 	/* fill out the message */
 	COPY_NAME((&messagePtr->name[0]), &(sbPtr->SBname));
+}
+
+/* KJL 17:49:31 20/01/98 - transmit make decal info */
+void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)
+{
+	NETMESSAGEHEADER *headerPtr;
+	NETMESSAGE_AGUNSTATE *messagePtr;
+	int headerSize = sizeof(NETMESSAGEHEADER);
+	int messageSize = sizeof(NETMESSAGE_AGUNSTATE);
+
+	/* only send this if we are playing */
+	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	/* check there's enough room in the send buffer */
+	{
+		int numBytesReqd = headerSize + messageSize;
+		int numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+		if (numBytesReqd > numBytesLeft)
+		{
+			LOCALASSERT(1 == 0);
+			/* don't add it */
+			return;
+		}
+	}
+	/* set up pointers to header and message structures */
+	headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+	endSendBuffer += headerSize;
+	messagePtr = (NETMESSAGE_AGUNSTATE *)endSendBuffer;
+	endSendBuffer += messageSize;
+	/* fill out the header */
+	headerPtr->type = (unsigned char)NetMT_PlayerAutoGunState;
+	/* fill out the message */
+	{
+		DYNAMICSBLOCK *dynPtr = sbPtr->DynPtr;
+		LOCALASSERT(dynPtr);
+		LOCALASSERT((dynPtr->Position.vx < 4194304) && (dynPtr->Position.vx > -4194304)); /* 23 bits of data */
+		LOCALASSERT((dynPtr->Position.vy < 4194304) && (dynPtr->Position.vy > -4194304)); /* 23 bits of data */
+		LOCALASSERT((dynPtr->Position.vz < 4194304) && (dynPtr->Position.vz > -4194304)); /* 23 bits of data */
+		LOCALASSERT((dynPtr->OrientEuler.EulerX >= 0) && (dynPtr->OrientEuler.EulerX < 4096)); /* 9 bits of signed data */
+		LOCALASSERT((dynPtr->OrientEuler.EulerY >= 0) && (dynPtr->OrientEuler.EulerY < 4096)); /* 9 bits of signed data */
+		LOCALASSERT((dynPtr->OrientEuler.EulerZ >= 0) && (dynPtr->OrientEuler.EulerZ < 4096));  /* 9 bits of signed data */
+
+		/* NB we can fit +-4194303 into 23 bits */
+		if (dynPtr->Position.vx < -4100000) {
+			messagePtr->xPos = -4100000;
+		}
+		else if (dynPtr->Position.vx > 4100000) {
+			messagePtr->xPos = 4100000;
+		}
+		else {
+			messagePtr->xPos = dynPtr->Position.vx;
+		}
+
+		messagePtr->xOrient = (dynPtr->OrientEuler.EulerX >> NET_EULERSCALESHIFT);
+
+		if (dynPtr->Position.vy < -4100000) {
+			messagePtr->yPos = -4100000;
+		}
+		else if (dynPtr->Position.vy > 4100000) {
+			messagePtr->yPos = 4100000;
+		}
+		else {
+			messagePtr->yPos = dynPtr->Position.vy;
+		}
+
+		messagePtr->yOrient = (dynPtr->OrientEuler.EulerY >> NET_EULERSCALESHIFT);
+
+		if (dynPtr->Position.vz < -4100000) {
+			messagePtr->zPos = -4100000;
+		}
+		else if (dynPtr->Position.vz > 4100000) {
+			messagePtr->zPos = 4100000;
+		}
+		else {
+			messagePtr->zPos = dynPtr->Position.vz;
+		}
+
+		messagePtr->zOrient = (dynPtr->OrientEuler.EulerZ >> NET_EULERSCALESHIFT);
+	}
+	/* add the object Id */
+	{
+		int obId = *((int *)(&(sbPtr->SBname[4])));
+		//      LOCALASSERT((obId >= -NET_MAXOBJECTID)&&(obId <= NET_MAXOBJECTID));
+		messagePtr->objectId = obId;
+	}
+	/* am I firing?? */
+	{
+		AUTOGUN_STATUS_BLOCK *agData;
+		agData = (AUTOGUN_STATUS_BLOCK *)(sbPtr->SBdataptr);
+		LOCALASSERT(agData);
+
+		if (agData->Firing) {
+			messagePtr->IAmFiring = 1;
+		}
+		else {
+			messagePtr->IAmFiring = 0;
+		}
+
+		if (agData->behaviourState == I_disabled) {
+			messagePtr->IAmEnabled = 0;
+		}
+		else {
+			messagePtr->IAmEnabled = 1;
+		}
+	}
 }
 
 /* KJL 17:49:31 20/01/98 - transmit make decal info */
@@ -5570,6 +5916,56 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 		}
 
 		netGameData.gameType = (NETGAME_TYPE)messagePtr->gameType;
+
+		// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all
+		if (NetCampaignPlaceIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, Campaign_LevelCount(messagePtr->coopCampaign)))
+		{
+			// Someone playing a level who hears here that the campaign has gone on wasn't told the proper way. If this
+			// only wrote the number down, he'd stay in the old level for good, with the others waiting for him. It
+			// shouldn't ever happen, so the log says when it does.
+			bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning
+				&& NetCampaignMoveIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, netGameData.coopCampaign, netGameData.coopCampaignLevel, Campaign_LevelCount(netGameData.coopCampaign));
+
+			netGameData.coopCampaign = messagePtr->coopCampaign;
+
+			if (leftBehind)
+			{
+				LogErrorString("campaign: the host has gone on to another level and nobody told this machine, so it's going on now");
+				Coop_GoToPlace(messagePtr->coopCampaignLevel);
+			}
+			else if (Coop_LevelChangeIsDue())
+			{
+				// The host's word to go on has come, and this description can be one it made before it moved. When the host
+				// reaches a level's end, it adds the next-level message and sends at once, and that send can add the
+				// once-a-second description behind it, still naming the old place. Written down, that old place would make this
+				// machine load the level it has just finished, while the host loads the next. So while a move is due, the
+				// place stays the one the next-level message gave. The descriptions sent while the next level loads name it too.
+				static unsigned long long oldPlacesLeft = 0;
+
+				if (messagePtr->coopCampaignLevel != netGameData.coopCampaignLevel && LogThisDrop(oldPlacesLeft))
+				{
+					LogString("campaign: a game description naming place " + std::to_string(messagePtr->coopCampaignLevel) + " came after the word to go on to place " +
+						std::to_string(netGameData.coopCampaignLevel) + ", so the place stays " + std::to_string(netGameData.coopCampaignLevel) + " (number " + std::to_string(oldPlacesLeft) + " of these)");
+				}
+			}
+			else
+			{
+				netGameData.coopCampaignLevel = messagePtr->coopCampaignLevel;
+			}
+		}
+		else
+		{
+			netGameData.coopCampaign = kCampaignNone;
+			netGameData.coopCampaignLevel = 0;
+		}
+
+		// It picks a row in the tables of damage and health, so it's checked in the same way. A bad number gets the
+		// game's usual difficulty, not a refusal, because the rest of the description may be good.
+		netGameData.coopDifficulty = NetCampaignDifficultyIsGood(messagePtr->coopDifficulty) ? messagePtr->coopDifficulty : I_Medium;
+
+		// Any number at all is safe here: see shared_roll.h
+		netGameData.coopRollNumber = messagePtr->coopRollNumber;
+
 		// level number got from the session description instead
 		// netGameData.levelNumber = messagePtr->levelNumber;
 		netGameData.scoreLimit = messagePtr->scoreLimit;
@@ -5606,6 +6002,11 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 				make sure our time scale is set correctly
 				(Only set it the once , so that it can be overridden for debugging purposes)
 				*/
+				if (netGameData.coopCampaign != kCampaignNone)
+				{
+					netGameData.gameSpeed = NETGAMESPEED_100PERCENT;
+				}
+
 				switch (netGameData.gameSpeed)
 				{
 					case NETGAMESPEED_70PERCENT :
@@ -5639,6 +6040,10 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 		netGameData.allowMedicomp = messagePtr->allowMedicomp;
 		netGameData.allowSmartDisc = messagePtr->allowSmartDisc;
 		netGameData.allowPistols = messagePtr->allowPistols;
+		netGameData.allowShotgun = messagePtr->allowShotgun;
+		netGameData.allowRevolver = messagePtr->allowRevolver;
+		netGameData.allowM79 = messagePtr->allowM79;
+		netGameData.allowStaff = messagePtr->allowStaff;
 		netGameData.maxPredator = messagePtr->maxPredator;
 		netGameData.maxAlien = messagePtr->maxAlien;
 		netGameData.maxMarine = messagePtr->maxMarine;
@@ -5651,6 +6056,9 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 		netGameData.maxMarineMinigun = messagePtr->maxMarineMinigun;
 		netGameData.maxMarineSmartDisc = messagePtr->maxMarineSmartDisc;
 		netGameData.maxMarinePistols = messagePtr->maxMarinePistols;
+		netGameData.maxMarineShotgun = messagePtr->maxMarineShotgun;
+		netGameData.maxMarineRevolver = messagePtr->maxMarineRevolver;
+		netGameData.maxMarineM79 = messagePtr->maxMarineM79;
 		netGameData.useSharedLives = messagePtr->useSharedLives;
 		netGameData.maxLives = messagePtr->maxLives;
 		netGameData.numDeaths[0] = messagePtr->numDeaths[0];
@@ -6773,7 +7181,11 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 
 		Similarly all things that cause falling damage should count as suicide (in particular platform lifts)
 		*/
-		if (messageHeader->ammo_id != AMMO_MOLOTOV && messageHeader->ammo_id != AMMO_FALLING_POSTMAX) {
+		// In the mode that plays like single player the host runs every NPC, so a hit from the host is usually an NPC's, and the message can't say which.
+		// So the host's name doesn't go on the kill. Nothing is scored in that mode, so nothing is lost when it really was the host's player.
+		bool const couldBeAnNpc = SameAsSinglePlayer() && senderId == Net_HostPlayerID();
+
+		if (messageHeader->ammo_id != AMMO_MOLOTOV && messageHeader->ammo_id != AMMO_FALLING_POSTMAX && !couldBeAnNpc) {
 			myNetworkKillerId = senderId;
 		}
 
@@ -6863,15 +7275,12 @@ static void ProcessNetMsg_LocalObjectDamaged(char *messagePtr, NetID senderId)
 
 			if (messageSection && messageSection->SectionID != -1)
 			{
-				// Hmm.
-				if (sbPtr->I_SBtype == I_BehaviourAlien)
+				// The kinds the host runs, each with its own model
+				controller = Npc_HModelController(sbPtr);
+
+				if (controller)
 				{
-					// Only allowed for aliens, right now.
-					ALIEN_STATUS_BLOCK *alienStatusPtr = (ALIEN_STATUS_BLOCK *)(sbPtr->SBdataptr);
-					GLOBALASSERT(alienStatusPtr);
-					controller = &alienStatusPtr->HModelController;
-					section_data = GetThisSectionData_FromID(alienStatusPtr->HModelController.section_data,
-					               (int)messageSection->SectionID);
+					section_data = GetThisSectionData_FromID(controller->section_data, (int)messageSection->SectionID);
 				}
 				else if (sbPtr->I_SBtype == I_BehaviourNetCorpse)
 				{
@@ -7010,7 +7419,7 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 	}
 
 	// start by finding the object
-	STRATEGYBLOCK *sbPtr = FindEnvironmentObjectFromName(messageHeader->name);
+	STRATEGYBLOCK *sbPtr = FindBreakableFromName(messageHeader->name);
 
 	if (!sbPtr)
 	{
@@ -7021,7 +7430,7 @@ static void ProcessNetMsg_InanimateObjectDamaged(char *messagePtr)
 
 	// ok: cause the damage
 	{
-		STRATEGYBLOCK *objectPtr = FindEnvironmentObjectFromName(messageHeader->name);
+		STRATEGYBLOCK *objectPtr = FindBreakableFromName(messageHeader->name);
 		DAMAGE_PROFILE damage;
 		int multiple;
 
@@ -7087,7 +7496,7 @@ static void ProcessNetMsg_InanimateObjectDestroyed(NETMESSAGE_INANIMATEDESTROYED
 	// only peers should get this
 	LOCALASSERT(AvP.Network != I_Host);
 	// start by finding the object
-	STRATEGYBLOCK *sbPtr = FindEnvironmentObjectFromName(messagePtr->name);
+	STRATEGYBLOCK *sbPtr = FindBreakableFromName(messagePtr->name);
 
 	if (!sbPtr)
 	{
@@ -7204,14 +7613,10 @@ static void ProcessNetMsg_LOSRequestBinarySwitch(NETMESSAGE_LOSREQUESTBINARYSWIT
 		return;
 	}
 
-	STRATEGYBLOCK *objectPtr = FindEnvironmentObjectFromName(msgPtr->name);
+	STRATEGYBLOCK *objectPtr = FindSwitchFromName(msgPtr->name);
 
 	if (!objectPtr) {
-		return;    // no object
-	}
-
-	if (objectPtr->I_SBtype != I_BehaviourBinarySwitch && objectPtr->I_SBtype != I_BehaviourLinkSwitch) {
-		return;    // we only do switches
+		return;    // no such switch
 	}
 
 	// change the state of this object, then, via request state
@@ -7297,6 +7702,62 @@ static void ProcessNetMsg_RequestPlatformLiftActivate(NETMESSAGE_REQUESTPLATFORM
 		ActivatePlatformLift(objectPtr);
 	}
 }
+
+static void ProcessNetMsg_PlayerAutoGunState(NETMESSAGE_AGUNSTATE *messagePtr, NetID senderId)
+{
+	// only do this if we're playing
+	if (netGameData.myGameState != NGS_Playing) {
+		return;
+	}
+
+	// get the object id from the message
+	int objectId = (int)messagePtr->objectId;
+	STRATEGYBLOCK *sbPtr = FindGhost(senderId, objectId);
+
+	// Only the campaign mode has autoguns on the network at all, and this number has to name one. A player's body has no model an autogun's messages can use.
+	if (!SameAsSinglePlayer() || objectId == GHOST_PLAYEROBJECTID || (sbPtr && (sbPtr->I_SBtype != I_BehaviourNetGhost || !sbPtr->SBdataptr || ((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type != I_BehaviourAutoGun)))
+	{
+		Net_NoteRefused("an autogun message named something that isn't an autogun");
+		return;
+	}
+
+	if (!sbPtr)
+	{
+		// we don't seem to have a ghost for this autoGun, so create one
+		VECTORCH position;
+		EULER orientation;
+		position.vx = messagePtr->xPos;
+		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
+		position.vy = messagePtr->yPos;
+		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
+		position.vz = messagePtr->zPos;
+		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
+		// NB there is no sequence required for autoguns, so just pass zero
+		sbPtr = CreateNetGhost(senderId, objectId, &position, &orientation, I_BehaviourAutoGun, IOT_Non, 0);
+
+		if (sbPtr)
+		{
+			HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
+			HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
+		}
+	}
+	else
+	{
+		// update the autogun ghost...
+		VECTORCH position;
+		EULER orientation;
+		position.vx = messagePtr->xPos;
+		orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT);
+		position.vy = messagePtr->yPos;
+		orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT);
+		position.vz = messagePtr->zPos;
+		orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT);
+		UpdateGhost(sbPtr, &position, &orientation, 0, 0);
+		HandleGhostAutoGunMuzzleFlash(sbPtr, (int)messagePtr->IAmFiring);
+		HandleGhostAutoGunSound(sbPtr, (int)messagePtr->IAmFiring);
+	}
+}
+
 
 static void ProcessNetMsg_MakeDecal(NETMESSAGE_MAKEDECAL *messagePtr)
 {
@@ -7727,7 +8188,12 @@ static void ProcessNetMsg_AlienAIState(NETMESSAGE_ALIENAISTATE *messagePtr, NetI
 
 	if (!sbPtr)
 	{
-		// we don't seem to have a ghost for this object, so create one
+		// we don't seem to have a ghost for this object, so create one, if this level has that kind of alien's model at all
+		if (!AlienModelIsLoaded((int)messagePtr->AlienType))
+		{
+			return;
+		}
+
 		sbPtr = CreateNetGhost(senderId, objectId, &position, &orientation, I_BehaviourAlien, IOT_Non, messagePtr->AlienType);
 	}
 	else
@@ -7889,6 +8355,436 @@ static void ProcessNetMsg_AlienAIKilled(NETMESSAGE_ALIENAIKILLED *messagePtr, Ne
 		// 'update' the ghost...
 		KillAlienAIGhost(sbPtr, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 	}
+}
+
+// Adds this to what's going out this frame, if there's room. Gives back false if there isn't.
+static bool AddPartToSendBuffer(NETMESSAGETYPE type, void const *part, int size)
+{
+	int const headerSize = sizeof(NETMESSAGEHEADER);
+	int const left = NET_MESSAGEBUFFERSIZE - (int)(endSendBuffer - &sendBuffer[0]);
+
+	if (headerSize + size > left)
+	{
+		return false;
+	}
+
+	NETMESSAGEHEADER *const header = (NETMESSAGEHEADER *)endSendBuffer;
+
+	endSendBuffer += headerSize;
+	header->type = (unsigned char)type;
+	memcpy(endSendBuffer, part, size);
+	endSendBuffer += size;
+	return true;
+}
+
+// Each NPC near someone, as the host sees it. If the buffer fills up, the next frame starts from the first one left out, so it's never the same ones who don't get told, and their
+// ghosts don't vanish on the others' machines.
+static void AddNpcStateMessages(void)
+{
+	static int startAt = 0;
+
+	if (!AvP.NetworkAIServer || !SameAsSinglePlayer() || NumActiveStBlocks <= 0)
+	{
+		return;
+	}
+
+	if (startAt >= NumActiveStBlocks)
+	{
+		startAt = 0;
+	}
+
+	int stoppedAt = -1;
+	char const *const bufferBefore = (char const *)endSendBuffer;
+
+	for (int i = 0; i < NumActiveStBlocks && stoppedAt < 0; i++)
+	{
+		int const place = (startAt + i) % NumActiveStBlocks;
+		STRATEGYBLOCK *const sbPtr = ActiveStBlockList[place];
+
+		if (!sbPtr->SBdptr)
+		{
+			continue;
+		}
+
+		NETMESSAGE_NPCSTATE state;
+
+		if (!NpcGhosts_FillState(sbPtr, &state))
+		{
+			continue;
+		}
+
+		if (!AddPartToSendBuffer(NetMT_NpcState, &state, sizeof(state)))
+		{
+			stoppedAt = place;
+			break;
+		}
+
+
+		NETMESSAGE_NPCXENODELTAS deltas;
+
+		if (NpcGhosts_FillXenoDeltas(sbPtr, &deltas) && !AddPartToSendBuffer(NetMT_NpcXenoDeltas, &deltas, sizeof(deltas)))
+		{
+			stoppedAt = place;
+		}
+	}
+
+	startAt = stoppedAt >= 0 ? stoppedAt : 0;
+}
+
+// Called for every sound an NPC's voice makes on the host. Only the mode that plays as single player has NPCs other than aliens on a network.
+void AddNetMsg_NpcSound(int species, int voice, int category, int pitch, VECTORCH const *place)
+{
+	if (AvP.Network == I_No_Network || !AvP.NetworkAIServer || !SameAsSinglePlayer() || !place)
+	{
+		return;
+	}
+
+	NETMESSAGE_NPCSOUND sound;
+
+	memset(&sound, 0, sizeof(sound));
+	sound.species = (unsigned char)species;
+	sound.voice = (unsigned char)voice;
+	sound.category = (unsigned char)category;
+	sound.pitch = pitch;
+	sound.vx = place->vx;
+	sound.vy = place->vy;
+	sound.vz = place->vz;
+	AddPartToSendBuffer(NetMT_NpcSound, &sound, sizeof(sound));
+}
+
+// A platform lift's car, as the host has it: its height, its state, and the end it's going to or resting at. In the mode that plays as
+// single player only. Every other machine's car follows it (bh_platform_lift.cpp), so a joiner who missed a message, or arrived
+// after the car had moved, has it right within a second. Sent when its state changes, and once a second.
+void AddNetMsg_LiftState(STRATEGYBLOCK *lift)
+{
+	if (AvP.Network != I_Host || !SameAsSinglePlayer() || !lift->DynPtr || !lift->SBdataptr)
+	{
+		return;
+	}
+
+	PLATFORMLIFT_BEHAVIOUR_BLOCK *const data = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)lift->SBdataptr;
+	NETMESSAGE_LIFTSTATE message;
+
+	memset(&message, 0, sizeof(message));
+	memcpy(message.name, lift->SBname, sizeof(message.name));
+	message.y = lift->DynPtr->Position.vy;
+	message.state = (unsigned char)data->state;
+	message.end = (unsigned char)PlatformLift_EndItsGoingTo(lift);
+	AddPartToSendBuffer(NetMT_LiftState, &message, sizeof(message));
+	data->syncMessages++;
+}
+
+// The host says where a lift's car is. Everything in this message came from another machine, so all of it is checked first.
+// Then this machine's car follows it (PlatformLift_TakeTheHostsCar, bh_platform_lift.cpp).
+static void ProcessNetMsg_LiftState(NETMESSAGE_LIFTSTATE *messagePtr)
+{
+	if (AvP.Network != I_Peer || netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	STRATEGYBLOCK *const lift = FindEnvironmentObjectFromName(messagePtr->name);
+
+	if (!lift || lift->I_SBtype != I_BehaviourPlatform || !lift->SBdataptr || !lift->DynPtr)
+	{
+		Net_NoteRefused("a lift's sync message named something that isn't a platform lift");
+		return;
+	}
+
+	// The name is how the car is found, so a name two lifts share can't say which car it means. No stock level has one.
+	if (PlatformLift_NameIsShared(lift))
+	{
+		Net_NoteRefused("a lift's sync message named a lift whose name another lift shares");
+		return;
+	}
+
+	PLATFORMLIFT_BEHAVIOUR_BLOCK const *const data = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)lift->SBdataptr;
+
+	if (!Lift_StateIsKnown(messagePtr->state, (int)PLBS_GoingDown + 1))
+	{
+		Net_NoteRefused("a lift's sync message named a state lifts don't have");
+		return;
+	}
+
+	if (!NetLiftEndIsKnown(messagePtr->end))
+	{
+		Net_NoteRefused("a lift's sync message named an end a lift doesn't have");
+		return;
+	}
+
+	// A car can be a little past its end for a frame, so the track counts a step's height further at each end
+	if (!NetLiftHeightIsOnItsTrack(messagePtr->y, data->upHeight, data->downHeight, MAXIMUM_STEP_HEIGHT))
+	{
+		Net_NoteRefused("a lift's sync message put the car off its track");
+		return;
+	}
+
+	PlatformLift_TakeTheHostsCar(lift, messagePtr->y, messagePtr->state, messagePtr->end);
+}
+
+// A thing the queen throws has moved. She's only on the host, so every other machine has to be told, or it would sit where the level put it.
+void AddNetMsg_NpcThrownObject(STRATEGYBLOCK *object)
+{
+	if (AvP.Network == I_No_Network || !AvP.NetworkAIServer || !SameAsSinglePlayer() || !object->DynPtr)
+	{
+		return;
+	}
+
+	NETMESSAGE_NPCTHROWNOBJECT message;
+	EULER way;
+
+	// She holds it by setting its matrix, so the matrix is what's true
+	MatrixToEuler(&object->DynPtr->OrientMat, &way);
+
+	memset(&message, 0, sizeof(message));
+	memcpy(message.name, object->SBname, sizeof(message.name));
+	message.vx = object->DynPtr->Position.vx;
+	message.vy = object->DynPtr->Position.vy;
+	message.vz = object->DynPtr->Position.vz;
+	message.xOrient = (short)way.EulerX;
+	message.yOrient = (short)way.EulerY;
+	message.zOrient = (short)way.EulerZ;
+	AddPartToSendBuffer(NetMT_NpcThrownObject, &message, sizeof(message));
+}
+
+// The host says where a thing the queen threw has got to. Everything in this message came from another machine.
+// It's moved to where it's told and stays there: only the host works out how it flies and whom it hits.
+static void ProcessNetMsg_NpcThrownObject(NETMESSAGE_NPCTHROWNOBJECT *messagePtr)
+{
+	if (netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	STRATEGYBLOCK *const object = FindEnvironmentObjectFromName(messagePtr->name);
+
+	if (!object)
+	{
+		return;
+	}
+
+	// She only throws these (see the search for them in bh_queen.cpp). The name also finds lights, lifts and switches.
+	if (object->I_SBtype != I_BehaviourInanimateObject || !object->DynPtr || !object->name || !strstr(object->name, "QueenAmmo"))
+	{
+		Net_NoteRefused("a thrown object's message named something a queen doesn't throw");
+		return;
+	}
+
+	VECTORCH place;
+
+	place.vx = messagePtr->vx;
+	place.vy = messagePtr->vy;
+	place.vz = messagePtr->vz;
+
+	// The game works out what's visible from the room a thing is in, so it has to be in one
+	MODULE *const room = ModuleFromPosition(&place, object->containingModule);
+
+	if (!room)
+	{
+		Net_NoteRefused("a thrown object's message put it outside the level");
+		return;
+	}
+
+	DYNAMICSBLOCK *const body = object->DynPtr;
+
+	// An angle goes round the circle 4096 parts to the turn, and the code that turns one into a matrix looks it up in a table of that size
+	body->OrientEuler.EulerX = messagePtr->xOrient & 4095;
+	body->OrientEuler.EulerY = messagePtr->yOrient & 4095;
+	body->OrientEuler.EulerZ = messagePtr->zOrient & 4095;
+	CreateEulerMatrix(&body->OrientEuler, &body->OrientMat);
+	TransposeMatrixCH(&body->OrientMat);
+
+	body->Position = place;
+	body->PrevPosition = place;
+	body->LinVelocity.vx = body->LinVelocity.vy = body->LinVelocity.vz = 0;
+	body->LinImpulse.vx = body->LinImpulse.vy = body->LinImpulse.vz = 0;
+	body->GravityOn = 0;
+	body->OnlyCollideWithEnvironment = 1;
+	object->containingModule = room;
+}
+
+// PlaySound checks the voice and the category against what it has loaded, so those can be any number.
+static void ProcessNetMsg_NpcSound(NETMESSAGE_NPCSOUND *messagePtr, NetID senderId)
+{
+	if (netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	if (!NetNumberFitsTable(messagePtr->species, kNpcSoundKinds))
+	{
+		Net_NoteRefused("an NPC's sound named a voice that isn't on the list");
+		return;
+	}
+
+	if (!NpcSoundPitch_IsGood(messagePtr->pitch))
+	{
+		Net_NoteRefused("an NPC's sound had a pitch that can't be right");
+		return;
+	}
+
+	VECTORCH place;
+
+	place.vx = messagePtr->vx;
+	place.vy = messagePtr->vy;
+	place.vz = messagePtr->vz;
+
+	switch (messagePtr->species)
+	{
+		case kNpcSoundMarine: PlayMarineScream(messagePtr->voice, messagePtr->category, messagePtr->pitch, NULL, &place); break;
+		case kNpcSoundPredator: PlayPredatorSound(messagePtr->voice, messagePtr->category, messagePtr->pitch, NULL, &place); break;
+		default: PlayQueenSound(messagePtr->voice, messagePtr->category, messagePtr->pitch, NULL, &place); break;
+	}
+}
+
+void AddNetMsg_NpcKilled(STRATEGYBLOCK *sbPtr, int deathCode, int deathTime, int gibbFactor)
+{
+	if (AvP.Network == I_No_Network || !AvP.NetworkAIServer)
+	{
+		return;
+	}
+
+	NETMESSAGE_NPCKILLED killed;
+
+	killed.Guid = *((int *)(&(sbPtr->SBname[4])));
+	killed.death_code = deathCode;
+	killed.death_time = deathTime;
+	killed.GibbFactor = gibbFactor;
+	AddPartToSendBuffer(NetMT_NpcKilled, &killed, sizeof(killed));
+}
+
+// Every number in these has come over the network, so nothing is used until it has been checked. The sender has already been checked to be the host: see kNetPartRules.
+static void ProcessNetMsg_NpcState(NETMESSAGE_NPCSTATE *messagePtr, NetID senderId)
+{
+	if (netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	if (!NpcGuid_IsGood(messagePtr->Guid))
+	{
+		Net_NoteRefused("an NPC message with a number no NPC can have");
+		return;
+	}
+
+	if (!NetNumberFitsTable(messagePtr->kind, kNpcKindCount))
+	{
+		Net_NoteRefused("an NPC message of a kind that isn't on the list");
+		return;
+	}
+
+	if (!NpcSequenceLength_IsGood(messagePtr->sequence_length))
+	{
+		Net_NoteRefused("an NPC message with an animation length that can't be right");
+		return;
+	}
+
+	AVP_BEHAVIOUR_TYPE const type = NpcGhosts_BehaviourOfKind(messagePtr->kind);
+	VECTORCH position;
+	EULER orientation;
+
+	position.vx = messagePtr->xPos;
+	position.vy = messagePtr->yPos;
+	position.vz = messagePtr->zPos;
+	orientation.EulerX = (messagePtr->xOrient << NET_EULERSCALESHIFT) & 4095;
+	orientation.EulerY = (messagePtr->yOrient << NET_EULERSCALESHIFT) & 4095;
+	orientation.EulerZ = (messagePtr->zOrient << NET_EULERSCALESHIFT) & 4095;
+
+	STRATEGYBLOCK *sbPtr = FindGhost(senderId, messagePtr->Guid);
+
+	if (!sbPtr)
+	{
+		if (!NpcGhosts_ModelIsLoaded(messagePtr->kind, messagePtr->model))
+		{
+			Net_NoteRefused("an NPC message with a model this level hasn't loaded");
+			return;
+		}
+
+		sbPtr = CreateNetGhost(senderId, messagePtr->Guid, &position, &orientation, type, IOT_Non, messagePtr->model);
+
+		if (!sbPtr)
+		{
+			return;
+		}
+	}
+	else if (((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type != type)
+	{
+		// Something else already has this name, or it has died, and isn't to be turned into something else
+		Net_NoteRefused("an NPC message named a ghost that isn't that kind");
+		return;
+	}
+
+	NpcGhosts_ApplyState(sbPtr, messagePtr, &position, &orientation);
+}
+
+static void ProcessNetMsg_NpcXenoDeltas(NETMESSAGE_NPCXENODELTAS *messagePtr, NetID senderId)
+{
+	if (netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	if (!NpcGuid_IsGood(messagePtr->Guid))
+	{
+		Net_NoteRefused("an NPC message with a number no NPC can have");
+		return;
+	}
+
+	if (!NpcXenoBeams_AreGood(messagePtr->beams))
+	{
+		Net_NoteRefused("a xenoborg's message named a beam he hasn't got");
+		return;
+	}
+
+	STRATEGYBLOCK *const sbPtr = FindGhost(senderId, messagePtr->Guid);
+
+	if (!sbPtr)
+	{
+		return;
+	}
+
+	if (((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type != I_BehaviourXenoborg)
+	{
+		Net_NoteRefused("a xenoborg's head named a ghost that isn't a xenoborg");
+		return;
+	}
+
+	NpcGhosts_ApplyXenoDeltas(sbPtr, messagePtr);
+}
+
+static void ProcessNetMsg_NpcKilled(NETMESSAGE_NPCKILLED *messagePtr, NetID senderId)
+{
+	if (netGameData.myGameState != NGS_Playing || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	if (!NpcGuid_IsGood(messagePtr->Guid))
+	{
+		Net_NoteRefused("an NPC message with a number no NPC can have");
+		return;
+	}
+
+	if (!NpcDeathTime_IsGood(messagePtr->death_time))
+	{
+		Net_NoteRefused("an NPC's death had a time that can't be right");
+		return;
+	}
+
+	STRATEGYBLOCK *const sbPtr = FindGhost(senderId, messagePtr->Guid);
+
+	if (!sbPtr)
+	{
+		return;
+	}
+
+	if (!NpcGhosts_TypeIsAnNpc(((NETGHOSTDATABLOCK *)sbPtr->SBdataptr)->type))
+	{
+		Net_NoteRefused("an NPC's death named a ghost that isn't an NPC");
+		return;
+	}
+
+	NpcGhosts_Kill(sbPtr, messagePtr->death_code, messagePtr->death_time, messagePtr->GibbFactor);
 }
 
 static void ProcessNetMsg_FarAlienPosition(NETMESSAGE_FARALIENPOSITION *messagePtr, NetID senderId)
@@ -8240,6 +9136,13 @@ static void ProcessNetMsg_CreateWeapon(NETMESSAGE_CREATEWEAPON *messagePtr, NetI
 		return;
 	}
 
+	// A game that plays as single player has no dropped guns, so nobody has a reason to send one, and each would hand out ammunition
+	if (SameAsSinglePlayer())
+	{
+		Net_NoteRefused("a dropped gun was sent in a game that plays as single player");
+		return;
+	}
+
 	// It becomes a pickup, and the game uses this number as a place in its table of weapons when someone walks over it
 	if (!NetNumberFitsTable(messagePtr->type, MAX_NO_OF_WEAPON_TEMPLATES)) {
 		return;
@@ -8319,6 +9222,36 @@ int EmptySlotInPlayerList(void)
 }
 
 // Finds the local strategy block who's network object id is that passed
+// The model of an NPC the host runs, for working out which part of it a player on another machine hit. Nothing for anything else.
+HMODELCONTROLLER *Npc_HModelController(STRATEGYBLOCK *sbPtr)
+{
+	if (!sbPtr->SBdataptr)
+	{
+		return NULL;
+	}
+
+	switch (sbPtr->I_SBtype)
+	{
+		case I_BehaviourAlien:
+			return &((ALIEN_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourMarine:
+		case I_BehaviourSeal:
+			return &((MARINE_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourPredator:
+			return &((PREDATOR_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourXenoborg:
+			return &((XENO_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourQueenAlien:
+			return &((QUEEN_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourFaceHugger:
+			return &((FACEHUGGER_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		case I_BehaviourAutoGun:
+			return &((AUTOGUN_STATUS_BLOCK *)sbPtr->SBdataptr)->HModelController;
+		default:
+			return NULL;
+	}
+}
+
 static STRATEGYBLOCK *FindObjectFromNetIndex(int obIndex)
 {
 	int sbIndex = 0;
@@ -8349,6 +9282,12 @@ static STRATEGYBLOCK *FindObjectFromNetIndex(int obIndex)
 		    (sbPtr->I_SBtype == I_BehaviourAlienSpit) ||
 		    (sbPtr->I_SBtype == I_BehaviourAutoGun) ||
 		    (sbPtr->I_SBtype == I_BehaviourAlien) ||
+		    (sbPtr->I_SBtype == I_BehaviourMarine) ||
+		    (sbPtr->I_SBtype == I_BehaviourSeal) ||
+		    (sbPtr->I_SBtype == I_BehaviourPredator) ||
+		    (sbPtr->I_SBtype == I_BehaviourXenoborg) ||
+		    (sbPtr->I_SBtype == I_BehaviourQueenAlien) ||
+		    (sbPtr->I_SBtype == I_BehaviourFaceHugger) ||
 		    (sbPtr->I_SBtype == I_BehaviourNetCorpse) ||
 		    (sbPtr->I_SBtype == I_BehaviourInanimateObject) ||
 		    (sbPtr->I_SBtype == I_BehaviourProximityGrenade))
@@ -8389,6 +9328,47 @@ static STRATEGYBLOCK *FindEnvironmentObjectFromName(char *name)
 	return (STRATEGYBLOCK *)0;
 }
 
+
+// What a message about damage to a breakable thing names. In the mode that plays as single player does, that can be a track
+// object. It's a search of its own because the one above is shared with messages about other things.
+static STRATEGYBLOCK *FindBreakableFromName(char *name)
+{
+	STRATEGYBLOCK *const found = FindEnvironmentObjectFromName(name);
+
+	if (found || !SameAsSinglePlayer())
+	{
+		return found;
+	}
+
+	for (int sbIndex = 0; sbIndex < NumActiveStBlocks; sbIndex++)
+	{
+		STRATEGYBLOCK *const sbPtr = ActiveStBlockList[sbIndex];
+
+		if (sbPtr->I_SBtype == I_BehaviourTrackObject && NAME_ISEQUAL((&(sbPtr->SBname[0])), (name)))
+		{
+			return sbPtr;
+		}
+	}
+
+	return (STRATEGYBLOCK *)0;
+}
+
+// The switch a press message names. The search above leaves out switches with a link group, so a press of one from another machine used to be lost, and the host's sync then put it back on the
+// machine that pressed it. This is a search of its own because the one above is shared with messages that do other things to what they find, such as damage, and they shouldn't get a new kind of thing.
+static STRATEGYBLOCK *FindSwitchFromName(char *name)
+{
+	for (int sbIndex = 0; sbIndex < NumActiveStBlocks; sbIndex++)
+	{
+		STRATEGYBLOCK *sbPtr = ActiveStBlockList[sbIndex];
+
+		if (NetPressMessageCanPress(sbPtr->I_SBtype, I_BehaviourBinarySwitch, I_BehaviourLinkSwitch) && NAME_ISEQUAL((&(sbPtr->SBname[0])), (name)))
+		{
+			return sbPtr;
+		}
+	}
+
+	return (STRATEGYBLOCK *)0;
+}
 
 /* asigns an object id to a strategyblock, such as a projectile */
 #if 0
@@ -9608,6 +10588,333 @@ void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startO
 	}
 }
 #else
+/*----------------------------------------------------------------------
+  Where a player goes on a level with no multiplayer starts. None of the 32 single player levels has any.
+  ----------------------------------------------------------------------*/
+
+extern VECTORCH PlayerStartLocation;
+extern MATRIXCH PlayerStartMat;
+
+// Everything about the spot that this looks at: a body is 450 mm from middle to edge, with its "position" at its
+// feet (CollisionExtents, in extents.cpp). The lines are cast from about chest height.
+static const int kChestHeight = 1000;
+static const int kBodyWidth = 500; // the 450, and a little to spare
+static const int kMostStepDown = 800;
+static const int kMostStepUp = 400;
+// How far above the floor a level's start can be, and how far above his feet the line looking for that floor begins.
+static const int kMostDropFromAStart = 8000;
+static const int kLookForTheFloorFromAbove = 300;
+
+// How tall this player stands, which depends on what he is: a Marine 1950 mm, an Alien 2033 and a Predator 2098.
+// A place that only just has room for a Marine's head would leave a Predator stuck.
+static int BodyHeight(void)
+{
+	COLLISION_EXTENTS_ID const kind = AvP.PlayerType == I_Predator ? CE_PREDATOR : AvP.PlayerType == I_Alien ? CE_ALIEN : CE_MARINE;
+
+	return -CollisionExtents[kind].StandingTop;
+}
+
+// How far a line runs before it meets the level or something in it, up to this many mm. Other players don't
+// count, since they move. The line can pass through one of them, but the second one it meets stops it.
+static int HowFarALineRuns(VECTORCH *from, VECTORCH *direction, int mostMillimetres)
+{
+	DISPLAYBLOCK *otherPlayer = 0;
+
+	for (int tries = 0; tries < 2; tries++)
+	{
+		FindPolygonInLineOfSight_TwoIgnores(direction, from, 0, Player, otherPlayer);
+
+		if (LOS_ObjectHitPtr == 0 || LOS_Lambda >= mostMillimetres)
+		{
+			return mostMillimetres;
+		}
+
+		if (otherPlayer == 0 && LOS_ObjectHitPtr->ObStrategyBlock && LOS_ObjectHitPtr->ObStrategyBlock->I_SBtype == I_BehaviourNetGhost)
+		{
+			otherPlayer = LOS_ObjectHitPtr;
+			continue;
+		}
+
+		return LOS_Lambda;
+	}
+
+	return LOS_Lambda;
+}
+
+// Whether a body would fit at this spot on the level, and could get there from the middle spot. If so,
+// "spot" comes back with its height changed so that the feet are on the floor.
+static bool ABodyFitsHere(VECTORCH const *middle, VECTORCH *spot)
+{
+	VECTORCH from = *middle;
+	from.vy -= kChestHeight;
+
+	// Could he walk here in a straight line, with room for his body at the far end?
+	VECTORCH way;
+	way.vx = spot->vx - middle->vx;
+	way.vy = 0;
+	way.vz = spot->vz - middle->vz;
+	int const distance = Magnitude(&way);
+	Normalise(&way);
+
+	if (HowFarALineRuns(&from, &way, distance + kBodyWidth) < distance + kBodyWidth)
+	{
+		return false;
+	}
+
+	VECTORCH chest = *spot;
+	chest.vy -= kChestHeight;
+
+	if (ModuleFromPosition(&chest, (MODULE *)0) == 0)
+	{
+		return false;
+	}
+
+	// Is there a floor near enough where his feet would be?  (In this game, down is a bigger y.)
+	VECTORCH down = { 0, ONE_FIXED, 0 };
+	int const mostDown = kChestHeight + kMostStepDown;
+	int const toFloor = HowFarALineRuns(&chest, &down, mostDown);
+
+	if (toFloor >= mostDown || toFloor < kChestHeight - kMostStepUp)
+	{
+		return false;
+	}
+
+	spot->vy = chest.vy + toFloor;
+	chest.vy = spot->vy - kChestHeight;
+
+	// Room for his head, and for his body on every side?
+	VECTORCH up = { 0, -ONE_FIXED, 0 };
+
+	if (HowFarALineRuns(&chest, &up, BodyHeight() - kChestHeight) < BodyHeight() - kChestHeight)
+	{
+		return false;
+	}
+
+	static VECTORCH const sides[4] = { { ONE_FIXED, 0, 0 }, { -ONE_FIXED, 0, 0 }, { 0, 0, ONE_FIXED }, { 0, 0, -ONE_FIXED } };
+
+	for (int side = 0; side < 4; side++)
+	{
+		VECTORCH sideways = sides[side];
+
+		if (HowFarALineRuns(&chest, &sideways, kBodyWidth) < kBodyWidth)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// Whether some other player is standing on this spot.
+static bool SomeoneIsOnThisSpot(VECTORCH const *spot)
+{
+	for (int i = 0; i < NET_MAXPLAYERS; i++)
+	{
+		if (netGameData.playerData[i].playerId == 0 || netGameData.playerData[i].playerId == AvPNetID)
+		{
+			continue;
+		}
+
+		STRATEGYBLOCK *ghost = FindGhost(netGameData.playerData[i].playerId, GHOST_PLAYEROBJECTID);
+
+		if (ghost && ghost->DynPtr)
+		{
+			VECTORCH apart;
+			apart.vx = ghost->DynPtr->Position.vx - spot->vx;
+			apart.vy = ghost->DynPtr->Position.vy - spot->vy;
+			apart.vz = ghost->DynPtr->Position.vz - spot->vz;
+
+			if (Magnitude(&apart) < kPlayerSpotGap - kBodyWidth)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+// Finds a place for this player around a middle spot: the middle first, then the list in player_spots.h.
+// Every machine that can see the same level finds the same places in the same order, and this player
+// takes the one that goes with his place in the player list, so two people arriving together never pick
+// the same one and nothing has to be sent. False if there's no free place here at all.
+static bool FindPlaceAround(VECTORCH const *middle, MATRIXCH const *facing, int playerNumber, VECTORCH *place)
+{
+	// The ways he's facing, flat along the ground
+	VECTORCH right = { facing->mat11, 0, facing->mat13 };
+	VECTORCH forward = { facing->mat31, 0, facing->mat33 };
+	static VECTORCH const noRight = { ONE_FIXED, 0, 0 };
+	static VECTORCH const noForward = { 0, 0, ONE_FIXED };
+
+	if (Magnitude(&right) == 0)
+	{
+		right = noRight;
+	}
+
+	if (Magnitude(&forward) == 0)
+	{
+		forward = noForward;
+	}
+
+	Normalise(&right);
+	Normalise(&forward);
+
+	// A level's start isn't always on the floor. temple_m's is a metre up, and the first player simply drops when the
+	// level begins. Everyone else's places are looked for from the floor under it, because from up there none of them
+	// would seem to have a floor within reach, and everyone would end up inside each other on the one spot.
+	VECTORCH ground = *middle;
+	VECTORCH lookFrom = *middle;
+	VECTORCH lookDown = { 0, ONE_FIXED, 0 };
+	lookFrom.vy -= kLookForTheFloorFromAbove;
+	int const toTheFloor = HowFarALineRuns(&lookFrom, &lookDown, kMostDropFromAStart);
+
+	if (toTheFloor < kMostDropFromAStart)
+	{
+		ground.vy = lookFrom.vy + toTheFloor;
+	}
+
+	VECTORCH places[NET_MAXPLAYERS * 2];
+	int found = 1;
+	places[0] = *middle;
+
+	for (int i = 0; i < kPlayerSpotCount && found < NET_MAXPLAYERS * 2; i++)
+	{
+		int const toRight = kPlayerSpots[i].stepsRight * kPlayerSpotGap;
+		int const toFront = kPlayerSpots[i].stepsForward * kPlayerSpotGap;
+
+		VECTORCH spot = ground;
+		spot.vx += MUL_FIXED(right.vx, toRight) + MUL_FIXED(forward.vx, toFront);
+		spot.vz += MUL_FIXED(right.vz, toRight) + MUL_FIXED(forward.vz, toFront);
+
+		if (ABodyFitsHere(&ground, &spot))
+		{
+			places[found++] = spot;
+		}
+	}
+
+	// For the proof that all 32 levels have room. It stops counting at twice as many as can play.
+	{
+		char line[120];
+		_snprintf(line, sizeof(line) - 1, "campaign: %d places for players were found round %d %d %d", found, middle->vx, middle->vy, middle->vz);
+		line[sizeof(line) - 1] = 0;
+		LogString(line);
+	}
+
+	if (playerNumber >= found)
+	{
+		LogErrorString("campaign: there are more players than places here, so some of them are sharing one");
+	}
+
+	// From this player's own place on, the first that nobody's standing on. Someone can be, if he arrived
+	// earlier in the game, or the place he'd have had was taken by another who left.
+	for (int i = 0; i < found; i++)
+	{
+		VECTORCH const *candidate = &places[(playerNumber + i) % found];
+
+		if (!SomeoneIsOnThisSpot(candidate))
+		{
+			*place = *candidate;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Moves the player, and brings the rest of the game up to date with where he now is.
+static void PutPlayerAt(STRATEGYBLOCK *playerSbPtr, VECTORCH const *place, MATRIXCH const *facing)
+{
+	DYNAMICSBLOCK *dynPtr = playerSbPtr->DynPtr;
+
+	Player->ObWorld = dynPtr->Position = dynPtr->PrevPosition = *place;
+	dynPtr->OrientMat = dynPtr->PrevOrientMat = *facing;
+	MatrixToEuler(&dynPtr->OrientMat, &dynPtr->OrientEuler);
+	dynPtr->PrevOrientEuler = dynPtr->OrientEuler;
+	playerSbPtr->containingModule = ModuleFromPosition(&Player->ObWorld, (MODULE *)0);
+	playerPherModule = playerSbPtr->containingModule;
+
+	// Dynamics needs the visibilities right for this frame, as it does after any move like this
+	Global_VDB_Ptr->VDB_World = Player->ObWorld;
+	AllNewModuleHandler();
+	DoObjectVisibilities();
+}
+
+// Before asking about the level around a spot, the rooms round it have to be the ones in play.
+static void BringThisSpotIntoPlay(VECTORCH const *spot)
+{
+	Global_VDB_Ptr->VDB_World = *spot;
+	AllNewModuleHandler();
+	DoObjectVisibilities();
+}
+
+// A teammate this far from the level's start has gone on ahead: 10 metres, in millimetres.
+static const int kFarFromTheStart = 10000;
+
+static void PlacePlayerWithNoMultiplayerStart(STRATEGYBLOCK *playerSbPtr)
+{
+	int playerNumber = PlayerIdInPlayerList(AvPNetID);
+
+	if (playerNumber == NET_IDNOTINPLAYERLIST)
+	{
+		playerNumber = 0;
+	}
+
+	VECTORCH place;
+
+	// Someone who joins a campaign's level after the others have gone on ahead goes to them, because the way
+	// from the start may have shut behind them. Anyone still near the start doesn't count: then he
+	// starts at the start, with everyone. There's no lobby to gather in first, so someone can connect
+	// long after the host has started, and this is how they catch up.
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		for (int i = 0; i < NET_MAXPLAYERS; i++)
+		{
+			if (netGameData.playerData[i].playerId == 0 || netGameData.playerData[i].playerId == AvPNetID || !netGameData.playerData[i].playerAlive)
+			{
+				continue;
+			}
+
+			STRATEGYBLOCK *teammate = FindGhost(netGameData.playerData[i].playerId, GHOST_PLAYEROBJECTID);
+
+			if (teammate && teammate->DynPtr)
+			{
+				VECTORCH const middle = teammate->DynPtr->Position;
+				MATRIXCH const facing = teammate->DynPtr->OrientMat;
+				VECTORCH apart;
+
+				apart.vx = middle.vx - PlayerStartLocation.vx;
+				apart.vy = middle.vy - PlayerStartLocation.vy;
+				apart.vz = middle.vz - PlayerStartLocation.vz;
+
+				if (Magnitude(&apart) < kFarFromTheStart)
+				{
+					continue;
+				}
+
+				BringThisSpotIntoPlay(&middle);
+
+				if (FindPlaceAround(&middle, &facing, playerNumber, &place))
+				{
+					PutPlayerAt(playerSbPtr, &place, &facing);
+					return;
+				}
+			}
+		}
+	}
+
+	// Otherwise, the level's own start, which is exactly where single player puts him if he's the first.
+	BringThisSpotIntoPlay(&PlayerStartLocation);
+
+	if (!FindPlaceAround(&PlayerStartLocation, &PlayerStartMat, playerNumber, &place))
+	{
+		// Nowhere free at all. On the start itself he's at least in the level, and they can walk apart.
+		place = PlayerStartLocation;
+		LogErrorString("a player has been put on the level's start with someone already on it: there's no room round it");
+	}
+
+	PutPlayerAt(playerSbPtr, &place, &PlayerStartMat);
+}
+
 void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startOfGame)
 {
 	int numStartPositions = 0;
@@ -9618,6 +10925,16 @@ void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startO
 	int bestDistance = -1;
 	int bestIndex = -1;
 	PLAYER_STATUS *psPtr = (PLAYER_STATUS *)playerSbPtr->SBdataptr;
+
+	// A campaign's level starts as single player's does, at the level's own start with no time of being safe.
+	// Nobody comes back after dying in this mode, so this is only ever someone arriving.
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		psPtr->invulnerabilityTimer = 0;
+		MultiplayerRestartSeed = 0;
+		PlacePlayerWithNoMultiplayerStart(playerSbPtr);
+		return;
+	}
 
 	if (MultiplayerRestartSeed)
 	{
@@ -9658,7 +10975,9 @@ void TeleportNetPlayerToAStartingPosition(STRATEGYBLOCK *playerSbPtr, int startO
 			break;
 	}
 
+	// None for this species: it used to do nothing here, which on coming back after dying left him at 0,0,0.
 	if (!numStartPositions) {
+		PlacePlayerWithNoMultiplayerStart(playerSbPtr);
 		return;
 	}
 
@@ -9775,6 +11094,11 @@ void StartOfGame_PlayerPlacement(STRATEGYBLOCK *playerSbPtr, int seed)
 		}
 
 		if (!numStartPositions) {
+			if (netGameData.playerData[i].playerId == AvPNetID) {
+				PlacePlayerWithNoMultiplayerStart(playerSbPtr);
+				return;
+			}
+
 			continue;
 		}
 
@@ -10134,6 +11458,14 @@ void RestartNetworkGame(int seed)
 	}
 
 	TurnOffMultiplayerObserveMode();
+
+	// The level starts again, so everything already reported of it has to be forgotten, as at a new level
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		LogString("campaign: the level is starting again");
+		LevelEvents_LevelStartsAgain();
+	}
+
 	// go to a new start position
 	// StartOfGame_PlayerPlacement(Player->ObStrategyBlock, seed);
 	netGameData.myGameState = NGS_Playing;
@@ -10194,7 +11526,8 @@ static void Inform_PlayerHasDied(NetID killer, NetID victim, NETGAME_CHARACTERTY
 					NetworkGameConsoleMessageWithWeaponIcon(TEXTSTRING_MULTIPLAYERCONSOLE_KILLEDBY, netGameData.playerData[victimIndex].name, netGameData.playerData[killerIndex].name, weaponSymbol);
 				}
 			}
-			else {
+			// In the mode that plays like single player this usually means an NPC did it, and it mustn't say "suicide". Single player says nothing either.
+			else if (!SameAsSinglePlayer()) {
 				NetworkGameConsoleMessage(TEXTSTRING_MULTIPLAYERCONSOLE_SUICIDE, netGameData.playerData[victimIndex].name, 0);
 			}
 
@@ -10785,7 +12118,8 @@ static void Handle_SpeciesTag_NewPersonIt(NetID predatorID)
 
 void ChangeNetGameType_Individual()
 {
-	if (AvP.Network == I_No_Network) {
+	// A campaign is a co-op game all the way through, as single player has no other kind
+	if (SameAsSinglePlayer()) {
 		return;
 	}
 
@@ -10794,7 +12128,8 @@ void ChangeNetGameType_Individual()
 
 void ChangeNetGameType_Coop()
 {
-	if (AvP.Network == I_No_Network) {
+	// A campaign is a co-op game all the way through, as single player has no other kind
+	if (SameAsSinglePlayer()) {
 		return;
 	}
 
@@ -10803,7 +12138,8 @@ void ChangeNetGameType_Coop()
 
 void ChangeNetGameType_LastManStanding()
 {
-	if (AvP.Network == I_No_Network) {
+	// A campaign is a co-op game all the way through, as single player has no other kind
+	if (SameAsSinglePlayer()) {
 		return;
 	}
 
@@ -10814,7 +12150,8 @@ void ChangeNetGameType_LastManStanding()
 
 void ChangeNetGameType_PredatorTag()
 {
-	if (AvP.Network == I_No_Network) {
+	// A campaign is a co-op game all the way through, as single player has no other kind
+	if (SameAsSinglePlayer()) {
 		return;
 	}
 
@@ -10894,8 +12231,45 @@ static void NetworkGameConsoleMessageWithWeaponIcon(enum TEXTSTRING_ID stringID,
 	NewOnScreenMessage(OnScreenMessageBuffer);
 }
 
+static_assert(NGSCT_Pistols == kClassPistols && NGSCT_Shotgun == kClassShotgun && NGSCT_Revolver == kClassRevolver && NGSCT_M79 == kClassM79, "marine_classes.h has to number the classes as NGSCT_ does");
+
 static int CharacterTypesAvailable[NUM_PC_TYPES];
 static int CharacterSubTypesAvailable[NUM_PC_SUBTYPES];
+
+// In a campaign everyone plays the species its levels were written for, because a level's objects, and
+// who fights whom in it, go by what the player is. A marine is a plain marine, since the kit is single
+// player's and not a class's. Only these two lists of what's on offer change, not the host's limits, so
+// that those are still as he left them if he goes on to choose another kind of game.
+static void CampaignFixesWhoMayBeWhat(void)
+{
+	if (netGameData.coopCampaign == kCampaignNone)
+	{
+		return;
+	}
+
+	CharacterTypesAvailable[NGCT_Marine] = 0;
+	CharacterTypesAvailable[NGCT_Predator] = 0;
+	CharacterTypesAvailable[NGCT_Alien] = 0;
+
+	for (int i = 0; i < NUM_PC_SUBTYPES; i++)
+	{
+		CharacterSubTypesAvailable[i] = 0;
+	}
+
+	switch (netGameData.coopCampaign)
+	{
+		case kCampaignMarine:
+			CharacterTypesAvailable[NGCT_Marine] = NET_MAXPLAYERS;
+			CharacterSubTypesAvailable[NGSCT_General] = NET_MAXPLAYERS;
+			break;
+		case kCampaignPredator:
+			CharacterTypesAvailable[NGCT_Predator] = NET_MAXPLAYERS;
+			break;
+		case kCampaignAlien:
+			CharacterTypesAvailable[NGCT_Alien] = NET_MAXPLAYERS;
+			break;
+	}
+}
 
 int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters)
 {
@@ -10929,6 +12303,18 @@ int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters)
 
 	if (!netGameData.allowPistols) {
 		netGameData.maxMarinePistols = 0;
+	}
+
+	if (!netGameData.allowShotgun) {
+		netGameData.maxMarineShotgun = 0;
+	}
+
+	if (!netGameData.allowRevolver) {
+		netGameData.maxMarineRevolver = 0;
+	}
+
+	if (!netGameData.allowM79) {
+		netGameData.maxMarineM79 = 0;
 	}
 
 	if (netGameData.gameType == NGT_PredatorTag)
@@ -10969,6 +12355,9 @@ int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters)
 		netGameData.maxMarineMinigun = 8;
 		netGameData.maxMarineSmartDisc = 8;
 		netGameData.maxMarinePistols = 8;
+		netGameData.maxMarineShotgun = 8;
+		netGameData.maxMarineRevolver = 8;
+		netGameData.maxMarineM79 = 8;
 	}
 
 	CharacterTypesAvailable[NGCT_Marine] = netGameData.maxMarine;
@@ -10983,6 +12372,10 @@ int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters)
 	CharacterSubTypesAvailable[NGSCT_Minigun] = netGameData.maxMarineMinigun;
 	CharacterSubTypesAvailable[NGSCT_Frisbee] = netGameData.maxMarineSmartDisc;
 	CharacterSubTypesAvailable[NGSCT_Pistols] = netGameData.maxMarinePistols;
+	CharacterSubTypesAvailable[NGSCT_Shotgun] = netGameData.maxMarineShotgun;
+	CharacterSubTypesAvailable[NGSCT_Revolver] = netGameData.maxMarineRevolver;
+	CharacterSubTypesAvailable[NGSCT_M79] = netGameData.maxMarineM79;
+	CampaignFixesWhoMayBeWhat();
 
 	// go through all the other players to see which character types are being used
 	if (ConsiderUsedCharacters)
@@ -11035,6 +12428,18 @@ int DetermineAvailableCharacterTypes(bool ConsiderUsedCharacters)
 
 								case NGSCT_Pistols :
 									CharacterSubTypesAvailable[NGSCT_Pistols]--;
+									break;
+
+								case NGSCT_Shotgun :
+									CharacterSubTypesAvailable[NGSCT_Shotgun]--;
+									break;
+
+								case NGSCT_Revolver :
+									CharacterSubTypesAvailable[NGSCT_Revolver]--;
+									break;
+
+								case NGSCT_M79 :
+									CharacterSubTypesAvailable[NGSCT_M79]--;
 									break;
 							}
 
@@ -11186,13 +12591,34 @@ void GetNextAllowedSpecies(int *species, BOOL search_forwards)
 				}
 
 				break;
+
+			case 11: // marine (shotgun)
+				if (CharacterSubTypesAvailable[NGSCT_Shotgun]) {
+					return;
+				}
+
+				break;
+
+			case 12: // marine (revolver)
+				if (CharacterSubTypesAvailable[NGSCT_Revolver]) {
+					return;
+				}
+
+				break;
+
+			case 13: // marine (M79)
+				if (CharacterSubTypesAvailable[NGSCT_M79]) {
+					return;
+				}
+
+				break;
 		}
 
 		if (search_forwards)
 		{
 			(*species)++;
 
-			if (*species > 10) {
+			if (*species > kClassSliderLast) {
 				*species = 0;
 			}
 		}
@@ -11201,13 +12627,13 @@ void GetNextAllowedSpecies(int *species, BOOL search_forwards)
 			(*species)--;
 
 			if (*species < 0) {
-				*species = 10;
+				*species = kClassSliderLast;
 			}
 		}
 
 		count++;
 	}
-	while (count < 9);
+	while (count <= kClassSliderLast);
 
 	// oh dear no allowable species
 	*species = 0;
@@ -11419,7 +12845,8 @@ static void CheckForPointBasedObjectRespawn()
 {
 	int score = 0;
 
-	if (netGameData.pointsForRespawn == 0) {
+	// (Nothing comes back in a game that plays as single player.)
+	if (netGameData.pointsForRespawn == 0 || SameAsSinglePlayer()) {
 		return;
 	}
 
@@ -11866,7 +13293,7 @@ void DoMultiplayerSpecificHud()
 	// 3. Player is dead and not observing anyone
 	if (ShowMultiplayerScoreTimer > 0 ||
 	    netGameData.myGameState == NGS_EndGameScreen ||
-	    (!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer))
+	    (!playerStatusPtr->IsAlive && !MultiplayerObservedPlayer && !SameAsSinglePlayer()))
 	{
 		DoMultiplayerEndGameScreen();
 	}
@@ -11887,7 +13314,8 @@ void DoMultiplayerSpecificHud()
 	{
 		int score = CalculateMyScore();
 
-		if (score || IsItPossibleToScore())
+		// (Single player has no score on the screen, so a campaign doesn't either.)
+		if (!SameAsSinglePlayer() && (score || IsItPossibleToScore()))
 		{
 			// size-limited: see the note where text is declared
 			_snprintf(text, sizeof(text) - 1, "%s : %d", GetTextString(TEXTSTRING_MULTIPLAYER_SCORE), score);
@@ -11897,7 +13325,7 @@ void DoMultiplayerSpecificHud()
 	}
 
 	// show time left
-	if (netGameData.timeLimit > 0)
+	if (netGameData.timeLimit > 0 && !SameAsSinglePlayer())
 	{
 		int hoursLeft;
 		int minutesLeft;
@@ -12088,3 +13516,525 @@ static int GetStrategySynchObjectChecksum()
 
 	return sum;
 }
+
+/*----------------------------------------------------------------------
+  The mode where a network game plays as single player does, and moving on through a campaign
+  ----------------------------------------------------------------------*/
+
+// Whether everyone playing is out. A player only counts once he's really in the level, which shows here as a
+// body on this machine: someone who has connected and is still in the menus doesn't stop the others starting again.
+bool Coop_EveryoneIsDead(void)
+{
+	if (AvP.Network == I_No_Network || netGameData.coopCampaign == kCampaignNone)
+	{
+		return false;
+	}
+
+	if (PlayerStatusPtr->IsAlive)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < NET_MAXPLAYERS; i++)
+	{
+		if (netGameData.playerData[i].playerId == 0 || netGameData.playerData[i].playerId == AvPNetID)
+		{
+			continue;
+		}
+
+		if (netGameData.playerData[i].playerAlive && FindGhost(netGameData.playerData[i].playerId, GHOST_PLAYEROBJECTID))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+// How long the host's machine waits for a key, once everyone is out, before starting the level again for them. A
+// player alone waits as long as he likes, as in single player.
+static const int kSecondsToWaitWithOthersWatching = 10;
+
+void Coop_WhileOut(bool asksToChangeWhoHeWatches)
+{
+	static int everyoneOutFor = 0;
+
+	// He watches someone who's alive, if there's anyone else here at all. A player alone has nobody to watch, and
+	// he mustn't be given himself. The game moves on by itself when the one he's watching dies.
+	bool someoneElseIsHere = false;
+
+	for (int i = 0; i < NET_MAXPLAYERS; i++)
+	{
+		if (netGameData.playerData[i].playerId != 0 && netGameData.playerData[i].playerId != AvPNetID)
+		{
+			someoneElseIsHere = true;
+		}
+	}
+
+	if (someoneElseIsHere && (asksToChangeWhoHeWatches || !MultiplayerObservedPlayer))
+	{
+		GetNextMultiplayerObservedPlayer();
+	}
+
+	// Only the host knows for sure, and only the host can start a level again for everyone
+	if (AvP.Network != I_Host || !Coop_EveryoneIsDead())
+	{
+		everyoneOutFor = 0;
+		return;
+	}
+
+	everyoneOutFor += RealFrameTime;
+
+	bool const timeIsUp = someoneElseIsHere && everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;
+
+	if (DebouncedGotAnyKey || timeIsUp)
+	{
+		// The same thing the host's "restart" command does, and the one single player's death leads to in the end
+		int const seed = FastRandom();
+
+		everyoneOutFor = 0;
+		LogString("campaign: everyone is out, so the host starts the level again");
+		AddNetMsg_RestartNetworkGame(seed);
+		NetSendMessagesNow();
+		RestartNetworkGame(seed);
+	}
+}
+
+bool SameAsSinglePlayer(void)
+{
+	return AvP.Network == I_No_Network || netGameData.coopCampaign != kCampaignNone;
+}
+
+// Set when the level that's running is ending because everyone is going on to the next one.
+static bool coopLevelChangeIsDue = false;
+
+static void Coop_LevelStopsRunning(void);
+
+static void Coop_GoToPlace(int place)
+{
+	Coop_LevelStopsRunning();
+	// Someone out and watching gets his own body back. If he kept watching, the next level would pull him along
+	// behind whoever he was watching, because watching works by moving the player to where they are.
+	TurnOffMultiplayerObserveMode();
+
+	netGameData.coopCampaignLevel = place;
+	coopLevelChangeIsDue = place < Campaign_LevelCount(netGameData.coopCampaign);
+	AvP.MainLoopRunning = 0;
+
+}
+
+/*----------------------------------------------------------------------
+  WAITING FOR EVERYONE ON THE LOADING SCREEN. Single player waits there for a key, and in this mode so does everyone. A player who has pressed a key tells the host once a second until the host says go,
+  and the host says go when it has pressed its own key and every other player has told it. Nobody can hold the others up for long: after a minute from your own key, you go anyway, and someone
+  who turns up after that is let straight in, because the host answers anyone who asks once the level is running. What these messages can do is only move that moment, so a player who lies about being ready only starts the level sooner.
+  ----------------------------------------------------------------------*/
+static DWORD const kMostWaitOnLoadingScreenMilliseconds = 60000;
+static DWORD const kSayReadyEveryMilliseconds = 1000;
+
+static bool coopPlaceIsReady[NET_MAXPLAYERS];
+static bool coopGoHasCome = false;
+static bool coopLevelIsRunningOnHost = false;
+
+// The host keeps answering "go" while a level runs, and it mustn't say so once the next one is loading.
+static void Coop_LevelStopsRunning(void)
+{
+	coopLevelIsRunningOnHost = false;
+}
+
+static bool coopThisPlayerPressed = false;
+static DWORD coopPressedAt = 0;
+static DWORD coopLastSaidReadyAt = 0;
+
+static void AddNetMsg_CoopWithNothingElse(NETMESSAGETYPE type)
+{
+	int const headerSize = sizeof(NETMESSAGEHEADER);
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if (headerSize > numBytesLeft)
+	{
+		return;
+	}
+
+	NETMESSAGEHEADER *const headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+	endSendBuffer += headerSize;
+	headerPtr->type = (unsigned char)type;
+}
+
+void Coop_WaitOnLoadingScreenBegins(void)
+{
+	memset(coopPlaceIsReady, 0, sizeof(coopPlaceIsReady));
+	coopGoHasCome = false;
+	coopLevelIsRunningOnHost = false;
+	coopThisPlayerPressed = false;
+}
+
+bool Coop_MayStartLevel(bool keyHasBeenPressed)
+{
+	DWORD const now = GetTickCount();
+
+	if (keyHasBeenPressed && !coopThisPlayerPressed)
+	{
+		coopThisPlayerPressed = true;
+		coopPressedAt = now;
+		coopLastSaidReadyAt = now - kSayReadyEveryMilliseconds;
+	}
+
+	if (!coopThisPlayerPressed)
+	{
+		return false;
+	}
+
+	bool const waitedLongEnough = now - coopPressedAt >= kMostWaitOnLoadingScreenMilliseconds;
+
+	if (AvP.Network == I_Host)
+	{
+		bool placeHasPlayer[NET_MAXPLAYERS];
+
+		for (int place = 0; place < NET_MAXPLAYERS; place++)
+		{
+			placeHasPlayer[place] = netGameData.playerData[place].playerId != 0;
+		}
+
+		if (!waitedLongEnough && !NetEveryoneElseIsReady(placeHasPlayer, coopPlaceIsReady, NET_MAXPLAYERS, PlayerIdInPlayerList(AvPNetID)))
+		{
+			return false;
+		}
+
+		coopLevelIsRunningOnHost = true;
+		AddNetMsg_CoopWithNothingElse(NetMT_CoopGo);
+		NetSendMessages();
+
+		return true;
+	}
+
+	if (coopGoHasCome || waitedLongEnough)
+	{
+		return true;
+	}
+
+	if (now - coopLastSaidReadyAt >= kSayReadyEveryMilliseconds)
+	{
+		coopLastSaidReadyAt = now;
+		AddNetMsg_CoopWithNothingElse(NetMT_CoopReady);
+	}
+
+	return false;
+}
+
+static void ProcessNetMsg_CoopReady(NetID senderId)
+{
+	if (AvP.Network != I_Host || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	int const place = PlayerIdInPlayerList(senderId);
+
+	if (place == NET_IDNOTINPLAYERLIST)
+	{
+		return;
+	}
+
+	coopPlaceIsReady[place] = true;
+
+	// Someone arriving late has missed the word, so they get it now. Someone asking again and again costs one answer a second at most.
+	static unsigned int secondStarted = 0;
+	static int answersThisSecond = 0;
+
+	if (coopLevelIsRunningOnHost && NetThisSecondHasRoom(GetTickCount(), &secondStarted, &answersThisSecond, NET_MAXPLAYERS))
+	{
+		AddNetMsg_CoopWithNothingElse(NetMT_CoopGo);
+	}
+}
+
+static void ProcessNetMsg_CoopGo(void)
+{
+	if (AvP.Network == I_Peer && SameAsSinglePlayer())
+	{
+		coopGoHasCome = true;
+	}
+}
+
+void AddNetMsg_CoopNextLevel(int place)
+{
+	NETMESSAGEHEADER *headerPtr;
+	NETMESSAGE_COOPNEXTLEVEL *messagePtr;
+	int headerSize = sizeof(NETMESSAGEHEADER);
+	int messageSize = sizeof(NETMESSAGE_COOPNEXTLEVEL);
+	int numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if (headerSize + messageSize > numBytesLeft)
+	{
+		return;
+	}
+
+	headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+	endSendBuffer += headerSize;
+	messagePtr = (NETMESSAGE_COOPNEXTLEVEL *)endSendBuffer;
+	endSendBuffer += messageSize;
+
+	headerPtr->type = (unsigned char)NetMT_CoopNextLevel;
+	messagePtr->campaign = (unsigned char)netGameData.coopCampaign;
+	messagePtr->place = (unsigned char)place;
+}
+
+void Coop_LevelEndReached(void)
+{
+	// For proof that the same chain reached the end on every machine. Only a test run writes this, in the log, because a level's end happens once.
+	LogString(AvP.Network == I_Host ? "net: the level's end was reached on the host, so everyone goes on" : "net: the level's end was reached on this client too, and the host decides");
+
+	if (AvP.Network != I_Host)
+	{
+		return;
+	}
+
+	int const place = netGameData.coopCampaignLevel + 1;
+
+	AddNetMsg_CoopNextLevel(place);
+
+	// Now, because this machine is about to stop sending anything until the next level has loaded, or leave if this was the last
+	NetSendMessagesNow();
+	Net_ServiceNetwork();
+
+	Coop_GoToPlace(place);
+}
+
+static void ProcessNetMsg_CoopNextLevel(NETMESSAGE_COOPNEXTLEVEL *messagePtr)
+{
+	if (AvP.Network != I_Peer)
+	{
+		return;
+	}
+
+	if (!NetCampaignMoveIsGood(messagePtr->campaign, messagePtr->place, netGameData.coopCampaign, netGameData.coopCampaignLevel, Campaign_LevelCount(netGameData.coopCampaign)))
+	{
+		Net_NoteRefused("a next-level message named a place this campaign can't go to, so it was ignored");
+		return;
+	}
+
+	Coop_GoToPlace(messagePtr->place);
+}
+
+void Coop_TakeCampaignSpecies(void)
+{
+	switch (netGameData.coopCampaign)
+	{
+		case kCampaignMarine:
+			netGameData.myCharacterType = netGameData.myNextCharacterType = NGCT_Marine;
+			AvP.PlayerType = I_Marine;
+			break;
+		case kCampaignPredator:
+			netGameData.myCharacterType = netGameData.myNextCharacterType = NGCT_Predator;
+			AvP.PlayerType = I_Predator;
+			break;
+		case kCampaignAlien:
+			netGameData.myCharacterType = netGameData.myNextCharacterType = NGCT_Alien;
+			AvP.PlayerType = I_Alien;
+			break;
+		default:
+			break;
+	}
+}
+
+bool Coop_LevelChangeIsDue(void)
+{
+	return coopLevelChangeIsDue;
+}
+
+void Coop_LevelChangeHasStarted(void)
+{
+	coopLevelChangeIsDue = false;
+
+	// What this machine had to say about the last level has no meaning in the next
+	InitialiseSendMessageBuffer();
+
+	netGameData.myGameState = NGS_Joining;
+	netGameData.myStrategyCheckSum = 0;
+	netGameData.stateCheckTimeDelay = 0;
+	netGameData.GameTimeElapsed = 0;
+	LevelEvents_NewLevel();
+
+	for (int i = 0; i < NET_MAXPLAYERS; i++)
+	{
+		netGameData.playerData[i].playerAlive = 1;
+		netGameData.playerData[i].playerHasLives = 1;
+	}
+
+}
+
+
+/*----------------------------------------------------------------------
+  Things that only happen on one machine, and have to reach all of them. See level_events.h.
+  ----------------------------------------------------------------------*/
+
+static LevelEventList levelEvents;
+
+void LevelEvents_NewLevel(void)
+{
+	LevelEvents_Empty(&levelEvents);
+}
+
+void LevelEvents_LevelStartsAgain(void)
+{
+	LevelEvents_ForgetWhatHappened(&levelEvents);
+}
+
+void LevelEvents_Note(const char *sourceName, const char *targetName, int request)
+{
+	LevelEvents_Add(&levelEvents, sourceName, targetName, request, false);
+}
+
+void LevelEvents_NoteItem(const char *sourceName, const char *targetName, int request, int x, int y, int z)
+{
+	if (LevelEvents_Add(&levelEvents, sourceName, targetName, request, true))
+	{
+		LevelEvent *const added = LevelEvents_Find(&levelEvents, sourceName);
+
+		added->hasPlace = true;
+		added->x = x;
+		added->y = y;
+		added->z = z;
+	}
+}
+
+static void AddNetMsg_LevelEvent(NETMESSAGETYPE type, const char *source)
+{
+	int const headerSize = sizeof(NETMESSAGEHEADER);
+	int const messageSize = sizeof(NETMESSAGE_LEVELEVENT);
+	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
+
+	if (netGameData.myGameState != NGS_Playing || headerSize + messageSize > numBytesLeft)
+	{
+		return;
+	}
+
+	NETMESSAGEHEADER *const headerPtr = (NETMESSAGEHEADER *)endSendBuffer;
+
+	endSendBuffer += headerSize;
+
+	NETMESSAGE_LEVELEVENT *const messagePtr = (NETMESSAGE_LEVELEVENT *)endSendBuffer;
+
+	endSendBuffer += messageSize;
+	headerPtr->type = (unsigned char)type;
+	memcpy(messagePtr->source, source, sizeof(messagePtr->source));
+}
+
+// A host says again what has happened, a few each second. Someone who joined late never heard the first time, and a message with no room left loses one, but a machine that has already heard does nothing with a repeat, so saying it again costs only these few bytes.
+static void LevelEvents_SayAgainWhatHappened(void)
+{
+	static const int kMostEachSecond = 16;
+	static int nextToSay = 0;
+
+	if (AvP.Network != I_Host || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	int said = 0;
+
+	for (int looked = 0; looked < levelEvents.count && said < kMostEachSecond; looked++)
+	{
+		nextToSay = nextToSay < levelEvents.count ? nextToSay : 0;
+
+		if (levelEvents.events[nextToSay].happened)
+		{
+			AddNetMsg_LevelEvent(NetMT_LevelEvent, levelEvents.events[nextToSay].source);
+			said++;
+		}
+
+		nextToSay++;
+	}
+}
+
+// What this object sets off, from this machine's own copy of the level
+static void LevelEvents_SetOff(LevelEvent *event)
+{
+	char source[kLevelEventNameLength * 2 + 1];
+	STRATEGYBLOCK *const target = FindSBWithName(event->target);
+
+	event->happened = true;
+
+	// Each machine says so, so that comparing two logs shows whether a level moved on for both
+	LevelEvents_NameAsText(event->source, source);
+	LogString(std::string("level event: ") + source + " set off here, and its target is " + (target ? "here" : "not here"));
+	RequestState(target, event->request, NULL);
+}
+
+void LevelEvents_Happened(const char *sourceName)
+{
+	if (AvP.Network == I_No_Network || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	LevelEvent *const event = LevelEvents_Find(&levelEvents, sourceName);
+
+	if (!event || event->happened)
+	{
+		return;
+	}
+
+	// This machine's own target fires where the event happened, so it's only marked here
+	event->happened = true;
+
+	{
+		char source[kLevelEventNameLength * 2 + 1];
+
+		LevelEvents_NameAsText(event->source, source);
+		LogString(std::string("level event: ") + source + " happened on this machine");
+	}
+
+	if (AvP.Network == I_Host)
+	{
+		AddNetMsg_LevelEvent(NetMT_LevelEvent, sourceName);
+	}
+	else if (event->clientMayAsk)
+	{
+		AddNetMsg_LevelEvent(NetMT_LevelEventAsk, sourceName);
+	}
+}
+
+// From the host only, by the message table. A name that isn't on this level's list does nothing, so no message can start a chain the level doesn't have.
+static void ProcessNetMsg_LevelEvent(NETMESSAGE_LEVELEVENT *messagePtr)
+{
+	if (AvP.Network != I_Peer || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	LevelEvent *const event = LevelEvents_Find(&levelEvents, messagePtr->source);
+
+	if (!event)
+	{
+		Net_NoteRefused("a host named something happening in the level that isn't in this level");
+		return;
+	}
+
+	if (!event->happened)
+	{
+		LevelEvents_SetOff(event);
+	}
+}
+
+// A client saying it picked something up. The host passes every message on, so other clients get this too, and ignore it. Only the host decides.
+static void ProcessNetMsg_LevelEventAsk(NETMESSAGE_LEVELEVENT *messagePtr, NetID senderId)
+{
+	if (AvP.Network != I_Host || !SameAsSinglePlayer())
+	{
+		return;
+	}
+
+	LevelEvent *const event = LevelEvents_Find(&levelEvents, messagePtr->source);
+	STRATEGYBLOCK *const asker = FindGhost(senderId, GHOST_PLAYEROBJECTID);
+	bool const closeEnough = event && asker && asker->DynPtr && LevelEvents_IsNear(event, asker->DynPtr->Position.vx, asker->DynPtr->Position.vy, asker->DynPtr->Position.vz);
+
+	if (!LevelEvents_ClientMayHaveThis(event, closeEnough))
+	{
+		Net_NoteRefused("a client asked for something to happen in the level that couldn't have, so it was ignored");
+		return;
+	}
+
+	LevelEvents_SetOff(event);
+	AddNetMsg_LevelEvent(NetMT_LevelEvent, messagePtr->source);
+}
+

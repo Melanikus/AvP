@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   in the mode that plays as single player does, a host waits for a key too, and a level starts for everyone together
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a level load answers other machines all the way through
 #include "3dc.h"
@@ -22,6 +25,11 @@ extern int FadingGameInAfterLoading;
 
 extern void MinimalNetCollectMessages(void);
 extern void NetSendMessages(void);
+extern bool SameAsSinglePlayer(void);
+
+// In pldnet.cpp. Begins is called once when the screen comes up, and MayStartLevel each frame after that.
+extern void Coop_WaitOnLoadingScreenBegins(void);
+extern bool Coop_MayStartLevel(bool keyHasBeenPressed);
 extern void RenderGrabbedScreen(void);
 extern void ThisFramesRenderingHasBegun(void);
 extern void ThisFramesRenderingHasFinished(void);
@@ -160,6 +168,22 @@ void Set_Progress_Bar_Position(int pos)
 	}
 }
 
+// Has the time come to leave the loading screen? In the mode that plays as single player does, everyone waits for a key, the host too, and then for everyone else. Otherwise a key is enough, and a host never waited. A test run counts as having pressed a key.
+static bool LoadingScreenIsDone(bool startsTogether, bool *keyHasBeenPressed)
+{
+	if (DebouncedGotAnyKey)
+	{
+		*keyHasBeenPressed = true;
+	}
+
+	if (startsTogether)
+	{
+		return Coop_MayStartLevel(*keyHasBeenPressed);
+	}
+
+	return *keyHasBeenPressed || AvP.Network == I_Host;
+}
+
 void Game_Has_Loaded()
 {
 	Net_SayLongestGapWhileLoading();
@@ -169,6 +193,14 @@ void Game_Has_Loaded()
 
 	int32_t f = 65536;
 	ResetFrameCounter();
+
+	bool const startsTogether = AvP.Network != I_No_Network && SameAsSinglePlayer();
+	bool keyHasBeenPressed = false;
+
+	if (startsTogether)
+	{
+		Coop_WaitOnLoadingScreenBegins();
+	}
 
 	do
 	{
@@ -232,7 +264,7 @@ void Game_Has_Loaded()
 		}
 	}
 
-	while (!DebouncedGotAnyKey && AvP.Network != I_Host /*&& LoadingBarFull != NULL*/); // TODO - check me
+	while (!LoadingScreenIsDone(startsTogether, &keyHasBeenPressed));   // a run has nobody to press a key // TODO - check me
 
 	FadingGameInAfterLoading = ONE_FIXED;
 

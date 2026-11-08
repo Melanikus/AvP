@@ -1,0 +1,1 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC /DNDEBUG /I3dc/avp tests/npc_kinds_test.cpp

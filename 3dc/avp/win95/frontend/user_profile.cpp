@@ -9,6 +9,8 @@
 //   a profile's difficulties are limited as it's read, and its multiplayer name has an end
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a profile saved before the shoulder lamp gets its key without anything else changing
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a profile from before the reload key gets R, unless he already uses it for something else, and then no key
 #include "list_tem.hpp"
 #include "3dc.h"
 #include "inline.h"
@@ -128,20 +130,35 @@ static BOOL UserProfileNameMatchesFile(const char *name, const char *fileName)
 	return (_strnicmp(fileName, name, length) == 0) && (_stricmp(fileName + length, USER_PROFILES_SUFFIX) == 0);
 }
 
-// See ShoulderLamp_KeyFromProfile. The lamp's own byte is the last of the marine's, so the ones before it are all the others.
-static void SettleShoulderLampKeys(PLAYER_INPUT_CONFIGURATION *primary, PLAYER_INPUT_CONFIGURATION *secondary)
+// Does either list of the marine's keys already use this one? It looks at the first so many of his keys.
+static bool MarineKeyIsTaken(PLAYER_INPUT_CONFIGURATION const *primary, PLAYER_INPUT_CONFIGURATION const *secondary, int howManyKeys, unsigned char key)
 {
 	unsigned char const *const primaryKeys = (unsigned char const *)primary;
 	unsigned char const *const secondaryKeys = (unsigned char const *)secondary;
-	bool defaultIsTaken = false;
 
-	for (int i = 0; i < NUMBER_OF_MARINE_INPUTS - 1; i++)
+	for (int i = 0; i < howManyKeys; i++)
 	{
-		defaultIsTaken = defaultIsTaken || primaryKeys[i] == KEY_G || secondaryKeys[i] == KEY_G;
+		if (primaryKeys[i] == key || secondaryKeys[i] == key)
+		{
+			return true;
+		}
 	}
 
-	primary->Marine_ShoulderLamp = ShoulderLamp_KeyFromProfile(primary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, defaultIsTaken, KEY_VOID);
+	return false;
+}
+
+// See ShoulderLamp_KeyFromProfile, which is for any key the same way. The lamp's byte and then the reload key's are the last two of the marine's. The lamp is settled first, and its key counts as taken when the reload key looks.
+static void SettleMarineNewKeys(PLAYER_INPUT_CONFIGURATION *primary, PLAYER_INPUT_CONFIGURATION *secondary)
+{
+	bool const lampDefaultIsTaken = MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 2, KEY_G);
+
+	primary->Marine_ShoulderLamp = ShoulderLamp_KeyFromProfile(primary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_G, lampDefaultIsTaken, KEY_VOID);
 	secondary->Marine_ShoulderLamp = ShoulderLamp_KeyFromProfile(secondary->Marine_ShoulderLamp, KEY_ESCAPE, KEY_VOID, false, KEY_VOID);
+
+	bool const reloadDefaultIsTaken = MarineKeyIsTaken(primary, secondary, NUMBER_OF_MARINE_INPUTS - 1, KEY_R);
+
+	primary->Marine_Reload = ShoulderLamp_KeyFromProfile(primary->Marine_Reload, KEY_ESCAPE, KEY_R, reloadDefaultIsTaken, KEY_VOID);
+	secondary->Marine_Reload = ShoulderLamp_KeyFromProfile(secondary->Marine_Reload, KEY_ESCAPE, KEY_VOID, false, KEY_VOID);
 }
 
 extern int SaveUserProfile(AVP_USER_PROFILE *profilePtr)
@@ -455,7 +472,7 @@ extern void GetSettingsFromUserProfile(void)
 
 	MarineInputPrimaryConfig      = UserProfilePtr->MarineInputPrimaryConfig;
 	MarineInputSecondaryConfig    = UserProfilePtr->MarineInputSecondaryConfig;
-	SettleShoulderLampKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);
+	SettleMarineNewKeys(&MarineInputPrimaryConfig, &MarineInputSecondaryConfig);
 	PredatorInputPrimaryConfig    = UserProfilePtr->PredatorInputPrimaryConfig;
 	PredatorInputSecondaryConfig  = UserProfilePtr->PredatorInputSecondaryConfig;
 	AlienInputPrimaryConfig       = UserProfilePtr->AlienInputPrimaryConfig;

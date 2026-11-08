@@ -1,6 +1,6 @@
-// The test of the checks on what arrives from other players' machines. Written 2026-11-04 by Melanikus for the AvP port.
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the checks added since: names, chat lines, a client's budget, typed addresses, who has asked lately, and a sound's address
+// The test of the checks on what arrives from other players' machines. Written 2026-11-04 by Melanikus for the AvP port.
 //
 // WHAT IT TESTS
 //
@@ -40,6 +40,104 @@ static void Check(bool passed, char const * what)
 	{
 		checksFailed++;
 	}
+}
+
+// With friendly fire off, whose weapons can't hurt you
+static void TestOtherSpeciesAsFriends()
+{
+	puts("friendly fire off, and the other species' weapons");
+
+	Check(NetOtherSpeciesCanBeAFriend(true, false), "in a co-op game, a marine and a Predator can be on one side");
+	Check(!NetOtherSpeciesCanBeAFriend(true, true), "in the mode everyone is the same species, so those weapons can only be an NPC's");
+	Check(!NetOtherSpeciesCanBeAFriend(false, false), "in other games, the other species is the other side");
+	Check(!NetOtherSpeciesCanBeAFriend(false, true), "and single player has nobody to be friends with");
+}
+
+// What happens to a hit on a breakable track object, in each kind of game
+static void TestBreakableHits()
+{
+	puts("hitting a breakable track object");
+
+	Check(NetBreakableHitGoes(false, true, false, false) == kNetHitCounts, "in single player, it counts");
+	Check(NetBreakableHitGoes(true, false, false, false) == kNetHitIsIgnored, "a network game outside the mode ignores it on the host");
+	Check(NetBreakableHitGoes(true, false, true, false) == kNetHitIsIgnored, "and on another machine");
+	Check(NetBreakableHitGoes(true, false, true, true) == kNetHitIsIgnored, "even if a message says it came from the host");
+	Check(NetBreakableHitGoes(true, true, false, false) == kNetHitCounts, "in the mode, it counts on the host");
+	Check(NetBreakableHitGoes(true, true, true, false) == kNetHitGoesToTheHost, "and another machine tells the host");
+	Check(NetBreakableHitGoes(true, true, true, true) == kNetHitCounts, "and counts when the host says so");
+}
+
+// How near a platform lift's far end someone has to be, for a network game to send it to them
+static void TestLiftSync()
+{
+	puts("a joiner's lift car following the host's");
+
+	Check(NetLiftEndIsKnown(0) && NetLiftEndIsKnown(1), "a lift's two ends are known");
+	Check(!NetLiftEndIsKnown(2) && !NetLiftEndIsKnown(-1) && !NetLiftEndIsKnown(255), "and nothing else is");
+
+	Check(NetLiftHeightIsOnItsTrack(-3000, -3000, 2000, 1000) && NetLiftHeightIsOnItsTrack(2000, -3000, 2000, 1000), "both ends of its track are on it");
+	Check(NetLiftHeightIsOnItsTrack(-4000, -3000, 2000, 1000) && NetLiftHeightIsOnItsTrack(3000, -3000, 2000, 1000), "and so is up to the margin past either");
+	Check(!NetLiftHeightIsOnItsTrack(-4001, -3000, 2000, 1000) && !NetLiftHeightIsOnItsTrack(3001, -3000, 2000, 1000), "but no further");
+	Check(!NetLiftHeightIsOnItsTrack(2147483647, -3000, 2000, 1000) && !NetLiftHeightIsOnItsTrack(-2147483647 - 1, -3000, 2000, 1000), "and the largest and smallest heights a message can hold are off it");
+
+	Check(NetLiftHostHeightNow(1000, false, -3000, 5000, 400) == 1000, "a car at rest stays where it was said to be");
+	Check(NetLiftHostHeightNow(1000, true, -3000, 5000, 400) == -1000, "one going up has gone 5 m a second towards its top");
+	Check(NetLiftHostHeightNow(-1000, true, 2000, 5000, 400) == 1000, "and one going down towards its bottom");
+	Check(NetLiftHostHeightNow(1000, true, -3000, 5000, 60000) == -3000, "and it stops at its end");
+	Check(NetLiftHostHeightNow(1000, true, -3000, 5000, -50) == 1000, "a time before the message counts as none");
+
+	Check(NetLiftFollowStep(0, 2000, 100, false, 450) == 2000, "with nobody on it and more than a step away, the car goes straight there");
+	Check(NetLiftFollowStep(0, 2000, 100, true, 450) == 100, "with someone on it, it travels, however far");
+	Check(NetLiftFollowStep(0, -2000, 100, true, 450) == -100, "in either direction");
+	Check(NetLiftFollowStep(0, 300, 100, false, 450) == 100, "within a step, it travels too");
+	Check(NetLiftFollowStep(0, 80, 100, true, 450) == 80, "and arrives without going past");
+}
+
+static void TestLiftCallReach()
+{
+	puts("calling a platform lift");
+
+	Check(NetLiftCallReach(6905, false) == 5000, "outside the mode, it's always 5 m");
+	Check(NetLiftCallReach(6905, true) == 11905, "in the mode, it's 5 m from the edge of the widest lift in the campaigns");
+	Check(NetLiftCallReach(1, true) == 5001, "a small lift is the same rule");
+	Check(NetLiftCallReach(0, true) == 5000, "a lift with no size is 5 m");
+	Check(NetLiftCallReach(-1, true) == 5000, "a size below nothing from a level's file counts as nothing");
+	Check(NetLiftCallReach(99999, true) == 104999, "a size just under the limit counts as itself");
+	Check(NetLiftCallReach(100000, true) == 105000, "and the limit is the most");
+	Check(NetLiftCallReach(2147483647, true) == 105000, "so the biggest number a file can hold doesn't overflow");
+}
+
+// Whether the host has heard from everyone else on the loading screen
+static void TestEveryoneElseIsReady()
+{
+	puts("waiting for everyone on the loading screen");
+
+	bool const noneHere[3] = { false, false, false };
+	bool const twoHere[3] = { true, true, false };
+	bool const noneReady[3] = { false, false, false };
+	bool const firstReady[3] = { true, false, false };
+	bool const secondReady[3] = { false, true, false };
+
+	Check(NetEveryoneElseIsReady(noneHere, noneReady, 3, 0), "with nobody else in the game, there's nobody to wait for");
+	Check(!NetEveryoneElseIsReady(twoHere, noneReady, 3, 0), "another player who hasn't said so is waited for");
+	Check(NetEveryoneElseIsReady(twoHere, secondReady, 3, 0), "and not once they have");
+	Check(NetEveryoneElseIsReady(twoHere, firstReady, 3, 1), "your own place doesn't count");
+	Check(!NetEveryoneElseIsReady(twoHere, firstReady, 3, 0), "someone ready in your own place doesn't speak for the others");
+	Check(NetEveryoneElseIsReady(twoHere, secondReady, 3, 0), "an empty place isn't waited for");
+}
+
+// A press message from another machine names something to press. The numbers here stand in for the game's kinds of object.
+static void TestPressMessages()
+{
+	puts("what a press message can press");
+
+	enum { kPlainSwitch = 7, kLinkSwitch = 11, kSomethingToPickUp = 3, kLift = 4, kLight = 5 };
+
+	Check(NetPressMessageCanPress(kPlainSwitch, kPlainSwitch, kLinkSwitch), "a plain switch can be pressed");
+	Check(NetPressMessageCanPress(kLinkSwitch, kPlainSwitch, kLinkSwitch), "a switch with a link group can be pressed");
+	Check(!NetPressMessageCanPress(kSomethingToPickUp, kPlainSwitch, kLinkSwitch), "something to pick up can't");
+	Check(!NetPressMessageCanPress(kLift, kPlainSwitch, kLinkSwitch), "a lift can't");
+	Check(!NetPressMessageCanPress(kLight, kPlainSwitch, kLinkSwitch), "a light can't");
 }
 
 static bool FitsAmmunitionTable(int number)
@@ -265,6 +363,31 @@ static void TestAnswersInASecond()
 	used = 10;
 	Check(!NetThisSecondHasRoom(0xFFFFFFF8u, &started, &used, 10), "the clock's numbers near the top still work");
 	Check(NetThisSecondHasRoom(1000u, &started, &used, 10), "and when they wrap round to the start");
+}
+
+// Where a campaign goes next, as the host says. The place is used to look up a level in a list.
+static void TestCampaignPlaces()
+{
+	Check(NetCampaignMoveIsGood(1, 3, 1, 2, 11), "going on to the next level is good");
+	Check(NetCampaignMoveIsGood(1, 11, 1, 10, 11), "and so is the place just past the last, which ends the campaign");
+	Check(!NetCampaignMoveIsGood(1, 12, 1, 10, 11), "but nothing further");
+	Check(!NetCampaignMoveIsGood(1, 2, 1, 2, 11), "the same place again is refused, or one message could reload a level for ever");
+	Check(!NetCampaignMoveIsGood(1, 1, 1, 2, 11), "and so is going back");
+	Check(!NetCampaignMoveIsGood(2, 3, 1, 2, 11), "and another campaign's");
+	Check(!NetCampaignMoveIsGood(0, 3, 0, 2, 11), "and it means nothing in a game with no campaign");
+	Check(NetCampaignDifficultyIsGood(0), "the easiest difficulty is good");
+	Check(NetCampaignDifficultyIsGood(1), "and the middle");
+	Check(NetCampaignDifficultyIsGood(2), "and the hardest on offer");
+	Check(!NetCampaignDifficultyIsGood(3), "and the next isn't");
+	Check(!NetCampaignDifficultyIsGood(255), "nor anything a byte can hold above that");
+	Check(!NetCampaignDifficultyIsGood(-1), "nor below");
+	Check(NetCampaignPlaceIsGood(0, 0, 0), "no campaign, at place 0, is what most games say");
+	Check(!NetCampaignPlaceIsGood(0, 1, 0), "no campaign at any other place isn't");
+	Check(NetCampaignPlaceIsGood(1, 0, 11), "the first level of one is good");
+	Check(NetCampaignPlaceIsGood(1, 10, 11), "and the last");
+	Check(!NetCampaignPlaceIsGood(1, 11, 11), "a joiner can't be told the place past the last");
+	Check(!NetCampaignPlaceIsGood(1, -1, 11), "or one before the first");
+	Check(!NetCampaignPlaceIsGood(9, 0, 0), "and a campaign with no levels has no places");
 }
 
 static void TestDamageMultiples()
@@ -546,6 +669,7 @@ static void TestWhatGoesOnTheScreen()
 
 int main()
 {
+	TestCampaignPlaces();
 	TestWhatGoesOnTheScreen();
 	TestCountingRefusals();
 	TestSoundAddresses();
@@ -553,6 +677,12 @@ int main()
 	TestRoomForAmounts();
 	TestWhoHasAskedLately();
 	TestTypedAddresses();
+	TestPressMessages();
+	TestEveryoneElseIsReady();
+	TestLiftCallReach();
+	TestLiftSync();
+	TestBreakableHits();
+	TestOtherSpeciesAsFriends();
 	TestDamageMultiples();
 	TestAnswersInASecond();
 	TestAmmunitionNumbers();

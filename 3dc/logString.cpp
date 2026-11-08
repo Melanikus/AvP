@@ -27,11 +27,18 @@
 //   SDK library), and LogErrorStringC, which writes a log line from code that does not use C++ strings
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   lines are written by a thread of their own, so a slow disk or a virus scanner can't hold up the game
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   if the save folder couldn't be found or made, the log says why as soon as it can write
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the last logs are kept as avp_log.1.txt to avp_log.5.txt, and only a plain file is ever written to (log_files.h); a crash writes what
+//   it was and the places on the stack, as file names and distances, straight to the file without waiting for a lock
+//   every line, and the crash lines, leave out the player's Windows user name, computer name, folders and network addresses
 
 #include "logString.h"
 #include "renderer.h"
 #include "utilities.h"
 #include "frame_timing.h"
+#include "log_files.h"
 
 #ifdef _XBOX
 	#include "D3dx8core.h"
@@ -181,9 +188,11 @@ public:
 		QueryPerformanceFrequency(&ticksPerSecond);
 
 		// no folder means the current one: the log is only worth so much, and it mustn't be why the game won't start
-		char const *folder = GetSaveFolderPath();
-		filePath = folder ? folder : "";
+		filePath = GetSaveFolderPath();
 		filePath += logFilename;
+
+		// What every line leaves out about the player: their folders, names and addresses (log_files.h). Found before any line is written.
+		LogFiles_PrivateGather(privateThings, GetSaveFolderPath());
 
 		wake = CreateEvent(NULL, FALSE, FALSE, NULL);
 
@@ -193,18 +202,21 @@ public:
 		}
 	}
 
-	// mustGoIn is for errors, which go on the list even if it's full
+	// mustGoIn is for errors, which go on the list even if it's full. Every line that reaches the file comes through here, and the player is
+	// left out of it first, before it waits anywhere.
 	void Add(const std::string &line, bool mustGoIn)
 	{
+		std::string const written = LogFiles_LeaveOutThePlayer(line, privateThings);
+
 		EnterCriticalSection(&listLock);
 
-		if (!mustGoIn && waiting.size() + line.size() > kMostWaiting)
+		if (!mustGoIn && waiting.size() + written.size() > kMostWaiting)
 		{
 			linesLost++;
 		}
 		else
 		{
-			waiting += line;
+			waiting += written;
 		}
 
 		LeaveCriticalSection(&listLock);
@@ -265,14 +277,28 @@ public:
 			file = INVALID_HANDLE_VALUE;
 		}
 
-		HANDLE const cleared = CreateFileA(filePath.c_str(), GENERIC_WRITE, kShareEverything, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-		if (cleared != INVALID_HANDLE_VALUE)
-		{
-			CloseHandle(cleared);
-		}
+		// The last run's log, and the ones before it, are kept: they move along by one, and this run starts a fresh one (log_files.h)
+		LogFiles_MoveAlong(filePath);
+		LogFiles_Empty(filePath);
 
 		LeaveCriticalSection(&fileLock);
+	}
+
+	// For a crash: these words go straight to the file, with a handle of their own, so no lock is needed. Whatever crashed may be holding one.
+	// They're only file names and numbers, but they go through the same leaving out as every other line, in a buffer kept for it, so that
+	// nothing is asked of memory while the game is crashing.
+	void WriteCrashWords(const char *words)
+	{
+		LogFiles_LeaveOutThePlayer(words, privateThings, crashWritten, sizeof(crashWritten));
+
+		HANDLE const crashFile = LogFiles_OpenToAdd(filePath);
+
+		if (crashFile != INVALID_HANDLE_VALUE)
+		{
+			DWORD written = 0;
+			WriteFile(crashFile, crashWritten, (DWORD)strlen(crashWritten), &written, NULL);
+			CloseHandle(crashFile);
+		}
 	}
 
 	void TakeWriteTimes(int *writesDone, float *slowestMilliseconds, int *lost)
@@ -290,9 +316,6 @@ public:
 private:
 	static const size_t kMostWaiting = 4 * 1024 * 1024;
 	static const int kCrashTries = 200;   // a millisecond each
-
-	// left open, and shared, so that anyone can read, copy, rename or delete the log while the game runs, and a second game can write to it too
-	static const DWORD kShareEverything = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
 	static DWORD WINAPI WriterThread(void *self)
 	{
@@ -320,9 +343,10 @@ private:
 		LARGE_INTEGER started, finished;
 		QueryPerformanceCounter(&started);
 
+		// Only a plain file is written to: a folder or a link in the log's place gets nothing
 		if (file == INVALID_HANDLE_VALUE)
 		{
-			file = CreateFileA(filePath.c_str(), FILE_APPEND_DATA, kShareEverything, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+			file = LogFiles_OpenToAdd(filePath);
 		}
 
 		if (file != INVALID_HANDLE_VALUE)
@@ -351,6 +375,8 @@ private:
 	std::string waiting;
 	std::string beingWritten;
 	std::string filePath;
+	LogFiles_Private privateThings;   // found once, before any line, and only read after that, so no lock is needed for it
+	char crashWritten[8192];          // the crash words with the player left out: they can come out longer than they went in
 	HANDLE file;
 	HANDLE wake;
 	HANDLE thread;
@@ -363,11 +389,54 @@ private:
 static LogWriter *logWriter = 0;
 static LPTOP_LEVEL_EXCEPTION_FILTER filterBeforeOurs = 0;
 
+// Kept here rather than on the stack, because a crash can be the stack running out
+static void *crashPlaces[kLogFilesMostCrashPlaces];
+static char crashWords[4096];
+
 static LONG WINAPI WriteLogBeforeCrash(EXCEPTION_POINTERS *crash)
 {
+	// Where it happened, as distances from the start of the game's own code, so that the linker's map can name the function. The stack holds the way back: any number on it that points into the game is probably a place that called something.
+	char const *const base = (char const *)GetModuleHandle(NULL);
+	IMAGE_NT_HEADERS const *const headers = (IMAGE_NT_HEADERS const *)(base + ((IMAGE_DOS_HEADER const *)base)->e_lfanew);
+	size_t const size = headers->OptionalHeader.SizeOfImage;
+	EXCEPTION_RECORD const *const record = crash->ExceptionRecord;
+	char line[200];
+
+	_snprintf(line, sizeof(line) - 1, "crash: code %08lX at %p, %IX into the game, on the address %p", record->ExceptionCode, record->ExceptionAddress, (size_t)((char const *)record->ExceptionAddress - base), record->NumberParameters > 1 ? (void *)record->ExceptionInformation[1] : NULL);
+	line[sizeof(line) - 1] = 0;
+	LogString(line);
+
+	size_t const *stack = (size_t const *)crash->ContextRecord->Esp;
+	std::string found = "crash: on the stack";
+	int kept = 0;
+
+	for (int i = 0; i < 400 && kept < 24 && !IsBadReadPtr(stack + i, sizeof(size_t)); i++)
+	{
+		size_t const distance = stack[i] - (size_t)base;
+
+		if (distance > headers->OptionalHeader.BaseOfCode && distance < size)
+		{
+			char one[16];
+
+			_snprintf(one, sizeof(one) - 1, " %IX", distance);
+			one[sizeof(one) - 1] = 0;
+			found += one;
+			kept++;
+		}
+	}
+
+	LogString(found);
+
 	if (logWriter)
 	{
+		// What was waiting first, so the lines stay in order, then what crashed and where
 		logWriter->WriteWaitingIfFree();
+
+		// Windows gives the places on this thread's stack, starting here, so they go back through the code that crashed. Each is written
+		// as a file name and a distance into it, to be looked up in the .map kept beside the build.
+		USHORT const count = RtlCaptureStackBackTrace(0, kLogFilesMostCrashPlaces, crashPlaces, NULL);
+		LogFiles_DescribeCrash(crash->ExceptionRecord->ExceptionCode, crash->ExceptionRecord->ExceptionAddress, crashPlaces, count, crashWords, sizeof(crashWords));
+		logWriter->WriteCrashWords(crashWords);
 	}
 
 	return filterBeforeOurs ? filterBeforeOurs(crash) : EXCEPTION_CONTINUE_SEARCH;
@@ -379,7 +448,7 @@ static void WriteLogAtExit()
 }
 
 // It's never given back: it has to outlive everything that might still write to the log as the game ends. It can give back nothing, while it's being
-// made: finding the save folder can log a problem, and that line would come straight back here. So a line that early is dropped.
+// made, so that a line written from inside that doesn't come straight back here. Such a line would be lost, so finding the save folder keeps what went wrong, and ClearLog says it.
 static LogWriter *TheLogWriter()
 {
 	static bool beingMade = false;
@@ -400,6 +469,13 @@ void ClearLog()
 	if (LogWriter *writer = TheLogWriter())
 	{
 		writer->Empty();
+	}
+
+	// Making the log asked for the save folder, and if that went wrong, there was no log yet to say so in. It's said here and not when the log is made, because this empties whatever came before it,
+	// and it's the first thing the game does (WinMain in winmain.cpp).
+	if (char const *const problem = GetSaveFolderProblem())
+	{
+		LogErrorString(problem);
 	}
 }
 

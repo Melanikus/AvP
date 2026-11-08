@@ -1,0 +1,969 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a species the game does not have counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "default:\n\t\t\treturn false;",
+					"to": "default:\n\t\t\tepisodes = 1;\n\t\t\tbreak;"
+				}
+			]
+		},
+		{
+			"name": "an episode below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "return episode >= 0 && episode < episodes",
+					"to": "return episode < episodes"
+				}
+			]
+		},
+		{
+			"name": "an episode past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "return episode >= 0 && episode < episodes",
+					"to": "return episode >= 0"
+				}
+			]
+		},
+		{
+			"name": "an episode one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "episode < episodes &&",
+					"to": "episode <= episodes &&"
+				}
+			]
+		},
+		{
+			"name": "a difficulty below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "difficulty >= 0 && difficulty < I_MaxDifficulties",
+					"to": "difficulty < I_MaxDifficulties"
+				}
+			]
+		},
+		{
+			"name": "a difficulty past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "difficulty >= 0 && difficulty < I_MaxDifficulties",
+					"to": "difficulty >= 0"
+				}
+			]
+		},
+		{
+			"name": "a slot below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS",
+					"to": "slot < MAX_NO_OF_WEAPON_SLOTS"
+				}
+			]
+		},
+		{
+			"name": "a slot one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS",
+					"to": "slot >= 0 && slot <= MAX_NO_OF_WEAPON_SLOTS"
+				}
+			]
+		},
+		{
+			"name": "a state below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "state >= 0 && state < MAX_NO_OF_WEAPON_STATES",
+					"to": "state < MAX_NO_OF_WEAPON_STATES"
+				}
+			]
+		},
+		{
+			"name": "a state one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "state >= 0 && state < MAX_NO_OF_WEAPON_STATES",
+					"to": "state >= 0 && state <= MAX_NO_OF_WEAPON_STATES"
+				}
+			]
+		},
+		{
+			"name": "a vision mode below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "mode >= 0 && mode < NUMBER_OF_VISION_MODES",
+					"to": "mode < NUMBER_OF_VISION_MODES"
+				}
+			]
+		},
+		{
+			"name": "a vision mode one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "mode >= 0 && mode < NUMBER_OF_VISION_MODES",
+					"to": "mode >= 0 && mode <= NUMBER_OF_VISION_MODES"
+				}
+			]
+		},
+		{
+			"name": "ammunition below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES",
+					"to": "ammo < MAX_NO_OF_AMMO_TEMPLATES"
+				}
+			]
+		},
+		{
+			"name": "ammunition one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "ammo >= 0 && ammo < MAX_NO_OF_AMMO_TEMPLATES",
+					"to": "ammo >= 0 && ammo <= MAX_NO_OF_AMMO_TEMPLATES"
+				}
+			]
+		},
+		{
+			"name": "OLD: a weapon put away with no slot to go to fits",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "!(state == WEAPONSTATE_UNREADYING && swapSlot == WEAPON_FINISHED_SWAPPING)",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "any weapon state fits no swap",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "state == WEAPONSTATE_UNREADYING && swapSlot == WEAPON_FINISHED_SWAPPING",
+					"to": "swapSlot == WEAPON_FINISHED_SWAPPING"
+				}
+			]
+		},
+		{
+			"name": "a place below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "place >= 0 && place < count",
+					"to": "place < count"
+				}
+			]
+		},
+		{
+			"name": "a place one past the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "place >= 0 && place < count",
+					"to": "place >= 0 && place <= count"
+				}
+			]
+		},
+		{
+			"name": "no place at all is counted as refused",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "if (!inTheList && place != -1)",
+					"to": "if (!inTheList)"
+				}
+			]
+		},
+		{
+			"name": "a place that is not in the list is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "return inTheList ? place : -1;",
+					"to": "return place;"
+				}
+			]
+		},
+		{
+			"name": "a block too small has its length read",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tif (blockSize < fixedSize)\n\t{\n\t\tSave_NoteRefused(\"a name in its block\");\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name of no length counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "length >= 1 && length == blockSize - fixedSize",
+					"to": "length == blockSize - fixedSize"
+				}
+			]
+		},
+		{
+			"name": "a name that does not fill its block counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "length >= 1 && length == blockSize - fixedSize &&",
+					"to": "length >= 1 &&"
+				}
+			]
+		},
+		{
+			"name": "a name with no end mark counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": " && name[length - 1] == '\\0'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a morph frame below the list counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "saved >= 0 && saved < maxFrames",
+					"to": "saved < maxFrames"
+				}
+			]
+		},
+		{
+			"name": "a morph frame at the end counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "saved >= 0 && saved < maxFrames",
+					"to": "saved >= 0 && saved <= maxFrames"
+				}
+			]
+		},
+		{
+			"name": "a morph frame that is refused is used anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "return valid ? saved : own;",
+					"to": "return saved;"
+				}
+			]
+		},
+		{
+			"name": "a texture list that is not there is read",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "if (!animationList || sequence < 0)",
+					"to": "if (sequence < 0)"
+				}
+			]
+		},
+		{
+			"name": "a sequence below the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "if (!animationList || sequence < 0)",
+					"to": "if (!animationList)"
+				}
+			]
+		},
+		{
+			"name": "the working number counts as a sequence",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "(void *const *)animationList + 1",
+					"to": "(void *const *)animationList"
+				}
+			]
+		},
+		{
+			"name": "the last entry is not looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "for (int i = 0; i <= sequence; i++)",
+					"to": "for (int i = 0; i < sequence; i++)"
+				}
+			]
+		},
+		{
+			"name": "a number below its range counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "number >= lowest && number <= highest",
+					"to": "number <= highest"
+				}
+			]
+		},
+		{
+			"name": "a number above its range counts",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "number >= lowest && number <= highest",
+					"to": "number >= lowest"
+				}
+			]
+		},
+		{
+			"name": "no object is written to",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tif (!live)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "OLD: a saved address is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->CollisionReportPtr = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a mass of nothing stays",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "if (live->Mass <= 0)",
+					"to": "if (live->Mass < 0)"
+				}
+			]
+		},
+		{
+			"name": "a mass that is refused is lost",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\t\tlive->Mass = ownMass;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of dynamics below the list stays",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "(int)live->DynamicsType < DYN_TYPE_NO_COLLISIONS || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of dynamics above the list stays",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": " || (int)live->DynamicsType > DYN_TYPE_CUBOID_COLLISIONS",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a topple force below the list stays",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "(int)live->ToppleForce < TOPPLE_FORCE_NONE || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a topple force above the list stays",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": " || (int)live->ToppleForce > TOPPLE_FORCE_FULL",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of dynamics that is refused is lost",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\t\tlive->DynamicsType = ownType;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a topple force that is refused is lost",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\t\tlive->ToppleForce = ownTopple;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an angle in x can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->OrientEuler.EulerX &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an angle in y can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->OrientEuler.EulerY &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an angle in z can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->OrientEuler.EulerZ &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an earlier angle in x can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->PrevOrientEuler.EulerX &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an earlier angle in y can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->PrevOrientEuler.EulerY &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an earlier angle in z can leave the table",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tlive->PrevOrientEuler.EulerZ &= wrap360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "counts carry on from the last load",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\tnumChecksRefusing = 0;\n\trefusalsWithNoPlace = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a repeat is not added up",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "\t\t\trefusalCounts[i]++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the list of kinds has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "if (numChecksRefusing == kMostKindsOfRefusal)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "what has no place goes unsaid",
+			"changes": [
+				{
+					"file": "3dc/avp/save_checks.cpp",
+					"from": "int total = refusalsWithNoPlace;",
+					"to": "int total = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_agun copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_agun.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_alien copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_alien.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_corpse copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_corpse.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_facehugger copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_marine copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_platform_lift copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_platform_lift.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_predator copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_queen copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: bh_xeno copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_xeno.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: player copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: pvisible copies a saved dynamics block straight over",
+			"changes": [
+				{
+					"file": "3dc/avp/pvisible.cpp",
+					"from": "Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);",
+					"to": "*sbPtr->DynPtr = block->dynamics;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a save slot's numbers are believed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (!Save_SlotNumbersAreValid(block.Species, block.Episode, block.Difficulty))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a weapon slot is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "if(!Save_WeaponSlotIsValid(slot))",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a state is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "if(Save_WeaponStateIsValid(block->WeaponSlot[i].CurrentState))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: a weapon put away with no slot is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "if(!Save_SwapFitsWeaponState(selectedWeapon->CurrentState,playerStatusPtr->SwapToWeaponSlot))",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a vision mode is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "if(Save_VisionModeIsValid(block->CurrentVisionMode))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a grenade is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/player.cpp",
+					"from": "if(Save_AmmoIsValid(block->GrenadeLauncherData.SelectedAmmo))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a path is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;",
+					"to": "*path = PathArray ? *path : -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a step is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_ais.cpp",
+					"from": "*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;",
+					"to": "*stepnumber = (*path >= 0) ? *stepnumber : -1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corpse's table is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_corpse.cpp",
+					"from": "Save_PlaceInListOrNone(block->hltable_index, numberOfTables)",
+					"to": "block->hltable_index"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a decal's module is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/decal.cpp",
+					"from": "if(Save_PlaceInListOrNone(saved_decal->ModuleIndex, ModuleArraySize) < 0)",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the Queen holds is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_queen.cpp",
+					"from": "Save_PlaceInListOrNone(block->CurrentQueenObject, NumQueenObjects)",
+					"to": "block->CurrentQueenObject"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a generator's rate is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_generator.cpp",
+					"from": "if(Save_NumberIsInRange(block->GenerationRate, 1, (60 * ONE_FIXED * 100) / 4))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a generator's NPCs are believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_generator.cpp",
+					"from": "if(Save_NumberIsInRange(block->generatorNPCsPerMinute, GENSPERMINUTE_MIN, GENSPERMINUTE_MAX))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's number is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "if(Save_NumberIsInRange(block->personalNumber, 0, PRED_MAXIDENTITY))",
+					"to": "if(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's sequence is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "if(bs_bhv->bs_tac && Save_TextureSequenceIsValid(bs_bhv->bs_tac->tac_txarray, block->txanim_sequence))",
+					"to": "if(bs_bhv->bs_tac)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a linked switch's sequence is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))",
+					"to": "if(ls_bhv->ls_tac)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a light's sequence is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_light.cpp",
+					"from": "if (Save_TextureSequenceIsValid(tac->tac_txarray, sequence))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift door's frame is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_lift_door.cpp",
+					"from": "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,",
+					"to": "(block->ObMorphCurrFrame,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch door's frame is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_switch_door.cpp",
+					"from": "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,",
+					"to": "(block->ObMorphCurrFrame,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a proximity door's frame is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_types.cpp",
+					"from": "Save_MorphFrameOrOwn(block->ObMorphCurrFrame,",
+					"to": "(block->ObMorphCurrFrame,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a handle's sound name is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/psnd.cpp",
+					"from": "so this is the usual way out\n\tif(!Save_NameFillsBlock(block->header.size, sizeof(*block), &block->fileNameLength, name)) return;",
+					"to": "so this is the usual way out\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sound with no handle's name is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/psnd.cpp",
+					"from": "//check the size\n\tif(!Save_NameFillsBlock(block->header.size, sizeof(*block), &block->fileNameLength, name)) return;",
+					"to": "//check the size\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: counts are not started afresh",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tSave_StartCountingRefusals();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a load says nothing of what it refused",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "Save_DescribeRefusals(refusals, sizeof(refusals));",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: OLD: a save can take the player's block away",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "if(sbPtr && sbPtr != Player->ObStrategyBlock)",
+					"to": "if(sbPtr)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine's saved path isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\tNPC_CheckSavedPath(&marineStatusPointer->path, &marineStatusPointer->stepnumber);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator's saved path isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\tNPC_CheckSavedPath(&predatorStatusPointer->path, &predatorStatusPointer->stepnumber);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine with no path or step walks one anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\n\tif ((marineStatusPointer->stepnumber<0)||(marineStatusPointer->path<0)) {\n",
+					"to": "\n\tif (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: and the other place a marine walks a path",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\n\t\tif ((marineStatusPointer->stepnumber<0)||(marineStatusPointer->path<0)) {\n",
+					"to": "\n\t\tif (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator with no path or step walks one anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_predator.cpp",
+					"from": "\n        if ((predatorStatusPointer->stepnumber<0)||(predatorStatusPointer->path<0)) {\n",
+					"to": "\n        if (0) {\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's path that isn't there gets a step",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/projload.cpp",
+					"from": "if(path_index<0 || path_index>=PathArraySize)",
+					"to": "if(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's path is followed without asking",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if(!PathCanBeFollowed(new_path)) return;",
+					"to": ""
+				}
+			]
+		}
+	]
+}

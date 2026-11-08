@@ -1,12 +1,19 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game, no debris is made once the blocks are down to what's kept back for this machine's own player
+//   a spent case thrown out of a gun, which is debris like any other
 /* KJL 15:01:53 02/25/97 - bh_debri.c */
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   debris in a save that cannot get a dynamics block is left out, instead of crashing
+//   debris that a save file leaves without a model is left out of the game
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "load_shape.h"
@@ -284,6 +291,74 @@ DISPLAYBLOCK *MakeDebris(AVP_BEHAVIOUR_TYPE bhvr, VECTORCH *positionPtr)
 }
 
 
+
+// A spent case thrown out of a gun: a small piece of debris of the shape named, which falls, lands and melts away like any other. If that shape isn't loaded, or the game has no room for one more thing, nothing happens.
+DISPLAYBLOCK *MakeThrownCase(char *shapeName, VECTORCH *positionPtr, MATRIXCH *turnPtr, VECTORCH *impulsePtr)
+{
+	enum { kCaseLastsThisLong = ONE_FIXED * 5 };
+
+	if ((NumActiveBlocks > maxobjects - 5) || (NumActiveStBlocks > maxstblocks - 5) || Net_BlocksAreShort() || GetLoadedShapeMSL(shapeName) <= 0)
+	{
+		return NULL;
+	}
+
+	MODULEMAPBLOCK *const mmbptr = &TempModuleMap;
+	MODULE m_temp;
+
+	CreateShapeInstance(mmbptr, shapeName);
+
+	m_temp.m_numlights = 0;
+	m_temp.m_lightarray = NULL;
+	m_temp.m_mapptr = mmbptr;
+	m_temp.m_sbptr = (STRATEGYBLOCK *)NULL;
+	m_temp.m_dptr = NULL;
+	AllocateModuleObject(&m_temp);
+
+	DISPLAYBLOCK *const dispPtr = m_temp.m_dptr;
+
+	if (dispPtr == NULL)
+	{
+		return NULL;
+	}
+
+	dispPtr->ObMyModule = NULL;
+	dispPtr->ObWorld = *positionPtr;
+
+	STRATEGYBLOCK *const sbPtr = AttachNewStratBlock((MODULE *)NULL, mmbptr, dispPtr);
+
+	if (sbPtr == 0)
+	{
+		return NULL;
+	}
+
+	sbPtr->I_SBtype = I_BehaviourFragment;
+	sbPtr->SBdataptr = (ONE_SHOT_BEHAV_BLOCK *)AllocateMem(sizeof(ONE_SHOT_BEHAV_BLOCK));
+
+	if (sbPtr->SBdataptr == 0)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return NULL;
+	}
+
+	((ONE_SHOT_BEHAV_BLOCK *)sbPtr->SBdataptr)->counter = kCaseLastsThisLong;
+
+	DYNAMICSBLOCK *const dynPtr = sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_DEBRIS);
+
+	if (dynPtr == 0)
+	{
+		RemoveBehaviourStrategy(sbPtr);
+		return NULL;
+	}
+
+	dynPtr->Position = *positionPtr;
+	dynPtr->OrientMat = *turnPtr;
+	dynPtr->LinImpulse = *impulsePtr;
+	dynPtr->AngVelocity.EulerX = (FastRandom() & 2047) - 1024;
+	dynPtr->AngVelocity.EulerY = (FastRandom() & 2047) - 1024;
+	dynPtr->AngVelocity.EulerZ = (FastRandom() & 2047) - 1024;
+
+	return dispPtr;
+}
 
 void CreateShapeInstance(MODULEMAPBLOCK *mmbptr, char *shapeNamePtr)
 {
@@ -1628,6 +1703,13 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 		memset(hdebrisStatusPointer,0,sizeof(*hdebrisStatusPointer));
 		dispPtr->HModelControlBlock=&hdebrisStatusPointer->HModelController;
 
+		// there is a fixed number of dynamics blocks, and a save can hold more debris than there are left. This comes after
+		// the behaviour block on purpose: removing a fragment reads that block.
+		if (!sbPtr->DynPtr)
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
 	}
 
 
@@ -1643,7 +1725,7 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Bounce_Sound)
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
@@ -1656,6 +1738,11 @@ void LoadStrategy_HierarchicalDebris(SAVE_BLOCK_STRATEGY_HEADER* header)
 		}
 	}
 
+	//debris is made from nothing as it loads, and its model comes from the save file. Without one it can't go on
+	if(!hdebrisStatusPointer->HModelController.Root_Section)
+	{
+		DestroyAnyStrategyBlock(sbPtr);
+	}
 }
 
 void SaveStrategy_HierarchicalDebris(STRATEGYBLOCK* sbPtr)
@@ -1811,7 +1898,7 @@ void LoadStrategy_Debris(/*SAVE_BLOCK_HEADER*/SAVE_BLOCK_STRATEGY_HEADER* header
 	}
 
 //strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 }
