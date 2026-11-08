@@ -395,6 +395,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\vision.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\winmain.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\win_proj.cpp" />
+    <ClCompile Include="..\..\3dc\build_identity.cpp" />
     <ClCompile Include="..\..\3dc\ConfigFile.cpp" />
     <ClCompile Include="..\..\3dc\console.cpp" />
     <ClCompile Include="..\..\3dc\d3d_render.cpp" />
@@ -420,6 +421,8 @@
     <ClCompile Include="..\..\3dc\MurmurHash3.cpp" />
     <ClCompile Include="..\..\3dc\MusicPlayer.cpp" />
     <ClCompile Include="..\..\3dc\networking.cpp" />
+    <ClCompile Include="..\..\3dc\net_close.cpp" />
+    <ClCompile Include="..\..\3dc\net_host.cpp" />
     <ClCompile Include="..\..\3dc\object.cpp" />
     <ClCompile Include="..\..\3dc\OnScreenKeyboard.cpp" />
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
@@ -645,6 +648,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\pldghost.h" />
     <ClInclude Include="..\..\3dc\avp\win95\pldnet.h" />
     <ClInclude Include="..\..\3dc\net_checks.h" />
+    <ClInclude Include="..\..\3dc\net_host.h" />
     <ClInclude Include="..\..\3dc\avp\win95\net_version_check.h" />
     <ClInclude Include="..\..\3dc\avp\sound_address.h" />
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
@@ -661,6 +665,7 @@
     <ClInclude Include="..\..\3dc\include\prototyp.h" />
     <ClInclude Include="..\..\3dc\include\shape.h" />
     <ClInclude Include="..\..\3dc\MemoryStream.h" />
+    <ClInclude Include="..\..\3dc\net_close.h" />
     <ClInclude Include="..\..\3dc\os_header.h" />
     <ClInclude Include="..\..\3dc\video\BinkPlayback.h" />
     <ClInclude Include="..\..\3dc\video\SmackerPlayback.h" />

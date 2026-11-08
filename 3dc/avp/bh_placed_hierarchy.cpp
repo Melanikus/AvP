@@ -3,6 +3,9 @@
 //   a sequence number the list does not have is ignored
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved placed hierarchy has to hold all the numbers it says it holds
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a placed hierarchy whose model the level names but doesn't have isn't made, and the log says which (MODEL-NULL-1;
+//   found through Bobblen's avp-forever, commit 207704e)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -56,8 +59,16 @@ void* PlacedHierarchyBehaveInit(void* bhdata,STRATEGYBLOCK* sbptr)
 	ph_bhv->num_special_track_points=ph_tt->num_special_track_points;
 	ph_bhv->special_track_points=ph_tt->special_track_points;
 	
+	// The file and the model are named by the level itself, so they may not be there. Then nothing is made: its block
+	// goes back, and the caller takes it out (bh_types.cpp), because everything that works it reads that block.
 	root_section=GetNamedHierarchyFromLibrary(ph_tt->file_name,ph_tt->hier_name);
-	GLOBALASSERT(root_section);
+
+	if (!NpcModelIsLoaded(root_section, "a placed hierarchy the level names", ph_tt->file_name, ph_tt->hier_name))
+	{
+		DeallocateMem(ph_bhv);
+		return ((void *)NULL);
+	}
+
 	Create_HModel(&ph_bhv->HModelController,root_section);
 	
 	ph_bhv->current_seq=ph_tt->first_sequence;

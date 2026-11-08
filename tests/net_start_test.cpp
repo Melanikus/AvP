@@ -3,6 +3,9 @@
 // This runs the real file. Only ENet and the rest of the game are stand-ins, in tests/net_start_test_stubs, and they open nothing: they count what was asked for, and the clock is the test's.
 //
 // WHY THESE THREE: only a client has a server to send to, so anything else asking to send has to be told no. A game that isn't doing anything on a network has no reason to have anything open on one. And anyone who can reach a host can connect and send anything at all, so it believes nothing about who sent what except which connection it came on.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   every ENet host the game makes has the game's limits and one channel (3dc/net_host.cpp), and a message too short for a header is refused before it's copied
+//   leaving closes each connection after what's waiting, while the ENet host is still there (3dc/net_close.h), and a client says in the log when the host's connection closes
 
 #include "enet/enet.h"
 #include "networking.h"
@@ -181,6 +184,8 @@ static std::vector<ENetAddress> socketsBoundTo, datagramsSentTo;
 
 static int hostsCreated = 0, hostsDestroyed = 0, hostsWithNoAddress = 0;
 static size_t connectionsAllowed = 0;
+// How many channels a host would give each connection, and how many a client asked for
+static size_t channelsAllowed = 0, channelsAsked = 0;
 static std::vector<ENetAddress> hostsBoundTo;
 static bool connectGetsAnAnswer = true, connectCantStart = false;
 
@@ -280,7 +285,7 @@ static void EverythingArrives()
 	packetsOnTheirWay.clear();
 }
 
-ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t, enet_uint32, enet_uint32)
+ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t channelLimit, enet_uint32, enet_uint32)
 {
 	if (hostCreateFails)
 	{
@@ -289,6 +294,15 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t,
 
 	hostsCreated++;
 	connectionsAllowed = peerCount;
+	channelsAllowed = channelLimit;
+
+	// What real ENet starts a host with (enet_host_create in ENet's host.c), so a check can see the game set its own:
+	// any number of places from one address, 32 MB messages, 32 MB waiting, and no checksum
+	theHost.duplicatePeers = 0xFFF;
+	theHost.maximumPacketSize = 32 * 1024 * 1024;
+	theHost.maximumWaitingData = 32 * 1024 * 1024;
+	theHost.checksum = NULL;
+	theHost.olderConnectsRefused = 0;
 
 	if (address)
 	{
@@ -336,8 +350,10 @@ void enet_host_destroy(ENetHost *)
 	eventsWaiting.clear();
 }
 
-ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *, size_t, enet_uint32)
+ENetPeer *enet_host_connect(ENetHost *, const ENetAddress *, size_t channelCount, enet_uint32)
 {
+	channelsAsked = channelCount;
+
 	if (connectCantStart)
 	{
 		return NULL;
@@ -527,8 +543,37 @@ enet_uint32 enet_time_get()
 	return enetClock;
 }
 
-void LogString(const std::string &)
+// The game's log. networking.cpp writes a few lines there, and the tests read them back.
+static std::vector<std::string> logLines;
+
+void LogString(const std::string &line)
 {
+	logLines.push_back(line);
+}
+
+static bool LogHas(const std::string &line)
+{
+	for (std::string const &said : logLines)
+	{
+		if (said == line)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Leaving closes each connection with net_close.cpp, which needs the real ENet and has its own test, tests/net_close_test.cpp. Here
+// it's only counted, with how many hosts had been let go when it was asked, so the order can be checked: a host that had already
+// been destroyed would have no connections left to close, and its memory would be gone.
+static int closesAsked = 0, hostsDestroyedWhenClosed = -1, connectionsThatDontAnswer = 0;
+
+int Net_CloseConnectionsAfterWhatsWaiting(ENetHost *, unsigned int)
+{
+	closesAsked++;
+	hostsDestroyedWhenClosed = hostsDestroyed;
+	return connectionsThatDontAnswer;
 }
 
 void enet_peer_timeout(ENetPeer *, enet_uint32, enet_uint32, enet_uint32)
@@ -1421,6 +1466,17 @@ static void TestConnectionsThatHoldAPlace()
 	Net_ServiceNetwork();
 	Check(peersReset == resetBefore + 1 && peers[2].state == ENET_PEER_STATE_DISCONNECTED, "and loses it if it never finishes");
 
+	// An older version of the game, which our ENet (patch 006) told no without a place, and counted
+	int const linesBefore = errorLines;
+
+	theHost.olderConnectsRefused = 2;
+	Net_ServiceNetwork();
+
+	int const linesAfter = errorLines;
+
+	Net_ServiceNetwork();
+	Check(linesAfter > linesBefore && errorLines == linesAfter && theHost.olderConnectsRefused == 0, "an older version of the game that ENet told no is in the host's log, and only once");
+
 	// One that was let in, and went quiet
 	int const askedBefore = closedGently;
 
@@ -1524,6 +1580,9 @@ static void TestLettingPeopleIn()
 	playersInGame.clear();
 	Check(HostAGame() == NET_OK, "someone hosts");
 	Check(connectionsAllowed == 7, "with room for the other seven players, and no more");
+	Check(channelsAllowed == 1, "and one channel for each, the only one the game uses");
+	Check(theHost.duplicatePeers == 4 && theHost.maximumPacketSize == kMostMessageBytes && theHost.maximumWaitingData == 8 * 1024 * 1024, "with the game's limits on places from one address, a message's size, and what can wait");
+	Check(theHost.checksum == enet_crc32, "and a checksum on every packet");
 	Check(netSession.nPlayers == 1, "and the game says it has one player");
 
 	int const hostGoneBefore = hostHasGoneCalls;
@@ -1894,6 +1953,8 @@ static void TestTheClientsSide()
 	Check(JoinAGame() == NET_OK, "someone joins");
 	Check(hostsWithNoAddress == noAddress + 1 && hostsBoundTo.size() == bound, "with no port of their own for anyone to find");
 	Check(connectionsAllowed == 1, "and only the one connection");
+	Check(channelsAllowed == 1 && channelsAsked == 1, "and one channel, the only one the game uses");
+	Check(theHost.maximumPacketSize == kMostMessageBytes && theHost.maximumWaitingData == 8 * 1024 * 1024 && theHost.checksum == enet_crc32, "with the game's limits on a message's size and what can wait, and a checksum on every packet");
 	Check(AvPNetID == 0, "the ID from the last game has gone");
 
 	NetID const given = 4242;
@@ -1920,6 +1981,7 @@ static void TestTheClientsSide()
 	Check(Hears(0, message) == message.size(), "a game message from the host goes to the game");
 	Check(Hears(0, AMessage(0, NET_ID_ALLPLAYERS, 99, "x", 1, 0x12345678)) == 0, "unless it isn't marked as this game's");
 	Check(Hears(0, std::vector<uint8_t>(3, 0)) == 0, "or it's too short to have a header");
+	Check(Hears(0, std::vector<uint8_t>()) == 0, "or it's empty");
 	EndTheGame();
 }
 
@@ -1984,25 +2046,62 @@ static void TestLeavingClosesConnections()
 	TakeEverything();
 
 	int const closedBefore = closedAtOnce;
-	int const flushesBefore = flushes;
+	int const closesBefore = closesAsked;
 
 	Net_Disconnect();
-	Check(flushes == flushesBefore + 1, "a host leaving sends what it has first, because closing the connections throws away what's still waiting");
-	Check(closedAtOnce == closedBefore + 3, "and tells everyone connected straight away");
-	Check(flushesWhenLastClosed == flushes, "in that order");
+	Check(closesAsked == closesBefore + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1, "a host leaving closes its connections after what's waiting, before letting its ENet host go");
+	Check(closedAtOnce == closedBefore, "and closes none of them at once, which would throw away the last thing it said");
 	AvP.Network = I_No_Network;
 
 	Check(JoinAGame() == NET_OK, "and someone joining");
 	netGameData.needGameDescription = 1;
 
 	int const closedClient = closedAtOnce;
-	int const flushesClient = flushes;
+	int const closesClient = closesAsked;
 
 	sentMessages.clear();
 	Net_Disconnect();
-	Check(flushes == flushesClient + 1 && closedAtOnce == closedClient + 1, "does the same when they leave");
+	Check(closesAsked == closesClient + 1 && hostsDestroyedWhenClosed == hostsDestroyed - 1 && closedAtOnce == closedClient, "does the same when they leave");
 	Check(sentMessages.empty(), "and there's no message saying they've gone for anyone to have to believe");
 	AvP.Network = I_No_Network;
+}
+
+// A connection whose other end never answers is waited for only so long, and the log says how many there were
+static void TestLeavingWithoutAnAnswer()
+{
+	Check(JoinAGame() == NET_OK, "joining, to leave without an answer");
+
+	int const destroyed = hostsDestroyed;
+
+	logLines.clear();
+	connectionsThatDontAnswer = 1;
+	Net_Disconnect();
+	connectionsThatDontAnswer = 0;
+	Check(LogHas("net: left without hearing back from 1 connection(s), which may have gone already"), "leaving without an answer from a connection says so");
+	Check(hostsDestroyed == destroyed + 1, "and still lets its ENet host go");
+	AvP.Network = I_No_Network;
+}
+
+// A client's one connection is the host's, so its closing is the host gone, and the log says so. On a host, a connection closing is
+// a client gone, and that isn't this line.
+static void TestTheHostsConnectionClosing()
+{
+	uint8_t message[16];
+	size_t size = 0;
+
+	Check(JoinAGame() == NET_OK, "joining, for the host's connection to close");
+	logLines.clear();
+	eventsWaiting.push_back(ENetEvent{ ENET_EVENT_TYPE_DISCONNECT, &thePeer, NULL });
+	Net_Receive(message, size);
+	Check(LogHas("net: the host's connection closed"), "a client says when the host's connection closes");
+	EndTheGame();
+
+	Check(HostAGame() == NET_OK, "hosting, for a client's connection to close");
+	logLines.clear();
+	eventsWaiting.push_back(ENetEvent{ ENET_EVENT_TYPE_DISCONNECT, &peers[1], NULL });
+	Net_Receive(message, size);
+	Check(!LogHas("net: the host's connection closed"), "and a host doesn't say that when a client's connection closes");
+	EndTheGame();
 }
 
 static void TestPlayerIDs()
@@ -2287,6 +2386,12 @@ static void TestTheGameUsesThis()
 	Check(Has(menus, "if (previousMenuID == AVPMENU_MULTIPLAYERSELECTSESSION && menuID != AVPMENU_MULTIPLAYERSELECTSESSION)\n\t{\n\t\tNet_StopSearchingForSessions();"), "leaving the page of games found stops the search, which is the only way off that page");
 	Check(!Has(starting, "enet_socket_create") && !Has(starting, "enet_socket_bind"), "and starting the game can't make a socket, even if a test above would miss it");
 	Check(!Has(networking, "assert(ServerPeer)"), "the function checks for itself, rather than with an assert");
+	Check(!Has(networking, "enet_host_create("), "every ENet host the game makes has the game's limits, because they're all made in net_host.cpp");
+
+	// An empty message comes with no bytes, and copying from nothing isn't allowed in C++, so the size is checked first
+	size_t const sizeChecked = networking.find("if (eEvent.packet->dataLength < kMessageHeaderSize)");
+	size_t const copied = networking.find("memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);");
+	Check(sizeChecked != std::string::npos && copied != std::string::npos && sizeChecked < copied, "a message too short to have a header is refused before it's copied");
 
 	// Everything about who's who is tested above, in the real file, and these are where the rest of the game joins on
 	Check(!Has(pldnet, "ProcessSystemMessage") && !Has(pldnet, "isSystemMessage"), "the rest of the game has no way to act on a system message, so only what's been checked reaches it");
@@ -2358,6 +2463,8 @@ int main()
 	TestTheClientsSide();
 	TestWaitingToJoin();
 	TestLeavingClosesConnections();
+	TestLeavingWithoutAnAnswer();
+	TestTheHostsConnectionClosing();
 	TestPlayerIDs();
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();

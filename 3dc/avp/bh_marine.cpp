@@ -1197,22 +1197,6 @@ static void NoteRefusedFromAFile(char const *why)
 	LogString(std::string("npc: refused: ") + why);
 }
 
-// A marine's model is in a file the level loads, and which files those are is worked out from the level's own lists
-// (InitNPCs in npcsetup.cpp). When the two don't agree, the model isn't there. Making him anyway would read through
-// nothing in Create_HModel, whose only check is an assert, and asserts aren't in the game people play. So he isn't
-// made, and the log names the model and its file, so the level can be found and put right.
-static bool MarineModelIsLoaded(SECTION *root, MARINE_WEAPON_DATA const *weapon, char const *who)
-{
-	if (root)
-	{
-		return true;
-	}
-
-	std::string const model = weapon->HierarchyName ? weapon->HierarchyName : "(no name)";
-	std::string const file = weapon->Riffname ? weapon->Riffname : "(no name)";
-	NoteRefusedFromAFile((std::string(who) + " needs the model " + model + " from " + file + ", which isn't loaded, so he isn't made").c_str());
-	return false;
-}
 
 MARINE_WEAPON_DATA *GetThisNPCMarineWeapon(MARINE_NPC_WEAPONS this_id)
 {
@@ -1875,7 +1859,7 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
 
-		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine the level places"))
+		if (!NpcModelIsLoaded(root_section, "a marine the level places", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))
 		{
 			RemoveBehaviourStrategy(sbPtr);
 			return;
@@ -2217,7 +2201,7 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 
 		root_section=GetNamedHierarchyFromLibrary(marineStatus->My_Weapon->Riffname,marineStatus->My_Weapon->HierarchyName);
 
-		if (!MarineModelIsLoaded(root_section, marineStatus->My_Weapon, "a marine a generator makes"))
+		if (!NpcModelIsLoaded(root_section, "a marine or civilian a generator makes", marineStatus->My_Weapon->Riffname, marineStatus->My_Weapon->HierarchyName))
 		{
 			RemoveBehaviourStrategy(sbPtr);
 			return;

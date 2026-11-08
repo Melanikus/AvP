@@ -12,6 +12,9 @@
 //   the object a saved Queen is holding has to be one of the objects in the level
 //   a saved Queen's biases are divided by, so they have to be 1 or more
 //   a value a save has refused is counted for the log
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a queen whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through Bobblen's
+//   avp-forever, commit 207704e)
 #define DB_LEVEL 2
 
 /*------------------------ChrisF 17/3/98-------------------------------
@@ -351,8 +354,20 @@ void InitQueenBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		queenStatus->death_target_sbptr=0;
 		queenStatus->death_target_request=toolsData->death_target_request;
 
+		// Nothing of her model is made yet, and she makes no sound yet, so if she's taken out below, there's nothing to
+		// free or stop. (Her sound is set again further down, the same way.)
+		queenStatus->HModelController.section_data=NULL;
+		queenStatus->HModelController.Deltas=NULL;
+		queenStatus->soundHandle=SOUND_NOACTIVEINDEX;
+
 		root_section=GetNamedHierarchyFromLibrary("queen","Template");
-		GLOBALASSERT(root_section);
+
+		if (!NpcModelIsLoaded(root_section, "a queen the level places", "queen", "Template"))
+		{
+			RemoveBehaviourStrategy(sbPtr);
+			return;
+		}
+
 		Create_HModel(&queenStatus->HModelController,root_section);
 		InitHModelSequence(&queenStatus->HModelController,
 			(int)HMSQT_QueenRightStanceTemplate,
