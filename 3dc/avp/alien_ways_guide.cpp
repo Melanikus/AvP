@@ -109,19 +109,19 @@ static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWays
 
 bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, AlienWaysXYZ down)
 {
-	double const fx = from.facing[0], fy = from.facing[1], fz = from.facing[2];
+	// One surface: there's no step to make (alien_ways_map.h; the aim asks the same, so it never looks past a step not made here)
+	if (AlienWays_SameSurface(from, onto))
+	{
+		return true;
+	}
+
 	double const ox = onto.facing[0], oy = onto.facing[1], oz = onto.facing[2];
-	double const fLength = sqrt(fx * fx + fy * fy + fz * fz), oLength = sqrt(ox * ox + oy * oy + oz * oz);
+	double const oLength = sqrt(ox * ox + oy * oy + oz * oz);
 	double const pi = 3.14159265358979323846;
 
-	// Both facings known: by the planes
-	if (fLength > 16384.0 && oLength > 16384.0)
+	// Both facings known, and another plane: the step is made once the alien clings to the new polygon
+	if (AlienWays_FacingKnown(from) && AlienWays_FacingKnown(onto))
 	{
-		if ((fx * ox + fy * oy + fz * oz) / (fLength * oLength) >= cos(kAlienWaysSamePlaneDegrees * pi / 180.0))
-		{
-			return true;
-		}
-
 		double const dLength = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
 
 		if (!(dLength > 0.0))
@@ -134,7 +134,8 @@ bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, 
 		return on >= cos(kAlienWaysOnThePlaneDegrees * pi / 180.0);
 	}
 
-	return from.kind == onto.kind || KindUnder(down) == static_cast<int>(onto.kind);
+	// Either facing not known, and the kinds differ: made once the alien is on the new kind, by its down
+	return KindUnder(down) == static_cast<int>(onto.kind);
 }
 
 bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open)

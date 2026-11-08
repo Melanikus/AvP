@@ -14,10 +14,11 @@
 //
 // WHERE THE AIM STOPS SHORT. It never goes:
 // - past the way's last point, the goal;
-// - past a step onto another kind of surface (floor, wall or ceiling) that the alien hasn't made yet. The guide counts a step as made only
-//   once the alien is on the new surface (OnTheKindNeeded), and until then the alien has to go to the corner where the two surfaces meet,
-//   so that the game's own climbing turns it onto the new one. A point past the step is on the other surface, and aiming at it would
-//   point into, or out of, the surface the alien is clinging to;
+// - past a step onto another surface that the alien hasn't made yet: another kind (floor, wall or ceiling), or, where the level stores the
+//   facings, a polygon turned more than kAlienWaysSamePlaneDegrees from the one before, by the guide's own test (AlienWays_SameSurface,
+//   alien_ways_map.h). The guide counts a step as made only once the alien is on the new surface (AlienWays_StepMade), and until then the
+//   alien has to go to the corner where the two surfaces meet, so that the game's own climbing turns it onto the new one. A point past the
+//   step is on the other surface, and aiming at it would point into, or out of, the surface the alien is clinging to;
 // - round bends that, added together, turn the way more than kAlienWaysAimMostTurnDegrees. The alien goes in a straight line to the
 //   aim, and a straight line to a point round a bend cuts the corner. An outside corner can't be cut. Third and Primary found an alien
 //   stuck on Ops01 at an outside corner between two walls (polygons 451 to 565), where the next point was round the corner. On a gentle
@@ -183,7 +184,7 @@ inline bool AlienWays_AimAlong(const AlienWaysPoint *points, int count, int head
 		// The aim waits at this point of the way if it's a step onto another kind of surface, which the alien hasn't made yet, or a bend
 		// that takes the way past the most it may turn
 		Place const next = PlaceOf(points[point + 1]);
-		bool const step = points[point].kind != points[point - 1].kind;
+		bool const step = !AlienWays_SameSurface(points[point - 1], points[point]);
 		turned += TurnAt(cameFrom, to, next);
 
 		if (step || turned > kAlienWaysAimMostTurnDegrees)

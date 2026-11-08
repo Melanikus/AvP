@@ -45,6 +45,7 @@
 #ifndef ALIEN_WAYS_MAP_H
 #define ALIEN_WAYS_MAP_H
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <atomic>
@@ -189,6 +190,34 @@ struct AlienWaysPoint
 	int16_t facing[3];   // the facing of the polygon the way is on from this point to the next, in 32767ths, as the level stores it;
 	                     // all 0 if that isn't known. For telling when a step onto a new polygon is made (AlienWays_StepMade).
 };
+
+// Whether a point's facing is known. The level stores a facing as a direction one unit long, in 32767ths, so a real one is at least half
+// that long, and one of all 0, which is how a point with no facing is kept, isn't.
+inline bool AlienWays_FacingKnown(const AlienWaysPoint &point)
+{
+	double const x = point.facing[0], y = point.facing[1], z = point.facing[2];
+	return sqrt(x * x + y * y + z * z) > 16384.0;
+}
+
+// Two polygons facing within this many degrees of each other are one surface, so a way going from one onto the other makes no step
+int const kAlienWaysSamePlaneDegrees = 30;
+
+// Whether the stretch that starts at point a and the one that starts at point b are on one surface, so going from one onto the other is no
+// step. Where both facings are known, it goes by the planes: within kAlienWaysSamePlaneDegrees. Where either isn't, it goes by kind: the
+// same kind is one surface. The guide's step (AlienWays_StepMade) and the aim (alien_ways_lookahead.h) both ask this, so the aim never looks
+// past a step the guide hasn't counted as made, and the two can't come to differ.
+inline bool AlienWays_SameSurface(const AlienWaysPoint &a, const AlienWaysPoint &b)
+{
+	if (AlienWays_FacingKnown(a) && AlienWays_FacingKnown(b))
+	{
+		double const ax = a.facing[0], ay = a.facing[1], az = a.facing[2];
+		double const bx = b.facing[0], by = b.facing[1], bz = b.facing[2];
+		double const lengths = sqrt(ax * ax + ay * ay + az * az) * sqrt(bx * bx + by * by + bz * bz);
+		return (ax * bx + ay * by + az * bz) / lengths >= cos(kAlienWaysSamePlaneDegrees * 3.14159265358979323846 / 180.0);
+	}
+
+	return a.kind == b.kind;
+}
 
 enum AlienWaysSearch
 {

@@ -4,8 +4,10 @@
 //
 // AlienWays_AimAlong, on made-up ways (places in mm; y goes down, so a wall going up has smaller y as it goes):
 // - on a straight stretch it aims 1.5 m on from the alien's nearest place on it, and with 0 ahead it aims at the next point, as before;
-// - it never aims past the goal, past a step onto another kind of surface, or round bends adding up to more than 30 degrees, and a bend
-//   just after two points in the same place still counts;
+// - it never aims past the goal, past a step onto another surface, or round bends adding up to more than 30 degrees, and a bend just after
+//   two points in the same place still counts;
+// - a step is the guide's own (AlienWays_SameSurface, alien_ways_map.h): another kind, or, where the facings are known, a polygon turned
+//   more than 30 degrees, so a seam between two walls stops the aim even with the way going straight on;
 // - it does go round a gentle bend, and on up a wall once the step onto it is made;
 // - an alien off either end of its stretch looks from that end, and it never looks more than 10 m ahead;
 // - it refuses a way it can't use, and leaves the answer alone then;
@@ -39,6 +41,16 @@ static void Check(bool good, std::string const &what)
 static AlienWaysPoint P(int x, int y, int z, AlienWaysKind kind)
 {
 	AlienWaysPoint const point = { x, y, z, kind };
+	return point;
+}
+
+// The same, on a polygon facing (fx, fy, fz), in 32767ths as the level stores it
+static AlienWaysPoint PF(int x, int y, int z, AlienWaysKind kind, int fx, int fy, int fz)
+{
+	AlienWaysPoint point = P(x, y, z, kind);
+	point.facing[0] = static_cast<int16_t>(fx);
+	point.facing[1] = static_cast<int16_t>(fy);
+	point.facing[2] = static_cast<int16_t>(fz);
 	return point;
 }
 
@@ -168,6 +180,35 @@ static void TestNoLength()
 	Check(Is(Aim(startsOnOne, 3, 1, At(0, 0, 0)), 2500, 0, 0), "an alien whose own stretch has no length looks on from that place");
 }
 
+static void TestSameSurface()
+{
+	puts("One surface, or a step (AlienWays_SameSurface):");
+
+	// A wall facing along -z, and the same wall turned about the up direction by 20, 29, 31 and 45 degrees, in 32767ths
+	AlienWaysPoint const wall = PF(0, 0, 0, W, 0, 0, -32767);
+	AlienWaysPoint const turned20 = PF(0, 0, 0, W, -11207, 0, -30791), turned29 = PF(0, 0, 0, W, -15886, 0, -28658);
+	AlienWaysPoint const turned31 = PF(0, 0, 0, W, -16876, 0, -28087), turned45 = PF(0, 0, 0, W, -23170, 0, -23170);
+
+	Check(AlienWays_SameSurface(wall, wall) && AlienWays_SameSurface(wall, turned20), "a wall and itself, or itself turned 20 degrees, are one surface");
+	Check(AlienWays_SameSurface(wall, turned29) && !AlienWays_SameSurface(wall, turned31), "up to 30 degrees is one surface: 29 is, and 31 isn't");
+	Check(!AlienWays_SameSurface(wall, turned45), "so two walls 45 degrees apart are two surfaces, though both are walls");
+
+	AlienWaysPoint const unknownWall = P(0, 0, 0, W), unknownFloor = P(0, 0, 0, F);
+	Check(AlienWays_SameSurface(unknownWall, unknownWall) && !AlienWays_SameSurface(unknownWall, unknownFloor),
+		"with the facings not known, it goes by kind: a wall and a wall are one surface, a wall and a floor aren't");
+	Check(AlienWays_SameSurface(wall, unknownWall) && AlienWays_SameSurface(turned45, unknownWall), "and with only one of them known, by kind too");
+
+	// Facings far shorter than the level stores them are no facings: 90 degrees apart, but taken as not known, so the kind decides
+	Check(AlienWays_SameSurface(PF(0, 0, 0, W, 100, 0, 0), PF(0, 0, 0, W, 0, 100, 0)), "a facing much shorter than one unit counts as not known");
+
+	// The aim, along a way that goes straight on from one wall onto the next, with no bend for the bend rule to see
+	AlienWaysPoint const seam45[] = { PF(0, -1500, 0, W, 0, 0, -32767), PF(1000, -1500, 0, W, -23170, 0, -23170), PF(5000, -1500, 0, W, -23170, 0, -23170) };
+	Check(Is(Aim(seam45, 3, 1, At(500, -1500, 0)), 1000, -1500, 0), "the aim waits at a seam between two walls 45 degrees apart, though the way goes straight on");
+
+	AlienWaysPoint const seam20[] = { PF(0, -1500, 0, W, 0, 0, -32767), PF(1000, -1500, 0, W, -11207, 0, -30791), PF(5000, -1500, 0, W, -11207, 0, -30791) };
+	Check(Is(Aim(seam20, 3, 1, At(500, -1500, 0)), 2000, -1500, 0), "and goes on over one 20 degrees apart, which is one surface");
+}
+
 static void TestRefused()
 {
 	puts("Ways it can't use:");
@@ -199,6 +240,7 @@ int main()
 	TestSteps();
 	TestBends();
 	TestNoLength();
+	TestSameSurface();
 	TestRefused();
 	TestFarOut();
 
