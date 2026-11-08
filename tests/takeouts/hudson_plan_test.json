@@ -8535,6 +8535,26 @@
 					"to": " && !seenTogether)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for -alienwaysaim",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($AlienWaysAim -ge 0) { $alienWaysSwitch += \" -alienwaysaim=$AlienWaysAim\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script passes any aim",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000))",
+					"to": "if ($false)"
+				}
+			]
 		}
 	]
 }
