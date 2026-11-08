@@ -95,13 +95,13 @@ bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool 
 
 // Whether an alien whose down is down has made the step from the stretch that starts at point from onto the one that starts at point onto.
 // Where both facings are known (AlienWaysPoint::facing), it goes by the planes:
-// - two polygons facing within kAlienWaysSamePlaneDegrees of each other are one surface, and there's no step to make;
+// - two polygons facing within kAlienWaysSamePlaneDegrees of each other are one surface, and there's no step to make (AlienWays_SameSurface,
+//   in alien_ways_map.h, which the aim asks too);
 // - otherwise the step is made once the alien is clinging to the new polygon, closely enough: its down within kAlienWaysOnThePlaneDegrees
 //   of that polygon's facing turned round. So a step off a bevel, the strip between a wall and the floor that faces half up and the map
 //   counts as floor, onto the wall beside it, about 45 degrees, is made straight away; by kind alone it waited for the alien to turn onto
 //   the wall, and the alien, pushed by 1999's gravity, never did (Third's read: 12 of 23 stucks at Third's 5-alien spot, 2026-11-08).
 // Where either facing isn't known it goes by kind, as before: made if the two are the same kind, or the alien is on the new kind by its down.
-int const kAlienWaysSamePlaneDegrees = 30;
 int const kAlienWaysOnThePlaneDegrees = 55;
 bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, AlienWaysXYZ down);
 

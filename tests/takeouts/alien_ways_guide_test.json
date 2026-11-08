@@ -570,8 +570,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\treturn from.kind == onto.kind || KindUnder(down) == static_cast<int>(onto.kind);",
-					"to": "\treturn from.kind == onto.kind || onto.kind == kAlienWaysFloor || KindUnder(down) == static_cast<int>(onto.kind);"
+					"from": "\treturn KindUnder(down) == static_cast<int>(onto.kind);",
+					"to": "\treturn onto.kind == kAlienWaysFloor || KindUnder(down) == static_cast<int>(onto.kind);"
 				}
 			]
 		},
@@ -1109,9 +1109,9 @@
 			"name": "a step is made by kind only, never by the planes",
 			"changes": [
 				{
-					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\tif (fLength > 16384.0 && oLength > 16384.0)\n",
-					"to": "\tif (false)\n"
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "\treturn sqrt(x * x + y * y + z * z) > 16384.0;",
+					"to": "\treturn false;"
 				}
 			]
 		},
@@ -1119,9 +1119,9 @@
 			"name": "one surface a little turned counts as a step to make",
 			"changes": [
 				{
-					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": ">= cos(kAlienWaysSamePlaneDegrees * pi / 180.0))",
-					"to": ">= 2.0)"
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": ">= cos(kAlienWaysSamePlaneDegrees * 3.14159265358979323846 / 180.0);",
+					"to": ">= 2.0;"
 				}
 			]
 		},

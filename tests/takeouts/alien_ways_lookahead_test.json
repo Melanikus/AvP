@@ -69,7 +69,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_lookahead.h",
-					"from": "bool const step = points[point].kind != points[point - 1].kind;",
+					"from": "bool const step = !AlienWays_SameSurface(points[point - 1], points[point]);",
 					"to": "bool const step = false;"
 				}
 			]
@@ -79,8 +79,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_lookahead.h",
-					"from": "bool const step = points[point].kind != points[point - 1].kind;",
-					"to": "bool const step = points[point + 1].kind != points[point].kind;"
+					"from": "bool const step = !AlienWays_SameSurface(points[point - 1], points[point]);",
+					"to": "bool const step = !AlienWays_SameSurface(points[point], points[point + 1]);"
 				}
 			]
 		},
@@ -191,6 +191,66 @@
 					"file": "3dc/avp/alien_ways_lookahead.h",
 					"from": "!points || ",
 					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the aim looks at the kinds only, not at the planes the guide uses",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_lookahead.h",
+					"from": "bool const step = !AlienWays_SameSurface(points[point - 1], points[point]);",
+					"to": "bool const step = points[point].kind != points[point - 1].kind;"
+				}
+			]
+		},
+		{
+			"name": "two facings are never compared: every pair of known facings goes by kind",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "\tif (AlienWays_FacingKnown(a) && AlienWays_FacingKnown(b))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "any two known facings are one surface, however far apart",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": ">= cos(kAlienWaysSamePlaneDegrees * 3.14159265358979323846 / 180.0);",
+					"to": ">= -1.0;"
+				}
+			]
+		},
+		{
+			"name": "the planes may be 45 degrees apart and still be one surface",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "int const kAlienWaysSamePlaneDegrees = 30;",
+					"to": "int const kAlienWaysSamePlaneDegrees = 50;"
+				}
+			]
+		},
+		{
+			"name": "a facing of any length counts as known",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "\treturn sqrt(x * x + y * y + z * z) > 16384.0;",
+					"to": "\treturn sqrt(x * x + y * y + z * z) > 0.0;"
+				}
+			]
+		},
+		{
+			"name": "with the facings not known, any two kinds are one surface",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "\treturn a.kind == b.kind;\n}",
+					"to": "\treturn true;\n}"
 				}
 			]
 		}
