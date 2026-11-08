@@ -55,6 +55,30 @@ static void TheGain()
 	Check(strcmp(kReverbHeading, "[Audio]") == 0 && strcmp(kReverbName, "Reverb") == 0, "the setting is [Audio] Reverb in the settings file");
 }
 
+static void TheRoomAndItsLine()
+{
+	float const notANumber = std::numeric_limits<float>::quiet_NaN();
+	float const endless = std::numeric_limits<float>::infinity();
+
+	// The amount kept for a room: the same room always gives the same number, so a change of room can be told by comparing
+	Check(Reverb_RoomAmount(0.0f) == 0.0f && Reverb_RoomAmount(0.2f) == 0.2f && Reverb_RoomAmount(1.0f) == 1.0f, "a room's amount from 0 to 1 is kept as it is");
+	Check(Reverb_RoomAmount(-1.0f) == -1.0f, "-1 is kept as -1");
+	Check(Reverb_RoomAmount(1.5f) == -1.0f && Reverb_RoomAmount(-5.0f) == -1.0f, "a number out of range is kept as -1");
+	Check(Reverb_RoomAmount(notANumber) == -1.0f, "so is something that isn't a number, which would differ from itself on every frame");
+	Check(Reverb_RoomAmount(endless) == -1.0f && Reverb_RoomAmount(-endless) == -1.0f, "and endless numbers");
+
+	Check(strcmp(Reverb_RoomName(0), "generic") == 0, "room 0 is generic");
+	Check(strcmp(Reverb_RoomName(10), "hangar") == 0, "room 10 is a hangar");
+	Check(strcmp(Reverb_RoomName(21), "sewer pipe") == 0, "room 21 is a sewer pipe");
+	Check(strcmp(Reverb_RoomName(25), "psychotic") == 0, "room 25 is the last, psychotic");
+	Check(strcmp(Reverb_RoomName(26), "unknown") == 0 && strcmp(Reverb_RoomName(1000), "unknown") == 0, "a number past the list has no name, and nothing past it is read");
+
+	Check(Reverb_RoomLine(10, -1.0f, true) == "sound: room echo now hangar (10) at full", "the log's line for a hangar at full");
+	Check(Reverb_RoomLine(21, 0.2f, true) == "sound: room echo now sewer pipe (21) at 0.20", "and for a sewer pipe at 0.2");
+	Check(Reverb_RoomLine(3, -1.0f, false) == "sound: room echo now bathroom (3) at full, but Room echo is off, so none is heard", "and when Room echo is off, it says none is heard");
+	Check(Reverb_RoomLine(1000, notANumber, true) == "sound: room echo now unknown (1000) at full", "a room and an amount from nowhere still make a plain line");
+}
+
 static std::string ReadSourceFile(char const *name)
 {
 	// /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it
@@ -126,6 +150,41 @@ static void TheSoundCode()
 	std::string const room = Between(sound, "void PlatSetEnviroment(unsigned int env_index, float reverb_mix)", "void ResetEaxEnvironment()");
 	Check(Has(room, "\tReverb_ApplyGain();\n}"), "SOURCE: every frame of play sets it, so a change is heard at once");
 	Check(CountOf(room, "return;") == 1, "SOURCE: and nothing in between stops before it, but a device with no echo at all");
+	Check(Has(room, "float const amount = Reverb_RoomAmount(reverb_mix);\n\n\tif (amount != SoundConfig.reverb_mix)"), "SOURCE: a room's amount is compared as it's kept");
+	Check(Has(room, "SoundConfig.env_index = env_index;\n\t\troomChanged = true;") && Has(room, "SoundConfig.reverb_changed = true;\n\t\troomChanged = true;"), "SOURCE: a new kind of room or a new amount counts as a change of room");
+	Check(Has(room, "if (roomChanged)\n\t{\n\t\tLogString(Reverb_RoomLine(SoundConfig.env_index, SoundConfig.reverb_mix, ReverbIsOn != 0));"), "SOURCE: and only then is it said in the log");
+	Check(Has(sound, "static_assert(kMaxReverbPresets == kReverbRoomKinds,"), "SOURCE: the compiler checks the names are as many as the echo settings");
+
+	// The names are in the same order as the echo settings: the i-th EFX_REVERB_PRESET_ is the i-th name, written in capitals with no spaces
+	std::string const list = Between(sound, "static Environment Sound_Enviroments[] =", "};");
+	bool sameOrder = !list.empty();
+	std::string::size_type place = 0;
+
+	for (unsigned int kind = 0; kind < (unsigned int)kReverbRoomKinds && sameOrder; kind++)
+	{
+		place = list.find("EFX_REVERB_PRESET_", place);
+
+		if (place == std::string::npos)
+		{
+			sameOrder = false;
+			break;
+		}
+
+		place += strlen("EFX_REVERB_PRESET_");
+		std::string expected;
+
+		for (const char *letter = Reverb_RoomName(kind); *letter; letter++)
+		{
+			if (*letter != ' ')
+			{
+				expected += (char)(*letter - 'a' + 'A');
+			}
+		}
+
+		sameOrder = list.compare(place, expected.size(), expected) == 0 && list[place + expected.size()] == ',';
+	}
+
+	Check(sameOrder && list.find("EFX_REVERB_PRESET_", place) == std::string::npos, "SOURCE: each name is the kind of room its number picks, and there are no more settings than names");
 
 	std::string const saving = Between(sound, "void Reverb_MenuFrame()", "int PlatStartSoundSys()");
 	Check(Has(saving, "Config_SetBool(kReverbHeading, kReverbName, now != 0);\n\t\tConfig_Save();"), "SOURCE: a change on the page is written to the settings file at once");
@@ -152,6 +211,7 @@ static void TheMenus()
 int main()
 {
 	TheGain();
+	TheRoomAndItsLine();
 	TheSoundCode();
 	TheMenus();
 

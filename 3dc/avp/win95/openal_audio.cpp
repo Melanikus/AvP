@@ -14,6 +14,8 @@
 //   a room's echo is as loud as its level says (reverb_choice.h); the amount used to be kept and never used, so every room had its full echo
 //   the Room echo setting turns the echo off, and is read from and written to the settings file ([Audio] Reverb). Reported by Bobblen;
 //   the setting follows the idea in his avp-forever (commit ccb453b), rewritten
+//   the log says when the player goes into a room with a different echo, and a room's amount is compared as it's kept, so one out of
+//   range isn't taken for a new room on every frame
 
 #ifdef USE_OPENAL
 
@@ -507,6 +509,7 @@ static Environment Sound_Enviroments[] =
 };
 
 const int kMaxReverbPresets = sizeof(Sound_Enviroments) / sizeof(Sound_Enviroments[0]);
+static_assert(kMaxReverbPresets == kReverbRoomKinds, "reverb_choice.h has a name for each kind of room in this list");
 
 LPALGENAUXILIARYEFFECTSLOTS    alGenAuxiliaryEffectSlots;
 LPALDELETEEFFECTS              alDeleteEffects;
@@ -1686,6 +1689,9 @@ void PlatSetEnviroment(unsigned int env_index, float reverb_mix)
 		return;
 	}
 
+	// Whether the player has gone into a room with a different echo, for the log
+	bool roomChanged = false;
+
 	// This number comes from the level file, so it could be anything. The stock levels use 0 to 25, which is all of the list. With
 	// any other, the room keeps the echo it has now.
 	if (env_index >= (unsigned int)kMaxReverbPresets)
@@ -1706,21 +1712,23 @@ void PlatSetEnviroment(unsigned int env_index, float reverb_mix)
 		AlCheckError();
 
 		SoundConfig.env_index = env_index;
+		roomChanged = true;
 	}
 
-	// The room's amount of echo: from 0 to 1, or -1, which leaves it to distance (EAX_REVERBMIX_USEDISTANCE)
-	if (reverb_mix != SoundConfig.reverb_mix)
-	{
-		if ((reverb_mix < 0.0f) || (reverb_mix > 1.0f))
-		{
-			SoundConfig.reverb_mix = -1.0f;
-		}
-		else
-		{
-			SoundConfig.reverb_mix = reverb_mix;
-		}
+	// The room's amount of echo: from 0 to 1, or -1, which leaves it to distance (EAX_REVERBMIX_USEDISTANCE). It's compared as it's kept
+	// (reverb_choice.h), so a room whose number is out of range isn't taken for a new room on every frame.
+	float const amount = Reverb_RoomAmount(reverb_mix);
 
+	if (amount != SoundConfig.reverb_mix)
+	{
+		SoundConfig.reverb_mix = amount;
 		SoundConfig.reverb_changed = true;
+		roomChanged = true;
+	}
+
+	if (roomChanged)
+	{
+		LogString(Reverb_RoomLine(SoundConfig.env_index, SoundConfig.reverb_mix, ReverbIsOn != 0));
 	}
 
 	// How loud the echo comes out follows the room's amount and the Room echo setting. It's asked on every frame of play, so a change to

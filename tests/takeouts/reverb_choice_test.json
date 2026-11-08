@@ -19,8 +19,8 @@
 			"changes": [
 				{
 					"file": "3dc/reverb_choice.h",
-					"from": "if (levelAmount >= 0.0f && levelAmount <= 1.0f)\n\t{\n\t\treturn levelAmount;\n\t}\n",
-					"to": ""
+					"from": "return (kept < 0.0f) ? 1.0f : kept;",
+					"to": "return 1.0f;"
 				}
 			]
 		},
@@ -29,8 +29,8 @@
 			"changes": [
 				{
 					"file": "3dc/reverb_choice.h",
-					"from": "levelAmount >= 0.0f && levelAmount <= 1.0f",
-					"to": "levelAmount >= 0.0f"
+					"from": "(levelAmount >= 0.0f && levelAmount <= 1.0f) ? levelAmount : -1.0f",
+					"to": "(levelAmount >= 0.0f) ? levelAmount : -1.0f"
 				}
 			]
 		},
@@ -39,8 +39,8 @@
 			"changes": [
 				{
 					"file": "3dc/reverb_choice.h",
-					"from": "levelAmount >= 0.0f && levelAmount <= 1.0f",
-					"to": "levelAmount <= 1.0f"
+					"from": "(levelAmount >= 0.0f && levelAmount <= 1.0f) ? levelAmount : -1.0f",
+					"to": "(levelAmount <= 1.0f) ? levelAmount : -1.0f"
 				}
 			]
 		},
@@ -49,8 +49,8 @@
 			"changes": [
 				{
 					"file": "3dc/reverb_choice.h",
-					"from": "\treturn 1.0f;\n}",
-					"to": "\treturn 0.0f;\n}"
+					"from": "return (kept < 0.0f) ? 1.0f : kept;",
+					"to": "return (kept < 0.0f) ? 0.0f : kept;"
 				}
 			]
 		},
@@ -109,8 +109,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/openal_audio.cpp",
-					"from": "\t// The room's amount of echo: from 0 to 1, or -1, which leaves it to distance (EAX_REVERBMIX_USEDISTANCE)\n",
-					"to": "\tif (reverb_mix == SoundConfig.reverb_mix) {\n\t\treturn;\n\t}\n"
+					"from": "\tfloat const amount = Reverb_RoomAmount(reverb_mix);\n",
+					"to": "\tif (reverb_mix == SoundConfig.reverb_mix) {\n\t\treturn;\n\t}\n\tfloat const amount = Reverb_RoomAmount(reverb_mix);\n"
 				}
 			]
 		},
@@ -151,6 +151,86 @@
 					"file": "3dc/avp/language.cpp",
 					"from": "\t\"Room echo\",\n\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n",
 					"to": "\t\"The echo each room adds to sounds (EAX reverb). Turn it off for dry sound, if it's too strong on your speakers or headphones.\",\n\t\"Room echo\",\n"
+				}
+			]
+		},
+		{
+			"name": "a room's amount out of range is kept as it came",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "return (levelAmount >= 0.0f && levelAmount <= 1.0f) ? levelAmount : -1.0f;",
+					"to": "return levelAmount;"
+				}
+			]
+		},
+		{
+			"name": "two kinds of room swap names",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "\"arena\",\n\t\t\"hangar\",",
+					"to": "\"hangar\",\n\t\t\"arena\","
+				}
+			]
+		},
+		{
+			"name": "a room number past the list gets a name from the list",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "(room < (unsigned int)kReverbRoomKinds) ? names[room] : \"unknown\"",
+					"to": "names[room % kReverbRoomKinds]"
+				}
+			]
+		},
+		{
+			"name": "the log's line doesn't say Room echo is off",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "(reverbOn ? \"\" : \", but Room echo is off, so none is heard\")",
+					"to": "\"\""
+				}
+			]
+		},
+		{
+			"name": "the log's line gives -1 as a number, not as full",
+			"changes": [
+				{
+					"file": "3dc/reverb_choice.h",
+					"from": "char number[16] = \"full\";",
+					"to": "char number[16] = \"-1.00\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never says which room's echo is heard",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "LogString(Reverb_RoomLine(SoundConfig.env_index, SoundConfig.reverb_mix, ReverbIsOn != 0));",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room's amount is compared as it came, so one out of range is new on every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "float const amount = Reverb_RoomAmount(reverb_mix);",
+					"to": "float const amount = reverb_mix;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new kind of room isn't counted as a change of room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_audio.cpp",
+					"from": "SoundConfig.env_index = env_index;\n\t\troomChanged = true;",
+					"to": "SoundConfig.env_index = env_index;"
 				}
 			]
 		}
