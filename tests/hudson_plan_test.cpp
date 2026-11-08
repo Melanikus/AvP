@@ -827,6 +827,8 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 walkfrom=1,2,3 walkto=4,5,6 walkto=4,5,6", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedWalkNotAlone);
 	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedWalkNotAlone);
+	Check(HudsonPlan_Read("-hudson level=a frames=1 machine=shared record=pictures walkfrom=1,2,3 walkto=4,5,6", &plan) == 0 && plan.pictures && plan.walkSaid, "a walk can ask for its pictures without rooms=");
+	Refused("-hudson level=a frames=1 machine=shared record=pictures walkfrom=1,2,3", kHudsonRefusedPicturesWithoutRooms);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3 standat=1,2,3", kHudsonRefusedAskedTwice);
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && plan.combatAliens == 1, "one alien unless it says");

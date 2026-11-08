@@ -92,7 +92,7 @@ const char *const kHudsonRefusedNetMeasuresTime = "net= is two games at once on 
 const char *const kHudsonRefusedNetNotAlone = "net= can't go with rooms=, nav=, route=, strategies=, strategy=, wall=, vision=, compare= or combat=, which all need a game to themselves";
 const char *const kHudsonRefusedFilmUnknown = "film= can only say no: a run that shares the machine has a film anyway, and one that measures time can't";
 const char *const kHudsonRefusedFilmBothWays = "record=video asks for a film and film=no says not to";
-const char *const kHudsonRefusedPicturesWithoutRooms = "record=pictures means nothing without rooms=";
+const char *const kHudsonRefusedPicturesWithoutRooms = "record=pictures means nothing without rooms=, a gun or a walk";
 const char *const kHudsonRefusedWallEmpty = "wall= has no name";
 const char *const kHudsonRefusedWallTooLong = "wall= is too long";
 const char *const kHudsonRefusedWallCharacter = "wall= has a character no picture's name has";
@@ -2296,7 +2296,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		plan->navModules = kHudsonMostNavModules;
 	}
 
-	if (plan->pictures && plan->rooms == 0 && plan->gunSlot == 0)
+	// A walk takes its own two pictures, once it has got where it was going: see "A WALK" in hudson.cpp
+	if (plan->pictures && plan->rooms == 0 && plan->gunSlot == 0 && !(seenWalkFrom && seenWalkTo))
 	{
 		return kHudsonRefusedPicturesWithoutRooms;
 	}

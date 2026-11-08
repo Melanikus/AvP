@@ -8175,6 +8175,16 @@
 					"to": "\telse if (plan.walkSaid)"
 				}
 			]
+		},
+		{
+			"name": "a walk's pictures need rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && plan->gunSlot == 0 && !(seenWalkFrom && seenWalkTo))",
+					"to": " && plan->gunSlot == 0)"
+				}
+			]
 		}
 	]
 }
