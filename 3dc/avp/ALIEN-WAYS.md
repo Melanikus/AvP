@@ -172,6 +172,10 @@ price 1, with ways 41% longer. Past 10, almost no more floor was left behind.
 **The allowance.** All the searches together may look at 500 polygons a frame (`kAlienWaysLooksPerFrame`). One search runs at a time,
 first asked, first served, so no frame is held up however many aliens ask.
 
+**Good, not always the cheapest.** Each polygon is settled by the first way that reaches it, but what crossing a polygon costs depends
+on where the way came onto it. So a dearer way that reaches a polygon first can win over a cheaper one that comes later. The ways it
+finds always join up; they're just not always the cheapest (section 15).
+
 **Where the search starts and ends.** An alien starts on the nearest polygon of the kind it's standing on, by its body's down, within 2 m
 (`kAlienWaysNearEnough`), looked for first in its own module. If its modules have none that near, every polygon of the map is looked
 through. The same goes for the goal.
@@ -263,7 +267,7 @@ Each alien's claims are kept on their own, so taking them off takes off exactly 
 goes: it's let go, its way is dropped, or a new way replaces it. All of them go at a restart and at the level's end. All their memory, about
 2 MB, is made once a level, when the map is ready, and never grows after that. Every number handed in is checked first.
 
-A price never below 1 keeps the search's estimate a lower bound, so the search stays correct.
+A price never below 1 keeps the search's estimate of what's left a lower bound, as a search of this kind needs.
 
 **Flankers** (the user's rule: "1 in 3, up to 2.5x", and "the 4th and 5th are long route sneaking bastards"). The guide counts the
 aliens coming for each target. Each alien takes its place among them at its first search for that target, and keeps it while that's its
@@ -342,6 +346,13 @@ Every rule above is a first guess, to be tuned from the log and from films of th
 
 Gathered from every commit's own notes, as of 2026-11-08:
 
+**The search**
+- It isn't exact (section 7): a polygon is settled by the first way that reaches it, though what crossing it costs depends on where the
+  way came onto it (its entry point, and the 0.5 m least floor step after a wall). In a JavaScript copy of the search, from one start on
+  Genshd1, the way found cost 10% more than one it missed. The claims multiply the difference: a flanker in one film paid 2.44 times its
+  route's unclaimed price where a way at 1.59 times was there. A test is owed that shows it in the C++: two ways into one room, the
+  cheaper one reaching the room second. The exact search is planned with the grid (#145, #149), so this version won't be tuned for it.
+
 **How the alien moves**
 - Whether a point is reached, and whether the alien is stuck, still go by the way's next point, not by the aim.
 - The aim doesn't know the alien's width, and doesn't check that the straight line to it stays on or clear of a surface.
@@ -357,7 +368,7 @@ Gathered from every commit's own notes, as of 2026-11-08:
 - Whether "1 in 3" means every alien after the 3rd (as written) or every third alien is a question for the user. The first film had
   flankers arriving from the same directions as direct aliens, so whether they really take other ways is still to be counted from the log.
 - Adding an alien's claims looks through what it holds one by one: fine for the few hundred polygons of a way, slow near its most of 4,096.
-- The claims can change while a search runs over several frames, so a way may be a little dearer than the cheapest. It's never wrong.
+- The claims can change while a search runs over several frames, so a way may be a little dearer than the cheapest. It still joins up.
 
 **Tests and tools**
 - No test drives the game side's "let go by state" with real game states; that's checked only by reading the source.
