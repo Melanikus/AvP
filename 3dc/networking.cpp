@@ -51,6 +51,7 @@
 //   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
 //   the settings file's port and speeds are checked, and one the game can't use is put back to the game's own, with a log line
 //   the screen says which connection a joining player is, never their address or port
+//   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -1658,4 +1659,44 @@ static NetResult Net_CreateSession(const char *sessionName, const char *levelNam
 NetResult Net_UpdateSessionDescForLobbiedGame(uint16_t gameStyle, uint16_t level)
 {
 	return NET_OK;
+}
+
+// Each connection, by number and round trip, for a tester's mark (networking.h). The number is its place in ENet's list, the same one the
+// screen names when a player joins, and never an address.
+void Net_DescribeConnections(char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	words[0] = '\0';
+
+	if (!host || AvP.Network == I_No_Network)
+	{
+		return;
+	}
+
+	size_t used = 0;
+
+	for (size_t i = 0; i < host->peerCount && used + 1 < size; i++)
+	{
+		ENetPeer const &peer = host->peers[i];
+
+		if (peer.state != ENET_PEER_STATE_CONNECTED)
+		{
+			continue;
+		}
+
+		int const added = _snprintf(words + used, size - 1 - used, "%sconnection %u at %u ms", used ? ", " : "", (unsigned)i + 1, (unsigned)peer.roundTripTime);
+
+		if (added < 0)
+		{
+			break;
+		}
+
+		used += (size_t)added;
+	}
+
+	words[used < size ? used : size - 1] = '\0';
 }

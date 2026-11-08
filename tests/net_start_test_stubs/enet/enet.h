@@ -47,6 +47,7 @@ struct ENetPeer
 	ENetAddress address;
 	void *data;
 	ENetPeerState state;
+	enet_uint32 roundTripTime;   // for a tester's mark (Net_DescribeConnections)
 };
 
 struct ENetHost

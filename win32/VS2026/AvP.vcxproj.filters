@@ -390,6 +390,9 @@
     <ClCompile Include="..\..\3dc\avp\los.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\mark_key.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\mempool.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

@@ -33,6 +33,7 @@
 //   the multiplayer version is 103, and the build now stops if a message changes without it: see net_version_check.h
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the list of versions has 105 and 106, which raised the number without a line
+//   Net_DescribeConnections, each connection's number and round trip for a tester's mark
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -81,6 +82,11 @@ uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 int       Net_ConnectingToLobbiedGame(char *playerName);
+
+// For a tester's mark (mark_key.cpp): each connection this machine has, by number, with its round trip, such as
+// "connection 1 at 45 ms, connection 2 at 120 ms". Never an address. words has room for size characters and always ends with a 0;
+// it's empty out of a network game.
+void      Net_DescribeConnections(char *words, size_t size);
 
 extern NetID AvPNetID;
 

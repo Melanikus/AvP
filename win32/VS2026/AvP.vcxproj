@@ -310,6 +310,7 @@
     <ClCompile Include="..\..\3dc\avp\lighting.cpp" />
     <ClCompile Include="..\..\3dc\avp\load_shape.cpp" />
     <ClCompile Include="..\..\3dc\avp\los.cpp" />
+    <ClCompile Include="..\..\3dc\avp\mark_key.cpp" />
     <ClCompile Include="..\..\3dc\avp\mempool.cpp" />
     <ClCompile Include="..\..\3dc\avp\messagehistory.cpp" />
     <ClCompile Include="..\..\3dc\avp\missions.cpp" />
