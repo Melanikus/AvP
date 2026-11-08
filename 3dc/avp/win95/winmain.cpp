@@ -368,6 +368,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 				LogString("alien ways: -alienwaysgrid needs -alienways too, so it was ignored");
 			}
 		}
+
+		// Modified 2026-11-08 by Melanikus for the AvP port: the alien's mover on the grid's way (#149, alien_ways.h). It picks one goal for an
+		// alien whatever its state, and heads it straight there when there's no way. Its own switch, so one exe films the grid with and
+		// without it; it's for the grid's ways, so it needs -alienwaysgrid too.
+		if (devSwitch("-alienwaysmover"))
+		{
+			if (AlienWaysGridSwitchedOn)
+			{
+				AlienWaysMoverSwitchedOn = 1;
+				LogString("alien ways: the mover picks where each alien heads, the same whatever its state, and heads it straight there with no way (-alienwaysmover)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwaysmover needs -alienwaysgrid too, so it was ignored");
+			}
+		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))
 		{

@@ -50,6 +50,7 @@ extern int ModuleArraySize;
 
 int AlienWaysSwitchedOn = 0;
 int AlienWaysGridSwitchedOn = 0;
+int AlienWaysMoverSwitchedOn = 0;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 int AlienWaysWatchPlace = -1;
 
@@ -691,7 +692,7 @@ static bool DirectionTo(AlienWaysXYZ from, AlienWaysXYZ to, VECTORCH *direction)
 	return true;
 }
 
-// Modified 2026-11-08 by Melanikus for the AvP port: THE MOVER (#149), an MVP, only with -alienwaysgrid.
+// Modified 2026-11-08 by Melanikus for the AvP port: THE MOVER (#149), an MVP, only with -alienwaysmover (which needs -alienwaysgrid).
 //
 // The user's rulings, through PO: the 1999 near AI's own movement is to be replaced by "pure pathfinding", and a hunting alien plans "a
 // way straight to the freshest, strongest scent it can reach", or to where the target was last seen, "whichever is fresher", rather than
@@ -869,8 +870,8 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	w->goal = *goal;
 	w->lastAsked = frameNumber;
 
-	// The mover, with -alienwaysgrid: where it heads is picked here, the same whatever its state (MoverGoal, above)
-	if (AlienWaysGridSwitchedOn)
+	// The mover, with -alienwaysmover: where it heads is picked here, the same whatever its state (MoverGoal, above)
+	if (AlienWaysMoverSwitchedOn)
 	{
 		moverGoals[MoverGoal(alien, w, &ask)]++;
 	}
@@ -885,7 +886,7 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	// No way to follow yet, or none at all. Without the mover, the game's own code steers it, as before. With it, it heads straight for its
 	// goal, holding on to whatever it's on, while the guide asks for a way as it always does; but in the rest after it was found stuck, the
 	// game's own code has it, as before, to get it free.
-	if (!AlienWaysGridSwitchedOn || theGuide.RestingAfterStuck(ask.who))
+	if (!AlienWaysMoverSwitchedOn || theGuide.RestingAfterStuck(ask.who))
 	{
 		return false;
 	}
