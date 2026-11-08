@@ -541,7 +541,9 @@ static void TestTheGamesSide()
 
 	Check(Has(shapes, "ConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);\n\tConsiderTheOtherLamps(steady, &numSteady, kLightChoiceMostCandidates);"), "SOURCE: the nearest lamps are put forward as real lights");
 	Check(Has(realLamps, "if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_RealLightIsWanted())"), "SOURCE: only with lights per pixel, shadows on, and the player's say-so: with no shadows a lamp would show what's behind a wall");
-	Check(Has(realLamps, "numOtherLampLights < kLampMostReal"), "SOURCE: and only as many as are allowed");
+	// The whole condition, so a limit raised by even one is seen: otherLampLights holds kLampMostReal, and one more would be written past its end
+	Check(Has(realLamps, "for (int i = 0; i < OtherLamps_Count() && numOtherLampLights < kLampMostReal; i++)"),
+		"SOURCE: and only as many as are allowed, which is as many as there's room for");
 	Check(!Has(realLamps, "AddLightBlock"), "SOURCE: never in the game's own lights, which a marine's hit roll and the player's stealth read");
 	Check(Has(shapes, "|| OtherLampLightNumber(light) >= 0;"), "SOURCE: they come ahead of the level's lamps");
 	Check(Has(shapes, "out[kToyLightAim + 3] = 1.0f;"), "SOURCE: and each is aimed its own way");

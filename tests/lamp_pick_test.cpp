@@ -102,6 +102,16 @@ static void TestChoosing()
 		Check(SameOwners(shown, LampPick_Choose(twice, 3, 0, 0, 6, shown), expected, 2), "an owner listed twice is shown once");
 	}
 
+	// Two new lamps nearer to each other than the margin, with room for one and nothing shown before. The margin only keeps a lamp that was
+	// shown last frame, so here the nearer has to win, and that's decided by the order they're looked at in: nearest first. Looked at the
+	// other way round, the further would take the place and the nearer couldn't push it out. The further is first in the list on purpose.
+	{
+		LampCandidate const close[2] = { { 21, 4500 }, { 20, 4000 } };
+		unsigned int const nearer[1] = { 20 };
+
+		Check(SameOwners(shown, LampPick_Choose(close, 2, 0, 0, 1, shown), nearer, 1), "two new lamps closer together than the margin: the nearer is shown");
+	}
+
 	// More than are ever looked at: the rest aren't shown, and nothing is read past the list
 	{
 		static LampCandidate many[kLampMostCandidates + 10];
