@@ -188,6 +188,17 @@ static void TheLookup()
 	LiveThing *const roundB = Lookup(levelB, true);
 	Check(roundA == 0 && looksA == 2 && roundB == 0 && looks == 2, "names in the list that lead to each other find nothing, in two looks, and the lookup ends");
 
+	// A name of all zeros is no name, but things made while the game runs can have one, so one stands in here
+	char empty[kNpcNameLength];
+	memset(empty, 0, sizeof(empty));
+	liveThings.assign(1, LiveThing());
+	memset(liveThings[0].name, 0, kNpcNameLength);
+	Check(Lookup(empty, true) == 0 && looks == 0, "a name of all zeros is never looked for, though something live has it");
+
+	NpcLevelNames_Clear(&list);
+	NpcLevelNames_Add(&list, levelA, empty);
+	Check(Lookup(levelA, true) == 0 && looks == 1, "and nor is a new name of all zeros in the list, so it can't find something with no name");
+
 	std::string const strategies = ReadSourceFile("3dc/avp/strategy_def.cpp");
 	// Its body, without the line that names it, so a call to itself would show
 	char const *const findStarts = "STRATEGYBLOCK* FindSBWithName(char* id_name)\n{\n";

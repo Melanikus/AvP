@@ -179,8 +179,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/npc_level_names.h",
-					"from": "\treturn newName ? findLive(newName) : found;",
-					"to": "\treturn newName ? NpcLevelNames_FindByLevelName(list, newName, networkGame, findLive) : found;"
+					"from": "\treturn newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName) : nothing;",
+					"to": "\treturn newName && !NpcLevelName_IsEmpty(newName) ? NpcLevelNames_FindByLevelName(list, newName, networkGame, findLive) : nothing;"
 				}
 			]
 		},
@@ -311,6 +311,26 @@
 					"file": "3dc/avp/win95/pldnet.h",
 					"from": "#define NET_IDNOTINPLAYERLIST       (-1)",
 					"to": "#define NET_IDNOTINPLAYERLIST       (-10)"
+				}
+			]
+		},
+		{
+			"name": "a name of all zeros is looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "\tif (NpcLevelName_IsEmpty(name))\n\t{\n\t\treturn nothing;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new name of all zeros in the list is looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_level_names.h",
+					"from": "newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName)",
+					"to": "newName ? findLive(newName)"
 				}
 			]
 		}

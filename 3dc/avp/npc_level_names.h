@@ -114,6 +114,15 @@ static inline char const *NpcLevelNames_NetworkNameFor(NpcLevelNames const *list
 template <typename FindLive>
 static inline auto NpcLevelNames_FindByLevelName(NpcLevelNames const *list, char const *name, bool networkGame, FindLive findLive) -> decltype(findLive(name))
 {
+	// A name that's all zeros is no name. Many things made while the game runs have one, so looking for it would find one of them. So
+	// it's never looked for, and that goes for a new name in the list too, though nothing writes one: AssignNewSBName's last byte is never 0.
+	decltype(findLive(name)) const nothing = 0;
+
+	if (NpcLevelName_IsEmpty(name))
+	{
+		return nothing;
+	}
+
 	auto const found = findLive(name);
 
 	if (found || !networkGame)
@@ -123,8 +132,7 @@ static inline auto NpcLevelNames_FindByLevelName(NpcLevelNames const *list, char
 
 	char const *const newName = NpcLevelNames_NetworkNameFor(list, name);
 
-	// found is nothing here, so with no new name that's the answer
-	return newName ? findLive(newName) : found;
+	return newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName) : nothing;
 }
 
 // The name in the level of the NPC with this new name, or nothing if it didn't come from the level's list
