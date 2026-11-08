@@ -207,9 +207,18 @@ static void FirstWay()
 	Check(reports[0].frames == 1 && reports[0].looks > 0 && reports[0].waitedMs == 16 && Same(reports[0].from, kStart) && Same(reports[0].to, kGoal),
 		"one frame, some polygons looked at, 16 ms after it asked, from its place to its goal");
 	Check(!reports[0].cutShort && reports[0].follower == 0, "not cut short, and the first of the guide's places");
+	Check(reports[0].polygonCount == 3 && reports[0].polygons[0] == 0 && reports[0].polygons[1] == (kWallX == 0 ? 10 : 11) && reports[0].polygons[2] == 9,
+		"and the polygons its way is on, each once: tile 0, the wall it climbs, and tile 9 (for measuring how ways stack)");
 
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "now it's steered: towards the wall's foot");
 	Check(guide.Guided(Alien(1)), "and it's guided");
+
+	size_t slots[4];
+	AlienWaysXYZ places[4];
+	int kinds[4];
+	Check(guide.GuidedPlaces(slots, places, kinds, 4) == 1 && slots[0] == 0 && Same(places[0], kStart) && kinds[0] == kAlienWaysFloor,
+		"its place is given for the once-a-second line: the guide's first place, where it is, on the floor");
+	Check(guide.GuidedPlaces(slots, places, kinds, 0) == 0, "with no room, no place is given");
 
 	const AlienWaysPoint *points[4];
 	int counts[4], headings[4];
@@ -789,6 +798,8 @@ static void SourceOfTheGame()
 	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");
 
 	std::string const guidedNow = Between(ways, "bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)", "size_t AlienWays_WaysToShow(");
+	Check(Has(ways, "\tdetails += polygons;\n\tLogString(std::string(text) + details);") && Has(ways, "polygons = \". Polygons:\";"), "SOURCE: a search's line lists the polygons its way is on");
+	Check(Has(ways, "\tif (clockMs / 1000 != placesSecond)\n\t{\n\t\tplacesSecond = clockMs / 1000;"), "SOURCE: and once a second a line says where the guided aliens are");
 	Check(Has(guidedNow, "return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));"),
 		"SOURCE: an alien is guided in this frame only with the switch on, on a machine that runs the aliens, with a map, and as the guide says");
 

@@ -318,6 +318,15 @@ static void CorridorWays()
 	std::vector<AlienWaysPoint> const way = map.Way();
 	m = MetresOf(way);
 	Check(Near(m.floor, 2.118, 0.01) && Near(m.wall, 11.5, 0.01) && m.ceiling == 0.0, "it goes 1 m to the nearest wall, 1.5 m up it, 8.5 m along it, 1.5 m down, and 1.1 m to the goal");
+	std::vector<int> const &onPolygons = map.WayPolygons();
+	bool polygonsMatch = onPolygons.size() == way.size();
+
+	for (size_t p = 0; polygonsMatch && p < way.size(); p++)
+	{
+		polygonsMatch = onPolygons[p] >= 0 && onPolygons[p] < static_cast<int>(map.Polygons()) && map.KindOf(onPolygons[p]) == way[p].kind;
+	}
+
+	Check(polygonsMatch && onPolygons.front() == 0 && onPolygons.back() == 9, "each point says which polygon it's on, of the point's own kind, from tile 0 to tile 9");
 	Check(way.size() == 6 && (way[1].x == 0 || way[1].x == 2000) && way[1].y == 0 && way[1].z == 500 && way[1].kind == kAlienWaysWall,
 		"it leaves the floor at the point of a wall nearest the start, not at a corner");
 	Check(way.size() == 6 && way[2].x == way[1].x && way[2].y == -1500 && way[2].z == 500 && way[2].kind == kAlienWaysWall,

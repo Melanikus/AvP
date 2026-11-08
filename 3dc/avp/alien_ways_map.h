@@ -228,6 +228,9 @@ public:
 	// was no way.
 	const std::vector<AlienWaysPoint> &Way() const { return way; }
 
+	// For each point of the way, the map polygon the way is on from that point to the next (the goal's: its own polygon). As long as Way().
+	const std::vector<int> &WayPolygons() const { return wayPolygons; }
+
 	// Whether the way was longer than kAlienWaysMostWayPoints points and was cut short. Then it doesn't reach the goal, and needs asking again.
 	bool WayCutShort() const { return cutShort; }
 
@@ -305,6 +308,7 @@ private:
 	int looks;
 	bool cutShort;
 	std::vector<AlienWaysPoint> way;
+	std::vector<int> wayPolygons;
 };
 
 #endif

@@ -694,6 +694,56 @@
 					"to": "return f >= 0 && followers[f].guided;"
 				}
 			]
+		},
+		{
+			"name": "a search's report leaves out the polygons its way is on",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tline.polygons[line.polygonCount++] = onPolygons[p];\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a search's report lists a polygon again for each point on it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (line.polygonCount == 0 || line.polygons[line.polygonCount - 1] != onPolygons[p])\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien that isn't guided is given a place in the once-a-second line",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (follower.used && follower.guided)\n\t\t{\n\t\t\tslots[found] = f;",
+					"to": "\t\tif (follower.used)\n\t\t{\n\t\t\tslots[found] = f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a search's line doesn't list its way's polygons",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tdetails += polygons;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no line says where the guided aliens are",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (clockMs / 1000 != placesSecond)\n\t{\n\t\tplacesSecond = clockMs / 1000;",
+					"to": "\tif (false)\n\t{\n\t\tplacesSecond = clockMs / 1000;"
+				}
+			]
 		}
 	]
 }

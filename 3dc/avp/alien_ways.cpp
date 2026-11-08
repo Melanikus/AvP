@@ -73,6 +73,9 @@ namespace
 	long long clockMs = 0;
 	int const kAlienWaysMostWouldHaveLines = 200;
 	int wouldHaveLines = 0;
+
+	// The last second of this level the log was told where the guided aliens are (lanes, #138)
+	long long placesSecond = -1;
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -321,6 +324,20 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			break;
 	}
 
+	// The polygons its way is on, for measuring how several aliens' ways stack (lanes, #138)
+	std::string polygons;
+
+	if ((line.outcome == kAlienWaysOutcomeFound || line.outcome == kAlienWaysOutcomeAllFloor) && line.polygonCount > 0)
+	{
+		polygons = ". Polygons:";
+
+		for (int p = 0; p < line.polygonCount && p < static_cast<int>(kAlienWaysMostWayPoints); p++)
+		{
+			polygons += " " + std::to_string(line.polygons[p]);
+		}
+	}
+
+	details += polygons;
 	LogString(std::string(text) + details);
 }
 
@@ -450,6 +467,29 @@ void AlienWays_Frame()
 	for (size_t i = 0; i < reportCount; i++)
 	{
 		TellHowASearchWent(reports[i]);
+	}
+
+	// Once a second, where every guided alien is, so a film with several aliens can be measured for how close they keep (lanes, #138)
+	if (clockMs / 1000 != placesSecond)
+	{
+		placesSecond = clockMs / 1000;
+		size_t slots[kAlienWaysMostFollowers];
+		AlienWaysXYZ at[kAlienWaysMostFollowers];
+		int kinds[kAlienWaysMostFollowers];
+		size_t const guided = theGuide.GuidedPlaces(slots, at, kinds, kAlienWaysMostFollowers);
+
+		if (guided > 0)
+		{
+			std::string places = "alien ways: guided now, second " + std::to_string(placesSecond) + ":";
+
+			for (size_t i = 0; i < guided; i++)
+			{
+				const char *const on = kinds[i] == kAlienWaysFloor ? "the floor" : (kinds[i] == kAlienWaysWall ? "a wall" : (kinds[i] == kAlienWaysCeiling ? "the ceiling" : "nothing known"));
+				places += std::string(i == 0 ? " " : "; ") + "alien " + std::to_string(slots[i]) + " at " + Metres(at[i]) + " on " + on;
+			}
+
+			LogString(places);
+		}
 	}
 
 	if (!toldTurnedAway && theGuide.TurnedAway() > 0)
@@ -610,4 +650,5 @@ void AlienWays_LevelEnd()
 	letGoLines = 0;
 	clockMs = 0;
 	wouldHaveLines = 0;
+	placesSecond = -1;
 }

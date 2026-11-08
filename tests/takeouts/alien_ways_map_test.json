@@ -513,6 +513,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a way's points don't say which polygon they're on",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\twayPolygons[place] = node;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

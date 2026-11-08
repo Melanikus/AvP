@@ -193,6 +193,26 @@ bool AlienWaysGuide::GuidedThisFrame(const AlienWaysWho &who) const
 	return f >= 0 && followers[f].steered && followers[f].guided;
 }
 
+size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
+{
+	size_t found = 0;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers && found < most; f++)
+	{
+		Follower const &follower = followers[f];
+
+		if (follower.used && follower.guided)
+		{
+			slots[found] = f;
+			at[found] = follower.last.at;
+			kinds[found] = KindUnder(follower.last.down);
+			found++;
+		}
+	}
+
+	return found;
+}
+
 size_t AlienWaysGuide::Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const
 {
 	size_t shown = 0;
@@ -427,6 +447,17 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 
 	line.points = static_cast<int>(count);
 	line.cutShort = map->WayCutShort();
+
+	// The polygons the way is on, each once in a row: a wall's climb, along and down are three points on one polygon
+	std::vector<int> const &onPolygons = map->WayPolygons();
+
+	for (size_t p = 0; p < onPolygons.size() && p < count; p++)
+	{
+		if (line.polygonCount == 0 || line.polygons[line.polygonCount - 1] != onPolygons[p])
+		{
+			line.polygons[line.polygonCount++] = onPolygons[p];
+		}
+	}
 
 	// A way that never leaves the floor is no better than the game's own steering, which curves at its target and climbs any wall it touches.
 	// That's where the alien and its target are on one big floor polygon, which the map can't leave and come back to (one way onto each polygon).

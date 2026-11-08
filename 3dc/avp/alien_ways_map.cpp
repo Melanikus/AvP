@@ -285,6 +285,7 @@ void AlienWaysMap::LetGo()
 	GiveBack(&stamp); GiveBack(&closed);
 	GiveBack(&heap); GiveBack(&heapPlace);
 	GiveBack(&way);
+	GiveBack(&wayPolygons);
 	heapSize = 0;
 	searchNumber = 0;
 	state = kAlienWaysNoWay;
@@ -634,7 +635,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	size_t const nodes = kept + 1;
 	size_t const keepBytes = (nodes + 1) * sizeof(int) + joins * 2 * 2 * sizeof(int) + joins * 2 * sizeof(AlienWaysXYZ)
 		+ nodes * (2 * sizeof(double) + sizeof(int) + sizeof(AlienWaysXYZ) + 2 * sizeof(uint32_t) + 2 * sizeof(int))
-		+ kAlienWaysMostWayPoints * sizeof(AlienWaysPoint);
+		+ kAlienWaysMostWayPoints * (sizeof(AlienWaysPoint) + sizeof(int));
 
 	if (!Count(keepBytes, &bytesKept, limits.mostBytesKept))
 	{
@@ -744,6 +745,7 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	heap.assign(nodes, 0);
 	heapPlace.assign(nodes, -1);
 	way.reserve(kAlienWaysMostWayPoints);
+	wayPolygons.reserve(kAlienWaysMostWayPoints);
 	GiveBack(&firstCorner);
 
 	// Everything that was only for building has been let go. The most it needed is the count, or the top of a copy, if that was more.
@@ -996,6 +998,7 @@ const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int t
 	heapSize = 0;
 	looks = 0;
 	way.clear();
+	wayPolygons.clear();
 	cutShort = false;
 	price = floorPrice;
 	fromNode = fromPolygon;
@@ -1122,12 +1125,14 @@ void AlienWaysMap::MakeTheWay()
 	size_t const keep = std::min(points, kAlienWaysMostWayPoints);
 	cutShort = points > kAlienWaysMostWayPoints;
 	way.resize(keep);
+	wayPolygons.resize(keep);
 
 	size_t place = points - 1;
 
 	if (place < keep)
 	{
 		way[place] = AlienWaysPoint{ goalAt.x, goalAt.y, goalAt.z, KindOf(toNode) };
+		wayPolygons[place] = toNode;
 	}
 
 	leaving = goalAt;
@@ -1146,6 +1151,7 @@ void AlienWaysMap::MakeTheWay()
 			{
 				AlienWaysXYZ const at = across[i - 1];
 				way[place] = AlienWaysPoint{ at.x, at.y, at.z, KindOf(node) };
+				wayPolygons[place] = node;
 			}
 		}
 

@@ -100,6 +100,8 @@ struct AlienWaysReport
 	bool toTheTarget;               // the goal was the target itself (AlienWaysAsk::goalIsTheTarget)
 	int fromKind;                   // the kind of polygon the search started on (an AlienWaysKind), or -1 if none was near
 	double floorMm, wallMm, ceilingMm;
+	int polygons[kAlienWaysMostWayPoints];   // the map polygons the way is on, in order, each once in a row, for measuring how ways stack
+	int polygonCount;
 };
 
 class AlienWaysGuide
@@ -127,6 +129,10 @@ public:
 	// Whether Steer was asked for this alien since the last Frame, and gave back true: its way steers it in this frame. Unlike Guided, it's
 	// false in a frame nothing asked Steer for it, even before the next Frame lets it go.
 	bool GuidedThisFrame(const AlienWaysWho &who) const;
+
+	// Where every guided alien is now, as it last told Steer, with the kind of surface it's on by its down, and which of the guide's places it
+	// has: up to most of them, for the log's once-a-second line (lanes, #138)
+	size_t GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const;
 
 	// What every guided alien's way is now, for the developer view: up to most of them. The points are good until the next Frame or Clear.
 	size_t Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const;
