@@ -8335,6 +8335,16 @@
 					"to": "\tif (lastAsked == 0)\n\t{\n\t\tsawHimOutAt = now;\n\t\tpressedThisTime = false;\n\t}"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the walk asks to go forward but never moves",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tstatus->Mvt_MotionIncrement = ONE_FIXED;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

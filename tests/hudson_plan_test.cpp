@@ -1205,7 +1205,8 @@ static void TestTheRealGame()
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "if (lastSaid != 0 && now - lastSaid < 1000)"), "SOURCE: and said once a second");
 		Check(Has(Between(watchCode, "static void FollowTheNamedThing()", "\n}\n"), "STRATEGYBLOCK const *const thing = HudsonStrategies_Find(plan.follow);"), "SOURCE: and found afresh each time, because a restart makes it again");
 		Check(Has(watchCode, "if (HudsonRunIsOn && plan.walkSaid && !levelHasEnded)\n\t{\n\t\tWalkHim((PLAYER_STATUS *)playerStatus);"), "SOURCE: a walk is the player's own input");
-		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "\t\tHudson_FaceThePlace(status, to);\n\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;"), "SOURCE: facing walkto=, with the forward key, as a person walks");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "\t\tstatus->Mvt_InputRequests.Flags.Rqst_Forward = 1;\n\t\tstatus->Mvt_MotionIncrement = ONE_FIXED;"), "SOURCE: facing walkto=, with the forward key, as a person walks: the request and the motion it sets");
+		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "Hudson_FaceThePlace(status, to);"), "SOURCE: and he turns to walkto= every frame");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "bool const there = away <= kWalkCloseEnough;"), "SOURCE: until he's close to it");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "if (walkStage == kWalkDone || walkMayStartAt == 0 || now < walkMayStartAt"), "SOURCE: only once it may start");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "me->SBDamageBlock.Health <= 0 || !status->IsAlive)"), "SOURCE: and he's alive, which a co-op restart makes him later than single player does");

@@ -9912,14 +9912,16 @@ static void WalkHim(PLAYER_STATUS *status)
 		}
 
 		Hudson_FaceThePlace(status, to);
+		// The same two things the forward key sets (user_io.cpp): the request alone moves nothing, the motion is what pmove.cpp walks him by
 		status->Mvt_InputRequests.Flags.Rqst_Forward = 1;
+		status->Mvt_MotionIncrement = ONE_FIXED;
 
 		// Once a second, so that the log shows the way he went
 		if ((now - walkStageSince) / 1000 > walkSecondsLogged)
 		{
 			walkSecondsLogged = (now - walkStageSince) / 1000;
-			_snprintf(line, sizeof(line) - 1, "walk: %lu s: he's at %d %d %d, in room %s, %d mm from walkto=, alive %d, moving at %d mm a second", (unsigned long)walkSecondsLogged, at.vx, at.vy, at.vz, roomName, away,
-				(int)status->IsAlive, Approximate3dMagnitude(&me->DynPtr->LinVelocity));
+			_snprintf(line, sizeof(line) - 1, "walk: %lu s: he's at %d %d %d, in room %s, %d mm from walkto=, alive %d, health %d, moving at %d mm a second", (unsigned long)walkSecondsLogged, at.vx, at.vy, at.vz, roomName, away,
+				(int)status->IsAlive, me->SBDamageBlock.Health >> ONE_FIXED_SHIFT, Approximate3dMagnitude(&me->DynPtr->LinVelocity));
 			LogString(line);
 		}
 
