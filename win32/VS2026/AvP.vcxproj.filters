@@ -992,6 +992,9 @@
     <ClInclude Include="..\..\3dc\avp\alien_ways_guide.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_stuck.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\alien_ways_level.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>

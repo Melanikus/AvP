@@ -280,7 +280,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "\t\t\tobject->DynPtr->UseStandardGravity = 1;\n",
+					"from": "\t\talien->DynPtr->UseStandardGravity = 1;\n",
 					"to": ""
 				}
 			]

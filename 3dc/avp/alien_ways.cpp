@@ -1,4 +1,7 @@
 // See alien_ways.h. Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an alien found stuck has its state, its last frames' states, its speed, gravity and body's down, its obstruction count, its module and
+//   the game's own goal for it in the log, and an alien let go has its state (alien_ways_stuck.h). One function finds a live alien by who it is.
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -7,11 +10,14 @@
 #include "dynblock.h"
 #include "logString.h"
 #include "pvisible.h"
+#include "bh_ais.h"
+#include "bh_alien.h"
 
 #include "alien_ways.h"
 #include "alien_ways_build.h"
 #include "alien_ways_guide.h"
 #include "alien_ways_level.h"
+#include "alien_ways_stuck.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -41,6 +47,25 @@ namespace
 	// Whether the log has been told how the build went, and that aliens were turned away for want of room
 	bool told = true;
 	bool toldTurnedAway = false;
+
+	// The aliens that have asked for a way, with their last frames' states and the goal the game's own code last picked for them, for the
+	// line when one is found stuck (alien_ways_stuck.h). As many as the guide can guide at once. When it's full, the one that asked longest
+	// ago makes room. Kept here, not in the alien's own status block, so a saved game's format doesn't change.
+	struct Watched
+	{
+		bool used = false;
+		AlienWaysWho who = {};
+		AlienWaysStateHistory history;
+		bool hasGoal = false;
+		VECTORCH goal = {};
+		unsigned int lastAsked = 0;   // the frame it last asked, by frameNumber
+	};
+
+	Watched watched[kAlienWaysMostFollowers];
+	unsigned int frameNumber = 0;
+
+	// How many lines this level has had about aliens let go (kAlienWaysMostLetGoLines at most)
+	int letGoLines = 0;
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -100,9 +125,9 @@ static bool InView(MODULE *from, MODULE *to)
 	return from->m_vmptr && IsModuleVisibleFromModule(from, to);
 }
 
-// An alien that's no longer guided gets the game's usual gravity back. It's only touched if it's still one of the game's live objects, the same
-// one, and still an alien: something dead or gone is never read.
-static void GiveGravityBack(const AlienWaysWho &who)
+// The alien the guide knows by who, if it's still one of the game's live objects, the same one, and still an alien with dynamics. Anything
+// else gives nothing, so something dead or gone is never read.
+static STRATEGYBLOCK *LiveAlien(const AlienWaysWho &who)
 {
 	for (int i = 0; i < NumActiveStBlocks; i++)
 	{
@@ -117,11 +142,121 @@ static void GiveGravityBack(const AlienWaysWho &who)
 
 		if (now.name == who.name && object->I_SBtype == I_BehaviourAlien && object->DynPtr)
 		{
-			object->DynPtr->UseStandardGravity = 1;
+			return object;
 		}
 
-		return;
+		return 0;
 	}
+
+	return 0;
+}
+
+// An alien that's no longer guided gets the game's usual gravity back
+static void GiveGravityBack(const AlienWaysWho &who)
+{
+	STRATEGYBLOCK *const alien = LiveAlien(who);
+
+	if (alien)
+	{
+		alien->DynPtr->UseStandardGravity = 1;
+	}
+}
+
+// A live alien's state (an ALIEN_BHSTATE), or -1 if its status block is missing
+static int StateOf(const STRATEGYBLOCK *alien)
+{
+	ALIEN_STATUS_BLOCK const *const status = static_cast<ALIEN_STATUS_BLOCK const *>(alien->SBdataptr);
+
+	return status ? static_cast<int>(status->BehaviourState) : -1;
+}
+
+static bool SameWho(const AlienWaysWho &a, const AlienWaysWho &b)
+{
+	return a.place == b.place && a.name == b.name;
+}
+
+// This alien's place in the watched list. With make, an alien not on it is put on it, in a free place or the one that asked longest ago.
+static Watched *WatchedFor(const AlienWaysWho &who, bool make)
+{
+	// Already on it
+	for (Watched &w : watched)
+	{
+		if (w.used && SameWho(w.who, who))
+		{
+			return &w;
+		}
+	}
+
+	if (!make)
+	{
+		return 0;
+	}
+
+	// A free place, or else the one that asked longest ago
+	Watched *room = &watched[0];
+
+	for (Watched &w : watched)
+	{
+		if (!w.used)
+		{
+			room = &w;
+			break;
+		}
+
+		if (w.lastAsked < room->lastAsked)
+		{
+			room = &w;
+		}
+	}
+
+	*room = Watched();
+	room->used = true;
+	room->who = who;
+	return room;
+}
+
+// What the game says about an alien the guide found stuck, for the rest of its line (alien_ways_stuck.h)
+static std::string StuckDetails(const AlienWaysWho &who)
+{
+	AlienWaysStuckFacts facts;
+	STRATEGYBLOCK *const alien = LiveAlien(who);
+
+	if (!alien)
+	{
+		return AlienWaysStuck_Details(facts);
+	}
+
+	DYNAMICSBLOCK const *const dynamics = alien->DynPtr;
+	ALIEN_STATUS_BLOCK const *const status = static_cast<ALIEN_STATUS_BLOCK const *>(alien->SBdataptr);
+	Watched const *const w = WatchedFor(who, false);
+
+	facts.found = true;
+	facts.stateNow = StateOf(alien);
+
+	if (w)
+	{
+		facts.history = w->history;
+		facts.hasGoal = w->hasGoal;
+		facts.goal[0] = w->goal.vx;
+		facts.goal[1] = w->goal.vy;
+		facts.goal[2] = w->goal.vz;
+	}
+
+	facts.velocity[0] = dynamics->LinVelocity.vx;
+	facts.velocity[1] = dynamics->LinVelocity.vy;
+	facts.velocity[2] = dynamics->LinVelocity.vz;
+	facts.standardGravity = dynamics->UseStandardGravity != 0;
+	facts.onFloor = dynamics->IsInContactWithFloor != 0;
+	facts.gravity[0] = dynamics->GravityDirection.vx;
+	facts.gravity[1] = dynamics->GravityDirection.vy;
+	facts.gravity[2] = dynamics->GravityDirection.vz;
+	facts.bodyDown[0] = dynamics->OrientMat.mat21;
+	facts.bodyDown[1] = dynamics->OrientMat.mat22;
+	facts.bodyDown[2] = dynamics->OrientMat.mat23;
+	facts.obstructedFrames = status ? status->moveData.numObstructiveCollisions : 0;
+	facts.module = alien->containingModule ? alien->containingModule->name : 0;
+
+	return AlienWaysStuck_Details(facts);
 }
 
 // A point in metres, for the log
@@ -138,6 +273,9 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 	char text[512];
 	const char *const startedOn = line.fromKind == kAlienWaysFloor ? " on the floor" : (line.fromKind == kAlienWaysWall ? " on a wall" : (line.fromKind == kAlienWaysCeiling ? " on the ceiling" : ""));
 	std::string const where = "from " + Metres(line.from) + startedOn + " to " + Metres(line.to) + (line.toTheTarget ? " (its target)" : " (on the way to its target)");
+
+	// What the game says about an alien found stuck, after the line's first part (alien_ways_stuck.h)
+	std::string details;
 
 	switch (line.outcome)
 	{
@@ -166,6 +304,7 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 				static_cast<unsigned>(line.follower), Metres(line.from).c_str(), Metres(line.to).c_str(),
 				sqrt(pow(static_cast<double>(line.to.x) - line.from.x, 2) + pow(static_cast<double>(line.to.y) - line.from.y, 2) + pow(static_cast<double>(line.to.z) - line.from.z, 2)) / 1000.0,
 				kAlienWaysNoHeadwayFor / 1000.0, kAlienWaysRestAfterStuck / 1000.0);
+			details = StuckDetails(line.who);
 			break;
 
 		case kAlienWaysOutcomeRefused:
@@ -175,7 +314,7 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			break;
 	}
 
-	LogString(text);
+	LogString(std::string(text) + details);
 }
 
 void AlienWays_LevelStart()
@@ -252,12 +391,48 @@ void AlienWays_Frame()
 	// The frame's time is in 65536ths of a second
 	int const stepMs = static_cast<int>((static_cast<long long>(NormalFrameTime) * 1000) >> 16);
 
-	// Every alien that stopped being guided since the last frame gets its usual gravity back, before any alien moves this frame
+	// Each watched alien's state this frame, whatever state it's in, so a stuck line can say where its last frames went. One that's gone is
+	// taken off the list.
+	frameNumber++;
+
+	for (Watched &w : watched)
+	{
+		if (!w.used)
+		{
+			continue;
+		}
+
+		STRATEGYBLOCK *const alien = LiveAlien(w.who);
+
+		if (!alien)
+		{
+			w = Watched();
+			continue;
+		}
+
+		AlienWaysStateHistory_Note(&w.history, StateOf(alien));
+	}
+
+	// Every alien that stopped being guided since the last frame gets its usual gravity back, before any alien moves this frame. The log says
+	// what state it left for, up to kAlienWaysMostLetGoLines times a level.
 	AlienWaysWho lapsed[kAlienWaysMostFollowers];
 	size_t const lapsedCount = theGuide.Frame(ReadyMap(), stepMs, kAlienWaysLooksPerFrame, lapsed, kAlienWaysMostFollowers);
 
 	for (size_t i = 0; i < lapsedCount; i++)
 	{
+		STRATEGYBLOCK *const letGo = LiveAlien(lapsed[i]);
+
+		if (letGo && letGoLines < kAlienWaysMostLetGoLines)
+		{
+			letGoLines++;
+			LogString(AlienWaysStuck_LetGoLine(StateOf(letGo), letGo->DynPtr->Position.vx, letGo->DynPtr->Position.vy, letGo->DynPtr->Position.vz));
+
+			if (letGoLines == kAlienWaysMostLetGoLines)
+			{
+				LogString(AlienWaysStuck_LetGoLinesStop());
+			}
+		}
+
 		GiveGravityBack(lapsed[i]);
 	}
 
@@ -311,6 +486,12 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 		ask.goal = AlienWaysXYZ{ target->DynPtr->Position.vx, target->DynPtr->Position.vy, target->DynPtr->Position.vz };
 		ask.goalIsTheTarget = true;
 	}
+
+	// The alien goes on the watched list, if it isn't on it, with the goal the game's own code picked for it this frame (alien_ways_stuck.h)
+	Watched *const w = WatchedFor(ask.who, true);
+	w->hasGoal = true;
+	w->goal = *goal;
+	w->lastAsked = frameNumber;
 
 	AlienWaysXYZ towards;
 
@@ -373,4 +554,13 @@ void AlienWays_LevelEnd()
 	std::vector<AlienWaysRange>().swap(theModules);
 	told = true;
 	toldTurnedAway = false;
+
+	// Nothing of this level's aliens is kept for the next one
+	for (Watched &w : watched)
+	{
+		w = Watched();
+	}
+
+	frameNumber = 0;
+	letGoLines = 0;
 }
