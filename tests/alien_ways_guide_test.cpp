@@ -695,11 +695,13 @@ static void SourceOfTheGame()
 	std::string const crawling = Between(near, "int AlienShouldBeCrawling(STRATEGYBLOCK *sbPtr)", "int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr)");
 	Check(Has(crawling, "\tif (AlienWays_Following(sbPtr)) {\n\t\treturn(1);\n\t}"), "SOURCE: an alien on a way crawls");
 
-	// Gravity back, for every alien the guide lets go
-	std::string const back = Between(ways, "static void GiveGravityBack(const AlienWaysWho &who)", "// A point in metres, for the log");
-	Check(Has(back, "if (now.name == who.name && object->I_SBtype == I_BehaviourAlien && object->DynPtr)\n\t\t{\n\t\t\tobject->DynPtr->UseStandardGravity = 1;"),
+	// Gravity back, for every alien the guide lets go. The alien is found by LiveAlien, which the stuck line uses too.
+	std::string const finder = Between(ways, "static STRATEGYBLOCK *LiveAlien(const AlienWaysWho &who)", "// An alien that's no longer guided gets");
+	std::string const back = Between(ways, "static void GiveGravityBack(const AlienWaysWho &who)", "// A live alien's state");
+	Check(Has(finder, "if (now.name == who.name && object->I_SBtype == I_BehaviourAlien && object->DynPtr)\n\t\t{\n\t\t\treturn object;")
+		&& Has(back, "STRATEGYBLOCK *const alien = LiveAlien(who);") && Has(back, "\t\talien->DynPtr->UseStandardGravity = 1;"),
 		"SOURCE: an alien let go gets its usual gravity back, if it's the same one, still an alien");
-	Check(Has(back, "for (int i = 0; i < NumActiveStBlocks; i++)") && Has(back, "if (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)) != who.place)"),
+	Check(Has(finder, "for (int i = 0; i < NumActiveStBlocks; i++)") && Has(finder, "if (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)) != who.place)"),
 		"SOURCE: and it's only looked for among the game's live objects, so nothing dead is read");
 
 	std::string const frame = Between(ways, "void AlienWays_Frame()", "bool AlienWays_Steer(");
