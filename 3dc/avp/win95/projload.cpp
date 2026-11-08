@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a handle can be asked for the size and MD5 sum of the file it was loaded from (level_file_sum.h)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a set of a model's clothes can be named by its number, so another machine can draw the same one;
 //   in a game that plays as single player, a Predator's starting equipment is the level's, not the host's Allow rows
@@ -3138,7 +3140,17 @@ void avp_undo_rif_load(RIFFHANDLE h)
 
 RIFFHANDLE avp_load_rif(const char * fname)
 {
-	return load_rif(fname); 
+	return load_rif(fname);
+}
+
+LevelFileSum avp_rif_file_sum(RIFFHANDLE h)
+{
+	if (h == INVALID_RIFFHANDLE || !h->fc)
+	{
+		return LevelFileSum();
+	}
+
+	return h->fc->file_sum;
 }
 
 RIFFHANDLE avp_load_rif_non_env(const char *fname)

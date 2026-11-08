@@ -401,6 +401,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\npcsetup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\object_setup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\openal_audio.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\openal_stream.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\path_chunk.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\platsup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldghost.cpp" />
@@ -674,6 +675,7 @@
     <ClInclude Include="..\..\3dc\level_switch.h" />
     <ClInclude Include="..\..\3dc\reverb_choice.h" />
     <ClInclude Include="..\..\3dc\level_kind.h" />
+    <ClInclude Include="..\..\3dc\level_file_sum.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\user_profile.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\console_command.hpp" />
@@ -709,6 +711,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
     <ClInclude Include="..\..\3dc\avp\win95\projload.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\psndplat.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\openal_shared.h" />
     <ClInclude Include="..\..\3dc\avp\win95\screenshot.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\strategy_chunk.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\system.h" />

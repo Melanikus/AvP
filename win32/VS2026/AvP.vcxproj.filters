@@ -573,6 +573,9 @@
     <ClCompile Include="..\..\3dc\avp\win95\openal_audio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\openal_stream.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\path_chunk.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1289,6 +1292,9 @@
     <ClInclude Include="..\..\3dc\avp\win95\psndplat.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\openal_shared.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\screenshot.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -1560,6 +1566,9 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\level_kind.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\level_file_sum.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\env_info.h">
