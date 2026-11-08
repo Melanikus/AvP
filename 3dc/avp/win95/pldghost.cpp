@@ -441,6 +441,7 @@ STRATEGYBLOCK *FindGhost(NetID Id, int obId)
 
 /* create a new ghost: doesn't do shape animation stuff: this is performed using a
 seperate set of functions */
+extern void Hudson_NetSayARefusedGhost(int kind, int subtype);
 
 STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, EULER* orientation, AVP_BEHAVIOUR_TYPE type, unsigned char IOType, unsigned char subtype)
 {
@@ -839,6 +840,7 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 		if (sbPtr->shapeIndex == -1)
 		{
 			Net_NoteRefused("a ghost with a model or shape this level hasn't loaded");
+			Hudson_NetSayARefusedGhost((int)type, (int)subtype);
 			RemoveBehaviourStrategy(sbPtr);
 			return NULL;
 		}
