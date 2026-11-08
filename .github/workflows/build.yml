@@ -41,7 +41,7 @@ jobs:
           if ($env:GITHUB_REF -ne 'refs/heads/avpx_main') { throw 'Builds come only from avpx_main' }
           $results = gh api --paginate "repos/$env:GITHUB_REPOSITORY/commits/$env:GITHUB_SHA/check-runs?per_page=100" --jq '.check_runs[] | .name + "=" + .conclusion'
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the scan results' }
-          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu'
+          $required = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu', 'Tests under the address sanitizer'
           foreach ($check in $required) {
             if ($results -notcontains "$check=success") { throw "'$check' did not pass on this commit" }
           }

@@ -50,7 +50,24 @@ that line does on a card needs a run of the game.
 
     tests/takeouts/sanitize.ps1 relief_map_file_test
 
-A test only sees what it looks for, and this sees the rest. It's slower, so it isn't part of the ordinary run. Run it after changing anything that handles a file.
+A test only sees what it looks for, and this sees the rest. Every pull request runs it on every test, in the Tests check's "Tests under the address
+sanitizer", split across four machines because it's slower than the ordinary run, and a test that doesn't pass under it stops the merge. Run it here
+too, after changing anything that handles a file, to find out before the pull request does.
+
+Each test is run from a window of its own there. Run several from one window here and that's fine too: Visual Studio's setup is done once, and the
+script stops and says why if the setup didn't give it the compiler. A test built for the sanitizer has the C runtime built in, as every test does,
+but the sanitizer's own library uses the runtime's DLLs while it runs, so a pass under the sanitizer says nothing about running without them.
+
+The same check makes sure the gate can fail: in its own copy of the repository it writes a test that reads one byte past the end of a block, and
+one that fails a check, and neither may pass. When a test doesn't pass, the script prints everything the test and the sanitizer said, because the
+folder that keeps it is gone once an automatic check ends. And it refuses a name that isn't one of the tests before it empties any folder.
+
+The sanitizer only watches code compiled with it, so the script refuses a test that links an object or a library compiled without it, and a test
+whose settings turn the sanitizer off for its own code (the compiler has /fno-sanitize=address). It reads each object, those the test links and
+those its own build makes, for the mark the compiler leaves in what it compiles with the sanitizer. A library vcpkg builds, such as ENet for the network tests, is
+taken from its copy built with the sanitizer, in `vcpkg_installed/x86-windows-static-asan`, which the automatic check makes
+(`vcpkg-overlay-triplets/x86-windows-static-asan.cmake`). So here, without that copy, the network tests can't be run under the sanitizer, and the
+script says so. Windows' own libraries, Microsoft's D3DX and Microsoft's C runtime are Microsoft's, and aren't compiled with it.
 
 ## What these don't cover
 
