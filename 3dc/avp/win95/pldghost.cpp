@@ -6,6 +6,7 @@
 //   ghosts for the NPCs the host runs in a game that plays the same as single player: see npc_ghosts.cpp
 //   a ghost holding a gun this level has no body for keeps the body it has, or isn't made, and a ghost gives back an effect block it can't use
 //   a corpse with no display block stays far
+//   a ghost's new data block is checked before it's cleared, not after
 /* Patrick 14/7/97----------------------------
   Source for Multi-Player ghost object support header
 d  ----------------------------------------------------------------------*/
@@ -513,14 +514,16 @@ STRATEGYBLOCK *CreateNetGhost(NetID playerId, int objectId, VECTORCH *position, 
 	/* data block */
 	{
 		NETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));
-		// New memory holds whatever was there before, and not every kind of ghost sets every field. AllocateMem stops the game rather than give back nothing.
-		memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));
-		if(!ghostData) 
+		if(!ghostData)
 		{
 			/* allocation failed */
 			RemoveBehaviourStrategy(sbPtr);
 			return NULL;
-		}		
+		}
+
+		// New memory holds whatever was there before, and not every kind of ghost sets every field. It's cleared only once it's
+		// known to be there: AllocateMem is meant to stop the game rather than give back nothing, but this doesn't count on it.
+		memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));
 		sbPtr->SBdataptr = (void *)ghostData;
 		ghostData->playerId = playerId;
 		ghostData->playerObjectId = objectId;
