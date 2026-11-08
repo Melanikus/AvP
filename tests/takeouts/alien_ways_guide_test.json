@@ -20,8 +20,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t\tfollower.used = false;\n\t\tfollower.guided = false;\n\t\tfollower.queued = false;\n\t\tDropTheWay(&follower);\n\t}\n\n\tif (!map || !map->Ready())",
-					"to": "\t\tDropTheWay(&follower);\n\t}\n\n\tif (!map || !map->Ready())"
+					"from": "\tfollower.used = false;\n\tfollower.guided = false;\n\tfollower.queued = false;\n\tDropTheWay(&follower);\n}",
+					"to": "\tDropTheWay(&follower);\n}"
 				}
 			]
 		},
@@ -180,7 +180,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t\tif (searching == static_cast<int>(f))\n\t\t{\n\t\t\tsearching = -1;\n\t\t}\n",
+					"from": "\tif (searching == f)\n\t{\n\t\tsearching = -1;\n\t}\n",
 					"to": ""
 				}
 			]
@@ -190,8 +190,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "\t\tfollowers[f].used = false;\n\t\tfollowers[f].steered = false;\n\t\tfollowers[f].guided = false;",
-					"to": "\t\tfollowers[f].steered = false;"
+					"from": "\t\tfollowers[f].used = false;\n\t\tfollowers[f].steered = false;\n\t\tfollowers[f].steeredAt = 0;\n\t\tfollowers[f].guided = false;",
+					"to": "\t\tfollowers[f].steered = false;\n\t\tfollowers[f].steeredAt = 0;"
 				}
 			]
 		},
@@ -770,8 +770,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_level.cpp",
-					"from": "if (door && door->SBdataptr)",
-					"to": "if (door)"
+					"from": "if (door && door->SBdataptr && door->SBmoptr == module)",
+					"to": "if (door && door->SBmoptr == module)"
 				}
 			]
 		},
@@ -882,6 +882,126 @@
 					"file": "3dc/avp/alien_ways.cpp",
 					"from": "\tif (clockMs / 1000 != placesSecond)\n\t{\n\t\tplacesSecond = clockMs / 1000;",
 					"to": "\tif (false)\n\t{\n\t\tplacesSecond = clockMs / 1000;"
+				}
+			]
+		},
+		{
+			"name": "an alien that misses a frame is let go at once",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (now - follower.steeredAt < kAlienWaysForgetAfter)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "Steer doesn't note when it was last asked",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tfollower.steered = true;\n\tfollower.steeredAt = now;\n",
+					"to": "\tfollower.steered = true;\n"
+				}
+			]
+		},
+		{
+			"name": "an alien kept through a frame nothing asked isn't named",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tmissed[missedCount] = follower.who;\n\t\t\tmissedCount++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Forget doesn't let the alien go",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tbool const wasGuided = followers[f].guided;\n\tLetGo(f);\n",
+					"to": "\tbool const wasGuided = followers[f].guided;\n"
+				}
+			]
+		},
+		{
+			"name": "the aliens kept through a gap carry over from one frame to the next",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tsize_t lapsedCount = 0;\n\tmissedCount = 0;\n",
+					"to": "\tsize_t lapsedCount = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien kept through a gap is read without being found alive",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tSTRATEGYBLOCK *const alien = LiveAlien(missed[i]);\n",
+					"to": "\t\tSTRATEGYBLOCK *const alien = reinterpret_cast<STRATEGYBLOCK *>(static_cast<uintptr_t>(missed[i].place));\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien kept in a state that never asks isn't let go",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (state != ABS_Approach && state != ABS_Hunt && state != ABS_Wander)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien let go for its state doesn't get its gravity back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\t\tlapsed[letGoCount] = missed[i];\n\t\t\t\tletGoCount++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: only the aliens the guide let go itself get their gravity back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tfor (size_t i = 0; i < letGoCount; i++)\n",
+					"to": "\tfor (size_t i = 0; i < lapsedCount; i++)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: kept aliens aren't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tmissedFrames++;\n\t\tmissedByState[state]++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the count of kept aliens never goes in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tif (missedFrames > 0)\n",
+					"to": "\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door whose block points at another module is read",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "if (door && door->SBdataptr && door->SBmoptr == module)",
+					"to": "if (door && door->SBdataptr)"
 				}
 			]
 		}

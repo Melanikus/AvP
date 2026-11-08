@@ -1995,14 +1995,16 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 	/* ok: should have a current target at this stage... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:
 	//   a standard alien that can climb, and is further from the point picked above than it attacks from, follows its way across the
-	//   walls and ceilings to that point, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach).
-	//   The point is the way into the next module towards where it hunts, so the way changes only how it gets there, never where. Without
+	//   walls and ceilings, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach). Without
 	//   a way, or within that distance of the point, it's steered as it always was. Either way the direction goes through the same checks
-	//   below. No target is given, even when there is one: given one it can see, the alien ways code would head for the target itself
-	//   instead of the point, and going straight for a target is Approach's job. So the way always goes to Hunt's own point.
+	//   below.
+	//   Its target is given, so when the target's module can be seen from the alien's, the way goes all the way to the target, and not
+	//   only to the point, the way into the next module, a few metres off. Over a few metres the floor always wins, so given only the point,
+	//   a hunting alien never climbed (Sixth's 5-alien film, 2026-11-08). When the target's module can't be seen, or there's no target,
+	//   the way goes to the point, as before.
 	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
 		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
-		&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+		&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
 	{
 		/* Stick to whatever it's touching, and go along it towards the way's next point */
 		dynPtr->UseStandardGravity=0;

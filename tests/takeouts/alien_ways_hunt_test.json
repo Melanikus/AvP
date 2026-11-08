@@ -9,18 +9,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(dynPtr->Position), &velocityDirection))"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(dynPtr->Position), &velocityDirection))"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a hunting alien asks with a target, so the way could go to the target instead of the point",
+			"name": "SOURCE: a hunting alien asks with no target, so its way never goes all the way to the target",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target,"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target,",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,"
 				}
 			]
 		},
@@ -49,8 +49,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& AlienWays_Steer(sbPtr, 0"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target"
 				}
 			]
 		},
@@ -59,8 +59,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
 				}
 			]
 		},
@@ -69,8 +69,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
 				}
 			]
 		},
@@ -79,8 +79,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
 				}
 			]
 		},
@@ -89,8 +89,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
-					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
+					"from": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "AlienIsAbleToClimb(sbPtr)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
 				}
 			]
 		},

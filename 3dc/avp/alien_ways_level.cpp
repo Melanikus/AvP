@@ -353,8 +353,11 @@ void AlienWaysLevel_ReadDoors(const std::vector<AlienWaysLevelDoor> &doors, Alie
 		STRATEGYBLOCK *const door = module ? module->m_sbptr : 0;
 		bool through = false;
 
-		// Each kind's block is read only once it's checked to be that kind, the way GetState reads them (bh_types.cpp)
-		if (door && door->SBdataptr)
+		// Each kind's block is read only once it's checked to be that kind, the way GetState reads them (bh_types.cpp), and only if it's this
+		// module's own: every door's setup points its block and its module at each other (bh_types.cpp, bh_lift_door.cpp, bh_switch_door.cpp),
+		// so a block that points at another module is a stale one, now another door's, and counts as shut rather than as the other door
+		// (Secondary's read of b786f33b)
+		if (door && door->SBdataptr && door->SBmoptr == module)
 		{
 			switch (doors[d].kind)
 			{

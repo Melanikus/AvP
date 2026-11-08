@@ -4,6 +4,9 @@
 //   the game's own goal for it in the log, and an alien let go has its state (alien_ways_stuck.h). One function finds a live alien by who it is.
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the map is told each frame which of the level's doors won't let an alien through, so a way never goes through a locked door (#118)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   an alien the guide keeps through a frame that didn't ask for it is let go at once if it's in a state that never asks, with its gravity
+//   back, and otherwise counted by state for a once-a-second line (#109)
 #include "3dc.h"
 #include "module.h"
 #include "strategy_def.h"
@@ -81,6 +84,11 @@ namespace
 
 	// The last second of this level the log was told where the guided aliens are (lanes, #138)
 	long long placesSecond = -1;
+
+	// Frames since the last once-a-second line in which an alien kept on its way wasn't asked about, by the state it was in. A hunting alien
+	// that skips asking now and then is steered by the game's own code in those frames, so this says which states make the two take turns.
+	int missedFrames = 0;
+	int missedByState[kAlienWaysStateKinds] = {};
 }
 
 // Whether this machine should have a map at all: the switch is on, and the aliens are run here
@@ -452,7 +460,37 @@ void AlienWays_Frame()
 	AlienWaysWho lapsed[kAlienWaysMostFollowers];
 	size_t const lapsedCount = theGuide.Frame(ReadyMap(), stepMs, kAlienWaysLooksPerFrame, lapsed, kAlienWaysMostFollowers);
 
-	for (size_t i = 0; i < lapsedCount; i++)
+	size_t letGoCount = lapsedCount;
+
+	// The aliens the guide kept though nothing asked about them last frame (it keeps them half a second, way and all). One that's now in a
+	// state that never asks for a way, attacking or dying say, is let go at once, and joins the list below to get its usual gravity back,
+	// so it doesn't hang on a wall. One still in a state that asks is counted, by that state, for the once-a-second line. Each is found by
+	// LiveAlien, so a dead alien, or a new one kept where it was, is never read.
+	const AlienWaysWho *missed = 0;
+	size_t const missedCount = theGuide.MissedLastFrame(&missed);
+
+	for (size_t i = 0; i < missedCount; i++)
+	{
+		STRATEGYBLOCK *const alien = LiveAlien(missed[i]);
+		int const state = alien ? StateOf(alien) : -1;
+
+		if (state != ABS_Approach && state != ABS_Hunt && state != ABS_Wander)
+		{
+			// Each alien is in the guide's lists once, so lapsed always has room for it
+			if (theGuide.Forget(missed[i]) && letGoCount < kAlienWaysMostFollowers)
+			{
+				lapsed[letGoCount] = missed[i];
+				letGoCount++;
+			}
+
+			continue;
+		}
+
+		missedFrames++;
+		missedByState[state]++;
+	}
+
+	for (size_t i = 0; i < letGoCount; i++)
 	{
 		STRATEGYBLOCK *const letGo = LiveAlien(lapsed[i]);
 
@@ -498,6 +536,24 @@ void AlienWays_Frame()
 			}
 
 			LogString(places);
+		}
+
+		if (missedFrames > 0)
+		{
+			std::string skipped = "alien ways: second " + std::to_string(placesSecond) + ": in the second before, aliens kept on their ways went "
+				+ std::to_string(missedFrames) + " frames without asking for them:";
+
+			for (int s = 0; s < kAlienWaysStateKinds; s++)
+			{
+				if (missedByState[s] > 0)
+				{
+					skipped += std::string(" ") + AlienWaysStuck_StateName(s) + " " + std::to_string(missedByState[s]);
+				}
+			}
+
+			LogString(skipped);
+			missedFrames = 0;
+			std::fill(missedByState, missedByState + kAlienWaysStateKinds, 0);
 		}
 	}
 
@@ -661,4 +717,6 @@ void AlienWays_LevelEnd()
 	clockMs = 0;
 	wouldHaveLines = 0;
 	placesSecond = -1;
+	missedFrames = 0;
+	std::fill(missedByState, missedByState + kAlienWaysStateKinds, 0);
 }

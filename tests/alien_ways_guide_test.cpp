@@ -476,8 +476,8 @@ static void LetGo()
 	GuidedAlien(guide, Alien(1));
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Check(Frame(guide, map, 16, lapsed) == 0, "an alien steered this frame isn't let go");
-	Check(Frame(guide, map, 16, lapsed) == 1 && lapsed[0].place == Alien(1).place && lapsed[0].name == Alien(1).name,
-		"one that wasn't steered since is let go, and named, so the game gives it its gravity back");
+	Check(Frame(guide, map, kAlienWaysForgetAfter, lapsed) == 1 && lapsed[0].place == Alien(1).place && lapsed[0].name == Alien(1).name,
+		"one that nothing has asked about for half a second is let go, and named, so the game gives it its gravity back");
 	Check(!guide.Guided(Alien(1)), "and it's no longer guided");
 	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "asking again, it starts again from nothing");
 
@@ -486,7 +486,7 @@ static void LetGo()
 	AlienWaysGuide &never = *neverRoom;
 	never.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
 	Frame(never, map, 16, lapsed);
-	Check(Frame(never, map, 16, lapsed) == 0, "an alien that asked but was never guided isn't named when it's let go");
+	Check(Frame(never, map, kAlienWaysForgetAfter, lapsed) == 0, "an alien that asked but was never guided isn't named when it's let go");
 
 	// Nor one whose last steer gave back no: the game's own code has set its gravity already
 	const std::unique_ptr<AlienWaysGuide> stoppedRoom(new AlienWaysGuide);
@@ -494,7 +494,7 @@ static void LetGo()
 	GuidedAlien(stopped, Alien(3));
 	stopped.Steer(&map, Ask(Alien(3), { 1000, -3000, -2500 }, kGoal, 13), &towards);
 	Frame(stopped, map, 16, lapsed);
-	Check(Frame(stopped, map, 16, lapsed) == 0, "nor one whose last steer said no");
+	Check(Frame(stopped, map, kAlienWaysForgetAfter, lapsed) == 0, "nor one whose last steer said no");
 
 	// Clear forgets everything
 	const std::unique_ptr<AlienWaysGuide> clearedRoom(new AlienWaysGuide);
@@ -506,6 +506,65 @@ static void LetGo()
 	int counts[1], headings[1];
 	Check(!cleared.Guided(Alien(4)) && cleared.Shown(points, counts, headings, 1) == 0 && Frame(cleared, map, 16, lapsed) == 0,
 		"Clear forgets every alien and every way, and names nobody");
+}
+
+// A hunting alien skips asking now and then. A frame or a few with nothing asked keep it, way, rest and all; half a second with nothing
+// asked lets it go (kAlienWaysForgetAfter). In Sixth's 5-alien film (2026-11-08), when each skip dropped the way, it was searched for
+// again nearly every frame and never followed.
+static void KeptThroughAGap()
+{
+	printf("Kept through frames nothing asked\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	AlienWaysWho lapsed[kAlienWaysMostFollowers];
+	const AlienWaysWho *missed = nullptr;
+	const AlienWaysReport *reports = nullptr;
+
+	// On its way for 600 ms, asked about every frame, so what it was last asked counts, not when it first came
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	GuidedAlien(guide, Alien(1));
+	bool onIt = true;
+
+	for (int f = 0; f < 30; f++)
+	{
+		onIt = guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && onIt;
+		Frame(guide, map, 20, lapsed);
+	}
+
+	Check(onIt && guide.MissedLastFrame(&missed) == 0, "an alien asked about every frame is on its way, and never missed");
+	Check(Frame(guide, map, 16, lapsed) == 0, "a frame nothing asked about it doesn't let it go");
+	Check(guide.MissedLastFrame(&missed) == 1 && missed[0].place == Alien(1).place && missed[0].name == Alien(1).name,
+		"it's named as kept through a frame nothing asked, so the game can count it, or let it go");
+	Check(guide.Guided(Alien(1)), "it's still on its way, so the game keeps it crawling, with its gravity off");
+	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && Same(towards, kOntoTheWall), "asked again, it's on the same way");
+	Frame(guide, map, 16, lapsed);
+	Check(ReportsOf(guide, &reports) == 0 && guide.MissedLastFrame(&missed) == 0, "with no new search for it, and nothing missed in that frame");
+	Check(Frame(guide, map, kAlienWaysForgetAfter, lapsed) == 1 && !guide.Guided(Alien(1)), "half a second with nothing asked lets it go, and names it");
+
+	// The rest after a way that's all floor is kept through a gap too, so it isn't searched for again every frame
+	AlienWaysMap floorOnly;
+	floorOnly.Build(Corridor(false));
+	const std::unique_ptr<AlienWaysGuide> flatRoom(new AlienWaysGuide);
+	AlienWaysGuide &flat = *flatRoom;
+	flat.Steer(&floorOnly, Ask(Alien(2), kStart, kGoal, 10), &towards);
+	Frame(flat, floorOnly, 16);
+	Check(ReportsOf(flat, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeAllFloor, "a way that's all floor, so it rests for 2 s");
+	Frame(flat, floorOnly, 16);
+	flat.Steer(&floorOnly, Ask(Alien(2), kStart, kGoal, 10), &towards);
+	Frame(flat, floorOnly, 16);
+	Check(ReportsOf(flat, &reports) == 0, "a frame nothing asked about it keeps its rest: it doesn't ask again");
+
+	// The game lets go at once of an alien in a state that never asks
+	const std::unique_ptr<AlienWaysGuide> forgetRoom(new AlienWaysGuide);
+	AlienWaysGuide &forget = *forgetRoom;
+	GuidedAlien(forget, Alien(3));
+	forget.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards);
+	Check(forget.Forget(Alien(3)) && !forget.Guided(Alien(3)), "Forget lets a guided alien go at once, and says it was guided, for its gravity");
+	Check(!forget.Forget(Alien(3)), "one it doesn't have any more is no one to forget");
+	forget.Steer(&map, Ask(Alien(4), kStart, kGoal, 13), &towards);
+	Check(!forget.Forget(Alien(4)), "and one with no way yet goes, but wasn't guided");
+	Check(Frame(forget, map, kAlienWaysForgetAfter, lapsed) == 0, "an alien forgotten isn't let go again later");
 }
 
 // Whether the way steers an alien in this frame: only in a frame Steer was asked and gave back a way (Hunt and Wander hold back the game's
@@ -595,7 +654,7 @@ static void Allowance()
 	AlienWaysGuide &dropped = *droppedRoom;
 	dropped.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(dropped, map, 16, nullptr, 1);
-	Frame(dropped, map, 16, nullptr, 1);
+	Frame(dropped, map, kAlienWaysForgetAfter, nullptr, 1);
 	AlienWaysXYZ const elsewhere = { 1000, 0, 3500 };
 	dropped.Steer(&map, Ask(Alien(2), elsewhere, kGoal, 13), &towards);
 	bool fromElsewhere = false;
@@ -870,7 +929,8 @@ static void SourceOfTheGame()
 		&& Has(level, "case I_BehaviourSwitchDoor:    isADoor = true; kind = kAlienWaysSwitchDoor;    break;"),
 		"SOURCE: the three kinds of door the game knows are listed as doors");
 	std::string const readDoors = Between(level, "void AlienWaysLevel_ReadDoors(", "map->SetDoorShut(");
-	Check(Has(readDoors, "if (door && door->SBdataptr)"), "SOURCE: a door with no block is never read");
+	Check(Has(readDoors, "if (door && door->SBdataptr && door->SBmoptr == module)"),
+		"SOURCE: a door with no block is never read, nor one whose block points at another module (Secondary's D-a)");
 	Check(Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourProximityDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tPROXDOOR_BEHAV_BLOCK const *const block")
 		&& Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourLiftDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tthrough =")
 		&& Has(readDoors, "\t\t\t\t\tif (door->I_SBtype == I_BehaviourSwitchDoor)\n\t\t\t\t\t{\n\t\t\t\t\t\tthrough ="),
@@ -879,6 +939,17 @@ static void SourceOfTheGame()
 		"SOURCE: a proximity door is judged by whether it's locked");
 	Check(Has(readDoors, "bool through = false;"), "SOURCE: a door that can't be read is taken as shut");
 	Check(Has(level, "map->SetDoorShut(static_cast<int>(d) + 1, !through);"), "SOURCE: and the map is told each door's state, by the number its polygons carry");
+
+	// Kept through a gap (KeptThroughAGap): each kept alien is found by LiveAlien; one in a state that never asks is let go at once, with its
+	// gravity back; one in a state that asks is counted for the once-a-second line
+	Check(Has(frame, "\t\tSTRATEGYBLOCK *const alien = LiveAlien(missed[i]);"), "SOURCE: an alien kept through a gap is only read once it's found alive and the same");
+	Check(Has(frame, "\t\tif (state != ABS_Approach && state != ABS_Hunt && state != ABS_Wander)\n"),
+		"SOURCE: one that's in a state that never asks for a way is let go at once");
+	Check(Has(frame, "if (theGuide.Forget(missed[i]) && letGoCount < kAlienWaysMostFollowers)\n\t\t\t{\n\t\t\t\tlapsed[letGoCount] = missed[i];"),
+		"SOURCE: and joins the aliens let go, for its gravity");
+	Check(Has(frame, "\tfor (size_t i = 0; i < letGoCount; i++)\n"), "SOURCE: and every alien let go, either way, gets its gravity back");
+	Check(Has(frame, "\t\tmissedFrames++;\n\t\tmissedByState[state]++;"), "SOURCE: one still in a state that asks is counted by its state");
+	Check(Has(frame, "\t\tif (missedFrames > 0)\n") && Has(frame, "aliens kept on their ways went "), "SOURCE: and the count goes in the log once a second");
 
 	Check(Has(project, "<ClCompile Include=\"..\\..\\3dc\\avp\\alien_ways_guide.cpp\" />"), "SOURCE: the game's project builds the guide");
 }
@@ -894,6 +965,7 @@ int main()
 	FailedRenewal();
 	LetGo();
 	GuidedThisFrame();
+	KeptThroughAGap();
 	WhoIsWho();
 	Allowance();
 	NoBetterThanToday();

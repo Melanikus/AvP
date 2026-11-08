@@ -7,17 +7,23 @@
 // ONE FRAME:
 //
 //      AlienWays_Frame, before any alien moves
-//        Frame: every alien that was steered last frame and not since is let go, and named, so the game gives it its usual gravity back.
-//        |      Then the searches get up to kAlienWaysLooksPerFrame polygons between them, first asked, first served.
+//        Frame: every alien nothing has asked about for kAlienWaysForgetAfter is let go, and named, so the game gives it its usual gravity
+//        |      back. One that missed only a frame or a few is kept, way and all, and named apart (MissedLastFrame), so the game can let go
+//        |      at once of one that's in a state that never asks. Then the searches get up to kAlienWaysLooksPerFrame polygons between them,
+//        |      first asked, first served.
 //      each alien that's coming for its target (bh_near.cpp)
 //        Steer: says where to head for now, or that it has no way yet, and then the game's own code steers it as it always has.
 //               It asks for a search when there's no way, or the way's 2 s old, or the goal has moved 3 m, or the alien is 3 m off the way.
 //
 // AN ALIEN STOPS BEING GUIDED (and gets its usual gravity back) when:
 // - Steer says no. It's still coming for its target, so the game's own code sets its gravity that same frame, as it always has.
-// - Nothing asks Steer for it in a frame: it's attacking, waiting, hunting, dying, gone far, or gone. The frame after that one, Frame names it.
-//   So it moves for two frames with the gravity the way gave it, about 33 ms. Most of those states set their own gravity as they start
-//   anyway; the two that don't, avoiding something and taunting, are the ones this is for.
+// - Nothing asks Steer for it for kAlienWaysForgetAfter, half a second: it's gone far, or gone, or it stays in a state that doesn't ask.
+//   A frame or a few with no asking don't let it go. A hunting alien skips asking now and then, and when each skip dropped its way, the way
+//   was searched for again nearly every frame and never followed (Sixth's 5-alien film, 2026-11-08). Through those frames it's still on its
+//   way for Guided, so the game keeps it crawling, and its gravity off.
+// - The game lets it go (Forget), at the first frame it's in a state that never asks, such as attacking or dying: the game gives it its
+//   usual gravity back then, so a dying alien doesn't hang on a ceiling. Most of those states set their own gravity as they start anyway;
+//   the ones that don't, avoiding something and taunting, are the ones this is for.
 // - The level ends: Clear, and the map and every alien go with it.
 //
 // A WAY THAT'S BEING FOLLOWED IS NEVER DROPPED BY A SEARCH THAT FAILS: only a new way replaces it. So an alien on a ceiling doesn't let go
@@ -60,6 +66,7 @@ int const kAlienWaysGoalMoved = 3000;             // mm: a goal that's moved thi
 int const kAlienWaysHeadway = 100;                // mm: getting this much nearer to the next point counts as headway...
 int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this many ms, the alien is stuck: its way is dropped...
 int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
+int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
 
 // The kinds of door the game has (ModuleIsADoor, in pfarlocs.cpp), and whether one lets an alien through now. It's the rule the game's own
 // routes for aliens follow (AIModuleAdmitsPheromones, in pheromone.cpp), which is why a hunting alien never plans through a locked door:
@@ -158,12 +165,22 @@ public:
 	// How many times an alien was turned away because all kAlienWaysMostFollowers places were taken, since the last Clear
 	size_t TurnedAway() const { return turnedAway; }
 
+	// The aliens the last Frame kept though nothing had asked Steer about them since the Frame before: kept, way and all, until
+	// kAlienWaysForgetAfter. Good until the next Frame or Clear. The game counts them by state for the log, and lets go at once of one in
+	// a state that never asks (Forget).
+	size_t MissedLastFrame(const AlienWaysWho **who) const { *who = missed; return missedCount; }
+
+	// Lets an alien go now, as if nothing had asked about it for kAlienWaysForgetAfter. Gives back whether it was guided, so the game can
+	// give it its usual gravity back. An alien the guide doesn't have gives back false.
+	bool Forget(const AlienWaysWho &who);
+
 private:
 	struct Follower
 	{
 		bool used;
 		AlienWaysWho who;
 		bool steered;                       // Steer was asked for it since the last Frame
+		long long steeredAt;                // when Steer was last asked for it
 		bool guided;                        // the last Steer gave back true
 		bool queued;                        // it wants a search
 		long long askedAt;                  // when it last asked for one
@@ -181,6 +198,7 @@ private:
 
 	int Find(const AlienWaysWho &who) const;
 	int Take(const AlienWaysWho &who);
+	void LetGo(int f);
 	void DropTheWay(Follower *follower);
 	void StartNext(AlienWaysMap *map);
 	void Finish(AlienWaysMap *map, AlienWaysSearch result);
@@ -202,6 +220,10 @@ private:
 	AlienWaysReport report[kAlienWaysMostFollowers];
 	size_t reportCount;
 	bool reportsRead;                   // the reports have been read by a Frame, so the next report starts a new list
+
+	// The aliens the last Frame kept though nothing had asked about them (MissedLastFrame)
+	AlienWaysWho missed[kAlienWaysMostFollowers];
+	size_t missedCount;
 };
 
 #endif

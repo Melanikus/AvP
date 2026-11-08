@@ -107,17 +107,18 @@ static void TestHunting(const std::string &source)
 	std::string const hunt = Between(source, "static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
 	Check(!hunt.empty(), "SOURCE: the hunting state is there to read");
 
-	// No target, though a hunting alien may have one: given one it can see, the alien ways code heads for the target itself instead of the
-	// point, and going straight for a target is Approach's job. So the way always goes where Hunt was going.
-	char const *const call = "AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))";
-	Check(Has(hunt, call), "SOURCE: a hunting alien asks for a way to the point the game picked, the way into the next module towards where it hunts, with no target to head for instead");
+	// Its target is given, so the way goes all the way to the target when the target's module can be seen from the alien's, and to the point,
+	// the way into the next module, otherwise. Given only the point, a few metres off, the floor always won, and hunting aliens never climbed
+	// (Sixth's 5-alien film, 2026-11-08).
+	char const *const call = "AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))";
+	Check(Has(hunt, call), "SOURCE: a hunting alien asks for a way to its target, and to the point the game picked when the target's module can't be seen");
 
 	Check(Has(hunt, "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)\n"
 		"\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n"
-		"\t\t&& AlienWays_Steer(sbPtr, 0"),
+		"\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target"),
 		"SOURCE: only a standard alien that can climb asks, and only while it's further from the point than it attacks from");
 
-	Check(Has(hunt, (std::string("AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), ") + kTheTwoBranches).c_str()),
+	Check(Has(hunt, (std::string("AlienWays_Steer(sbPtr, alienStatusPointer->Target, &(alienStatusPointer->wanderData.worldPosition), ") + kTheTwoBranches).c_str()),
 		"SOURCE: on a way it lets go of gravity and goes the way's direction; without one it's steered as it always was");
 
 	// The state puts gravity back on at its start, every frame. That's before the call, so the way's choice is the one that counts.

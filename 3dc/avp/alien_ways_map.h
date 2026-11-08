@@ -225,9 +225,11 @@ public:
 	int NearestPolygonOfKind(AlienWaysXYZ point, size_t firstGiven, size_t endGiven, int within, double *howFar, int kind) const;
 
 	// DOORS. Some polygons are part of a door (AlienWaysPolygon::door). The game says which doors won't let an alien through at the moment (a
-	// locked door, say), and a search keeps off every polygon of a door that's shut. Two exceptions, so an alien is never trapped by this:
-	// the polygon the search starts on, so an alien already in a doorway can leave it, and the goal's own polygon. A search sees the doors as
-	// they were when it started, so a door that shuts while one runs can't leave it half seeing the door shut: the next search sees it.
+	// locked door, say), and a search keeps off every polygon of a door that's shut. Two exceptions: the polygon the search starts on, so an
+	// alien already on a door's polygon can leave it onto one that's no shut door's, and the goal's own polygon. An alien on a door's polygon
+	// that touches only the same door's other polygons gets no way at all, and the game's own code steers it, so it's never trapped either way
+	// (Secondary's read of b786f33b). A search sees the doors as they were when it started, so a door that shuts while one runs can't leave it
+	// half seeing the door shut: the next search sees it.
 	//
 	//      room A            door 1 (shut)          room B
 	//      floor  ------------+==========+------------  floor        a way from A to B goes round, if there's another way,

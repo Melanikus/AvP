@@ -140,11 +140,13 @@ void AlienWaysGuide::Clear()
 	searchAskedAt = searchMicroseconds = 0;
 	searchFrames = 0;
 	reportCount = 0;
+	missedCount = 0;
 
 	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
 	{
 		followers[f].used = false;
 		followers[f].steered = false;
+		followers[f].steeredAt = 0;
 		followers[f].guided = false;
 		followers[f].queued = false;
 		followers[f].count = 0;
@@ -194,6 +196,36 @@ void AlienWaysGuide::DropTheWay(Follower *follower)
 {
 	follower->count = 0;
 	follower->heading = 0;
+}
+
+// Frees an alien's place: its way, its search if one is running, and everything the guide knew about it
+void AlienWaysGuide::LetGo(int f)
+{
+	Follower &follower = followers[f];
+
+	if (searching == f)
+	{
+		searching = -1;
+	}
+
+	follower.used = false;
+	follower.guided = false;
+	follower.queued = false;
+	DropTheWay(&follower);
+}
+
+bool AlienWaysGuide::Forget(const AlienWaysWho &who)
+{
+	int const f = Find(who);
+
+	if (f < 0)
+	{
+		return false;
+	}
+
+	bool const wasGuided = followers[f].guided;
+	LetGo(f);
+	return wasGuided;
 }
 
 bool AlienWaysGuide::Guided(const AlienWaysWho &who) const
@@ -268,8 +300,10 @@ size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, Al
 	reportsRead = true;
 	now += std::max(0, stepMs);
 
-	// Every alien nothing asked about since the last frame is let go. If it was being guided, the game is told, to give it its gravity back.
+	// Every alien nothing has asked about for kAlienWaysForgetAfter is let go. If it was being guided, the game is told, to give it its
+	// gravity back. One that has missed only a frame or a few is kept, way and all, and named in missed.
 	size_t lapsedCount = 0;
+	missedCount = 0;
 
 	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
 	{
@@ -286,21 +320,20 @@ size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, Al
 			continue;
 		}
 
+		if (now - follower.steeredAt < kAlienWaysForgetAfter)
+		{
+			missed[missedCount] = follower.who;
+			missedCount++;
+			continue;
+		}
+
 		if (follower.guided && lapsedCount < mostLapsed)
 		{
 			lapsed[lapsedCount] = follower.who;
 			lapsedCount++;
 		}
 
-		if (searching == static_cast<int>(f))
-		{
-			searching = -1;
-		}
-
-		follower.used = false;
-		follower.guided = false;
-		follower.queued = false;
-		DropTheWay(&follower);
+		LetGo(static_cast<int>(f));
 	}
 
 	if (!map || !map->Ready())
@@ -539,6 +572,7 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 
 	Follower &follower = followers[f];
 	follower.steered = true;
+	follower.steeredAt = now;
 	follower.guided = false;
 	follower.last = ask;
 
