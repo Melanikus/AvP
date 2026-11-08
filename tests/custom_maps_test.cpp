@@ -294,11 +294,7 @@ static void TestTheList()
 
 static void TestNamesAndLoading()
 {
-	puts("A map named, and loaded:");
-
-	Check(CustomMaps_Named("ab", 3) == 1 && CustomMaps_Named("A_B", 4) == 0, "a map is found by its name in any case, as Windows finds the file");
-	Check(CustomMaps_Named("Gamma", 6) == -1, "a multiplayer map isn't one of them");
-	Check(CustomMaps_Named("..\\Ab", 6) == -1 && CustomMaps_Named("Ab.rif", 7) == -1, "a name that breaks the rule is never one of them");
+	puts("A map loaded:");
 
 	Check(CustomMaps_SetLevelToLoad(1) && std::string(LevelName) == "Custom/Ab", "loading one puts Custom/<name> where the game loads from");
 

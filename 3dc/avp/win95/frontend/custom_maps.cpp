@@ -232,25 +232,6 @@ const char *CustomMaps_Name(int which)
 	return customMaps[which].name;
 }
 
-int CustomMaps_Named(const char *name, size_t room)
-{
-	if (!CustomMapName_IsSafe(name, room))
-	{
-		return -1;
-	}
-
-	// In any case, because Windows takes Map.rif and map.rif for the same file
-	for (size_t i = 0; i < customMaps.size(); i++)
-	{
-		if (_stricmp(customMaps[i].name, name) == 0)
-		{
-			return (int)i;
-		}
-	}
-
-	return -1;
-}
-
 bool CustomMaps_SetLevelToLoad(int which)
 {
 	const char *const name = CustomMaps_Name(which);
