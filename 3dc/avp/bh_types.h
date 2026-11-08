@@ -457,6 +457,12 @@ extern void RequestState(STRATEGYBLOCK* sb, int message, STRATEGYBLOCK * SBReque
 extern BOOL GetState(STRATEGYBLOCK* sb);
 extern void RemoveBehaviourStrategy(STRATEGYBLOCK* sbptr);
 
+// Whether a character's model is there to be made. It's in a file the level loads, and which files those are is worked
+// out from the level's own lists, so the two can disagree. If the model isn't there, this says so in the log, naming
+// the model and its file, and the caller doesn't make the character. (MODEL-NULL-1; bh_types.cpp.)
+struct section;
+extern bool NpcModelIsLoaded(struct section const *root, char const *who, char const *file, char const *model);
+
 extern void UnlockThisProxdoor(STRATEGYBLOCK* sbptr);
 
 extern void FindMaxZXandYAverages(VECTORCH* vect, SHAPEHEADER* shapeptr);
