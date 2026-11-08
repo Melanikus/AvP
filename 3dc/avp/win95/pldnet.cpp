@@ -39,6 +39,8 @@
 //   loads the level the host loads, and the log says when one tried
 //   a decal from another machine has to be on one of this level's modules, or on none; an alien's far place has to
 //   be in the list of far places as well as in the list of AI modules
+//   the log says when the host's switches can't be matched with this machine's, once a level and with how many, and when a frame's
+//   messages don't all fit, so a tester's log shows both
 /* Patrick 19/3/97 -----------------------------------------------------
   Source for Multi-Player game support
   ----------------------------------------------------------------------*/
@@ -470,6 +472,20 @@ void CheckStateOfObservedPlayer();
 /*----------------------------------------------------------------------
   Initalisation of net game
   ----------------------------------------------------------------------*/
+// How many of the host's switch messages couldn't be matched with this machine's switches in this level (see NetLevelCount)
+static NetLevelCount switchSyncsNotMatched;
+
+// The level is over, or another is starting: the log hears how many of the host's switch messages couldn't be used in it, if any were
+static void SwitchSyncs_LevelIsOver(void)
+{
+	unsigned long long const notMatched = NetLevelCount_LevelIsOver(switchSyncsNotMatched);
+
+	if (notMatched > 0)
+	{
+		LogString("net: in that level, " + std::to_string(notMatched) + " of the host's messages about switches, doors and lifts couldn't be matched with this machine's, so they were left out");
+	}
+}
+
 void InitAVPNetGameForHost(int species, int gamestyle, int level)
 {
 	AvP.GameMode = I_GM_Playing;
@@ -631,6 +647,7 @@ void InitAVPNetGameForHost(int species, int gamestyle, int level)
 			break;
 	}
 
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.numDeaths[0] = 0;
 	netGameData.numDeaths[1] = 0;
@@ -709,6 +726,7 @@ void InitAVPNetGameForJoin(void)
 	numMessagesReceived    = 0;      /* these are for testing */
 	numMessagesTransmitted = 0;
 	InitNetLog();
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.numDeaths[0] = 0;
 	netGameData.numDeaths[1] = 0;
@@ -2240,6 +2258,7 @@ static void AddPlayerAndObjectUpdateMessages(void)
   ----------------------------------------------------------------------*/
 void EndAVPNetGame(void)
 {
+	SwitchSyncs_LevelIsOver();
 	RemovePlayerFromGame(AvPNetID);
 	TransmitPlayerLeavingNetMsg();
 
@@ -2263,6 +2282,20 @@ void EndAVPNetGame(void)
 /*----------------------------------------------------------------------
   Functions for adding each message type to the send message buffer
   ----------------------------------------------------------------------*/
+
+// A message didn't fit in what's going out this frame, so it's left out. The log hears of it, a few times and then less often, with how
+// many there have been, so a tester's log shows a game sending more than a frame holds. This used to be an assert, which only stopped a
+// test build, but a busy game can fill a frame: it isn't a mistake in the code.
+static void NoteSendBufferFull(int bytesWanted)
+{
+	static unsigned long long timesFull = 0;
+
+	if (LogThisDrop(timesFull))
+	{
+		LogString("net: a message of " + std::to_string(bytesWanted) + " bytes didn't fit in this frame's " + std::to_string(NET_MESSAGEBUFFERSIZE) +
+			" bytes, so it was left out (number " + std::to_string(timesFull) + " of these)");
+	}
+}
 void AddNetMsg_GameDescription(void)
 {
 	NETMESSAGEHEADER *headerPtr;
@@ -2279,7 +2312,7 @@ void AddNetMsg_GameDescription(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2395,7 +2428,7 @@ void AddNetMsg_PlayerDescription(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2429,7 +2462,7 @@ void AddNetMsg_StartGame(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2552,7 +2585,7 @@ void AddNetMsg_PlayerState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -2939,7 +2972,7 @@ void AddNetMsg_PlayerState_Minimal(STRATEGYBLOCK *sbPtr, BOOL sendOrient)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3108,7 +3141,7 @@ void AddNetMsg_FrameTimer()
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3345,7 +3378,7 @@ void AddNetMsg_PlayerKilled(int objectId, DAMAGE_PROFILE *damage)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3441,7 +3474,7 @@ void AddNetMsg_PlayerDeathAnim(int deathId, int objectId)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3473,7 +3506,7 @@ void AddNetMsg_PlayerLeaving(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3501,7 +3534,7 @@ void AddNetMsg_AllGameScores(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3549,7 +3582,7 @@ void AddNetMsg_PlayerScores(int playerId)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3592,7 +3625,7 @@ void AddNetMsg_ScoreChange(int killerIndex, int victimIndex)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3636,7 +3669,7 @@ void AddNetMsg_SpeciesScores()
 
 	if (numBytesReqd > numBytesLeft)
 	{
-		LOCALASSERT(1 == 0);
+		NoteSendBufferFull(numBytesReqd);
 		/* don't add it */
 		return;
 	}
@@ -3679,7 +3712,7 @@ void AddNetMsg_LocalObjectState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -3855,7 +3888,7 @@ void AddNetMsg_LocalObjectDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, 
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4000,7 +4033,7 @@ void AddNetMsg_LocalObjectDestroyed_Request(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4045,7 +4078,7 @@ void AddNetMsg_LocalObjectDestroyed(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4094,7 +4127,7 @@ void AddNetMsg_InanimateObjectDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *dama
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4182,7 +4215,7 @@ void AddNetMsg_InanimateObjectDestroyed(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4218,7 +4251,7 @@ void AddNetMsg_ObjectPickedUp(char *objectName)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4250,7 +4283,7 @@ void AddNetMsg_EndGame(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4286,7 +4319,7 @@ void AddNetMsg_LOSRequestBinarySwitch(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4330,7 +4363,7 @@ void AddNetMsg_PlatformLiftState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4375,7 +4408,7 @@ void AddNetMsg_RequestPlatformLiftActivate(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4411,7 +4444,7 @@ void AddNetMsg_PlayerAutoGunState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4593,7 +4626,7 @@ void AddNetMsg_ChatBroadcast(char *string, BOOL same_species_only)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4665,7 +4698,7 @@ void AddNetMsg_MakeExplosion(VECTORCH *positionPtr, enum EXPLOSION_ID explosionI
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4700,7 +4733,7 @@ void AddNetMsg_MakeFlechetteExplosion(VECTORCH *positionPtr, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4736,7 +4769,7 @@ void AddNetMsg_MakePlasmaExplosion(VECTORCH *positionPtr, VECTORCH *fromPosition
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4774,7 +4807,7 @@ void AddNetMsg_PredatorLaserSights(VECTORCH *positionPtr, VECTORCH *normalPtr, D
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4867,7 +4900,7 @@ void AddNetMsg_LocalObjectOnFire(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4914,7 +4947,7 @@ void AddNetMsg_RestartNetworkGame(int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -4952,7 +4985,7 @@ void AddNetMsg_FragmentalObjectsStatus(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5059,7 +5092,7 @@ void AddNetMsg_StrategySynch(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5154,7 +5187,7 @@ void AddNetMsg_CreateWeapon(char *objectName, int type, VECTORCH *location)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5243,7 +5276,7 @@ void AddNetMsg_AlienAIState(STRATEGYBLOCK *sbPtr)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5359,7 +5392,7 @@ void AddNetMsg_AlienAISeqChange(STRATEGYBLOCK *sbPtr, int sequence_type, int sub
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5418,7 +5451,7 @@ void AddNetMsg_AlienAIKilled(STRATEGYBLOCK *sbPtr, int death_code, int death_tim
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5483,7 +5516,7 @@ void AddNetMsg_FarAlienPosition(STRATEGYBLOCK *sbPtr, int targetModuleIndex, int
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5528,7 +5561,7 @@ void AddNetMsg_GhostHierarchyDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damag
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5644,7 +5677,7 @@ void AddNetMsg_Gibbing(STRATEGYBLOCK *sbPtr, int gibbFactor, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5680,7 +5713,7 @@ void AddNetMsg_SpotAlienSound(int soundCategory, int alienType, int pitch, VECTO
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5715,7 +5748,7 @@ void AddNetMsg_PlayerID(NetID playerID, unsigned char message)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5744,7 +5777,7 @@ void AddNetMsg_LastManStanding_RestartTimer(char time)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5773,7 +5806,7 @@ void AddNetMsg_LastManStanding_Restart(NetID alienID, int seed)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5807,7 +5840,7 @@ void AddNetMsg_RespawnPickups(void)
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -5829,7 +5862,7 @@ void AddNetMsg_SpotOtherSound(enum soundindex SoundIndex, VECTORCH *position, in
 
 		if (numBytesReqd > numBytesLeft)
 		{
-			LOCALASSERT(1 == 0);
+			NoteSendBufferFull(numBytesReqd);
 			/* don't add it */
 			return;
 		}
@@ -8072,6 +8105,14 @@ static void ProcessNetMsg_StrategySynch(NETMESSAGE_STRATEGYSYNCH *messagePtr)
 	{
 		//strategies are obviously different from those on the host's machine
 		textprint("Strategy checksums don't match");
+
+		// The host's message names its switches by where they are in its list. A different list means it would name the wrong ones, so the
+		// whole message is left out. The log hears of it once a level: the checksums are only numbers, so nothing the host sent is written as text.
+		if (NetLevelCount_One(switchSyncsNotMatched))
+		{
+			LogString("net: the host's switches, doors and lifts can't be matched with this machine's (the host's checksum is " + std::to_string(messagePtr->strategyCheckSum) +
+				", this machine's " + std::to_string(netGameData.myStrategyCheckSum) + "), so in this level they won't follow the host's. The two machines may not have the same level file");
+		}
 		return;
 	}
 
@@ -8367,6 +8408,7 @@ static bool AddPartToSendBuffer(NETMESSAGETYPE type, void const *part, int size)
 
 	if (headerSize + size > left)
 	{
+		NoteSendBufferFull(headerSize + size);
 		return false;
 	}
 
@@ -13654,6 +13696,7 @@ static void AddNetMsg_CoopWithNothingElse(NETMESSAGETYPE type)
 
 	if (headerSize > numBytesLeft)
 	{
+		NoteSendBufferFull(headerSize);
 		return;
 	}
 
@@ -13767,6 +13810,7 @@ void AddNetMsg_CoopNextLevel(int place)
 
 	if (headerSize + messageSize > numBytesLeft)
 	{
+		NoteSendBufferFull(headerSize + messageSize);
 		return;
 	}
 
@@ -13851,6 +13895,7 @@ void Coop_LevelChangeHasStarted(void)
 	InitialiseSendMessageBuffer();
 
 	netGameData.myGameState = NGS_Joining;
+	SwitchSyncs_LevelIsOver();
 	netGameData.myStrategyCheckSum = 0;
 	netGameData.stateCheckTimeDelay = 0;
 	netGameData.GameTimeElapsed = 0;
@@ -13905,8 +13950,14 @@ static void AddNetMsg_LevelEvent(NETMESSAGETYPE type, const char *source)
 	int const messageSize = sizeof(NETMESSAGE_LEVELEVENT);
 	int const numBytesLeft = NET_MESSAGEBUFFERSIZE - ((int)(endSendBuffer - &sendBuffer[0]));
 
-	if (netGameData.myGameState != NGS_Playing || headerSize + messageSize > numBytesLeft)
+	if (netGameData.myGameState != NGS_Playing)
 	{
+		return;
+	}
+
+	if (headerSize + messageSize > numBytesLeft)
+	{
+		NoteSendBufferFull(headerSize + messageSize);
 		return;
 	}
 

@@ -65,9 +65,14 @@ void Con_PrintDebugMessage(const std::string &)
 {
 }
 
-int Config_GetInt(const std::string &, const std::string &, int defaultValue)
+// What the test's settings file says. A setting that isn't in it gets the game's own number, as with a file that doesn't have the line.
+static std::map<std::string, int> settingsFile;
+
+int Config_GetInt(const std::string &, const std::string &variable, int defaultValue)
 {
-	return defaultValue;
+	const std::map<std::string, int>::const_iterator found = settingsFile.find(variable);
+
+	return found == settingsFile.end() ? defaultValue : found->second;
 }
 
 void NewOnScreenMessage(char *)
@@ -285,7 +290,11 @@ static void EverythingArrives()
 	packetsOnTheirWay.clear();
 }
 
-ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t channelLimit, enet_uint32, enet_uint32)
+// The speeds the last host was made with, in bytes a second
+static enet_uint32 hostIncomingBandwidth = 0;
+static enet_uint32 hostOutgoingBandwidth = 0;
+
+ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t channelLimit, enet_uint32 incomingBandwidth, enet_uint32 outgoingBandwidth)
 {
 	if (hostCreateFails)
 	{
@@ -293,6 +302,8 @@ ENetHost *enet_host_create(const ENetAddress *address, size_t peerCount, size_t 
 	}
 
 	hostsCreated++;
+	hostIncomingBandwidth = incomingBandwidth;
+	hostOutgoingBandwidth = outgoingBandwidth;
 	connectionsAllowed = peerCount;
 	channelsAllowed = channelLimit;
 
@@ -2452,6 +2463,47 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
 	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 110;"), "and an older game can tell this one isn't what it speaks");
+
+	// The log lines a tester's log needs from pldnet.cpp. A message left out for want of room says so from every place it can be left out.
+	Check(Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tNoteSendBufferFull(numBytesReqd);") && !Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tLOCALASSERT(1 == 0);"), "SOURCE: a message left out of a full frame is in the log, from every room check");
+	Check(Has(pldnet, "if (headerSize + size > left)\n\t{\n\t\tNoteSendBufferFull(headerSize + size);"), "SOURCE: and from the one the NPCs' messages use");
+	Check(Has(pldnet, "\t\tif (NetLevelCount_One(switchSyncsNotMatched))\n\t\t{\n\t\t\tLogString(\"net: the host's switches, doors and lifts can't be matched"), "SOURCE: the host's switches that can't be matched are in the log, once a level");
+	Check(Has(pldnet, "void EndAVPNetGame(void)\n{\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: and how many, when the game ends");
+	Check(Has(pldnet, "\tnetGameData.myGameState = NGS_Joining;\n\tSwitchSyncs_LevelIsOver();"), "SOURCE: or the next level starts");
+}
+
+// The settings file's network numbers. It's the player's own file, but it can hold any number. A number the game can't use is put back
+// to the game's own, and the log says so with the number, so a tester's log shows why a host isn't where it was set to be.
+static void StartAgainWith(std::map<std::string, int> const &settings)
+{
+	EndTheGame();
+	Net_Deinitialise();
+	settingsFile = settings;
+	logLines.clear();
+	Net_Initialise();
+}
+
+static void TestTheSettingsFile()
+{
+	StartAgainWith({ { "PortNumber", 0 }, { "IncomingBandwidth", -5 }, { "OutgoingBandwidth", -1 } });
+	Check(LogHas("net: the settings file's PortNumber is 0, which the game can't use, so it uses 23513"), "a port of 0 isn't used, and the log says so");
+	Check(LogHas("net: the settings file's IncomingBandwidth is -5, which the game can't use, so it uses 0"), "nor a speed below nothing coming in");
+	Check(LogHas("net: the settings file's OutgoingBandwidth is -1, which the game can't use, so it uses 0"), "nor going out");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "and a host plays on the game's own port");
+	Check(hostIncomingBandwidth == 0 && hostOutgoingBandwidth == 0, "with as much speed as there is, not four thousand million bytes a second");
+
+	StartAgainWith({ { "PortNumber", 23514 } });
+	Check(LogHas("net: the settings file's PortNumber is 23514, which the game can't use, so it uses 23513"), "the port a search uses isn't used for the game as well");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 23513, "so the host still opens both");
+
+	StartAgainWith({ { "PortNumber", 65536 } });
+	Check(LogHas("net: the settings file's PortNumber is 65536, which the game can't use, so it uses 23513"), "nor a port past the last there is");
+
+	StartAgainWith({ { "PortNumber", 30000 }, { "IncomingBandwidth", 20000 }, { "OutgoingBandwidth", 10000 } });
+	Check(std::none_of(logLines.begin(), logLines.end(), [](std::string const &line) { return line.rfind("net: the settings file's", 0) == 0; }), "a port and speeds the game can use are used, with nothing in the log");
+	Check(HostAGame() == NET_OK && hostsBoundTo.back().port == 30000, "and the host plays on it");
+	Check(hostIncomingBandwidth == 20000 && hostOutgoingBandwidth == 10000, "with the speeds the file says");
+	EndTheGame();
 }
 
 // Called last: every message from every test above has been looked at by now, and each of them had a stack under it
@@ -2507,6 +2559,7 @@ int main()
 	TestTheMessageCheck();
 	TestTheTableOfMessageParts();
 	TestTheGameUsesThis();
+	TestTheSettingsFile();
 
 	TestNoHeaderLeftAnything();
 

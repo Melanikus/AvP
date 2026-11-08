@@ -49,6 +49,7 @@
 //   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
 //   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
+//   the settings file's port and speeds are checked, and one the game can't use is put back to the game's own, with a log line
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -491,6 +492,19 @@ bool Net_UpdateSessionList(int &SelectedItem)
 	return changed;
 }
 
+// A number from the settings file, if the game can use it; if not, the game's own number, and the log says so. Only the number is written
+// in the log, never the file's text, so nothing in the file can make a line that isn't ours.
+static int NetSettingOrOwn(const char *name, int fromTheFile, bool usable, int own)
+{
+	if (usable)
+	{
+		return fromTheFile;
+	}
+
+	LogString(std::string("net: the settings file's ") + name + " is " + std::to_string(fromTheFile) + ", which the game can't use, so it uses " + std::to_string(own));
+	return own;
+}
+
 NetResult Net_Initialise()
 {
 	Con_PrintMessage("Initialising ENet networking");
@@ -501,11 +515,16 @@ NetResult Net_Initialise()
 		return NET_FAIL;
 	}
 
-	// get user config data
-	netPortNumber = Config_GetInt("[Networking]", "PortNumber", netPortNumber);
-//	broadcastPort = Config_GetInt("[Networking]", "BroadcastPort", broadcastPort);
-	incomingBandwidth = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
-	outgoingBandwidth = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
+	// The player's own settings. The settings file can hold any number, so each one is checked, and one the game can't use is put back to
+	// the game's own, with a line in the log saying so. The port is the one the host plays on: it has to be a port there is, and not the one
+	// a search uses (broadcastPort), which the host opens as well. A speed of 0 means "as much as there is", and one below 0 means nothing.
+	int const port = Config_GetInt("[Networking]", "PortNumber", (int)netPortNumber);
+	int const incoming = Config_GetInt("[Networking]", "IncomingBandwidth", 0);
+	int const outgoing = Config_GetInt("[Networking]", "OutgoingBandwidth", 0);
+
+	netPortNumber = (uint32_t)NetSettingOrOwn("PortNumber", port, port >= 1 && port <= 65535 && port != (int)broadcastPort, (int)netPortNumber);
+	incomingBandwidth = (uint32_t)NetSettingOrOwn("IncomingBandwidth", incoming, incoming >= 0, 0);
+	outgoingBandwidth = (uint32_t)NetSettingOrOwn("OutgoingBandwidth", outgoing, outgoing >= 0, 0);
 
 	// Nothing is opened on the network here, because this runs every time the game starts, and most games are never on a network. See OpenDiscoverySocket.
 

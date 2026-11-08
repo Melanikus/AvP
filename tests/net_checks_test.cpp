@@ -186,6 +186,18 @@ static void TestAmmunitionNumbers()
 	Check(!NetNumberFitsTable(0, 0), "nothing fits a table with no places");
 }
 
+// Trouble that goes on all level is in the log once when it starts, and once with how many there were when the level is over (NetLevelCount)
+static void TestTroubleAllLevel()
+{
+	NetLevelCount level = {};
+
+	Check(NetLevelCount_One(level), "the first in a level is the one the log hears of");
+	Check(!NetLevelCount_One(level) && !NetLevelCount_One(level), "and not the ones after it");
+	Check(NetLevelCount_LevelIsOver(level) == 3, "the level's end says how many there were");
+	Check(NetLevelCount_LevelIsOver(level) == 0, "and starts the count again, so a level with none says none");
+	Check(NetLevelCount_One(level), "and the first in the next level is heard of again");
+}
+
 static void TestTheLogCantBeFlooded()
 {
 	puts("a flood of bad messages");
@@ -687,6 +699,7 @@ int main()
 	TestAnswersInASecond();
 	TestAmmunitionNumbers();
 	TestTheLogCantBeFlooded();
+	TestTroubleAllLevel();
 	TestMessageParts();
 	TestChatLines();
 	TestNames();

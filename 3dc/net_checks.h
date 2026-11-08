@@ -89,6 +89,29 @@ inline bool LogThisDrop(unsigned long long &count)
 	return (count <= kDropsLoggedInFull) || ((count & (count - 1)) == 0);
 }
 
+// TROUBLE THAT GOES ON ALL LEVEL. Some trouble, once it starts, comes back with every copy of the same message: the host's switches that can't
+// be matched with this machine's come ten times a second. The log hears of the first one in a level, and of how many there were once the
+// level is over, so a tester's log says what happened without filling up.
+struct NetLevelCount
+{
+	unsigned long long count;
+};
+
+// Counts one more, and says whether it's the first in this level, the one the log hears of
+inline bool NetLevelCount_One(NetLevelCount &level)
+{
+	return ++level.count == 1;
+}
+
+// The level is over: gives back how many there were, and starts the count again for the next level
+inline unsigned long long NetLevelCount_LevelIsOver(NetLevelCount &level)
+{
+	unsigned long long const howMany = level.count;
+
+	level.count = 0;
+	return howMany;
+}
+
 // WHAT A GAME MESSAGE IS MADE OF. One message holds any number of parts, one after another. Each starts with a byte saying what kind it is, and each kind has its own length, so a part can only be found by getting all the ones before it right. A message
 // has to be checked from end to end before any of it is believed, and if any part is wrong all of it goes, because nothing after a wrong part can be trusted to be where it seems.
 struct NetPartRule
