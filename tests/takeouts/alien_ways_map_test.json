@@ -633,6 +633,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a search's prices don't count the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tdouble const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher) : 1.0;\n",
+					"to": "\tdouble const claimed = 1.0;\n"
+				}
+			]
+		},
+		{
+			"name": "a search counts the searcher's own claims against it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "searchClaims->PriceFactor(node, searchSearcher)",
+					"to": "searchClaims->PriceFactor(node, -1)"
+				}
+			]
+		},
+		{
+			"name": "a search keeps the last search's claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaims = claims;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

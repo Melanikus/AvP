@@ -1004,6 +1004,46 @@
 					"to": "if (door && door->SBdataptr)"
 				}
 			]
+		},
+		{
+			"name": "a way found isn't claimed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tclaims.Add(static_cast<int>(line.follower),",
+					"to": "\t\tif (false) claims.Add(static_cast<int>(line.follower),"
+				}
+			]
+		},
+		{
+			"name": "a dropped way keeps its claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tclaims.Remove(static_cast<int>(follower - followers));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the claims are never made",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tclaimsOn = claims.Reset(map->Polygons());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the searches aren't given the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "claimsOn ? &claims : nullptr, next);",
+					"to": "nullptr, next);"
+				}
+			]
 		}
 	]
 }

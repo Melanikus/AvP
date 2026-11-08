@@ -141,6 +141,8 @@ void AlienWaysGuide::Clear()
 	searchFrames = 0;
 	reportCount = 0;
 	missedCount = 0;
+	claims.Clear();
+	claimsTried = claimsOn = false;
 
 	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
 	{
@@ -194,6 +196,8 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 
 void AlienWaysGuide::DropTheWay(Follower *follower)
 {
+	// Its way's claims go with it, so the others' searches no longer pay to go round it
+	claims.Remove(static_cast<int>(follower - followers));
 	follower->count = 0;
 	follower->heading = 0;
 }
@@ -342,6 +346,13 @@ size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, Al
 		return lapsedCount;
 	}
 
+	// The claims, once a level, the first frame there's a map. Tried only once: if there's no memory for them, the searches go without.
+	if (!claimsTried)
+	{
+		claimsTried = true;
+		claimsOn = claims.Reset(map->Polygons());
+	}
+
 	// The searches, one at a time, first asked first served, inside the frame's allowance
 	int left = std::max(0, looksAllowed);
 
@@ -431,7 +442,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 			continue;
 		}
 
-		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice);
+		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next);
 
 		if (why)
 		{
@@ -531,6 +542,15 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	follower.wayGoal = searchGoal;
 	follower.nearest = DBL_MAX;
 	follower.headwayAt = now;
+
+	// The way's claims, in place of the old way's, so the other aliens' searches pay more where it goes
+	if (claimsOn)
+	{
+		std::vector<int> const &onPolygons = map->WayPolygons();
+		std::vector<int> const &firstJoins = map->FirstJoins();
+		std::vector<int> const &joinOthers = map->JoinOthers();
+		claims.Add(static_cast<int>(line.follower), onPolygons.data(), onPolygons.size(), firstJoins.data(), firstJoins.size(), joinOthers.data(), joinOthers.size());
+	}
 
 	line.outcome = kAlienWaysOutcomeFound;
 	AddReport(line);

@@ -255,8 +255,8 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 
 AlienWaysMap::AlienWaysMap()
 	: ready(false), limits(AlienWays_UsualLimits()), stopAsked(false), stopAtLook(0), stopLooks(0), leftOut(0), bytesKept(0), bytesBuilding(0), bytesBuildingTop(0), bytesBuildingUsed(0),
-	  edgeSteps(0), cornerTests(0), heapSize(0), searchNumber(0), state(kAlienWaysNoWay), fromNode(-1), toNode(-1), price(1), looks(0),
-	  cutShort(false)
+	  edgeSteps(0), cornerTests(0), heapSize(0), searchNumber(0), state(kAlienWaysNoWay), fromNode(-1), toNode(-1), price(1), searchClaims(nullptr),
+	  searchSearcher(-1), looks(0), cutShort(false)
 {
 	goalAt.x = goalAt.y = goalAt.z = 0;
 }
@@ -270,6 +270,8 @@ template <typename T> static void GiveBack(std::vector<T> *list)
 void AlienWaysMap::LetGo()
 {
 	ready = false;
+	searchClaims = nullptr;
+	searchSearcher = -1;
 	leftOut = bytesKept = bytesBuilding = bytesBuildingTop = bytesBuildingUsed = edgeSteps = cornerTests = 0;
 	GiveBack(&mapNumber);
 	GiveBack(&middleX); GiveBack(&middleY); GiveBack(&middleZ);
@@ -981,7 +983,9 @@ double AlienWaysMap::CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) co
 		length = std::max(length, static_cast<double>(kAlienWaysLeastFloorStep));
 	}
 
-	return length * PriceOf(node);
+	// Dearer where other aliens' ways are, by the claims the search was started with (lanes, #138): from 1 to 1.5 times
+	double const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher) : 1.0;
+	return length * PriceOf(node) * claimed;
 }
 
 // What a metre on a node costs: a floor's at the search's price, and anything else 1. The goal node is never left, so its price never counts.
@@ -995,7 +999,8 @@ double AlienWaysMap::PriceOf(int node) const
 	return 1.0;
 }
 
-const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice)
+const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
+	const AlienWaysClaims *claims, int searcher)
 {
 	if (!ready)
 	{
@@ -1036,6 +1041,8 @@ const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int t
 	wayPolygons.clear();
 	cutShort = false;
 	price = floorPrice;
+	searchClaims = claims;
+	searchSearcher = searcher;
 
 	// The doors as they are now, for the whole of this search. Both lists were made the same length when the map was built.
 	std::copy(doorShut.begin(), doorShut.end(), doorShutInSearch.begin());

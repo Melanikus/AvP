@@ -50,6 +50,8 @@
 #include <atomic>
 #include <vector>
 
+#include "alien_ways_claims.h"
+
 // A polygon has from 3 to this many corners. The game's own polygons have 3 or 4.
 int const kAlienWaysMostCorners = 8;
 
@@ -246,7 +248,11 @@ public:
 
 	// Starts a search for a way from start, on polygon fromPolygon, to goal, on polygon toPolygon, with the floor at floorPrice times a wall's
 	// price. It gives back nothing if it started, or why not, in words. A search that's running is dropped.
-	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice);
+	// With claims, each polygon also costs claims->PriceFactor(polygon, searcher) times as much: more where other aliens' ways are (lanes,
+	// #138). claims has to stay as it is made until the search ends; its counts can change in the meantime. Never less than 1, so the
+	// search's guess stays a lower bound, and never more than 1.5, so a way is never more than half as dear again as the cheapest.
+	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
+		const AlienWaysClaims *claims = nullptr, int searcher = -1);
 
 	// Carries on, looking at up to this many polygons, and says how it stands. Asked again after it's ended, it gives the same answer.
 	AlienWaysSearch Work(int polygonsAllowed);
@@ -342,6 +348,8 @@ private:
 	uint32_t searchNumber;
 	AlienWaysSearch state;
 	int fromNode, toNode, price;
+	const AlienWaysClaims *searchClaims;   // the claims the search prices by, or none
+	int searchSearcher;                    // and whose search it is, so its own claims don't count
 	AlienWaysXYZ goalAt;
 	int looks;
 	bool cutShort;

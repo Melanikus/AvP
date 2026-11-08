@@ -224,6 +224,13 @@ private:
 	// The aliens the last Frame kept though nothing had asked about them (MissedLastFrame)
 	AlienWaysWho missed[kAlienWaysMostFollowers];
 	size_t missedCount;
+
+	// What each alien's way claims of the map, so the others' searches pay more there and take other ways where they can (lanes, #138;
+	// alien_ways_claims.h). Made once a level, the first Frame there's a map: claimsTried says it was tried, claimsOn that it worked. Without
+	// them the searches go as they did before. An alien's place here is its place in followers.
+	AlienWaysClaims claims;
+	bool claimsTried, claimsOn;
+	static_assert(kAlienWaysClaimsMostAliens == static_cast<int>(kAlienWaysMostFollowers), "the claims have room for every alien the guide has");
 };
 
 #endif

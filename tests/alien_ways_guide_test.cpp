@@ -585,6 +585,34 @@ static void GuidedThisFrame()
 	Check(!guide.Steer(&map, Ask(Alien(1), { 1000, 0, 4000 }, kGoal, 13), &towards) && !guide.GuidedThisFrame(Alien(1)), "in a frame Steer says no, it isn't");
 }
 
+// Two aliens with the same start and goal take different walls: the second's search pays more on the first's way (lanes, #138). And an
+// alien let go takes its claims with it.
+static void DifferentWays()
+{
+	printf("Different ways for aliens together\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	GuidedAlien(guide, Alien(1));
+	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && towards.x == kWallX, "the first alien goes up the wall a lone alien takes");
+	guide.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
+	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	Frame(guide, map, 16);
+	Check(guide.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards) && towards.x == 2000 - kWallX, "the second, asking while the first is on its way, goes up the other wall");
+
+	// One alien, let go: the next alien's way is as if it had never been. The next asks while the first still has its place, so it has a
+	// place of its own, and the first's claims, if they stayed, would count against it.
+	const std::unique_ptr<AlienWaysGuide> goneRoom(new AlienWaysGuide);
+	AlienWaysGuide &gone = *goneRoom;
+	GuidedAlien(gone, Alien(1));
+	gone.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
+	gone.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards);
+	Check(gone.Forget(Alien(1)), "the first alien is let go before the second's search");
+	Frame(gone, map, 16);
+	Check(gone.Steer(&map, Ask(Alien(3), kStart, kGoal, 13), &towards) && towards.x == kWallX, "and the second takes the same wall the first did: its claims went with it");
+}
+
 static void WhoIsWho()
 {
 	printf("Who is who\n");
@@ -966,6 +994,7 @@ int main()
 	LetGo();
 	GuidedThisFrame();
 	KeptThroughAGap();
+	DifferentWays();
 	WhoIsWho();
 	Allowance();
 	NoBetterThanToday();

@@ -732,6 +732,32 @@ static void Adding()
 	Check(AlienWays_AddPolygon(x, y, z, 0, 1.0f, &list) == kAlienWaysLeftOutTooFewCorners && list.size() == 3, "and so is none");
 }
 
+// Claims (lanes, #138; alien_ways_claims.h): with another alien's way on one wall of the corridor, a search goes up the other. Unclaimed, the
+// two walls cost the same, 32.7; with the first alien's way claimed, its wall costs 1.25 times, 40.85, and the other wall, beside only the
+// way's two floor tiles, 1.125 times, 39.4. The searcher's own claims change nothing.
+static void Claims()
+{
+	printf("Claims of other aliens' ways\n");
+	AlienWaysMap map;
+	map.Build(Corridor(10, 1000));
+	AlienWaysXYZ const start = { 1000, 0, 500 }, goal = { 1000, 0, 9500 };
+	Check(SearchAll(map, 0, start, 9, goal, 10) == kAlienWaysFound && map.Way().size() >= 2, "unclaimed, a way goes up one of the walls");
+	int const wallX = map.Way()[1].x;
+	int const wall = wallX == 0 ? 10 : 11;
+
+	AlienWaysClaims claims;
+	Check(claims.Reset(map.Polygons()), "the claims are made for the map");
+	int const firstWay[3] = { 0, wall, 9 };
+	Check(claims.Add(0, firstWay, 3, map.FirstJoins().data(), map.FirstJoins().size(), map.JoinOthers().data(), map.JoinOthers().size()) == kAlienWaysClaimsAdded,
+		"alien 0 claims that wall and the floor tiles at its ends");
+
+	Check(map.StartSearch(0, start, 9, goal, 10, &claims, 1) == nullptr && map.Work(1000000) == kAlienWaysFound && map.Way().size() >= 2
+		&& map.Way()[1].x == 2000 - wallX, "alien 1, searching with the claims, goes up the other wall");
+	Check(map.StartSearch(0, start, 9, goal, 10, &claims, 0) == nullptr && map.Work(1000000) == kAlienWaysFound && map.Way().size() >= 2
+		&& map.Way()[1].x == wallX, "alien 0, whose own claims they are, goes up the same wall as before");
+	Check(SearchAll(map, 0, start, 9, goal, 10) == kAlienWaysFound && map.Way()[1].x == wallX, "and a search with no claims, as before");
+}
+
 static void BuiltAgain()
 {
 	printf("Building again\n");
@@ -896,6 +922,7 @@ int main()
 	Adding();
 	BuiltAgain();
 	Doors();
+	Claims();
 
 	if (checksFailed)
 	{
