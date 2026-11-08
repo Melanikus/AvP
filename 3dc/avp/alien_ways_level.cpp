@@ -28,6 +28,11 @@ namespace
 
 	const char *const kWhyTooMany = "the level has more polygons than the map takes";
 	const char *const kWhyNoMemory = "there isn't the memory to list the level's polygons";
+
+	// A loaded polygon's record has room for 5 corners: the loader writes its corners and fills the rest of the 5 with -1
+	// (3dc/win95/chunk_load.cpp, where item_list is filled; POLYHEADER's Poly1stPt is the first, in 3dc/include/shape.h). The chunk reader
+	// takes at most 4, so a real polygon always has its -1 within the 5. One without is broken, and nothing past its 5 is ever read.
+	int const kAlienWaysRecordCorners = 5;
 }
 
 // Every polygon of one shape, placed at place, and turned by turn if it has one
@@ -39,6 +44,15 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 	}
 
 	VECTORCH const *const points = (const VECTORCH *)*shape->points;
+	AlienWaysXYZ const where = { place.vx, place.vy, place.vz };
+	AlienWaysTurn turned = {};
+
+	if (turn)
+	{
+		turned = AlienWaysTurn{ turn->mat11, turn->mat12, turn->mat13, turn->mat21, turn->mat22, turn->mat23, turn->mat31, turn->mat32, turn->mat33 };
+	}
+
+	AlienWaysTurn const *const turning = turn ? &turned : 0;
 
 	for (int number = 0; number < shape->numitems && !listing->tooMany; number++)
 	{
@@ -49,14 +63,13 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 			continue;
 		}
 
-		// Read the corners, up to the negative number that ends them. One more than the map takes is enough to know it's too many, so no more
-		// than that is ever read: a level file's polygons have at most 4.
-		int x[kAlienWaysMostCorners + 1], y[kAlienWaysMostCorners + 1], z[kAlienWaysMostCorners + 1];
+		// Read the corners, up to the negative number that ends them, and never past the record's own 5 places
+		int x[kAlienWaysRecordCorners], y[kAlienWaysRecordCorners], z[kAlienWaysRecordCorners];
 		int const *const corners = &polygon->Poly1stPt;
 		int count = 0;
-		bool trusted = true;
+		bool trusted = true, nearEnough = true;
 
-		while (count <= kAlienWaysMostCorners && corners[count] >= 0)
+		while (count < kAlienWaysRecordCorners && corners[count] >= 0)
 		{
 			if (corners[count] >= shape->numpoints)
 			{
@@ -64,25 +77,38 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 				break;
 			}
 
+			// Turned and placed in 64 bits, so no level's numbers can overflow it
 			VECTORCH const &point = points[corners[count]];
-			int px = point.vx, py = point.vy, pz = point.vz;
+			AlienWaysXYZ const corner = { point.vx, point.vy, point.vz };
+			AlienWaysXYZ placed;
 
-			if (turn)
+			if (!AlienWays_PlaceCorner(corner, turning, where, &placed))
 			{
-				px = MUL_FIXED(turn->mat11, point.vx) + MUL_FIXED(turn->mat21, point.vy) + MUL_FIXED(turn->mat31, point.vz);
-				py = MUL_FIXED(turn->mat12, point.vx) + MUL_FIXED(turn->mat22, point.vy) + MUL_FIXED(turn->mat32, point.vz);
-				pz = MUL_FIXED(turn->mat13, point.vx) + MUL_FIXED(turn->mat23, point.vy) + MUL_FIXED(turn->mat33, point.vz);
+				nearEnough = false;
+				break;
 			}
 
-			x[count] = px + place.vx;
-			y[count] = py + place.vy;
-			z[count] = pz + place.vz;
+			x[count] = placed.x;
+			y[count] = placed.y;
+			z[count] = placed.z;
 			count++;
 		}
 
 		if (!trusted)
 		{
 			listing->counts->badCorner++;
+			continue;
+		}
+
+		if (!nearEnough)
+		{
+			listing->counts->farCorner++;
+			continue;
+		}
+
+		if (count == kAlienWaysRecordCorners)
+		{
+			listing->counts->noEnd++;
 			continue;
 		}
 
@@ -97,10 +123,8 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 
 			if (stored.vx || stored.vy || stored.vz)
 			{
-				int const normalY = turn ? MUL_FIXED(turn->mat12, stored.vx) + MUL_FIXED(turn->mat22, stored.vy) + MUL_FIXED(turn->mat32, stored.vz) : stored.vy;
-
-				// y goes down, so facing up is a negative y
-				up = static_cast<float>(-normalY) / 65536.0f;
+				// Turned with the object, in 64 bits, and kept from -1 to 1
+				up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);
 
 				// A polygon drawn from both sides: an alien can stand on its top
 				if ((polygon->PolyFlags & iflag_no_bfc) && up < 0.0f)
@@ -108,8 +132,6 @@ static void AddShape(const SHAPEHEADER *shape, const VECTORCH &place, const MATR
 					up = -up;
 				}
 
-				// A stored normal is a little over or under 1 long at times, so it's kept in the range the map takes
-				up = up > 1.0f ? 1.0f : (up < -1.0f ? -1.0f : up);
 				haveFacing = true;
 			}
 		}
@@ -251,7 +273,7 @@ static void AddStillObjects(Listing *listing)
 
 const char *AlienWaysLevel_List(std::vector<AlienWaysPolygon> *polygons, std::vector<AlienWaysRange> *modules, AlienWaysLevelCounts *counts)
 {
-	AlienWaysLevelCounts const none = { 0, 0, 0, 0, 0, 0, 0 };
+	AlienWaysLevelCounts const none = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 	*counts = none;
 	polygons->clear();
 	modules->clear();

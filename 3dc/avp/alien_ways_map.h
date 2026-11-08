@@ -126,6 +126,22 @@ struct AlienWaysXYZ
 	int x, y, z;
 };
 
+// How an object that stands still is turned, as the game keeps it: nine numbers in 65536ths, in the game's own order (its MATRIXCH)
+struct AlienWaysTurn
+{
+	int m11, m12, m13, m21, m22, m23, m31, m32, m33;
+};
+
+// Where one of a shape's points is in the world: turned by turn, if there is one, the way the game turns a shape's points, then moved to place.
+// The numbers come from a level file, so they can be anything: it's all worked out in 64 bits, where nothing a level holds can overflow, and
+// it gives back false, with placed untouched, if the point lands more than kAlienWaysMostCoordinate from the middle. Then its polygon is left
+// out. A point that lands nearer comes out exactly as the game's own sums give it (MUL_FIXED in 3dc/mathline.cpp).
+bool AlienWays_PlaceCorner(AlienWaysXYZ point, const AlienWaysTurn *turn, AlienWaysXYZ place, AlienWaysXYZ *placed);
+
+// How much a turned object's stored facing points up, as AlienWays_PlaceCorner turns a point: from the facing's own numbers, in 65536ths,
+// worked out in 64 bits and kept from -1 to 1. With no turn, it's the facing's own.
+float AlienWays_TurnedUp(AlienWaysXYZ facing, const AlienWaysTurn *turn);
+
 // One point of a way. kind is what the way is on from this point to the next.
 struct AlienWaysPoint
 {
@@ -172,7 +188,7 @@ public:
 	size_t Joins() const { return stretchA.size(); }
 	size_t PolygonsLeftOut() const { return leftOut; }
 	size_t BytesKept() const { return bytesKept; }
-	size_t BytesWhileBuilding() const { return bytesBuildingUsed; }   // the most the last build that worked counted against its building ceiling
+	size_t BytesWhileBuilding() const { return bytesBuildingUsed; }   // the most the last build that worked held against its building ceiling, at its top
 	size_t EdgeSteps() const { return edgeSteps; }
 	size_t CornerTests() const { return cornerTests; }
 	AlienWaysKind KindOf(int polygon) const { return static_cast<AlienWaysKind>(kind[polygon]); }
@@ -222,7 +238,7 @@ private:
 	AlienWaysLimits limits;
 	std::atomic<bool> stopAsked;
 	size_t stopAtLook, stopLooks;
-	size_t leftOut, bytesKept, bytesBuilding, bytesBuildingUsed, edgeSteps, cornerTests;
+	size_t leftOut, bytesKept, bytesBuilding, bytesBuildingTop, bytesBuildingUsed, edgeSteps, cornerTests;
 
 	// Which map number each polygon handed to Build became, or -1
 	std::vector<int> mapNumber;

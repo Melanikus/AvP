@@ -99,8 +99,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "if (!Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding))",
-					"to": "if (false && !Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding))"
+					"from": "if (!Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding) ||",
+					"to": "if (false && !Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding) ||"
 				}
 			]
 		},
@@ -331,6 +331,126 @@
 					"file": "3dc/avp/alien_ways_map.cpp",
 					"from": "\tif (corners < 3)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;",
 					"to": "\tif (corners < 2)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;"
+				}
+			]
+		},
+		{
+			"name": "a corner is placed in int, where a crafted level's numbers wrap round to a place inside 64 km (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tx += place.x;\n\ty += place.y;\n\tz += place.z;",
+					"to": "\tx = static_cast<int>(x + place.x);\n\ty = static_cast<int>(y + place.y);\n\tz = static_cast<int>(z + place.z);"
+				}
+			]
+		},
+		{
+			"name": "a corner more than 64 km out is kept (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (x < -most || x > most || y < -most || y > most || z < -most || z > most)\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a corner isn't turned with its object",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (turn)\n\t{\n\t\tx = TimesFixed(turn->m11",
+					"to": "\tif (false)\n\t{\n\t\tx = TimesFixed(turn->m11"
+				}
+			]
+		},
+		{
+			"name": "a turned facing isn't turned",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "long long const y = turn ? TimesFixed(turn->m12, facing.x) + TimesFixed(turn->m22, facing.y) + TimesFixed(turn->m32, facing.z) : facing.y;",
+					"to": "long long const y = facing.y;"
+				}
+			]
+		},
+		{
+			"name": "a facing isn't kept from -1 to 1",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "return static_cast<float>(up > 1.0 ? 1.0 : (up < -1.0 ? -1.0 : up));",
+					"to": "return static_cast<float>(up);"
+				}
+			]
+		},
+		{
+			"name": "of two boxes as near, the one given first wins",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (best < 0 || distance < bestDistance || toMiddle < bestToMiddle)",
+					"to": "if (best < 0 || distance < bestDistance)"
+				}
+			]
+		},
+		{
+			"name": "a polygon's box is only its first corner",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tlow.x = std::min(low.x, p.x[c]); low.y = std::min(low.y, p.y[c]); low.z = std::min(low.z, p.z[c]);\n\t\t\thigh.x = std::max(high.x, p.x[c]); high.y = std::max(high.y, p.y[c]); high.z = std::max(high.z, p.z[c]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the nearest polygon is looked for past the end of the list (the program stops at the read)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tendGiven = std::min(endGiven, mapNumber.size());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "how near the polygon found is isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (howFar && best >= 0)\n\t{\n\t\t*howFar = bestDistance;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the guess counts the rest of the way at the floor's price, so it can guess too much (Third)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt));",
+					"to": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt) * price);"
+				}
+			]
+		},
+		{
+			"name": "the top of the touches' copy isn't checked against the building ceiling (F3)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": " || old > limits.mostBytesBuilding - bytesBuilding)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the top of the touches' copy isn't kept as the most the build needed (F3)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\t\tbytesBuildingTop = std::max(bytesBuildingTop, bytesBuilding + old);\n",
+					"to": ""
 				}
 			]
 		}

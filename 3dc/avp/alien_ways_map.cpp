@@ -160,6 +160,51 @@ float AlienWays_HowMuchItFacesUp(const AlienWaysPolygon &polygon)
 	return static_cast<float>(-ny / size);
 }
 
+// One of the game's 65536ths sums, a times b, in 64 bits. Two ints multiplied are under 2^62, so this can't overflow. The game's own
+// MUL_FIXED does the same and then keeps the low 32 bits, which is the same number whenever the answer fits in an int.
+static long long TimesFixed(int a, int b)
+{
+	return (static_cast<long long>(a) * b) >> 16;
+}
+
+bool AlienWays_PlaceCorner(AlienWaysXYZ point, const AlienWaysTurn *turn, AlienWaysXYZ place, AlienWaysXYZ *placed)
+{
+	long long x = point.x, y = point.y, z = point.z;
+
+	if (turn)
+	{
+		x = TimesFixed(turn->m11, point.x) + TimesFixed(turn->m21, point.y) + TimesFixed(turn->m31, point.z);
+		y = TimesFixed(turn->m12, point.x) + TimesFixed(turn->m22, point.y) + TimesFixed(turn->m32, point.z);
+		z = TimesFixed(turn->m13, point.x) + TimesFixed(turn->m23, point.y) + TimesFixed(turn->m33, point.z);
+	}
+
+	// Each part is under 2^47 and the place under 2^31, so these sums are far inside what 64 bits hold
+	x += place.x;
+	y += place.y;
+	z += place.z;
+
+	long long const most = kAlienWaysMostCoordinate;
+
+	if (x < -most || x > most || y < -most || y > most || z < -most || z > most)
+	{
+		return false;
+	}
+
+	placed->x = static_cast<int>(x);
+	placed->y = static_cast<int>(y);
+	placed->z = static_cast<int>(z);
+	return true;
+}
+
+float AlienWays_TurnedUp(AlienWaysXYZ facing, const AlienWaysTurn *turn)
+{
+	long long const y = turn ? TimesFixed(turn->m12, facing.x) + TimesFixed(turn->m22, facing.y) + TimesFixed(turn->m32, facing.z) : facing.y;
+
+	// y goes down, so facing up is a negative y. A stored facing is a little over or under 1 long at times, so it's kept from -1 to 1.
+	double const up = static_cast<double>(-y) / 65536.0;
+	return static_cast<float>(up > 1.0 ? 1.0 : (up < -1.0 ? -1.0 : up));
+}
+
 AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, int corners, float up, std::vector<AlienWaysPolygon> *list)
 {
 	if (corners < 3)
@@ -188,7 +233,7 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 }
 
 AlienWaysMap::AlienWaysMap()
-	: ready(false), limits(AlienWays_UsualLimits()), stopAsked(false), stopAtLook(0), stopLooks(0), leftOut(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0),
+	: ready(false), limits(AlienWays_UsualLimits()), stopAsked(false), stopAtLook(0), stopLooks(0), leftOut(0), bytesKept(0), bytesBuilding(0), bytesBuildingTop(0), bytesBuildingUsed(0),
 	  edgeSteps(0), cornerTests(0), heapSize(0), searchNumber(0), state(kAlienWaysNoWay), fromNode(-1), toNode(-1), price(1), looks(0),
 	  cutShort(false)
 {
@@ -204,7 +249,7 @@ template <typename T> static void GiveBack(std::vector<T> *list)
 void AlienWaysMap::LetGo()
 {
 	ready = false;
-	leftOut = bytesKept = bytesBuilding = bytesBuildingUsed = edgeSteps = cornerTests = 0;
+	leftOut = bytesKept = bytesBuilding = bytesBuildingTop = bytesBuildingUsed = edgeSteps = cornerTests = 0;
 	GiveBack(&mapNumber);
 	GiveBack(&middleX); GiveBack(&middleY); GiveBack(&middleZ);
 	GiveBack(&kind);
@@ -678,9 +723,9 @@ const char *AlienWaysMap::BuildIt(const std::vector<AlienWaysPolygon> &polygons)
 	way.reserve(kAlienWaysMostWayPoints);
 	GiveBack(&firstCorner);
 
-	// Everything that was only for building has been let go
-	bytesBuildingUsed = bytesBuilding;
-	bytesBuilding = 0;
+	// Everything that was only for building has been let go. The most it needed is the count, or the top of a copy, if that was more.
+	bytesBuildingUsed = std::max(bytesBuilding, bytesBuildingTop);
+	bytesBuilding = bytesBuildingTop = 0;
 	ready = true;
 	return 0;
 }
@@ -769,16 +814,19 @@ const char *AlienWaysMap::JoinEdge(int polygon, AlienWaysXYZ a, AlienWaysXYZ b)
 					continue;
 				}
 
-				// Room for more touches is counted against the ceiling before it's asked for
+				// Room for more touches is counted against the ceiling before it's asked for. While the touches are copied into the bigger room,
+				// the old room is still held as well, so that top is checked against the ceiling too, and kept as the most the build needed.
 				if (touches.size() == touches.capacity())
 				{
 					size_t const more = std::max<size_t>(1024, touches.capacity());
+					size_t const old = touches.capacity() * sizeof(Touch);
 
-					if (!Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding))
+					if (!Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding) || old > limits.mostBytesBuilding - bytesBuilding)
 					{
 						return kWhyBuilding;
 					}
 
+					bytesBuildingTop = std::max(bytesBuildingTop, bytesBuilding + old);
 					touches.reserve(touches.capacity() + more);
 				}
 
@@ -875,7 +923,8 @@ void AlienWaysMap::Relax(int node, double costHere, AlienWaysXYZ at, int from)
 	entry[node] = at;
 
 	// The guess of the whole way's cost: so far, plus the straight line to the goal. Nothing costs less than 1 a millimetre, so the guess is never
-	// more than the real cost, and the first way found to the goal is the cheapest.
+	// more than the real cost, and the first way found to the goal is the cheapest the map can see: straight lines from join to join, with the
+	// floor at its price. That is not always the cheapest way an alien could really walk.
 	guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt));
 
 	if (heapPlace[node] < 0)

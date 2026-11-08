@@ -1,0 +1,369 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "an alien let go is never named, so its gravity is never given back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (follower.guided && lapsedCount < mostLapsed)\n",
+					"to": "\t\tif (false && lapsedCount < mostLapsed)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien let go keeps its place, and is still guided",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tfollower.used = false;\n\t\tfollower.guided = false;\n\t\tfollower.queued = false;\n\t\tDropTheWay(&follower);\n\t}\n\n\tif (!map || !map->Ready())",
+					"to": "\t\tDropTheWay(&follower);\n\t}\n\n\tif (!map || !map->Ready())"
+				}
+			]
+		},
+		{
+			"name": "a point any height above or below the alien counts as reached",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " && fabs(along) <= kAlienWaysBodyHeight;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a point twice as far across counts as reached",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return acrossSquared <= static_cast<double>(kAlienWaysReached) * kAlienWaysReached &&",
+					"to": "return acrossSquared <= 4.0 * kAlienWaysReached * kAlienWaysReached &&"
+				}
+			]
+		},
+		{
+			"name": "the alien's own down is ignored when it reaches a point",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "double const along = downLength > 0.0 ? (dx * down.x + dy * down.y + dz * down.z) / downLength : 0.0;",
+					"to": "double const along = 0.0;"
+				}
+			]
+		},
+		{
+			"name": "a new way is taken up at its first stretch, wherever the alien has got to (H2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (follower.count > 0 && follower.fresh)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an alien far off its way keeps following it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "follower.points[follower.heading]) > kAlienWaysOffTheWay)",
+					"to": "follower.points[follower.heading]) > 1.0e30)"
+				}
+			]
+		},
+		{
+			"name": "an alien that makes no headway is never stuck",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\telse if (now - follower.headwayAt >= kAlienWaysNoHeadwayFor)\n",
+					"to": "\t\telse if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a stuck alien asks again at once, with no rest",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tfollower.restUntil = now + kAlienWaysRestAfterStuck;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a goal that moves is never searched for again",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " || Distance(ask.goal, follower.wayGoal) > kAlienWaysGoalMoved;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a way is never searched for again as it gets old",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " || now - follower.wayAt >= kAlienWaysAskAgainAfter",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a renewal that finds nothing drops the way the alien is on, so it lets go of the wall (H2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (follower->count > 0)\n\t{\n\t\tfollower->wayAt = now;\n\t\tfollower->wayGoal = goal;\n\t\treturn;\n\t}\n\n\tfollower->restUntil",
+					"to": "\tfollower->count = 0;\n\tfollower->restUntil"
+				}
+			]
+		},
+		{
+			"name": "the goal a renewal failed for is searched for again every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tfollower->wayGoal = goal;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way all on the floor is followed, instead of the game's own steering",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tif (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the searches take as long as they like in one frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "const AlienWaysSearch result = map->Work(left);",
+					"to": "const AlienWaysSearch result = map->Work(1000000);"
+				}
+			]
+		},
+		{
+			"name": "an alien turned away for want of room isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tturnedAway++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a new alien kept where a dead one was takes the dead one's way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return a.place == b.place && a.name == b.name;",
+					"to": "return a.place == b.place;"
+				}
+			]
+		},
+		{
+			"name": "a search for an alien let go part way carries on, for whoever takes its place",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tif (searching == static_cast<int>(f))\n\t\t{\n\t\t\tsearching = -1;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Clear forgets nobody",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\tfollowers[f].used = false;\n\t\tfollowers[f].steered = false;\n\t\tfollowers[f].guided = false;",
+					"to": "\t\tfollowers[f].steered = false;"
+				}
+			]
+		},
+		{
+			"name": "an alien asks for a way with no map",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards)\n{\n\tif (!map || !map->Ready())\n\t{\n\t\treturn false;\n\t}\n",
+					"to": "bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no alien ever follows a way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif ((alienStatusPointer->Type == AT_Standard) && (distanceToPlayer > ALIEN_ATTACKDISTANCE_MIN) && AlienIsAbleToClimb(sbPtr)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target, &targetPos, &wayDirection))",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: predaliens and praetorians follow ways too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(alienStatusPointer->Type == AT_Standard) && (distanceToPlayer",
+					"to": "(distanceToPlayer"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the last 2 m before an attack are on a way too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "(distanceToPlayer > ALIEN_ATTACKDISTANCE_MIN) && AlienIsAbleToClimb(sbPtr)\n",
+					"to": "AlienIsAbleToClimb(sbPtr)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien that can't climb follows a way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": " && AlienIsAbleToClimb(sbPtr)\n\t\t&& AlienWays_Steer(",
+					"to": "\n\t\t&& AlienWays_Steer("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien on a way doesn't stick to what it's touching",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tdynPtr->UseStandardGravity=0;\n\t\tNPCSetVelocity(sbPtr, &wayDirection",
+					"to": "\t\tNPCSetVelocity(sbPtr, &wayDirection"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's own steering runs as well as the way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t}\n\telse if(curveToPlayer)\n\t{",
+					"to": "\t}\n\tif(curveToPlayer)\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien on a way doesn't crawl",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (AlienWays_Following(sbPtr)) {\n\t\treturn(1);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien let go keeps the gravity the way gave it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\t\tobject->DynPtr->UseStandardGravity = 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: whatever is kept where an alien was has its gravity changed",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (now.name == who.name && object->I_SBtype == I_BehaviourAlien && object->DynPtr)",
+					"to": "if (object->DynPtr)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien's place is read without looking for it among the live objects",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)) != who.place)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the aliens the guide names are never given their gravity back",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tGiveGravityBack(lapsed[i]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the guide has no turn in the frame",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "size_t const lapsedCount = theGuide.Frame(ReadyMap(), stepMs, kAlienWaysLooksPerFrame, lapsed, kAlienWaysMostFollowers);",
+					"to": "size_t const lapsedCount = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log hears nothing of the searches",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t\tTellHowASearchWent(reports[i]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: aliens are guided with the switch off, and on a machine that doesn't run them",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "if (!AlienWays_On() || !map ||",
+					"to": "if (!map ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways outlive the level",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.Clear();\n\ttheBuild.Stop();",
+					"to": "\ttheBuild.Stop();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's project leaves out the guide",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "    <ClCompile Include=\"..\\..\\3dc\\avp\\alien_ways_guide.cpp\" />\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

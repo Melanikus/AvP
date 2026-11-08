@@ -222,18 +222,20 @@ static size_t CountOf(std::string const &text, char const *wanted)
 	return count;
 }
 
-// The text from the first from to the first to after it, or nothing
+// The text from the first from to the first to after it. If either mark isn't there, that fails a check of its own, by name, so no check
+// can pass on an empty piece of text without anyone hearing of it (card SOURCE-SLICE-1).
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
 	std::string::size_type const start = text.find(from);
+	std::string::size_type const end = start == std::string::npos ? std::string::npos : text.find(to, start + strlen(from));
 
-	if (start == std::string::npos)
+	if (end == std::string::npos)
 	{
+		Check(false, std::string("SOURCE: the marks \"") + from + "\" and \"" + to + "\" are found, in that order");
 		return std::string();
 	}
 
-	std::string::size_type const end = text.find(to, start + strlen(from));
-	return end == std::string::npos ? std::string() : text.substr(start, end - start);
+	return text.substr(start, end - start);
 }
 
 static void SourceOfTheGame()
@@ -274,7 +276,19 @@ static void SourceOfTheGame()
 	Check(Has(start, "AlienWays_LevelEnd();") && start.find("AlienWays_LevelEnd();") < start.find("if (!AlienWays_On())"),
 		"SOURCE: a level's start lets go of whatever the last level left, before anything else");
 
-	char const *const files[] = { "alien_ways.cpp", "alien_ways_build.cpp", "alien_ways_level.cpp", "alien_ways_map.cpp" };
+	// The listing reads a level's own numbers, so it's checked for what it trusts (Secondary's review, F1 and F2). The sums themselves are
+	// tested in alien_ways_map_test, where they can be run.
+	std::string const level = ReadSourceFile("3dc/avp/alien_ways_level.cpp");
+	Check(Has(level, "int const kAlienWaysRecordCorners = 5;"), "SOURCE: the listing knows a polygon's record has room for 5 corners");
+	Check(Has(level, "while (count < kAlienWaysRecordCorners && corners[count] >= 0)"), "SOURCE: and never reads past them");
+	Check(Has(level, "\t\tif (count == kAlienWaysRecordCorners)\n\t\t{\n\t\t\tlisting->counts->noEnd++;\n\t\t\tcontinue;\n\t\t}"),
+		"SOURCE: a polygon with no end to its corners within them is left out, and counted");
+	Check(Has(level, "\t\t\tif (!AlienWays_PlaceCorner(corner, turning, where, &placed))") && !Has(level, "MUL_FIXED("),
+		"SOURCE: every corner is turned and placed in 64 bits, and nothing of the level's is summed in int");
+	Check(Has(level, "up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);"), "SOURCE: and every stored facing is turned in 64 bits");
+	Check(Has(level, "extern SCENE Global_Scene;"), "SOURCE: the listing says which scene is loaded the way the game's own files do (the Game build needs it)");
+
+	char const *const files[] = { "alien_ways.cpp", "alien_ways_build.cpp", "alien_ways_guide.cpp", "alien_ways_level.cpp", "alien_ways_map.cpp" };
 
 	for (char const *const name : files)
 	{

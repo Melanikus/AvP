@@ -15,8 +15,13 @@
 //
 // AN ALIEN STOPS BEING GUIDED (and gets its usual gravity back) when:
 // - Steer says no. It's still coming for its target, so the game's own code sets its gravity that same frame, as it always has.
-// - Nothing asks Steer for it in a frame: it's attacking, waiting, hunting, dying, gone far, or gone. Frame names it the next frame.
+// - Nothing asks Steer for it in a frame: it's attacking, waiting, hunting, dying, gone far, or gone. The frame after that one, Frame names it.
+//   So it moves for two frames with the gravity the way gave it, about 33 ms. Most of those states set their own gravity as they start
+//   anyway; the two that don't, avoiding something and taunting, are the ones this is for.
 // - The level ends: Clear, and the map and every alien go with it.
+//
+// A WAY THAT'S BEING FOLLOWED IS NEVER DROPPED BY A SEARCH THAT FAILS: only a new way replaces it. So an alien on a ceiling doesn't let go
+// because its way's renewal found nothing.
 //
 // ALL ON THE GAME'S THREAD. Nothing here asks for memory after it's made: every way is kept in room set aside for it.
 #ifndef ALIEN_WAYS_GUIDE_H
@@ -133,6 +138,7 @@ private:
 		AlienWaysAsk last;                  // what it last told Steer: a search starts from this
 
 		int count, heading;                 // the way: count points, heading for point heading
+		bool fresh;                         // the way has just come, and the alien hasn't taken it up yet
 		long long wayAt;                    // when the way came
 		AlienWaysXYZ wayGoal;               // the goal it was searched for
 		double nearest;                     // the nearest the alien has been to the point it's heading for
@@ -145,6 +151,7 @@ private:
 	void DropTheWay(Follower *follower);
 	void StartNext(AlienWaysMap *map);
 	void Finish(AlienWaysMap *map, AlienWaysSearch result);
+	void NoNewWay(Follower *follower, AlienWaysXYZ goal);
 	void AddReport(const AlienWaysReport &line);
 
 	long long now;

@@ -127,6 +127,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.restUntil = 0;
 			follower.count = 0;
 			follower.heading = 0;
+			follower.fresh = false;
 			return static_cast<int>(f);
 		}
 	}
@@ -296,8 +297,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		{
 			line.outcome = kAlienWaysOutcomeNoPolygon;
 			AddReport(line);
-			DropTheWay(&follower);
-			follower.restUntil = now + kAlienWaysAskAgainAfter;
+			NoNewWay(&follower, follower.last.goal);
 			continue;
 		}
 
@@ -308,8 +308,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 			line.outcome = kAlienWaysOutcomeRefused;
 			line.why = why;
 			AddReport(line);
-			DropTheWay(&follower);
-			follower.restUntil = now + kAlienWaysAskAgainAfter;
+			NoNewWay(&follower, follower.last.goal);
 			continue;
 		}
 
@@ -340,28 +339,22 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	{
 		line.outcome = kAlienWaysOutcomeNoWay;
 		AddReport(line);
-		DropTheWay(&follower);
-		follower.restUntil = now + kAlienWaysAskAgainAfter;
+		NoNewWay(&follower, searchGoal);
 		return;
 	}
 
 	std::vector<AlienWaysPoint> const &way = map->Way();
 	size_t const count = std::min(way.size(), kAlienWaysMostWayPoints);
 
-	for (size_t p = 0; p < count; p++)
+	for (size_t p = 0; p + 1 < count; p++)
 	{
-		follower.points[p] = way[p];
+		double const length = Distance(AlienWaysXYZ{ way[p].x, way[p].y, way[p].z }, way[p + 1]);
 
-		if (p + 1 < count)
+		switch (way[p].kind)
 		{
-			double const length = Distance(AlienWaysXYZ{ way[p].x, way[p].y, way[p].z }, way[p + 1]);
-
-			switch (way[p].kind)
-			{
-				case kAlienWaysFloor: line.floorMm += length; break;
-				case kAlienWaysWall: line.wallMm += length; break;
-				case kAlienWaysCeiling: line.ceilingMm += length; break;
-			}
+			case kAlienWaysFloor: line.floorMm += length; break;
+			case kAlienWaysWall: line.wallMm += length; break;
+			case kAlienWaysCeiling: line.ceilingMm += length; break;
 		}
 	}
 
@@ -370,6 +363,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 
 	// A way that never leaves the floor is no better than the game's own steering, which curves at its target and climbs any wall it touches.
 	// That's where the alien and its target are on one big floor polygon, which the map can't leave and come back to (one way onto each polygon).
+	// The alien is on the floor then, so dropping the way it had lets nothing fall.
 	if (line.wallMm <= 0.0 && line.ceilingMm <= 0.0)
 	{
 		line.outcome = kAlienWaysOutcomeAllFloor;
@@ -379,8 +373,14 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 		return;
 	}
 
+	for (size_t p = 0; p < count; p++)
+	{
+		follower.points[p] = way[p];
+	}
+
 	follower.count = static_cast<int>(count);
 	follower.heading = 1;
+	follower.fresh = true;
 	follower.wayAt = now;
 	follower.wayGoal = searchGoal;
 	follower.nearest = DBL_MAX;
@@ -388,6 +388,21 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 
 	line.outcome = kAlienWaysOutcomeFound;
 	AddReport(line);
+}
+
+// A search gave no new way. An alien that's following one already keeps it, so a failed renewal never drops it off a wall, and it asks again
+// in kAlienWaysAskAgainAfter. The goal it failed for counts as the way's goal, so a goal that can't be reached isn't searched for every frame.
+// An alien with no way is left to the game's own code till then.
+void AlienWaysGuide::NoNewWay(Follower *follower, AlienWaysXYZ goal)
+{
+	if (follower->count > 0)
+	{
+		follower->wayAt = now;
+		follower->wayGoal = goal;
+		return;
+	}
+
+	follower->restUntil = now + kAlienWaysAskAgainAfter;
 }
 
 bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards)
@@ -417,6 +432,25 @@ bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, Ali
 	if (now < follower.restUntil)
 	{
 		return false;
+	}
+
+	// A new way starts where the alien was when its search began. It may have gone on since, so it takes the way up at the stretch nearest to
+	// where it is now, not at the first one, which could be behind it by now and make it look off the way.
+	if (follower.count > 0 && follower.fresh)
+	{
+		follower.fresh = false;
+		double nearestStretch = DBL_MAX;
+
+		for (int k = 1; k < follower.count; k++)
+		{
+			double const howFar = DistanceToStretch(ask.at, follower.points[k - 1], follower.points[k]);
+
+			if (howFar < nearestStretch)
+			{
+				nearestStretch = howFar;
+				follower.heading = k;
+			}
+		}
 	}
 
 	if (follower.count > 0)

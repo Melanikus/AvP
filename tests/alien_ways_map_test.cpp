@@ -15,6 +15,7 @@
 //
 // Coordinates are the game's: millimetres, and y goes down, so the ceiling is at y = -3000.
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -90,6 +91,23 @@ static std::vector<AlienWaysPolygon> Corridor(int tiles, int tileLength)
 static AlienWaysPolygon Square(int x, int y, int z, int side)
 {
 	return Polygon({ { x, y, z }, { x + side, y, z }, { x + side, y, z + side }, { x, y, z + side } }, kUp);
+}
+
+// A grid of floor squares side by side, across by across. Each square's corners lie on its neighbours' corners, so a big grid touches in many
+// thousands of places, and the room the build keeps for touches has to grow several times.
+static std::vector<AlienWaysPolygon> Grid(int across, int side)
+{
+	std::vector<AlienWaysPolygon> world;
+
+	for (int i = 0; i < across; i++)
+	{
+		for (int k = 0; k < across; k++)
+		{
+			world.push_back(Square(i * side, 0, k * side, side));
+		}
+	}
+
+	return world;
 }
 
 struct Metres
@@ -389,6 +407,81 @@ static void AtTheEdgeOfTheWorld()
 	Check(Near(m.wall, 127996.5, 0.01) && Near(m.floor, 1.207, 0.01), "it's 128 km along the wall, and a metre and a bit of floor");
 }
 
+// A still object's corners, placed in the world (alien_ways_map.h, AlienWays_PlaceCorner), and its facing turned with it. The numbers come from
+// a level file, so the sums are done in 64 bits: in int, a crafted level's numbers would overflow, which C++ doesn't allow, and in practice
+// wrap round to a place inside 64 km, where the polygon would be kept in the wrong place. (Secondary's review, F1.)
+static void CornersPlaced()
+{
+	printf("A still object's corners, placed in the world\n");
+	AlienWaysXYZ const middle = { 0, 0, 0 };
+	AlienWaysXYZ placed = { 7, 7, 7 };
+
+	Check(AlienWays_PlaceCorner({ 100, -200, 300 }, nullptr, { 1000, 2000, 3000 }, &placed) && placed.x == 1100 && placed.y == 1800 && placed.z == 3300,
+		"with no turn, a corner is moved to its place");
+
+	// A quarter turn about the up axis, in the game's 65536ths. The game turns a point so: x' = m11 x + m21 y + m31 z, y' = m12 x + m22 y + m32 z,
+	// z' = m13 x + m23 y + m33 z. Here that's x' = z = 300, y' = y = -200 and z' = -x = -100.
+	AlienWaysTurn const quarter = { 0, 0, -65536, 0, 65536, 0, 65536, 0, 0 };
+	Check(AlienWays_PlaceCorner({ 100, -200, 300 }, &quarter, middle, &placed) && placed.x == 300 && placed.y == -200 && placed.z == -100,
+		"turned, it's turned the way the game turns a shape's points");
+
+	// 2,147,483,647 and 2,147,483,647 again come to 4,294,967,294. In int that wraps round to -2, right in the middle of the level.
+	placed = AlienWaysXYZ{ 7, 7, 7 };
+	Check(!AlienWays_PlaceCorner({ INT_MAX, 0, 0 }, nullptr, { INT_MAX, 0, 0 }, &placed) && placed.x == 7 && placed.y == 7 && placed.z == 7,
+		"the biggest corner moved by the biggest place is refused, where int would have wrapped it round to -2, and nothing is written");
+	Check(!AlienWays_PlaceCorner({ INT_MIN, 0, 0 }, nullptr, { INT_MIN, 0, 0 }, &placed), "the smallest moved by the smallest is refused too: int would make it 0");
+
+	AlienWaysTurn const huge = { INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX, INT_MAX };
+	Check(!AlienWays_PlaceCorner({ INT_MAX, INT_MAX, INT_MAX }, &huge, middle, &placed), "a corner turned by the biggest numbers there are is refused");
+
+	// The edge of the world, kAlienWaysMostCoordinate, on each axis and each side
+	Check(AlienWays_PlaceCorner({ 64000000, 0, 0 }, nullptr, middle, &placed) && placed.x == 64000000, "a corner exactly 64 km out is kept");
+	Check(!AlienWays_PlaceCorner({ 64000001, 0, 0 }, nullptr, middle, &placed), "a millimetre further is refused");
+	Check(!AlienWays_PlaceCorner({ 0, -64000001, 0 }, nullptr, middle, &placed), "and below the middle");
+	Check(!AlienWays_PlaceCorner(middle, nullptr, { 0, 0, -64000001 }, &placed), "and where it's the place that's too far");
+
+	// The facing: y goes down, so straight up is a y of -65536
+	Check(Near(AlienWays_TurnedUp({ 0, -65536, 0 }, nullptr), 1.0, 1e-6), "a facing straight up, not turned, faces up");
+	AlienWaysTurn const over = { 65536, 0, 0, 0, -65536, 0, 0, 0, 65536 };
+	Check(Near(AlienWays_TurnedUp({ 0, -65536, 0 }, &over), -1.0, 1e-6), "turned upside down, it faces down");
+	Check(Near(AlienWays_TurnedUp({ 0, -70000, 0 }, nullptr), 1.0, 1e-6), "a stored facing a little over 1 long is kept at 1");
+	float const crafted = AlienWays_TurnedUp({ INT_MAX, INT_MAX, INT_MAX }, &huge);
+	Check(crafted >= -1.0f && crafted <= 1.0f, "a facing turned by the biggest numbers there are still comes out from -1 to 1");
+}
+
+// The polygon nearest a point, which is where an alien, or where it's going, starts on the map
+static void Nearest()
+{
+	printf("The polygon nearest a point\n");
+	std::vector<AlienWaysPolygon> const world = Corridor(10, 1000);
+	AlienWaysMap map;
+	AlienWaysXYZ const above = { 1000, -900, 3500 };
+	double howFar = -1.0;
+
+	Check(map.NearestPolygon(above, 0, world.size(), 2000, &howFar) == -1, "with no map there's no polygon");
+	Check(map.Build(world) == nullptr, "the corridor builds");
+
+	// 900 mm above the middle of tile 3 (z 3000 to 4000): tile 3 is 900 away, each wall 1,000, tiles 2 and 4 about 1,030, the ceiling 2,100
+	Check(map.NearestPolygon(above, 0, world.size(), 2000, &howFar) == 3 && Near(howFar, 900.0, 0.001), "a point 900 mm above a floor tile finds that tile, 900 mm away");
+	Check(map.NearestPolygon(above, 0, world.size(), 899, nullptr) == -1, "but not if it may only look 899 mm");
+	Check(map.NearestPolygon({ 300, -1500, 3500 }, 10, 13, 2000, nullptr) == 10, "looking only at the walls and the ceiling, a point 300 mm from the left wall finds it");
+	Check(map.NearestPolygon(above, 0, 1000000, 2000, nullptr) == 3, "a range that runs past the list stops at its end");
+	Check(map.NearestPolygon(above, 5, 3, 2000, nullptr) == -1, "a range that ends before it starts finds nothing");
+
+	// A long slope whose box holds the point, and a small floor right under it. Both boxes are 0 away, so the nearer middle wins: the floor's.
+	std::vector<AlienWaysPolygon> const slope = {
+		Polygon({ { -5000, 0, -5000 }, { 5000, 0, -5000 }, { 5000, -5000, 5000 }, { -5000, -5000, 5000 } }, 0.9f),
+		Square(0, 0, 0, 1000) };
+	AlienWaysMap sloped;
+	Check(sloped.Build(slope) == nullptr && sloped.NearestPolygon({ 500, 0, 500 }, 0, 2, 100, nullptr) == 1,
+		"of two boxes both holding the point, the one whose middle is nearer wins, even when it was given second");
+
+	// A polygon the map left out as scenery is never found, and the one after it is found by its map number
+	AlienWaysMap scenery;
+	Check(scenery.Build({ Square(0, 0, 0, 80000), Square(0, 0, 0, 1000) }) == nullptr && scenery.NearestPolygon({ 500, 0, 500 }, 0, 2, 100, nullptr) == 0,
+		"a polygon left out as scenery is passed over");
+}
+
 // The limits, each at exactly its value, where the map builds, and one short of it, where it's refused with its own words
 static void OneLimit(const char *what, size_t AlienWaysLimits::*field, size_t at, std::vector<AlienWaysPolygon> const &world, const char *why)
 {
@@ -474,6 +567,15 @@ static void Limits()
 	OneLimit("memory kept", &AlienWaysLimits::mostBytesKept, usual.BytesKept(), world, "the map would keep more memory than it may");
 	OneLimit("memory while building", &AlienWaysLimits::mostBytesBuilding, usual.BytesWhileBuilding(), world, "building the map would need more memory than it may have");
 
+	// While the room for touches is copied into a bigger room, the old room is still held as well. A grid of 1,600 squares touches in tens of
+	// thousands of places, so its room grows several times, and the top of the last copy is the most the build ever holds. That's what's
+	// counted: it builds with exactly that ceiling, and is refused one byte under it. (Secondary's review, F3.)
+	std::vector<AlienWaysPolygon> const grid = Grid(40, 1000);
+	AlienWaysMap gridMap;
+	Check(gridMap.Build(grid) == nullptr && gridMap.Polygons() == 1600, "a grid of 1,600 floor squares builds with the usual limits");
+	OneLimit("memory while building, with the room for touches grown many times", &AlienWaysLimits::mostBytesBuilding, gridMap.BytesWhileBuilding(), grid,
+		"building the map would need more memory than it may have");
+
 	// Corners piled into one place: 20 triangles meeting at one corner put 20 corners in its box
 	OneLimit("corners in one place", &AlienWaysLimits::mostCornersInOnePlace, 20, Fan(20), "too many corners lie close together in one place");
 
@@ -553,6 +655,8 @@ int main()
 	SearchRefusals();
 	NumberGoesRound();
 	AtTheEdgeOfTheWorld();
+	CornersPlaced();
+	Nearest();
 	Limits();
 	Stopping();
 	Adding();

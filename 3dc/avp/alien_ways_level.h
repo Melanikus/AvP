@@ -14,9 +14,10 @@
 // dynamics.cpp). Only a polygon with none stored has it worked out from its corners. A polygon drawn from both sides counts as facing up
 // whichever way it's stored, because an alien can stand on its top.
 //
-// A POLYGON'S CORNERS: a list that ends at a negative number. Each one has to be one of its shape's points, or the polygon can't be trusted and
-// is left out. One with more corners than the map takes is left out too, never cut down (AlienWays_AddPolygon), and no more than one corner past
-// that is ever read. The counts say how many of each, for the log.
+// A POLYGON'S CORNERS: a list that ends at a negative number, inside the polygon's record, which has room for 5. Nothing past those 5 is ever
+// read, and a polygon with no end within them is left out. Each corner has to be one of its shape's points, or the polygon can't be trusted and
+// is left out. Each is turned and placed in 64 bits (AlienWays_PlaceCorner), so a level's numbers can't overflow, and a polygon with a corner
+// more than 64 km out is left out. The counts say how many of each, for the log.
 //
 // It runs on the game's thread, at a level's start, because it reads the game's own shapes and objects. It's quick: a few thousand polygons a
 // millisecond. The joining up is the slow part, and that's done on a thread of its own (alien_ways_build.h).
@@ -40,6 +41,8 @@ struct AlienWaysLevelCounts
 	int tooFewCorners;        // left out: fewer than 3 corners
 	int tooManyCorners;       // left out: more corners than the map takes
 	int badCorner;            // left out: a corner that isn't one of its shape's points
+	int farCorner;            // left out: a corner that lands more than kAlienWaysMostCoordinate from the middle, worked out in 64 bits
+	int noEnd;                // left out: no negative number ends its corners within its record's 5 places
 	int noStoredFacing;       // facing worked out from the corners, because none was stored
 };
 

@@ -168,6 +168,7 @@ void AlienWays_LevelStart()
 
 	LogString("alien ways: listed " + std::to_string(counts.polygons) + " polygons from " + std::to_string(counts.modules) + " modules and "
 		+ std::to_string(counts.objects) + " still objects. Left out: " + std::to_string(counts.badCorner) + " with a corner that isn't one of its shape's, "
+		+ std::to_string(counts.farCorner) + " with a corner more than 64 km out, " + std::to_string(counts.noEnd) + " whose corners have no end, "
 		+ std::to_string(counts.tooFewCorners) + " with under 3 corners, " + std::to_string(counts.tooManyCorners) + " with over 8. "
 		+ std::to_string(counts.noStoredFacing) + " had their facing worked out from their corners");
 

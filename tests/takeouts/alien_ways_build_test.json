@@ -134,6 +134,76 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "the program stops when a build is let go while running: it no longer waits for its thread (F5)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "AlienWaysBuild::~AlienWaysBuild()\n{\n\tStop();",
+					"to": "AlienWaysBuild::~AlienWaysBuild()\n{\n"
+				}
+			]
+		},
+		{
+			"name": "the program stops when a build is started while another runs: Start no longer stops the last one first (F5)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n\tStop();\n",
+					"to": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the listing reads past a polygon's record (F2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "while (count < kAlienWaysRecordCorners && corners[count] >= 0)",
+					"to": "while (count <= kAlienWaysMostCorners && corners[count] >= 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a polygon with no end to its corners is kept (F2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\tif (count == kAlienWaysRecordCorners)\n\t\t{\n\t\t\tlisting->counts->noEnd++;\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corner is summed in int again (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\tif (!AlienWays_PlaceCorner(corner, turning, where, &placed))",
+					"to": "\t\t\tplaced = AlienWaysXYZ{ MUL_FIXED(65536, corner.x) + where.x, corner.y + where.y, corner.z + where.z };\n\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facing is worked out in int again (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);",
+					"to": "up = static_cast<float>(-stored.vy) / 65536.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the listing doesn't say which scene is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "extern SCENE Global_Scene;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
