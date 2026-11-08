@@ -1,7 +1,7 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a polygon's corners are put in the middle of the texels they name, as the 1999 Direct3D code had them, so a smoothly filtered
-//   edge no longer takes colour from the texture's other edge (#148, texel_centre.h)
+//   edge no longer takes colour from the texture's other edge (#148, texel_centre.h); the same for particles, which share one sheet
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
 //   broken picture coordinates
@@ -2260,8 +2260,11 @@ static void D3D_Particle_Output(PARTICLE *particlePtr, PARTICLEVERTEX *renderVer
 
 		particleVertex[pVb].colour = colour;
 
-		particleVertex[pVb].u = vertices->u * RecipW;
-		particleVertex[pVb].v = vertices->v * RecipH;
+		// The middle of the texel the corner names, as 1999's particles had it: see texel_centre.h (#148). A particle's picture is one part
+		// of a sheet shared with others, so an edge on a texel line mixed in the next picture's edge, and clamping doesn't help inside a
+		// sheet. Its corners are whole texel numbers, copied into floats by AddParticle.
+		particleVertex[pVb].u = TexelCentre((int)vertices->u, 1.0f, RecipW);
+		particleVertex[pVb].v = TexelCentre((int)vertices->v, 1.0f, RecipH);
 		pVb++;
 	}
 

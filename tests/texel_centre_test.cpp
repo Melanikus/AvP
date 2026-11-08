@@ -154,7 +154,12 @@ static void TestTheGame()
 		&& Has(sky, "float RecipW = (1.0f / (float) texWidth)  / 65536.0f;"),
 		"and the sky, whose corners are in 16.16, with half a texel of its own numbers");
 
-	Check(CountOf(render, "(float)(vertices->U) * RecipW") == 0 && CountOf(render, "((float)vertices->U) * RecipW") == 0
+	std::string const particles = FunctionBody(render, "static void D3D_Particle_Output(");
+	Check(Has(particles, "particleVertex[pVb].u = TexelCentre((int)vertices->u, 1.0f, RecipW);\n\t\tparticleVertex[pVb].v = TexelCentre((int)vertices->v, 1.0f, RecipH);"),
+		"particles, in whole texels, since each is one part of a sheet shared with others (Secondary's review)");
+
+	Check(CountOf(render, "vertices->u * RecipW") == 0 && CountOf(render, "vertices->v * RecipH") == 0
+		&& CountOf(render, "(float)(vertices->U) * RecipW") == 0 && CountOf(render, "((float)vertices->U) * RecipW") == 0
 		&& CountOf(render, "(float)(vertices->V) * RecipH") == 0 && CountOf(render, "((float)vertices->V) * RecipH") == 0,
 		"and none of them is left on the old sum, which put a polygon's edge on the line between two texels");
 

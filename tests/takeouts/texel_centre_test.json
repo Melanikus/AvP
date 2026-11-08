@@ -73,6 +73,16 @@
 					"to": "vertex.u = textured ? (float)coordinates[corner * 2 + 0] * placed.recipWidth : 0.0f;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: particles go back to the old sum, and mix in the next picture of their sheet",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "particleVertex[pVb].u = TexelCentre((int)vertices->u, 1.0f, RecipW);\n\t\tparticleVertex[pVb].v = TexelCentre((int)vertices->v, 1.0f, RecipH);",
+					"to": "particleVertex[pVb].u = vertices->u * RecipW;\n\t\tparticleVertex[pVb].v = vertices->v * RecipH;"
+				}
+			]
 		}
 	]
 }
