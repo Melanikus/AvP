@@ -6,9 +6,11 @@
 static bool lampIsOn = false;
 static bool lampIsAskedFor = false;
 static long framesDrawn = 0;
+static long framesAsARealLight = 0;
 static bool playerCouldHaveALamp = false;
-// Nothing in this build asks for the real light: the setting that does comes with the lamp work. So the lamp is always the painted version.
-static const bool realLightIsWanted = false;
+// Nothing in the game asks for the real light, so the lamp is the painted version. Only a Hudson run can ask for it, through
+// ShoulderLamp_SetRealLightWanted, to try its look.
+static bool realLightIsWanted = false;
 
 // The robot arm. See ShoulderLamp_FollowTheView.
 static bool aimIsKnown = false;
@@ -77,9 +79,21 @@ bool ShoulderLamp_CanBeALight()
 	return lampIsOn && playerCouldHaveALamp && realLightIsWanted;
 }
 
+void ShoulderLamp_SetRealLightWanted(bool wanted)
+{
+	realLightIsWanted = wanted;
+}
+
 const float *ShoulderLamp_PlaceFromEyes()
 {
 	return placeFromEyes;
+}
+
+void ShoulderLamp_SetPlaceFromEyes(float across, float up, float ahead)
+{
+	placeFromEyes[0] = across;
+	placeFromEyes[1] = up;
+	placeFromEyes[2] = ahead;
 }
 
 static double DotProductOf(const double *a, const double *b)
@@ -295,6 +309,16 @@ float ShoulderLamp_AimAcross()
 float ShoulderLamp_AimDown()
 {
 	return (float)aimDown;
+}
+
+void ShoulderLamp_NoteARealLightFrame()
+{
+	framesAsARealLight++;
+}
+
+long ShoulderLamp_FramesAsARealLight()
+{
+	return framesAsARealLight;
 }
 
 unsigned char ShoulderLamp_KeyFromProfile(unsigned char stored, unsigned char neverSet, unsigned char defaultKey, bool defaultIsTaken, unsigned char noKey)
