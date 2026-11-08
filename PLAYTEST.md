@@ -7,8 +7,10 @@ Custom maps page and the in-game co-op pages. Read "Stay safe" before you play, 
 - Windows 10 or 11.
 - Your own copy of **Aliens versus Predator Classic 2000** from **Steam**. The game's data isn't in this download, and we
   don't distribute it.
-- Microsoft's Visual C++ Redistributable, the **x86** one, from Microsoft's website. If Windows says a file such as
-  `VCRUNTIME140.dll` is missing, this is what it needs. Don't get DLLs from any other site.
+
+Nothing else needs installing. The parts of Microsoft's Visual C++ runtime the game uses come with it, in `bin`, as Microsoft makes
+them and signed by Microsoft, and Windows 10 and 11 have the rest. If Windows ever says a DLL is missing, tell us which one, and don't
+download it from any site.
 
 **GOG:** we've never tried a GOG copy, so we can't tell you where its files go. If you try one, tell us what you find.
 

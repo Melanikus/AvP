@@ -67,14 +67,18 @@ each release, with the zip from the draft, before you press Publish.
 ## When Microsoft fixes its C runtime
 
 The game and every library built for it take Microsoft's C and C++ runtime from Microsoft's own DLLs: the /MD switch, and
-`vcpkg-overlay-triplets/x86-windows.cmake`. Those are `vcruntime140.dll` and `msvcp140.dll`, from the Visual C++ Redistributable that `PLAYTEST.md`
-asks a tester to install from Microsoft, and the Universal C runtime, which is part of Windows 10 and 11. Microsoft fixes the installed copies
-itself, through Microsoft Update or a newer redistributable. (It was built into the game for a while, as /MT, until Bitdefender flagged that build
-and the user ruled it out: issue #111, card STATIC-UNDO-1, #125.)
+`vcpkg-overlay-triplets/x86-windows.cmake`. (It was built into them for a day, as /MT, until Bitdefender flagged the game built that way and the
+user ruled it out: issue #111, card STATIC-UNDO-1, #125.) The runtime has two parts, and Microsoft fixes them in two different ways:
 
-A small part of the runtime is still copied into each program when it's built, even with /MD: the code that starts a program and stops it. When
-Microsoft announces a security fix in the Visual C++ runtime (MSVC's C runtime, C++ standard library or vcruntime) that reaches that part, our
-release still has the hole until we build again. So:
+- **The Universal C runtime** (`ucrtbase.dll`) is part of Windows 10 and 11, so Windows Update fixes it, and the release has nothing to do.
+- **The C++ part**, `vcruntime140.dll` and the C++ standard library's `msvcp140*.dll`, goes out in the release, beside the game in `bin`, so that
+  a tester installs nothing. `tools/build-and-package.ps1` copies it from the redistributable folder of the Visual Studio that built the
+  game, and `licences/README.txt` in the package names its version. Windows looks in the game's own folder first, so those copies are the
+  ones the game uses, and Windows Update can't fix them: it only fixes the copies Microsoft installed itself.
+
+So when Microsoft announces a security fix in the Visual C++ runtime (vcruntime, the C++ standard library, or the start-up code that every
+program built with it carries inside itself), our release still has the hole until we build again with a Visual Studio that has the fix.
+So:
 
 1. Update GitHub's runner image, or the pinned Visual Studio version, to one with the fixed runtime.
 2. Make a new release from the same commit, or a newer one, and publish it.

@@ -139,6 +139,56 @@ New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'D3DCompiler_43.dll')
 Expect-Refused (Run-Imports) "D3DCompiler_43.dll isn't in the package" 'the check that reads what links to what notices the compiler too, though nothing links to it'
 
+# --- Microsoft's Visual C++ runtime, which the package carries beside the game (card STATIC-UNDO-1, #125): only the DLLs it needs, each the very
+# copy in Visual Studio's redistributable folder, signed by Microsoft. Each way of getting that wrong is tried by itself. The extra files tried
+# here are Microsoft's own, from Visual Studio's copy of the runtime and from Windows, as a stray one would be.
+New-Copy
+Expect-Passes (Run-Imports) "Microsoft's runtime is only the" 'the whole package carries only the runtime it needs, each one checked'
+
+New-Copy
+Remove-Item -LiteralPath (Join-Path $work 'vcruntime140.dll')
+Expect-Refused (Run-Imports) 'needs vcruntime140.dll' "with the runtime's vcruntime140.dll taken out, it's named, whatever this machine has"
+
+New-Copy
+$file = Join-Path $work 'vcruntime140.dll'
+$bytes = [System.IO.File]::ReadAllBytes($file)
+$bytes[$bytes.Length / 2] = $bytes[$bytes.Length / 2] -bxor 1
+[System.IO.File]::WriteAllBytes($file, $bytes)
+Expect-Refused (Run-Imports) "vcruntime140.dll doesn't carry Microsoft's signature" 'one changed bit in the runtime is refused'
+
+New-Copy
+Copy-Item -Force -LiteralPath (Join-Path $work 'ogg.dll') (Join-Path $work 'vcruntime140.dll')
+Expect-Refused (Run-Imports) "vcruntime140.dll doesn't carry Microsoft's signature" "another library under the runtime's name is refused"
+
+# Signed by Microsoft, and not Visual Studio's copy: the check doesn't stop at the signature
+New-Copy
+Copy-Item -Force -LiteralPath (Join-Path $work 'D3DCompiler_43.dll') (Join-Path $work 'msvcp140.dll')
+Expect-Refused (Run-Imports) "msvcp140.dll isn't the copy in Visual Studio's redistributable folder" "another file Microsoft signed, under the runtime's name, is refused"
+
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Redist\MSVC\*\x86\Microsoft.VC*.CRT') | Select-Object -Last 1
+if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime (VC\Redist\MSVC\<version>\x86) wasn't found, so the runtime's rows can't be tried" }
+
+# A piece the package may carry, but which nothing in it needs
+$unneeded = @('msvcp140_codecvt_ids.dll', 'msvcp140_2.dll', 'msvcp140_1.dll' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Package $_)) }) | Select-Object -First 1
+if (-not $unneeded) { throw "every piece of the runtime the package may carry is in it, so none is left to try as one nothing needs" }
+New-Copy
+Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName $unneeded) $work
+Expect-Refused (Run-Imports) "the package carries $unneeded, and nothing in it needs it" 'a piece of the runtime that nothing needs is refused'
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'concrt140.dll') $work
+Expect-Refused (Run-Imports) "the package carries concrt140.dll, which isn't one of the runtime DLLs it may carry" "a piece of the runtime that isn't on the list is refused, though it's Microsoft's"
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path "$env:windir\SysWOW64" 'ucrtbase.dll') $work
+Expect-Refused (Run-Imports) "the package carries ucrtbase.dll, which isn't one of the runtime DLLs it may carry" "Windows' own C runtime in the package is refused: Windows 10 and 11 use theirs"
+
+New-Copy
+Copy-Item -LiteralPath (Join-Path $work 'vcruntime140.dll') (Join-Path $work 'vcruntime140d.dll')
+Expect-Refused (Run-Imports) "the package carries vcruntime140d.dll, which isn't one of the runtime DLLs it may carry" 'a debug runtime, which no player has, is refused by its name'
+
 # --- No folder of the machine that built it. A copy of a library with one put after its end, which nothing else here notices: the end of the file isn't
 # part of what Windows loads, and this library isn't signed. First as plain text, then as UTF-16, the way a program keeps a wide string, then UTF-16 starting
 # on an odd byte, and last a /home/ folder from another system, which doesn't count on its own, so it has to pass.

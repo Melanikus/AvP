@@ -103,6 +103,47 @@ $programFolder = Join-Path $OutFolder 'bin'
 New-Item -ItemType Directory -Force $programFolder | Out-Null
 Copy-Item (Join-Path $release 'AvPx.exe') (Join-Path $programFolder 'AvP_Classic.exe')
 Copy-Item (Join-Path $release '*.dll') $programFolder
+
+# --- Microsoft's C++ runtime, beside the game, so a tester installs nothing (card STATIC-UNDO-1, #125). The game and its libraries are built
+# with /MD, so they take Microsoft's C and C++ runtime from DLLs. Windows 10 and 11 have the C part, the Universal C runtime, as part of
+# themselves. They don't have the C++ part, vcruntime140.dll and the C++ standard library's msvcp140*.dll, so those are copied here, unchanged,
+# from the redistributable folder of the Visual Studio that has just built the game: Microsoft lets a program carry them (licences/README.txt).
+# Only what something in bin asks for is copied, and then what those ask for in turn, until nothing new is asked for.
+# tools/check-package-imports.ps1 then refuses any that isn't on its list, isn't needed, isn't that very file, or isn't signed by Microsoft.
+$visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+$dumpbin = Get-ChildItem (Join-Path $visualStudio 'VC\Tools\MSVC\*\bin\Hostx64\x86\dumpbin.exe') | Select-Object -Last 1
+if (-not $dumpbin) { throw 'dumpbin was not found' }
+
+# Where Visual Studio keeps them: VC\Redist\MSVC\<version>\x86\Microsoft.VC<toolset>.CRT, at the version its own file
+# Microsoft.VCRedistVersion.default.txt names, which goes with the compiler it builds with. tools/check-package-imports.ps1 finds it the same
+# way, in the same lines.
+$redistVersion = "$(Get-Content -LiteralPath (Join-Path $visualStudio 'VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt') -TotalCount 1)".Trim()
+if ($redistVersion -cnotmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "Visual Studio's Microsoft.VCRedistVersion.default.txt doesn't name a version: $redistVersion" }
+$runtimeFolders = @(Get-ChildItem -Directory -LiteralPath (Join-Path $visualStudio "VC\Redist\MSVC\$redistVersion\x86") -Filter 'Microsoft.VC*.CRT')
+if ($runtimeFolders.Count -ne 1) { throw "Visual Studio's redistributable folder for $redistVersion doesn't have exactly one Microsoft.VC*.CRT folder for x86" }
+$runtimeFolder = $runtimeFolders[0].FullName
+
+do {
+    $copiedThisTime = 0
+
+    foreach ($binary in @(Get-ChildItem -LiteralPath $programFolder -File | Where-Object { $_.Extension -in '.exe', '.dll' })) {
+        $output = & $dumpbin.FullName /nologo /dependents $binary.FullName
+        if ($LASTEXITCODE -ne 0) { throw "dumpbin could not read $($binary.Name)" }
+
+        # The names are the only indented lines ending in .dll, as tools/check-package-imports.ps1 reads them. Only the runtime's C++ parts.
+        foreach ($name in @($output | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim().ToLowerInvariant() })) {
+            if ($name -notmatch '^(vcruntime|msvcp|concrt|vccorlib)[0-9a-z_]*\.dll$') { continue }
+            if (Test-Path -LiteralPath (Join-Path $programFolder $name)) { continue }
+
+            $from = Join-Path $runtimeFolder $name
+            if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { throw "$($binary.Name) needs $name, and it isn't in Visual Studio's redistributable folder, $runtimeFolder" }
+            Copy-Item -LiteralPath $from -Destination (Join-Path $programFolder $name)
+            "Microsoft's runtime: $name, because $($binary.Name) needs it, from $runtimeFolder"
+            $copiedThisTime++
+        }
+    }
+} while ($copiedThisTime -gt 0)
+
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
@@ -126,6 +167,7 @@ $licences = [ordered]@{
     'LGPL-2.1.txt'      = 'dependencies\libbinkdec\COPYING'   # the GNU Lesser GPL 2.1, the version this project takes OpenAL Soft under
     'libsmackerdec.txt' = 'dependencies\libsmackerdec\COPYING'
     'D3DX.txt'          = "$installed\dxsdk-d3dx\copyright"
+    'Microsoft-VC-Runtime.txt' = 'notices\Microsoft-VC-Runtime.txt'   # ours: what the files are, and where Microsoft's terms are
 }
 
 $licenceFolder = Join-Path $OutFolder 'licences'
@@ -180,6 +222,11 @@ $whatEachIs = @{
     'libsmackerdec.dll'  = "libsmackerdec, Barry Duncan's player for Smacker films (licences/libsmackerdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libsmackerdec. You may put your own build of it in its place."
     'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
     'd3dcompiler_43.dll' = "Microsoft's D3DX shader compiler (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
+}
+
+# Microsoft's Visual C++ runtime, copied above: the same words for each piece, with the version it came from
+foreach ($name in 'vcruntime140.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll') {
+    $whatEachIs[$name] = "part of Microsoft's Visual C++ runtime, $redistVersion, copied unchanged and with Microsoft's signature from the redistributable folder of the Visual Studio that built the game (licences/Microsoft-VC-Runtime.txt, which says where Microsoft's terms for it are)."
 }
 
 $aboutLines = @(foreach ($binary in @(Get-ChildItem -LiteralPath $programFolder -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object Name)) {
