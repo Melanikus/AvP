@@ -1,3 +1,5 @@
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a run keeps its files beside the game, and has nobody to show a message to
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the save folder is never missing: without one the path is empty and the log says why once, where before the log and this went round until the game crashed
 // Copyright (C) 2010 Barry Duncan. All Rights Reserved.
@@ -28,6 +30,7 @@
 //   took out avp_GetCommandLineArgs, which nothing called, and which read a command line from the settings file
 //   what went wrong finding the save folder is kept for the log to say, because the log asks for that folder first
 #include "utilities.h"
+#include "hudson.h"
 #include <string>
 #include <algorithm>
 #include "configFile.h"
@@ -137,11 +140,13 @@ char *GetSaveFolderPath()
 #ifdef _WIN32
 
 	// The game's folder is made in the player's Documents. Documents is found in a space of its own, so that if anything goes wrong there's no half a path left where the game's folder goes.
+	// A Hudson run has a folder of its own beside the game in place of Documents, so it never touches the player's.
 	char documents[MAX_PATH] = {0};
-	char const *whatWentWrong = "Can't find the player's Documents folder";
+	char const *whatWentWrong = HudsonRunIsOn ? "Can't find the run's own folder" : "Can't find the player's Documents folder";
 	std::string where;
+	bool const found = HudsonRunIsOn ? Hudson_RunFolder(documents, sizeof(documents)) : SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents));
 
-	if (SUCCEEDED(::SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, documents)))
+	if (found)
 	{
 		whatWentWrong = SaveFolder_Make(documents, saveFolder, sizeof(saveFolder), &where);
 	}
@@ -282,6 +287,7 @@ HANDLE avp_FindFirstFile(LPCTSTR lpFileName, LPWIN32_FIND_DATA lpFindFileData)
 void avp_MessageBox(const char* message, int type)
 {
 #ifdef _WIN32
+	Hudson_StopIfTheGameWantsToAsk(message);
 	ReleaseDirect3D();
 	MessageBox(hWndMain, message, "AvP Error", type);
 #endif
