@@ -1026,6 +1026,10 @@ void AlienWaysMap::Relax(int node, double costHere, AlienWaysXYZ at, int from)
 	// The guess of the whole way's cost: so far, plus the straight line to the goal. Nothing costs less than 1 a millimetre, so the guess is never
 	// more than the real cost, and the first way found to the goal is the cheapest the map can see: straight lines from join to join, with the
 	// floor at its price. That is not always the cheapest way an alien could really walk.
+	// One more limit: what crossing a floor costs depends on how the way came onto it (CostAcross: at least kAlienWaysLeastFloorStep from a
+	// wall or a ceiling), and each polygon is reached only once, by the first way to get there cheapest. So the way found is the cheapest for
+	// the order the search looked in, and now and then not the very cheapest the map holds. It's always a way that joins up, and it's the
+	// same on every run. (Secondary's read of 4a754a7d.)
 	guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt));
 
 	if (heapPlace[node] < 0)
