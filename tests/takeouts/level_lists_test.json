@@ -1745,12 +1745,12 @@
 			]
 		},
 		{
-			"name": "SOURCE: a description after the word to go on puts the place back",
+			"name": "SOURCE: a description after the word to go on puts the campaign or place back",
 			"changes": [
 				{
 					"file": "3dc/avp/win95/pldnet.cpp",
-					"from": "else if (Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come",
-					"to": "else if (false && Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come"
+					"from": "\t\tif (Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come",
+					"to": "\t\tif (false && Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come"
 				}
 			]
 		}

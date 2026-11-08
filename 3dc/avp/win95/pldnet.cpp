@@ -5917,8 +5917,25 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 
 		netGameData.gameType = (NETGAME_TYPE)messagePtr->gameType;
 
+		if (Coop_LevelChangeIsDue())
+		{
+			// The host's word to go on has come, and this description can be one it made before it moved. When the host
+			// reaches a level's end, it adds the next-level message and sends at once, and that send can add the
+			// once-a-second description behind it, still naming the old place. Written down, that old place would make this
+			// machine load the level it has just finished, while the host loads the next. So while a move is due, the
+			// campaign and the place stay the pair the next-level message gave and was checked against. The descriptions
+			// sent while the next level loads name them too.
+			static unsigned long long oldPlacesLeft = 0;
+
+			if ((messagePtr->coopCampaign != netGameData.coopCampaign || messagePtr->coopCampaignLevel != netGameData.coopCampaignLevel) && LogThisDrop(oldPlacesLeft))
+			{
+				LogString("campaign: a game description naming campaign " + std::to_string(messagePtr->coopCampaign) + " place " + std::to_string(messagePtr->coopCampaignLevel) +
+					" came after the word to go on to place " + std::to_string(netGameData.coopCampaignLevel) + ", so the campaign and place stay as they are (number " +
+					std::to_string(oldPlacesLeft) + " of these)");
+			}
+		}
 		// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all
-		if (NetCampaignPlaceIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, Campaign_LevelCount(messagePtr->coopCampaign)))
+		else if (NetCampaignPlaceIsGood(messagePtr->coopCampaign, messagePtr->coopCampaignLevel, Campaign_LevelCount(messagePtr->coopCampaign)))
 		{
 			// Someone playing a level who hears here that the campaign has gone on wasn't told the proper way. If this
 			// only wrote the number down, he'd stay in the old level for good, with the others waiting for him. It
@@ -5932,21 +5949,6 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 			{
 				LogErrorString("campaign: the host has gone on to another level and nobody told this machine, so it's going on now");
 				Coop_GoToPlace(messagePtr->coopCampaignLevel);
-			}
-			else if (Coop_LevelChangeIsDue())
-			{
-				// The host's word to go on has come, and this description can be one it made before it moved. When the host
-				// reaches a level's end, it adds the next-level message and sends at once, and that send can add the
-				// once-a-second description behind it, still naming the old place. Written down, that old place would make this
-				// machine load the level it has just finished, while the host loads the next. So while a move is due, the
-				// place stays the one the next-level message gave. The descriptions sent while the next level loads name it too.
-				static unsigned long long oldPlacesLeft = 0;
-
-				if (messagePtr->coopCampaignLevel != netGameData.coopCampaignLevel && LogThisDrop(oldPlacesLeft))
-				{
-					LogString("campaign: a game description naming place " + std::to_string(messagePtr->coopCampaignLevel) + " came after the word to go on to place " +
-						std::to_string(netGameData.coopCampaignLevel) + ", so the place stays " + std::to_string(netGameData.coopCampaignLevel) + " (number " + std::to_string(oldPlacesLeft) + " of these)");
-				}
 			}
 			else
 			{
