@@ -7,7 +7,8 @@
 //   removed debug logging code that was switched off and could never run
 //   the room for far locations is counted the same way it's shared out
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   an AI module's door is found by AIModuleDoor_Find (ai_module_door.h), the one the scent test asks too
+//   AIModuleDoorKindOf, so ai_module_door.h can ask a module what kind of door it is. AIModuleIsADoor, which looked through an AI
+//   module's list for a door, is taken out: its only caller was the scent test, which now finds the door itself (ai_module_door.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -381,21 +382,6 @@ int AIModuleDoorKindOf(MODULE *module)
 	return static_cast<int>(ModuleIsADoor(module));
 }
 
-MODULE *AIModuleTheDoor(AIMODULE *target)
-{
-	int kind = kAIModuleNotADoor;
-
-	return AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);
-}
-
-// An AI module is a door if any module on its list is one, and it's the kind of the first that is
-MODULEDOORTYPE AIModuleIsADoor(AIMODULE* target)
-{
-	int kind = kAIModuleNotADoor;
-
-	AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);
-	return static_cast<MODULEDOORTYPE>(kind);
-}
 
 /*-----------------------Patrick 20/12/96---------------------------
 Returns TRUE if a module is a physical part of the environment,

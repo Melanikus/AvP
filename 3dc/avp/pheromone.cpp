@@ -1,8 +1,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a game that plays as single player, an alien on another machine leaves a trail NPCs can follow
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   whether the scent goes through an AI module is asked of the module that is its door, the one AIModuleIsADoor finds, and that
-//   module's block is checked before it's read (ai_module_door.h)
+//   whether the scent goes through an AI module is asked of the module that is its door, the first on its list, and that module's
+//   block is checked before it's read (ai_module_door.h)
 /*-----------------------Patrick 12/11/96--------------------------
   Source for AVP Pheromone system
   -----------------------------------------------------------------*/

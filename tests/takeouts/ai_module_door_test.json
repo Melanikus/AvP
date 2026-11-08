@@ -95,26 +95,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: the game's door is found some other way",
-			"changes": [
-				{
-					"file": "3dc/avp/pfarlocs.cpp",
-					"from": "\treturn AIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);",
-					"to": "\treturn *target->m_module_ptrs;"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: AIModuleIsADoor gives the first module's kind",
-			"changes": [
-				{
-					"file": "3dc/avp/pfarlocs.cpp",
-					"from": "\tAIModuleDoor_Find(target->m_module_ptrs, AIModuleDoorKindOf, &kind);\n\treturn static_cast<MODULEDOORTYPE>(kind);",
-					"to": "\treturn ModuleIsADoor(*(target->m_module_ptrs));"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: the scent test reads the list's first module itself",
 			"changes": [
 				{
@@ -151,6 +131,26 @@
 					"file": "3dc/avp/pheromone.cpp",
 					"from": "\treturn door && GetState(door->m_sbptr);",
 					"to": "\treturn GetState(door->m_sbptr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the scent test also reads the list's first module itself",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "\treturn AIModuleDoor_LetsScentThrough(targetModule->m_module_ptrs, AIModuleDoorKindOf, ProxDoorIsLocked, DoorIsOpen) ? 1 : 0;",
+					"to": "\tMODULE *const first = *(targetModule->m_module_ptrs);\n\t(void)first;\n\treturn AIModuleDoor_LetsScentThrough(targetModule->m_module_ptrs, AIModuleDoorKindOf, ProxDoorIsLocked, DoorIsOpen) ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door's lock is read before its block is checked",
+			"changes": [
+				{
+					"file": "3dc/avp/pheromone.cpp",
+					"from": "\tif (!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr)\n",
+					"to": "\tint const lockedFirst = static_cast<PROXDOOR_BEHAV_BLOCK const *>(door->m_sbptr->SBdataptr)->door_locked;\n\t(void)lockedFirst;\n\n\tif (!block || block->I_SBtype != I_BehaviourProximityDoor || !block->SBdataptr)\n"
 				}
 			]
 		}
