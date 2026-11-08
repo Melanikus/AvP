@@ -5,7 +5,7 @@
 // reason, so a later check can't hide a missing earlier one. Whether the sounds play in the game needs a real run.
 //
 // It reads no file it's told about: the game's own real sound files aren't in the repository, so they were checked through the game's
-// real loader instead (AvP-docs, outside the repository), and the test takes no path from its command line.
+// real loader instead (in the project's notes, outside the repository), and the test takes no path from its command line.
 
 #include "avp/weapon_sound_bank.h"
 
