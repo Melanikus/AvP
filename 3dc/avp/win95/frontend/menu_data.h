@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the sidearm a player chose
 #ifndef _AvP_MenuData_h_
 #define _AvP_MenuData_h_
 
@@ -6,6 +8,7 @@
 #define MAX_MULTIPLAYER_NAME_LENGTH 10
 
 extern int MP_Species;
+extern int MP_Sidearm;
 extern int MP_GameStyle;
 extern int MP_LevelNumber;
 

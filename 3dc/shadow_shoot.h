@@ -51,7 +51,7 @@ struct ShootFrameFacts
 
 // These three are in kshape.cpp, which knows the game's shapes. FindTarget sends a ray from the camera, along direction, a line 1 long in the world. ShapeNumber gives a shape's number
 // in the game's list, or -1. CrosshairPixel gives where the sight is drawn, or -1 and -1 if this player has none.
-void ShadowShoot_FindTarget(const float *direction, ShootTarget *target);
+void ShadowShoot_FindTarget(const float *direction, ShootTarget *target, const void *alsoIgnore = 0);
 int ShadowShoot_ShapeNumber(const void *shape);
 void ShadowShoot_CrosshairPixel(int *x, int *y);
 

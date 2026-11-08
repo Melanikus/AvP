@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   two questions for an NPC in a game that plays the same as single player: is this any player, on this machine or another, and how far away is the nearest one
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 
 #ifndef _bhais_h_
@@ -154,6 +156,12 @@ extern int CheckAdjacencyValidity(AIMODULE *target,AIMODULE *source,int alien);
 extern int AIModuleIsVisible(AIMODULE *aimodule);
 
 extern int NPC_IsDead(STRATEGYBLOCK *sbPtr);
+
+// Is this any player: the one on this machine, or a living one on another machine?
+extern bool NPC_IsAPlayer(const STRATEGYBLOCK *sbPtr);
+
+// How far away the nearest player is, on this machine or any other
+extern int NPC_DistanceToNearestPlayer(const VECTORCH *place);
 extern void NPC_InitMovementData(NPC_MOVEMENTDATA *moveData);
 extern void NPC_IsObstructed(STRATEGYBLOCK *sbPtr, NPC_MOVEMENTDATA *moveData, NPC_OBSTRUCTIONREPORT *details, STRATEGYBLOCK **destructableObject);
 extern int NPC_CannotReachTarget(NPC_MOVEMENTDATA *moveData, VECTORCH* thisTarget, VECTORCH* thisVelocity);
@@ -172,6 +180,7 @@ extern void CastLOSProjectile(STRATEGYBLOCK *sbPtr, VECTORCH *muzzlepos, VECTORC
 extern int VerifyHitShot(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target, VECTORCH *muzzlepos, VECTORCH *in_shotvector, enum AMMO_ID AmmoID, int multiple, int maxrange);
 extern AIMODULE *GetNextModuleForLink(AIMODULE *source,AIMODULE *target,int max_depth,int alien);
 extern AIMODULE *GetNextModuleForLink_Core(AIMODULE *source,AIMODULE *target,int max_depth,int visibility_check,int alien);
+extern void NPC_CheckSavedPath(int *path, int *stepnumber);
 extern int GetNextModuleInPath(int current_module, int path);
 extern AIMODULE *TranslatePathIndex(int current_module, int path);
 extern int GetClosestStepInPath(int path,MODULE* current_module);

@@ -1,3 +1,5 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port: numbers for the new guns' sounds.
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP Project sound header
   ----------------------------------------------------------------------------*/
@@ -347,7 +349,15 @@ typedef enum soundindex
 	SID_UNUSED_238,
 	SID_UNUSED_239,
 
-	SID_ENDOF_LOADSLOTS=800,
+	// The slots above are handed out while a level loads. They stop here so that the numbers below stay free.
+	SID_ENDOF_LOADSLOTS=796,
+
+	// The new guns' sounds, from their own small file: see LoadNewWeaponSounds. These come last so that no number
+	// the game already uses has to move.
+	SID_WEAPON_REVOLVER_FIRE,
+	SID_WEAPON_HEADSHOT,
+	SID_WEAPON_SHOTGUN_FIRE,
+	SID_WEAPON_SNIPER_FIRE,
 
 	SID_MAXIMUM, /* SPECIAL: used to trap out of bounds values */
 	SID_NOSOUND  /* SPECIAL: used to specify a null sound */

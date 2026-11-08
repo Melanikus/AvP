@@ -4,6 +4,11 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   removed a repeated "ghostData =" from one line; the game runs exactly as before
+//   in the same-as-single-player mode, a lift comes for someone within 5 m of its edge, because some lifts are wider than 5 m
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   in the same-as-single-player mode, the host says where each lift's car is, and every other machine's car follows it
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -13,20 +18,24 @@
 #include "triggers.h"
 #include "mslhand.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "showcmds.h"
 #include "io.h"
+#include "logString.h"
 #define UseLocalAssert TRUE
 #include "ourasert.h"
 #include "bh_platform_lift.h"
 #include "pldnet.h"
 #include "pldghost.h"
 #include "weapons.h"
+#include "net_checks.h"
 
 /* prototypes for this file */
 static int SquashingSomething(DYNAMICSBLOCK *dynPtr);
 static void PushPassengersUpwards(DYNAMICSBLOCK *dynPtr);
 static int ActivatedByPlayer(DYNAMICSBLOCK *dynPtr);
+static void Lift_FollowTheHostsCar(STRATEGYBLOCK *sbPtr);
 static int PlayerIsNearOtherTerminal(STRATEGYBLOCK *sbPtr);
 static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr);
 static int PLiftIsNearerUpThanDown(STRATEGYBLOCK *sbPtr);
@@ -45,10 +54,23 @@ void PlatformLiftBehaviour(STRATEGYBLOCK *sbPtr)
 	dynPtr = sbPtr->DynPtr;
 	LOCALASSERT(dynPtr);
 
-	switch(platformliftdata->state)
+	// In the mode that plays as single player, a joiner's car follows the host's once the host has said where it is, and doesn't
+	// move by itself. Touching it still asks the host to start it, as before.
+	BOOL const followsTheHost = AvP.Network == I_Peer && SameAsSinglePlayer() && platformliftdata->syncHeard;
+
+	if (followsTheHost)
+	{
+		Lift_FollowTheHostsCar(sbPtr);
+
+		if (platformliftdata->state == PLBS_AtRest && ActivatedByPlayer(dynPtr))
+		{
+			AddNetMsg_RequestPlatformLiftActivate(sbPtr);
+		}
+	}
+	else switch(platformliftdata->state)
 	{
 		case(PLBS_AtRest):
-		{			
+		{
 			if(AvP.Network==I_Host)
 			{
 				/* multiplayer host */
@@ -226,7 +248,21 @@ void PlatformLiftBehaviour(STRATEGYBLOCK *sbPtr)
 			{
 				AddNetMsg_PlatformLiftState(sbPtr);
 			}
-			platformliftdata->netMsgCount--;	
+			platformliftdata->netMsgCount--;
+		}
+	}
+
+	// In the mode that plays as single player, the host also says where the car is: when its state changes, and once a second, so
+	// a joiner who missed a message or arrived late has it right within a second
+	if (AvP.Network == I_Host && SameAsSinglePlayer())
+	{
+		platformliftdata->syncSinceSent += NormalFrameTime;
+
+		if ((int)platformliftdata->state != platformliftdata->syncLastSentState || platformliftdata->syncSinceSent >= ONE_FIXED)
+		{
+			AddNetMsg_LiftState(sbPtr);
+			platformliftdata->syncLastSentState = (int)platformliftdata->state;
+			platformliftdata->syncSinceSent = 0;
 		}
 	}
 }
@@ -253,6 +289,16 @@ void InitialisePlatformLift(void* bhdata, STRATEGYBLOCK *sbPtr)
 	platformliftdata->activationDelayTimer = 0;
 	platformliftdata->state = PLBS_AtRest;
 	platformliftdata->netMsgCount = 0;
+
+	// The lift sync: the host sends at once, and a joiner's car moves by itself until the host has spoken
+	platformliftdata->syncSinceSent = ONE_FIXED;
+	platformliftdata->syncLastSentState = -1;
+	platformliftdata->syncHeard = FALSE;
+	platformliftdata->syncHeight = toolsData->position.vy;
+	platformliftdata->syncState = PLBS_AtRest;
+	platformliftdata->syncEnd = 0;
+	platformliftdata->syncAge = 0;
+	platformliftdata->syncMessages = 0;
 	
 	if(toolsData->travel<0)
 	{
@@ -292,6 +338,13 @@ void InitialisePlatformLift(void* bhdata, STRATEGYBLOCK *sbPtr)
 	sbPtr->shapeIndex = toolsData->shapeIndex;
 	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
 	sbPtr->integrity = 1;
+
+	// The lift sync finds a car by its name, so it can't tell two lifts with the same name apart, and refuses messages about them.
+	// No stock level has one; a level that does is told in the log as it loads.
+	if (PlatformLift_NameIsShared(sbPtr))
+	{
+		LogString("lift: two platform lifts in this level share a name, so a network game can't keep their cars together");
+	}
 }
 
 /*------------------------------Patrick 2/4/97-----------------------------------
@@ -506,6 +559,8 @@ static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 	PLATFORMLIFT_BEHAVIOUR_BLOCK *platformliftdata;
 	DYNAMICSBLOCK *dynPtr;
 	VECTORCH otherTerminal;
+	SHAPEHEADER const *const liftShape = GetShapeData(sbPtr->shapeIndex);
+	int const callReach = NetLiftCallReach(liftShape ? liftShape->shaperadius : 0, SameAsSinglePlayer());
 
 	LOCALASSERT(sbPtr);
 	platformliftdata = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)sbPtr->SBdataptr;
@@ -540,14 +595,14 @@ static int NetPlayerAtOtherTerminal(STRATEGYBLOCK *sbPtr)
 			{
 				/* remote player */
 				LOCALASSERT(sbPtr->DynPtr);
-				if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<5000) return 1;
+				if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<callReach) return 1;
 			}
 		}
 		else if(sbPtr==Player->ObStrategyBlock)
 		{
 			/* local player */
 			LOCALASSERT(sbPtr->DynPtr);
-			if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<5000) return 1;
+			if(VectorDistance(&(sbPtr->DynPtr->Position),&(otherTerminal))<callReach) return 1;
 		}
 	}		
 	return 0;
@@ -580,6 +635,12 @@ void NetworkPeerChangePlatformLiftState(STRATEGYBLOCK* sbPtr,PLATFORMLIFT_STATES
 	LOCALASSERT(platformliftdata);
 	LOCALASSERT(sbPtr->DynPtr);
 
+	// In the mode that plays as single player, the host's lift sync message says where the car is, and this one is left alone
+	if (SameAsSinglePlayer() && platformliftdata->syncHeard)
+	{
+		return;
+	}
+
 	//check to see if this is a new state , and change any sound playing as necessary
 
 	if(new_state==PLBS_Activating)
@@ -607,6 +668,97 @@ void NetworkPeerChangePlatformLiftState(STRATEGYBLOCK* sbPtr,PLATFORMLIFT_STATES
 
 }
 
+
+// Which end a car is going to, or resting at: 0 the top (upHeight, the smaller height), 1 the bottom (downHeight)
+int PlatformLift_EndItsGoingTo(STRATEGYBLOCK *sbPtr)
+{
+	PLATFORMLIFT_BEHAVIOUR_BLOCK const *const lift = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)sbPtr->SBdataptr;
+
+	if (lift->state == PLBS_GoingUp)
+	{
+		return 0;
+	}
+
+	if (lift->state == PLBS_GoingDown)
+	{
+		return 1;
+	}
+
+	return sbPtr->DynPtr->Position.vy - lift->upHeight <= lift->downHeight - sbPtr->DynPtr->Position.vy ? 0 : 1;
+}
+
+// Whether another platform lift in the level has this one's name. The network finds a lift by its name, so it couldn't tell them apart.
+BOOL PlatformLift_NameIsShared(STRATEGYBLOCK *sbPtr)
+{
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const other = ActiveStBlockList[i];
+
+		if (other != sbPtr && other->I_SBtype == I_BehaviourPlatform && NAME_ISEQUAL(other->SBname, sbPtr->SBname))
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+// The host's message about this car, already checked (ProcessNetMsg_LiftState, pldnet.cpp). The car follows it from now on.
+void PlatformLift_TakeTheHostsCar(STRATEGYBLOCK *sbPtr, int height, int state, int end)
+{
+	PLATFORMLIFT_BEHAVIOUR_BLOCK *const lift = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)sbPtr->SBdataptr;
+	BOOL const wasMoving = lift->state == PLBS_GoingUp || lift->state == PLBS_GoingDown;
+	BOOL const isMoving = state == PLBS_GoingUp || state == PLBS_GoingDown;
+
+	// The sound of it starting, as the old state message plays it
+	if (isMoving && !wasMoving && lift->start_sound)
+	{
+		Start_Track_Sound(lift->start_sound, &sbPtr->DynPtr->Position);
+	}
+
+	lift->syncHeight = height;
+	lift->syncState = state;
+	lift->syncEnd = end;
+	lift->syncAge = 0;
+	lift->syncHeard = TRUE;
+	lift->syncMessages++;
+	lift->state = (PLATFORMLIFT_STATES)state;
+}
+
+// In the mode that plays as single player, a joiner's car follows the host's (PlatformLift_TakeTheHostsCar). From the host's last
+// message it works out where the host's car should be by now, and moves this one there. With someone on it, or close, it travels at
+// a little over lift speed, so a rider is carried and never dropped or passed through. Further than a step away with nobody on it,
+// it goes straight there. A joiner's touch still asks the host to start it (PlatformLiftBehaviour).
+static void Lift_FollowTheHostsCar(STRATEGYBLOCK *sbPtr)
+{
+	PLATFORMLIFT_BEHAVIOUR_BLOCK *const lift = (PLATFORMLIFT_BEHAVIOUR_BLOCK *)sbPtr->SBdataptr;
+	DYNAMICSBLOCK *const dynPtr = sbPtr->DynPtr;
+	BOOL const moving = lift->syncState == PLBS_GoingUp || lift->syncState == PLBS_GoingDown;
+	int const endHeight = lift->syncEnd == 0 ? lift->upHeight : lift->downHeight;
+
+	lift->syncAge += NormalFrameTime;
+
+	int const msSince = (int)(((long long)lift->syncAge * 1000) >> ONE_FIXED_SHIFT);
+	int const hostHeight = NetLiftHostHeightNow(lift->syncHeight, moving != FALSE, endHeight, PLATFORMLIFT_SPEED, msSince);
+	int const mostThisFrame = MUL_FIXED(PLATFORMLIFT_SPEED + (PLATFORMLIFT_SPEED >> 2), NormalFrameTime);
+	BOOL const someoneOnIt = ActivatedByPlayer(dynPtr) ? TRUE : FALSE;
+	int const height = NetLiftFollowStep(dynPtr->Position.vy, hostHeight, mostThisFrame, someoneOnIt != FALSE, MAXIMUM_STEP_HEIGHT);
+	int const gap = height - dynPtr->Position.vy;
+
+	dynPtr->Displacement.vx = 0;
+	dynPtr->Displacement.vz = 0;
+
+	if (!someoneOnIt && (gap > MAXIMUM_STEP_HEIGHT || -gap > MAXIMUM_STEP_HEIGHT))
+	{
+		dynPtr->Position.vy = height;
+		dynPtr->PrevPosition.vy = height;
+		dynPtr->Displacement.vy = 0;
+	}
+	else
+	{
+		dynPtr->Displacement.vy = gap;
+	}
+}
 
 /*--------------------**
 ** Loading and Saving **
@@ -656,7 +808,7 @@ void LoadStrategy_PlatformLift(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(Enabled)
 	COPYELEMENT_LOAD(OneUse)
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 
 }
 

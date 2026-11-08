@@ -1,3 +1,11 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved curve of no length is worked out again, because the game divides by its length
+//   a value a save has refused is counted for the log
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game a placed alien can still be found by the name it has in the level
+//   when this dies on the host, its death target reaches the other machines
 /*------------------------Patrick 6/11/96-----------------------------
   Source file for alien AI behaviour functions....
   --------------------------------------------------------------------*/
@@ -14,6 +22,7 @@
 #include "strategy_def.h"
 #include "gamedef.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "load_shape.h"
@@ -649,15 +658,8 @@ void InitAlienBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* strategy block initialisation */
 	sbPtr->shapeIndex =	toolsData->shapeIndex;
 
-	if(AvP.Network==I_No_Network)
-	{
-		for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
-	}
-	else
-	{
-		//in a network game , generate a new sb name (so that it gets a reasonably low value)
-		AssignNewSBName(sbPtr);
-	}
+	// In a network game this generates a new name, and a switch aimed at this alien still finds it by the name it has in the level
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	/* create, initialise and attach a dynamics block */
 	sbPtr->DynPtr = AllocateDynamicsBlock(DYNAMICS_TEMPLATE_ALIEN_NPC);
@@ -1105,7 +1107,7 @@ void MakeAlienNear(STRATEGYBLOCK *sbPtr)
 
 	/* first of all, see how many aliens are currently near: if there are too many,
 	destroy this alien, and try to force a generator to make a replacement */
-	if(NumGeneratorNPCsVisible() >= MAX_VISIBLEGENERATORNPCS)
+	if(NumGeneratorNPCsVisible() >= NearNpcLimit())
 	{
 		DestroyAnyStrategyBlock(sbPtr);
 		ForceAGenerator();
@@ -1560,6 +1562,7 @@ void KillAlien(STRATEGYBLOCK *sbPtr,int wounds,DAMAGE_PROFILE *damage, int multi
 	if(alienStatusPointer->death_target_sbptr)
 	{
 		RequestState(alienStatusPointer->death_target_sbptr,1, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 	/* Set up gibb factor. */
@@ -2390,6 +2393,12 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(CurveRadius)
 	COPYELEMENT_LOAD(CurveLength)
 	COPYELEMENT_LOAD(CurveTimeOut)
+	if(alienStatusPointer->CurveLength <= 0)
+	{
+		//the length gets divided by, so this makes the alien work out a new curve
+		Save_NoteRefused("a curve with no length");
+		alienStatusPointer->CurveTimeOut = 0;
+	}
 	COPYELEMENT_LOAD(FarStateTimer)
 	COPYELEMENT_LOAD(NearStateTimer)
 	COPYELEMENT_LOAD(IAmCrouched)
@@ -2412,7 +2421,7 @@ void LoadStrategy_Alien(SAVE_BLOCK_STRATEGY_HEADER* header)
 	//get the alien's attack from the attack code
 	alienStatusPointer->current_attack = GetThisAttack_FromUniqueCode(block->currentAttackCode);
 
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 

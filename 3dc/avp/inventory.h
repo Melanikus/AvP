@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   unlimited pistol ammunition doesn't apply in a game that plays as single player
 #ifndef INVENTRY_H
 #define INVENTRY_H
 /*KJL*****************************************************
@@ -35,6 +37,6 @@ typedef struct player_starting_equipment
 
 extern PLAYER_STARTING_EQUIPMENT StartingEquipment;
 
-#define PISTOL_INFINITE_AMMO	(netGameData.pistolInfiniteAmmo)
+#define PISTOL_INFINITE_AMMO	(netGameData.pistolInfiniteAmmo && !SameAsSinglePlayer())
 
 #endif

@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a sound can forget an address in memory that is about to go
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP sound management header
   Provides support for sound samples, and for playing CDDA tracks.
@@ -140,6 +142,9 @@ extern void Sound_Play(SOUNDINDEX soundNumber, char* format, ...);
   from the base pitch of the sound. 
   -----------------------------------------------------------------------------*/
 extern void Sound_Stop(int activeSoundNumber);
+
+// Some memory is about to be freed. A sound can hold the address of a number in whatever started it, to say when it has ended. Any sound holding an address inside this memory forgets it, and plays on.
+extern void Sound_ForgetAddressesInside(const void *start, size_t bytes);
 extern void Sound_ChangeVolume(int activeSoundNumber, int volume);
 extern void Sound_ChangePitch(int activeSoundNumber, int pitch);
 extern void Sound_Update3d(int activeSoundNumber, VECTORCH* posn);
