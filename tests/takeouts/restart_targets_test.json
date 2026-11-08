@@ -1,0 +1,48 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "SOURCE: restarting keeps the sight's locked target",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "\tSmartTarget_Object = NULL;\n\tOld_SmartTarget_Object = NULL;\n\n\t/* KJL 14:21:54 17/11/98 - Predator */",
+					"to": "\tOld_SmartTarget_Object = NULL;\n\n\t/* KJL 14:21:54 17/11/98 - Predator */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: restarting keeps the sight's last target",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "\tSmartTarget_Object = NULL;\n\tOld_SmartTarget_Object = NULL;\n\n\t/* KJL 14:21:54 17/11/98 - Predator */",
+					"to": "\tSmartTarget_Object = NULL;\n\n\t/* KJL 14:21:54 17/11/98 - Predator */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the restart doesn't set the HUD up again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tReInitHUD();",
+					"to": "\t// ReInitHUD();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a disc keeps a target with no name",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_weapon.cpp",
+					"from": "if (!NAME_ISNULL(bbPtr->Target_SBname) && NAME_ISEQUAL(bbPtr->Target_SBname,bbPtr->Target->SBname)) {",
+					"to": "if (NAME_ISEQUAL(bbPtr->Target_SBname,bbPtr->Target->SBname)) {"
+				}
+			]
+		}
+	]
+}

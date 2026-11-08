@@ -300,19 +300,34 @@ static std::string ReadSourceFile(const char *name)
 	return text;
 }
 
-// The text from one marker up to the next one after it. Empty if either isn't there, so a check looking inside it fails instead of passing on nothing.
+// The text from one marker up to the next one after it.
+//
+// If either marker isn't there, that's a failed check of its own, named by the marker, and the text given back is empty. An empty text alone
+// wasn't enough: a check that something is NOT inside it, like "no while (1)", passes on nothing, and so can't tell code that moved from code
+// that's right. A marker goes missing when the code it names is moved or renamed, and the test then has to be pointed at where it went.
+// (Modified 2026-11-08 by Melanikus for the AvP port: a missing marker is now a failed check, because moving GetALFormat to openal_shared.h
+// took away this file's end marker for AllocateWavData without anything saying so.)
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
 	std::string::size_type const start = text.find(from);
 
 	if (start == std::string::npos)
 	{
+		printf("FAILED: the code this test reads has no \"%s\"\n", from);
+		checksFailed++;
 		return "";
 	}
 
 	std::string::size_type const end = text.find(to, start);
 
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	if (end == std::string::npos)
+	{
+		printf("FAILED: the code this test reads has no \"%s\" after \"%s\"\n", to, from);
+		checksFailed++;
+		return "";
+	}
+
+	return text.substr(start, end - start);
 }
 
 static bool Has(const std::string &text, const char *words)
@@ -363,7 +378,8 @@ static void TestTheGamesLoops()
 static void TestTheSizesInSoundFiles()
 {
 	std::string const audio = ReadSourceFile("3dc/avp/win95/openal_audio.cpp");
-	std::string const allocating = Between(audio, "static bool AllocateWavData(int soundNum, uint32_t nAudioBytes)", "inline ALenum GetALFormat");
+	// AllocateWavData runs up to the WAV file loader, the next function in openal_audio.cpp
+	std::string const allocating = Between(audio, "static bool AllocateWavData(int soundNum, uint32_t nAudioBytes)", "int LoadWavFile(int soundNum, const std::string &fileName)");
 
 	Check(Has(audio, "static const uint32_t kMaxWavDataBytes = 64 * 1024 * 1024;"), "a WAV may hold 64 MB of sound at most");
 	Check(ComesBefore(allocating, "if (nAudioBytes > kMaxWavDataBytes)", "new(std::nothrow) uint8_t[nAudioBytes]"), "and that's checked before the memory is asked for");

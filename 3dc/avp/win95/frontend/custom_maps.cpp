@@ -1,9 +1,12 @@
 // The custom maps you can play in single player: see custom_maps.h. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and
 // Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten).
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the largest file listed is the largest the level loader reads, one number for both (level_file_sum.h)
 
 #include "3dc.h"
 #include "custom_maps.h"
 #include "custom_map_name.h"
+#include "level_file_sum.h"
 #include "level_kind.h"
 #include "huffman.hpp"
 #include "utilities.h"
@@ -22,7 +25,8 @@ extern texID_t MISSING_TEXTURE;
 
 // The largest custom level file that's read, and the largest it may unpack to. The largest stock level is 2.6 MB packed and 5.1 MB
 // unpacked (Vaults, measured 2026-11-07), so these leave plenty of room for a real map and none for a file made to fill memory.
-static const long long kCustomMapMostFileBytes = 32LL << 20;
+// The file's limit is the level loader's own, so a map is never listed that the loader would refuse for its size.
+static const long long kCustomMapMostFileBytes = kLevelFileMostBytes;
 static const int kCustomMapMostLevelBytes = 64 << 20;
 
 // The largest picture shown with a map. It goes between the page's title and its rows, which leaves room for this much

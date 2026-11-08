@@ -705,6 +705,21 @@
 			]
 		},
 		{
+			"name": "an alien with no target reads where its target is before it checks it has one",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t// Modified 2026-11-08 by Melanikus for the AvP port:\n\t//   this used to come before the check above, so an alien with no target read through an empty pointer and the game crashed\n\tdistanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tLOCALASSERT(dynPtr);\n\n\tif (alienStatusPointer->Target==NULL) {\n\t\t/* Approach what? */\n",
+					"to": "\tLOCALASSERT(dynPtr);\n\n\tdistanceToPlayer = VectorDistance(&(dynPtr->Position),&(alienStatusPointer->Target->DynPtr->Position));\n\n\tif (alienStatusPointer->Target==NULL) {\n\t\t/* Approach what? */\n"
+				}
+			]
+		},
+		{
 			"name": "things placed in a level aren't marked to be kept until it ends",
 			"changes": [
 				{

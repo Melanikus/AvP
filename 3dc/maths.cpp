@@ -3,6 +3,9 @@
 //   the degree signs in comments are plain text now, and four calls are split so each #if branch is a whole
 //   statement; both let code scanners read the file (the compiled code is the same);
 //   angles received from the network are kept between 0 and 4095 before a sine or cosine lookup
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   MatrixFromZVector gives back the matrix that turns nothing for a vector of nothing, and makes a real matrix for a vector straight up
+//   or down, which it used to build from -2147483648s (NORMALISE-ZERO-1)
 
 #include "3dc.h"
 #include "inline.h"
@@ -1623,11 +1626,29 @@ void MatrixFromZVector(VECTORCH *v, MATRIXCH *m)
 
 	VECTORCH zero = {0, 0, 0};
 
-	XVector.vx = v->vz;
-	XVector.vy = 0;
-	XVector.vz = -v->vx;
+	// A direction of nothing points nowhere: the matrix that turns nothing is given back. See normalise.h.
+	if (v->vx == 0 && v->vy == 0 && v->vz == 0)
+	{
+		*m = IdentityMatrix;
+		return;
+	}
 
-	Normalise(&XVector);
+	if (v->vx == 0 && v->vz == 0)
+	{
+		// Straight up or down there's no side across it to work out (vz, 0, -vx is nothing), and Normalise used to make that a vector
+		// of -2147483648s. So the world's own across is used, as MakeMatrixFromDirection does when it has nothing across.
+		XVector.vx = ONE_FIXED;
+		XVector.vy = 0;
+		XVector.vz = 0;
+	}
+	else
+	{
+		XVector.vx = v->vz;
+		XVector.vy = 0;
+		XVector.vz = -v->vx;
+
+		Normalise(&XVector);
+	}
 
 	MakeNormal(&zero, &XVector, v, &YVector);
 

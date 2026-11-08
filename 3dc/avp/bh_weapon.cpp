@@ -12,6 +12,8 @@
 //   a Molotov starts from cleared memory, so loading one no longer reads a model from random memory
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a disc whose target has no name flies free, since every object in the level has a name and a target with none isn't one of them
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -3630,7 +3632,9 @@ extern void DiscBehaviour_SeekTrack(STRATEGYBLOCK *sbPtr)
   	} else if (bbPtr->Target) {
 		/* We have a target. */
 		textprint("Disc homing on target.\n");
-		if (NAME_ISEQUAL(bbPtr->Target_SBname,bbPtr->Target->SBname)) {
+		// Every object in the level has a name, and a place that's been let go has none. So a target whose name is nothing isn't an
+		// object any more, even when the place it was kept in says nothing too: the disc lets it go and flies free.
+		if (!NAME_ISNULL(bbPtr->Target_SBname) && NAME_ISEQUAL(bbPtr->Target_SBname,bbPtr->Target->SBname)) {
 			if (!NPC_IsDead(bbPtr->Target)) {
 				/* Our target lives! */
 				VECTORCH targetPos;
