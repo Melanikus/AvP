@@ -3651,10 +3651,14 @@ static bool PutTheCameraBesideTheAlien(const STRATEGYBLOCK *marine, VECTORCH *pl
 	return true;
 }
 
-// watchfrom=eyes: the camera stays at his own eyes, where he stands, and turns to look at the alien, so that a film shows what a player standing there
-// would see coming at him. Only the way it looks changes. Until there's an alien, and after it's gone, he looks the way he's facing.
-static void TurnHisEyesToTheAlien(VECTORCH standing, MATRIXCH *turn)
+// watchfrom=eyes: the camera looks at the alien from his eyes, so that a film shows what a player standing there would see coming at him. In a fight his
+// body has to stay solid and seen (see HideFromCollisionsAndTheCamera), and from inside his head the camera saw the inside of his own helmet, shoulder and
+// gun. So it sits a little way in front of his eyes, along the ground towards the alien: kCameraAheadOfHisEyes, or half the way to the alien when that's
+// nearer, and short of any wall. Until there's an alien, and after it's gone, the camera is his own eyes, looking the way he faces.
+static void LookFromHisEyesAtTheAlien(const STRATEGYBLOCK *marine, VECTORCH *place, MATRIXCH *turn)
 {
+	static const int kCameraAheadOfHisEyes = 1000;   // mm: clear of his helmet, and of the gun he holds out in front of him
+
 	STRATEGYBLOCK *const found = FindSBWithName(alienName);
 
 	if (marineStage != kMarineFighting || !found || found->I_SBtype != I_BehaviourAlien || !found->DynPtr)
@@ -3663,11 +3667,40 @@ static void TurnHisEyesToTheAlien(VECTORCH standing, MATRIXCH *turn)
 	}
 
 	// The game raises the camera from where he stands to his eyes afterwards (see the camera beside the alien, above), so the look starts from there too
-	VECTORCH eyes = standing;
+	int const eyeHeight = CollisionExtents[CE_MARINE].StandingTop + 200;
+	VECTORCH const alien = found->DynPtr->Position;
+	VECTORCH ahead = { alien.vx - place->vx, 0, alien.vz - place->vz };
 
-	eyes.vy += CollisionExtents[CE_MARINE].StandingTop + 200;
+	if (ahead.vx != 0 || ahead.vz != 0)
+	{
+		int distance = Approximate3dMagnitude(&ahead) / 2;
 
-	VECTORCH look = { found->DynPtr->Position.vx - eyes.vx, found->DynPtr->Position.vy - eyes.vy, found->DynPtr->Position.vz - eyes.vz };
+		if (distance > kCameraAheadOfHisEyes)
+		{
+			distance = kCameraAheadOfHisEyes;
+		}
+
+		Normalise(&ahead);
+
+		VECTORCH eyes = { place->vx, place->vy + eyeHeight, place->vz };
+
+		FindPolygonInLineOfSight(&ahead, &eyes, 0, marine->SBdptr);
+
+		// Only walls count, as for the camera behind him: the alien itself coming close is what the half-way rule is for
+		if (LOS_ObjectHitPtr && LOS_ObjectHitPtr->ObMyModule && LOS_Lambda - kCameraOffAWall < distance)
+		{
+			distance = LOS_Lambda - kCameraOffAWall;
+		}
+
+		VECTORCH inFrontOfHim = { place->vx + MUL_FIXED(ahead.vx, distance), place->vy, place->vz + MUL_FIXED(ahead.vz, distance) };
+
+		if (distance > 0 && ModuleFromPosition(&inFrontOfHim, marine->containingModule))
+		{
+			*place = inFrontOfHim;
+		}
+	}
+
+	VECTORCH look = { alien.vx - place->vx, alien.vy - (place->vy + eyeHeight), alien.vz - place->vz };
 
 	if (look.vx == 0 && look.vy == 0 && look.vz == 0)
 	{
@@ -4873,13 +4906,13 @@ void Hudson_PointTheCamera(VECTORCH *place, MATRIXCH *turn)
 	*place = marine->DynPtr->Position;
 	*turn = marine->DynPtr->OrientMat;
 
-	// watch=alien: beside the alien, while there's one and room for the camera; or with watchfrom=eyes, at his own eyes, looking at it. Otherwise, and in
+	// watch=alien: beside the alien, while there's one and room for the camera; or with watchfrom=eyes, just in front of his eyes, looking at it. Otherwise, and in
 	// any other fight, behind him.
 	bool const fromHisEyes = plan.watchAlien && plan.watchFromEyes;
 
 	if (fromHisEyes)
 	{
-		TurnHisEyesToTheAlien(*place, turn);
+		LookFromHisEyesAtTheAlien(marine, place, turn);
 	}
 
 	bool const besideTheAlien = plan.watchAlien && !fromHisEyes && PutTheCameraBesideTheAlien(marine, place, turn);

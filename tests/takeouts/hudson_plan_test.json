@@ -7591,7 +7591,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "\t\tTurnHisEyesToTheAlien(*place, turn);",
+					"from": "\t\tLookFromHisEyesAtTheAlien(marine, place, turn);",
 					"to": "\t\t;"
 				}
 			]
@@ -7611,8 +7611,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "eyes.vy += CollisionExtents[CE_MARINE].StandingTop + 200;",
-					"to": "eyes.vy += 0;"
+					"from": "int const eyeHeight = CollisionExtents[CE_MARINE].StandingTop + 200;",
+					"to": "int const eyeHeight = 0;"
 				}
 			]
 		},
@@ -7703,6 +7703,46 @@
 					"file": "3dc/avp/bh_marine.cpp",
 					"from": "\tif (HudsonMarineIsOn && HudsonMarineHoldsFire) {\n\t\treturn;\n\t}\n\n\t/* Test? */",
 					"to": "\tif (false) {\n\t\treturn;\n\t}\n\n\t/* Test? */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the eyes camera stays inside his head",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\t*place = inFrontOfHim;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the eyes camera goes in front of him outside any room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (distance > 0 && ModuleFromPosition(&inFrontOfHim, marine->containingModule))",
+					"to": "if (distance > 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the eyes camera goes through a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (LOS_ObjectHitPtr && LOS_ObjectHitPtr->ObMyModule && LOS_Lambda - kCameraOffAWall < distance)\n\t\t{\n\t\t\tdistance = LOS_Lambda - kCameraOffAWall;\n\t\t}\n\n\t\tVECTORCH inFrontOfHim",
+					"to": "if (false)\n\t\t{\n\t\t\tdistance = LOS_Lambda - kCameraOffAWall;\n\t\t}\n\n\t\tVECTORCH inFrontOfHim"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the eyes camera goes past the alien",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "int distance = Approximate3dMagnitude(&ahead) / 2;",
+					"to": "int distance = Approximate3dMagnitude(&ahead) * 2;"
 				}
 			]
 		}
