@@ -378,8 +378,8 @@ static void TestTheWiring()
 	Check(Has(pldnet, "if (leftBehind)\n\t\t\t{") && Has(pldnet, "Coop_GoToPlace(messagePtr->coopCampaignLevel);"), "someone left behind goes on when he hears of it");
 	Check(Has(pldnet, "bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning"), "only if he's actually playing a level");
 	// The host's send at a level's end can put its once-a-second description, still naming the old place, behind the word to go on
-	Check(Has(pldnet, "\t\t\telse if (Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come") && Has(pldnet, "\t\t\t}\n\t\t\telse\n\t\t\t{\n\t\t\t\tnetGameData.coopCampaignLevel = messagePtr->coopCampaignLevel;"),
-		"SOURCE: a description that comes after the word to go on can't put the place back, so a joiner loads the host's next level");
+	Check(Has(pldnet, "\t\tif (Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come") && Has(pldnet, "\t\t}\n\t\t// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all\n\t\telse if (NetCampaignPlaceIsGood("),
+		"SOURCE: a description that comes after the word to go on changes neither the campaign nor the place, so a joiner loads the host's next level");
 	Check(Has(winmain, "AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;"), "a level called off while it loads doesn't start");
 	Check(Has(pldnet, "VECTORCH spot = ground;"), "the places round a start are on the floor under it");
 	Check(Has(pldnet, "if (ABodyFitsHere(&ground, &spot))"), "and they're judged from there");
