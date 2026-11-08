@@ -104,6 +104,7 @@ typedef struct
 {
 	char Name[40];
 	int levelIndex;
+	char coopLobby;
 	uint32_t host;
 	uint16_t port;
 	GUID Guid;

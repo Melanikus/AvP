@@ -32,6 +32,7 @@
 
 #include "custom_maps.h"
 #include "huffman.hpp"
+#include "md5.h"
 
 static int checksFailed = 0;
 
@@ -294,13 +295,70 @@ static void TestTheList()
 
 static void TestNamesAndLoading()
 {
-	puts("A map loaded:");
+	puts("A map named, and loaded:");
+
+	Check(CustomMaps_Named("ab", 3) == 1 && CustomMaps_Named("A_B", 4) == 0, "a map is found by its name in any case, as Windows finds the file");
+	Check(CustomMaps_Named("Gamma", 6) == -1, "a multiplayer map isn't one of them");
+	Check(CustomMaps_Named("..\\Ab", 6) == -1 && CustomMaps_Named("Ab.rif", 7) == -1, "a name that breaks the rule is never one of them");
 
 	Check(CustomMaps_SetLevelToLoad(1) && std::string(LevelName) == "Custom/Ab", "loading one puts Custom/<name> where the game loads from");
 
 	strcpy(LevelName, "unchanged");
 	Check(!CustomMaps_SetLevelToLoad(2) && !CustomMaps_SetLevelToLoad(-1) && std::string(LevelName) == "unchanged",
 	      "and a number that isn't one of them changes nothing");
+}
+
+static void TestSizeAndSum()
+{
+	puts("A map's size and sum, for comparing with another player's:");
+
+	Bytes const level = Level(false);
+	char expected[16];
+	unsigned char sum[16];
+	unsigned int size = 0;
+
+	md5_buffer((char const *)level.data(), (unsigned int)level.size(), expected);
+
+	Check(CustomMaps_SizeAndSum(1, &size, sum), "a map on the list has them");
+	Check(size == level.size(), "its size is the size of its file");
+	Check(memcmp(sum, expected, 16) == 0, "and its sum is the MD5 of everything in the file");
+
+	unsigned char packedSum[16];
+	unsigned int packedSize = 0;
+
+	Check(CustomMaps_SizeAndSum(0, &packedSize, packedSum) && memcmp(sum, packedSum, 16) != 0, "another file has another sum");
+
+	// Changing the file proves the second answer didn't read it again
+	Write("avp_rifs\\Custom\\Ab.rif", "changed", 7);
+
+	Check(CustomMaps_SizeAndSum(1, &size, sum) && size == level.size() && memcmp(sum, expected, 16) == 0, "a map's file is only read once");
+
+	Write("avp_rifs\\Custom\\Ab.rif", level);
+
+	Check(!CustomMaps_SizeAndSum(2, &size, sum), "a number past the end of the list has none");
+	Check(!CustomMaps_SizeAndSum(-1, &size, sum), "and nor does a number before it");
+
+	CustomMaps_Find();
+	remove("avp_rifs\\Custom\\Ab.rif");
+
+	Check(!CustomMaps_SizeAndSum(1, &size, sum), "a file that has gone since the list was made has none");
+
+	Write("avp_rifs\\Custom\\Ab.rif", level);
+
+	FILE *const huge = fopen("avp_rifs\\Custom\\Ab.rif", "wb");
+
+	if (!huge || _chsize_s(_fileno(huge), (32LL << 20) + 1) != 0)
+	{
+		printf("  FAILED  the test couldn't make its large file\n");
+		exit(1);
+	}
+
+	fclose(huge);
+
+	Check(!CustomMaps_SizeAndSum(1, &size, sum), "and nor does one that has grown past the most a level may be");
+
+	Write("avp_rifs\\Custom\\Ab.rif", level);
+	CustomMaps_Find();
 }
 
 static void TestPictures()
@@ -330,6 +388,7 @@ int main(int argc, char **argv)
 
 	TestTheList();
 	TestNamesAndLoading();
+	TestSizeAndSum();
 	TestPictures();
 
 	Check(!CustomMaps_Playing(), "nothing is being played until a map is started");

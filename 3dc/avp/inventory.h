@@ -10,6 +10,11 @@
 *                                    P R O T O T Y P E S	                                *
 ****************************************************************************************KJL*/
 extern void InitialisePlayersInventory(PLAYER_STATUS *playerStatusPtr);
+
+// What a player keeps between the levels of a co-op campaign. See campaign_kit.h.
+extern void Campaign_NoteKit(int place);                                 // a level is ending, and place comes next
+extern void Campaign_ForgetKit(void);                                    // a new game has begun
+extern void Campaign_GiveKeptKit(PLAYER_STATUS *playerStatusPtr);        // this player has just been given the level's own kit
 extern void MaintainPlayersInventory(void);
 
 /*-------------------------------Patrick 11/3/97--------------------------------

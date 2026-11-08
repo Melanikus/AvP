@@ -21,6 +21,10 @@ void CustomMaps_Find(void);
 int CustomMaps_Count(void);
 const char *CustomMaps_Name(int which);
 
+// Which of them has this name, in any case, or -1. The name is checked against the rule first, and only ever compared with the list: it's
+// never used to build a path itself.
+int CustomMaps_Named(const char *name, size_t room);
+
 // Puts "Custom/<name>" into LevelName, for the game to load. False, with LevelName unchanged, for a number that isn't one of them.
 bool CustomMaps_SetLevelToLoad(int which);
 
@@ -28,6 +32,10 @@ bool CustomMaps_SetLevelToLoad(int which);
 // CustomMaps_ForgetPictures.
 texID_t CustomMaps_Picture(int which);
 void CustomMaps_ForgetPictures(void);
+
+// The size of a map's file and its MD5, so that two players can see if they have the same map. See coop_lobby.h: they're only ever compared.
+// False for a number that isn't one of the maps, or a file that can't be read. Each map's file is read once, however often this is asked.
+bool CustomMaps_SizeAndSum(int which, unsigned int *size, unsigned char sum[16]);
 
 // Whether the level being played is a custom map, so that finishing it opens no next level and unlocks nothing. Set as one is started,
 // cleared as a stock level is.

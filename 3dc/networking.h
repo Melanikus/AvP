@@ -81,6 +81,15 @@ void      Net_SayLongestGapWhileLoading();
 uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
+
+// What a search for games is told about this one, for a game from the co-op campaign page, whose level changes as the host changes its rows.
+void Net_SayWhatTheGameIs(uint16_t level, const char *levelName, const char *sessionName, uint8_t coopLobby);
+
+// A host takes this player out of the game, and their address can't come back until the game closes. See coop_lobby.h.
+void Net_RemoveThisPlayer(NetID id);
+
+// Was this machine told, as it was let go, that the host had removed it?
+bool Net_WasRemovedByTheHost();
 int       Net_ConnectingToLobbiedGame(char *playerName);
 
 // For a tester's mark (mark_key.cpp): each connection this machine has, by number, with its round trip, such as
@@ -115,11 +124,12 @@ Version 107 - Used by builds of the co-op lobby, before it landed. Not this code
 Version 108 - Used by builds of the in-game pages, before they landed. Not this code, and never to be used again
 Version 109 - Used by rehearsal builds of the co-op landing, before it landed: the co-op branch with main's network fixes. Never to be used again
 Version 110 - 109, and a search's question as big as its answer, so an answer is never bigger than its question
+Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's answer about the map, and a byte in a game's description
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 110; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 111; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
@@ -182,6 +192,7 @@ struct SessionDescription
 	uint8_t   maxPlayers;
 	char      levelName[kLevelNameSize];
 	char      sessionName[kSessionNameSize];
+	uint8_t   coopLobby;   // kCoopLobbyNone, Open or UnderWay: see coop_lobby.h
 };
 
 struct PlayerDetails

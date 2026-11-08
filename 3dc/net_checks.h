@@ -1,3 +1,7 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the table of refusal reasons has a place for each reason there is
+//   a message's parts can be held up against a short list of kinds, for the co-op lobby. Credit: Melanikus and Bobblen (the co-op
+//   campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the difficulty a host says a campaign is at is checked
 // Checks on what arrives from other players' machines. Written 2026-11-06 by Melanikus for the AvP port.
@@ -43,7 +47,9 @@ inline bool NetNumberFitsTable(int number, int places)
 static const unsigned long long kDropsLoggedInFull = 5;
 
 // HOW MANY TIMES EACH REASON HAS STOPPED A MESSAGE. Each reason counts by itself, so that a flood of one bad message can't use up the log and hide a different one. The reasons are fixed text inside this program, so the list can't grow without limit, and anything past its end shares the last place.
-static const int kMostRefusalReasons = 40;
+// Each reason needs a place of its own, or a stranger who sends other refused things first can choose which reasons share the last place, and
+// hide one flood behind another. tests/coop_lobby_test.cpp counts the reasons in the source, and fails if they get near this.
+static const int kMostRefusalReasons = 128;
 static const unsigned long long kRefusalsLoggedInFull = 20;
 
 struct NetRefusalCounts
@@ -243,6 +249,63 @@ inline bool NetPartsFitTheBudget(const unsigned char *parts, size_t size, const 
 	for (size_t i = 0; i < ruleCount; i++)
 	{
 		spent.used[i] += wanted[i];
+	}
+
+	return true;
+}
+
+// How many parts a message has, and how many of those are of a kind on this list. The co-op lobby takes only a few kinds, and one part
+// of any other kind refuses the whole message, so every part has to be looked at. It's only asked about a message NetCheckParts has
+// passed, so the false answer can't happen, and it keeps this safe if that ever changes.
+inline bool NetCountPartsOnTheList(const unsigned char *parts, size_t size, const NetPartRule *rules, size_t ruleCount, NetPartLength lengthOf, const unsigned char *list, size_t listCount, size_t *partCount, size_t *onTheList)
+{
+	size_t at = 0;
+
+	*partCount = 0;
+	*onTheList = 0;
+
+	while (at < size)
+	{
+		unsigned char const kind = parts[at];
+
+		at++;
+
+		// Walked the same way as NetCheckParts, so a part means the same thing to both
+		if (kind >= ruleCount)
+		{
+			return false;
+		}
+
+		NetPartRule const &rule = rules[kind];
+		size_t const bytesLeft = size - at;
+		size_t length = rule.bytes;
+
+		if (length > bytesLeft)
+		{
+			return false;
+		}
+
+		if (rule.lengthVaries)
+		{
+			length = lengthOf(kind, parts + at, bytesLeft);
+
+			if (length == 0 || length > bytesLeft)
+			{
+				return false;
+			}
+		}
+
+		at += length;
+		(*partCount)++;
+
+		for (size_t i = 0; i < listCount; i++)
+		{
+			if (list[i] == kind)
+			{
+				(*onTheList)++;
+				break;
+			}
+		}
 	}
 
 	return true;

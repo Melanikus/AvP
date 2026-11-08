@@ -1,5 +1,8 @@
 // What the common weapon code offers the guns that have files of their own. See weapon_hooks.h. Written 2026-11-06 by Melanikus for the AvP port.
 
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a gun's own state can be kept from one level of a co-op campaign to the next. Credit: Melanikus and Bobblen (the kept kit follows Bobblen's avp-forever, rewritten)
+
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -175,6 +178,35 @@ void Guns_SaveOwnStates(void)
 		block->header.size = size;
 		block->gun = gun;
 		memcpy(block + 1, hooks->OwnState, hooks->OwnStateSize);
+	}
+}
+
+// What each gun held when a level of a co-op campaign ended. These are the game's own numbers, so nothing here needs checking as a save does.
+static unsigned char keptOwnStates[MAX_NO_OF_WEAPON_TEMPLATES][kMostOwnStateBytes];
+
+void Guns_KeepOwnStates(void)
+{
+	for (int gun = 0; gun < MAX_NO_OF_WEAPON_TEMPLATES; gun++)
+	{
+		const WEAPON_HOOKS *const hooks = TemplateWeapon[gun].Hooks;
+
+		if (hooks && hooks->OwnState && hooks->OwnStateSize > 0 && hooks->OwnStateSize <= kMostOwnStateBytes)
+		{
+			memcpy(keptOwnStates[gun], hooks->OwnState, hooks->OwnStateSize);
+		}
+	}
+}
+
+void Guns_GiveBackOwnStates(void)
+{
+	for (int gun = 0; gun < MAX_NO_OF_WEAPON_TEMPLATES; gun++)
+	{
+		const WEAPON_HOOKS *const hooks = TemplateWeapon[gun].Hooks;
+
+		if (hooks && hooks->OwnState && hooks->OwnStateSize > 0 && hooks->OwnStateSize <= kMostOwnStateBytes)
+		{
+			memcpy(hooks->OwnState, keptOwnStates[gun], hooks->OwnStateSize);
+		}
 	}
 }
 

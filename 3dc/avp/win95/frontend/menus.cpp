@@ -25,6 +25,9 @@
 //   a level's films play only when the game plays as single player does, and the network goes on underneath them
 //   the host chooses a campaign's difficulty, and a joiner plays what the host says rather than his last single player game's
 // Modified 2026-11-07 by Melanikus for the AvP port:
+//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
+//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
+//   the co-op campaign pages: see coop_menu.h. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 //   a marine's class comes from the class slider through ClassSlider_ToClass, the same sum as before, in the one place its test checks
 //   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
 //   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
@@ -43,6 +46,7 @@
 #include "view_settings.h"
 #include "env_info.h"
 #include "custom_maps.h"
+#include "coop_menu.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -93,6 +97,7 @@ extern void Show_WinnerScreen(void);
 extern void AvP_UpdateMenus(void);
 extern void GetNextAllowedSpecies(int* species,BOOL search_forwards);
 static void SetBriefingTextForMultiplayer();
+static void StartTheCoopCampaign(void);
 void SetBriefingTextToBlank(void);
 extern bool Net_UpdateSessionList(int &SelectedItem);
 extern void Net_StopSearchingForSessions();
@@ -111,6 +116,7 @@ extern void CheatMode_GetNextAllowedEnvironment(int *environmentPtr, int searchF
 extern void RenderKeyConfigRectangle(int alpha);
 extern void IngameKeyboardInput_ClearBuffer(void);
 extern int LengthOfMenuText(const char *textPtr);
+extern int HeightOfMenuGfx(texID_t textureID);
 extern int PlayMenuBackgroundFmv();
 extern char *GetGamePadButtonTextString(enum TEXTSTRING_ID stringID);
 
@@ -132,6 +138,7 @@ void HandlePostGameFMVs(void);
 void HandlePreGameFMVs(void);
 
 static void SetupNewMenu(enum AVPMENU_ID menuID);
+static void CountTheRowsOnThisPage(void);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
 static void RenderEpisodeSelectMenu(void);
@@ -334,6 +341,17 @@ static int StartNextCampaignLevel(void)
 	return 1;
 }
 
+// The Start row of the co-op campaign page
+static void StartTheCoopCampaign(void)
+{
+	if (CoopMenu_HostStarts())
+	{
+		AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+		SetLevelToLoadForThisNetworkGame();
+		SetBriefingTextForMultiplayer();
+	}
+}
+
 int AvP_MainMenus(void)
 {
 	if (Coop_LevelChangeIsDue())
@@ -385,7 +403,7 @@ int AvP_MainMenus(void)
 		{
 			// A custom map has no film after it, and no place in a campaign: the episode numbers still name the last stock level, so
 			// using them here would play that level's film and mark it done. It goes back to its own page instead.
-			SetupNewMenu(AVPMENU_CUSTOMMAPS);
+			SetupNewMenu((enum AVPMENU_ID)CoopMenu_PageAfterACustomMap());
 		}
 		else
 		{
@@ -626,7 +644,34 @@ extern int InGameMenusAreRunning(void)
 
 extern void AvP_UpdateMenus(void)
 {
-	if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
+	if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
+	{
+		switch (CoopMenu_EveryFrame(AvPMenus.CurrentMenu == AVPMENU_COOP_HOST))
+		{
+			case kCoopPageGoesToTheLoad:
+				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+				SetLevelToLoadForThisNetworkGame();
+				SetBriefingTextForMultiplayer();
+				break;
+
+			case kCoopPageHostHasGone:
+				CoopMenu_PageLeft();
+				SetupNewMenu(AVPMENU_MAIN);
+				return;
+
+			case kCoopPageRowsChanged:
+				CountTheRowsOnThisPage();
+				break;
+
+			case kCoopPageJoinerIsOut:
+				SetupNewMenu(AVPMENU_COOP_OUT);
+				return;
+
+			default:
+				break;
+		}
+	}
+	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_SPECIES_JOIN ||
 	    AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 	{
 		MinimalNetCollectMessages();
@@ -711,16 +756,16 @@ extern void AvP_UpdateMenus(void)
 			retval = Net_ConnectingToSession();
 			if (retval == NET_FAIL)
 			{
-				// player has aborted, go back a menu
-				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				// player has aborted, go back a menu. Someone the host removed is told so.
+				SetupNewMenu(Net_WasRemovedByTheHost() ? AVPMENU_COOP_OUT : AVPMENU_MULTIPLAYER);
 				return;
 			}
 		}
 
 		if (retval == AVPMENU_MULTIPLAYER_CONFIG_JOIN)
 		{
-			// successfully joined
-			SetupNewMenu(AVPMENU_MULTIPLAYER_CONFIG_JOIN);
+			// successfully joined. A game from the co-op campaign page has its own page.
+			SetupNewMenu(Net_CoopLobbyState() != kCoopLobbyNone ? AVPMENU_COOP_JOIN : AVPMENU_MULTIPLAYER_CONFIG_JOIN);
 		}
 	}
 	else if (AvPMenus.CurrentMenu == AVPMENU_MULTIPLAYERSELECTSESSION)
@@ -889,6 +934,30 @@ extern void AvP_UpdateMenus(void)
 	ActUponUsersInput();
 }
 
+// How many rows this page has, and how high they are. The co-op campaign page asks again when someone comes or goes, and the row the host is on
+// might have been that player's.
+static void CountTheRowsOnThisPage(void)
+{
+	AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
+	AvPMenus.NumberOfElementsInMenu=0;
+	AvPMenus.MenuHeight=0;
+	do
+	{
+		elementPtr->Brightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
+
+		AvPMenus.MenuHeight += HeightOfMenuElement(elementPtr);
+
+		AvPMenus.NumberOfElementsInMenu++;
+		elementPtr++;
+	}
+	while (elementPtr->ElementID != AVPMENU_ELEMENT_ENDOFMENU);
+
+	if (AvPMenus.CurrentlySelectedElement >= AvPMenus.NumberOfElementsInMenu)
+	{
+		AvPMenus.CurrentlySelectedElement = AvPMenus.NumberOfElementsInMenu - 1;
+	}
+}
+
 static void SetupNewMenu(enum AVPMENU_ID menuID)
 {
 	enum AVPMENU_ID previousMenuID = AvPMenus.CurrentMenu;
@@ -970,6 +1039,29 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 
 		case AVPMENU_SINGLEPLAYER:
 		{
+			break;
+		}
+
+		case AVPMENU_COOP_HOST:
+		{
+			// This page opens the game. If that can't be done, there's no page.
+			if (!CoopMenu_HostPageOpens())
+			{
+				SetupNewMenu(AVPMENU_MULTIPLAYER);
+				return;
+			}
+			break;
+		}
+
+		case AVPMENU_COOP_JOIN:
+		{
+			CoopMenu_JoinPageOpens();
+			break;
+		}
+
+		case AVPMENU_COOP_OUT:
+		{
+			CoopMenu_OutPageOpens();
 			break;
 		}
 
@@ -1239,22 +1331,7 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 			break;
 	}
 
-	/* count the number of elements in the menu */
-	{
-		AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
-		AvPMenus.NumberOfElementsInMenu=0;
-		AvPMenus.MenuHeight=0;
-		do
-		{
-			elementPtr->Brightness = BRIGHTNESS_OF_DARKENED_ELEMENT;
-
-			AvPMenus.MenuHeight += HeightOfMenuElement(elementPtr);
-
-			AvPMenus.NumberOfElementsInMenu++;
-			elementPtr++;
-		}
-		while (elementPtr->ElementID != AVPMENU_ELEMENT_ENDOFMENU);
-	}
+	CountTheRowsOnThisPage();
 
 	switch (menuID)
 	{
@@ -1345,6 +1422,7 @@ static void RenderMenu(void)
 	AVPMENU_ELEMENT *elementPtr = AvPMenus.MenuElements;
 
 	int y;
+	texID_t coopPicture = MISSING_TEXTURE;
 	
 	if (AvPMenus.MenusState == MENUSSTATE_MAINMENUS)
 	{
@@ -1353,6 +1431,15 @@ static void RenderMenu(void)
 		{
 			y = MENU_BOTTOMYEDGE - AvPMenus.MenuHeight;
 			RenderBriefingScreenInfo();
+		}
+		else if (AvPMenus.CurrentMenu == AVPMENU_COOP_HOST || AvPMenus.CurrentMenu == AVPMENU_COOP_JOIN)
+		{
+			// These pages have a picture, and can have more rows than fit under it
+			texID_t const picture = CoopMenu_Picture();
+			CoopPageLayout const layout = CoopPage_Layout(AvPMenus.MenuHeight, MENU_CENTREY, picture != MISSING_TEXTURE ? kMenuPictureTop + HeightOfMenuGfx(picture) : 0);
+
+			y = layout.rowsTop;
+			coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;
 		}
 		else
 		{
@@ -1408,6 +1495,10 @@ static void RenderMenu(void)
 		if (AvPMenus.CurrentMenu == AVPMENU_CUSTOMMAPS)
 		{
 			RenderCustomMapPicture();
+		}
+		else if (coopPicture != MISSING_TEXTURE)
+		{
+			DrawAvPMenuGfx(coopPicture, MENU_CENTREX, kMenuPictureTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 		}
 	}
 }
@@ -2411,6 +2502,12 @@ static void ActUponUsersInput(void)
 					}
 					break;
 				}
+				case AVPMENU_COOP_HOST:
+				case AVPMENU_COOP_JOIN:
+				{
+					CoopMenu_PageLeft();
+					break;
+				}
 				case AVPMENU_DETAILLEVELS:
 				{
 					SetDetailLevelsFromMenu();
@@ -2946,6 +3043,22 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 				CustomMaps_SetPlaying(true);
 				CustomMaps_ForgetPictures();
 				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+			}
+			break;
+		}
+		case AVPMENU_ELEMENT_COOP_REMOVE:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				CoopMenu_HostRemoves(elementPtr->MaxValue);
+			}
+			break;
+		}
+		case AVPMENU_ELEMENT_COOP_START:
+		{
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
+			{
+				StartTheCoopCampaign();
 			}
 			break;
 		}
@@ -3525,6 +3638,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_SAVEMPCONFIG:
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
 		case AVPMENU_ELEMENT_CUSTOMMAP_START:
+		case AVPMENU_ELEMENT_COOP_START:
 		case AVPMENU_ELEMENT_JOINLOBBIED:
 		case AVPMENU_ELEMENT_CONNECTIONCHOICE :
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
@@ -3858,6 +3972,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 			DrawAvPMenuGfx(elementPtr->textureID, MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
 			break;
 		}
+		case AVPMENU_ELEMENT_COOP_REMOVE:
 		case AVPMENU_ELEMENT_LISTCHOICE:
 		{
 			RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
@@ -5138,7 +5253,7 @@ static BOOL IsSmartgunInLevel(int level)
 static void SetBriefingTextForMultiplayer()
 {
 	// A campaign's level has the words single player shows for it, and none of a network game's settings count
-	if (netGameData.coopCampaign != kCampaignNone)
+	if (netGameData.coopCampaign != kCampaignNone && netGameData.coopCampaign != kCampaignCustom)
 	{
 		I_PLAYER_TYPE const species = netGameData.coopCampaign == kCampaignPredator ? I_Predator
 			: netGameData.coopCampaign == kCampaignAlien ? I_Alien : I_Marine;

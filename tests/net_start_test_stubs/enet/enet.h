@@ -75,6 +75,7 @@ struct ENetEvent
 	ENetEventType type;
 	ENetPeer *peer;
 	ENetPacket *packet;
+	enet_uint32 data;
 };
 
 int enet_initialize();

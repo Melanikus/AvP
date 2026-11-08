@@ -1,0 +1,1398 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a campaign of nothing is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.campaign < kCoopChoiceFirstCampaign || choice.campaign > kCoopChoiceCustomCampaign)",
+					"to": "if (choice.campaign > kCoopChoiceCustomCampaign)"
+				}
+			]
+		},
+		{
+			"name": "a campaign past the last is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.campaign < kCoopChoiceFirstCampaign || choice.campaign > kCoopChoiceCustomCampaign)",
+					"to": "if (choice.campaign < kCoopChoiceFirstCampaign)"
+				}
+			]
+		},
+		{
+			"name": "any level is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if ((int)choice.place >= levelsInCampaign)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the level after the last is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if ((int)choice.place >= levelsInCampaign)",
+					"to": "if ((int)choice.place > levelsInCampaign)"
+				}
+			]
+		},
+		{
+			"name": "a species past the last is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.species > kCoopChoiceMostSpecies)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a stock campaign can be another species",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.campaign != kCoopChoiceCustomCampaign && choice.species != choice.campaign - kCoopChoiceFirstCampaign)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a custom map has to be one species too",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.campaign != kCoopChoiceCustomCampaign && choice.species != choice.campaign - kCoopChoiceFirstCampaign)",
+					"to": "if (choice.species != choice.campaign - kCoopChoiceFirstCampaign)"
+				}
+			]
+		},
+		{
+			"name": "a difficulty past the last is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.difficulty > kCoopChoiceMostDifficulty)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a kit rule that isn't one is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.keepKit > 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a friendly fire setting that isn't one is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.friendlyFireOff > 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a start flag that isn't one is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (choice.started > 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name with no end is read as far as the rule goes",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (!CoopField_Has(choice.mapName, sizeof(choice.mapName), 0))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name that breaks the rule is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (!CustomMapName_IsSafe(choice.mapName, sizeof(choice.mapName)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a stock campaign can carry a name",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "else if (!CoopField_IsEmpty(choice.mapName, sizeof(choice.mapName)) || choice.mapSize != 0",
+					"to": "else if (choice.mapSize != 0"
+				}
+			]
+		},
+		{
+			"name": "a stock campaign can carry a size",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "|| choice.mapSize != 0 || !CoopField_IsEmpty(choice.mapSum, sizeof(choice.mapSum)))",
+					"to": "|| !CoopField_IsEmpty(choice.mapSum, sizeof(choice.mapSum)))"
+				}
+			]
+		},
+		{
+			"name": "a stock campaign can carry a sum",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "|| choice.mapSize != 0 || !CoopField_IsEmpty(choice.mapSum, sizeof(choice.mapSum)))",
+					"to": "|| choice.mapSize != 0)"
+				}
+			]
+		},
+		{
+			"name": "the field is only looked at up to its end marker",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tif (bytes[i] != 0)\n\t\t{\n\t\t\treturn false;\n\t\t}\n",
+					"to": "\t\tif (bytes[i] == 0)\n\t\t{\n\t\t\treturn true;\n\t\t}\n\n\t\treturn false;\n"
+				}
+			]
+		},
+		{
+			"name": "a repeat is taken as new",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (anyTaken && number == numberTaken)\n\t{\n\t\treturn kCoopChoiceIsARepeat;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the first choice after joining is checked against nothing",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (anyTaken && number == numberTaken)",
+					"to": "if (number == numberTaken)"
+				}
+			]
+		},
+		{
+			"name": "a choice is taken after the start",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (startedIsTaken)\n\t{\n\t\treturn kCoopChoiceIsAfterTheStart;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an older choice is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (anyTaken && number < numberTaken)\n\t{\n\t\treturn kCoopChoiceIsOlder;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a machine without the map says it has it",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (!thisMachineHasIt)\n\t{\n\t\treturn kCoopMapIsMissing;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the size isn't compared",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (mySize != theirSize || memcmp(mySum, theirSum, kCoopMapSumBytes) != 0)",
+					"to": "if (memcmp(mySum, theirSum, kCoopMapSumBytes) != 0)"
+				}
+			]
+		},
+		{
+			"name": "the sum isn't compared",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (mySize != theirSize || memcmp(mySum, theirSum, kCoopMapSumBytes) != 0)",
+					"to": "if (mySize != theirSize)"
+				}
+			]
+		},
+		{
+			"name": "only part of the sum is compared",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "memcmp(mySum, theirSum, kCoopMapSumBytes) != 0)",
+					"to": "memcmp(mySum, theirSum, kCoopMapSumBytes - 1) != 0)"
+				}
+			]
+		},
+		{
+			"name": "an answer is taken with no lobby",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (!isOpen)\n\t{\n\t\treturn kCoopRefusedAnswerNoLobby;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an answer is taken from a stranger",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (!isKnown)\n\t{\n\t\treturn kCoopRefusedAnswerStranger;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an answer that isn't one of the three is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (answer.answer > kCoopMostMapAnswer)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an answer to a choice not made is taken",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (answer.number > numberNow)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a state below the first is real",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "return state >= kCoopLobbyNone && state <= kCoopLobbyUnderWay;",
+					"to": "return state <= kCoopLobbyUnderWay;"
+				}
+			]
+		},
+		{
+			"name": "a state past the last is real",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "return state >= kCoopLobbyNone && state <= kCoopLobbyUnderWay;",
+					"to": "return state >= kCoopLobbyNone;"
+				}
+			]
+		},
+		{
+			"name": "the walk reads a kind past the table",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\t// Walked the same way as NetCheckParts, so a part means the same thing to both\n\t\tif (kind >= ruleCount)\n\t\t{\n\t\t\treturn false;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the walk stops at the first part",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\tat += length;\n\t\t(*partCount)++;\n",
+					"to": "\t\tat = size;\n\t\t(*partCount)++;\n"
+				}
+			]
+		},
+		{
+			"name": "the walk forgets to count parts",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\tat += length;\n\t\t(*partCount)++;\n",
+					"to": "\t\tat += length;\n"
+				}
+			]
+		},
+		{
+			"name": "the walk forgets to count what's on the list",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\t\t\t(*onTheList)++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the walk counts a part twice if the list says it twice",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "\t\t\t\t(*onTheList)++;\n\t\t\t\tbreak;\n",
+					"to": "\t\t\t\t(*onTheList)++;\n"
+				}
+			]
+		},
+		{
+			"name": "the walk goes by the list's first kind only",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "for (size_t i = 0; i < listCount; i++)\n\t\t{\n\t\t\tif (list[i] == kind)",
+					"to": "for (size_t i = 0; i < 1 && i < listCount; i++)\n\t\t{\n\t\t\tif (list[i] == kind)"
+				}
+			]
+		},
+		{
+			"name": "the refusal table has fewer places than there are reasons",
+			"changes": [
+				{
+					"file": "3dc/net_checks.h",
+					"from": "static const int kMostRefusalReasons = 128;",
+					"to": "static const int kMostRefusalReasons = 60;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lobby takes chat from a joiner",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kCoopLobbyFromAJoiner[] = { NetMT_PlayerDescription, NetMT_PlayerLeaving, NetMT_CoopMapAnswer };",
+					"to": "kCoopLobbyFromAJoiner[] = { NetMT_PlayerDescription, NetMT_PlayerLeaving, NetMT_CoopMapAnswer, NetMT_ChatBroadcast };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lobby refuses a joiner's answer",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kCoopLobbyFromAJoiner[] = { NetMT_PlayerDescription, NetMT_PlayerLeaving, NetMT_CoopMapAnswer };",
+					"to": "kCoopLobbyFromAJoiner[] = { NetMT_PlayerDescription, NetMT_PlayerLeaving };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lobby takes anything else from the host",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kCoopLobbyFromTheHost[] = { NetMT_GameDescription, NetMT_PlayerLeaving, NetMT_CoopCampaignChoice };",
+					"to": "kCoopLobbyFromTheHost[] = { NetMT_GameDescription, NetMT_PlayerLeaving, NetMT_CoopCampaignChoice, NetMT_StartGame };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's choice isn't on the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "kCoopLobbyFromTheHost[] = { NetMT_GameDescription, NetMT_PlayerLeaving, NetMT_CoopCampaignChoice };",
+					"to": "kCoopLobbyFromTheHost[] = { NetMT_GameDescription, NetMT_PlayerLeaving };"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing asks the lobby",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\treturn Net_CoopLobbyTakesThis(message, size);\n",
+					"to": "\t\t\treturn true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one part on the list is enough",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "&onTheList) && onTheList == partCount)",
+					"to": "&onTheList) && onTheList != 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused part isn't named",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tNet_NoteRefused(coopLobbyState == kCoopLobbyUnderWay ? kCoopRefusedPartBeforeJoining : kCoopRefusedPartInLobby);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer in a game with no lobby goes through",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\t\tNet_NoteRefused(kCoopRefusedAnswerNoLobby);\n\t\t\treturn false;\n",
+					"to": "\t\t\treturn true;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer that crossed the Start is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network == I_Host && !coopHostHasStarted && Net_MessageIsForTheHostAlone(message, size))",
+					"to": "if (AvP.Network == I_Host && Net_MessageIsForTheHostAlone(message, size))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer that crossed the Start is written down",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (AvP.Network != I_Host || coopHostHasStarted)",
+					"to": "if (AvP.Network != I_Host)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can say what's chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_CoopCampaignChoice, sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE), false, true },",
+					"to": "{ NetMT_CoopCampaignChoice, sizeof(NETMESSAGE_COOPCAMPAIGNCHOICE), false, false },"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: answers have no limit a second",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "{ NetMT_CoopMapAnswer, sizeof(NETMESSAGE_COOPMAPANSWER), false, false, kMostMapAnswersEachSecond }",
+					"to": "{ NetMT_CoopMapAnswer, sizeof(NETMESSAGE_COOPMAPANSWER), false, false }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing stops the campaign numbers differing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static_assert(kCoopChoiceCustomCampaign == kCampaignCustom, \"coop_lobby.h and env_info.h have to agree on what a custom map's campaign number is\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host takes a choice too",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (AvP.Network != I_Peer || coopLobbyState == kCoopLobbyNone)\n\t{\n\t\treturn;\n\t}\n\n\tswitch (CoopChoice_Step",
+					"to": "\tif (coopLobbyState == kCoopLobbyNone)\n\t{\n\t\treturn;\n\t}\n\n\tswitch (CoopChoice_Step"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the choice is read before its number is looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tint const levels = messagePtr->campaign == kCoopChoiceCustomCampaign ? 1 : Campaign_LevelCount(messagePtr->campaign);\n",
+					"to": "\tint const levels = Campaign_LevelCount(messagePtr->campaign);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refused choice is kept anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (why)\n\t{\n\t\tNet_NoteRefused(why);\n\t\treturn;\n\t}\n\n\t// It's good, all of it",
+					"to": "\tif (why)\n\t{\n\t\tNet_NoteRefused(why);\n\t}\n\n\t// It's good, all of it"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name's end isn't forced",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tnetGameData.coopCustomMap[sizeof(netGameData.coopCustomMap) - 1] = 0;\n\tnetGameData.coopCustomMapSize = messagePtr->mapSize;\n",
+					"to": "\tnetGameData.coopCustomMapSize = messagePtr->mapSize;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a name is used for something other than the list",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "CustomMaps_SizeAndSum(CustomMaps_Named(coopChoice.mapName, sizeof(coopChoice.mapName)), &size, sum)",
+					"to": "CustomMaps_SizeAndSum(0, &size, sum)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer writes before it's checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tconst char *const why = CoopAnswer_WhyRefused(*messagePtr, coopLobbyState == kCoopLobbyOpen, place != NET_IDNOTINPLAYERLIST, coopChoice.number);\n",
+					"to": "\tcoopMapAnswers[place] = messagePtr->answer;\n\tconst char *const why = CoopAnswer_WhyRefused(*messagePtr, coopLobbyState == kCoopLobbyOpen, place != NET_IDNOTINPLAYERLIST, coopChoice.number);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an old answer counts",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tif (messagePtr->number == coopChoice.number)\n\t{\n\t\tcoopMapAnswers[place] = messagePtr->answer;\n\t}\n",
+					"to": "\tcoopMapAnswers[place] = messagePtr->answer;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change keeps the old number",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tnow.number = coopChoice.number + 1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a change keeps what was said about the last choice",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tcoopChoice = now;\n\t\tCoop_ForgetTheAnswers();\n",
+					"to": "\t\tcoopChoice = now;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the description sets the campaign in the lobby",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tif (coopLobbyState == kCoopLobbyNone)\n\t\t{\n\t\t\tif (Coop_LevelChangeIsDue())",
+					"to": "\t\t{\n\t\t\tif (Coop_LevelChangeIsDue())"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the description sets friendly fire in the lobby",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t\tif (coopLobbyState == kCoopLobbyNone)\n\t\t{\n\t\t\tnetGameData.disableFriendlyFire = messagePtr->disableFriendlyFire;",
+					"to": "\t\t{\n\t\t\tnetGameData.disableFriendlyFire = messagePtr->disableFriendlyFire;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a join keeps the last game's place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tCoop_ForgetTheLobby();\n\tnetGameData.coopCampaign = kCampaignNone;\n\tnetGameData.coopCampaignLevel = 0;\n",
+					"to": "\tCoop_ForgetTheLobby();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a host passes things on in the lobby",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_CoopLobbyState() != kCoopLobbyNone || Net_MessageIsForTheHostAlone(data, size))",
+					"to": "if (Net_MessageIsForTheHostAlone(data, size))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an answer is passed on",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (Net_CoopLobbyState() != kCoopLobbyNone || Net_MessageIsForTheHostAlone(data, size))",
+					"to": "if (Net_CoopLobbyState() != kCoopLobbyNone)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything at all keeps a seat in the lobby",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (connection <= kMostClients && Net_CoopLobbyState() == kCoopLobbyNone)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();",
+					"to": "if (connection <= kMostClients)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a silent joiner stays for minutes",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "(Net_CoopLobbyState() == kCoopLobbyOpen ? kMostMillisecondsSilentInTheLobby : kMostMillisecondsSilent)",
+					"to": "kMostMillisecondsSilent"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any lobby state is believed",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (!CoopLobby_StateIsReal(session.coopLobby))\n\t{\n\t\tLogDroppedMessage(\"a game described itself with a lobby state there isn't\");\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lobby game without its map leaves the list",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (local_index < 0 && session.coopLobby == kCoopLobbyNone)",
+					"to": "if (local_index < 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner isn't in the lobby from the start",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tNet_CoopLobbyJoined(SessionData[sessionNumber].coopLobby);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom map is a campaign with no map chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "return netGameData.coopCustomMap[0] != 0 ? 1 : 0;",
+					"to": "return 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom map is looked up on the stock lists",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "if (campaign == kCampaignCustom || place < 0 || place >= Campaign_LevelCount(campaign))",
+					"to": "if (place < 0 || place >= Campaign_LevelCount(campaign))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's page has a Start",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTFIELD,\t{TEXTSTRING_COOP_MAP_LINE},\t{kCoopRowTextBytes - 1},\t{(int*)CoopRowMapLine},\t{TEXTSTRING_BLANK},\tTEXTSTRING_COOP_MAP_LINE_HELP},\n\t{AVPMENU_ELEMENT_ENDOFMENU}\n};\n\n// The page a joiner ends on",
+					"to": "\t{AVPMENU_ELEMENT_COOP_START,\t{TEXTSTRING_LEVELSELECT_START},\t{0},\t{0},\t{0},\tTEXTSTRING_COOP_START_HELP},\n\t{AVPMENU_ELEMENT_DUMMYTEXTFIELD,\t{TEXTSTRING_COOP_MAP_LINE},\t{kCoopRowTextBytes - 1},\t{(int*)CoopRowMapLine},\t{TEXTSTRING_BLANK},\tTEXTSTRING_COOP_MAP_LINE_HELP},\n\t{AVPMENU_ELEMENT_ENDOFMENU}\n};\n\n// The page a joiner ends on"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner can change the kit rule",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_COOP_KIT},",
+					"to": "\t{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_COOP_KIT},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a row the code looks for has gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTSLIDER_POINTER,\t{TEXTSTRING_COOP_START_AT},\t{0},\t{&CoopRowPlace},\t{0},\tTEXTSTRING_COOP_START_AT_HELP},\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: nothing leads to the host's page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_TITLE},\t{AVPMENU_COOP_HOST},\t{0},\t{0},\tTEXTSTRING_COOP_TITLE_HELP},\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every joiner lands on the lobby page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "SetupNewMenu(Net_CoopLobbyState() != kCoopLobbyNone ? AVPMENU_COOP_JOIN : AVPMENU_MULTIPLAYER_CONFIG_JOIN);",
+					"to": "SetupNewMenu(AVPMENU_COOP_JOIN);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Escape leaves the game open",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\t\tCoopMenu_PageLeft();\n\t\t\t\t\tbreak;\n",
+					"to": "\t\t\t\t\tbreak;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom map always goes back to the single player page",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "SetupNewMenu((enum AVPMENU_ID)CoopMenu_PageAfterACustomMap());",
+					"to": "SetupNewMenu(AVPMENU_CUSTOMMAPS);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a search isn't told what the rows say",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tHostPlayerLines();\n\tHostSaysWhatTheGameIs(kCoopLobbyOpen);\n",
+					"to": "\tHostPlayerLines();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: joiners aren't told what the rows say",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tHostSaysWhatTheGameIs(kCoopLobbyOpen);\n\n\tNet_CoopHostSays();\n",
+					"to": "\tHostSaysWhatTheGameIs(kCoopLobbyOpen);\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom map with no file starts anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tif (netGameData.coopCampaign == kCampaignCustom && !CustomMaps_SizeAndSum(CoopRowPlace, &size, sum))\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a started game still looks open to a search",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tHostSaysWhatTheGameIs(kCoopLobbyUnderWay);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the one number comes after the host's last word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tCampaign_ChooseRollNumber();\n\tNet_CoopTakeTheCampaign();\n\tHostSaysWhatTheGameIs(kCoopLobbyUnderWay);\n\tNet_CoopHostStarts();\n",
+					"to": "\tNet_CoopTakeTheCampaign();\n\tHostSaysWhatTheGameIs(kCoopLobbyUnderWay);\n\tNet_CoopHostStarts();\n\tCampaign_ChooseRollNumber();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a custom map is offered with none to play",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "int const mostCampaignRow = CustomMaps_Count() > 0 ? 3 : 2;",
+					"to": "int const mostCampaignRow = 3;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner goes whether or not it has the map",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\t\tif (Net_CoopMyMapAnswer() == kCoopMapIsHere)\n\t\t{\n\t\t\tJoinerGoesIntoTheLoad();",
+					"to": "\t\t{\n\t\t\tJoinerGoesIntoTheLoad();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one left behind keeps its seat",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tCoopMenu_PageLeft();\n\treturn kCoopPageJoinerIsOut;\n",
+					"to": "\treturn kCoopPageJoinerIsOut;\n"
+				}
+			]
+		},
+		{
+			"name": "the removed list can't be forgotten",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tlist.count = 0;\n\tlist.next = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the removed list finds nobody",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (list.addresses[i] == address)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the removed list takes the same address twice",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (CoopRemoved_Has(list, address))\n\t{\n\t\treturn;\n\t}\n\n\tlist.addresses[list.next] = address;",
+					"to": "\tlist.addresses[list.next] = address;"
+				}
+			]
+		},
+		{
+			"name": "a full removed list keeps its oldest",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "list.next = (list.next + 1) % kCoopMostRemoved;",
+					"to": "list.next = list.next + 1 < kCoopMostRemoved ? list.next + 1 : list.next;"
+				}
+			]
+		},
+		{
+			"name": "the removed list counts past its room",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (list.count < kCoopMostRemoved)\n\t{\n\t\tlist.count++;\n\t}\n",
+					"to": "\tlist.count++;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone removed is let back in",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tif (CoopRemoved_Has(removedPlayers, peer->address.host))\n\t{\n\t\tNet_NoteRefused(kCoopRefusedRemoved);\n\t\tenet_peer_disconnect(peer, kCoopRemovedByTheHost);\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: someone removed is refused without a reason",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\tNet_NoteRefused(kCoopRefusedRemoved);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can be removed, on any machine",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (AvP.Network != I_Host || !host || id == 0 || id == AvPNetID)",
+					"to": "if (!host)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the address isn't kept",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tCoopRemoved_Add(removedPlayers, peer->address.host);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what a removed player sends still counts",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tpeer->data = NULL;\n\t\t\tnetSession.nPlayers--;\n",
+					"to": "\t\t\tnetSession.nPlayers--;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a removed player's seat stays taken",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tnetSession.nPlayers--;\n\t\t\tNet_PlayerHasGone(id);\n\t\t\tenet_peer_disconnect(peer, kCoopRemovedByTheHost);\n",
+					"to": "\t\t\tenet_peer_disconnect(peer, kCoopRemovedByTheHost);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list outlives the game",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\tCoopRemoved_Forget(removedPlayers);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a removed player's page says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tif (Net_WasRemovedByTheHost())\n\t{\n\t\treturn JoinerIsOut();\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner's page can remove someone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "\t{AVPMENU_ELEMENT_DUMMYTEXTFIELD,\t{TEXTSTRING_COOP_MAP_LINE},\t{kCoopRowTextBytes - 1},\t{(int*)CoopRowMapLine},\t{TEXTSTRING_BLANK},\tTEXTSTRING_COOP_MAP_LINE_HELP},\n\t{AVPMENU_ELEMENT_ENDOFMENU}\n};\n\n// The page a joiner ends on",
+					"to": "\t{AVPMENU_ELEMENT_COOP_REMOVE,\t{TEXTSTRING_COOP_REMOVE},\t{0},\t{0},\t{0},\tTEXTSTRING_COOP_REMOVE_HELP},\n\t{AVPMENU_ELEMENT_DUMMYTEXTFIELD,\t{TEXTSTRING_COOP_MAP_LINE},\t{kCoopRowTextBytes - 1},\t{(int*)CoopRowMapLine},\t{TEXTSTRING_BLANK},\tTEXTSTRING_COOP_MAP_LINE_HELP},\n\t{AVPMENU_ELEMENT_ENDOFMENU}\n};\n\n// The page a joiner ends on"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pressing a row removes nobody",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\t\tCoopMenu_HostRemoves(elementPtr->MaxValue);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a message can remove someone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "static void ProcessNetMsg_PlayerLeaving(NetID senderId)\n{\n",
+					"to": "static void ProcessNetMsg_PlayerLeaving(NetID senderId)\n{\n\tNet_RemoveThisPlayer(senderId);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner whose host has gone waits for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tif (netGameData.myGameState == NGS_Error_HostLost)\n\t{\n\t\treturn kCoopPageHostHasGone;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the row of names can be read past its end",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\t// Checked as it arrived. This row of pointers is the one thing here that would read past its end if that ever changed.\n\tif (CoopRowPlace < 0 || CoopRowPlace >= (int)placeNames.size())\n\t{\n\t\tCoopRowPlace = 0;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner runs the game before it leaves the lobby",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tNet_CoopLobbyEnds();\n\tNet_CoopTakeTheCampaign();\n",
+					"to": "\tNet_CoopTakeTheCampaign();\n\tNet_CoopLobbyEnds();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: leaving a page leaves the game open",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tif (AvP.Network != I_No_Network)\n\t{\n\t\tEndAVPNetGame();\n\t}\n\n\tCustomMaps_ForgetPictures();\n",
+					"to": "\tCustomMaps_ForgetPictures();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner who's out is left on the wiped rows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\tcase kCoopPageJoinerIsOut:\n\t\t\t\tSetupNewMenu(AVPMENU_COOP_OUT);\n\t\t\t\treturn;\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a removed player trying again isn't told",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "Net_WasRemovedByTheHost() ? AVPMENU_COOP_OUT : AVPMENU_MULTIPLAYER",
+					"to": "AVPMENU_MULTIPLAYER"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map's name goes with the wipe",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n\n\tCoopMenu_PageLeft();\n",
+					"to": "\tCoopMenu_PageLeft();\n\tstrncpy(CoopRowMapLine, netGameData.coopCustomMap, sizeof(CoopRowMapLine) - 1);\n\tCoopRowMapLine[sizeof(CoopRowMapLine) - 1] = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page says the same to everyone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "removed ? TEXTSTRING_COOP_REMOVED : TEXTSTRING_COOP_LEFT_BEHIND",
+					"to": "TEXTSTRING_COOP_LEFT_BEHIND"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a removed player is told where a map goes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "removed ? TEXTSTRING_BLANK : TEXTSTRING_COOP_MAP_LINE_HELP",
+					"to": "TEXTSTRING_COOP_MAP_LINE_HELP"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a removed player gets a map row",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "removed ? AVPMENU_ELEMENT_ENDOFMENU : AVPMENU_ELEMENT_DUMMYTEXTFIELD",
+					"to": "AVPMENU_ELEMENT_DUMMYTEXTFIELD"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page reads what the wipe clears",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_LEFT_BEHIND},\t{AVPMENU_MULTIPLAYER},\t{0},\t{0},",
+					"to": "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_LEFT_BEHIND},\t{AVPMENU_MULTIPLAYER},\t{&netGameData.coopKeepKit},\t{0},"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sentence is put back on a row with no room",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "{AVPMENU_ELEMENT_GOTOMENU,\t{TEXTSTRING_COOP_LEFT_BEHIND},\t{AVPMENU_MULTIPLAYER},",
+					"to": "{AVPMENU_ELEMENT_DUMMYTEXTFIELD,\t{TEXTSTRING_COOP_LEFT_BEHIND},\t{AVPMENU_MULTIPLAYER},"
+				}
+			]
+		},
+		{
+			"name": "rows are left on the picture",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\t\tlayout.rowsTop = underThePicture;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the picture stays when the rows can't fit under it",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\t\tlayout.showPicture = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "rows may run onto the help line",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (underThePicture + rowsHeight <= kCoopRowsMostLow)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "rows that just fit are taken for too many",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (underThePicture + rowsHeight <= kCoopRowsMostLow)",
+					"to": "if (underThePicture + rowsHeight < kCoopRowsMostLow)"
+				}
+			]
+		},
+		{
+			"name": "rows clear of the picture are moved anyway",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (layout.showPicture && layout.rowsTop < underThePicture)",
+					"to": "if (layout.showPicture)"
+				}
+			]
+		},
+		{
+			"name": "rows touching the gap under the picture are left there",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "if (layout.showPicture && layout.rowsTop < underThePicture)",
+					"to": "if (layout.showPicture && layout.rowsTop < pictureBottom)"
+				}
+			]
+		},
+		{
+			"name": "no picture is treated as a picture",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "layout.showPicture = pictureBottom > 0;",
+					"to": "layout.showPicture = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the page ignores the rule",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "\t\t\ty = layout.rowsTop;\n",
+					"to": "\t\t\ty = MENU_CENTREY - AvPMenus.MenuHeight / 2;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture ignores the rule",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "coopPicture = layout.showPicture ? picture : MISSING_TEXTURE;",
+					"to": "coopPicture = picture;"
+				}
+			]
+		},
+		{
+			"name": "a row of names runs as long as it likes",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tif (letters + CoopNames_MoreWords(more, sizeof(more), andMore, nameCount - i - 1) <= mostLetters)\n",
+					"to": "\t\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the words for the rest aren't counted",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tif (letters + CoopNames_MoreWords(more, sizeof(more), andMore, nameCount - i - 1) <= mostLetters)\n",
+					"to": "\t\tif (letters <= mostLetters)\n"
+				}
+			]
+		},
+		{
+			"name": "names exactly as long as the most are cut",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "andMore, nameCount - i - 1) <= mostLetters)",
+					"to": "andMore, nameCount - i - 1) < mostLetters)"
+				}
+			]
+		},
+		{
+			"name": "the names left out aren't counted",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "size_t const moreLetters = CoopNames_MoreWords(more, sizeof(more), andMore, nameCount - shown);",
+					"to": "size_t const moreLetters = 0;"
+				}
+			]
+		},
+		{
+			"name": "a name is read to its end, wherever that is",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\twhile (letters < nameBytes && name[letters] != 0)\n",
+					"to": "\twhile (name[letters] != 0)\n"
+				}
+			]
+		},
+		{
+			"name": "a row can run past its room",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tfor (size_t c = 0; c < CoopName_Letters(names[i], nameBytes) && used + 1 < room; c++)\n",
+					"to": "\t\tfor (size_t c = 0; c < CoopName_Letters(names[i], nameBytes); c++)\n"
+				}
+			]
+		},
+		{
+			"name": "no comma between names",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\t\tline[used++] = \", \"[c];\n",
+					"to": "\t\t\tline[used++] = ' ';\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host's row lists every name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "GetTextString(TEXTSTRING_COOP_AND_MORE), kCoopRowMostLetters);",
+					"to": "GetTextString(TEXTSTRING_COOP_AND_MORE), sizeof(CoopRowNoMap));"
+				}
+			]
+		},
+		{
+			"name": "the first count that fails ends the search",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\t\tshown = i + 1;\n\t\t}\n\t}\n",
+					"to": "\t\t\tshown = i + 1;\n\t\t}\n\t\telse\n\t\t{\n\t\t\tbreak;\n\t\t}\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a name is printed as a format",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tfor (size_t c = 0; c < CoopName_Letters(names[i], nameBytes) && used + 1 < room; c++)\n\t\t{\n\t\t\tline[used++] = names[i][c];\n\t\t}\n",
+					"to": "\t\tint const wrote = snprintf(line + used, room - used, names[i]);\n\n\t\tused = wrote < 0 ? used : used + (size_t)wrote < room ? used + (size_t)wrote : room - 1;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a Remove row prints its name as a format",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/coop_menu.cpp",
+					"from": "\"%s %s\", GetTextString(TEXTSTRING_COOP_REMOVE), netGameData.playerData[place].name);",
+					"to": "netGameData.playerData[place].name);"
+				}
+			]
+		},
+		{
+			"name": "words with two %d have the number put in one of them",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\tif (marks == 1 && afterMark <= textLetters)\n",
+					"to": "\tif (marks >= 1 && afterMark <= textLetters)\n"
+				}
+			]
+		},
+		{
+			"name": "the number's digits come out backwards",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "number[i] = backwards[digits - 1 - i];",
+					"to": "number[i] = backwards[i];"
+				}
+			]
+		},
+		{
+			"name": "words without a %d don't say the number",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "\t\tCoopNames_Put(words, room, &wanted, \" \", 1);\n\t\tCoopNames_Put(words, room, &wanted, number, digits);\n\t}\n",
+					"to": "\t\tCoopNames_Put(words, room, &wanted, \" \", 1);\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "the words have no end where they stop",
+			"changes": [
+				{
+					"file": "3dc/coop_lobby.h",
+					"from": "words[wanted < room ? wanted : room - 1] = 0;",
+					"to": "words[room - 1] = 0;"
+				}
+			]
+		}
+	]
+}

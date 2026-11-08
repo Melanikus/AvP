@@ -199,7 +199,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent",
+					"from": "peer->data != NULL && now - lastHeardFrom[i] >= (Net_CoopLobbyState() == kCoopLobbyOpen ? kMostMillisecondsSilentInTheLobby : kMostMillisecondsSilent)",
 					"to": "false"
 				}
 			]
@@ -209,7 +209,7 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "\tif (connection <= kMostClients)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();\n\t}\n",
+					"from": "\tif (connection <= kMostClients && Net_CoopLobbyState() == kCoopLobbyNone)\n\t{\n\t\tlastHeardFrom[connection] = enet_time_get();\n\t}\n",
 					"to": ""
 				}
 			]
@@ -1249,8 +1249,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.h",
-					"from": "const int kMultiplayerVersion = 110;",
-					"to": "const int kMultiplayerVersion = 109;"
+					"from": "const int kMultiplayerVersion = 111;",
+					"to": "const int kMultiplayerVersion = 110;"
 				}
 			]
 		},

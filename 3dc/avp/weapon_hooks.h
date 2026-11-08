@@ -40,3 +40,7 @@ void Guns_AtPlayerStart(void);
 // Each gun's own state goes into a save in a block of its own, and comes back from one. A block that's missing, the wrong size or fails the gun's own check is left out, and the gun stays as it was at the player's start. So an older save, which has none, simply starts these guns afresh.
 void Guns_SaveOwnStates(void);
 void Guns_LoadOwnStates(void);
+
+// The same states, kept in memory from one level of a co-op campaign to the next. See campaign_kit.h. They never leave this machine.
+void Guns_KeepOwnStates(void);
+void Guns_GiveBackOwnStates(void);

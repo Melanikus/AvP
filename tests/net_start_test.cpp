@@ -152,6 +152,28 @@ static size_t lastAskedSize = 0;
 
 static bool clientCanAfford = true;
 
+// The co-op lobby's state, which pldnet.cpp keeps. It's here so a check can say a lobby is open.
+static int lobbyStateForTheTest = 0;
+
+int Net_CoopLobbyState(void)
+{
+	return lobbyStateForTheTest;
+}
+
+void Net_CoopLobbyJoined(int state)
+{
+	lobbyStateForTheTest = state;
+}
+
+bool Net_MessageIsForTheHostAlone(const uint8_t *, size_t)
+{
+	return false;
+}
+
+void Net_NoteRefused(const char *)
+{
+}
+
 bool Net_ClientCanAfford(const uint8_t *, size_t, size_t)
 {
 	return clientCanAfford;
@@ -2218,7 +2240,7 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(names.size() == 63, "there are 63 kinds of part: " + std::to_string(names.size()));
+	Check(names.size() == 65, "there are 65 kinds of part: " + std::to_string(names.size()));
 
 	int inTheTable = 0, sameLength = 0, inOrder = 0;
 	std::string::size_type place = 0;
@@ -2273,10 +2295,10 @@ static void TestTheTableOfMessageParts()
 		}
 	}
 
-	Check(inTheTable == 63, "every one of them is in the table");
-	Check(inOrder == 63, "in the game's order");
-	Check(sameLength == 63, "and each has the length the code that reads it steps by:" + mismatched);
-	Check(CountOf(table, "{ NetMT_") == 63, "and there's nothing else in it");
+	Check(inTheTable == 65, "every one of them is in the table");
+	Check(inOrder == 65, "in the game's order");
+	Check(sameLength == 65, "and each has the length the code that reads it steps by:" + mismatched);
+	Check(CountOf(table, "{ NetMT_") == 65, "and there's nothing else in it");
 
 	// What a message can make. The kind and the weapon are its own numbers, and a shape this level didn't load comes back as -1.
 	std::string const makeGhost = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
@@ -2360,7 +2382,7 @@ static void TestTheTableOfMessageParts()
 
 	// Who may say what. These are the ones whoever hears them just believes.
 	std::vector<std::string> const onlyTheHost = { "NetMT_CoopGo", "NetMT_CoopNextLevel", "NetMT_LevelEvent", "NetMT_PlayerAutoGunState", "NetMT_AlienAIState", "NetMT_AlienAISequenceChange", "NetMT_AlienAIKilled", "NetMT_SpotAlienSound", "NetMT_FarAlienPosition", "NetMT_GameDescription", "NetMT_StartGame", "NetMT_AllGameScores", "NetMT_PlayerScores", "NetMT_InanimateObjectDestroyed", "NetMT_PlatformLiftState", "NetMT_RestartNetworkGame", "NetMT_FragmentalObjectsStatus", "NetMT_LastManStanding_Restart", "NetMT_LastManStanding_RestartInfo", "NetMT_LastManStanding_RestartCountDown", "NetMT_LastManStanding_LastMan", "NetMT_PredatorTag_NewPredator", "NetMT_EndGame", "NetMT_RespawnPickups", "NetMT_ScoreChange", "NetMT_StrategySynch", "NetMT_SpeciesScores",
-		"NetMT_NpcState", "NetMT_NpcXenoDeltas", "NetMT_NpcKilled", "NetMT_NpcSound", "NetMT_NpcThrownObject", "NetMT_LiftState" };
+		"NetMT_NpcState", "NetMT_NpcXenoDeltas", "NetMT_NpcKilled", "NetMT_NpcSound", "NetMT_NpcThrownObject", "NetMT_LiftState", "NetMT_CoopCampaignChoice" };
 	int rightOnes = 0;
 
 	for (std::string const &name : onlyTheHost)
@@ -2370,8 +2392,8 @@ static void TestTheTableOfMessageParts()
 		rightOnes += (at != std::string::npos && Has(table.substr(at, table.find('\n', at) - at), ", true }")) ? 1 : 0;
 	}
 
-	Check(rightOnes == 33, "33 kinds can only come from the host");
-	Check(CountOf(table, ", true }") == 33, "and no others");
+	Check(rightOnes == 34, "34 kinds can only come from the host");
+	Check(CountOf(table, ", true }") == 34, "and no others");
 
 	// Numbers in a message that are used as places in memory. Whichever machine sent them, they could be anything.
 	Check(Has(Between(pldnet, "static void ProcessNetMsg_PlayerScores(NETMESSAGE_PLAYERSCORES *messagePtr)\n{", "static void ProcessNetMsg_ScoreChange("), "if (!NetNumberFitsTable(playerId, NET_MAXPLAYERS))\n\t{\n\t\treturn;"), "a player's scores have to name a place in the list");
@@ -2402,7 +2424,7 @@ static void TestTheTableOfMessageParts()
 	Check(Has(pldnet, "static uint8_t msg[kMostMessageBytes];"), "the buffer a message is read into has room for the most a message can be");
 	Check(CountOf(pldnet, "NetNumberFitsTable(") >= 3 && Has(pldnet, "!messageProfile && messageHeader->ammo_id != AMMO_FLECHETTE_POSTMAX && !NetNumberFitsTable(messageHeader->ammo_id, MAX_NO_OF_AMMO_TEMPLATES)"), "a damage message naming ammunition that isn't in the table is ignored");
 	Check(CountOf(pldnet, "if (!NetNumberFitsTable(damage.Id, MAX_NO_OF_AMMO_TEMPLATES))") == 2, "in the other two damage messages as well");
-	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))\n\t{\n\t\tcase kNetPartsGood:\n\t\t\treturn true;"), "the whole message is walked, from after its header");
+	Check(Has(pldnet, "NetCheckParts(message + kMessageHeaderSize, size - kMessageHeaderSize, kNetPartRules, sizeof(kNetPartRules) / sizeof(kNetPartRules[0]), fromTheHost, LengthOfANetPart))\n\t{\n\t\tcase kNetPartsGood:\n\t\t\treturn Net_CoopLobbyTakesThis(message, size);"), "the whole message is walked, from after its header");
 	Check(Has(pldnet, "if (size < kMessageHeaderSize)\n\t{\n\t\tNet_NoteRefused("), "and one too short to have a header is refused");
 	Check(Has(pldnet, "return NetChatPartLength(part, bytesLeft);"), "a chat line has to end inside the message");
 	Check(Has(reading, "// Net_GameMessageIsGood has refused a message with a part it doesn't know, so this can't happen. If it ever did, nothing after it could be read.\n\t\t\t\treturn;"), "and a part nobody knows stops the reading");
@@ -2502,7 +2524,7 @@ static void TestTheGameUsesThis()
 	Check(Has(pldnet, "NetCopyPlayerName(messagePtr->players[i].name, netGameData.playerData[i].name, NET_PLAYERNAMELENGTH);"), "the host's description of the game has each player's name");
 	Check(Has(pldnet, "NetCopyPlayerName(netGameData.playerData[i].name, messagePtr->players[i].name, NET_PLAYERNAMELENGTH);"), "and that's where a client gets it, with an end");
 	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "unsigned char startFlag;\n\tchar name[NET_PLAYERNAMELENGTH];\n} GAMEDESCRIPTION_PLAYERDATA;"), "there's room for it in the message");
-	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 110;"), "and an older game can tell this one isn't what it speaks");
+	Check(Has(ReadSourceFile("3dc/networking.h"), "const int kMultiplayerVersion = 111;"), "and an older game can tell this one isn't what it speaks");
 
 	// The log lines a tester's log needs from pldnet.cpp. A message left out for want of room says so from every place it can be left out.
 	Check(Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tNoteSendBufferFull(numBytesReqd);") && !Has(pldnet, "if (numBytesReqd > numBytesLeft)\n\t\t{\n\t\t\tLOCALASSERT(1 == 0);"), "SOURCE: a message left out of a full frame is in the log, from every room check");

@@ -125,7 +125,10 @@ enum AVPMENU_ID
 
 	AVPMENU_RENDERING,        // the same page, reached from the main menus or from a level, so that going back goes to where it came from
 	AVPMENU_INGAMERENDERING,
-	AVPMENU_CUSTOMMAPS         // the custom maps for single player: see custom_maps.h
+	AVPMENU_CUSTOMMAPS,        // the custom maps for single player: see custom_maps.h
+	AVPMENU_COOP_HOST,         // the co-op campaign, chosen by a host with others gathering: see coop_menu.h
+	AVPMENU_COOP_JOIN,         // the same rows, shown to a joiner
+	AVPMENU_COOP_OUT           // one plain sentence, for a joiner the game went on without or the host removed
 };
 
 enum AVPMENU_FONT_ID
@@ -209,6 +212,8 @@ enum AVPMENU_ELEMENT_ID
 	AVPMENU_ELEMENT_LOADGAME,
 	AVPMENU_ELEMENT_VIEWKEY,   // a key on the rendering page. Its MaxValue is which of ViewKeyLine it is
 	AVPMENU_ELEMENT_CUSTOMMAP_START, // starts the custom map chosen on the Custom maps page
+	AVPMENU_ELEMENT_COOP_START, // a host starts the co-op campaign chosen on the page, for everyone with the map
+	AVPMENU_ELEMENT_COOP_REMOVE, // a host takes this player out of the game. Its MaxValue is their place on the list of players
 };
 
 
@@ -328,6 +333,7 @@ typedef struct
 {
 	char Name[40];
 	char levelIndex; //local level index
+	char coopLobby; // kCoopLobbyNone unless this game was started from the co-op campaign page
 	uint32_t host;
 	uint16_t port;
 	GUID Guid;

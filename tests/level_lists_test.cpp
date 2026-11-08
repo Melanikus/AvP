@@ -319,8 +319,8 @@ static void TestTheWiring()
 	// difficulty
 	std::string const menuData = ReadSource("3dc/avp/win95/frontend/menu_data.cpp");
 
-	Check(Times(menuData, "{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},") == 2, "the host's page and skirmish's have the row");
-	Check(Times(menuData, "{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},") == 1, "and a joiner's shows it");
+	Check(Times(menuData, "{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},") == 3, "the host's page, skirmish's and the co-op campaign page have the row");
+	Check(Times(menuData, "{AVPMENU_ELEMENT_DUMMYTEXTSLIDER,\t{TEXTSTRING_DIFFICULTY_LEVEL},\t{2},\t{&netGameData.coopDifficulty},") == 2, "and a joiner's two pages show it");
 	Check(Has(menus, "row->ElementID = (isCampaign && AvPMenus.CurrentMenu != AVPMENU_MULTIPLAYER_CONFIG_JOIN) ? AVPMENU_ELEMENT_TEXTSLIDER : AVPMENU_ELEMENT_DUMMYTEXTSLIDER;"), "only a campaign's host can change it");
 	Check(Has(menus, "row->SliderValuePtr = isCampaign ? &netGameData.coopDifficulty : &mediumToShow;"), "any other game shows Medium");
 	Check(Has(Between(menus, "case AVPMENU_ELEMENT_STARTMPGAME:", "case AVPMENU_ELEMENT_JOINMPGAME:"), "Campaign_SetDifficulty();"), "the host plays it");
@@ -375,10 +375,10 @@ static void TestTheWiring()
 	Check(Has(pldnet, "kMostLeavingsEachSecond = NET_MESSAGEITERATIONS;") && Has(pldnet, "for (int i = 0; i < NET_MESSAGEITERATIONS; i++)\n\t{\n\t\tAddNetMsg_PlayerLeaving();"), "and however many times a machine says it, that's never over the limit on goodbyes");
 	Check(Has(pldnet, "AddNetMsg_StartGame();\n\t\tNetSendMessagesNow();"), "and the start of a game");
 	Check(Has(pldnet, "// AddNetMsg_EndGame();\n\t\tNetSendMessagesNow();"), "and the end of one");
-	Check(Has(pldnet, "if (leftBehind)\n\t\t\t{") && Has(pldnet, "Coop_GoToPlace(messagePtr->coopCampaignLevel);"), "someone left behind goes on when he hears of it");
+	Check(Has(pldnet, "if (leftBehind)\n\t\t\t\t{") && Has(pldnet, "Coop_GoToPlace(messagePtr->coopCampaignLevel);"), "someone left behind goes on when he hears of it");
 	Check(Has(pldnet, "bool const leftBehind = netGameData.myGameState == NGS_Playing && AvP.MainLoopRunning"), "only if he's actually playing a level");
 	// The host's send at a level's end can put its once-a-second description, still naming the old place, behind the word to go on
-	Check(Has(pldnet, "\t\tif (Coop_LevelChangeIsDue())\n\t\t{\n\t\t\t// The host's word to go on has come") && Has(pldnet, "\t\t}\n\t\t// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all\n\t\telse if (NetCampaignPlaceIsGood("),
+	Check(Has(pldnet, "\t\t\tif (Coop_LevelChangeIsDue())\n\t\t\t{\n\t\t\t\t// The host's word to go on has come") && Has(pldnet, "\t\t\t}\n\t\t\t// Where the campaign has got to picks a level from a list, so a number that isn't a real place means no campaign at all\n\t\t\telse if (NetCampaignPlaceIsGood("),
 		"SOURCE: a description that comes after the word to go on changes neither the campaign nor the place, so a joiner loads the host's next level");
 	Check(Has(winmain, "AvP.MainLoopRunning = Coop_LevelChangeIsDue() ? 0 : 1;"), "a level called off while it loads doesn't start");
 	Check(Has(pldnet, "VECTORCH spot = ground;"), "the places round a start are on the floor under it");
@@ -424,7 +424,7 @@ static void TestTheWiring()
 	Check(Has(versionCheck, "2 * sizeof(NETMESSAGE_GAMEDESCRIPTION) +"), "the game description is one of them");
 	Check(Has(versionCheck, "61 * kLevelListCampaignLevels;"), "and so is the level list");
 	Check(Has(versionCheck, "58 * (sizeof(kNetPartRules) / sizeof(kNetPartRules[0])) +"), "and how many kinds of message there are");
-	Check(Has(networking, "const int kMultiplayerVersion = 110;"), "this build's version");
+	Check(Has(networking, "const int kMultiplayerVersion = 111;"), "this build's version");
 }
 
 int main()

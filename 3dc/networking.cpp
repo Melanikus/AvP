@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the co-op lobby: a game's description says if it has one, and in the lobby nothing is passed on and a silent joiner goes sooner. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Copyright (C) 2011 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -64,6 +66,7 @@
 #include "mp_config.h"
 #include "networking.h"
 #include "net_checks.h"
+#include "coop_lobby.h"
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
@@ -131,6 +134,13 @@ static unsigned int halfOpenSince[kMostClients + 1];
 
 // A player sends something many times a second, even waiting in a menu, and a level loads in much less than this. So a player silent for this long has gone, and is asked to go.
 static const unsigned int kMostMillisecondsSilent = 300000;
+// In the co-op lobby a joiner says something every 2 seconds, so this much silence means it has stopped. A seat in the lobby costs the others a place in the game.
+static const unsigned int kMostMillisecondsSilentInTheLobby = 30000;
+
+// A host's list of the addresses it has removed, and whether this machine has been removed by its host. See coop_lobby.h.
+static CoopRemovedList removedPlayers;
+static bool removedByTheHost = false;
+
 static unsigned int lastHeardFrom[kMostClients + 1];
 
 // How many bytes one client may send in a second, on top of how many messages. A real game sends a tenth of this. A host keeps what it's passing on until the other machines say they have it, for as long as the patience, so this also limits how much one client can make it keep.
@@ -159,6 +169,10 @@ extern bool AddPlayerToGame(NetID id, const char *name);
 extern void Net_PlayerHasGone(NetID id);
 extern void Net_HostHasGone();
 extern bool Net_GameMessageIsGood(const uint8_t *message, size_t size, bool fromTheHost);
+extern int Net_CoopLobbyState(void);
+extern void Net_NoteRefused(const char *why);
+extern bool Net_MessageIsForTheHostAlone(const uint8_t *message, size_t size);
+extern void Net_CoopLobbyJoined(int state);
 extern bool Net_ClientCanAfford(const uint8_t *message, size_t size, size_t connection);
 extern unsigned char DebouncedKeyboardInput[];
 
@@ -244,6 +258,13 @@ static void Net_AddSession(SessionDescription &session)
 	uint16_t gameStyle = session.gameStyle;
 	uint16_t level     = session.level;
 
+	// This comes from anyone who answers a search, like everything else here
+	if (!CoopLobby_StateIsReal(session.coopLobby))
+	{
+		LogDroppedMessage("a game described itself with a lobby state there isn't");
+		return;
+	}
+
 	// the session description comes from any machine on the LAN: SessionData (and the session menu,
 	// AvPMenu_MultiplayerSelectSession) hold MAX_NO_OF_SESSIONS entries, so ignore any more
 	if (NumberOfSessionsFound >= MAX_NO_OF_SESSIONS)
@@ -290,6 +311,7 @@ static void Net_AddSession(SessionDescription &session)
 
 	SessionData[NumberOfSessionsFound].host = session.host;
 	SessionData[NumberOfSessionsFound].port = session.port;
+	SessionData[NumberOfSessionsFound].coopLobby = (char)session.coopLobby;
 
 	// bounded: a long session name used to overflow Name (40 bytes) into host/port
 	_snprintf(name, nameSize - 1, "%s (%u/%u)", session.sessionName, session.nPlayers, session.maxPlayers);
@@ -317,13 +339,14 @@ static void Net_AddSession(SessionDescription &session)
 		// get the level number in our list of levels (assuming we have the level)
 
 		int local_index = GetLocalMultiplayerLevelIndex(level, session.levelName, gameStyle);
-		if (local_index < 0)
+		// A lobby game stays on the list without its map, because its page is where this player is told so. It has no use for the place on the list.
+		if (local_index < 0 && session.coopLobby == kCoopLobbyNone)
 		{
 			// we don't have the level, so ignore this session
 			return;
 		}
 
-		SessionData[NumberOfSessionsFound].levelIndex = local_index;
+		SessionData[NumberOfSessionsFound].levelIndex = local_index < 0 ? 0 : local_index;
 	}
 
 	NumberOfSessionsFound++;
@@ -707,6 +730,39 @@ void Net_Disconnect()
 
 	sessionCheckTimer = 0;
 	CloseDiscoverySocket();
+
+	// The game has closed, and the list was only for this game
+	CoopRemoved_Forget(removedPlayers);
+}
+
+static NetID IDOfConnection(const ENetPeer *peer);
+
+void Net_RemoveThisPlayer(NetID id)
+{
+	if (AvP.Network != I_Host || !host || id == 0 || id == AvPNetID)
+	{
+		return;
+	}
+
+	for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; ++peer)
+	{
+		if (peer->state == ENET_PEER_STATE_CONNECTED && IDOfConnection(peer) == id)
+		{
+			CoopRemoved_Add(removedPlayers, peer->address.host);
+
+			// They're out at once: nothing more from this connection counts, whatever it does about the goodbye
+			peer->data = NULL;
+			netSession.nPlayers--;
+			Net_PlayerHasGone(id);
+			enet_peer_disconnect(peer, kCoopRemovedByTheHost);
+			return;
+		}
+	}
+}
+
+bool Net_WasRemovedByTheHost()
+{
+	return removedByTheHost;
 }
 
 uint32_t Net_JoinGame()
@@ -949,10 +1005,10 @@ static void ForgetConnectionsNotLetIn()
 
 		halfOpenSince[i] = 0;
 
-		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data != NULL && now - lastHeardFrom[i] >= kMostMillisecondsSilent)
+		if (peer->state == ENET_PEER_STATE_CONNECTED && peer->data != NULL && now - lastHeardFrom[i] >= (Net_CoopLobbyState() == kCoopLobbyOpen ? kMostMillisecondsSilentInTheLobby : kMostMillisecondsSilent))
 		{
 			// The ordinary way out, so that the game hears this player has gone
-			LogDroppedMessage("a player has sent nothing for minutes");
+			LogDroppedMessage("a player has sent nothing for too long");
 			lastHeardFrom[i] = now;
 			enet_peer_disconnect(peer, 0);
 			continue;
@@ -1123,6 +1179,14 @@ static void LetClientIn(ENetPeer *peer, const uint8_t *details)
 		return;
 	}
 
+	// Somebody the host took out of this game
+	if (CoopRemoved_Has(removedPlayers, peer->address.host))
+	{
+		Net_NoteRefused(kCoopRefusedRemoved);
+		enet_peer_disconnect(peer, kCoopRemovedByTheHost);
+		return;
+	}
+
 	NetID const id = Net_GetNextPlayerID();
 
 	if (netSession.nPlayers >= netSession.maxPlayers || !AddPlayerToGame(id, player.name))
@@ -1208,7 +1272,7 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 
 	size_t const connection = (size_t)(from - host->peers);
 
-	if (connection <= kMostClients)
+	if (connection <= kMostClients && Net_CoopLobbyState() == kCoopLobbyNone)
 	{
 		lastHeardFrom[connection] = enet_time_get();
 	}
@@ -1236,6 +1300,18 @@ static bool HostHearsFromClient(ENetPeer *from, const uint8_t *data, size_t size
 	if (!Net_ClientCanAfford(data, size, connection))
 	{
 		return false;
+	}
+
+	// In the lobby only what the lobby takes counts as being heard from, so sending what's refused doesn't keep a seat
+	if (connection <= kMostClients && Net_CoopLobbyState() != kCoopLobbyNone)
+	{
+		lastHeardFrom[connection] = enet_time_get();
+	}
+
+	// Nothing goes from one joiner to another in the lobby, and an answer about the map is only ever for the host
+	if (Net_CoopLobbyState() != kCoopLobbyNone || Net_MessageIsForTheHostAlone(data, size))
+	{
+		return true;
 	}
 
 	// Clients can't reach each other, so the host passes this on to the rest
@@ -1408,6 +1484,7 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 					else if (eEvent.peer == ServerPeer)
 					{
 						ServerPeer = NULL;
+						removedByTheHost = eEvent.data == kCoopRemovedByTheHost;
 					}
 
 					break;
@@ -1529,6 +1606,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	// Whatever this was belonged to the last game. The host gives this game's.
 	AvPNetID = 0;
 	hostPlayerID = 0;
+	removedByTheHost = false;
 
 	ServerAddress.host = SessionData[sessionNumber].host;
 	ServerAddress.port = SessionData[sessionNumber].port;
@@ -1578,6 +1656,9 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	}
 
 	InitAVPNetGameForJoin();
+
+	// From here on, before anything has been read from the host
+	Net_CoopLobbyJoined(SessionData[sessionNumber].coopLobby);
 
 	netGameData.levelNumber = SessionData[sessionNumber].levelIndex;
 	netGameData.joiningGameStatus = JOINNETGAME_WAITFORDESC;
@@ -1736,6 +1817,18 @@ static NetResult Net_CreateSession(const char *sessionName, const char *levelNam
 	strncpy(netSession.sessionName, sessionName, sizeof(netSession.sessionName) - 1);
 
 	return NET_OK;
+}
+
+void Net_SayWhatTheGameIs(uint16_t level, const char *levelName, const char *sessionName, uint8_t coopLobby)
+{
+	netSession.level = level;
+	netSession.coopLobby = coopLobby;
+
+	// Each is cleared first, so nothing of a longer old name stays after the end of a shorter new one
+	memset(netSession.levelName, 0, sizeof(netSession.levelName));
+	memset(netSession.sessionName, 0, sizeof(netSession.sessionName));
+	strncpy(netSession.levelName, levelName, sizeof(netSession.levelName) - 1);
+	strncpy(netSession.sessionName, sessionName, sizeof(netSession.sessionName) - 1);
 }
 
 NetResult Net_UpdateSessionDescForLobbiedGame(uint16_t gameStyle, uint16_t level)

@@ -1,5 +1,6 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   how many marine classes there are (NUM_PC_SUBTYPES) is checked against the list of them when the game is built
+//   the co-op lobby: two new messages, the host's rows, and what the pages ask. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the new guns' settings are in the game description, so a joiner uses the host's
 //   in the same-as-single-player mode, a level starts for everyone together, with two new messages
@@ -21,6 +22,7 @@ extern NetID MultiplayerObservedPlayer;
 /* Oh, for heaven's sake... */
 #include "psnd.h"
 #include "particle.h"
+#include "coop_lobby.h"
 /* ---------------------------------------------------------------------
   Some defines for multiplayer games
   ----------------------------------------------------------------------*/
@@ -117,7 +119,9 @@ typedef enum netmessagetype
 	NetMT_NpcKilled,
 	NetMT_NpcSound,
 	NetMT_NpcThrownObject,
-	NetMT_LiftState
+	NetMT_LiftState,
+	NetMT_CoopCampaignChoice,
+	NetMT_CoopMapAnswer
 } NETMESSAGETYPE;
 
 
@@ -321,6 +325,16 @@ typedef struct netgame_gamedata
 
 	// One number for the whole game, chosen by the host, that things with several possible places take theirs from. See shared_roll.h.
 	int coopRollNumber;
+
+	// 1 if each player keeps their kit between the levels of a campaign (campaign_kit.h), and 0 for each level's own kit. Only the co-op campaign page turns it on.
+	int coopKeepKit;
+
+	// A custom map chosen in a co-op lobby: its name, who plays it (0 Marine, 1 Predator, 2 Alien), and its size and sum, only to compare. See coop_lobby.h.
+	// No name means no custom map.
+	char coopCustomMap[kCoopMapNameBytes];
+	int coopCustomSpecies;
+	unsigned int coopCustomMapSize;
+	unsigned char coopCustomMapSum[kCoopMapSumBytes];
 
 } NETGAME_GAMEDATA;
 
@@ -1024,6 +1038,20 @@ typedef struct multiplayer_start
    Some prototypes
   ----------------------------------------------------------------------*/
 extern void NetCollectMessages(void);
+
+// The co-op lobby. See coop_lobby.h for what it is.
+int Net_CoopLobbyState(void);                 // kCoopLobbyNone, Open or UnderWay, for this machine
+void Net_CoopLobbyOpens(void);                // a host has opened the page
+void Net_CoopLobbyJoined(int state);          // a joiner has connected to a game whose description said this
+void Net_CoopLobbyEnds(void);                 // a joiner has been pulled into the load, or has left
+void Net_CoopHostSays(void);                  // a host says what's chosen: at once if a row has changed, and otherwise once a second
+void Net_CoopHostStarts(void);                // a host has pressed Start, and everyone who has the map goes
+void Net_CoopJoinerSays(void);                // a joiner answers about the map: at once if that has changed, and otherwise every 2 seconds
+bool Net_CoopChoiceIsHeard(void);             // has this joiner heard what the host has chosen?
+bool Net_CoopHostHasStarted(void);            // has this joiner heard the host press Start?
+int Net_CoopMyMapAnswer(void);                // what this joiner found out about the map
+bool Net_CoopPlayerHasTheMap(int place);      // on a host: is the player at this place known to have the map?
+void Net_CoopTakeTheCampaign(void);           // this machine is about to load: everything the rows decided takes effect
 extern void NetSendMessages(void);
 extern void EndAVPNetGame(void);
 extern int PlayerIdInPlayerList(NetID Id);

@@ -378,6 +378,9 @@
     <ClCompile Include="..\..\3dc\avp\hud.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\campaign_kit.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -843,6 +846,9 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\coop_menu.cpp">
+      <Filter>Source Files\menus</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\win95\frontend\env_info.cpp">
       <Filter>Source Files\menus</Filter>
     </ClCompile>
@@ -1014,6 +1020,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\huddefs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\campaign_kit.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\inventory.h">
@@ -1527,6 +1536,12 @@
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\coop_menu.h">
+      <Filter>Header Files\menus</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\coop_lobby.h">
       <Filter>Header Files\menus</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\custom_map_name.h">
