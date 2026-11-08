@@ -82,8 +82,14 @@ if ($LASTEXITCODE -ne 0) { throw 'The game did not build' }
 New-Item -ItemType Directory -Force $OutFolder | Out-Null
 $release = 'win32\VS2026\Win32\Release'
 
-Copy-Item (Join-Path $release 'AvPx.exe') $OutFolder
-Copy-Item (Join-Path $release '*.dll') $OutFolder
+# The package is laid out as the game folder is, so a tester unzips it over theirs and lets it replace what's there. Steam starts
+# bin\AvP_Classic.exe, so the game goes there under that name, with its libraries beside it: Windows looks for a library in the
+# program's own folder first, and D3DX looks there for D3DCompiler_43.dll. The shaders go at the top: the game reads them from the
+# folder Steam starts it in, which is the game folder. Steam's "Verify integrity of game files" puts its own back. (2026-11-07.)
+$programFolder = Join-Path $OutFolder 'bin'
+New-Item -ItemType Directory -Force $programFolder | Out-Null
+Copy-Item (Join-Path $release 'AvPx.exe') (Join-Path $programFolder 'AvP_Classic.exe')
+Copy-Item (Join-Path $release '*.dll') $programFolder
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
@@ -134,13 +140,14 @@ foreach ($file in @(Get-ChildItem -LiteralPath 'package-files' -Recurse -File)) 
     if (-not $listedNames.ContainsKey($name.ToLower())) { throw "package-files/$name isn't on package-files/SHA256SUMS.txt, so it wouldn't go in the package" }
 }
 
-if (-not (Test-Path (Join-Path $OutFolder 'AvPx.exe'))) { throw 'AvPx.exe was not built' }
+if (-not (Test-Path (Join-Path $programFolder 'AvP_Classic.exe'))) { throw 'the game was not built, so there is no bin\AvP_Classic.exe' }
 
 # Nothing links to this one: D3DX loads it by name while the game is running, so losing it would give no error here. Without it the game
 # can't compile its shaders on a Windows that doesn't already have it.
-if (-not (Test-Path (Join-Path $OutFolder 'D3DCompiler_43.dll'))) { throw 'D3DCompiler_43.dll is not in the package' }
+if (-not (Test-Path (Join-Path $programFolder 'D3DCompiler_43.dll'))) { throw 'D3DCompiler_43.dll is not in the package''s bin' }
 
-& (Join-Path $PSScriptRoot 'check-package-imports.ps1') -Package $OutFolder
+# The program and its libraries are all in bin, so that's the folder whose links are read
+& (Join-Path $PSScriptRoot 'check-package-imports.ps1') -Package $programFolder
 
 "$env:GITHUB_REF_NAME $(git rev-parse HEAD)" | Out-File -Encoding ascii (Join-Path $OutFolder 'BUILD.txt')
 

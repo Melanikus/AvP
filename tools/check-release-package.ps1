@@ -30,7 +30,9 @@ function Stop-Release([string]$why)
     exit 1
 }
 
-foreach ($needed in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
+# The package is laid out as the game folder is: the game in bin as AvP_Classic.exe, the name Steam starts, with the libraries it needs
+# there too, and the notes at the top
+foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
 {
     if (-not (Test-Path -LiteralPath (Join-Path $Package $needed)))
     {
@@ -46,11 +48,13 @@ if ($symbols.Count -gt 0)
     Stop-Release "$($symbols[0].Name) is in the package, and a build's symbols stay with the build"
 }
 
-$programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { $_.Name -ne 'AvPx.exe' })
+# The only program is the game, at bin/AvP_Classic.exe. One with that name anywhere else, or any other, is refused.
+$packageRoot = (Resolve-Path -LiteralPath $Package).Path.TrimEnd('\', '/')
+$programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { ($_.FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') -cne 'bin/AvP_Classic.exe' })
 
 if ($programs.Count -gt 0)
 {
-    Stop-Release "$($programs[0].Name) is in the package, and the only program in it should be the game"
+    Stop-Release "$($programs[0].FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') is in the package, and the only program in it should be the game, bin/AvP_Classic.exe"
 }
 
 if (-not (Get-Content -LiteralPath (Join-Path $Package 'BUILD.txt') -Raw).Contains($Commit))

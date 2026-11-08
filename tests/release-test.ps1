@@ -449,7 +449,7 @@ function Write-Sums
 function Make-GoodPackage
 {
     Clear-Work
-    foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
+    foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md') { Write-File (Join-Path $package $name) $name }
     Write-File (Join-Path $package 'BUILD.txt') "avpx_main $commit"
     Write-File (Join-Path $package 'shaders/reliefMain.psh') 'shader one'
     Write-File (Join-Path $package 'shaders/volume.vsh') 'shader two'
@@ -469,7 +469,7 @@ Make-GoodPackage
 $result = Run-Script 'check-release-package.ps1' (Package-Arguments)
 Check ($result.Code -eq 0) "a good package passes. It said: $($result.Text)"
 
-foreach ($name in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
+foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
 {
     Make-GoodPackage
     Remove-Item -LiteralPath (Join-Path $package $name)
@@ -537,6 +537,11 @@ Make-GoodPackage
 Write-File (Join-Path $package 'other.exe') 'a program'
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'other.exe is in the package' 'a second program is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'AvP_Classic.exe') 'the game, but not in bin'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'AvP_Classic.exe is in the package, and the only program in it should be the game, bin/AvP_Classic.exe' 'the game anywhere but bin is refused'
 
 foreach ($name in 'AvPx.pdb', 'AvPx.map')
 {
