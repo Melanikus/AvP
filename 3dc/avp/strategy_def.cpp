@@ -7,6 +7,7 @@
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   the list of placed NPCs' names is emptied whenever every strategy block is destroyed, so after a restart in a network game a switch finds the
 //   NPC it's aimed at again. It used to be emptied only when the program started (#126)
+//   so is what the log has said about links that find nothing, and about walk-in boxes set off by nearness (#130)
 //   a lookup by name follows the list of placed NPCs' names once at most, to the live blocks only (#131)
 //   a new name's number passes over any number something alive still has, so when the count goes round no two live things share an id
 //   (see sb_name_numbers.h, #139)
@@ -29,6 +30,7 @@
 #include "logString.h"
 #include "npc_level_names.h"
 #include "sb_name_numbers.h"
+#include "near_wake_game.h"
 
 #include <string.h>
 
@@ -785,6 +787,10 @@ void DestroyAllStrategyBlocks(void)
 	// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).
 	NpcLevelNames_Clear(&TheNpcLevelNames);
 
+	// And the next level's links, or this one's made again, get their own lines about any that find nothing (link_misses.h), and their
+	// own lines about walk-in boxes set off by a player near a sleeping NPC (near_wake.h)
+	LinkMisses_LevelEnds();
+	NearWake_LevelEnds();
 }
 
 // Whether something alive other than self already has this number and tag in its name: the four bytes from SBname[4], which the network
