@@ -41,6 +41,10 @@
 //   a connection may stay silent for a named time, and a level load answers all the way through
 //   a packet has a checksum, a connection that never finishes starting or a player who goes silent loses their place, one address can hold 4 places, and a client can only send so many bytes each second
 //   one address gets only so many answers to a search, and can list 2 games at most
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   every ENet host is made by Net_MakeENetHost (net_host.cpp) with the game's limits, and a connection gets the one channel the game uses
+//   a message too short to have a header is refused before it's copied
+//   the log says when our ENet has told an older version of the game no
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -51,6 +55,7 @@
 #include "mp_config.h"
 #include "networking.h"
 #include "net_checks.h"
+#include "net_host.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -115,12 +120,6 @@ static unsigned int lastHeardFrom[kMostClients + 1];
 static const int kMostBytesEachSecond = 512 * 1024;
 static unsigned int bytesSecond[kMostClients + 1];
 static int bytesUsed[kMostClients + 1];
-
-// One address can hold this many of the seven places. People sharing an address at home get in, and someone flooding from one address can't take them all.
-static const size_t kMostConnectionsFromOneAddress = 4;
-
-// How much ENet may keep waiting for the game to read, from one connection. A level load is the longest wait there is. ENet's own limit is 32 MB.
-static const size_t kMostBytesWaitingForTheGame = 8 * 1024 * 1024;
 
 static uint32_t netPortNumber = 23513;
 static const uint32_t broadcastPort = 23514; // checkme
@@ -585,25 +584,13 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			ServerAddress.host = ENET_HOST_ANY;
 			ServerAddress.port = netPortNumber;
 
-			host = enet_host_create(&ServerAddress,      // the address to bind the server host to.
-								kMostClients,            // the most clients it can have
-								0,                       // channel limit.
-								incomingBandwidth,       // assume any amount of incoming bandwidth.
-								outgoingBandwidth);      // assume any amount of outgoing bandwidth.
+			// The game's limits, a checksum on every packet and one channel: see net_host.h
+			host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);
 			if (NULL == host)
 			{
 				Con_PrintError("Failed to create ENet server");
 				return NET_FAIL;
 			}
-
-			host->duplicatePeers = kMostConnectionsFromOneAddress;
-
-			// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
-			host->maximumPacketSize = kMostMessageBytes;
-			host->maximumWaitingData = kMostBytesWaitingForTheGame;
-
-			// A packet that's been changed on the way, or forged by someone who doesn't know the connection's number, is thrown away. It isn't a password, because anyone who sees the traffic can work this out.
-			host->checksum = enet_crc32;
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
 			OpenDiscoverySocket();
@@ -802,6 +789,27 @@ static void LogDroppedMessage(const char *why)
 	}
 }
 
+// Our ENet (patch 006) tells an older version of the game no as soon as it asks to join, without a place or an event, and
+// counts it. This puts that in the log, so a host can see why that player never got in.
+static void LogOlderVersionsToldNo()
+{
+	static unsigned long long toldNo = 0;
+
+	if (host->olderConnectsRefused == 0)
+	{
+		return;
+	}
+
+	host->olderConnectsRefused = 0;
+
+	if (LogThisDrop(toldNo))
+	{
+		std::stringstream sstream;
+		sstream << "Net - a player with an older version of the game tried to join, and was told no (" << toldNo << " so far)";
+		Con_PrintError(sstream.str());
+	}
+}
+
 static void ForgetConnectionsNotLetIn()
 {
 	unsigned int const now = enet_time_get();
@@ -900,6 +908,7 @@ void Net_ServiceNetwork()
 		if (AvP.Network == I_Host) {
 			Net_CheckForSessionRequest();
 			ForgetConnectionsNotLetIn();
+			LogOlderVersionsToldNo();
 		}
 	}
 }
@@ -1234,6 +1243,15 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						break;
 					}
 
+					// Every message has a header. An empty one comes with no bytes at all, and copying from nothing isn't allowed in
+					// C++, even copying nothing. Both readers below would refuse it anyway, so it goes here, before the copy.
+					if (eEvent.packet->dataLength < kMessageHeaderSize)
+					{
+						LogDroppedMessage("a message too short to have a header");
+						enet_packet_destroy(eEvent.packet);
+						break;
+					}
+
 					// copy it in, header and all
 					memcpy(messageData, eEvent.packet->data, eEvent.packet->dataLength);
 
@@ -1391,11 +1409,8 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 	ServerAddress.port = SessionData[sessionNumber].port;
 
 	// create ENet client. It has no address of its own, because nobody needs to find it: it talks to its host, and gets whatever port is free. That also means two games on one machine don't fight over a port.
-	host = enet_host_create(NULL,
-				1,                      // only allow 1 outgoing connection
-				0,                      // channel limit
-				incomingBandwidth,      // 57600 / 8 : 56K modem with 56 Kbps downstream bandwidth
-				outgoingBandwidth);     // 14400 / 8 : 56K modem with 14 Kbps upstream bandwidth
+	// One connection, to the host, with the game's limits: see net_host.h
+	host = Net_MakeENetHost(NULL, 1, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);
 
 	if (host == NULL)
 	{
@@ -1403,12 +1418,7 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
 		return NET_FAIL;
 	}
 
-	// no packet the game sends is larger than this (Net_Send builds each one in packetBuffer): let ENet refuse larger ones before it reassembles them
-	host->maximumPacketSize = kMostMessageBytes;
-	host->maximumWaitingData = kMostBytesWaitingForTheGame;
-	host->checksum = enet_crc32;
-
-	ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);
+	ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);
 	if (ServerPeer == NULL)
 	{
 		Con_PrintError("Net_ConnectToSession - Failed to connect to server host");

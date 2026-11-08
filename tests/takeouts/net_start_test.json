@@ -959,8 +959,8 @@
 			"changes": [
 				{
 					"file": "3dc/networking.cpp",
-					"from": "host = enet_host_create(NULL,",
-					"to": "host = enet_host_create(&ServerAddress,"
+					"from": "host = Net_MakeENetHost(NULL,",
+					"to": "host = Net_MakeENetHost(&ServerAddress,"
 				}
 			]
 		},
@@ -1851,6 +1851,106 @@
 					"file": "3dc/networking.cpp",
 					"from": "\t\tif (LogThisDrop(noGameToSendIn))",
 					"to": "\t\tnoGameToSendIn++;\n\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "a connection gets every channel ENet allows",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "enet_host_create(address, connections, kNetChannels,",
+					"to": "enet_host_create(address, connections, 0,"
+				}
+			]
+		},
+		{
+			"name": "a client asks for two channels",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "ServerPeer = enet_host_connect(host, &ServerAddress, kNetChannels, 0);",
+					"to": "ServerPeer = enet_host_connect(host, &ServerAddress, 2, 0);"
+				}
+			]
+		},
+		{
+			"name": "one address can take every place",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->duplicatePeers = kMostConnectionsFromOneAddress;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ENet takes a message of any size",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->maximumPacketSize = mostMessageBytes;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "ENet keeps any amount waiting",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->maximumWaitingData = kMostBytesWaitingForTheGame;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "packets have no checksum",
+			"changes": [
+				{
+					"file": "3dc/net_host.cpp",
+					"from": "\thost->checksum = enet_crc32;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game makes a host without its limits",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "host = Net_MakeENetHost(&ServerAddress, kMostClients, kMostMessageBytes, incomingBandwidth, outgoingBandwidth);",
+					"to": "host = enet_host_create(&ServerAddress, kMostClients, 0, incomingBandwidth, outgoingBandwidth);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an empty message is copied before its size is checked",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\tif (eEvent.packet->dataLength < kMessageHeaderSize)\n\t\t\t\t\t{\n\t\t\t\t\t\tLogDroppedMessage(\"a message too short to have a header\");\n\t\t\t\t\t\tenet_packet_destroy(eEvent.packet);\n\t\t\t\t\t\tbreak;\n\t\t\t\t\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the log never says an older version was told no",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tLogOlderVersionsToldNo();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an older version told no is logged again and again",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\thost->olderConnectsRefused = 0;\n",
+					"to": ""
 				}
 			]
 		}
