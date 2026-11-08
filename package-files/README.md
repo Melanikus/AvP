@@ -6,8 +6,8 @@ looks for it. Written 2026-11-07 by Melanikus for the AvP port.
 
 **What goes in the package is exactly what `SHA256SUMS.txt` lists,** each with its SHA-256. `tools/build-and-package.ps1` checks
 every file against its line before copying it in, and refuses a file here that isn't listed. `tools/check-release-package.ps1`
-refuses a package that hasn't got every listed file, byte for byte. So a file can't change without its line changing too, and that
-line shows in the pull request that changes it. `.gitattributes` stops git changing a line ending in any of them.
+refuses a package that hasn't got every listed file, byte for byte, and a commit whose folder doesn't hold exactly its list, or holds a
+link. So a file can't change without its line changing too, and that line shows in the pull request that changes it. `.gitattributes` stops git changing a line ending in any of them.
 
 **None of them replaces a file of the player's own game.** The player's `avp_huds\marwep.rif` stays theirs: without
 `MelPyth_MarWep.rif`, the guns it holds come from that file instead.

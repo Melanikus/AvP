@@ -409,6 +409,7 @@ function Make-GoodPackage
     Write-File (Join-Path $package 'avp_huds/Ours.rif') 'a model'
     $modelHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')).Hash.ToLower()
     Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') "$modelHash  avp_huds/Ours.rif"
+    Write-File (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') 'a model'
     Write-Sums
 }
 
@@ -458,7 +459,19 @@ Make-GoodPackage
 Remove-Item -LiteralPath (Join-Path $packageRepository 'package-files/SHA256SUMS.txt')
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit lists none of our game files' 'a commit with no list of game files is refused'
 
-foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif'))
+Make-GoodPackage
+Write-File (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') 'changed in the commit, not on the list'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/avp_huds/Ours.rif in this commit isn't the file its list names" 'a game file that has drifted from its list is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $packageRepository 'package-files/avp_huds/Extra.rif') 'in the folder, not on the list'
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/avp_huds/Extra.rif isn't on package-files/SHA256SUMS.txt" 'a game file left off the list is refused'
+
+Make-GoodPackage
+New-Item -ItemType SymbolicLink -Path (Join-Path $packageRepository 'package-files/avp_huds/Linked.rif') -Target (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') | Out-Null
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'package-files/avp_huds/Linked.rif is a link' 'a link among the game files is refused'
+
+foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif', ('0' * 64) + '  avp_huds/a[1].rif', ('0' * 64) + '  /root.rif'))
 {
     Make-GoodPackage
     Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') $badLine

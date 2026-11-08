@@ -95,8 +95,9 @@ $listedNames = @{}
 foreach ($line in $gameFiles) {
     $hash, $name = $line -split '  ', 2
 
-    # A line names a file inside the folder: no drive, no root, and no way out of it with ..
-    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or -not $name -or $name.Contains(':') -or $name.StartsWith('/') -or $name.StartsWith('\') -or ($name -split '[\\/]') -contains '..') {
+    # A line names a plain file inside the folder: parts of letters, digits, _ . - and spaces, between /, each starting with a letter,
+    # a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard.
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$') {
         throw "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the folder: $line"
     }
 
@@ -109,6 +110,11 @@ foreach ($line in $gameFiles) {
     New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
     Copy-Item -LiteralPath $from -Destination $to
     $listedNames[($name -replace '\\', '/').ToLower()] = $true
+}
+
+# git keeps every one of them as a plain file. A link (mode 120000) would be followed, to whatever it points at.
+foreach ($entry in @(git ls-files -s -- package-files)) {
+    if ($entry -cnotmatch '^100644 ') { throw "package-files has something git doesn't keep as a plain file: $entry" }
 }
 
 $folder = (Resolve-Path -LiteralPath 'package-files').Path
@@ -134,7 +140,7 @@ Push-Location $OutFolder
 # The hashes are worked out first and written after. Writing the list while the folder is being read would make it hash its own
 # half-written file, and that fails with a sharing violation.
 $hashes = Get-ChildItem -Recurse -File | Resolve-Path -Relative | ForEach-Object {
-    '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 $_).Hash.ToLower(), ($_ -replace '^\.\\', '' -replace '\\', '/')
+    '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_).Hash.ToLower(), ($_ -replace '^\.\\', '' -replace '\\', '/')
 }
 $hashes | Out-File -Encoding ascii SHA256SUMS.txt
 Pop-Location

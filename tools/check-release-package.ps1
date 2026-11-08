@@ -93,16 +93,28 @@ if ($gameFiles.Count -eq 0)
     Stop-Release 'this commit lists none of our game files (package-files/SHA256SUMS.txt)'
 }
 
+$listedGameFiles = @{}
+
 foreach ($line in $gameFiles)
 {
     $hash, $name = $line -split '  ', 2
 
-    # A line names a file inside the game folder: no drive, no root, and no way out of it with ..
-    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or -not $name -or $name.Contains(':') -or $name.StartsWith('/') -or $name.StartsWith('\') -or ($name -split '[\\/]') -contains '..')
+    # A line names a plain file inside the game folder: parts of letters, digits, _ . - and spaces, between /, each starting with a
+    # letter, a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard.
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$')
     {
         Stop-Release "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the game folder: $line"
     }
 
+    # The commit's own copy has to be the file the list names, so the list and the folder can't drift apart
+    $inCommit = Join-Path (Join-Path $Repository 'package-files') $name
+
+    if (-not (Test-Path -LiteralPath $inCommit -PathType Leaf) -or (Get-FileHash -Algorithm SHA256 -LiteralPath $inCommit).Hash.ToLower() -cne $hash)
+    {
+        Stop-Release "package-files/$name in this commit isn't the file its list names"
+    }
+
+    $listedGameFiles[$name.ToLower()] = $true
     $inPackage = Join-Path $Package $name
 
     if (-not (Test-Path -LiteralPath $inPackage -PathType Leaf))
@@ -113,6 +125,26 @@ foreach ($line in $gameFiles)
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $inPackage).Hash.ToLower() -cne $hash)
     {
         Stop-Release "the game file $name in the package isn't the one this commit lists"
+    }
+}
+
+# Nothing else is in the commit's folder, apart from its notes, and nothing in it is a link, which would be followed to wherever it
+# points
+$gameFolder = Join-Path $Repository 'package-files'
+$gameFolderPath = (Resolve-Path -LiteralPath $gameFolder).Path.TrimEnd('\', '/')
+
+foreach ($item in @(Get-ChildItem -LiteralPath $gameFolder -Recurse -Force))
+{
+    $name = $item.FullName.Substring($gameFolderPath.Length + 1) -replace '\\', '/'
+
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    {
+        Stop-Release "package-files/$name is a link, and every game file has to be a plain file"
+    }
+
+    if (-not $item.PSIsContainer -and $name -cnotin 'README.md', 'SHA256SUMS.txt', '.gitattributes' -and -not $listedGameFiles.ContainsKey($name.ToLower()))
+    {
+        Stop-Release "package-files/$name isn't on package-files/SHA256SUMS.txt"
     }
 }
 
