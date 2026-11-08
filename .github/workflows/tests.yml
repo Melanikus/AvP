@@ -45,6 +45,35 @@ jobs:
         with:
           ports: dxsdk-d3dx enet
 
+      # SANITIZE-RUN-1's first question, asked on a scratch branch that is never merged: a test built with the C runtime inside it (/MT)
+      # and with the address sanitizer, which Windows DLLs does it ask for? tests/takeouts/sanitize.ps1 refuses a test that asks for one
+      # of the C runtime's, so if the sanitizer brings one in, every test would be refused. Four different kinds of test are tried: plain
+      # C++, one with a C file in it, one linking ENet and Windows' network library, and the shader test. For each, this prints what the
+      # script said, the list of DLLs dumpbin read from the program, and the end of what the test wrote. Then it prints the DLLs the
+      # sanitizer's own library asks for. It never fails the job: the answer is in this log, whatever it is.
+      - name: "Probe: what a /MT test built with the sanitizer asks Windows for"
+        shell: pwsh
+        run: |
+          foreach ($test in 'relief_map_file_test', 'chunk_memory_test', 'enet_hostile_test', 'shader_test') {
+            "===== $test"
+            & ./tests/takeouts/sanitize.ps1 $test
+            "===== sanitize.ps1 gave back $LASTEXITCODE for $test"
+            $out = Join-Path $env:RUNNER_TEMP "avp-sanitize\$test"
+            $imports = Join-Path $out 'imports.txt'
+            if (Test-Path -LiteralPath $imports) { "--- the DLLs dumpbin read from $test's program:"; Get-Content -LiteralPath $imports }
+            else { "--- no list of DLLs: the program wasn't built. The start of what the compiler said:"; Get-Content -LiteralPath (Join-Path $out 'build.txt') -TotalCount 30 -ErrorAction SilentlyContinue }
+            $said = Join-Path $out 'said.txt'
+            if (Test-Path -LiteralPath $said) { "--- the end of what $test wrote:"; Get-Content -LiteralPath $said -Tail 30 }
+          }
+
+          # The sanitizer's own library, from the same Visual Studio
+          $visualStudio = & (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe') -latest -products * -property installationPath
+          $tools = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Tools\MSVC\*\bin\Hostx64\x86') | Select-Object -Last 1
+          $library = Join-Path $tools.FullName 'clang_rt.asan_dynamic-i386.dll'
+          "===== the DLLs the sanitizer's own library ($library) asks for:"
+          & (Join-Path $tools.FullName 'dumpbin.exe') /nologo /dependents $library
+          exit 0
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1
