@@ -23,10 +23,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Part of Windows itself, from Windows 8 on, which is what PLAYTEST.md asks for
+# Part of Windows itself, from Windows 8 on, which is what PLAYTEST.md asks for. bcrypt.dll is Windows' own cryptography library, there
+# since Windows Vista: the game links it because ENet's host_secret.c (vcpkg-overlay-ports/enet, for patch 006) asks it for random
+# numbers with BCryptGenRandom.
 $partOfWindows = @(
-    'advapi32.dll', 'avrt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll', 'winmm.dll',
-    'ws2_32.dll', 'xinput1_4.dll'
+    'advapi32.dll', 'avrt.dll', 'bcrypt.dll', 'd3d9.dll', 'gdi32.dll', 'kernel32.dll', 'msvcrt.dll', 'ole32.dll', 'shell32.dll', 'user32.dll',
+    'winmm.dll', 'ws2_32.dll', 'xinput1_4.dll'
 )
 
 # Microsoft's Visual C++ Redistributable, which PLAYTEST.md tells a tester to install from Microsoft
