@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   in a Hudson run with dieat=, a host left alone and out starts the level again by itself, as single player does (#126)
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   two test-only helpers a Hudson hostile network run uses. Nothing calls them until the network step: hudson.cpp refuses net= until then
 // Modified 2026-11-07 by Melanikus for the AvP port:
@@ -122,6 +124,7 @@ int IsThisObjectVisibleFromThisPosition_WithIgnore(DISPLAYBLOCK *objectPtr, DISP
 #include "npc_ghosts.h"
 #include "coop_in_game.h"
 #include "coop_menu.h"
+#include "hudson.h"
 
 // coop_in_game.h keeps one bit for each place on the player list
 static_assert(kCoopMostPlayers == NET_MAXPLAYERS, "coop_in_game.h needs one bit for each player");
@@ -13811,7 +13814,8 @@ void Coop_WhileOut(bool asksToChangeWhoHeWatches)
 
 	bool const timeIsUp = someoneElseIsHere && everyoneOutFor >= kSecondsToWaitWithOthersWatching * ONE_FIXED;
 
-	if (DebouncedGotAnyKey || timeIsUp)
+	// A Hudson run that asked to die (dieat=) presses its key here too, 3 seconds after he went out, as it does in single player
+	if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())
 	{
 		// The same thing the host's "restart" command does, and the one single player's death leads to in the end
 		int const seed = FastRandom();

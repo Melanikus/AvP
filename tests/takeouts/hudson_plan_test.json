@@ -8185,6 +8185,16 @@
 					"to": " && plan->gunSlot == 0)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a host out alone never starts the level again",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())",
+					"to": "if (DebouncedGotAnyKey || timeIsUp)"
+				}
+			]
 		}
 	]
 }
