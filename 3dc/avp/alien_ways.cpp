@@ -560,6 +560,11 @@ bool AlienWays_Following(STRATEGYBLOCK *alien)
 	return alien && AlienWays_On() && ReadyMap() && theGuide.Guided(WhoIs(alien));
 }
 
+bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)
+{
+	return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));
+}
+
 size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most)
 {
 	if (!out || !AlienWays_On() || !ReadyMap())

@@ -187,6 +187,12 @@ bool AlienWaysGuide::Guided(const AlienWaysWho &who) const
 	return f >= 0 && followers[f].guided;
 }
 
+bool AlienWaysGuide::GuidedThisFrame(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && followers[f].steered && followers[f].guided;
+}
+
 size_t AlienWaysGuide::Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const
 {
 	size_t shown = 0;

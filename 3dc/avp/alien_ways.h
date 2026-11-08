@@ -62,6 +62,10 @@ bool AlienWays_Steer(struct strategyblock *alien, struct strategyblock *target, 
 // Whether this alien's last AlienWays_Steer gave back true. An alien on a way crawls (AlienShouldBeCrawling, bh_near.cpp).
 bool AlienWays_Following(struct strategyblock *alien);
 
+// Whether AlienWays_Steer was asked for this alien in this frame and gave back true: its way steers it now. False with the switch off, and
+// in a frame nothing asked. Hunt and Wander (bh_near.cpp) use it to hold back the game's own avoidance only while a way really steers them.
+bool AlienWays_GuidedThisFrame(struct strategyblock *alien);
+
 // On a frame its way steers an alien, the game's own tests that would send it off to avoid something are kept from acting, because running
 // into a wall is how it climbs (AlienNearState_Approach, bh_near.cpp). When one of them would have acted, this says so in the log: which one,
 // where the alien is, and its module, at most once a second for each alien and kAlienWaysMostWouldHaveLines times a level. turnedBack means

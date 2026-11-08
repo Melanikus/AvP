@@ -580,7 +580,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)",
 					"to": "\tbool const onAWay = false;   // (Wander)"
 				}
 			]
@@ -620,7 +620,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)",
 					"to": "\tbool const onAWay = false;   // (Hunt)"
 				}
 			]
@@ -652,6 +652,46 @@
 					"file": "3dc/avp/bh_near.cpp",
 					"from": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)   // Hunt\n\t{",
 					"to": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, the mark is read from gravity, so a crouched hunter with no way has its avoidance held back, even with the switch off",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)",
+					"to": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, the mark is read from gravity",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)",
+					"to": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an alien counts as guided in this frame with the switch off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));",
+					"to": "return alien && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));"
+				}
+			]
+		},
+		{
+			"name": "an alien counts as guided in this frame when nothing asked Steer for it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "return f >= 0 && followers[f].steered && followers[f].guided;",
+					"to": "return f >= 0 && followers[f].guided;"
 				}
 			]
 		}

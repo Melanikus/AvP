@@ -124,6 +124,10 @@ public:
 	// Whether the last Steer for this alien gave back true
 	bool Guided(const AlienWaysWho &who) const;
 
+	// Whether Steer was asked for this alien since the last Frame, and gave back true: its way steers it in this frame. Unlike Guided, it's
+	// false in a frame nothing asked Steer for it, even before the next Frame lets it go.
+	bool GuidedThisFrame(const AlienWaysWho &who) const;
+
 	// What every guided alien's way is now, for the developer view: up to most of them. The points are good until the next Frame or Clear.
 	size_t Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const;
 

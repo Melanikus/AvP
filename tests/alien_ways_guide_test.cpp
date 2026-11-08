@@ -499,6 +499,24 @@ static void LetGo()
 		"Clear forgets every alien and every way, and names nobody");
 }
 
+// Whether the way steers an alien in this frame: only in a frame Steer was asked and gave back a way (Hunt and Wander hold back the game's
+// avoidance by this, so it must never be true for an alien with no way)
+static void GuidedThisFrame()
+{
+	printf("Guided in this frame\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	Check(!guide.GuidedThisFrame(Alien(1)), "an alien the guide has never heard of isn't");
+	GuidedAlien(guide, Alien(1));
+	Check(!guide.GuidedThisFrame(Alien(1)), "after asking, with no way yet steering it, it isn't");
+	Check(guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards) && guide.GuidedThisFrame(Alien(1)), "in a frame its way steers it, it is");
+	Frame(guide, map, 16);
+	Check(guide.Guided(Alien(1)) && !guide.GuidedThisFrame(Alien(1)), "in the next frame, before anything asks Steer, it isn't, though it's still guided till it's let go");
+	Check(!guide.Steer(&map, Ask(Alien(1), { 1000, 0, 4000 }, kGoal, 13), &towards) && !guide.GuidedThisFrame(Alien(1)), "in a frame Steer says no, it isn't");
+}
+
 static void WhoIsWho()
 {
 	printf("Who is who\n");
@@ -746,8 +764,9 @@ static void SourceOfTheGame()
 
 	// The same in Wander (Fourth's hook there)
 	std::string const wander = Between(near, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Wait(STRATEGYBLOCK *sbPtr)\n{");
-	Check(Has(wander, "\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)"),
-		"SOURCE: in Wander, an alien steered by its way this frame is marked so, by the gravity only the way's branch turns off");
+	Check(Has(wander, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander)"),
+		"SOURCE: in Wander, an alien steered by its way this frame is marked so, by the guide");
+	Check(!Has(wander, "onAWay = (dynPtr->UseStandardGravity"), "SOURCE: in Wander, the mark isn't read from gravity, which the state's own code can turn off with no way");
 	Check(Has(wander, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Wander\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
 		"SOURCE: in Wander, running into the wall it climbs doesn't send it off, and the log says it would have");
 	Check(Has(wander, "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Wander\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget("),
@@ -756,8 +775,9 @@ static void SourceOfTheGame()
 
 	// The same in Hunt (Fourth's hook there)
 	std::string const hunt = Between(near, "static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)\n{");
-	Check(Has(hunt, "\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)"),
-		"SOURCE: in Hunt, an alien steered by its way this frame is marked so, by the gravity only the way's branch turns off");
+	Check(Has(hunt, "\tbool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt)"),
+		"SOURCE: in Hunt, an alien steered by its way this frame is marked so, by the guide");
+	Check(!Has(hunt, "onAWay = (dynPtr->UseStandardGravity"), "SOURCE: in Hunt, the mark isn't read from gravity, which the state's own code can turn off with no way");
 	Check(Has(hunt, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Hunt\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
 		"SOURCE: in Hunt, running into the wall it climbs doesn't send it off, and the log says it would have");
 	Check(Has(hunt, "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Hunt\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget("),
@@ -767,6 +787,10 @@ static void SourceOfTheGame()
 	std::string const would = Between(ways, "void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)", "bool AlienWays_Following(");
 	Check(Has(would, "if (!w || clockMs - w->lastWouldHaveMs < 1000)"), "SOURCE: the line comes at most once a second for each alien");
 	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");
+
+	std::string const guidedNow = Between(ways, "bool AlienWays_GuidedThisFrame(STRATEGYBLOCK *alien)", "size_t AlienWays_WaysToShow(");
+	Check(Has(guidedNow, "return alien && AlienWays_On() && ReadyMap() && theGuide.GuidedThisFrame(WhoIs(alien));"),
+		"SOURCE: an alien is guided in this frame only with the switch on, on a machine that runs the aliens, with a map, and as the guide says");
 
 	std::string const crawling = Between(near, "int AlienShouldBeCrawling(STRATEGYBLOCK *sbPtr)", "int AlienIsAbleToClimb(STRATEGYBLOCK *sbPtr)");
 	Check(Has(crawling, "\tif (AlienWays_Following(sbPtr)) {\n\t\treturn(1);\n\t}"), "SOURCE: an alien on a way crawls");
@@ -817,6 +841,7 @@ int main()
 	AskingAgain();
 	FailedRenewal();
 	LetGo();
+	GuidedThisFrame();
 	WhoIsWho();
 	Allowance();
 	NoBetterThanToday();

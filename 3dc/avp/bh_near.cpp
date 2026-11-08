@@ -1491,7 +1491,7 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
 	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
-	bool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander): only the way's branch turns gravity off in this state
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Wander): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:
@@ -2009,7 +2009,8 @@ static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)
 		NPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);
 	}
 	NPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);
-	bool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt): only the way's branch turns gravity off in this state
+	// Not read from gravity: this state's own 1999 code turns gravity off for a crouched alien that can climb, with no way at all
+	bool const onAWay = AlienWays_GuidedThisFrame(sbPtr);   // its way steers it this frame (Hunt): the way's branch above ran, and never with the switch off
 
 	/* test here for impeding collisions, and not being able to reach target... */
 	// Modified 2026-11-08 by Melanikus for the AvP port:
