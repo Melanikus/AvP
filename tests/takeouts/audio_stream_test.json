@@ -1,0 +1,89 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the count of free buffers reads the list without the lock",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\tpthread_mutex_lock(&_bufferMutex);\n\tuint32_t const count = static_cast<uint32_t>(_freeBufferQueue.size());\n\tpthread_mutex_unlock(&_bufferMutex);\n",
+					"to": "\tuint32_t const count = static_cast<uint32_t>(_freeBufferQueue.size());\n"
+				}
+			]
+		},
+		{
+			"name": "GetNumFreeBuffers reads the list itself, without the lock, as it did before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "uint32_t AudioStream::GetNumFreeBuffers()\n{\n\treturn CountFreeBuffers();\n}",
+					"to": "uint32_t AudioStream::GetNumFreeBuffers()\n{\n\treturn static_cast<uint32_t>(_freeBufferQueue.size());\n}"
+				}
+			]
+		},
+		{
+			"name": "WriteData looks at the list before taking the lock, as it did before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\tif (TakeFreeBuffer(&buffer)) {",
+					"to": "\tif (_freeBufferQueue.size() && TakeFreeBuffer(&buffer)) {"
+				}
+			]
+		},
+		{
+			"name": "a buffer OpenAL couldn't hand back is counted as free, as it was before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\t\t\t\tif (AlCheckError() == AL_NO_ERROR)\n\t\t\t\t{",
+					"to": "\t\t\t\tAlCheckError();\n\t\t\t\t{"
+				}
+			]
+		},
+		{
+			"name": "a buffer given back is lost, so the stream's user waits for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\t_freeBufferQueue.push_back(buffer);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SetVolume doesn't keep the volume, as it didn't before",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\t_volume = volume;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "how much was played is worked out for a stream that didn't start, as before (this one crashes, dividing by 0)",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "\tif (_bytesPerSample == 0 || _nChannels == 0) {\n\t\treturn 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "whether a stream is playing is a plain value again, which two threads can't safely read and write at once",
+			"changes": [
+				{
+					"file": "3dc/AudioStreaming.h",
+					"from": "\t\tstd::atomic<bool> _isPlaying;",
+					"to": "\t\tbool _isPlaying;"
+				}
+			]
+		}
+	]
+}
