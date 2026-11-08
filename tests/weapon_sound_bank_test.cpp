@@ -4,7 +4,8 @@
 // Nothing here needs a sound card or the game's data. Each broken file below has to be refused for its own named
 // reason, so a later check can't hide a missing earlier one. Whether the sounds play in the game needs a real run.
 //
-// To also read the real files, give their paths: weapon_sound_bank_test <stock common.ffl> <mod's common.ffl>
+// It reads no file it's told about: the game's own real sound files aren't in the repository, so they were checked through the game's
+// real loader instead (AvP-docs, outside the repository), and the test takes no path from its command line.
 
 #include "avp/weapon_sound_bank.h"
 
@@ -429,28 +430,12 @@ static void TestWiring()
 	}
 }
 
-// The real files, when the test is told where they are. No test machine has to have them.
-static void TestRealFile(const char *path, int expected, const char *what)
-{
-	std::string text = ReadText(path);
-	int entries = -1;
-	const SoundBankVerdict verdict = SoundBank_CheckWholeFile((const uint8_t *)text.data(), text.size(), &entries);
-	Check(verdict == SOUND_BANK_REACHED_THE_END_MARK, what);
-	Check(entries == expected, what);
-	printf("%s: verdict %d, %d sounds\n", what, (int)verdict, entries);
-}
-
-int main(int argc, char **argv)
+int main()
 {
 	TestGoodFiles();
 	TestBrokenFiles();
 	TestEveryCut();
 	TestWiring();
-	if (argc == 3)
-	{
-		TestRealFile(argv[1], 136, "the game's own sound file");
-		TestRealFile(argv[2], 15, "the mod's sound file");
-	}
 
 	printf("%d checks, %d failed\n", checks, failures);
 	return failures == 0 ? 0 : 1;

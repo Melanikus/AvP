@@ -7,11 +7,12 @@
 // list is kNewWeaponSounds in 3dc/avp/psndproj.cpp). The other 11 are the mod's own versions of sounds the game already
 // has, and the user ruled that the game keeps its own. So the file we ship holds just the 4.
 //
-// How to run it, with node, from the folder that holds the files. Both file names have to be inside that folder (see
-// pathInside below), and the tool itself can be anywhere:
-//   node <the repository>/tools/m5-files/sound-bank-pick.js <the bigger file> <the new file> <sound name> [<sound name> ...]
+// How to run it, with node, from the folder that holds the file it reads (see the names' check below). The new file goes in that
+// folder's "out" folder, which it makes if it isn't there. The tool itself can be anywhere:
+//   node <the repository>/tools/m5-files/sound-bank-pick.js <the bigger file's name> <the new file's name> <sound name> [<sound name> ...]
 // For example:
-//   node <the repository>/tools/m5-files/sound-bank-pick.js M5\common.ffl out\common.ffl Revolver_Fire.wav headshot.wav AutoShotgun4.wav SniperRifle_Fire.wav
+//   node <the repository>/tools/m5-files/sound-bank-pick.js common common Revolver_Fire.wav headshot.wav AutoShotgun4.wav SniperRifle_Fire.wav
+//   reads common.ffl and writes out\common.ffl
 //
 // It only reads the bigger file and never changes it. It won't write over a file that's already there, so it can't destroy
 // anything by mistake. It stops, writing nothing, if a name isn't found, or is found twice, or if anything in the bigger file
@@ -42,26 +43,12 @@ function stop(why) {
   process.exit(1);
 }
 
-// Every file name on the command line comes through here first, before any file is looked at. A name has to be a plain path
-// inside the folder the tool is run from: not one that starts from a drive or a share, not one that climbs out with "..", and
-// not one that names one of Windows' devices (CON, NUL, COM1 and so on, with or without an ending). Anything else stops the
-// tool before it touches a file, so a mistyped or hostile name can't make it read or write somewhere else. It's the same rule
-// as tests/takeouts/find-moved-row.js. Each tool keeps its own copy, because the security scanner is only known to follow a
-// check made in the same file.
-const kDeviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9]|conin\$|conout\$)(\..*)?$/i;
-function pathInside(name, what) {
-  if (typeof name !== 'string' || name === '' || name.includes('\0')) stop(`${what} has to be a file name`);
-  // A drive (C:), a share (\\server), a device path (\\.\ or \\?\) or a path from the top of a drive (\name) starts somewhere else
-  if (path.isAbsolute(name) || name.includes(':') || name.startsWith('\\') || name.startsWith('/')) {
-    stop(`${what} "${name}" has to be a path inside the folder this is run from, not one that starts somewhere else`);
-  }
-  const parts = name.split(/[\\/]/);
-  if (parts.includes('..') || parts.some((part) => kDeviceName.test(part.trim()))) stop(`${what} "${name}" climbs out of this folder or names a device`);
-  const here = path.resolve(process.cwd());
-  const whole = path.resolve(here, name);
-  if (!whole.startsWith(here + path.sep)) stop(`${what} "${name}" isn't inside the folder this is run from`);
-  return whole;
-}
+// Each file is named, not given as a path: letters, digits and _ only, and the tool adds its ending. The file it reads is in the
+// folder it's run from, and the new file goes in that folder's "out" folder. That's the same check tests/takeouts/find-moved-row.js
+// makes on the name of the list it's given, so no name can reach a file anywhere else. Windows' device names (CON, NUL, COM1 and
+// so on) are refused too, because Windows takes CON.rif for the screen, in any folder.
+const kDeviceName = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i;
+const here = path.resolve(process.cwd());
 
 function lettersAre(bytes, at, letters) {
   return bytes.toString('latin1', at, at + 4) === letters;
@@ -132,8 +119,15 @@ function readEntry(file, at) {
 const [fromName, toName, ...wanted] = process.argv.slice(2);
 if (!fromName || !toName || wanted.length === 0) stop('give it the bigger file, the new file, and at least one sound name');
 // Both names are checked before any file is touched
-const from = pathInside(fromName, 'the bigger file');
-const to = pathInside(toName, 'the new file');
+if (!/^[A-Za-z0-9_]+$/.test(fromName) || kDeviceName.test(fromName)) {
+  stop(`the bigger file is named with letters, digits and _ only, without .ffl, and not as a device: "${fromName}" isn't`);
+}
+if (!/^[A-Za-z0-9_]+$/.test(toName) || kDeviceName.test(toName)) {
+  stop(`the new file is named with letters, digits and _ only, without .ffl, and not as a device: "${toName}" isn't`);
+}
+const from = path.join(here, `${fromName}.ffl`);
+const outFolder = path.join(here, 'out');
+const to = path.join(outFolder, `${toName}.ffl`);
 if (fs.existsSync(to)) stop(`${to} is already there, and this never writes over a file`);
 
 const stat = fs.statSync(from);
@@ -167,6 +161,7 @@ parts.push(Buffer.from([0xff, 0xff]));
 const out = Buffer.concat(parts);
 
 // 'wx' makes the write itself refuse a file that appeared since the check above
+if (!fs.existsSync(outFolder)) fs.mkdirSync(outFolder);
 fs.writeFileSync(to, out, { flag: 'wx' });
 
 const sha = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
