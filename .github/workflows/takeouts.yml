@@ -102,7 +102,10 @@ jobs:
     timeout-minutes: 300
     strategy:
       fail-fast: false   # one list failing doesn't stop the others, so a run shows every list that needs work
-      max-parallel: 8
+      # GitHub Pro runs up to 40 jobs at once for this account. 30 leaves room for the other checks of the same pull request
+      # (build, tests, Snyk), so the take-out lists, which are the slowest part of a run, finish sooner. It costs nothing more on a
+      # public repository.
+      max-parallel: 30
       matrix:
         list: ${{ fromJSON(needs.choose.outputs.lists) }}
     steps:
