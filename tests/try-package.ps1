@@ -115,33 +115,13 @@ Expect-Refused (Run-Test '--her') 'the only thing this takes is --here' 'a word 
 New-Copy
 Expect-Passes (Run-Imports) 'Every library the package links to is accounted for' 'the whole package accounts for every library'
 
-# OpenAL Soft is one of the few libraries still beside the game rather than inside it (card STATIC-1), so it's the one taken out
 New-Copy
-Remove-Item -LiteralPath (Join-Path $work 'OpenAL32.dll')
-Expect-Refused (Run-Imports) 'needs OpenAL32.dll' 'with a library taken out, that library is named'
+Remove-Item -LiteralPath (Join-Path $work 'ogg.dll')
+Expect-Refused (Run-Imports) 'needs ogg.dll' 'with a library taken out, that library is named'
 
 New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'd3dx9_43.dll')
 Expect-Refused (Run-Imports) 'AvP_Classic.exe needs d3dx9_43.dll' "with D3DX taken out, it's named, whatever this machine has"
-
-# --- Microsoft's Visual C++ runtime, which nothing in the package may need or carry any more: the game and its libraries have it inside them
-# (card STATIC-1). The files tried here are Microsoft's own, from Visual Studio's copy of the runtime, as a stray one would be. vcruntime140.dll
-# in the package is refused for being there, though nothing in the package needs it. msvcp140.dll is refused for what it needs as well: the
-# C++ runtime's vcruntime140.dll, and the C runtime's api-ms-win-crt-* names.
-$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-$visualStudio = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-$runtimeFolder = Get-ChildItem -Directory (Join-Path $visualStudio 'VC\Redist\MSVC\*\x86\Microsoft.VC*.CRT') | Select-Object -Last 1
-if (-not $runtimeFolder) { throw "Visual Studio's copy of Microsoft's runtime (VC\Redist\MSVC\<version>\x86) wasn't found, so the runtime's rows can't be tried" }
-
-New-Copy
-Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'vcruntime140.dll') $work
-Expect-Refused (Run-Imports) 'the package carries vcruntime140.dll' "Microsoft's runtime in the package is refused, though nothing in the package needs it"
-
-New-Copy
-Copy-Item -LiteralPath (Join-Path $runtimeFolder.FullName 'msvcp140.dll') $work
-$result = Run-Imports
-Expect-Refused $result 'msvcp140.dll needs vcruntime140.dll' 'a library that needs the C++ runtime is refused, and what it needs is named'
-Expect-Refused $result 'msvcp140.dll needs api-ms-win-crt-' "and so is one that needs the C runtime under Windows' names for it"
 
 # --- Microsoft's two files, which we can't build from source, so all we can check is Microsoft's signature on them
 New-Copy
@@ -152,7 +132,7 @@ $bytes[$bytes.Length / 2] = $bytes[$bytes.Length / 2] -bxor 1
 Expect-Refused (Run-Imports) "D3DCompiler_43.dll doesn't carry Microsoft's signature" 'one changed bit in the compiler is refused'
 
 New-Copy
-Copy-Item -Force -LiteralPath (Join-Path $work 'OpenAL32.dll') (Join-Path $work 'd3dx9_43.dll')
+Copy-Item -Force -LiteralPath (Join-Path $work 'ogg.dll') (Join-Path $work 'd3dx9_43.dll')
 Expect-Refused (Run-Imports) "d3dx9_43.dll doesn't carry Microsoft's signature" "another library under D3DX's name is refused"
 
 New-Copy
@@ -184,11 +164,11 @@ Add-ToTheEnd 'libsmackerdec.dll' ([byte[]](@(0x41) + [System.Text.Encoding]::Uni
 Expect-Refused (Run-Imports) 'names a folder: C:\Users\someone' 'and as UTF-16 starting on an odd byte'
 
 New-Copy
-Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows-static\bin\OpenAL32.pdb`0"))
+Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
 Expect-Refused (Run-Imports) 'AvP_Classic.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
 
 New-Copy
-Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and OpenAL32.pdb`0"))
+Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and ogg.pdb`0"))
 Expect-Passes (Run-Imports) 'none names a folder on the machine that built it' "a web address, and a .pdb's name with no folder, aren't refused"
 
 if (Test-Path -LiteralPath $work) { Remove-Item -Recurse -Force -LiteralPath $work }
