@@ -10,14 +10,24 @@
 //
 // HOW TO READ THE SUMS. Coordinates are the game's: millimetres, and y goes down, so a ceiling 3 m up is at y = -3000. A way costs its length
 // on walls and ceilings, plus its length on floors times the floor's price. The search crosses from one polygon to the next at the point of the
-// edge they share that's nearest to where it came onto the first one. So a way hugs the walls it follows, and comes down off a wall at the near
-// end of the goal's own edge. That's how the map is meant to work (alien_ways_map.h), and the sums below follow it.
+// edge they share that's nearest to where it came onto the first one. So a way comes down off a wall at the near end of the goal's own edge.
+// That's how the map is meant to work (alien_ways_map.h), and the sums below follow it.
 //
-// WHERE ONLY THE LENGTH IS CHECKED. In three worlds, at the usual price, two different ways are exactly as long: along the foot of a wall, or
-// along the floor right beside it. Which one the search takes then depends on which polygon it happens to look at first, so those checks look
-// only at the way's length. Everywhere else the whole way is checked, point for point. Each of those ways was also worked out with the ties
-// between polygons broken the other way round, and came out the same, so a check doesn't depend on that order. (That was done with a copy of
-// the search in JavaScript, which isn't in the repository: these sums, and this test's run, are what count.)
+// HOW A WAY CROSSES A WALL (Fifth's rules, alien_ways_map.cpp, from 2026-11-08): so that an alien climbs, and doesn't walk along a wall's foot,
+//   - on a wall, the way goes straight up from where it came on to 1.5 m above the wall's lowest point, or to the wall's top if that's lower,
+//     along at that height, and straight down where it leaves. Each of those points is on the way, if it's somewhere new;
+//   - from one wall onto the next, it crosses no lower than 1.5 m up the edge they share, or that edge's top;
+//   - a floor stepped onto from a wall or a ceiling costs at least 0.5 m of floor, so a way can't touch a floor for nothing to get round them.
+// Where a wall's climb reaches its top exactly where the way leaves it, the same point is on the way twice: once as the wall's, once as the
+// next polygon's. The gantry and the stairs have that.
+//
+// EVERY WAY IS CHECKED POINT FOR POINT. Each was also worked out with the ties between polygons broken the other way round, and came out the same,
+// so a check doesn't depend on that order. (That was done with a copy of the search in JavaScript, which isn't in the repository: these sums, and
+// this test's run, are what count.)
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the ways as Fifth's climbing rules make them (alien-ways 4a754a7d). Every world's way at price 1 is checked whole now: with a climb costing
+//   more than the floor beside a wall's foot, none of them ties any more
 
 #include <math.h>
 #include <stdio.h>
@@ -286,19 +296,22 @@ static void Doorway()
 		"it goes straight along the floor, 7.5 m, across the doorway's 0.5 m");
 
 	// Floor is lava, at 10. The start is 0.7 m from wall 4 and 1.3 m from wall 5, so the way leaves by wall 4:
-	//   0.7 m of floor to wall 4, at (0, 0, 500)
-	//   3.5 m along wall 4 to where it meets A's end wall 15, at (0, 0, 4000)
-	//   0.6 m along the foot of 15 to the doorway's corner, (600, 0, 4000)
+	//   0.7 m of floor to wall 4, at (0, 0, 500), and 1.5 m up it
+	//   3.5 m along wall 4 at that height, to where it meets A's end wall 15, at (0, -1500, 4000): the crossing from one wall to the next is
+	//   1.5 m up the edge they share
+	//   0.6 m along 15 to above the doorway's corner, (600, -1500, 4000), and 1.5 m down to the corner, (600, 0, 4000)
 	//   0.5 m across the doorway's floor, along its edge, to B's end wall 17 at (600, 0, 4500): the floor the way can't do without
-	//   0.6 m along the foot of 17 to wall 12, at (0, 0, 4500)
-	//   3 m along wall 12 to where the goal's tile meets it, at (0, 0, 7500)
+	//   1.5 m up 17, and 0.6 m along it to wall 12, at (0, -1500, 4500)
+	//   3 m along wall 12 to above where the goal's tile meets it, (0, -1500, 7500), and 1.5 m down
 	//   and sqrt(700 x 700 + 500 x 500) = 0.86 m of floor to the goal.
-	// Floor: 0.7 + 0.5 + 0.86 = 2.06 m. Wall: 3.5 + 0.6 + 0.6 + 3 = 7.7 m. It costs 10 x 2.06 + 7.7 = 28.3, against 75 along the floor.
+	// Floor: 0.7 + 0.5 + 0.86 = 2.06 m. Wall: 1.5 + 3.5 + 0.6 + 1.5 + 1.5 + 0.6 + 3 + 1.5 = 13.7 m. It costs 10 x 2.06 + 13.7 = 34.3, against 75
+	// along the floor.
 	Check(SearchAll(map, 0, start, goalTile, goal, 10) == kAlienWaysFound, "with floor is lava, a way is found");
-	CheckWay(map.Way(), { { 700, 0, 500, kFloor }, { 0, 0, 500, kWall }, { 0, 0, 4000, kWall }, { 600, 0, 4000, kFloor }, { 600, 0, 4500, kWall },
-		{ 0, 0, 4500, kWall }, { 0, 0, 7500, kFloor }, { 700, 0, 8000, kFloor } },
-		"it keeps to the walls, and crosses the doorway's floor at its edge, by the end walls");
-	Check(MetresAre(map.Way(), 2.06, 7.7, 0.0), "2.06 m of floor, 0.5 m of it the doorway's, and 7.7 m of wall");
+	CheckWay(map.Way(), { { 700, 0, 500, kFloor }, { 0, 0, 500, kWall }, { 0, -1500, 500, kWall }, { 0, -1500, 4000, kWall }, { 600, -1500, 4000, kWall },
+		{ 600, 0, 4000, kFloor }, { 600, 0, 4500, kWall }, { 600, -1500, 4500, kWall }, { 0, -1500, 4500, kWall }, { 0, -1500, 7500, kWall },
+		{ 0, 0, 7500, kFloor }, { 700, 0, 8000, kFloor } },
+		"it climbs the walls, keeps 1.5 m up them, and comes down only to cross the doorway's floor at its edge");
+	Check(MetresAre(map.Way(), 2.06, 13.7, 0.0), "2.06 m of floor, 0.5 m of it the doorway's, and 13.7 m of wall");
 }
 
 // 2. A GANTRY. A hall 6 m wide (x) and 4 m high, with a walkway across it 1.5 m up, from wall to wall, 1 m wide (z 4000 to 5000) and 100 mm
@@ -344,14 +357,16 @@ static void Gantry()
 	// From (500, 0, 4500), under the gantry by the left wall, to (5500, 0, 4500), under it by the right wall.
 	//   Across the floor: 5 m, costing 5 x the floor's price.
 	//   By the underside: 0.5 m of floor to wall 6, 1.5 m up it, 6 m along the underside, 1.5 m down wall 8, and 0.5 m of floor to the goal.
-	//   That's 1 m of floor, 3 m of wall and 6 m of ceiling, costing 1 x the price + 9.
+	//   That's 1 m of floor, 3 m of wall and 6 m of ceiling, costing 1 x the price + 9. Wall 6 is only 1.5 m tall, so its climb ends at its top,
+	//   (0, -1500, 4500), which is also where the way comes onto the underside: that point is on the way twice, as the wall's and the ceiling's.
+	//   Wall 8 is the same height, so the way comes onto it already at its top, and goes straight down.
 	//   By the hall's ceiling instead it would be 1 x the price + 4 + 6 + 4, always 5 more than by the gantry.
 	// At a price of 2, 10 against 11, so the floor. At 3, 15 against 12, so the underside.
 	AlienWaysXYZ const start = { 500, 0, 4500 }, goal = { 5500, 0, 4500 };
 	std::vector<Expected> const acrossTheFloor = { { 500, 0, 4500, kFloor }, { 1000, 0, 4500, kFloor }, { 2000, 0, 4500, kFloor }, { 3000, 0, 4500, kFloor },
 		{ 4000, 0, 4500, kFloor }, { 5000, 0, 4500, kFloor }, { 5500, 0, 4500, kFloor } };
-	std::vector<Expected> const byTheUnderside = { { 500, 0, 4500, kFloor }, { 0, 0, 4500, kWall }, { 0, -1500, 4500, kCeiling }, { 6000, -1500, 4500, kWall },
-		{ 6000, 0, 4500, kFloor }, { 5500, 0, 4500, kFloor } };
+	std::vector<Expected> const byTheUnderside = { { 500, 0, 4500, kFloor }, { 0, 0, 4500, kWall }, { 0, -1500, 4500, kWall }, { 0, -1500, 4500, kCeiling },
+		{ 6000, -1500, 4500, kWall }, { 6000, 0, 4500, kFloor }, { 5500, 0, 4500, kFloor } };
 
 	Check(SearchAll(map, 0, start, goalStrip, goal, 1) == kAlienWaysFound, "with the floor cheap, a way is found");
 	CheckWay(map.Way(), acrossTheFloor, "it goes straight across the floor, 5 m");
@@ -406,19 +421,25 @@ static void Vent()
 	Check(TouchAlong(map, belowTheVent, ventSide, { 0, -2000, 5000 }, { 0, -2000, 5000 }), "and the vent's side only at the mouth's corner");
 
 	// From (500, 0, 2000) on the corridor's floor to (-2500, -2000, 5300), in the vent's last metre.
-	//   Floor is lava: 0.5 m of floor to wall 1, then up and along it in a straight line to the corner of the vent's mouth, (0, -2000, 5000):
-	//   sqrt(2000 x 2000 + 3000 x 3000) = 3.606 m. Into the vent along the foot of its side 11, 2 m, to where the last tile meets it at
-	//   x = -2000, then sqrt(500 x 500 + 300 x 300) = 0.583 m of floor to the goal. Floor 1.083 m, wall 5.606 m. Going in on the vent's own
-	//   floor instead would be 2 m more of floor, 20 more at this price.
-	//   The floor cheap: the same length, 6.689 m. In the vent, its floor and the foot of its side are exactly as long, so which one the way
-	//   takes then depends on which the search happens to look at first. Only the length is checked.
+	//   Both prices start the same: 0.5 m of floor to wall 1, 1.5 m straight up it to (0, -1500, 2000), then along it in a straight line to the
+	//   corner of the vent's mouth, (0, -2000, 5000): sqrt(500 x 500 + 3000 x 3000) = 3.041 m.
+	//   The floor cheap: onto the vent's first tile at that corner, and along its floor: 1 m, 1 m, and sqrt(500 x 500 + 300 x 300) = 0.583 m to
+	//   the goal. Floor 0.5 + 2.583 = 3.083 m, wall 1.5 + 3.041 = 4.541 m. Along the vent's side instead would add its climb and drop, 1.2 m.
+	//   Floor is lava: onto the vent's side 11 at that corner. It meets wall 1 only there, at one point, so that crossing can't be lifted. The
+	//   side is only 0.6 m tall, so the way climbs to its top, (0, -2600, 5000), goes 2 m along it, comes 0.6 m down to where the last tile
+	//   meets it at x = -2000, and has 0.583 m of floor to the goal. Floor 1.083 m, wall 1.5 + 3.041 + 0.6 + 2 + 0.6 = 7.741 m. Going in on the
+	//   vent's own floor instead would be 2 m more of floor, 20 more at this price, against 3.2 m less wall.
 	AlienWaysXYZ const start = { 500, 0, 2000 }, goal = { -2500, -2000, 5300 };
 	Check(SearchAll(map, 0, start, lastVentTile, goal, 1) == kAlienWaysFound, "with the floor cheap, a way into the vent is found");
-	Check(Near(LengthOf(map.Way()), 6.689, 0.01), "it's 6.689 m long, climbing the wall to the vent's mouth");
+	CheckWay(map.Way(), { { 500, 0, 2000, kFloor }, { 0, 0, 2000, kWall }, { 0, -1500, 2000, kWall }, { 0, -2000, 5000, kFloor }, { -1000, -2000, 5000, kFloor },
+		{ -2000, -2000, 5000, kFloor }, { -2500, -2000, 5300, kFloor } },
+		"it climbs the wall to the vent's mouth, and goes in along the vent's floor");
+	Check(MetresAre(map.Way(), 3.083, 4.541, 0.0), "3.083 m of floor and 4.541 m of wall");
 	Check(SearchAll(map, 0, start, lastVentTile, goal, 10) == kAlienWaysFound, "with floor is lava, a way into the vent is found");
-	CheckWay(map.Way(), { { 500, 0, 2000, kFloor }, { 0, 0, 2000, kWall }, { 0, -2000, 5000, kWall }, { -2000, -2000, 5000, kFloor }, { -2500, -2000, 5300, kFloor } },
-		"it climbs to the mouth's corner, goes in along the vent's side, and steps onto the floor only in the last metre");
-	Check(MetresAre(map.Way(), 1.083, 5.606, 0.0), "1.083 m of floor and 5.606 m of wall");
+	CheckWay(map.Way(), { { 500, 0, 2000, kFloor }, { 0, 0, 2000, kWall }, { 0, -1500, 2000, kWall }, { 0, -2000, 5000, kWall }, { 0, -2600, 5000, kWall },
+		{ -2000, -2600, 5000, kWall }, { -2000, -2000, 5000, kFloor }, { -2500, -2000, 5300, kFloor } },
+		"it climbs to the mouth's corner, goes in along the top of the vent's side, and steps onto the floor only in the last metre");
+	Check(MetresAre(map.Way(), 1.083, 7.741, 0.0), "1.083 m of floor and 7.741 m of wall");
 }
 
 // 4. TWO FLOORS JOINED ONLY BY A LIFT. A lower floor (0, x 0 to 4000) and an upper floor (1, x 6000 to 10000) 4 m higher, with a lift between
@@ -435,6 +456,7 @@ static void Vent()
 // The map's listing of a level leaves a lift's car out, because a car isn't always where the level file has it (AddModules, in
 // alien_ways_level.cpp). So in a level like this, the map has two floors that don't touch, and the search has to say there's no way, not make
 // one up. With the car in, there's one way at any price: 2 m of floor to the car, 2 m across it, 4 m up its back wall, and 2 m to the goal.
+// The back wall's climb point, 1.5 m up, is a point on the way too, though the way goes on straight up past it.
 static void Lift()
 {
 	printf("Two floors joined only by a lift\n");
@@ -456,8 +478,8 @@ static void Lift()
 	Check(TouchAlong(with, 0, 2, { 4000, 0, 1000 }, { 4000, 0, 3000 }) && TouchAlong(with, 3, 1, { 6000, -4000, 1000 }, { 6000, -4000, 3000 }),
 		"the car's floor touches the lower floor, and its back wall the upper floor");
 
-	std::vector<Expected> const byTheCar = { { 2000, 0, 2000, kFloor }, { 4000, 0, 2000, kFloor }, { 6000, 0, 2000, kWall }, { 6000, -4000, 2000, kFloor },
-		{ 8000, -4000, 2000, kFloor } };
+	std::vector<Expected> const byTheCar = { { 2000, 0, 2000, kFloor }, { 4000, 0, 2000, kFloor }, { 6000, 0, 2000, kWall }, { 6000, -1500, 2000, kWall },
+		{ 6000, -4000, 2000, kFloor }, { 8000, -4000, 2000, kFloor } };
 
 	for (int price : { 1, 10 })
 	{
@@ -482,6 +504,8 @@ static void Lift()
 //
 // There's nothing else to cling to, so the way is the same at any price: straight up, 1 m of floor to the first riser, then up each riser
 // and across each tread, 5 x 0.2 = 1 m of wall and 5 x 0.3 = 1.5 m of floor, then 1 m across the landing. Floor 3.5 m, wall 1 m.
+// A riser is only 0.2 m tall, so its climb ends at its top, which is where the tread begins: each riser's top is on the way twice, once as the
+// riser's and once as the tread's.
 static void Stairs()
 {
 	printf("Stairs, with treads of floor and risers of wall\n");
@@ -515,6 +539,7 @@ static void Stairs()
 	for (int k = 0; k < 5; k++)
 	{
 		straightUp.push_back({ 700, -k * 200, k * 300, kWall });
+		straightUp.push_back({ 700, -(k + 1) * 200, k * 300, kWall });
 		straightUp.push_back({ 700, -(k + 1) * 200, k * 300, kFloor });
 	}
 
@@ -583,15 +608,21 @@ static void Pillar()
 	Check(TouchAlong(map, square[2][1], south, { 2000, 0, 2000 }, { 3000, 0, 2000 }), "the square south of the pillar touches its south face along its foot");
 
 	// The floor cheap: 0.5 m to the next square, then across it to the pillar's corner, sqrt(400 x 400 + 1000 x 1000) = 1.077 m, 1 m beside the
-	// pillar, 1 m across square 8 to the goal's square, and sqrt(400 x 400 + 500 x 500) = 0.64 m to the goal: 4.217 m. The 1 m beside the
-	// pillar can be along its foot or along the square next to it, which are exactly as long, so only the length is checked.
+	// pillar on the square next to it, 1 m across square 8 to the goal's square, and sqrt(400 x 400 + 500 x 500) = 0.64 m to the goal: 4.217 m,
+	// all floor. Along the pillar's foot instead would cost its climb as well.
 	//
-	// Floor is lava: 0.5 m to the next square, and 1 m straight on to the pillar's south face, as no wall is nearer. Then 0.4 m along the foot of
-	// that face to the pillar's corner, round the corner and 1 m along the west face; down onto square 8 at its corner (2000, 0, 3000), 1 m
-	// across it to the goal's square, and 0.64 m to the goal. Floor 0.5 + 1 + 1 + 0.64 = 3.14 m, wall 1.4 m.
+	// Floor is lava: 0.5 m to the next square, then across it to the pillar's corner, 1.077 m, and onto the west face there: the square touches
+	// that face only at the corner. Up 1.5 m, 1 m along the west face, and 1.5 m down to (2000, 0, 3000), onto square 8; 1 m across it to the
+	// goal's square, and 0.64 m to the goal. Floor 0.5 + 1.077 + 1 + 0.64 = 3.217 m, wall 4 m: it costs 36.17, against 42.17 all on the floor.
+	// That isn't quite the cheapest way. Going 1 m on to the south face first, and round the corner 1.5 m up, would cost 35.8. But the search
+	// keeps one arrival for each polygon, the cheapest, and arriving low at the west face from the square is cheaper (15.77 against 16.9),
+	// though the climb from there then costs more. alien_ways_map.h says why the map keeps one entry point a polygon.
 	AlienWaysXYZ const start = { 2400, 0, 500 }, goal = { 2400, 0, 4500 };
 	Check(SearchAll(map, square[2][0], start, square[2][4], goal, 1) == kAlienWaysFound, "with the floor cheap, a way round the pillar is found");
-	Check(Near(LengthOf(map.Way()), 4.217, 0.01), "it's 4.217 m long, cutting across to the pillar's corner");
+	CheckWay(map.Way(), { { 2400, 0, 500, kFloor }, { 2400, 0, 1000, kFloor }, { 2000, 0, 2000, kFloor }, { 2000, 0, 3000, kFloor }, { 2000, 0, 4000, kFloor },
+		{ 2400, 0, 4500, kFloor } },
+		"it cuts across to the pillar's corner, and goes on beside it on the floor");
+	Check(Near(LengthOf(map.Way()), 4.217, 0.01), "it's 4.217 m long");
 	bool outside = true;
 
 	for (AlienWaysPoint const &p : map.Way())
@@ -602,10 +633,10 @@ static void Pillar()
 	Check(outside, "and no point of it is inside the pillar");
 
 	Check(SearchAll(map, square[2][0], start, square[2][4], goal, 10) == kAlienWaysFound, "with floor is lava, a way round the pillar is found");
-	CheckWay(map.Way(), { { 2400, 0, 500, kFloor }, { 2400, 0, 1000, kFloor }, { 2400, 0, 2000, kWall }, { 2000, 0, 2000, kWall }, { 2000, 0, 3000, kFloor },
-		{ 2000, 0, 4000, kFloor }, { 2400, 0, 4500, kFloor } },
-		"it goes to the pillar's face, round its corner on the walls, and back to the floor past it");
-	Check(MetresAre(map.Way(), 3.14, 1.4, 0.0), "3.14 m of floor and 1.4 m of wall");
+	CheckWay(map.Way(), { { 2400, 0, 500, kFloor }, { 2400, 0, 1000, kFloor }, { 2000, 0, 2000, kWall }, { 2000, -1500, 2000, kWall }, { 2000, -1500, 3000, kWall },
+		{ 2000, 0, 3000, kFloor }, { 2000, 0, 4000, kFloor }, { 2400, 0, 4500, kFloor } },
+		"it goes to the pillar's corner, climbs its west face, and comes back down to the floor past it");
+	Check(MetresAre(map.Way(), 3.217, 4.0, 0.0), "3.217 m of floor and 4 m of wall");
 }
 
 // 7. A LONG WALL PAST SEVERAL TILES. One wall (0), 10 m long at x = 0, with five floor tiles of different lengths along its foot: 1 (z 0 to 1000),
@@ -636,17 +667,19 @@ static void LongWall()
 
 	// From (1500, 0, 500) on tile 1 to (1500, 0, 8500) on tile 5.
 	//   The floor cheap: straight along, 8 m, all floor, across every tile, the one 11 mm short too.
-	//   Floor is lava: 1.5 m of floor to the wall at (0, 0, 500), 6.5 m along it past tiles 2, 3 and 4 to where tile 5's own edge starts,
-	//   (0, 0, 7000), and sqrt(1500 x 1500 + 1500 x 1500) = 2.121 m to the goal. Floor 3.621 m, wall 6.5 m.
+	//   Floor is lava: 1.5 m of floor to the wall at (0, 0, 500), 1.5 m up it, 6.5 m along it at that height past tiles 2, 3 and 4 to above where
+	//   tile 5's own edge starts, 1.5 m down to (0, 0, 7000), and sqrt(1500 x 1500 + 1500 x 1500) = 2.121 m to the goal. Floor 3.621 m, wall
+	//   1.5 + 6.5 + 1.5 = 9.5 m. This is the case the climbing rules were made for: one long wall, which a way used to walk along at its foot.
 	AlienWaysXYZ const start = { 1500, 0, 500 }, goal = { 1500, 0, 8500 };
 	Check(SearchAll(map, 1, start, 5, goal, 1) == kAlienWaysFound, "with the floor cheap, a way is found");
 	CheckWay(map.Way(), { { 1500, 0, 500, kFloor }, { 1500, 0, 1000, kFloor }, { 1500, 0, 3500, kFloor }, { 1500, 0, 4200, kFloor }, { 1500, 0, 7000, kFloor },
 		{ 1500, 0, 8500, kFloor } },
 		"it goes straight along the floor, 8 m, across every tile");
 	Check(SearchAll(map, 1, start, 5, goal, 10) == kAlienWaysFound, "with floor is lava, a way is found");
-	CheckWay(map.Way(), { { 1500, 0, 500, kFloor }, { 0, 0, 500, kWall }, { 0, 0, 7000, kFloor }, { 1500, 0, 8500, kFloor } },
-		"it goes along the wall and comes down where the goal's tile starts, not at the wall's end");
-	Check(MetresAre(map.Way(), 3.621, 6.5, 0.0), "3.621 m of floor and 6.5 m of wall");
+	CheckWay(map.Way(), { { 1500, 0, 500, kFloor }, { 0, 0, 500, kWall }, { 0, -1500, 500, kWall }, { 0, -1500, 7000, kWall }, { 0, 0, 7000, kFloor },
+		{ 1500, 0, 8500, kFloor } },
+		"it climbs the wall, goes along it 1.5 m up, and comes down where the goal's tile starts, not at the wall's end");
+	Check(MetresAre(map.Way(), 3.621, 9.5, 0.0), "3.621 m of floor and 9.5 m of wall");
 }
 
 // 8. AN OUTSIDE CORNER. A block standing in the corner of the world, x and z from 0 to 4000, 3 m high. Two of its faces show: the south face (9,
@@ -688,19 +721,24 @@ static void OutsideCorner()
 	Builds(map, world, "the block and the floor round it");
 	Check(TouchAlong(map, southFace, westFace, { 0, 0, 0 }, { 0, -3000, 0 }), "the two faces meet along the block's corner edge, the whole height");
 
-	// Floor is lava: 0.5 m of floor to the south face at (3500, 0, 0), 3.5 m along it to the block's corner, round the corner onto the west face
-	// at (0, 0, 0), 3 m along that to where strip 7 meets it, (0, 0, 3000), and sqrt(500 x 500 + 500 x 500) = 0.707 m to the goal. Floor 1.207 m,
-	// wall 6.5 m.
+	// Floor is lava: 0.5 m of floor to the south face at (3500, 0, 0), 1.5 m up it, 3.5 m along it to the block's corner, round the corner onto
+	// the west face 1.5 m up their shared edge, (0, -1500, 0), 3 m along that to above where strip 7 meets it, 1.5 m down to (0, 0, 3000), and
+	// sqrt(500 x 500 + 500 x 500) = 0.707 m to the goal. Floor 1.207 m, wall 1.5 + 3.5 + 3 + 1.5 = 9.5 m. Before the climbing rules a way could go
+	// round the corner at the faces' foot, through the square 8 that touches the corner: a floor stepped onto for nothing. A floor stepped onto
+	// from a wall now costs at least 0.5 m of it, so it climbs instead.
 	// The floor cheap: along the strips south of the block, 0.5 + 1 + 1 m, across strip 0 to the corner, sqrt(1000 x 1000 + 500 x 500) = 1.118 m,
-	// 3 m north beside the block, and 0.707 m to the goal: 7.325 m. Beside the block, the foot of the west face and the strips next to it are
-	// exactly as long, so only the length is checked.
+	// 3 m north beside the block on the strips 4 to 7, and 0.707 m to the goal: 7.325 m, all floor.
 	AlienWaysXYZ const start = { 3500, 0, -500 }, goal = { -500, 0, 3500 };
 	Check(SearchAll(map, startStrip, start, goalStrip, goal, 1) == kAlienWaysFound, "with the floor cheap, a way round the corner is found");
-	Check(Near(LengthOf(map.Way()), 7.325, 0.01), "it's 7.325 m long, cutting the corner");
+	CheckWay(map.Way(), { { 3500, 0, -500, kFloor }, { 3000, 0, -500, kFloor }, { 2000, 0, -500, kFloor }, { 1000, 0, -500, kFloor }, { 0, 0, 0, kFloor },
+		{ 0, 0, 1000, kFloor }, { 0, 0, 2000, kFloor }, { 0, 0, 3000, kFloor }, { -500, 0, 3500, kFloor } },
+		"it cuts the corner on the floor, and goes on beside the block on the strips");
+	Check(Near(LengthOf(map.Way()), 7.325, 0.01), "it's 7.325 m long");
 	Check(SearchAll(map, startStrip, start, goalStrip, goal, 10) == kAlienWaysFound, "with floor is lava, a way round the corner is found");
-	CheckWay(map.Way(), { { 3500, 0, -500, kFloor }, { 3500, 0, 0, kWall }, { 0, 0, 0, kWall }, { 0, 0, 3000, kFloor }, { -500, 0, 3500, kFloor } },
-		"it goes along the south face, round the block's corner onto the west face, and down by the goal");
-	Check(MetresAre(map.Way(), 1.207, 6.5, 0.0), "1.207 m of floor and 6.5 m of wall");
+	CheckWay(map.Way(), { { 3500, 0, -500, kFloor }, { 3500, 0, 0, kWall }, { 3500, -1500, 0, kWall }, { 0, -1500, 0, kWall }, { 0, -1500, 3000, kWall },
+		{ 0, 0, 3000, kFloor }, { -500, 0, 3500, kFloor } },
+		"it climbs the south face, goes round the block's corner 1.5 m up onto the west face, and comes down by the goal");
+	Check(MetresAre(map.Way(), 1.207, 9.5, 0.0), "1.207 m of floor and 9.5 m of wall");
 }
 
 // 9. A WIDE ROOM: UP, ACROSS THE CEILING, AND DOWN. A room 8 m wide (x), 4 m long (z) and 3 m high: a floor of 1 m strips (0 to 7), a wall each
@@ -714,7 +752,8 @@ static void OutsideCorner()
 // From (500, 0, 1500) to (7500, 0, 1500).
 //   Across the floor: 7 m, costing 7 x the floor's price.
 //   Over the ceiling: 0.5 m of floor to wall 8, 3 m up, 8 m across the ceiling, 3 m down wall 9, and 0.5 m of floor to the goal: 1 m of floor,
-//   6 m of wall and 8 m of ceiling, costing 1 x the price + 14.
+//   6 m of wall and 8 m of ceiling, costing 1 x the price + 14. Each wall's climb point, 1.5 m up, is on the way too: going up wall 8, the
+//   way passes it on its way to the top, and coming down wall 9, it passes it on its way to the floor.
 // At a price of 2 that's 14 against 16, so the floor. At 3 it's 21 against 17, so the ceiling.
 static void Ceiling()
 {
@@ -745,8 +784,8 @@ static void Ceiling()
 	}
 
 	acrossTheFloor.push_back({ 7500, 0, 1500, kFloor });
-	std::vector<Expected> const overTheCeiling = { { 500, 0, 1500, kFloor }, { 0, 0, 1500, kWall }, { 0, -3000, 1500, kCeiling }, { 8000, -3000, 1500, kWall },
-		{ 8000, 0, 1500, kFloor }, { 7500, 0, 1500, kFloor } };
+	std::vector<Expected> const overTheCeiling = { { 500, 0, 1500, kFloor }, { 0, 0, 1500, kWall }, { 0, -1500, 1500, kWall }, { 0, -3000, 1500, kCeiling },
+		{ 8000, -3000, 1500, kWall }, { 8000, -1500, 1500, kWall }, { 8000, 0, 1500, kFloor }, { 7500, 0, 1500, kFloor } };
 
 	Check(SearchAll(map, 0, start, goalStrip, goal, 1) == kAlienWaysFound, "with the floor cheap, a way is found");
 	CheckWay(map.Way(), acrossTheFloor, "it goes straight across the floor, 7 m");
