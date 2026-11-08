@@ -34,6 +34,9 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the list of versions has 105 and 106, which raised the number without a line
 //   Net_DescribeConnections, each connection's number and round trip for a tester's mark
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the multiplayer version is 113: a player's state says whether his shoulder lamp is on. The message keeps its size, so only the number tells
+//   an older build it can't read that bit
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
@@ -126,11 +129,12 @@ Version 109 - Used by rehearsal builds of the co-op landing, before it landed: t
 Version 110 - 109, and a search's question as big as its answer, so an answer is never bigger than its question
 Version 111 - 110, and the co-op campaign lobby: the host's choice, a joiner's answer about the map, and a byte in a game's description
 Version 112 - 111, and the in-game co-op pages: who the host is waiting for, in a game's description
+Version 113 - 112, and whether a marine player's shoulder lamp is on, in a spare bit after landingNoise in a player's state, for the mode that plays like single player
 
 A number any build has ever used, a local test copy included, is never used again for a different protocol. A change takes
 the next free number when it lands, not when it's written.
 */
-const int kMultiplayerVersion = 112; // bjd - my version, not directplay compatible
+const int kMultiplayerVersion = 113; // bjd - my version, not directplay compatible
 
 struct MessageHeader; // forward declare the structure
 extern const uint32_t kMessageHeaderSize;
