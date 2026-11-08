@@ -15,21 +15,25 @@ place with CONNECTs from made-up addresses, and nobody else could join.
   with a DISCONNECT giving the reason, and the host counts it for the program.
 - SipHash is the reference code by Aumasson and Bernstein, copied in as it is by
   portfile.cmake from siphash/ (siphash/README.md says where it came from).
+- The keys come from host_secret.c, our own file, which portfile.cmake copies in
+  beside SipHash. So ENet's own unix.c and win32.c stay as they came.
 
 Two copies of this ENet connect as before, with one more round trip.
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 63aef98..0ae738f 100644
+index 63aef98..0b2d874 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -79,7 +79,9 @@ set(SOURCE_FILES
+@@ -79,7 +79,11 @@ set(SOURCE_FILES
      peer.c
      protocol.c
      unix.c
 -    win32.c)
 +    win32.c
 +    # Our own (AvP): the reference SipHash, kept as it is, for the tokens a host gives a CONNECT. The port copies it in.
-+    siphash.c)
++    siphash.c
++    # Our own (AvP): where a host's secret keys come from, for those tokens. The port copies it in too.
++    host_secret.c)
  
  source_group(include FILES ${INCLUDE_FILES})
  source_group(source FILES ${SOURCE_FILES})
@@ -435,69 +439,3 @@ index 7a10ac2..17e78f9 100644
         case ENET_PROTOCOL_COMMAND_VERIFY_CONNECT:
            if (enet_protocol_handle_verify_connect (host, event, peer, command))
              goto commandError;
-diff --git a/unix.c b/unix.c
-index 6669216..8ce41cf 100644
---- a/unix.c
-+++ b/unix.c
-@@ -14,6 +14,7 @@
- #include <string.h>
- #include <errno.h>
- #include <time.h>
-+#include <stdio.h>
- 
- #define ENET_BUILDING_LIB 1
- #include "enet/enet.h"
-@@ -80,6 +81,23 @@ enet_host_random_seed (void)
-     return (enet_uint32) time (NULL);
- }
- 
-+int
-+enet_host_secret (enet_uint8 * secret, size_t size)
-+{
-+    /* Our own (AvP): the system's secure random source. Nobody can work these out from the outside, unlike
-+       enet_host_random_seed above, which is only the time. */
-+    FILE * source = fopen ("/dev/urandom", "rb");
-+    size_t got;
-+
-+    if (source == NULL)
-+      return -1;
-+
-+    got = fread (secret, 1, size, source);
-+    fclose (source);
-+
-+    return got == size ? 0 : -1;
-+}
-+
- enet_uint32
- enet_time_get (void)
- {
-diff --git a/win32.c b/win32.c
-index f395c09..3db1104 100644
---- a/win32.c
-+++ b/win32.c
-@@ -9,6 +9,10 @@
- #include <windows.h>
- #include <mmsystem.h>
- #include <ws2tcpip.h>
-+/* Our own (AvP): the system's secure random source, for the keys behind a host's tokens (see enet_host_secret). The
-+   pragma links its library, bcrypt.lib, into whatever uses ENet, so nothing else has to name it. */
-+#include <bcrypt.h>
-+#pragma comment(lib, "bcrypt.lib")
- 
- static enet_uint32 timeBase = 0;
- 
-@@ -48,6 +52,14 @@ enet_host_random_seed (void)
-     return (enet_uint32) timeGetTime ();
- }
- 
-+int
-+enet_host_secret (enet_uint8 * secret, size_t size)
-+{
-+    /* Our own (AvP): BCryptGenRandom is Windows' own secure random source. Nobody can work its numbers out from the
-+       outside, unlike enet_host_random_seed above, which is only the time. ENet asks for 16 bytes at a time. */
-+    return BCRYPT_SUCCESS (BCryptGenRandom (NULL, secret, (ULONG) size, BCRYPT_USE_SYSTEM_PREFERRED_RNG)) ? 0 : -1;
-+}
-+
- enet_uint32
- enet_time_get (void)
- {
