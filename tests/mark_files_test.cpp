@@ -87,7 +87,7 @@ static void MakeFile(const std::string &name, const char *text)
 	}
 }
 
-static std::string ReadFile(const std::string &name)
+static std::string ReadWholeFile(const std::string &name)
 {
 	HANDLE const file = ::CreateFileA(name.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	std::string text;
@@ -238,7 +238,7 @@ static void TestNumbersAndKeeping()
 		if (::CreateHardLinkA(link.c_str(), other.c_str(), NULL))
 		{
 			Mark_KeepTheNewest(folder, 30);
-			Check(IsThere(link) && ReadFile(other) == "someone else's", "an old number that's a second name for another file isn't thrown away");
+			Check(IsThere(link) && ReadWholeFile(other) == "someone else's", "an old number that's a second name for another file isn't thrown away");
 			::DeleteFileA(link.c_str());
 		}
 		else
@@ -248,7 +248,7 @@ static void TestNumbersAndKeeping()
 
 		if (::CreateSymbolicLinkA(link.c_str(), other.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
 		{
-			Check(!Mark_WritePicture(link, "png", 3) && ReadFile(other) == "someone else's", "a picture is never written through a link");
+			Check(!Mark_WritePicture(link, "png", 3) && ReadWholeFile(other) == "someone else's", "a picture is never written through a link");
 			::DeleteFileA(link.c_str());
 		}
 		else
@@ -278,8 +278,8 @@ static void TestWriting()
 	::CreateDirectoryA(folder.substr(0, folder.size() - 1).c_str(), NULL);
 
 	std::string const name = Mark_PictureName(folder, 1);
-	Check(Mark_WritePicture(name, "first", 5) && ReadFile(name) == "first", "a new picture is written");
-	Check(!Mark_WritePicture(name, "second", 6) && ReadFile(name) == "first", "nothing is ever written over a picture that's there");
+	Check(Mark_WritePicture(name, "first", 5) && ReadWholeFile(name) == "first", "a new picture is written");
+	Check(!Mark_WritePicture(name, "second", 6) && ReadWholeFile(name) == "first", "nothing is ever written over a picture that's there");
 
 	::CreateDirectoryA((folder + "mark-2.png").c_str(), NULL);
 	Check(!Mark_WritePicture(folder + "mark-2.png", "x", 1), "nor over a folder with a picture's name");

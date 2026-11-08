@@ -26,6 +26,8 @@
 //   notes that Net_Receive's buffer must hold NET_MESSAGEBUFFERSIZE bytes
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the page of games found can stop the search, so that nothing stays open on the network
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   Net_DescribeConnections, each connection's number and round trip for a tester's mark
 
 #ifndef _NETWORKING_H_
 #define _NETWORKING_H_
