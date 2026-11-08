@@ -163,6 +163,16 @@
 					"to": "return list->names[i].network;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the first run's NPC names",
+			"changes": [
+				{
+					"file": "3dc/avp/strategy_def.cpp",
+					"from": "\t// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).\n\tNpcLevelNames_Clear(&TheNpcLevelNames);\n",
+					"to": "\t// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).\n"
+				}
+			]
 		}
 	]
 }
