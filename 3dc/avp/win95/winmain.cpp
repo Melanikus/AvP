@@ -25,6 +25,8 @@
 //   F2 marks the moment for a tester, with a line in the log and a picture of the screen (mark_key.h)
 //   as a co-op game ends, why it ended is noted before it's wiped, for the page after it
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   the log lines for -dev and for a developer switch asked for without it start "developer tools:", not "shadows:", because the
+//   switches aren't all about the shadows (#122)
 //   -n is ignored in a network game and while a saved game loads, and its name has to keep to the rule for a map's name (level_switch.h);
 //   the level it names is marked, so that the game doesn't save on it
 //   every switch is read as a whole word (one with a number after its '=' as a word that starts with its name), so a longer word with the
@@ -293,13 +295,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	{
-		// -dev turns on the tools for finding out what the shadows are doing: the tag, the keys G, L, H, F7 and F8, the shoot tool, the flicker
-		// number and the full report. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		// -dev turns on the developer tools: the ones for finding out what the shadows are doing (the tag; the keys J, or the key chosen on
+		// the rendering page, F7 and F8; the shoot tool's F9, F10 and F5; the flicker number and the full report), and every switch below
+		// that's read through devSwitch or devNumber, the shadows' and the others alike. A tester has no need of them, and shouldn't be able to reach them by accident, so without it they're off.
+		// Their log lines start "developer tools:", because they aren't all about the shadows.
 		extern int DevMode;
 		DevMode = CommandLineHasWord(command_line, "-dev") ? 1 : 0;
 		if (DevMode)
 		{
-			LogString("shadows: the developer tools are on (-dev)");
+			LogString("developer tools: on (-dev)");
 		}
 
 		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
@@ -312,7 +316,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 			if (!DevMode)
 			{
-				LogString(std::string("shadows: ") + name + " needs -dev, so it's off");
+				LogString(std::string("developer tools: ") + name + " needs -dev, so it's off");
 			}
 			return DevMode != 0;
 		};

@@ -172,7 +172,7 @@ void Set_Progress_Bar_Position(int pos)
 	}
 }
 
-// Has the time come to leave the loading screen? In the mode that plays as single player does, everyone waits for a key, the host too, and then for everyone else. Otherwise a key is enough, and a host never waited. A test run counts as having pressed a key.
+// Has the time come to leave the loading screen? In the mode that plays as single player does, everyone waits for a key, the host too, and then for everyone else. Otherwise a key is enough, and a host never waited.
 static bool LoadingScreenIsDone(bool startsTogether, bool *keyHasBeenPressed)
 {
 	if (DebouncedGotAnyKey)

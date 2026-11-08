@@ -656,8 +656,6 @@ static bool ExecuteBuffer()
 	// It comes before the gun on purpose. The lamp lights a wall by adding the wall's own colour, read from a picture of the walls, at each spot on the screen. The gun and the hands aren't
 	// in that picture, so a lamp drawn over them added the colour of the wall behind them, which made the gun look see-through. Now the gun goes on afterwards, whole and solid.
 	// The price: the painted lamp doesn't light the gun at all.
-	bool compareTheLamp = false;
-
 	if (toyFinalFlush && ShoulderLamp_TakeThisFramesAnswer())
 	{
 		DrawShoulderLamp();

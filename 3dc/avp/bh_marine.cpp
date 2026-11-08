@@ -31,7 +31,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   an NPC marine turns his shoulder lamp on in dark places, and off again once it's been clearly light twice in a row, deciding every couple of seconds
 // Modified 2026-11-05 by Melanikus for the AvP port:
-//   CreateMarineBot gives back the marine it made, and a marine can be told to stand guard here and face a point, or to guard another spot, or to hurry
+//   CreateMarineBot gives back the marine it made
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine firing with no target no longer works out its aim from numbers nothing set;
 //   a target standing exactly on the marine no longer divides by nothing
