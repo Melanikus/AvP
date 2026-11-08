@@ -443,6 +443,36 @@
 					"to": "\t\t\tls_bhv->triggered_last = TRUE;\n"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a link switch's box looks for sleepers on a joiner too",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\tif (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &ls",
+					"to": "\t\t{\n\t\t\tNearWake_FindSleepers(sbptr, &ls"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box is only set off by nearness",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request",
+					"to": "\t\t\tif (sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box is tested for things that aren't players",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tif (!needToTest)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > ls_bhv",
+					"to": "\t\t\tif (!sbPtr->DynPtr)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > ls_bhv"
+				}
+			]
 		}
 	]
 }

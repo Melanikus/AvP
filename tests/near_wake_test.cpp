@@ -13,7 +13,8 @@
 // HOW IT RUNS
 //
 // tests/build.ps1 compiles this with tests/near_wake_test.args, and the program gives back a non-zero result if any check failed.
-// tests/takeouts/near_wake_test.json proves each check can fail.
+// tests/takeouts/near_wake_test.json proves each check can fail. The pieces of source are taken by tests/source_slice.h, so a marker
+// that has moved fails by name.
 
 #include <math.h>
 #include <stdio.h>
@@ -24,6 +25,7 @@
 #include <string>
 
 #include "near_wake.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -71,19 +73,16 @@ static bool ComesBefore(std::string const &text, char const *first, char const *
 	return a != std::string::npos && b != std::string::npos;
 }
 
-// The text from one mark up to the next one after it, or nothing if either isn't there, so a check inside it fails instead of passing on nothing
+// How tests/source_slice.h fails a check when a marker isn't there
+static void FailBecause(std::string const &why)
+{
+	Check(false, why);
+}
+
+// The text from one marker up to the next one after it, by tests/source_slice.h: a marker that isn't there is a failed check of its own
 static std::string Between(std::string const &text, char const *from, char const *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start + 1);
-
-	return end == std::string::npos ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromOneOn, FailBecause);
 }
 
 static bool Near(double a, double b)
