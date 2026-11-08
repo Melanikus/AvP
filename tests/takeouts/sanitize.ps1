@@ -179,10 +179,12 @@ function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysT
         Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|concrt|vccorlib)[0-9a-z_]*\.dll$' -or $_ -match '^api-ms-win-crt-[0-9a-z-]*\.dll$' })
 }
 
-# SANITIZE-RUN-1: is every part of the test watched? The sanitizer only watches code compiled with it. Every source the test's settings
-# name is compiled by the line below, with /fsanitize=address, and nothing in a test's settings can turn that off. What can come in
-# unwatched is code that was compiled somewhere else: an object (.obj) or a library (.lib) the settings name. So each of those is read
-# before anything is built.
+# SANITIZE-RUN-1: is every part of the test watched? The sanitizer only watches code compiled with it. Code can come in unwatched two ways:
+# - compiled somewhere else: an object (.obj) or a library (.lib) the settings name. Each of those is read before anything is built.
+# - compiled here, with the sanitizer turned off. Every source is compiled by the line below with /fsanitize=address, but the test's
+#   settings come after it, and the compiler has a switch, /fno-sanitize=address, that turns it off again (found in cl.exe's own list of
+#   switches, Visual Studio 18's compiler 14.51). So after the build, every object it made is read too. That doesn't depend on knowing
+#   every switch that could do it.
 #
 # THE MARK: the compiler writes three lines into each object it compiles with the sanitizer, among the object's orders to the linker,
 # which dumpbin /directives shows. One of them, below, is the mark. It's there even in an object that reads and writes no memory at all,
@@ -335,6 +337,17 @@ if ($built -ne 0) {
     $buildSaid = Join-Path $out 'build.txt'
     Show-WhatWasSaid 'what the compiler said' @($buildSaid, "$buildSaid.errors")
     Write-Host "$Test didn't build. What the compiler said is above"
+    exit 1
+}
+
+# Every object the build just made has to carry the sanitizer's mark too, or something in the test's settings turned the sanitizer off
+# for it (see SANITIZE-RUN-1, above). With none at all, the build made nothing this can read, which proves nothing either.
+$compiled = @(Get-ChildItem -LiteralPath $out -Filter '*.obj' -File)
+if ($compiled.Count -eq 0) { throw "the build of $Test made no objects in $out to read for the sanitizer's mark" }
+
+$unwatchedHere = @($compiled | Where-Object { -not (Test-CompiledWithSanitizer $_.FullName "$($_.FullName).directives.txt") } | ForEach-Object { $_.Name })
+if ($unwatchedHere.Count -gt 0) {
+    Write-Host "$Test's own $($unwatchedHere -join ', ') wasn't compiled with the sanitizer, though this asked for it: something in its settings turned it off, so its code would run unwatched"
     exit 1
 }
 

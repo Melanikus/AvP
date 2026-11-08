@@ -62,8 +62,9 @@ The same check makes sure the gate can fail: in its own copy of the repository i
 one that fails a check, and neither may pass. When a test doesn't pass, the script prints everything the test and the sanitizer said, because the
 folder that keeps it is gone once an automatic check ends. And it refuses a name that isn't one of the tests before it empties any folder.
 
-The sanitizer only watches code compiled with it, so the script refuses a test that links an object or a library compiled without it. It reads
-each one for the mark the compiler leaves in what it compiles with the sanitizer. A library vcpkg builds, such as ENet for the network tests, is
+The sanitizer only watches code compiled with it, so the script refuses a test that links an object or a library compiled without it, and a test
+whose settings turn the sanitizer off for its own code (the compiler has /fno-sanitize=address). It reads each object, those the test links and
+those its own build makes, for the mark the compiler leaves in what it compiles with the sanitizer. A library vcpkg builds, such as ENet for the network tests, is
 taken from its copy built with the sanitizer, in `vcpkg_installed/x86-windows-static-asan`, which the automatic check makes
 (`vcpkg-overlay-triplets/x86-windows-static-asan.cmake`). So here, without that copy, the network tests can't be run under the sanitizer, and the
 script says so. Windows' own libraries, Microsoft's D3DX and Microsoft's C runtime are Microsoft's, and aren't compiled with it.

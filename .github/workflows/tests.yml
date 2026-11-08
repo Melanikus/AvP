@@ -147,8 +147,8 @@ jobs:
   # nothing from vcpkg.
   #
   # Three more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). It refuses
-  # code compiled without the sanitizer that comes in from outside a test's own build: an object, a library made from one, or a library
-  # named without a folder that isn't Windows' own. And the gate is seen to fail, because a check nobody has seen fail proves nothing:
+  # code compiled without the sanitizer: an object, a library made from one, a library named without a folder that isn't Windows' own,
+  # and a test whose settings turn the sanitizer off for its own code. And the gate is seen to fail, because a check nobody has seen fail proves nothing:
   # broken tests are written here, one that reads past the end of a block and one that fails a check, and sanitize.ps1 must refuse each,
   # with its reason, and show what each said.
   sanitizer-refusals:
@@ -234,7 +234,8 @@ jobs:
           #    (run 42493315111). sanitize.ps1 must refuse it, before it builds anything, in each way it can come in:
           #    - an object named in the test's settings;
           #    - a library named in them, made from that object;
-          #    - a library named without a folder that isn't one of Windows' own, which this doesn't read.
+          #    - a library named without a folder that isn't one of Windows' own, which this doesn't read;
+          #    - and, after its build, the test's own code compiled with the sanitizer turned off by its settings.
           #    The object and the library are made here, by the compiler and lib.exe 3 set up in this window, while the window still has
           #    them: Run-WithPath puts the path back after its run.
           Set-Content -LiteralPath tests/canary_unwatched.cpp -Value $readsPastTheEnd
@@ -259,6 +260,15 @@ jobs:
           $result.text
           Check ($result.code -eq 1) "a test naming a library without a folder that isn't Windows' own gives back 1 (it gave back $($result.code))"
           Check ($result.text -cmatch "canary_unknown_lib_test's settings name not_a_windows_library\.lib, which isn't one of Windows' own libraries in the Windows SDK") 'and it says which library, and why'
+
+          # And code compiled here with the sanitizer turned off: the compiler has /fno-sanitize=address, and a test's settings come after
+          # the /fsanitize=address sanitize.ps1 gives. Every object the build makes must carry the sanitizer's mark, or the test is refused.
+          Set-Content -LiteralPath tests/canary_sanitizer_off.cpp -Value $readsPastTheEnd
+          Set-Content -LiteralPath tests/canary_sanitizer_off_test.args -Value ($settings + ' /fno-sanitize=address'), 'tests/canary_sanitizer_off.cpp'
+          $result = Run-WithPath $original 'canary_sanitizer_off_test'
+          $result.text
+          Check ($result.code -eq 1) "a test whose settings turn the sanitizer off gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch "canary_sanitizer_off_test's own canary_sanitizer_off\.obj wasn't compiled with the sanitizer, though this asked for it: something in its settings turned it off") 'and it says which object, and why'
 
           # 5. A name that isn't a test's is refused before any folder is touched. Here ".." points at this runner's own temporary folder,
           #    the one the sanitizer's folders are made in, and the old script emptied whatever its name pointed at. So a file is left
