@@ -93,7 +93,9 @@ inline const char *SaveFolder_Make(const char *under, char *folder, size_t size,
 		return kSaveFolderTooLong;
 	}
 
-	memcpy(folder, path.c_str(), path.length() + 1);
+	// The letters, then the 0 that ends them on a line of its own: the length was checked against the room just above
+	memcpy(folder, path.c_str(), path.length());
+	folder[path.length()] = 0;
 	return 0;
 }
 
