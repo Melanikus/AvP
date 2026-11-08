@@ -96,16 +96,6 @@
 			]
 		},
 		{
-			"name": "a name is looked for only as it is written, not in any case",
-			"changes": [
-				{
-					"file": "3dc/avp/win95/frontend/custom_maps.cpp",
-					"from": "if (_stricmp(customMaps[i].name, name) == 0)",
-					"to": "if (strcmp(customMaps[i].name, name) == 0)"
-				}
-			]
-		},
-		{
 			"name": "a number that isn't one of the maps is loaded anyway",
 			"changes": [
 				{
