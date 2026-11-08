@@ -8,6 +8,9 @@
 // WHAT THIS TESTS: the part that makes the folders is tested for real, on folders made here and taken away afterwards. The part
 // that asks Windows for the player's Documents can't be made to fail from a test, so GetSaveFolderPath itself is checked by
 // reading it. Run this from the top of the repository, because that's where the source it reads is found from.
+//
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the backslash check hands in a folder that really has a backslash, now that this run's folder is a bare name with no slash in it
 #include "save_folder.h"
 #include "save_file_write.h"
 
@@ -124,11 +127,13 @@ static void TestMakingIt()
 	folder[0] = 'x';
 	Check(SaveFolder_Make(base.c_str(), folder, sizeof(folder), NULL) == 0 && expected == folder, "a folder that's there already is fine");
 
-	std::string backslashes = base;
+	// Windows' backslashes come back as forward slashes. This run's folder is a bare name with no slash in it, so ".\" (this folder) goes
+	// in front of it, to give the code a backslash to change. The first check makes sure of that, so this one can't quietly test nothing.
+	std::string const backslashes = ".\\" + base;
 
-	std::replace(backslashes.begin(), backslashes.end(), '/', '\\');
-
-	Check(SaveFolder_Make(backslashes.c_str(), folder, sizeof(folder), NULL) == 0 && expected == folder, "Windows' backslashes come back as forward slashes");
+	Check(backslashes.find('\\') != std::string::npos, "the folder handed in for the next check really holds a backslash");
+	Check(SaveFolder_Make(backslashes.c_str(), folder, sizeof(folder), NULL) == 0 && "./" + base + "/My Games/Aliens versus Predator/" == folder,
+		"Windows' backslashes come back as forward slashes");
 
 	// Exactly enough room, and one short of it
 	Check(SaveFolder_Make(base.c_str(), folder, expected.size() + 1, NULL) == 0 && expected == folder, "exactly enough room is enough");
