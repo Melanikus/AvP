@@ -279,8 +279,8 @@
 			"changes": [
 				{
 					"file": "shaders/lightShapes.fxh",
-					"from": "(turned == 0.0f) ? 0.125f",
-					"to": "(turned == 0.0f) ? 0.0f"
+					"from": "(turned > 0.0f) ? slant : (turned == 0.0f) ? 0.125f",
+					"to": "(turned > 0.0f) ? slant : (turned == 0.0f) ? 0.0f"
 				},
 				{
 					"file": "tests/light_shape_test.cpp",

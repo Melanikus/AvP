@@ -1,4 +1,6 @@
 // One drawing of the surfaces each frame, for every light to read. Written 2026-11-04 by Melanikus for the AvP port.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   remembers whether the last drawing used the fixed buffer, for the NORMAL LINES view
 //
 // To light a pixel you need to know three things about the surface it shows: how far away it is, which way it faces, and what colour its
 // texture is. The slow way is for every light to draw every polygon again to find out. Instead, the frame's solid polygons are drawn once,
@@ -173,9 +175,16 @@ void SurfacePictures_SetReliefConstants(LPDIRECT3DDEVICE9 device, const float *w
 	device->SetPixelShaderConstantF(0, constants, 4);
 }
 
+static bool lastDrawWasFromBuffer = false;
+
+bool SurfacePictures_LastDrawWasFromBuffer()
+{
+	return lastDrawWasFromBuffer;
+}
+
 // useStatic asks for the level's walls to be drawn from the fixed buffer, and only what isn't in it to be drawn the old way. It can be asked for on any frame,
 // and if that route can't draw, the old way draws everything: see surface_static.cpp.
-bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic, bool marchWanted)
+bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPicture, const float *worldAxes, bool reliefWanted, bool useStatic, bool marchWanted, bool backwards)
 {
 	if (!SurfacePictures_Ready(device))
 	{
@@ -216,6 +225,7 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 
 	effectID_t const effect = withRelief ? d3d.surfaceReliefEffect : d3d.surfaceEffect;
 
+
 	// The fixed buffer's own drawing doesn't set up the depth maps, so the walk goes the old way for now.
 	bool fromBuffer = useStatic && !march && SurfaceStatic_Ready();
 
@@ -229,6 +239,8 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	{
 		fromBuffer = SurfaceStatic_Draw(device, withRelief);
 	}
+
+	lastDrawWasFromBuffer = fromBuffer;
 
 	d3d.effectSystem->SetActive(effect);
 
@@ -245,12 +257,12 @@ bool SurfacePictures_Draw(LPDIRECT3DDEVICE9 device, IDirect3DSurface9 *depthPict
 	if (withRelief)
 	{
 		SurfaceNormals_UseTangents();
-		mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true, march);
+		mainList->DrawOpaqueAgain(d3d.surfaceReliefDecl, true, march, backwards);
 		SurfaceNormals_StopUsingTangents();
 	}
 	else
 	{
-		mainList->DrawOpaqueAgain(d3d.surfaceDecl);
+		mainList->DrawOpaqueAgain(d3d.surfaceDecl, false, false, backwards);
 	}
 
 	SurfaceNormals_StopUsingList();

@@ -1,9 +1,14 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a marine can ask whether a path can be followed before setting out on it
+//   an NPC with no movement data stops speeding up, instead of crashing
+//   a saved place on a path has to be a real path and a real step on it
 // Modified 2026-11-06 by Melanikus for the AvP port:
-//   a queen's death is read from her own block
+//   a death code nobody knows gives the first death on the list, because the code can come from another player's machine
+//   a queen's death is read from her own block; a player on another machine who has died counts as dead; and one standing right on a muzzle no longer divides by nothing
 
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a death code nobody knows gives the first death on the list, because the code can come from another player's machine
 /* CDF 11/6/98 - AI support functions moved out of bh_pred. */
 // AvP port by Barry Duncan.
 // Modified 2026-11-03 by Melanikus for the AvP port:
@@ -16,6 +21,7 @@
 #include "gamedef.h"
 #include "compiled_shapes.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "pfarlocs.h"
 #include "pheromone.h"
@@ -29,6 +35,7 @@
 #include "bh_marine.h"
 #include "bh_alien.h"
 #include "bh_agun.h"
+#include "pldghost.h"
 #include "lighting.h"
 #include "bh_weapon.h"
 #include "weapons.h"
@@ -104,6 +111,44 @@ int CheckAdjacencyValidity(AIMODULE *target, AIMODULE *source, int alien)
 /* Patrick-------------------------------------------------------------
 For chris, or anyone else who wants it...
 -----------------------------------------------------------------------*/
+bool NPC_IsAPlayer(const STRATEGYBLOCK *sbPtr)
+{
+        if(!sbPtr) return false;
+        if(sbPtr==Player->ObStrategyBlock) return true;
+
+        if(sbPtr->I_SBtype==I_BehaviourNetGhost && sbPtr->SBdataptr)
+        {
+                NETGHOSTDATABLOCK const *const ghostData = (NETGHOSTDATABLOCK const *)(sbPtr->SBdataptr);
+
+                return ghostData->type==I_BehaviourMarinePlayer
+                        || ghostData->type==I_BehaviourAlienPlayer
+                        || ghostData->type==I_BehaviourPredatorPlayer;
+        }
+
+        return false;
+}
+
+int NPC_DistanceToNearestPlayer(const VECTORCH *place)
+{
+        int nearest = VectorDistance(const_cast<VECTORCH *>(place), &Player->ObStrategyBlock->DynPtr->Position);
+
+        if(AvP.Network==I_No_Network) return nearest;
+
+        for(int i=0;i<NumActiveStBlocks;i++)
+        {
+                STRATEGYBLOCK *const other = ActiveStBlockList[i];
+
+                if(other->I_SBtype==I_BehaviourNetGhost && NPC_IsAPlayer(other) && other->DynPtr)
+                {
+                        int const distance = VectorDistance(const_cast<VECTORCH *>(place), &other->DynPtr->Position);
+
+                        if(distance<nearest) nearest=distance;
+                }
+        }
+
+        return nearest;
+}
+
 int NPC_IsDead(STRATEGYBLOCK *sbPtr)
 {       
         LOCALASSERT(sbPtr);
@@ -169,6 +214,13 @@ int NPC_IsDead(STRATEGYBLOCK *sbPtr)
                         /* Corpses are always dead :-) */
                         return(1);
                         break;
+                case(I_BehaviourNetGhost):
+                {
+                        // A player on another machine who has died keeps his block, and it turns into a corpse
+                        NETGHOSTDATABLOCK const *const ghostData = (NETGHOSTDATABLOCK const *)(sbPtr->SBdataptr);
+                        if(ghostData && ghostData->type==I_BehaviourNetCorpse) return 1;
+                        break;
+                }
 				case I_BehaviourAutoGun:
 					{
 						AUTOGUN_STATUS_BLOCK *agunStatusPointer;
@@ -265,7 +317,8 @@ void NPC_IsObstructed(STRATEGYBLOCK *sbPtr, NPC_MOVEMENTDATA *moveData, NPC_OBST
                 
                 if(nextReport->ObstacleSBPtr)
                 {
-                        if(nextReport->ObstacleSBPtr==Player->ObStrategyBlock) IsCharacterOrPlayer = 1;
+                        /* A player on another machine isn't a wall either */
+                        if(NPC_IsAPlayer(nextReport->ObstacleSBPtr)) IsCharacterOrPlayer = 1;
                         if(nextReport->ObstacleSBPtr->I_SBtype==myType)
                         {
                                 IsCharacterOrPlayer = 1;
@@ -477,6 +530,9 @@ void ProjectNPCShot(STRATEGYBLOCK *sbPtr, STRATEGYBLOCK *target, VECTORCH *muzzl
 
         
         mag>>=2; /* For now. */
+
+        /* A player on another machine says where he is, so he can be standing right on the muzzle, and the sums below divide by this */
+        if (mag<1) mag=1;
 
         /* Random tweak. */
         shotVector.vx+=((FastRandom()%mag)-(mag>>1));
@@ -725,6 +781,8 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
         } else {
                 int accelerationThisFrame,deltaVMag,dotProduct;
                 VECTORCH deltaV,targetV,yDirection,movementOffset;
+                /* These lookups can't fail today: each one is in the table in movement.cpp. If one were taken out of
+                   that table, the NPC would stop speeding up, and the game would carry on. */
                 const MOVEMENT_DATA *movementData;
 
                 /* Mode 2, for marines 'n' predators.  And xenoborgs. */
@@ -743,11 +801,11 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                                 ||((predatorStatusPointer->behaviourState==PBS_Avoidance)&&(predatorStatusPointer->lastState==PBS_Wandering))) {
                                                 movementData=GetThisMovementData(MDI_Casual_Predator);
                                                 /* Fix reduced max speed. */
-                                                speed=movementData->maxSpeed;
+                                                if (movementData) speed=movementData->maxSpeed;
                                         } else {
                                                 movementData=GetThisMovementData(MDI_Predator);
                                         }
-                                        accelerationThisFrame=movementData->acceleration;
+                                        accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 }
                                 break;
                         case I_BehaviourMarine:
@@ -762,7 +820,7 @@ int NPCSetVelocity(STRATEGYBLOCK *sbPtr, VECTORCH* targetDirn, int in_speed)
                                 break;
                         case I_BehaviourXenoborg:
                                 movementData=GetThisMovementData(MDI_Xenoborg);
-                                accelerationThisFrame=movementData->acceleration;
+                                accelerationThisFrame=movementData ? movementData->acceleration : 0;
                                 break;
                         default:
                                 GLOBALASSERT(0);
@@ -2059,6 +2117,19 @@ bool PathCanBeFollowed(int path)
 	return PathArray && path >= 0 && path < PathArraySize && PathArray[path].path_length > 0;
 }
 
+// A path and a step come from a save, and they pick entries in lists that are only checked in a debug build. -1 means no path, and the code
+// that walks a path already goes off wandering when it sees that, so a place that isn't real becomes no path.
+void NPC_CheckSavedPath(int *path, int *stepnumber)
+{
+	*path = PathArray ? Save_PlaceInListOrNone(*path, PathArraySize) : -1;
+	*stepnumber = (*path >= 0) ? Save_PlaceInListOrNone(*stepnumber, PathArray[*path].path_length) : -1;
+
+	if (*stepnumber < 0)
+	{
+		*path = -1;
+	}
+}
+
 int GetNextModuleInPath(int current_module, int path) {
 
         GLOBALASSERT(path>=0 && path<PathArraySize);
@@ -2320,8 +2391,12 @@ DEATH_DATA *GetThisDeath_FromCode(HMODELCONTROLLER *controller,DEATH_DATA *First
                 this_death++;
         }
 
-        GLOBALASSERT(retval);
-        return(retval);
+	// The code can come from another player's machine, so it can be anything. Everyone who calls this reads what it gives back, so it gives the first death on the list rather than nothing.
+	if (!retval) {
+		retval=FirstDeath;
+	}
+
+	return(retval);
 }
 
 DEATH_DATA *GetThisDeath_FromUniqueCode(int code) 

@@ -1,3 +1,6 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   in a network game of the same-as-single-player mode, a level's end goes to the host, who moves everyone on
 #include "3dc.h"
 #include <math.h>
 #include "inline.h"
@@ -412,6 +415,13 @@ void UpdateGame(void)
 	DoPlayerSounds();
 
 	MessageHistory_Maintain();
+
+	// However the end was reached, this is the one place that decides what happens next. In a network game of this mode it isn't this machine's to finish alone.
+	if (AvP.LevelCompleted && AvP.Network != I_No_Network && SameAsSinglePlayer())
+	{
+		AvP.LevelCompleted = 0;
+		Coop_LevelEndReached();
+	}
 
 	if (AvP.LevelCompleted)
 	{

@@ -2,6 +2,7 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a switch copes with a link, a resting sequence or a track that the level file got wrong
 
+//   a saved switch has to be on a sequence of its own texture animation
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -759,6 +760,7 @@ void LinkSwitchSetSynchData(STRATEGYBLOCK* sbPtr,int status)
 ** Loading and Saving **
 **--------------------*/
 #include "savegame.h"
+#include "save_checks.h"
 typedef struct link_switch_save_block
 {
 	SAVE_BLOCK_STRATEGY_HEADER header;
@@ -822,7 +824,7 @@ void LoadStrategy_LinkSwitch(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(triggered_last)
 
 	//set the texture animation sequence
-	if(ls_bhv->ls_tac)
+	if(ls_bhv->ls_tac && Save_TextureSequenceIsValid(ls_bhv->ls_tac->tac_txarray, block->txanim_sequence))
 	{
 		ls_bhv->ls_tac->tac_sequence = block->txanim_sequence;
 		ls_bhv->ls_tac->tac_txah_s = GetTxAnimHeaderFromShape(ls_bhv->ls_tac, (sbPtr->shapeIndex));

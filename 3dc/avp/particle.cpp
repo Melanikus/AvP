@@ -1,3 +1,7 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a grenade from the M79 slows the view near it, like other grenades;
+//   a xenoborg's ghost shows his beams, drawn by the same code as the real one's
+//   a flare with no light left has no corona
 /* KJL 14:50:53 10/13/97 - 
  *
  *	Experimental particle system
@@ -80,6 +84,8 @@ void AddRipple(int x,int z,int amplitude);
 void MakeMolotovExplosionAt(VECTORCH *positionPtr,int seed);
 static void HandleVolumetricExplosion(VOLUMETRIC_EXPLOSION *expPtr);
 void DrawXenoborgMainLaserbeam(LASER_BEAM_DESC *laserPtr);
+static void DrawXenoborgBeams(LASER_BEAM_DESC *aiming, LASER_BEAM_DESC *leftGun, LASER_BEAM_DESC *rightGun);
+extern bool NpcGhosts_XenoBeamsToDraw(STRATEGYBLOCK *ghost, LASER_BEAM_DESC *aiming, LASER_BEAM_DESC *leftGun, LASER_BEAM_DESC *rightGun); // npc_ghosts.cpp
 void HandlePheromoneTrails(void);
 void RenderTrailSegment(PHEROMONE_TRAIL *trailPtr);
 void OutputTranslucentPolyList(void);
@@ -2845,6 +2851,17 @@ void HandleParticleSystem(void)
 					{
 						NETGHOSTDATABLOCK *ghostDataPtr = (NETGHOSTDATABLOCK *)sbPtr->SBdataptr;
 
+						// A xenoborg's ghost shows the beams the real one has on, on the machine that runs him
+						if (ghostDataPtr->type==I_BehaviourXenoborg)
+						{
+							LASER_BEAM_DESC aiming[3], leftGun, rightGun;
+
+							if (NpcGhosts_XenoBeamsToDraw(sbPtr, aiming, &leftGun, &rightGun))
+							{
+								DrawXenoborgBeams(aiming, &leftGun, &rightGun);
+							}
+						}
+
 						if (ghostDataPtr->type==I_BehaviourFlareGrenade && LocalDetailLevels.DrawLightCoronas)
 						{
 							DoFlareCorona(objectPtr);
@@ -2921,81 +2938,7 @@ void HandleParticleSystem(void)
 					case I_BehaviourXenoborg:
 					{
 						XENO_STATUS_BLOCK *statusPtr = (XENO_STATUS_BLOCK *)sbPtr->SBdataptr;
-						LASER_BEAM_DESC *laserPtr = statusPtr->TargetingLaser;
-						int i = 2;
-						do
-						{
-							if (laserPtr->BeamIsOn)
-							{
-								if (laserPtr->BeamHasHitPlayer)
-								{
-									int colour;
-									switch (CurrentVisionMode)
-									{
-										default:
-										case VISION_MODE_NORMAL:
-										{
-											colour = 0xffff0000;
-											break;
-										}
-										case VISION_MODE_IMAGEINTENSIFIER:
-										{
-											colour = 0xffffffff;
-											break;
-										}
-										case VISION_MODE_PRED_THERMAL:
-										case VISION_MODE_PRED_SEEALIENS:
-										case VISION_MODE_PRED_SEEPREDTECH:
-										{
-											colour = 0xffff8000;
-											break;
-										}
-									}
-									RenderLightFlare(&(laserPtr->SourcePosition),colour);
-								}
-								else
-								{
-									PARTICLE particle;
-									switch (CurrentVisionMode)
-									{
-										default:
-										case VISION_MODE_NORMAL:
-										{
-											particle.Colour = RGBALIGHT_MAKE(255,0,0,255);
-											break;
-										}
-										case VISION_MODE_IMAGEINTENSIFIER:
-										{
-											particle.Colour = RGBALIGHT_MAKE(255,255,255,255);
-											break;
-										}
-										case VISION_MODE_PRED_THERMAL:
-										case VISION_MODE_PRED_SEEALIENS:
-										case VISION_MODE_PRED_SEEPREDTECH:
-										{
-											particle.Colour = RGBALIGHT_MAKE(255,128,0,255);
-											break;
-										}
-									}
-									particle.ParticleID = PARTICLE_LASERBEAM;
-									particle.Position = laserPtr->SourcePosition;
-									particle.Offset = laserPtr->TargetPosition;
-									particle.Size = 20;
-									RenderParticle(&particle);
-								}
-							}
-							laserPtr++;
-						}
-						while(i--);
-
-						if (statusPtr->LeftMainBeam.BeamIsOn)
-						{
-							DrawXenoborgMainLaserbeam(&statusPtr->LeftMainBeam);
-						}
-						if (statusPtr->RightMainBeam.BeamIsOn)
-						{
-							DrawXenoborgMainLaserbeam(&statusPtr->RightMainBeam);
-						}
+						DrawXenoborgBeams(statusPtr->TargetingLaser, &statusPtr->LeftMainBeam, &statusPtr->RightMainBeam);
 						break;
 					}
 					case I_BehaviourSpeargunBolt:
@@ -3285,6 +3228,13 @@ void DoFlareCorona(DISPLAYBLOCK *objectPtr)
 	if (CameraCanSeeThisPosition_WithIgnore(objectPtr, &position))
 	{
 		LIGHTBLOCK *lPtr = objectPtr->ObLights[0];
+
+		// The game can run out of lights to give
+		if (!lPtr)
+		{
+			return;
+		}
+
 		int a = lPtr->LightBright>>8;
 		int colour;
 
@@ -4644,6 +4594,86 @@ void MakeDewlineTrailParticles(DYNAMICSBLOCK *dynPtr, int number)
 	}
 }
 
+// All five of a xenoborg's beams: the three aiming lines, then the two guns. The real one and a ghost of one both come here.
+static void DrawXenoborgBeams(LASER_BEAM_DESC *aiming, LASER_BEAM_DESC *leftGun, LASER_BEAM_DESC *rightGun)
+{
+	LASER_BEAM_DESC *laserPtr = aiming;
+	int i = 2;
+	do
+	{
+		if (laserPtr->BeamIsOn)
+		{
+			if (laserPtr->BeamHasHitPlayer)
+			{
+				int colour;
+				switch (CurrentVisionMode)
+				{
+					default:
+					case VISION_MODE_NORMAL:
+					{
+						colour = 0xffff0000;
+						break;
+					}
+					case VISION_MODE_IMAGEINTENSIFIER:
+					{
+						colour = 0xffffffff;
+						break;
+					}
+					case VISION_MODE_PRED_THERMAL:
+					case VISION_MODE_PRED_SEEALIENS:
+					case VISION_MODE_PRED_SEEPREDTECH:
+					{
+						colour = 0xffff8000;
+						break;
+					}
+				}
+				RenderLightFlare(&(laserPtr->SourcePosition),colour);
+			}
+			else
+			{
+				PARTICLE particle;
+				switch (CurrentVisionMode)
+				{
+					default:
+					case VISION_MODE_NORMAL:
+					{
+						particle.Colour = RGBALIGHT_MAKE(255,0,0,255);
+						break;
+					}
+					case VISION_MODE_IMAGEINTENSIFIER:
+					{
+						particle.Colour = RGBALIGHT_MAKE(255,255,255,255);
+						break;
+					}
+					case VISION_MODE_PRED_THERMAL:
+					case VISION_MODE_PRED_SEEALIENS:
+					case VISION_MODE_PRED_SEEPREDTECH:
+					{
+						particle.Colour = RGBALIGHT_MAKE(255,128,0,255);
+						break;
+					}
+				}
+				particle.ParticleID = PARTICLE_LASERBEAM;
+				particle.Position = laserPtr->SourcePosition;
+				particle.Offset = laserPtr->TargetPosition;
+				particle.Size = 20;
+				RenderParticle(&particle);
+			}
+		}
+		laserPtr++;
+	}
+	while(i--);
+
+	if (leftGun->BeamIsOn)
+	{
+		DrawXenoborgMainLaserbeam(leftGun);
+	}
+	if (rightGun->BeamIsOn)
+	{
+		DrawXenoborgMainLaserbeam(rightGun);
+	}
+}
+
 void DrawXenoborgMainLaserbeam(LASER_BEAM_DESC *laserPtr)
 {
 	if (laserPtr->BeamHasHitPlayer)
@@ -5033,6 +5063,9 @@ void TimeScaleThingy()
 					break;
 
 				case I_BehaviourGrenade :
+				case I_BehaviourM79Grenade :
+				case I_BehaviourM79FireGrenade :
+				case I_BehaviourM79FragGrenade :
 				case I_BehaviourRocket :
 				case I_BehaviourFrisbee:
 				case I_BehaviourPulseGrenade :

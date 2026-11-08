@@ -13,6 +13,7 @@
 #define _console_h_
 #define _ConfigFile_h_
 #define LOGSTRING_H
+void LogString(const std::string &logString);
 
 typedef uint32_t NetID;
 

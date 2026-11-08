@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the level row chooses a campaign, its difficulty and the number things with several possible places take theirs from
 #ifndef _avp_env_info_h_
 #define _avp_env_info_h_ 1
 
@@ -17,6 +19,38 @@
 #endif
 
 #define MAX_NO_OF_COOPERATIVE_EPISODES 13
+
+// The three campaigns, for a game in the mode where everything plays as it does in single player. 0 means this game isn't one. See SameAsSinglePlayer in pldnet.cpp.
+enum
+{
+	kCampaignNone = 0,
+	kCampaignMarine,
+	kCampaignPredator,
+	kCampaignAlien
+};
+
+// How many levels a campaign has. 0 for a number that isn't a campaign.
+int Campaign_LevelCount(int campaign);
+
+// The level at this place in a campaign, or -1 if there's no such place.
+int Campaign_Environment(int campaign, int place);
+
+// Loads the level netGameData says the campaign has got to.
+void SetLevelToLoadForCampaign(void);
+
+// What the level row on a host's page has chosen, in the two numbers the rest of the game asks. Only
+// someone starting a game asks this: a joiner is told those numbers by the host.
+void Campaign_SetFromLevelRow(void);
+
+// Chooses the one number that everything with several possible places takes its place from. Only the host does this,
+// once, as a game starts. See shared_roll.h.
+void Campaign_ChooseRollNumber(void);
+
+// Sets the difficulty this network game is played at, on every machine: the host's choice in a campaign, and Medium in any other.
+void Campaign_SetDifficulty(void);
+
+// Loads the level this network game is playing, whichever kind of game it is.
+void SetLevelToLoadForThisNetworkGame(void);
 
 enum AVP_ENVIRONMENT_ID
 {

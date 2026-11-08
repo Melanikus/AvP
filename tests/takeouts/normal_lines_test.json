@@ -1,0 +1,858 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a normal 6 degrees out agrees",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "kNormalLineAgreeCosine = 0.99619470",
+					"to": "kNormalLineAgreeCosine = 0.98"
+				}
+			]
+		},
+		{
+			"name": "a normal 3 degrees out leans",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "kNormalLineAgreeCosine = 0.99619470",
+					"to": "kNormalLineAgreeCosine = 0.9999"
+				}
+			]
+		},
+		{
+			"name": "a normal 50 degrees out only leans",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "kNormalLineBadCosine = 0.70710678",
+					"to": "kNormalLineBadCosine = 0.5"
+				}
+			]
+		},
+		{
+			"name": "a normal 40 degrees out leans badly",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "kNormalLineBadCosine = 0.70710678",
+					"to": "kNormalLineBadCosine = 0.8"
+				}
+			]
+		},
+		{
+			"name": "zero counts as a direction",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "return size > 0.0 && size < 1e12;",
+					"to": "return size < 1e12;"
+				}
+			]
+		},
+		{
+			"name": "a number too big counts as a direction",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "return size > 0.0 && size < 1e12;",
+					"to": "return size > 0.0;"
+				}
+			]
+		},
+		{
+			"name": "past 90 gets no second line",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (kind == kNormalLeansBadly && !(NormalLines_Along(normal, facing) > 0.0))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "every bad lean gets a second line",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (kind == kNormalLeansBadly && !(NormalLines_Along(normal, facing) > 0.0))",
+					"to": "if (kind == kNormalLeansBadly)"
+				}
+			]
+		},
+		{
+			"name": "the second line goes the same way as the first",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "(float)(place[2] + (normal[2] - into * fz) * across),",
+					"to": "(float)(place[2] + normal[2] * across),"
+				}
+			]
+		},
+		{
+			"name": "the list has no limit",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if ((int)(list.ends[kind].size() / 2) >= NormalLines_MostOfKind(kind))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "what passes the limit is not counted",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\t\tlist.leftOut[kind]++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every kind shares the biggest limit",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "return (kind == kNormalAgrees) ? kNormalLinePlentyOfAgreeing : kNormalLinePlentyOfTheRest;",
+					"to": "return kNormalLinePlentyOfAgreeing;"
+				}
+			]
+		},
+		{
+			"name": "the mirror image is forgotten",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\tfacing[0] = -facing[0];\n\tfacing[1] = -facing[1];\n\tfacing[2] = -facing[2];\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon out of the pictures is treated as in them",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (fourth < 0.5f)",
+					"to": "if (fourth < 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "a polygon the buffer drew is read from the list as well",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (fourth > 1.5f && bufferDrewThisFrame)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a polygon in the buffer is left out when the buffer did not draw",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (fourth > 1.5f && bufferDrewThisFrame)",
+					"to": "if (fourth > 1.5f)"
+				}
+			]
+		},
+		{
+			"name": "a normal is compared without turning it",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "turned[i] = direction[0] * axes[i] + direction[1] * axes[3 + i] + direction[2] * axes[6 + i];",
+					"to": "turned[i] = direction[i];"
+				}
+			]
+		},
+		{
+			"name": "a fixed buffer corner is not cut to whole numbers",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "place[i] = (float)(int)sum;",
+					"to": "place[i] = sum;"
+				}
+			]
+		},
+		{
+			"name": "a fixed buffer corner keeps its y the world way up",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\tplace[1] = -place[1];\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a fixed buffer polygon is compared in the wrong numbers",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "facing[i] = worldFacing[0] * axes[i] + worldFacing[1] * axes[3 + i] + worldFacing[2] * axes[6 + i];",
+					"to": "facing[i] = worldFacing[i];"
+				}
+			]
+		},
+		{
+			"name": "a polygon with no area is compared anyway",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "return facing[0] * facing[0] + facing[1] * facing[1] + facing[2] * facing[2] >= kNormalLineNoArea;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "backs of fixed buffer triangles are kept",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (!twoSided && places[0] * facing[0] + places[1] * facing[1] + places[2] * facing[2] >= 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "two sided triangles lose their backs",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (!twoSided && places[0] * facing[0]",
+					"to": "if (places[0] * facing[0]"
+				}
+			]
+		},
+		{
+			"name": "a shared corner is done twice",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (!drawn[i])",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a corner on the camera is kept",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (!(place[2] > 0.0f))",
+					"to": "if (place[2] < 0.0f)"
+				}
+			]
+		},
+		{
+			"name": "far corners are kept",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (place[0] * place[0] + place[1] * place[1] + place[2] * place[2] > kNormalLineFurthest * kNormalLineFurthest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "an outline needs every corner near",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "nearEnough = nearEnough || (place",
+					"to": "nearEnough = (place"
+				}
+			]
+		},
+		{
+			"name": "a long normal draws a long line",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "(length > kNormalLineLongest) ? kNormalLineLongest : length",
+					"to": "length"
+				}
+			]
+		},
+		{
+			"name": "a short normal draws a line nobody can see",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "(length < kNormalLineShortest) ? kNormalLineShortest : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every normal is drawn the same length",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "double const across = drawnLength / length;",
+					"to": "double const across = kNormalLineLength / length;"
+				}
+			]
+		},
+		{
+			"name": "odd lengths are not counted",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (length < 0.95 || length > 1.05)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "past 90 is not counted",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\t\tlist.pastNinety++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a zero normal gets no cross",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "NormalLines_AddLine(list, kind, from, to);\n\t\t}\n\n\t\treturn;",
+					"to": "}\n\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "J does not reach the lines",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (*view == viewBeforeTheLines)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "J from the lines stays where it is",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\t\t*linesOn = 0;\n\t\t*view = viewOff;\n",
+					"to": "\t\t*linesOn = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "polygons that did not fit are not stopping short",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (notNoted > 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the log says less than it knows",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "list.found[kNormalLeansBadly], list.pastNinety, list.found[kNormalIsZero]",
+					"to": "list.found[kNormalLeansBadly], 0, list.found[kNormalIsZero]"
+				}
+			]
+		},
+		{
+			"name": "the log runs past the room it was given",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "int const written = snprintf(line, size,",
+					"to": "int const written = snprintf(line, 600,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the copy holds something else",
+			"changes": [
+				{
+					"file": "3dc/surface_normals.cpp",
+					"from": "*copyPlace++ = normal[0];",
+					"to": "*copyPlace++ = 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the copy has its own order",
+			"changes": [
+				{
+					"file": "3dc/surface_normals.cpp",
+					"from": "copyOfList + firstVertex * kNumbersPerVertex",
+					"to": "copyOfList"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the copy keeps last list's numbers",
+			"changes": [
+				{
+					"file": "3dc/surface_normals.cpp",
+					"from": "\t\t\tmemset(copyOfList, 0, verticesInList * kNumbersPerVertex * sizeof(float));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the copy is always kept",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SurfaceNormals_KeepACopy(NormalLinesOn != 0);",
+					"to": "SurfaceNormals_KeepACopy(true);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: lines read past the copy",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (polygon.firstVertex <= verticesInCopy && polygon.corners <= verticesInCopy - polygon.firstVertex)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the weapon is noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!NormalLinesOn || gunLayer || translucency != TRANSLUCENCY_OFF)",
+					"to": "if (!NormalLinesOn || translucency != TRANSLUCENCY_OFF)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: see-through polygons are noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!NormalLinesOn || gunLayer || translucency != TRANSLUCENCY_OFF)",
+					"to": "if (!NormalLinesOn || gunLayer)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the note has no limit",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (normalLinesPolygons.size() >= kNormalLinesMostPolygons || normalLinesCorners.size() / 3 + count > kNormalLinesMostCorners)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: polygons left out of the note are not counted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tnormalLinesNotNoted++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: notes outlive the list they describe",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tnormalLinesCorners.clear();\n\t\tnormalLinesPolygons.clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the route is not remembered",
+			"changes": [
+				{
+					"file": "3dc/surface_pictures.cpp",
+					"from": "\tlastDrawWasFromBuffer = fromBuffer;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the route is ignored",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "bool const bufferDrew = surfacePicturesAreFromThisFrame && SurfacePictures_LastDrawWasFromBuffer();",
+					"to": "bool const bufferDrew = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the index is not checked",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (first + 3 > indexCount)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the corner is not checked",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (place >= vertexCount)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the fixed buffer is kept without -dev",
+			"changes": [
+				{
+					"file": "3dc/static_level_card.cpp",
+					"from": "if (!DevMode)\n\t{\n\t\tstd::vector<StaticVertex>().swap(theLevel.vertices);",
+					"to": "if (false)\n\t{\n\t\tstd::vector<StaticVertex>().swap(theLevel.vertices);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: thermal vision is not noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tNoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, TRANSLUCENCY_OFF);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sky is not noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}\n\n\tNoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);\n",
+					"to": "FILTERING_BILINEAR_ON, TEXTURE_WRAP)) {\n\t\treturn;\n\t}\n\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: level polygons are not noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tWriteSurfaceNormals(inputPolyPtr, shapePolygon);\n\tNoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);\n\n\tfor (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)\n\t{\n\t\tRENDERVERTEX *vertices = &renderVerticesPtr[i];\n\n\t\tmainVertex[vb].x = (float)vertices->X;\n\t\tmainVertex[vb].y = (float)-vertices->Y;\n\t\tmainVertex[vb].z = (float)vertices->Z;\n\n\t\t// gamma testing",
+					"to": "\tWriteSurfaceNormals(inputPolyPtr, shapePolygon);\n\n\tfor (uint32_t i = 0; i < RenderPolygon.NumberOfVertices; i++)\n\t{\n\t\tRENDERVERTEX *vertices = &renderVerticesPtr[i];\n\n\t\tmainVertex[vb].x = (float)vertices->X;\n\t\tmainVertex[vb].y = (float)-vertices->Y;\n\t\tmainVertex[vb].z = (float)vertices->Z;\n\n\t\t// gamma testing"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: polygons with no texture are not noted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "// of the game's lighting for its shape are added from those pictures.\n\tWriteSurfaceNormals(inputPolyPtr, shapePolygon);\n\tNoteCornersForNormalLines(renderVerticesPtr, RenderPolygon.NumberOfVertices, RenderPolygon.TranslucencyMode);\n",
+					"to": "// of the game's lighting for its shape are added from those pictures.\n\tWriteSurfaceNormals(inputPolyPtr, shapePolygon);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls do not hide the lines",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
+					"to": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lines change the depth buffer",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);\n",
+					"to": "\tdevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);\n\tdevice->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);\n\tdevice->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lines are drawn in every drawing of a frame",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && NormalLinesOn)",
+					"to": "if (NormalLinesOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game starts with the lines on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "int NormalLinesOn = 0;",
+					"to": "int NormalLinesOn = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: J never reaches the lines",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!View_StepNormalLines(&ToyShadowsMode, kToyViewOff, kToyViewFinal, kViewNormals, &NormalLinesOn))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: J works without -dev",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "return DevMode && AvP.Network == I_No_Network && PlayerKeysCanAct();",
+					"to": "return AvP.Network == I_No_Network && PlayerKeysCanAct();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game leaves the lines on",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (NormalLinesOn)\n\t{\n\t\tNormalLinesOn = 0;\n",
+					"to": "\tif (false)\n\t{\n\t\tNormalLinesOn = 0;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the drawing lets a network game through",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!NormalLinesOn || ToyShadowsMode != kToyViewFinal || AvP.Network != I_No_Network)",
+					"to": "if (!NormalLinesOn || ToyShadowsMode != kToyViewFinal)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen calls it something else",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\"VIEW: %s\", NormalLinesOn ? kNormalLinesName : kToyViewNames[ToyShadowsMode]",
+					"to": "\"VIEW: %s\", kToyViewNames[ToyShadowsMode]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first frame says nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (firstFrameOfTheView || toyFrame % kFramesBetweenReports == 0 || (stoppedShort && !saidItStoppedShort))",
+					"to": "if (toyFrame % kFramesBetweenReports == 0 || (stoppedShort && !saidItStoppedShort))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: stopping short says nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (firstFrameOfTheView || toyFrame % kFramesBetweenReports == 0 || (stoppedShort && !saidItStoppedShort))",
+					"to": "if (firstFrameOfTheView || toyFrame % kFramesBetweenReports == 0)"
+				}
+			]
+		},
+		{
+			"name": "a polygon with nothing leaning is noted",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (pastNinety <= 0 && badly <= 0 && leaning <= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a shape is noted again for each polygon",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (shape.shapeNumber == shapeNumber && shape.behaviour == behaviour)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the same shape on another object is mixed in",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (shape.shapeNumber == shapeNumber && shape.behaviour == behaviour)",
+					"to": "if (shape.shapeNumber == shapeNumber)"
+				}
+			]
+		},
+		{
+			"name": "the list of shapes has no limit",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (shapes.count >= kNormalLinesShapesKept)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "shapes that do not fit are not counted",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "\t\tshapes.notKept++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "past 90 does not decide the order",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (a.pastNinety != b.pastNinety) { return a.pastNinety > b.pastNinety; }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "past 45 does not decide the order",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "if (a.badly != b.badly) { return a.badly > b.badly; }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name from a level goes in the log as it is",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "clean[place] = (c >= 32 && c < 127) ? (char)c : '?';",
+					"to": "clean[place] = (char)c;"
+				}
+			]
+		},
+		{
+			"name": "a long name runs on",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "for (; name && name[place] && place + 1 < size; place++)",
+					"to": "for (; name && name[place]; place++)"
+				}
+			]
+		},
+		{
+			"name": "a shape with no name stops the log",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "for (; name && name[place] && place + 1 < size; place++)",
+					"to": "for (; name[place] && place + 1 < size; place++)"
+				}
+			]
+		},
+		{
+			"name": "the log names every shape",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "for (int i = 0; i < shapes.count && i < most; i++)",
+					"to": "for (int i = 0; i < shapes.count; i++)"
+				}
+			]
+		},
+		{
+			"name": "the log runs past its room",
+			"changes": [
+				{
+					"file": "3dc/normal_lines.h",
+					"from": "int const added = snprintf(line + written, size - written,",
+					"to": "int const added = snprintf(line + written, 1000,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: polygons do not say what they were drawn as",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tToyShadows_WhatIsBeingDrawn(&polygon.shapeNumber, &polygon.behaviour, &polygon.hasPolygonList);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list of polygons is said to be there when it is not",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "*hasPolygonList = Global_ShapeHeaderPtr && Global_ShapeHeaderPtr->sh_surfacepolygons;",
+					"to": "*hasPolygonList = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not name them",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tNormalLines_DescribeShapes(shapes, GetLoadedShapeName, kShapesInTheLog, shapesLine, sizeof(shapesLine));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shape that cannot exist is looked up",
+			"changes": [
+				{
+					"file": "3dc/win95/chunk_load.cpp",
+					"from": "(position >= 0) ? ShapeInMSL::GetByMSL(position) : 0",
+					"to": "ShapeInMSL::GetByMSL(position)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lines read an older frame's normals",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (!surfaceNormalsWereWrittenThisFrame)\n\t{\n\t\treturn;\n\t}\n\n\tuint32_t verticesInCopy = 0;",
+					"to": "\tuint32_t verticesInCopy = 0;"
+				}
+			]
+		}
+	]
+}

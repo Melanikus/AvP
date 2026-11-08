@@ -1,3 +1,5 @@
+// Modified 2026-11-06 by Melanikus for the AvP port: reads the new guns' sounds from their own small file, and gives the shotgun its own firing sound.
+//   and the revolver's shot makes its sound
 /* Patrick 5/6/97 -------------------------------------------------------------
   AvP Project sound source
   ----------------------------------------------------------------------------*/
@@ -26,6 +28,10 @@
 #include "dxlog.h"
 #include "FileStream.h"
 #include "..\3dc\FileStream.h"
+#include "weapon_sound_bank.h"
+
+#include <string>
+#include <vector>
 
 int ExtractWavFile(int soundNum, FileStream &fStream);
 
@@ -259,11 +265,32 @@ void DoPlayerSounds(void)
 		break;
 	}
 
+	case WEAPON_MYSTERYGUN:
+	{
+		// The M79
+		if (weaponPtr->CurrentState == WEAPONSTATE_FIRING_PRIMARY)
+		{
+			Sound_Play(SID_ROCKFIRE, "h");
+			playerNoise = 1;
+		}
+		break;
+	}
+
 	case WEAPON_AUTOSHOTGUN:
 	{
 		if (weaponPtr->CurrentState == WEAPONSTATE_FIRING_PRIMARY)
 		{
-			Sound_Play(SID_SHOTGUN, "h");
+			Sound_Play(SID_WEAPON_SHOTGUN_FIRE, "h");
+			playerNoise = 1;
+		}
+		break;
+	}
+
+	case WEAPON_BEAMCANNON: // the revolver
+	{
+		if (weaponPtr->CurrentState == WEAPONSTATE_FIRING_PRIMARY)
+		{
+			Sound_Play(SID_WEAPON_REVOLVER_FIRE, "h");
 			playerNoise = 1;
 		}
 		break;
@@ -574,6 +601,95 @@ int FindAndLoadWavFile(int soundNum, const char* wavFileName)
   Sound data loaders 
   ----------------------------------------------------------------------------*/
 
+// The new guns' sounds. They come from a small file of their own, which also holds the mod's versions of some of the
+// game's sounds. Those stay unused: only the sounds named here are taken, so everything the game already had still
+// sounds the way it did.
+struct NewWeaponSound
+{
+	const char *wavName;
+	SOUNDINDEX number;
+};
+
+static const NewWeaponSound kNewWeaponSounds[] =
+{
+	{ "Revolver_Fire.wav", SID_WEAPON_REVOLVER_FIRE },
+	{ "headshot.wav", SID_WEAPON_HEADSHOT },
+	{ "AutoShotgun4.wav", SID_WEAPON_SHOTGUN_FIRE },
+	{ "SniperRifle_Fire.wav", SID_WEAPON_SNIPER_FIRE },
+};
+
+// The real file is under a megabyte. Anything far bigger isn't that file, so it isn't read into memory at all.
+static const uint32_t kLargestNewWeaponSoundFile = 16 * 1024 * 1024;
+
+// Without this file the game runs as normal, and the new guns are silent. A damaged file is the same: it's checked
+// from end to end first, and if any part of it is wrong, none of it is used.
+static void LoadNewWeaponSounds()
+{
+	const char *fileName = "./MelPyth/fastfile/common.ffl";
+
+	FileStream fStream;
+	if (!fStream.Open(fileName, FileStream::FileRead, FileStream::SkipFastFileCheck))
+	{
+		return;
+	}
+
+	const uint32_t fileSize = fStream.GetFileSize();
+	if (fileSize > kLargestNewWeaponSoundFile)
+	{
+		LogErrorString("The new weapon sounds file is far too big, so it wasn't used");
+		return;
+	}
+
+	std::vector<uint8_t> bytes(fileSize);
+	if (fileSize == 0 || fStream.ReadBytes(bytes.data(), fileSize) != fileSize)
+	{
+		LogErrorString("The new weapon sounds file couldn't be read, so it wasn't used");
+		return;
+	}
+
+	const SoundBankVerdict verdict = SoundBank_CheckWholeFile(bytes.data(), bytes.size(), NULL);
+	if (verdict != SOUND_BANK_REACHED_THE_END_MARK)
+	{
+		LogErrorString("The new weapon sounds file is damaged, so it wasn't used. Reason number " + std::to_string((int)verdict));
+		return;
+	}
+
+	size_t at = 0;
+	SoundBankEntry entry;
+	while (SoundBank_ReadEntry(bytes.data(), bytes.size(), at, &entry) == SOUND_BANK_ENTRY_IS_GOOD)
+	{
+		const std::string name(reinterpret_cast<const char *>(bytes.data()) + entry.nameAt, entry.nameLength);
+
+		for (const NewWeaponSound &wanted : kNewWeaponSounds)
+		{
+			if (_stricmp(name.c_str(), wanted.wavName) != 0)
+			{
+				continue;
+			}
+
+			// A number already holding a sound is left alone
+			if (GameSounds[wanted.number].loaded)
+			{
+				continue;
+			}
+
+			fStream.Seek(entry.nameAt, FileStream::SeekStart);
+			if (!ExtractWavFile(wanted.number, fStream))
+			{
+				continue;
+			}
+
+			GameSounds[wanted.number].loaded = 1;
+			GameSounds[wanted.number].activeInstances = 0;
+			GameSounds[wanted.number].volume = VOLUME_DEFAULT;
+			GameSounds[wanted.number].pitch = entry.pitch;
+			InitialiseBaseFrequency(wanted.number);
+		}
+
+		at = entry.nextEntryAt;
+	}
+}
+
 void LoadSounds(char *soundDirectory)
 {
 	int soundIndex;
@@ -642,4 +758,7 @@ void LoadSounds(char *soundDirectory)
 		soundIndex = fStream.GetByte();
 		pitch      = fStream.GetByte();
 	}
+
+	// After the game's own sounds, so that the game's own always win
+	LoadNewWeaponSounds();
 }

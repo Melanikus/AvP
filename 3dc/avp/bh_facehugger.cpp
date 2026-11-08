@@ -1,3 +1,12 @@
+// AvP port by Barry Duncan.
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
+//   a saved curve of no length is worked out again, because the game divides by its length
+//   a value a save has refused is counted for the log
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a network game that plays the same as single player has facehuggers, on the host
+//   when this dies on the host, its death target reaches the other machines
+//   in a network game a facehugger goes after the nearest player on any machine, and can jump on someone on another machine
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   a facehugger whose model isn't loaded isn't made, and the log says which model (MODEL-NULL-1; found through
 //   Bobblen's avp-forever, commit 207704e)
@@ -12,9 +21,13 @@
 #include "gamedef.h"
 #include "game_statistics.h"
 #include "dynblock.h"
+#include "save_checks.h"
 #include "dynamics.h"
 #include "compiled_shapes.h"
 #include "bh_types.h"
+#include "bh_ais.h"
+#include "pldnet.h"
+#include "pldghost.h"
 #include "bh_predator.h"
 #include "bh_facehugger.h"
 #include "bh_debris.h"
@@ -63,6 +76,20 @@ extern SECTION *GetHierarchyFromLibrary(const char *rif_name);
 /* -------------------------------------------------------------------
    Initilaiser, damage, and visibility functions + behaviour shell
   --------------------------------------------------------------------*/
+extern NetID AvPNetID;
+
+// Who it's after, and where they are. See below.
+static STRATEGYBLOCK *Hugger_TargetOf(STRATEGYBLOCK *sbPtr);
+static int Hugger_ChooseTarget(STRATEGYBLOCK *sbPtr);
+
+// The display block's place for the player on this machine, as it has always used, and the dynamics block's for a ghost, which may have no display block
+static VECTORCH Hugger_PlaceOfTarget(STRATEGYBLOCK *sbPtr)
+{
+	STRATEGYBLOCK *const target = Hugger_TargetOf(sbPtr);
+
+	return target == Player->ObStrategyBlock ? Player->ObWorld : target->DynPtr->Position;
+}
+
 void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 {
 	TOOLS_DATA_FACEHUGGER *toolsData;
@@ -72,8 +99,8 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	LOCALASSERT(sbPtr);
 	toolsData = (TOOLS_DATA_FACEHUGGER *)bhdata;
 
-	/* check we're not in a net game */
-	if(AvP.Network != I_No_Network)
+	/* A network game has no facehuggers, unless it plays the same as single player */
+	if(!SameAsSinglePlayer())
 	{
 		RemoveBehaviourStrategy(sbPtr);
 		return;
@@ -82,7 +109,7 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	/* make the assumption that the loader has initialised the strategy block sensibly...
 	so just set the shapeIndex from the tools data & copy the name id*/
 	sbPtr->shapeIndex = toolsData->shapeIndex;
-	for(i=0;i<SB_NAME_LENGTH;i++) sbPtr->SBname[i] = toolsData->nameID[i];
+	NameFromTheLevel(sbPtr, toolsData->nameID);
 
 	sbPtr->SBdptr=NULL;
 	/* create, initialise and attach a dynamics block */
@@ -124,6 +151,9 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		SECTION *root_section;
 		FACEHUGGER_STATUS_BLOCK *facehuggerStatus = (FACEHUGGER_STATUS_BLOCK *)sbPtr->SBdataptr;
 
+		// New memory holds whatever was there before
+		memset(facehuggerStatus, 0, sizeof(FACEHUGGER_STATUS_BLOCK));
+
 		NPC_InitMovementData(&(facehuggerStatus->moveData));
      	facehuggerStatus->health = FACEHUGGER_STARTING_HEALTH;
    		sbPtr->integrity = facehuggerStatus->health;
@@ -133,6 +163,10 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 		facehuggerStatus->CurveLength = 0;
 		facehuggerStatus->CurveTimeOut = 0;
 		facehuggerStatus->jumping = 0;
+
+		// Nobody yet. New memory holds whatever was there before, and this pointer gets followed.
+		facehuggerStatus->Target = NULL;
+		memset(facehuggerStatus->Target_SBname, 0, sizeof(facehuggerStatus->Target_SBname));
 
 		// Nothing of its model is made yet, and it makes no sound yet, so if it's taken out below, there's nothing to
 		// free or stop. (Its sounds are set again further down, the same way.)
@@ -366,7 +400,7 @@ void MakeFacehuggerNear(STRATEGYBLOCK *sbPtr)
 	dPtr->HModelControlBlock=&facehuggerStatusPointer->HModelController;
    	if ((facehuggerStatusPointer->nearBehaviourState!=FHNS_Floating)
    		&&(facehuggerStatusPointer->nearBehaviourState!=FHNS_Dying)) {
-   		if(HuggerShouldAttackPlayer())
+   		if(Hugger_ChooseTarget(sbPtr))
 		{
 			NPC_InitMovementData(&(facehuggerStatusPointer->moveData));
    			facehuggerStatusPointer->nearBehaviourState = FHNS_Approach;
@@ -428,6 +462,9 @@ void FacehuggerIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multi
 
 static void KillFaceHugger(STRATEGYBLOCK *sbPtr,DAMAGE_PROFILE *damage)
 {
+	/* The other machines' ghost of this melts as this does */
+	AddNetMsg_NpcKilled(sbPtr, 0, FACEHUGGER_DYINGTIME, 0);
+
 	FACEHUGGER_STATUS_BLOCK *fhugStatusPointer;
 	DYNAMICSBLOCK *dynPtr;
 
@@ -463,6 +500,7 @@ static void KillFaceHugger(STRATEGYBLOCK *sbPtr,DAMAGE_PROFILE *damage)
 	if(fhugStatusPointer->death_target_sbptr)
 	{
 		RequestState(fhugStatusPointer->death_target_sbptr,fhugStatusPointer->death_target_request, 0);
+		LevelEvents_Happened(NpcNameInTheLevel(sbPtr));
 	}
 
 	/* More restrained death. */
@@ -542,9 +580,9 @@ static void Execute_FHNS_Approach(STRATEGYBLOCK *sbPtr)
 	{
 		extern DISPLAYBLOCK *Player;
 		if (sbPtr->SBDamageBlock.IsOnFire==0) {
-			targetPos=Player->ObStrategyBlock->DynPtr->Position;
+			targetPos=Hugger_TargetOf(sbPtr)->DynPtr->Position;
 		} else {
-			targetPos=Player->ObStrategyBlock->DynPtr->Position;
+			targetPos=Hugger_TargetOf(sbPtr)->DynPtr->Position;
 
 			targetPos.vx+=((FastRandom()&8191)-4096);
 			targetPos.vy+=((FastRandom()&8191)-4096);
@@ -634,7 +672,7 @@ static void Execute_FHNS_Approach(STRATEGYBLOCK *sbPtr)
 	}
 
 	/* is player visible?: if not, go to wait */
-	if(!HuggerShouldAttackPlayer())
+	if(!Hugger_ChooseTarget(sbPtr))
 	{
 		fhugStatusPointer->nearBehaviourState = FHNS_Wait;
 		fhugStatusPointer->stateTimer = 0;
@@ -644,7 +682,7 @@ static void Execute_FHNS_Approach(STRATEGYBLOCK *sbPtr)
 	#if 1
 	/* should we jump at the player? */
 	if (sbPtr->SBDamageBlock.IsOnFire==0) {
-		int distanceToPlayer = VectorDistance(&(dynPtr->Position),&(Player->ObStrategyBlock->DynPtr->Position));
+		int distanceToPlayer = VectorDistance(&(dynPtr->Position),&(Hugger_TargetOf(sbPtr)->DynPtr->Position));
 		if((distanceToPlayer<=FACEHUGGER_JUMPDISTANCE)&&(dynPtr->IsInContactWithFloor))
 		{
 			#if 0
@@ -786,6 +824,18 @@ static void Execute_FHNS_Attack(STRATEGYBLOCK *sbPtr)
 
 	textprint("face hugger attack \n");
 
+	/* In a network game the player it's on can leave or die, and a player on another machine has no one but this to get it off them */
+	if (AvP.Network != I_No_Network)
+	{
+		STRATEGYBLOCK *const victim = facehuggerStatusPointer->Target;
+
+		if (!victim || !NAME_ISEQUAL(victim->SBname, facehuggerStatusPointer->Target_SBname) || NPC_IsDead(victim))
+		{
+			KillFaceHugger(sbPtr, NULL);
+			return;
+		}
+	}
+
 	/* Make not vis */
 
 	sbPtr->SBdptr->ObFlags|=ObFlag_NotVis;
@@ -796,7 +846,7 @@ static void Execute_FHNS_Attack(STRATEGYBLOCK *sbPtr)
 	if(facehuggerStatusPointer->stateTimer <= 0)
 	{
 		facehuggerStatusPointer->stateTimer = FACEHUGGER_NEARATTACKTIME;
-		CauseDamageToObject(Player->ObStrategyBlock, &TemplateAmmo[AMMO_FACEHUGGER].MaxDamage[AvP.Difficulty], ONE_FIXED,NULL);
+		CauseDamageToObject(Hugger_TargetOf(sbPtr), &TemplateAmmo[AMMO_FACEHUGGER].MaxDamage[AvP.Difficulty], ONE_FIXED,NULL);
 		/* FRI? */
 	}
 
@@ -810,7 +860,7 @@ static void Execute_FHNS_Wait(STRATEGYBLOCK *sbPtr)
 	facehuggerStatusPointer = (FACEHUGGER_STATUS_BLOCK *)(sbPtr->SBdataptr);
 	LOCALASSERT(facehuggerStatusPointer);
 
-	if(HuggerShouldAttackPlayer())
+	if(Hugger_ChooseTarget(sbPtr))
 	{
 		NPC_InitMovementData(&(facehuggerStatusPointer->moveData));
    		facehuggerStatusPointer->nearBehaviourState = FHNS_Approach;
@@ -868,7 +918,7 @@ static void Execute_FHNS_Avoidance(STRATEGYBLOCK *sbPtr)
 
 	if(terminateState)
 	{
-		if(HuggerShouldAttackPlayer())
+		if(Hugger_ChooseTarget(sbPtr))
 		{
 			/* switch to approach */
 			NPC_InitMovementData(&(fhugStatusPointer->moveData));
@@ -899,6 +949,107 @@ static void SetHuggerAnimationSequence(STRATEGYBLOCK *sbPtr, HUGGER_SUBSEQUENCES
 
 	if (seq==HSS_Jump) fhugStatus->HModelController.LoopAfterTweening=0;
 
+}
+
+// The player this one is after, as long as that block is still theirs. In single player, or before it has chosen, that's the player on this machine.
+static STRATEGYBLOCK *Hugger_TargetOf(STRATEGYBLOCK *sbPtr)
+{
+	FACEHUGGER_STATUS_BLOCK *const status = (FACEHUGGER_STATUS_BLOCK *)(sbPtr->SBdataptr);
+
+	if (status->Target && NAME_ISEQUAL(status->Target->SBname, status->Target_SBname))
+	{
+		return status->Target;
+	}
+
+	return Player->ObStrategyBlock;
+}
+
+// Is another facehugger already on this player's face?
+static bool Hugger_SomeoneIsOnThem(STRATEGYBLOCK const *player)
+{
+	for (int i = 0; i < NumActiveStBlocks; i++)
+	{
+		STRATEGYBLOCK const *const other = ActiveStBlockList[i];
+
+		if (other->I_SBtype == I_BehaviourFaceHugger && other->SBdataptr)
+		{
+			FACEHUGGER_STATUS_BLOCK const *const status = (FACEHUGGER_STATUS_BLOCK const *)other->SBdataptr;
+
+			if (status->nearBehaviourState == FHNS_Attack && status->Target == player)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static int HuggerShouldAttackPlayer(void);
+
+// Chooses who to go after, and says whether there's anybody. In a network game that's the nearest player who's alive, isn't an Alien, and hasn't one on their face already.
+static int Hugger_ChooseTarget(STRATEGYBLOCK *sbPtr)
+{
+	FACEHUGGER_STATUS_BLOCK *const status = (FACEHUGGER_STATUS_BLOCK *)(sbPtr->SBdataptr);
+	STRATEGYBLOCK *chosen = NULL;
+
+	if (HuggerShouldAttackPlayer() && (AvP.Network == I_No_Network || !NPC_IsDead(Player->ObStrategyBlock)))
+	{
+		chosen = Player->ObStrategyBlock;
+	}
+
+	if (AvP.Network != I_No_Network)
+	{
+		int nearest = chosen ? VectorDistance(&sbPtr->DynPtr->Position, &chosen->DynPtr->Position) : 0;
+
+		for (int i = 0; i < NumActiveStBlocks; i++)
+		{
+			STRATEGYBLOCK *const other = ActiveStBlockList[i];
+
+			if (other->I_SBtype != I_BehaviourNetGhost || !other->DynPtr || !NPC_IsAPlayer(other) || NPC_IsDead(other)
+				|| ((NETGHOSTDATABLOCK *)other->SBdataptr)->type == I_BehaviourAlienPlayer || Hugger_SomeoneIsOnThem(other))
+			{
+				continue;
+			}
+
+			int const distance = VectorDistance(&sbPtr->DynPtr->Position, &other->DynPtr->Position);
+
+			if (!chosen || distance < nearest)
+			{
+				chosen = other;
+				nearest = distance;
+			}
+		}
+	}
+
+	status->Target = chosen;
+
+	if (chosen)
+	{
+		COPY_NAME(status->Target_SBname, chosen->SBname);
+	}
+
+	return chosen != NULL;
+}
+
+int Hugger_FaceVictimForTheNetwork(STRATEGYBLOCK *sbPtr)
+{
+	FACEHUGGER_STATUS_BLOCK const *const status = (FACEHUGGER_STATUS_BLOCK const *)(sbPtr->SBdataptr);
+
+	if (status->nearBehaviourState != FHNS_Attack)
+	{
+		return 0;
+	}
+
+	STRATEGYBLOCK *const target = Hugger_TargetOf(sbPtr);
+	int const place = target->I_SBtype == I_BehaviourNetGhost ? PlayerIdInPlayerList(((NETGHOSTDATABLOCK *)target->SBdataptr)->playerId) : PlayerIdInPlayerList(AvPNetID);
+
+	return (place >= 0 && place < NET_MAXPLAYERS) ? place + 1 : 0;
+}
+
+int Hugger_IsDyingForTheNetwork(STRATEGYBLOCK *sbPtr)
+{
+	return ((FACEHUGGER_STATUS_BLOCK const *)(sbPtr->SBdataptr))->nearBehaviourState == FHNS_Dying;
 }
 
 static int HuggerShouldAttackPlayer(void)
@@ -960,7 +1111,14 @@ static void FHugApplyPounceImpulse(STRATEGYBLOCK *sbPtr) {
 	LOCALASSERT(fhugStatusPointer);
 	LOCALASSERT(dynPtr);
 
-	GetTargetingPointOfObject(Player,&targetPoint);
+	if (Hugger_TargetOf(sbPtr) == Player->ObStrategyBlock)
+	{
+		GetTargetingPointOfObject(Player,&targetPoint);
+	}
+	else
+	{
+		GetTargetingPointOfObject_Far(Hugger_TargetOf(sbPtr),&targetPoint);
+	}
 
 	dist = VectorDistance(&(dynPtr->Position),&targetPoint);
 
@@ -1018,9 +1176,9 @@ static void Execute_FHNS_Jumping(STRATEGYBLOCK *sbPtr)
 			VECTORCH orientationDirn;
 			int i;
 
-			orientationDirn.vx = Player->ObWorld.vx - dynPtr->Position.vx;
+			orientationDirn.vx = Hugger_PlaceOfTarget(sbPtr).vx - dynPtr->Position.vx;
 			orientationDirn.vy = 0;
-			orientationDirn.vz = Player->ObWorld.vz - dynPtr->Position.vz;
+			orientationDirn.vz = Hugger_PlaceOfTarget(sbPtr).vz - dynPtr->Position.vz;
 			i = NPCOrientateToVector(sbPtr, &orientationDirn,NPC_TURNRATE<<2,NULL);
 
 			if (i==0) {
@@ -1054,10 +1212,13 @@ static void Execute_FHNS_Jumping(STRATEGYBLOCK *sbPtr)
 			fhugStatusPointer->CurveTimeOut = 0;
 
 			if (hitSbPtr) {
-				if ((hitSbPtr->SBdptr==Player)&&(sbPtr->SBDamageBlock.IsOnFire==0)) {
+				if ((hitSbPtr==Hugger_TargetOf(sbPtr))&&(sbPtr->SBDamageBlock.IsOnFire==0)) {
 					/* Got him, My Precious, we've Got Him! */
 
-					Sound_Play(SID_ED_FACEHUGGERSLAP,"h");
+					/* Someone on another machine hears this on their own machine */
+					if (hitSbPtr==Player->ObStrategyBlock) {
+						Sound_Play(SID_ED_FACEHUGGERSLAP,"h");
+					}
 
 					/* Test for attach, or merely bite? */
 					fhugStatusPointer->nearBehaviourState = FHNS_Attack;
@@ -1067,8 +1228,8 @@ static void Execute_FHNS_Jumping(STRATEGYBLOCK *sbPtr)
 					dynPtr->GravityOn = 0;							/* turn off gravity */
 					sbPtr->maintainVisibility = 0;					/* turn off visibility support- be carefull! */
 
-					/* Attach to player! */
-					{
+					/* Attach to player! A player on another machine finds out from the host's next message about this facehugger: see NpcGhosts_ApplyState */
+					if (hitSbPtr==Player->ObStrategyBlock) {
 						PLAYER_STATUS *playerStatusPointer= (PLAYER_STATUS *) (Player->ObStrategyBlock->SBdataptr);
 
 						playerStatusPointer->MyFaceHugger=sbPtr;
@@ -1168,9 +1329,9 @@ static void Execute_FHNS_AboutToJump(STRATEGYBLOCK *sbPtr)
 		VECTORCH orientationDirn;
 		int i;
 
-		orientationDirn.vx = Player->ObWorld.vx - dynPtr->Position.vx;
+		orientationDirn.vx = Hugger_PlaceOfTarget(sbPtr).vx - dynPtr->Position.vx;
 		orientationDirn.vy = 0;
-		orientationDirn.vz = Player->ObWorld.vz - dynPtr->Position.vz;
+		orientationDirn.vz = Hugger_PlaceOfTarget(sbPtr).vz - dynPtr->Position.vz;
 		i = NPCOrientateToVector(sbPtr, &orientationDirn,NPC_TURNRATE,NULL);
 
 		if (i==0) {
@@ -1178,7 +1339,7 @@ static void Execute_FHNS_AboutToJump(STRATEGYBLOCK *sbPtr)
 			return;
 		} else {
 			/* Okay, pounce! */
-			int distanceToPlayer = VectorDistance(&(dynPtr->Position),&(Player->ObStrategyBlock->DynPtr->Position));
+			int distanceToPlayer = VectorDistance(&(dynPtr->Position),&(Hugger_TargetOf(sbPtr)->DynPtr->Position));
 			if((distanceToPlayer<=FACEHUGGER_JUMPDISTANCE)&&(dynPtr->IsInContactWithFloor)
 				&&(sbPtr->SBDamageBlock.IsOnFire==0)) {
 				JumpAtPlayer(sbPtr);
@@ -1254,10 +1415,16 @@ void LoadStrategy_FaceHugger(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPYELEMENT_LOAD(CurveRadius)
 	COPYELEMENT_LOAD(CurveLength)
 	COPYELEMENT_LOAD(CurveTimeOut)
+	if(huggerStatusPointer->CurveLength <= 0)
+	{
+		//the length gets divided by, so this makes the facehugger work out a new curve
+		Save_NoteRefused("a curve with no length");
+		huggerStatusPointer->CurveTimeOut = 0;
+	}
 	COPYELEMENT_LOAD(jumping)
 
 	//copy strategy block stuff
-	*sbPtr->DynPtr = block->dynamics;
+	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;
 	sbPtr->SBDamageBlock = block->SBDamageBlock;
 
