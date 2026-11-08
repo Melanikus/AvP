@@ -130,16 +130,33 @@ static void TestWandering(const std::string &source)
 	std::string const wander = Between(source, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "\n}\n");
 	Check(!wander.empty(), "SOURCE: the wandering state is there to read");
 
-	char const *const call = "AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))";
-	Check(Has(wander, call), "SOURCE: a wandering alien asks for a way to its wander point, with no target, since it has let its target go");
+	// An alien that knows where its target is goes back to Hunt from here: the 1999 code sends it back and forth, one frame each. It gives
+	// its way that target, as Hunt does, so both frames head the same way (Fifth's reading of Sixth's 5-alien film, 2026-11-08). Given only
+	// the wander point in this frame and the target in the next, the way changed its mind every frame. Any other wandering alien gives none.
+	char const *const call = "AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))";
+	Check(Has(wander, call), "SOURCE: a wandering alien asks for a way to its wander point, and gives its target only when it knows where that is");
+
+	// The target is kept in the branch that sends it back to Hunt, and only there, before the state lets the target go
+	std::string const aware = Between(wander, "} else if (AlienIsAwareOfTarget(sbPtr)) {", "/* Try to reaquire target? */");
+	char const *const keep = "\t\thuntedTarget = alienStatusPointer->Target;\n";
+	Check(Has(wander, "\tSTRATEGYBLOCK *huntedTarget = 0;\n") && Has(aware, "alienStatusPointer->BehaviourState = ABS_Hunt;") && Has(aware, keep),
+		"SOURCE: the target is kept only by an alien going back to Hunt, before it's let go, and it's none otherwise");
+	int sets = 0;
+
+	for (std::string::size_type at = wander.find("huntedTarget ="); at != std::string::npos; at = wander.find("huntedTarget =", at + 1))
+	{
+		sets++;
+	}
+
+	Check(sets == 2, "SOURCE: and nothing else sets it: there's only its start, at none, and that");
 
 	Check(Has(wander, "if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)\n"
 		"\t\t&& (alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n"
 		"\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n"
-		"\t\t&& AlienWays_Steer(sbPtr, 0"),
+		"\t\t&& AlienWays_Steer(sbPtr, huntedTarget"),
 		"SOURCE: only a standard alien that can climb asks, only when it has a wander point, and only while it's further from it than it attacks from");
 
-	Check(Has(wander, (std::string("AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), ") + kTheTwoBranches).c_str()),
+	Check(Has(wander, (std::string("AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), ") + kTheTwoBranches).c_str()),
 		"SOURCE: on a way it lets go of gravity and goes the way's direction; without one it's steered as it always was");
 
 	Check(!Has(WithoutSpaces(After(wander, call)), "UseStandardGravity=1"), "SOURCE: nothing after the call puts gravity back on in the same frame, however it's written");
