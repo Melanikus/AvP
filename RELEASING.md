@@ -40,6 +40,39 @@ The checks run on GitHub's machines, and their own machine may have a copy of a 
 itself on a clean Windows, so a person has to. `RELEASE-BLOCKERS.md` lists that until someone has done it the first time. Do it again for
 each release, with the zip from the draft, before you press Publish.
 
+## When Microsoft fixes its C runtime
+
+The game has Microsoft's C and C++ runtime built in, so a player needs no Visual C++ install: see `vcpkg-overlay-triplets/x86-windows-static.cmake`.
+OpenAL Soft's DLL has it built in too. The other side of that is that Windows Update can't fix it for us. When Microsoft announces a security fix in
+the Visual C++ runtime (MSVC's C runtime, C++ standard library or vcruntime), the copy inside our release still has the hole until we build again.
+So:
+
+1. Update GitHub's runner image, or the pinned Visual Studio version, to one with the fixed runtime.
+2. Make a new release from the same commit, or a newer one, and publish it.
+3. Say in the release notes which Microsoft fix it carries.
+
+Until that new release is out, the old one counts as having an open hole, and `RELEASE-BLOCKERS.md` says so (AvP Tao #1).
+
+## Building on a machine without vcpkg
+
+The game's libraries are normally built by vcpkg from our pinned ports, as part of the build. A machine where vcpkg can't download sources
+can't do that, so it takes the libraries GitHub built, once, and checks them before using them:
+
+1. The owner starts **Build** by hand (Actions, "Run workflow", on avpx_main). It builds only scanned code on avpx_main, and it keeps the
+   libraries it built as the artifact **static-libraries**, for a week. The run's log lists a SHA-256 for every file ("List the libraries'
+   hashes"), the hash of that list ("The list itself: ..."), and the artifact's own hash ("Say the libraries' artifact hash"). It also records
+   how the list was made, so that GitHub can vouch for it later ("Record how the libraries were built").
+2. Whoever is allowed to go online downloads it: `gh run download <run number> --repo Melanikus/AvP -n static-libraries -D
+   <folder>\vcpkg_installed\x86-windows-static`.
+3. Before anything uses it, check it. If any of these fails, delete it all and don't use it.
+   - `gh attestation verify <folder>\vcpkg_installed\x86-windows-static\SHA256SUMS.txt --repo Melanikus/AvP` must say the list was made by
+     this repository's Build workflow.
+   - The list's own hash must be the run log's "The list itself".
+   - Every file must have the hash the list gives it, with no file missing and none extra.
+4. Build against it with `/p:VcpkgManifestInstall=false /p:VcpkgApplocalDeps=false "/p:VcpkgInstalledDir=<folder>\vcpkg_installed\\"`.
+5. It's never committed. Fetch it again when `vcpkg.json`'s baseline, an overlay port or the triplet changes, because then it's no longer
+   what the game is built against.
+
 ## How someone checks a copy they downloaded
 
 - `SHA256SUMS` beside the zip has the zip's hash, and `SHA256SUMS.txt` inside the zip has the hash of every file in it.

@@ -11,6 +11,10 @@
 # new programs that appear there. It gives back a non-zero result if any row wasn't noticed, or couldn't be run.
 #
 # A row that can't run says why and what to do. When its text has moved, node tests/takeouts/find-moved-row.js <test> <row> finds where it went (added 2026-11-07).
+#
+# Modified 2026-11-08 by Melanikus for the AvP port:
+#   the test's first build, with nothing changed, is refused if it asks Windows for the C runtime as a DLL: every test carries its own (/MT),
+#   the same as the game (STATIC-1)
 
 param(
     [Parameter(Mandatory = $true)][string]$Test,
@@ -103,6 +107,25 @@ function Invoke-Tool([string]$program, [string]$arguments, [string]$folder, [str
     return $process.ExitCode
 }
 
+# STATIC-1: the tests are built with the C runtime inside them (/MT), the same as the game, so a test needs no Visual C++ install to run,
+# and can't pass only because the machine it runs on happens to have one. This asks Visual Studio's dumpbin which DLLs a program asks
+# Windows for, and gives back those that are the C runtime's: vcruntime, msvcp, ucrtbase, and the api-ms-win-crt- names Windows uses for
+# ucrtbase. An empty answer means the program carries its own. The same function is in tests/build.ps1 and tests/takeouts/sanitize.ps1.
+function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysTo)
+{
+    if ((Invoke-Tool 'dumpbin.exe' "/nologo /dependents `"$program`"" $folder $saysTo) -ne 0)
+    {
+        # What dumpbin said goes into the message, because the folder can be emptied before anyone looks, by the next build or by an
+        # antivirus program holding the new program
+        $said = @(Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ' / '
+        throw "dumpbin couldn't read $program`: $said"
+    }
+
+    # dumpbin writes each DLL's name on a line of its own, under "Image has the following dependencies", and the same for any it loads later
+    return @(Get-Content -LiteralPath $saysTo | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|concrt|vccorlib)[0-9a-z_]*\.dll$' -or $_ -match '^api-ms-win-crt-[0-9a-z-]*\.dll$' })
+}
+
 function Build-And-Run {
     if (Test-Path $out) { Remove-Item -Recurse -Force $out }
     New-Item -ItemType Directory -Force $out | Out-Null
@@ -130,6 +153,10 @@ function Build-And-Run {
 $first = Build-And-Run
 if (-not $first.Built -or $first.Exit -ne 0) { throw "With nothing changed the test should pass, and it doesn't: $($first.Exit) $($first.Words)" }
 Write-Host "With nothing changed, $Test passes $($first.Ok) checks"
+
+# STATIC-1: every row starts from this build, so it has to have the C runtime inside it, the same as in tests/build.ps1
+$runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $tree (Join-Path $out 'imports.txt'))
+if ($runtime.Count -gt 0) { throw "With nothing changed, $Test asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)" }
 
 $rows = @($list.rows)
 $last = if ($To -ge 0) { [Math]::Min($To, $rows.Count - 1) } else { $rows.Count - 1 }
