@@ -3,12 +3,14 @@
 // WHAT IT TESTS
 //
 // - The header on its own: the user's numbers, how far a point is from a box, how near a player has to come (the box's own distance, but
-//   no more than 4 m and no less than 1.5 m), the list of one box's sleepers and its size, which sleeper a player is near, and every word
-//   of the log's lines.
+//   no more than 4 m and no less than 1.5 m), the list of one box's sleepers and its size, which sleeper a player is near (asking the
+//   room test only of one near enough), the rule for a box's other jobs with the boxes of Third's table (the locker, a shut door, a
+//   self-destruct), and every word of the log's lines.
 // - By reading the game's files: only a machine that runs the NPCs looks; a sleeper is one of the four kinds, still asleep, and not gone;
-//   one switch between a box and its NPC at most; a walk-in box is set off by a player in it or near one of its sleepers, for both kinds
-//   of switch; the line is written only when the box really is set off, and at most so many a level; and the count starts again when a
-//   level's blocks are all destroyed.
+//   one switch between a box and its NPC at most; a player near a sleeper counts only in its room or in view of it; each of a box's targets
+//   is sorted into its job, with a door or track asked on near the sleeper the only one that opens the way; the whole box is set off only
+//   then, and otherwise the sleeper alone; the line is written only when the box really is set off, and at most so many a level; and the
+//   count starts again when a level's blocks are all destroyed.
 //
 // HOW IT RUNS
 //
@@ -134,28 +136,45 @@ static void TestTheDistances()
 	Check(NearWake_Reach(4500) == 4000.0 && NearWake_Reach(107000) == 4000.0, "and one whose box is farther than 4 m, within 4 m");
 }
 
+// A stand-in for the game's same-room-or-in-view test: every sleeper is in view
+static bool Anywhere(NearWakeSleeper const &)
+{
+	return true;
+}
+
 static void TestTheSleepers()
 {
 	puts("One box's sleepers:");
 
 	NearWakeBox const box = TheBox();
 	NearWakeSleepers sleepers;
+	int hugger = 0, alien = 0;
 
 	Check(sleepers.count == 0 && !sleepers.full, "a new list is empty");
-	Check(NearWakeSleepers_Add(&sleepers, NearWake_Point(9500, 1000, 1000), kNearWakeFacehugger, box), "a sleeper goes in");
+	Check(NearWakeSleepers_Add(&sleepers, NearWake_Point(9500, 1000, 1000), kNearWakeFacehugger, box, &hugger, &alien), "a sleeper goes in");
 	Check(Near(sleepers.list[0].boxDistance, 7500) && sleepers.list[0].reach == 4000.0 && sleepers.list[0].kind == kNearWakeFacehugger,
 		"with how far its box is and how near a player has to come");
+	Check(sleepers.list[0].who == &hugger && sleepers.list[0].room == &alien, "and the game's own block and module for it, kept as they were given");
 
 	NearWakeSleepers_Add(&sleepers, NearWake_Point(1000, 1000, 1000), kNearWakeAlien, box);
 	double howFar = -1;
 
 	// The facehugger is at a height of 1 m, so a player at 1 m plus a distance is that far from it
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 6000), &howFar) == -1, "a player 5 m from the facehugger is too far");
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 5001), &howFar) == -1, "and so is one just over 4 m from it");
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 5000), &howFar) == -1, "and one exactly 4 m from it: nearer than means nearer");
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 3900), &howFar) == 0 && Near(howFar, 2900), "one 2.9 m from it is near, and says how near");
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(1000, 1000, 2400), &howFar) == 1 && Near(howFar, 1400), "the alien inside the box is woken within 1.5 m");
-	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(1000, 1000, 2600), &howFar) == -1, "and not from 1.6 m");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 6000), &howFar, Anywhere) == -1, "a player 5 m from the facehugger is too far");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 5001), &howFar, Anywhere) == -1, "and so is one just over 4 m from it");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 5000), &howFar, Anywhere) == -1, "and one exactly 4 m from it: nearer than means nearer");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 3900), &howFar, Anywhere) == 0 && Near(howFar, 2900), "one 2.9 m from it is near, and says how near");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(1000, 1000, 2400), &howFar, Anywhere) == 1 && Near(howFar, 1400), "the alien inside the box is woken within 1.5 m");
+	Check(NearWakeSleepers_NearOne(sleepers, NearWake_Point(1000, 1000, 2600), &howFar, Anywhere) == -1, "and not from 1.6 m");
+
+	// The user's "same room or in view": near enough, but on the other side of a floor
+	int asked = 0;
+	int const behindAFloor = NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 3900), &howFar,
+		[&asked](NearWakeSleeper const &) { asked++; return false; });
+	Check(behindAFloor == -1 && asked == 1, "a player near enough but not in its room, nor in view of it, doesn't wake it");
+	asked = 0;
+	NearWakeSleepers_NearOne(sleepers, NearWake_Point(9500, 1000, 6000), &howFar, [&asked](NearWakeSleeper const &) { asked++; return true; });
+	Check(asked == 0, "and the room is only asked about a sleeper near enough");
 
 	NearWakeSleepers_Clear(&sleepers);
 	Check(sleepers.count == 0 && !sleepers.full, "the list can be emptied for the next box");
@@ -171,6 +190,27 @@ static void TestTheSleepers()
 
 	NearWakeSleepers_Clear(&sleepers);
 	Check(sleepers.count == 0 && !sleepers.full, "and emptied for the next box, it's no longer full");
+}
+
+// The user's "only safe jobs", with the boxes of Third's table of the stock levels
+static void TestTheJobs()
+{
+	puts("Whether a box may be set off whole:");
+
+	int const onlySleepers[] = { kNearWakeJobWakesASleeper, kNearWakeJobWakesASleeper };
+	int const theLocker[] = { kNearWakeJobWakesASleeper, kNearWakeJobOpensTheWay };
+	int const aShutDoor[] = { kNearWakeJobWakesASleeper, kNearWakeJobAnythingElse };
+	int const aSelfDestruct[] = { kNearWakeJobWakesASleeper, kNearWakeJobOpensTheWay, kNearWakeJobAnythingElse };
+	int const notAJob[] = { kNearWakeJobWakesASleeper, 99 };
+
+	Check(NearWake_OnlyOpensTheWay(onlySleepers, 2, false), "a box that only wakes sleepers is set off whole (112 of the 139)");
+	Check(NearWake_OnlyOpensTheWay(theLocker, 2, false), "and so is one that also opens the way to it (Sulaco's locker door)");
+	Check(!NearWake_OnlyOpensTheWay(aShutDoor, 2, false), "but not one that shuts a door (Invasion_P's quantum alien): only the sleeper wakes");
+	Check(!NearWake_OnlyOpensTheWay(aSelfDestruct, 3, false), "nor one that does anything else as well, such as a self-destruct (Vaults_M)");
+	Check(!NearWake_OnlyOpensTheWay(notAJob, 2, false), "nor one with a job that isn't on the list");
+	Check(!NearWake_OnlyOpensTheWay(onlySleepers, 2, true), "nor one with more targets than are sorted");
+	Check(NearWake_OnlyOpensTheWay(onlySleepers, 0, false), "a box with no other target is set off whole");
+	Check(kNearWakeMostJobDistance == 4000.0 && kNearWakeMostJobs == 32, "a door or track counts as on the way within 4 m of the sleeper, and 32 targets are sorted");
 }
 
 static void TestTheWords()
@@ -192,6 +232,10 @@ static void TestTheWords()
 		printf("        it said: %s\n", said.c_str());
 	}
 
+	sleeper.kind = kNearWakeAlien;
+	Check(NearWake_WokeAloneLine(sleeper, 3200) == "near wake: a player came within 3.2 m of a sleeping alien at (-4.6, 1.9, 19.5), so it was woken by itself: its walk-in "
+		"box, 7.5 m from it, does other things too, which wait for the box (it's woken within 4.0 m)", "and a sleeper woken by itself is said so");
+
 	Check(std::string(NearWake_KindName(kNearWakeAlien)) == "alien" && std::string(NearWake_KindName(kNearWakePredator)) == "predator"
 		&& std::string(NearWake_KindName(kNearWakeSentryGun)) == "sentry gun", "each kind has its name");
 	Check(std::string(NearWake_KindName(-1)) == "NPC" && std::string(NearWake_KindName(kNearWakeKinds)) == "NPC", "and a number that isn't a kind is an NPC");
@@ -207,10 +251,11 @@ static void TestTheGameUsesIt()
 	std::string const wake = ReadSourceFile("3dc/avp/near_wake.cpp");
 	Check(Has(Between(wake, "bool NearWake_ThisMachineRunsNpcs(void)", "\n}\n"), "return AvP.Network == I_No_Network || AvP.NetworkAIServer;"),
 		"only single player, or a network game's host when it runs the NPCs, looks for sleepers");
+	Check(Has(Between(wake, "static bool Gone(STRATEGYBLOCK const *block)", "\n}\n"), "return !block || block->SBflags.destroyed_but_preserved || !block->SBdataptr;"),
+		"something gone is something with no block, or one that's been destroyed, or has no data");
 
 	std::string const sleeper = Between(wake, "static bool SleeperFrom(", "\nstatic void AddSleepersFrom(");
-	Check(ComesBefore(sleeper, "if (!target || target->SBflags.destroyed_but_preserved || !target->SBdataptr)\n\t{\n\t\treturn false;", "switch (target->I_SBtype)"),
-		"something gone isn't a sleeper, and its freed data isn't read");
+	Check(ComesBefore(sleeper, "if (Gone(target))\n\t{\n\t\treturn false;", "switch (target->I_SBtype)"), "something gone isn't a sleeper, and its freed data isn't read");
 	Check(Has(sleeper, "if (alien->BehaviourState != ABS_Dormant || !target->DynPtr)"), "an alien is a sleeper only while it's dormant");
 	Check(Has(sleeper, "if (hugger->nearBehaviourState != FHNS_Floating || !target->DynPtr)"), "a facehugger only while it floats asleep");
 	Check(Has(sleeper, "case I_BehaviourDormantPredator:") && Has(sleeper, "*where = PointOf(predator->toolsData.position);"),
@@ -220,18 +265,49 @@ static void TestTheGameUsesIt()
 		"and nothing else: a xenoborg wakes by itself, and the queen and marines aren't placed asleep");
 
 	std::string const add = Between(wake, "static void AddSleepersFrom(", "\nvoid NearWake_FindSleepers(");
-	Check(ComesBefore(add, "if (SleeperFrom(target, &where, &kind))\n\t{\n\t\tNearWakeSleepers_Add(sleepers, where, kind, box);\n\t\treturn;",
-		"switchesBetween >= kNearWakeMostSwitchesBetween)\n\t{\n\t\treturn;"), "a sleeper a box wakes goes on its list");
+	Check(ComesBefore(add, "NearWakeSleepers_Add(sleepers, where, kind, box, target, target->containingModule);\n\t\treturn;",
+		"switchesBetween >= kNearWakeMostSwitchesBetween)\n\t{\n\t\treturn;"), "a sleeper a box wakes goes on its list, with its block and module");
 	Check(Has(add, "AddSleepersFrom(between->bs_targets[i], box, sleepers, switchesBetween + 1);") && Has(add, "AddSleepersFrom(between->ls_targets[i].sbptr, box, sleepers, switchesBetween + 1);"),
 		"and so do the ones a switch it sets off wakes, through either kind of switch, one switch more each time");
 
-	std::string const find = Between(wake, "void NearWake_FindSleepers(", "\nvoid NearWake_SayBoxSetOff(");
+	std::string const find = Between(wake, "void NearWake_FindSleepers(", "\n// The module a sleeper is in.");
 	Check(ComesBefore(find, "NearWakeSleepers_Clear(sleepers);", "AddSleepersFrom(own->bs_targets[i], box, sleepers, 0);")
 		&& Has(find, "AddSleepersFrom(own->ls_targets[i].sbptr, box, sleepers, 0);"), "a box's own targets are looked at first, from an empty list");
 	Check(Has(find, "if (sleepers->full && !saidABoxWakesTooMany)\n\t{\n\t\tsaidABoxWakesTooMany = true;\n\t\tLogString(NearWake_FullLine());"), "a box that wakes too many is said once a level");
 
-	std::string const say = Between(wake, "void NearWake_SayBoxSetOff(", "\nvoid NearWake_LevelEnds(");
-	Check(ComesBefore(say, "if (linesThisLevel >= kNearWakeMostLines)\n\t{\n\t\treturn;", "LogString(NearWake_Line(sleeper, playerDistance));")
+	// The user's "same room or in view"
+	Check(Has(Between(wake, "static MODULE *RoomOf(", "\n}\n"), "return ModuleFromPosition(&place, startFrom);"), "a dormant predator's module is found from its place");
+	std::string const sameOrInView = Between(wake, "static bool SameOrInView(", "\n}\n");
+	Check(ComesBefore(sameOrInView, "if (!from || !other)\n\t{\n\t\treturn false;", "return from == other || (from->m_vmptr && IsModuleVisibleFromModule(from, other));"),
+		"a player is in the sleeper's room, or one the game sees from it, asked only of modules that are there and have their list of what they see");
+	Check(Has(Between(wake, "bool NearWake_InTheRoomOrInView(", "\n}\n"), "return SameOrInView(RoomOf(sleeper, playerModule), playerModule);"),
+		"from the sleeper's room to the player's");
+
+	// The user's "only safe jobs"
+	std::string const job = Between(wake, "static void SortJob(", "\nbool NearWake_BoxOnlyOpensTheWay(");
+	Check(ComesBefore(job, "if (Gone(target))\n\t{\n\t\treturn;", "switch (target->I_SBtype)"), "a target that's gone does nothing, and isn't read");
+	Check(Has(job, "case I_BehaviourAlien:\n\t\tcase I_BehaviourFaceHugger:\n\t\tcase I_BehaviourDormantPredator:\n\t\tcase I_BehaviourPredator:\n\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);"),
+		"waking an NPC is the box's own job");
+	Check(Has(job, "case I_BehaviourProximityDoor:\n\t\tcase I_BehaviourSwitchDoor:\n\t\tcase I_BehaviourLiftDoor:\n\t\tcase I_BehaviourTrackObject:\n\t\t\tNote(jobs, on && DistanceFrom(sleeper, target) <= kNearWakeMostJobDistance ? kNearWakeJobOpensTheWay : kNearWakeJobAnythingElse);"),
+		"a door or track opens the way only when it's asked on and is near the sleeper: shut, locked, or far off, it's something else");
+	Check(Has(job, "bool const on = (message & 1) != 0;"), "on is the request's own on-or-off");
+	Check(Has(job, "if (switchesBetween >= kNearWakeMostSwitchesBetween)\n\t\t\t{\n\t\t\t\tNote(jobs, kNearWakeJobAnythingElse);")
+		&& Has(job, "SortJob(between->bs_targets[i], between->request_messages[i], sleeper, switchesBetween + 1, jobs);")
+		&& Has(job, "SortJob(between->ls_targets[i].sbptr, between->ls_targets[i].request_message, sleeper, switchesBetween + 1, jobs);"),
+		"a switch between is looked through, with its own requests, as far as the sleepers are");
+	Check(Has(job, "default:\n\t\t\tNote(jobs, kNearWakeJobAnythingElse);") && !Has(job, "I_BehaviourSelfDestruct") && !Has(job, "I_BehaviourGenerator"),
+		"and anything else is something else: a self-destruct, a generator, a lift, a message");
+	std::string const box = Between(wake, "bool NearWake_BoxOnlyOpensTheWay(", "\n// A log line about this");
+	Check(Has(box, "SortJob(own->bs_targets[i], own->request_messages[i], sleeper, 0, &jobs);") && Has(box, "SortJob(own->ls_targets[i].sbptr, own->ls_targets[i].request_message, sleeper, 0, &jobs);")
+		&& Has(box, "return NearWake_OnlyOpensTheWay(jobs.list, jobs.count, jobs.tooMany);"), "every target of the box is sorted, and the rule is near_wake.h's");
+	Check(Has(Between(wake, "static void Note(Jobs *jobs, int job)", "\n}\n"), "if (jobs->count >= kNearWakeMostJobs)\n\t{\n\t\tjobs->tooMany = true;\n\t\treturn;"),
+		"a box with more targets than are sorted says so, and its extra ones aren't written past the list's end");
+	std::string const alone = Between(wake, "void NearWake_WakeItAlone(", "\n}\n");
+	Check(ComesBefore(alone, "if (Gone(npc))\n\t{\n\t\treturn;", "RequestState(npc, 1, areaSwitch);") && Has(alone, "Say(NearWake_WokeAloneLine(sleeper, playerDistance));"),
+		"a sleeper woken by itself is asked as its box would have asked it, and said so");
+
+	std::string const say = Between(wake, "static void Say(std::string const &line)", "\nvoid NearWake_SayBoxSetOff(");
+	Check(ComesBefore(say, "if (linesThisLevel >= kNearWakeMostLines)\n\t{\n\t\treturn;", "LogString(line);")
 		&& Has(say, "if (++linesThisLevel == kNearWakeMostLines)\n\t{\n\t\tLogString(NearWake_LinesStop());"), "a level gets so many lines, then one that says that's all");
 	Check(Has(Between(wake, "void NearWake_LevelEnds(void)", "\n}\n"), "linesThisLevel = 0;") && Has(Between(wake, "void NearWake_LevelEnds(void)", "\n}\n"), "saidABoxWakesTooMany = false;"),
 		"and the next level starts again");
@@ -243,6 +319,7 @@ static void TestTheGameUsesIt()
 	char const *const flags[] = { "if(bs_bhv->switch_flags & SwitchFlag_UseTriggerVolume)", "if(ls_bhv->switch_flags & SwitchFlag_UseTriggerVolume)" };
 	char const *const finds[] = { "NearWake_FindSleepers(sbptr, &bs_bhv->trigger_volume_min, &bs_bhv->trigger_volume_max, &sleepers);",
 		"NearWake_FindSleepers(sbptr, &ls_bhv->trigger_volume_min, &ls_bhv->trigger_volume_max, &sleepers);" };
+	char const *const requests[] = { "bs_bhv->request=I_request_on;", "ls_bhv->request = linkswitch_request_on;" };
 	char const *const marks[] = { "bs_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);",
 		"ls_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);" };
 	char const *const names[] = { "a switch", "a link switch" };
@@ -251,11 +328,15 @@ static void TestTheGameUsesIt()
 	{
 		std::string const behaviour = Between(ReadSourceFile(files[i]), behaviours[i], "\n}\n");
 		std::string const name = names[i];
+		std::string const whole = std::string("if (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))\n\t\t\t\t{\n\t\t\t\t\t") + requests[i];
 
 		Check(ComesBefore(behaviour, flags[i], "if (NearWake_ThisMachineRunsNpcs())\n\t\t{\n\t\t\tNearWake_FindSleepers(") && Has(behaviour, finds[i]),
 			name + ": a walk-in box finds its sleepers, on a machine that runs the NPCs");
-		Check(Has(behaviour, "int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance);")
-			&& Has(behaviour, "if (inTheBox || sleeperNearBy >= 0)"), name + ": and is set off by a player in it, or near one of them");
+		Check(Has(behaviour, "int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance,\n\t\t\t\t[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); });")
+			&& Has(behaviour, "MODULE *const playerModule = sbPtr->containingModule;"), name + ": a player near a sleeper counts only in its room or in view of it");
+		Check(ComesBefore(behaviour, (std::string("if (inTheBox)\n\t    \t{\n\t    \t\t") + requests[i]).c_str(), "if (sleeperNearBy >= 0)"), name + ": a player in the box sets it off, as always");
+		Check(Has(behaviour, whole.c_str()) && Has(behaviour, "else\n\t\t\t\t{\n\t\t\t\t\tNearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);"),
+			name + ": near a sleeper, the whole box only if all else it does opens the way to it, and otherwise the sleeper alone");
 		Check(ComesBefore(behaviour, "if (!needToTest)\n\t\t\t{\n\t\t\t\tcontinue;", "bool const inTheBox ="), name + ": the same players count for both, this machine's and the others'");
 		Check(Has(behaviour, marks[i]), name + ": the line is written only when the box really is set off");
 	}
@@ -266,6 +347,7 @@ int main()
 	TestTheNumbers();
 	TestTheDistances();
 	TestTheSleepers();
+	TestTheJobs();
 	TestTheWords();
 	TestTheGameUsesIt();
 

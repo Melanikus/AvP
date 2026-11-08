@@ -135,12 +135,52 @@
 			]
 		},
 		{
+			"name": "a sleeper's block isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tsleeper.who = who;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a sleeper's module isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tsleeper.room = room;\n",
+					"to": ""
+				}
+			]
+		},
+		{
 			"name": "a player exactly at the reach counts as near",
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.h",
-					"from": "\t\tif (distance < sleepers.list[i].reach)",
-					"to": "\t\tif (distance <= sleepers.list[i].reach)"
+					"from": "if (distance < sleepers.list[i].reach && inRoomOrView(sleepers.list[i]))",
+					"to": "if (distance <= sleepers.list[i].reach && inRoomOrView(sleepers.list[i]))"
+				}
+			]
+		},
+		{
+			"name": "a player near but out of the room and out of view counts",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "if (distance < sleepers.list[i].reach && inRoomOrView(sleepers.list[i]))",
+					"to": "if (distance < sleepers.list[i].reach)"
+				}
+			]
+		},
+		{
+			"name": "the room is asked about every sleeper, near or not",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "if (distance < sleepers.list[i].reach && inRoomOrView(sleepers.list[i]))",
+					"to": "if (inRoomOrView(sleepers.list[i]) && distance < sleepers.list[i].reach)"
 				}
 			]
 		},
@@ -155,12 +195,72 @@
 			]
 		},
 		{
+			"name": "opening the way doesn't count as safe",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "if (jobs[i] != kNearWakeJobWakesASleeper && jobs[i] != kNearWakeJobOpensTheWay)",
+					"to": "if (jobs[i] != kNearWakeJobWakesASleeper)"
+				}
+			]
+		},
+		{
+			"name": "anything else counts as safe",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "if (jobs[i] != kNearWakeJobWakesASleeper && jobs[i] != kNearWakeJobOpensTheWay)",
+					"to": "if (jobs[i] > kNearWakeJobAnythingElse)"
+				}
+			]
+		},
+		{
+			"name": "a box with more targets than are sorted counts as safe",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tif (tooMany)\n\t{\n\t\treturn false;\n\t}\n\n\tfor (int i = 0; i < count; i++)",
+					"to": "\tfor (int i = 0; i < count; i++)"
+				}
+			]
+		},
+		{
+			"name": "a door or track counts as on the way from 5 m",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "kNearWakeMostJobDistance = 4000.0;",
+					"to": "kNearWakeMostJobDistance = 5000.0;"
+				}
+			]
+		},
+		{
+			"name": "a box's jobs are sorted to a different number",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "\tkNearWakeMostJobs = 32 ",
+					"to": "\tkNearWakeMostJobs = 31 "
+				}
+			]
+		},
+		{
 			"name": "the line gives the distances in mm",
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.h",
-					"from": "playerDistance / 1000.0, NearWake_KindName(sleeper.kind)",
-					"to": "playerDistance, NearWake_KindName(sleeper.kind)"
+					"from": "playerDistance / 1000.0, NearWake_KindName(sleeper.kind), sleeper.where.x / 1000.0,\n\t\tsleeper.where.y / 1000.0, sleeper.where.z / 1000.0, sleeper.boxDistance / 1000.0, sleeper.reach / 1000.0);\n\treturn text;\n}\n\n// The log's line for a sleeper woken",
+					"to": "playerDistance, NearWake_KindName(sleeper.kind), sleeper.where.x / 1000.0,\n\t\tsleeper.where.y / 1000.0, sleeper.where.z / 1000.0, sleeper.boxDistance / 1000.0, sleeper.reach / 1000.0);\n\treturn text;\n}\n\n// The log's line for a sleeper woken"
+				}
+			]
+		},
+		{
+			"name": "a sleeper woken by itself is said otherwise",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.h",
+					"from": "at (%.1f, %.1f, %.1f), so it was woken by itself",
+					"to": "at (%.1f, %.1f, %.1f), so it woke"
 				}
 			]
 		},
@@ -205,12 +305,22 @@
 			]
 		},
 		{
+			"name": "SOURCE: something destroyed isn't gone",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\treturn !block || block->SBflags.destroyed_but_preserved || !block->SBdataptr;",
+					"to": "\treturn !block || !block->SBdataptr;"
+				}
+			]
+		},
+		{
 			"name": "SOURCE: a sleeper that's gone is still looked at",
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.cpp",
-					"from": "\tif (!target || target->SBflags.destroyed_but_preserved || !target->SBdataptr)\n\t{\n\t\treturn false;\n\t}\n\n\tswitch (target->I_SBtype)",
-					"to": "\tif (!target || !target->SBdataptr)\n\t{\n\t\treturn false;\n\t}\n\n\tswitch (target->I_SBtype)"
+					"from": "static bool SleeperFrom(STRATEGYBLOCK *target, NearWakePoint *where, int *kind)\n{\n\tif (Gone(target))\n\t{\n\t\treturn false;\n\t}\n\n",
+					"to": "static bool SleeperFrom(STRATEGYBLOCK *target, NearWakePoint *where, int *kind)\n{\n"
 				}
 			]
 		},
@@ -239,8 +349,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.cpp",
-					"from": "\t\tcase I_BehaviourDormantPredator:\n",
-					"to": "\t\tcase I_BehaviourPredator:\n"
+					"from": "\t\tcase I_BehaviourDormantPredator:\n\t\t{\n\t\t\t// A dormant predator",
+					"to": "\t\tcase I_BehaviourPredator:\n\t\t{\n\t\t\t// A dormant predator"
 				}
 			]
 		},
@@ -269,8 +379,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/near_wake.cpp",
-					"from": "\t\tNearWakeSleepers_Add(sleepers, where, kind, box);\n\t\treturn;",
+					"from": "\t\tNearWakeSleepers_Add(sleepers, where, kind, box, target, target->containingModule);\n\t\treturn;",
 					"to": "\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper's block isn't given to the list",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "NearWakeSleepers_Add(sleepers, where, kind, box, target, target->containingModule);",
+					"to": "NearWakeSleepers_Add(sleepers, where, kind, box, 0, target->containingModule);"
 				}
 			]
 		},
@@ -311,6 +431,196 @@
 					"file": "3dc/avp/near_wake.cpp",
 					"from": "\tif (sleepers->full && !saidABoxWakesTooMany)",
 					"to": "\tif (sleepers->full)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dormant predator's module isn't found from its place",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\treturn ModuleFromPosition(&place, startFrom);",
+					"to": "\treturn startFrom;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a module with no list of what it sees is asked anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "(from->m_vmptr && IsModuleVisibleFromModule(from, other))",
+					"to": "(IsModuleVisibleFromModule(from, other))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a module that isn't there is asked anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (!from || !other)\n\t{\n\t\treturn false;\n\t}\n\n\treturn from == other",
+					"to": "\treturn from == other"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every player is in the room or in view",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\treturn SameOrInView(RoomOf(sleeper, playerModule), playerModule);",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a target that's gone is read for its job",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (Gone(target))\n\t{\n\t\treturn;\n\t}\n\n\tbool const on",
+					"to": "\tbool const on"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door or track asked off counts as opening the way",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "Note(jobs, on && DistanceFrom(sleeper, target) <= kNearWakeMostJobDistance ?",
+					"to": "Note(jobs, DistanceFrom(sleeper, target) <= kNearWakeMostJobDistance ?"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door or track far from the sleeper counts as opening the way",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "Note(jobs, on && DistanceFrom(sleeper, target) <= kNearWakeMostJobDistance ?",
+					"to": "Note(jobs, on ?"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a self-destruct counts as opening the way",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tcase I_BehaviourLiftDoor:\n\t\tcase I_BehaviourTrackObject:\n",
+					"to": "\t\tcase I_BehaviourLiftDoor:\n\t\tcase I_BehaviourSelfDestruct:\n\t\tcase I_BehaviourTrackObject:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a generator counts as waking an NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tcase I_BehaviourAutoGun:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);",
+					"to": "\t\tcase I_BehaviourAutoGun:\n\t\tcase I_BehaviourGenerator:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: on is read from the whole request",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tbool const on = (message & 1) != 0;",
+					"to": "\tbool const on = message != 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch too far on isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\t\t\tNote(jobs, kNearWakeJobAnythingElse);\n\t\t\t\treturn;\n\t\t\t}\n\n\t\t\tif (target->I_SBtype == I_BehaviourBinarySwitch)",
+					"to": "\t\t\t\treturn;\n\t\t\t}\n\n\t\t\tif (target->I_SBtype == I_BehaviourBinarySwitch)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch between is taken to ask everything on",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "SortJob(between->bs_targets[i], between->request_messages[i], sleeper",
+					"to": "SortJob(between->bs_targets[i], 1, sleeper"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anything else counts as waking an NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tdefault:\n\t\t\tNote(jobs, kNearWakeJobAnythingElse);",
+					"to": "\t\tdefault:\n\t\t\tNote(jobs, kNearWakeJobWakesASleeper);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box is taken to ask everything on",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "SortJob(own->bs_targets[i], own->request_messages[i], sleeper, 0, &jobs);",
+					"to": "SortJob(own->bs_targets[i], 1, sleeper, 0, &jobs);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box is taken to ask everything on",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "SortJob(own->ls_targets[i].sbptr, own->ls_targets[i].request_message, sleeper, 0, &jobs);",
+					"to": "SortJob(own->ls_targets[i].sbptr, 1, sleeper, 0, &jobs);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a box with too many targets doesn't say so",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\t\tjobs->tooMany = true;\n\t\treturn;",
+					"to": "\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper woken alone is read when it's gone",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tif (Gone(npc))\n\t{\n\t\treturn;\n\t}\n\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper woken alone is asked off",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tRequestState(npc, 1, areaSwitch);",
+					"to": "\tRequestState(npc, 0, areaSwitch);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a sleeper woken alone isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/near_wake.cpp",
+					"from": "\tSay(NearWake_WokeAloneLine(sleeper, playerDistance));\n",
+					"to": ""
 				}
 			]
 		},
@@ -375,22 +685,42 @@
 			]
 		},
 		{
-			"name": "SOURCE: a switch's box isn't set off by a player near a sleeper",
+			"name": "SOURCE: a switch's box counts a player near a sleeper anywhere",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_binary_switch.cpp",
-					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request",
-					"to": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tbs_bhv->request"
+					"from": "[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); }",
+					"to": "[playerModule](NearWakeSleeper const &) { return true; }"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a switch's box is only set off by nearness",
+			"name": "SOURCE: a switch's box isn't set off by a player in it",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_binary_switch.cpp",
-					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request",
-					"to": "\t\t\tif (sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tbs_bhv->request"
+					"from": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tbs_bhv->request=I_request_on;",
+					"to": "\t\t\tif (false)\n\t    \t{\n\t    \t\tbs_bhv->request=I_request_on;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's box is always set off whole",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\t\tif (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))",
+					"to": "\t\t\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a switch's sleeper is never woken by itself",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_binary_switch.cpp",
+					"from": "\t\t\t\t\tNearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);\n",
+					"to": ""
 				}
 			]
 		},
@@ -425,26 +755,6 @@
 			]
 		},
 		{
-			"name": "SOURCE: a link switch's box isn't set off by a player near a sleeper",
-			"changes": [
-				{
-					"file": "3dc/avp/bh_link_switch.cpp",
-					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request",
-					"to": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tls_bhv->request"
-				}
-			]
-		},
-		{
-			"name": "SOURCE: a link switch's line is written every frame a player stays near",
-			"changes": [
-				{
-					"file": "3dc/avp/bh_link_switch.cpp",
-					"from": "\t\t\tls_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);\n\t\t\t}\n",
-					"to": "\t\t\tls_bhv->triggered_last = TRUE;\n"
-				}
-			]
-		},
-		{
 			"name": "SOURCE: a link switch's box looks for sleepers on a joiner too",
 			"changes": [
 				{
@@ -455,12 +765,42 @@
 			]
 		},
 		{
-			"name": "SOURCE: a link switch's box is only set off by nearness",
+			"name": "SOURCE: a link switch's box counts a player near a sleeper anywhere",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_link_switch.cpp",
-					"from": "\t\t\tif (inTheBox || sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request",
-					"to": "\t\t\tif (sleeperNearBy >= 0)\n\t    \t{\n\t    \t\tls_bhv->request"
+					"from": "[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); }",
+					"to": "[playerModule](NearWakeSleeper const &) { return true; }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box isn't set off by a player in it",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tif (inTheBox)\n\t    \t{\n\t    \t\tls_bhv->request = linkswitch_request_on;//I_request_on;",
+					"to": "\t\t\tif (false)\n\t    \t{\n\t    \t\tls_bhv->request = linkswitch_request_on;//I_request_on;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's box is always set off whole",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\t\tif (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))",
+					"to": "\t\t\t\tif (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's sleeper is never woken by itself",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\t\t\tNearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);\n",
+					"to": ""
 				}
 			]
 		},
@@ -471,6 +811,16 @@
 					"file": "3dc/avp/bh_link_switch.cpp",
 					"from": "\t\t\tif (!needToTest)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > ls_bhv",
 					"to": "\t\t\tif (!sbPtr->DynPtr)\n\t\t\t{\n\t\t\t\tcontinue;\n\t\t\t}\n\n\t\t\tVECTORCH const &at = sbPtr->DynPtr->Position;\n\t\t\tbool const inTheBox =\n\t\t\t\tat.vx > ls_bhv"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a link switch's line is written every frame a player stays near",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_link_switch.cpp",
+					"from": "\t\t\tls_bhv->triggered_last = TRUE;\n\n\t\t\t// Only when it really is set off, not on each frame the player stays near\n\t\t\tif (setOffByNearness)\n\t\t\t{\n\t\t\t\tNearWake_SayBoxSetOff(nearSleeper, nearDistance);\n\t\t\t}\n",
+					"to": "\t\t\tls_bhv->triggered_last = TRUE;\n"
 				}
 			]
 		}

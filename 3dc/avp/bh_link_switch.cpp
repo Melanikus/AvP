@@ -400,20 +400,34 @@ void LinkSwitchBehaveFun(STRATEGYBLOCK* sbptr)
 				at.vy < ls_bhv->trigger_volume_max.vy &&
 				at.vz > ls_bhv->trigger_volume_min.vz &&
 				at.vz < ls_bhv->trigger_volume_max.vz;
-			int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance);
+			// Near a sleeper, and in its room or in view of it: the user's "same room or in view", so nothing wakes through a floor
+			MODULE *const playerModule = sbPtr->containingModule;
+			int const sleeperNearBy = inTheBox ? -1 : NearWakeSleepers_NearOne(sleepers, NearWake_Point(at.vx, at.vy, at.vz), &nearDistance,
+				[playerModule](NearWakeSleeper const &sleeper) { return NearWake_InTheRoomOrInView(sleeper, playerModule); });
 
-			if (inTheBox || sleeperNearBy >= 0)
+			if (inTheBox)
 	    	{
 	    		ls_bhv->request = linkswitch_request_on;//I_request_on;
+				break;
+	    	}
 
-				if (!inTheBox)
+			if (sleeperNearBy >= 0)
+			{
+				// The whole box only if all else it does is open the way to the sleeper, the user's "only safe jobs"; otherwise the
+				// sleeper alone, and the box waits for the player as before
+				if (NearWake_BoxOnlyOpensTheWay(sbptr, sleepers.list[sleeperNearBy]))
 				{
+					ls_bhv->request = linkswitch_request_on;//I_request_on;
 					setOffByNearness = true;
 					nearSleeper = sleepers.list[sleeperNearBy];
 				}
+				else
+				{
+					NearWake_WakeItAlone(sbptr, sleepers.list[sleeperNearBy], nearDistance);
+				}
 
 				break;
-	    	}
+			}
     	}
 	}
 

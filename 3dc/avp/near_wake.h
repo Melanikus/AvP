@@ -11,11 +11,22 @@
 // than the box itself is to that NPC. So a player who comes the way the level means still sets it off at the box, and one who comes another
 // way sets it off no farther away than the box would have. Two limits: never farther than kNearWakeMostMillimetres (4 m), so an NPC whose
 // box is far off isn't woken from across a room, and never nearer than kNearWakeLeastMillimetres (1.5 m), about touching, so one inside its
-// box or at its edge still has a distance to wake at. It's the box itself that's set off, as if walked into, so whatever else it opens or
-// moves (the facehugger's locker door, for one) goes with it, and it's said in the log:
+// box or at its edge still has a distance to wake at.
+//
+// SAME ROOM OR IN VIEW (the user's ruling, 2026-11-08): the player also has to be in the sleeper's own module, or a module the game sees
+// from it (IsModuleVisibleFromModule, module.cpp). A straight line goes through floors and walls, and a sleeper on the floor above isn't
+// "near" someone underneath.
+//
+// ONLY SAFE JOBS (the user's ruling, 2026-11-08): the box itself is set off, as if walked into, only when everything else it does just
+// opens the way to the sleeper: a door or a track asked on, near it, such as the facehugger's locker door. A box that does anything else
+// (shuts or locks a door, calls a lift, starts a generator, sets off a self-destruct) would do it early, so then only the sleeper is woken,
+// and the box waits for the player as before. NearWake_OnlyOpensTheWay has the rule, and near_wake.cpp sorts each target into one of its
+// jobs. Either way it's said in the log:
 //
 //     near wake: a player came within 3.2 m of a sleeping facehugger at (-4.6, 1.9, 19.5), whose walk-in box is 7.5 m from it, so the box
 //          was set off as if walked into (it's set off within 4.0 m)
+//     near wake: a player came within 3.2 m of a sleeping alien at (-4.6, 1.9, 19.5), so it was woken by itself: its walk-in box, 7.5 m
+//          from it, does other things too, which wait for the box (it's woken within 4.0 m)
 //
 // WHAT IT LEAVES ALONE: an NPC woken some other way (a button, a timer, another NPC's death), and one nothing wakes, because setting
 // something off early would spoil what the level waits for. Only the NPCs a box wakes are looked at: its own targets, or the targets of a
@@ -129,6 +140,8 @@ struct NearWakeSleeper
 	int kind = kNearWakeAlien;
 	double boxDistance = 0;   // from it to its box's nearest point
 	double reach = 0;         // how near a player has to come
+	void *who = 0;            // the game's own block for it, so it can be woken by itself (near_wake.cpp). This file never reads it.
+	void *room = 0;           // the module it's in, or none if the game hasn't said, for the same-room-or-in-view test. Never read here either.
 };
 
 // The sleeping NPCs one box wakes
@@ -146,7 +159,9 @@ static inline void NearWakeSleepers_Clear(NearWakeSleepers *sleepers)
 }
 
 // Adds one, with how near a player has to come to it, worked out from where its box is. Gives back false when there's no room for it.
-static inline bool NearWakeSleepers_Add(NearWakeSleepers *sleepers, NearWakePoint const &where, int kind, NearWakeBox const &box)
+// who and room are the game's, kept for near_wake.cpp.
+static inline bool NearWakeSleepers_Add(NearWakeSleepers *sleepers, NearWakePoint const &where, int kind, NearWakeBox const &box, void *who = 0,
+	void *room = 0)
 {
 	if (sleepers->count >= kNearWakeMostSleepers)
 	{
@@ -160,17 +175,21 @@ static inline bool NearWakeSleepers_Add(NearWakeSleepers *sleepers, NearWakePoin
 	sleeper.kind = kind;
 	sleeper.boxDistance = NearWake_DistanceToBox(where, box);
 	sleeper.reach = NearWake_Reach(sleeper.boxDistance);
+	sleeper.who = who;
+	sleeper.room = room;
 	return true;
 }
 
-// The first sleeper a player here is nearer to than its reach, or -1 for none. howFar gets how far the player is from that one.
-static inline int NearWakeSleepers_NearOne(NearWakeSleepers const &sleepers, NearWakePoint const &player, double *howFar)
+// The first sleeper a player here is nearer to than its reach, and that inRoomOrView(sleeper) says the player is in the same room as, or in
+// view of; or -1 for none. howFar gets how far the player is from that one. The room test is asked only of a sleeper near enough.
+template <typename InRoomOrView>
+static inline int NearWakeSleepers_NearOne(NearWakeSleepers const &sleepers, NearWakePoint const &player, double *howFar, InRoomOrView inRoomOrView)
 {
 	for (int i = 0; i < sleepers.count; i++)
 	{
 		double const distance = NearWake_Distance(player, sleepers.list[i].where);
 
-		if (distance < sleepers.list[i].reach)
+		if (distance < sleepers.list[i].reach && inRoomOrView(sleepers.list[i]))
 		{
 			*howFar = distance;
 			return i;
@@ -178,6 +197,46 @@ static inline int NearWakeSleepers_NearOne(NearWakeSleepers const &sleepers, Nea
 	}
 
 	return -1;
+}
+
+// What one of a box's targets does, besides waking the sleeper a player came near. near_wake.cpp sorts each target into one of these.
+// Third's table of the stock levels' boxes (AvP-docs, box-targets.md) has 139 that wake sleepers: 112 do nothing else, 1 only opens the way
+// (Sulaco's locker door, a track 1.4 m from hugger1, asked on), and 26 do something else, such as a self-destruct and an objective (Vaults_M)
+// or shutting a door (Invasion_P's quantum alien).
+enum NearWakeJob
+{
+	kNearWakeJobWakesASleeper,     // wakes an NPC: another sleeper, or one that's awake already and does nothing more
+	kNearWakeJobOpensTheWay,       // a door or a track asked on (opened, unlocked, started) within kNearWakeMostJobDistance of the sleeper
+	kNearWakeJobAnythingElse       // anything asked off (a door shut or locked), any other kind (a lift, a generator, a message, a
+	                               // self-destruct), anything farther off, or a switch beyond kNearWakeMostSwitchesBetween
+};
+
+enum
+{
+	kNearWakeMostJobs = 32         // targets sorted for one box. A box with more counts as doing something else.
+};
+
+// How near the sleeper a door or a track has to be for opening it to count as opening the way to it, in mm: the distance Third's table used
+static const double kNearWakeMostJobDistance = 4000.0;
+
+// Whether a box whose other targets do these may be set off whole: only when every one of them wakes an NPC or opens the way to the sleeper
+// (the user's "only safe jobs"). tooMany says the box had more targets than were sorted, and then it may not.
+static inline bool NearWake_OnlyOpensTheWay(int const *jobs, int count, bool tooMany)
+{
+	if (tooMany)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		if (jobs[i] != kNearWakeJobWakesASleeper && jobs[i] != kNearWakeJobOpensTheWay)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 // The log's line for a box set off this way, as at the top
@@ -188,6 +247,17 @@ static inline std::string NearWake_Line(NearWakeSleeper const &sleeper, double p
 	snprintf(text, sizeof(text), "near wake: a player came within %.1f m of a sleeping %s at (%.1f, %.1f, %.1f), whose walk-in box is %.1f m from it, so the box "
 		"was set off as if walked into (it's set off within %.1f m)", playerDistance / 1000.0, NearWake_KindName(sleeper.kind), sleeper.where.x / 1000.0,
 		sleeper.where.y / 1000.0, sleeper.where.z / 1000.0, sleeper.boxDistance / 1000.0, sleeper.reach / 1000.0);
+	return text;
+}
+
+// The log's line for a sleeper woken by itself, because its box does other things too, as at the top
+static inline std::string NearWake_WokeAloneLine(NearWakeSleeper const &sleeper, double playerDistance)
+{
+	char text[320];
+
+	snprintf(text, sizeof(text), "near wake: a player came within %.1f m of a sleeping %s at (%.1f, %.1f, %.1f), so it was woken by itself: its walk-in box, "
+		"%.1f m from it, does other things too, which wait for the box (it's woken within %.1f m)", playerDistance / 1000.0, NearWake_KindName(sleeper.kind),
+		sleeper.where.x / 1000.0, sleeper.where.y / 1000.0, sleeper.where.z / 1000.0, sleeper.boxDistance / 1000.0, sleeper.reach / 1000.0);
 	return text;
 }
 
