@@ -16,12 +16,14 @@
 //        AlienWays_Frame: once the build has finished, one line in the log says how: ready, with its size and time, or why there's no map.
 //        |                Then the guide (alien_ways_guide.h): aliens no longer guided get their usual gravity back, the searches carry on, and
 //        |                each search that ends is one line in the log.
-//      each standard alien coming for its target (AlienNearState_Approach, bh_near.cpp)
+//      each standard alien that's coming for its target, hunting it or wandering (AlienNearState_Approach, _Hunt and _Wander, bh_near.cpp)
 //        AlienWays_Steer: the direction of its way, if it has one, and then it climbs. If not, the game steers it as it always has.
+//      after each near alien's state has had its turn (NearAlienBehaviour, bh_near.cpp)
+//        AlienWays_KeepDriving: an alien on its way whose state didn't ask this frame is kept going along it, holding on
+//      level restart (RestartLevel, system.cpp)
+//        AlienWays_LevelRestarts: every alien's way goes, the map stays
 //      level end (Destroy_CurrentEnvironment, system.cpp)
 //        AlienWays_LevelEnd: ask the build to stop if it's still going, wait for its thread, let go of the map and every way
-//
-// ONLY APPROACH, FOR NOW: Hunt and Wander get the same call once Approach has been played.
 #ifndef ALIEN_WAYS_H
 #define ALIEN_WAYS_H
 
