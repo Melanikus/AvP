@@ -30,6 +30,7 @@
 #include "3dc.h"
 #include "surface_tangent.h"
 #include "polygon_facing.h"
+#include "texel_centre.h"
 
 #include <math.h>
 #include <string.h>
@@ -309,8 +310,9 @@ static const char *WriteCorners(const StaticLevelInput &input, const PolygonToPl
 		vertex.y = (float)point.vy + (float)input.place[1];
 		vertex.z = (float)point.vz + (float)input.place[2];
 
-		vertex.u = textured ? (float)coordinates[corner * 2 + 0] * placed.recipWidth : 0.0f;
-		vertex.v = textured ? (float)coordinates[corner * 2 + 1] * placed.recipHeight : 0.0f;
+		// The middle of the texel the corner names, the same sum as D3D_ZBufferedGouraudTexturedPolygon_Output: see texel_centre.h (#148)
+		vertex.u = textured ? TexelCentre(coordinates[corner * 2 + 0], 1.0f, placed.recipWidth) : 0.0f;
+		vertex.v = textured ? TexelCentre(coordinates[corner * 2 + 1], 1.0f, placed.recipHeight) : 0.0f;
 
 		float normal[3] = { 0.0f, 0.0f, 0.0f };
 		setup.cornerNormal(shape, placed.polygonNumber, corner, normal);

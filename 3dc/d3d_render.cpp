@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a polygon's corners are put in the middle of the texels they name, as the 1999 Direct3D code had them, so a smoothly filtered
+//   edge no longer takes colour from the texture's other edge (#148, texel_centre.h)
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   a small menu letter is skipped when the font picture is missing or empty, instead of being drawn with
 //   broken picture coordinates
@@ -94,6 +97,7 @@
 #include "lighting.h"
 #include "showcmds.h"
 #include "frustum.h"
+#include "texel_centre.h"
 #include "d3d_render.h"
 #include "pixel_lights.h"
 #include "pixel_look.h"
@@ -1722,8 +1726,9 @@ void D3D_ZBufferedGouraudTexturedPolygon_Output(POLYHEADER *inputPolyPtr, RENDER
 		mainVertex[vb].color = RGBA_MAKE(GammaValues[vertices->R], GammaValues[vertices->G], GammaValues[vertices->B], vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(GammaValues[vertices->SpecularR], GammaValues[vertices->SpecularG], GammaValues[vertices->SpecularB], /*255*/0);
 
-		mainVertex[vb].u = (float)(vertices->U) * RecipW;
-		mainVertex[vb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names, as the 1999 Direct3D code had it: see texel_centre.h (#148)
+		mainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		vb++;
 	}
 
@@ -1847,8 +1852,9 @@ void D3D_ZBufferedCloakedPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *
 	   	mainVertex[vb].color = RGBA_MAKE(vertices->R, vertices->G, vertices->B, vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(0,0,0,/*255*/0);
 
-		mainVertex[vb].u = (float)(vertices->U) * RecipW;
-		mainVertex[vb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names, as for every textured polygon: see texel_centre.h (#148)
+		mainVertex[vb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		vb++;
 	}
 
@@ -2122,8 +2128,9 @@ void D3D_Decal_Output(DECAL *decalPtr, RENDERVERTEX *renderVerticesPtr)
 
 		decalVertex[decalVb].colour = colour;
 
-		decalVertex[decalVb].u = (float)(vertices->U) * RecipW;
-		decalVertex[decalVb].v = (float)(vertices->V) * RecipH;
+		// The middle of the texel the corner names: see texel_centre.h (#148)
+		decalVertex[decalVb].u = TexelCentre(vertices->U, 1.0f, RecipW);
+		decalVertex[decalVb].v = TexelCentre(vertices->V, 1.0f, RecipH);
 		decalVb++;
 	}
 
@@ -2845,8 +2852,10 @@ void D3D_SkyPolygon_Output(POLYHEADER *inputPolyPtr, RENDERVERTEX *renderVertice
 		mainVertex[vb].color = RGBA_MAKE(vertices->R,vertices->G,vertices->B,vertices->A);
 		mainVertex[vb].specular = RGBA_MAKE(0,0,0,/*255*/0);
 
-		mainVertex[vb].u = ((float)vertices->U) * RecipW;
-		mainVertex[vb].v = ((float)vertices->V) * RecipH;
+		// The middle of the texel the corner names, as 1999 had it: see texel_centre.h (#148). The sky's corners are in 16.16, so half a
+		// texel is 32768 of them, and RecipW above already has the 65536 in it.
+		mainVertex[vb].u = TexelCentre(vertices->U, 65536.0f, RecipW);
+		mainVertex[vb].v = TexelCentre(vertices->V, 65536.0f, RecipH);
 		vb++;
 	}
 
