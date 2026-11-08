@@ -4,6 +4,7 @@
 // The build is the node copy's (AvP-docs, engine/pathfinding-study/npc-grid.js), step for step, in the game's numbers (y goes down), so the
 // numbers measured there on the 63 stock levels are this code's.
 #include "npc_grid.h"
+#include "npc_grid_smooth.h"
 
 #include <math.h>
 #include <string.h>
@@ -1816,6 +1817,9 @@ AlienWaysPoint NpcGrid::PointAt(uint32_t cell, double x, double y, double z) con
 
 // The cells of the way found, as points: the start, then a cell's middle wherever the way turns or goes onto another sheet, then the goal.
 // Each point's kind and facing are those of its cell's sheet: the surface the way is on from that point to the next.
+//
+// First the way is pulled straight across each sheet (npc_grid_smooth.h, Secondary's): only the cells where it has to turn are kept, so a
+// way across a room at a slant is one line, not a staircase of cells. A marine's line is kept off steep cells, which he only goes down.
 void NpcGrid::MakeWay()
 {
 	way.clear();
@@ -1828,17 +1832,43 @@ void NpcGrid::MakeWay()
 		return;
 	}
 
-	way.push_back(PointAt(wayCells.front(), searchStart.x, searchStart.y, searchStart.z));
-	wayPointCells.push_back(wayCells.front());
-	wayPolygons.push_back(PolygonOf(wayCells.front()));
+	uint8_t const bit = searchBody == kNpcGridMarine ? kNpcGridStands : kNpcGridClings;
+	bool const marine = searchBody == kNpcGridMarine;
+	std::vector<size_t> kept(wayCells.size());
+	size_t const keptCount = NpcGridSmooth_Pull(wayCells.data(), wayCells.size(),
+		[this](uint32_t cell, NpcGridSmoothPlace *p) { return CellPlace(cell, &p->sheet, &p->i, &p->j); },
+		[this, bit, marine](int sheet, int i, int j) {
+			uint32_t const cell = CellAt(sheet, i, j);
+			return cell != kNpcGridNoCell && (Flags(cell) & bit) && !(marine && (Flags(cell) & kNpcGridSteep));
+		},
+		kept.data(), kept.size());
 
-	for (size_t k = 1; k + 1 < wayCells.size(); k++)
+	// The cells to make points of: the ones kept, or if the smoother gave nothing back, every cell of the way
+	std::vector<uint32_t> path;
+
+	if (keptCount >= 2)
+	{
+		for (size_t k = 0; k < keptCount; k++)
+		{
+			path.push_back(wayCells[kept[k]]);
+		}
+	}
+	else
+	{
+		path = wayCells;
+	}
+
+	way.push_back(PointAt(path.front(), searchStart.x, searchStart.y, searchStart.z));
+	wayPointCells.push_back(path.front());
+	wayPolygons.push_back(PolygonOf(path.front()));
+
+	for (size_t k = 1; k + 1 < path.size(); k++)
 	{
 		double a[3], b[3], c[3];
-		Middle(wayCells[k - 1], a);
-		Middle(wayCells[k], b);
-		Middle(wayCells[k + 1], c);
-		bool const sameSheet = SheetOf(wayCells[k - 1]) == SheetOf(wayCells[k]) && SheetOf(wayCells[k]) == SheetOf(wayCells[k + 1]);
+		Middle(path[k - 1], a);
+		Middle(path[k], b);
+		Middle(path[k + 1], c);
+		bool const sameSheet = SheetOf(path[k - 1]) == SheetOf(path[k]) && SheetOf(path[k]) == SheetOf(path[k + 1]);
 
 		// The same direction in and out: the two steps point the same way, so their cross is nothing
 		double const in[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, out[3] = { c[0] - b[0], c[1] - b[1], c[2] - b[2] };
@@ -1850,9 +1880,9 @@ void NpcGrid::MakeWay()
 			continue;
 		}
 
-		way.push_back(PointAt(wayCells[k], b[0], b[1], b[2]));
-		wayPointCells.push_back(wayCells[k]);
-		wayPolygons.push_back(PolygonOf(wayCells[k]));
+		way.push_back(PointAt(path[k], b[0], b[1], b[2]));
+		wayPointCells.push_back(path[k]);
+		wayPolygons.push_back(PolygonOf(path[k]));
 
 		// Room is kept for the goal: a longer way is cut short there, and says so
 		if (way.size() + 1 >= kAlienWaysMostWayPoints)
@@ -1862,7 +1892,7 @@ void NpcGrid::MakeWay()
 		}
 	}
 
-	way.push_back(PointAt(wayCells.back(), searchGoal.x, searchGoal.y, searchGoal.z));
-	wayPointCells.push_back(wayCells.back());
-	wayPolygons.push_back(PolygonOf(wayCells.back()));
+	way.push_back(PointAt(path.back(), searchGoal.x, searchGoal.y, searchGoal.z));
+	wayPointCells.push_back(path.back());
+	wayPolygons.push_back(PolygonOf(path.back()));
 }

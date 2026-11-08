@@ -353,6 +353,14 @@ static void Searches()
 	Check(allStand, "on cells he fits on");
 	Check(looks > 0 && looks <= 100000, "it says how many cells it looked at (" + Number(looks) + ")");
 
+	// The same way spread over frames gives points: pulled straight across the floor, far fewer than its cells. The pillar's in the way of
+	// the diagonal from (1650, 1650) to (4350, 4350), so it takes at least one turn, and a straight line can't do it in one.
+	AlienWaysXYZ const marineFrom = { 1650, 0, 1650 }, marineTo = { 4350, 0, 4350 };
+	Check(grid.StartSearch(marineFrom, marineTo, kNpcGridMarine, 1, 100000) == nullptr && grid.Work(static_cast<size_t>(-1)) == kNpcGridFound,
+		"a marine's way from positions is found");
+	Check(grid.Way().size() >= 3 && grid.Way().size() * 2 <= grid.WayPath().size(),
+		"pulled straight, it has a turn or two, not a point for each cell (" + Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
+
 	// The same with too few looks
 	Check(grid.Search(from, to, kNpcGridMarine, 1, 3, &way, &looks) == kNpcGridTooFar && way.empty() && looks == 3,
 		"allowed to look at only 3 cells, it gives up, with no way");
