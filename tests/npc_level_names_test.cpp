@@ -2,6 +2,7 @@
 //
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   a restart that doesn't empty the list leaves the first run's name to be found, and the game's lines that empty it are read (#126)
+//   a lookup by a name from the level reads the list once at most, and always ends; the game's FindSBWithName is read to see it does so (#131)
 
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "npc_level_names.h"
 
@@ -113,6 +115,127 @@ static void TheRestart()
 	Check(Has(Between(systemFile, "int Destroy_CurrentEnvironment(void)", "KillFarModuleLocs();"), "DestroyAllStrategyBlocks();"), "and so does a level's end");
 }
 
+// What the lookup below is given to look among: a few things that exist now, each with a name, standing in for the game's live blocks
+struct LiveThing
+{
+	char name[kNpcNameLength];
+};
+
+static std::vector<LiveThing> liveThings;
+static int looks = 0;
+
+// The most looks the stand-in allows. A lookup never needs more than two, so more means one that goes round, and this stops it there
+// with an answer of its own instead of running for ever, so the test can say so.
+static int const kMostLooks = 10;
+static LiveThing wentRound;
+
+static LiveThing *FindLiveThing(char const *name)
+{
+	if (++looks > kMostLooks)
+	{
+		return &wentRound;
+	}
+
+	for (LiveThing &thing : liveThings)
+	{
+		if (memcmp(thing.name, name, kNpcNameLength) == 0)
+		{
+			return &thing;
+		}
+	}
+
+	return 0;
+}
+
+static LiveThing *Lookup(char const *name, bool networkGame)
+{
+	looks = 0;
+	return NpcLevelNames_FindByLevelName(&list, name, networkGame, FindLiveThing);
+}
+
+// A lookup by a name from the level, as FindSBWithName makes it: the live things first, and in a network game the list once, to a placed
+// NPC's new name, which is looked for among the live things only. However the names in the list lead from one to another, it ends.
+static void TheLookup()
+{
+	char levelA[kNpcNameLength], levelB[kNpcNameLength], newName[kNpcNameLength], nobody[kNpcNameLength];
+
+	NameFrom(levelA, 701);
+	NameFrom(levelB, 702);
+	NameFrom(newName, 703);
+	NameFrom(nobody, 704);
+
+	puts("a lookup by a name from the level (npc_level_names.h, and strategy_def.cpp read as text)");
+	NpcLevelNames_Clear(&list);
+	NpcLevelNames_Add(&list, levelA, newName);
+	liveThings.assign(2, LiveThing());
+	memcpy(liveThings[0].name, newName, kNpcNameLength);
+	memcpy(liveThings[1].name, levelB, kNpcNameLength);
+
+	Check(Lookup(levelB, true) == &liveThings[1] && looks == 1, "something live with that name is found straight away, without the list");
+	Check(Lookup(levelA, true) == &liveThings[0] && looks == 2, "in a network game, a placed NPC is found by its new name, in two looks");
+	Check(Lookup(levelA, false) == 0 && looks == 1, "in single player the list isn't read: names there are the level's own");
+	Check(Lookup(nobody, true) == 0 && looks == 1, "a name nothing has, and the list doesn't know, finds nothing after one look");
+
+	// Names in the list that lead to each other, and nothing live with any of them: a lookup that read the list again for each new name
+	// would go round them for ever
+	NpcLevelNames_Clear(&list);
+	NpcLevelNames_Add(&list, levelA, levelB);
+	NpcLevelNames_Add(&list, levelB, levelA);
+	liveThings.clear();
+
+	LiveThing *const roundA = Lookup(levelA, true);
+	int const looksA = looks;
+	LiveThing *const roundB = Lookup(levelB, true);
+	Check(roundA == 0 && looksA == 2 && roundB == 0 && looks == 2, "names in the list that lead to each other find nothing, in two looks, and the lookup ends");
+
+	std::string const strategies = ReadSourceFile("3dc/avp/strategy_def.cpp");
+	// Its body, without the line that names it, so a call to itself would show
+	char const *const findStarts = "STRATEGYBLOCK* FindSBWithName(char* id_name)\n{\n";
+	std::string const find = Between(strategies, findStarts, "\n}\n");
+	std::string const body = find.size() > strlen(findStarts) ? find.substr(strlen(findStarts)) : "";
+	Check(Has(body, "return NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, AvP.Network != I_No_Network, FindLiveSBWithName);"),
+		"the game's FindSBWithName makes its lookup this way, in a network game only");
+	Check(!body.empty() && !Has(body, "FindSBWithName"), "and never calls itself, so nothing it finds can send it round again");
+
+	std::string const live = Between(strategies, "static STRATEGYBLOCK *FindLiveSBWithName(char const *id_name)", "\n}\n");
+	Check(Has(live, "STRATEGYBLOCK* sbptr = ActiveStBlockList[stratblock];") && !Has(live, "NpcLevelNames"),
+		"and what it looks among is the live blocks, and only those");
+}
+
+// The rule that kept the old lookup from going round, before it read the list only once: a name in the level ends in a 0 byte, and a new
+// name never does, so a new name is never a name in the level. The lookup no longer counts on it, but npc_level_names.h says it holds, so
+// it's checked here, by reading the files that make each kind of name.
+static void TheLastByte()
+{
+	puts("the last byte of a name (the files that make names, read as text)");
+
+	struct Maker
+	{
+		char const *file;
+		char const *function;
+	};
+
+	Maker const makers[] = {
+		{ "3dc/win95/chunk_object.cpp", "ObjectID Object_Chunk::CalculateID()" },
+		{ "3dc/win95/chunk_sound.cpp", "ObjectID Sound_Object_Chunk::CalculateID()" },
+		{ "3dc/avp/win95/avp_chunk.cpp", "ObjectID AVP_Generator_Chunk::CalculateID()" },
+		{ "3dc/avp/win95/strategy_chunk.cpp", "ObjectID Virtual_Object_Properties_Chunk::CalculateID()" },
+	};
+
+	for (Maker const &maker : makers)
+	{
+		std::string const made = Between(ReadSourceFile(maker.file), maker.function, "\n}\n");
+		Check(Has(made, "\tbuffer[7]=0;\n"), std::string(maker.function) + " ends every id it makes in a 0 byte");
+	}
+
+	std::string const strategies = ReadSourceFile("3dc/avp/strategy_def.cpp");
+	std::string const named = Between(strategies, "void AssignNewSBName(STRATEGYBLOCK *sbPtr)", "\n}\n");
+	Check(Has(named, "\tif(AvP.Network != I_No_Network)\n\t{\n") && Has(named, "\t\tsbPtr->SBname[SB_NAME_LENGTH-1]=+10 + PlayerIdInPlayerList(AvPNetID);"),
+		"a new name in a network game ends in 10 + the player's place");
+	Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "#define NET_IDNOTINPLAYERLIST       (-1)"),
+		"and a player who isn't on the list has the place -1, so that's a 9, never a 0");
+}
+
 
 int main()
 {
@@ -202,6 +325,8 @@ int main()
 	Check(list.count == 0 && !list.saidItIsFull, "a new level starts again");
 
 	TheRestart();
+	TheLookup();
+	TheLastByte();
 
 	if (checksFailed)
 	{
