@@ -13,6 +13,7 @@
 //
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   says when the list has to be emptied, and why (#126)
+//   a lookup by a name in the level is here, NpcLevelNames_FindByLevelName, and it reads the list once at most (#131)
 //
 // This file knows nothing about the game, so tests/npc_level_names_test.cpp can try all of it.
 
@@ -82,8 +83,7 @@ static inline bool NpcLevelNames_Add(NpcLevelNames *list, char const *level, cha
 	return true;
 }
 
-// The new name of the NPC with this name in the level, or nothing. A level's name that's the same as its own new name isn't an answer, so a caller who looks that up can't
-// go round for ever.
+// The new name of the NPC with this name in the level, or nothing. A level's name that's the same as its own new name isn't an answer either.
 static inline char const *NpcLevelNames_NetworkNameFor(NpcLevelNames const *list, char const *level)
 {
 	if (NpcLevelName_IsEmpty(level))
@@ -100,6 +100,39 @@ static inline char const *NpcLevelNames_NetworkNameFor(NpcLevelNames const *list
 	}
 
 	return 0;
+}
+
+// Finds something by a name from the level, the way the game does it (FindSBWithName in strategy_def.cpp calls this). findLive looks among
+// the things that exist now, and gives back what has that name, or nothing. In a network game a name that finds nothing may be a placed
+// NPC's name in the level: then its new name is looked for, among the things that exist, and that's the end of it. The list is read once
+// at most, and never again for the new name, so a lookup always ends, whatever names a level file holds.
+//
+// It couldn't go round before this either, but only because of a rule kept far from here: every id a level gives anything ends in a 0 byte
+// (each CalculateID: chunk_object.cpp, chunk_sound.cpp, avp_chunk.cpp, strategy_chunk.cpp), and a new name ends in 10 + the player's place,
+// so 9 at the least (AssignNewSBName in strategy_def.cpp). So a new name is never a name in the level, and the list never leads from a new
+// name anywhere. This doesn't count on that rule, and tests/npc_level_names_test.cpp checks the rule is still kept.
+template <typename FindLive>
+static inline auto NpcLevelNames_FindByLevelName(NpcLevelNames const *list, char const *name, bool networkGame, FindLive findLive) -> decltype(findLive(name))
+{
+	// A name that's all zeros is no name. Many things made while the game runs have one, so looking for it would find one of them. So
+	// it's never looked for, and that goes for a new name in the list too, though nothing writes one: AssignNewSBName's last byte is never 0.
+	decltype(findLive(name)) const nothing = 0;
+
+	if (NpcLevelName_IsEmpty(name))
+	{
+		return nothing;
+	}
+
+	auto const found = findLive(name);
+
+	if (found || !networkGame)
+	{
+		return found;
+	}
+
+	char const *const newName = NpcLevelNames_NetworkNameFor(list, name);
+
+	return newName && !NpcLevelName_IsEmpty(newName) ? findLive(newName) : nothing;
 }
 
 // The name in the level of the NPC with this new name, or nothing if it didn't come from the level's list
