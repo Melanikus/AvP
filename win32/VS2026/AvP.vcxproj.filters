@@ -318,6 +318,9 @@
     <ClCompile Include="..\..\3dc\avp\alien_ways_map.cpp">
       <Filter>Source Files\behaviours</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\alien_ways_view.cpp">
+      <Filter>Source Files\behaviours</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\avp\bonusabilities.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -987,6 +990,9 @@
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\alien_ways_map.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\alien_ways_view.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
     <ClInclude Include="..\..\3dc\avp\bonusabilities.h">
