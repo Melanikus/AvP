@@ -1,8 +1,14 @@
 // The names placed NPCs have in a level, for a network game: see 3dc/avp/npc_level_names.h. Written 2026-11-06 by Melanikus for the AvP port.
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a restart that doesn't empty the list leaves the first run's name to be found, and the game's lines that empty it are read (#126)
 
 #include <stdio.h>
 #include <string.h>
 
+#include <algorithm>
+#include <fstream>
+#include <sstream>
 #include <string>
 
 #include "npc_level_names.h"
@@ -26,6 +32,87 @@ static void NameFrom(char *name, int number)
 }
 
 static NpcLevelNames list;
+
+static std::string ReadSourceFile(char const *name)
+{
+	// /FC in this test's settings makes __FILE__ the whole path of this file, so the repository's top is found from it
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+
+	// A file has one kind of line ending or the other depending on how it was cloned, and these checks shouldn't care
+	std::string text = all.str();
+	text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+	return text;
+}
+
+// The text from one marker up to the next one after it. Empty if either isn't there, so a check looking inside it fails instead of passing on nothing.
+static std::string Between(std::string const &text, char const *from, char const *to)
+{
+	std::string::size_type const start = text.find(from);
+
+	if (start == std::string::npos)
+	{
+		return "";
+	}
+
+	std::string::size_type const end = text.find(to, start + 1);
+
+	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+}
+
+static bool Has(std::string const &text, char const *words)
+{
+	return text.find(words) != std::string::npos;
+}
+
+// #126, as the game had it before the fix. In a co-op game, a placed facehugger (sulaco's hugger1) gets a new name when it's made, and its
+// pair goes in the list. The host dies, and the restart makes it again with the next new name. If the list isn't emptied in between, the
+// lookup a switch makes by its level name finds the first run's pair, a name nothing has any more, so the switch that wakes it finds nothing.
+static void TheRestart()
+{
+	char level[kNpcNameLength], firstRun[kNpcNameLength], afterRestart[kNpcNameLength];
+
+	NameFrom(level, 444);
+	NameFrom(firstRun, 555);
+	NameFrom(afterRestart, 556);
+
+	puts("a restart");
+	NpcLevelNames_Clear(&list);
+	NpcLevelNames_Add(&list, level, firstRun);
+	NpcLevelNames_Add(&list, level, afterRestart);
+	char const *found = NpcLevelNames_NetworkNameFor(&list, level);
+	Check(found && memcmp(found, firstRun, kNpcNameLength) == 0, "not emptied in between, the switch finds the first run's name: the state carried over");
+
+	NpcLevelNames_Clear(&list);
+	NpcLevelNames_Add(&list, level, firstRun);
+	NpcLevelNames_Clear(&list);   // what DestroyAllStrategyBlocks does now, before the NPCs are made again
+	NpcLevelNames_Add(&list, level, afterRestart);
+	found = NpcLevelNames_NetworkNameFor(&list, level);
+	Check(found && memcmp(found, afterRestart, kNpcNameLength) == 0, "emptied in between, it finds the NPC the restart made");
+	Check(list.count == 1, "and the list holds only this run's pair, so a long game can't fill it");
+
+	puts("the game empties it whenever its NPCs are destroyed (strategy_def.cpp and system.cpp, read as text)");
+	std::string const strategies = ReadSourceFile("3dc/avp/strategy_def.cpp");
+	std::string const destroyAll = Between(strategies, "void DestroyAllStrategyBlocks(void)", "void AssignNewSBName(STRATEGYBLOCK *sbPtr)");
+	Check(Has(destroyAll, "NpcLevelNames_Clear(&TheNpcLevelNames);"), "DestroyAllStrategyBlocks empties the list");
+	Check(Has(strategies, "static NpcLevelNames TheNpcLevelNames;") && Has(strategies, "NpcLevelNames_Add(&TheNpcLevelNames, levelName, sbPtr->SBname)"),
+		"and that's the list NameFromTheLevel fills");
+
+	std::string const systemFile = ReadSourceFile("3dc/avp/win95/system.cpp");
+	std::string const restart = Between(systemFile, "void RestartLevel()\n{", "create_strategies_from_list();");
+	Check(Has(restart, "DestroyAllStrategyBlocks();"), "a restart destroys every NPC before it makes them again");
+	Check(Has(Between(systemFile, "int Destroy_CurrentEnvironment(void)", "KillFarModuleLocs();"), "DestroyAllStrategyBlocks();"), "and so does a level's end");
+}
+
 
 int main()
 {
@@ -113,6 +200,8 @@ int main()
 
 	NpcLevelNames_Clear(&list);
 	Check(list.count == 0 && !list.saidItIsFull, "a new level starts again");
+
+	TheRestart();
 
 	if (checksFailed)
 	{

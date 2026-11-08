@@ -6,6 +6,14 @@
 //
 // The names come from a level file, which is treated as hostile: this list has a fixed size, and one too many is refused and not written.
 //
+// ONE LIST FOR ONE SET OF NPCs: a level name can be in the list more than once, and the first is the one found. So the list has to be emptied
+// whenever the NPCs it names are destroyed, before they're made again: strategy_def.cpp does that in DestroyAllStrategyBlocks, which a level's
+// end and a restart both run. Until 2026-11-08 it was emptied only when the program started. After a co-op restart a switch then found the
+// first run's name, which nothing had any more, and the facehugger it wakes floated for ever (#126).
+//
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   says when the list has to be emptied, and why (#126)
+//
 // This file knows nothing about the game, so tests/npc_level_names_test.cpp can try all of it.
 
 #ifndef NPC_LEVEL_NAMES_H
