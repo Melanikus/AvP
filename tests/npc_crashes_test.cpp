@@ -4,7 +4,8 @@
 //   it also checks how a marine's glow is chosen when you play the alien
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   and that facehuggers and the queen glow in the alien colour;
-//   and that an alien coming for its target checks it has one before it reads where it is
+//   and that an alien coming for its target checks it has one before it reads where it is;
+//   and that a dormant predator that wakes is still kept until the level ends
 //
 // WHAT IT TESTS
 //
@@ -410,6 +411,32 @@ static void TestTheAlienWithNoTarget()
 	Check(ComesBefore(approach, check, read), "but only after the check, so an alien with none never reads through the empty pointer");
 }
 
+// Everything placed in a level is marked to be kept until the level ends, because switches, tracks and other things in the level keep
+// hold of it, even after it's gone. A dormant predator that wakes has its block started afresh, which clears that mark, so it has to be
+// put back. Without it, once the predator's body has gone its block is handed to the next thing made, while the switches still hold it.
+static void TestTheWokenPredator()
+{
+	puts("A dormant predator that wakes:");
+
+	std::string const setup = ReadSourceFile("3dc/avp/win95/object_setup.cpp");
+	std::string const blocks = ReadSourceFile("3dc/avp/strategy_def.cpp");
+	std::string const predator = ReadSourceFile("3dc/avp/bh_predator.cpp");
+
+	std::string const placed = Between(setup, "void create_strategies_from_list ()", "\n}\n");
+	std::string const destroyed = Between(blocks, "int DestroyActiveStrategyBlock(STRATEGYBLOCK* sb)", "\n}\n");
+	std::string const afresh = Between(blocks, "void InitialiseSBValues(STRATEGYBLOCK* sptr)", "\n}\n");
+	std::string const wake = Between(predator, "void ActivateDormantPredator(STRATEGYBLOCK* sbPtr)", "\n}\n");
+
+	Check(Has(placed, "\t\tsbPtr->SBflags.preserve_until_end_of_level=1;"), "everything placed in a level is marked to be kept until it ends");
+	Check(Has(destroyed, "\t\t\t\tif(!sb->SBflags.preserve_until_end_of_level)\n\t\t\t\t{\n\t\t\t\t\tDeallocateStrategyBlock(sb);"),
+		"a block with the mark isn't handed back for something else when it's gone");
+	Check(Has(afresh, "\tsptr->SBflags.preserve_until_end_of_level = 0;"), "starting a block afresh clears the mark, which is why the predator puts it back");
+	Check(ComesBefore(wake, "bool const keptUntilTheLevelEnds = sbPtr->SBflags.preserve_until_end_of_level != 0;", "InitialiseSBValues(sbPtr);"),
+		"the woken predator's mark is read before its block starts afresh");
+	Check(ComesBefore(wake, "InitialiseSBValues(sbPtr);\n        sbPtr->SBflags.preserve_until_end_of_level = keptUntilTheLevelEnds ? 1 : 0;\n",
+		"EnableBehaviourType(sbPtr,I_BehaviourPredator ,&toolsData );"), "and put back straight after, before it becomes a predator");
+}
+
 int main()
 {
 	TestTheXenoborg();
@@ -425,6 +452,7 @@ int main()
 	TestTheMarineSeenByAnAlien();
 	TestTheAliensSeenByAnAlien();
 	TestTheAlienWithNoTarget();
+	TestTheWokenPredator();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;
