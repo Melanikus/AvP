@@ -15,6 +15,9 @@ vcpkg_from_github(
         # Our own fixes.
         006-config-file-hardening.patch
         008-excommon-only-with-examples.patch
+        # A dated notice at the top of each file the patches above change, saying what was changed, by whom
+        # and when, as the Library GPL asks (2(b)). Last, so the others apply to the files as upstream has them.
+        009-change-notices.patch
 )
 
 # Delete source folders that are never built, so that nothing we do not ship stays in the tree,

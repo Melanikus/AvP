@@ -1,0 +1,118 @@
+Put a dated notice at the top of each file the other patches change.
+
+Our own patch (AvP), applied after all the others. The GNU Library General Public License (2(b)) asks that each
+file we change carries a notice saying so, and when. Each notice says which patch changed the file, what it
+changed, and where that patch came from. 006-config-file-hardening.patch carries its own notice.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,3 +1,8 @@
++# Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++#   001-devendor-fmt.patch, from vcpkg's own port: builds with the fmt library vcpkg provides, not the copy kept in this source
++#   008-excommon-only-with-examples.patch, our own: declares the alsoft.excommon helper library only when the examples are built
++# Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ # CMake build file list for OpenAL
+ 
+ cmake_minimum_required(VERSION 3.13...3.31)
+diff --git a/OpenALConfig.cmake.in b/OpenALConfig.cmake.in
+--- a/OpenALConfig.cmake.in
++++ b/OpenALConfig.cmake.in
+@@ -1,3 +1,7 @@
++# Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++#   001-devendor-fmt.patch, from vcpkg's own port: finds the fmt and Threads libraries that OpenAL's target now needs
++# Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ if((NOT DEFINED CMAKE_VERSION) OR (CMAKE_VERSION VERSION_LESS "3.1"))
+    message(FATAL_ERROR "CMake >= 3.1 required")
+ endif()
+diff --git a/openal.pc.in b/openal.pc.in
+--- a/openal.pc.in
++++ b/openal.pc.in
+@@ -1,3 +1,7 @@
++# Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++#   001-devendor-fmt.patch, from vcpkg's own port: names fmt as a library OpenAL needs (Requires.private)
++# Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ prefix=@prefix@
+ exec_prefix=@exec_prefix@
+ libdir=@libdir@
+diff --git a/common/opthelpers.h b/common/opthelpers.h
+--- a/common/opthelpers.h
++++ b/common/opthelpers.h
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   002-fix-non-blocking.patch, from vcpkg's own port: uses clang's nonblocking attribute only when the C++ library isn't Microsoft's
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ #ifndef OPTHELPERS_H
+ #define OPTHELPERS_H
+ 
+diff --git a/alc/alc.cpp b/alc/alc.cpp
+--- a/alc/alc.cpp
++++ b/alc/alc.cpp
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   003-fix-fmt-header.patch, from vcpkg's own port: includes fmt/format.h in place of fmt/core.h
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ /**
+  * OpenAL cross platform audio library
+  * Copyright (C) 1999-2007 by authors.
+diff --git a/alc/backends/pipewire.cpp b/alc/backends/pipewire.cpp
+--- a/alc/backends/pipewire.cpp
++++ b/alc/backends/pipewire.cpp
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   003-fix-fmt-header.patch, from vcpkg's own port: includes fmt/format.h in place of fmt/core.h
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ /**
+  * OpenAL cross platform audio library
+  * Copyright (C) 2010 by Chris Robinson
+diff --git a/common/pffft.cpp b/common/pffft.cpp
+--- a/common/pffft.cpp
++++ b/common/pffft.cpp
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   003-fix-fmt-header.patch, from vcpkg's own port: includes fmt/format.h in place of fmt/core.h
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ //$ nobt
+ 
+ /* Copyright (c) 2013  Julien Pommier ( pommier@modartt.com )
+diff --git a/core/hrtf_loader.cpp b/core/hrtf_loader.cpp
+--- a/core/hrtf_loader.cpp
++++ b/core/hrtf_loader.cpp
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   003-fix-fmt-header.patch, from vcpkg's own port: includes fmt/format.h in place of fmt/core.h, and fmt/std.h as well
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ 
+ #include "config.h"
+ 
+diff --git a/al/auxeffectslot.cpp b/al/auxeffectslot.cpp
+--- a/al/auxeffectslot.cpp
++++ b/al/auxeffectslot.cpp
+@@ -1,3 +1,7 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   004-fix-libcxx-compatibility.patch, from vcpkg's own port: clears a new effect slot list's end with std::span, not std::views::drop
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ /**
+  * OpenAL cross platform audio library
+  * Copyright (C) 1999-2007 by authors.
+diff --git a/alc/alconfig.cpp b/alc/alconfig.cpp
+--- a/alc/alconfig.cpp
++++ b/alc/alconfig.cpp
+@@ -1,3 +1,8 @@
++// Modified 2026-11-03 by Melanikus for the AvP port, in https://github.com/Melanikus/AvP (vcpkg-overlay-ports/openal-soft):
++//   005-upstream-c41281da-config-fs-ifstream.patch, from upstream's commit c41281da: opens the settings files through fs::ifstream
++//   006-config-file-hardening.patch, our own, has its notice below the licence
++// Modified 2026-11-08 by Melanikus for the AvP port: this notice, added by 009-change-notices.patch
++
+ /**
+  * OpenAL cross platform audio library
+  * Copyright (C) 1999-2007 by authors.
