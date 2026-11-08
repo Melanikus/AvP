@@ -4,6 +4,9 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game a placed NPC can still be found by the name it has in the level: see npc_level_names.h
 //   a level with no block left to carry something over goes on
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a new name's number passes over any number something alive still has, so when the count goes round no two live things share an id
+//   (see sb_name_numbers.h, #139)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -22,6 +25,9 @@
 #include "tables.h"
 #include "logString.h"
 #include "npc_level_names.h"
+#include "sb_name_numbers.h"
+
+#include <string.h>
 
 /* 
 	this attaches runtime and precompiled object
@@ -779,17 +785,28 @@ void DestroyAllStrategyBlocks(void)
 
 }
 
-void AssignNewSBName(STRATEGYBLOCK *sbPtr) 
+// Whether something alive other than self already has this number and tag in its name: the four bytes from SBname[4], which the network
+// uses as a thing's id. The number's three bytes come first, low byte first, as the game writes them, and the tag is the fourth.
+static bool NameNumberIsInUse(STRATEGYBLOCK const *self, unsigned int number, char tag)
 {
-	IncrementalSBname++;
+	unsigned char const id[4] = { (unsigned char)(number & 0xff), (unsigned char)((number >> 8) & 0xff), (unsigned char)((number >> 16) & 0xff), (unsigned char)tag };
 
-	if(IncrementalSBname>0xffffff)
+	for (int i = 0; i < NumActiveStBlocks; i++)
 	{
-		IncrementalSBname=1;
+		STRATEGYBLOCK const *const other = ActiveStBlockList[i];
+
+		if (other && other != self && memcmp(&other->SBname[4], id, sizeof(id)) == 0)
+		{
+			return true;
+		}
 	}
 
-	*((int *)&sbPtr->SBname[4])=IncrementalSBname;
-	
+	return false;
+}
+
+void AssignNewSBName(STRATEGYBLOCK *sbPtr)
+{
+	// The tag first, in the name's last byte: 1 playing alone, or 10 + the player's place in a network game, so two players' names never meet
 	if(AvP.Network != I_No_Network)
 	{
 		//modify name to ensure uniqueness between players
@@ -800,6 +817,17 @@ void AssignNewSBName(STRATEGYBLOCK *sbPtr)
 	{
 		sbPtr->SBname[SB_NAME_LENGTH-1]=1; /* Just to make sure... */
 	}
+
+	char const tag = sbPtr->SBname[SB_NAME_LENGTH-1];
+
+	// The next number, passing over one that something alive still has (sb_name_numbers.h): after the count goes round, a number can come
+	// back while the thing that had it is still there
+	IncrementalSBname = SBNameNumber_Next(IncrementalSBname, [sbPtr, tag](unsigned int number) { return NameNumberIsInUse(sbPtr, number, tag); }, maxstblocks);
+
+	// The number's three bytes, low byte first, as the game has always written them, leaving the tag in the fourth
+	sbPtr->SBname[4] = (char)(IncrementalSBname & 0xff);
+	sbPtr->SBname[5] = (char)((IncrementalSBname >> 8) & 0xff);
+	sbPtr->SBname[6] = (char)((IncrementalSBname >> 16) & 0xff);
 }
 
 void GivePlayerCloakAway(void) {

@@ -530,6 +530,7 @@
     <ClInclude Include="..\..\3dc\avp\ai_sight.h" />
     <ClInclude Include="..\..\3dc\avp\bh_agun.h" />
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h" />
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h" />
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h" />
     <ClInclude Include="..\..\3dc\avp\win95\npc_ghosts.h" />
     <ClInclude Include="..\..\3dc\avp\bh_ais.h" />

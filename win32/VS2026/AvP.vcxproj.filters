@@ -1367,6 +1367,9 @@
     <ClInclude Include="..\..\3dc\avp\npc_level_names.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\3dc\avp\sb_name_numbers.h">
+      <Filter>Header Files\behaviours</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\3dc\avp\npc_kinds.h">
       <Filter>Header Files\behaviours</Filter>
     </ClInclude>
