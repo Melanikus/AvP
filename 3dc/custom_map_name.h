@@ -1,4 +1,4 @@
-// The rule for a custom map's name. Written 2026-11-07 for the AvP port. Credit: Melanikus and Bobblen (the custom maps follow
+// The rule for a custom map's name. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and Bobblen (the custom maps follow
 // Bobblen's avp-forever, rewritten).
 //
 // A custom map is a level file in avp_rifs/Custom, and its name is the file's name without ".rif". The name is used to build the

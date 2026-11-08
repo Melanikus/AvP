@@ -1,4 +1,4 @@
-// A stand-in for the DirectX helper library's header, for the custom maps test only. Written 2026-11-07 for the AvP port.
+// A stand-in for the DirectX helper library's header, for the custom maps test only. Written 2026-11-07 by Melanikus for the AvP port.
 // Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten).
 //
 // custom_maps.cpp asks for pictures through TextureManager.h, whose graphics header (win32/d3_func.h) includes the real d3dx9.h. That

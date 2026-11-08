@@ -1,4 +1,4 @@
-// The custom maps you can play in single player: see custom_maps.h. Written 2026-11-07 for the AvP port. Credit: Melanikus and
+// The custom maps you can play in single player: see custom_maps.h. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and
 // Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten).
 
 #include "3dc.h"

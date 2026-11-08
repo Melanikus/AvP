@@ -1,4 +1,4 @@
-// The test of how a level file is told apart as single player or multiplayer. Written 2026-11-07 for the AvP port.
+// The test of how a level file is told apart as single player or multiplayer. Written 2026-11-07 by Melanikus for the AvP port.
 // Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten).
 //
 // WHAT IT TESTS

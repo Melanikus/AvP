@@ -1,4 +1,4 @@
-// The test of finding the custom maps for single player. Written 2026-11-07 for the AvP port. Credit: Melanikus and Bobblen (the
+// The test of finding the custom maps for single player. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and Bobblen (the
 // custom single-player maps follow Bobblen's avp-forever, rewritten).
 //
 // WHAT IT TESTS

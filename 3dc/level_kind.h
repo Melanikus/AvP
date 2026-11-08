@@ -1,4 +1,4 @@
-// What a level file is made for: single player or multiplayer. Written 2026-11-07 for the AvP port. Credit: Melanikus and Bobblen
+// What a level file is made for: single player or multiplayer. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and Bobblen
 // (the custom single-player maps follow Bobblen's avp-forever, rewritten).
 //
 // WHY: the single-player menu lists the custom maps in avp_rifs/Custom, but only those made for single player. Most of what's in that

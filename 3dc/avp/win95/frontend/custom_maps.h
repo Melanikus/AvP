@@ -1,4 +1,4 @@
-// The custom maps you can play in single player. Written 2026-11-07 for the AvP port. Credit: Melanikus and Bobblen (the custom
+// The custom maps you can play in single player. Written 2026-11-07 by Melanikus for the AvP port. Credit: Melanikus and Bobblen (the custom
 // single-player maps follow Bobblen's avp-forever, rewritten).
 //
 // A custom map is a level file someone has put in avp_rifs/Custom. The single-player menu lists the ones made for single player
