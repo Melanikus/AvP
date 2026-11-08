@@ -744,6 +744,26 @@ static void SourceOfTheGame()
 		"SOURCE: nor does turning back as it goes round by the walls, and the log says so");
 	Check(Has(tests, "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)\n\t{"), "SOURCE: and the other avoidance, switched off in this game, is kept off a way too");
 
+	// The same in Wander (Fourth's hook there)
+	std::string const wander = Between(near, "static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Wait(STRATEGYBLOCK *sbPtr)\n{");
+	Check(Has(wander, "\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)"),
+		"SOURCE: in Wander, an alien steered by its way this frame is marked so, by the gravity only the way's branch turns off");
+	Check(Has(wander, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Wander\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
+		"SOURCE: in Wander, running into the wall it climbs doesn't send it off, and the log says it would have");
+	Check(Has(wander, "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Wander\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget("),
+		"SOURCE: in Wander, nor does turning back, and the log says so");
+	Check(Has(wander, "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)   // Wander\n\t{"), "SOURCE: in Wander, the switched-off avoidance is kept off a way too");
+
+	// The same in Hunt (Fourth's hook there)
+	std::string const hunt = Between(near, "static void AlienNearState_Hunt(STRATEGYBLOCK *sbPtr)\n{", "static void AlienNearState_Pounce(STRATEGYBLOCK *sbPtr)\n{");
+	Check(Has(hunt, "\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)"),
+		"SOURCE: in Hunt, an alien steered by its way this frame is marked so, by the gravity only the way's branch turns off");
+	Check(Has(hunt, "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Hunt\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))"),
+		"SOURCE: in Hunt, running into the wall it climbs doesn't send it off, and the log says it would have");
+	Check(Has(hunt, "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Hunt\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget("),
+		"SOURCE: in Hunt, nor does turning back, and the log says so");
+	Check(Has(hunt, "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)   // Hunt\n\t{"), "SOURCE: in Hunt, the switched-off avoidance is kept off a way too");
+
 	std::string const would = Between(ways, "void AlienWays_WouldHaveAvoided(STRATEGYBLOCK *alien, bool turnedBack)", "bool AlienWays_Following(");
 	Check(Has(would, "if (!w || clockMs - w->lastWouldHaveMs < 1000)"), "SOURCE: the line comes at most once a second for each alien");
 	Check(Has(would, "wouldHaveLines >= kAlienWaysMostWouldHaveLines"), "SOURCE: and has a most for each level");

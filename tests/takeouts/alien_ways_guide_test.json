@@ -574,6 +574,86 @@
 					"to": "return before == after || after == kAlienWaysFloor || KindUnder(down) == static_cast<int>(after);"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: in Wander, an alien on a way is never marked so, and is sent off to avoid the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Wander)",
+					"to": "\tbool const onAWay = false;   // (Wander)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, an alien on a way is sent off when it runs into the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Wander\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))",
+					"to": "\t\tif((obstruction.environment)||(obstruction.otherCharacter))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, an alien on a way is sent off when it turns back",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Wander\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget(",
+					"to": "\tif(NPC_CannotReachTarget("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Wander, the switched-off avoidance acts on an alien on a way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)   // Wander\n\t{",
+					"to": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, an alien on a way is never marked so, and is sent off to avoid the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tbool const onAWay = (dynPtr->UseStandardGravity == 0);   // its way steers it this frame (Hunt)",
+					"to": "\tbool const onAWay = false;   // (Hunt)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, an alien on a way is sent off when it runs into the wall it climbs",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\tif (onAWay && ((obstruction.environment)||(obstruction.otherCharacter)))   // Hunt\n\t\t{\n\t\t\tAlienWays_WouldHaveAvoided(sbPtr, false);\n\t\t}\n\t\telse if((obstruction.environment)||(obstruction.otherCharacter))",
+					"to": "\t\tif((obstruction.environment)||(obstruction.otherCharacter))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, an alien on a way is sent off when it turns back",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\tif (onAWay && NPC_CannotReachTarget(&(alienStatusPointer->moveData), &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))   // Hunt\n\t{\n\t\tAlienWays_WouldHaveAvoided(sbPtr, true);\n\t}\n\telse if(!onAWay && NPC_CannotReachTarget(",
+					"to": "\tif(NPC_CannotReachTarget("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: in Hunt, the switched-off avoidance acts on an alien on a way",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\tif (!onAWay)   // Hunt\n\t{",
+					"to": "\t#if ALL_NEW_AVOIDANCE_ALIEN\n\t{"
+				}
+			]
 		}
 	]
 }
