@@ -45,6 +45,98 @@ jobs:
         with:
           ports: dxsdk-d3dx enet
 
+      # SANITIZE-RUN-1's second probe, on a scratch branch that is never merged. 1617b81b's check, that a test's program loads the
+      # sanitizer's library, can't tell: linking with /fsanitize=address brings the library in even when no code was compiled with it
+      # (run 42493315111, check 4). So the check has to read the objects. This asks what this runner's compiler really writes:
+      # - for three small objects, two compiled with the sanitizer (one touching no memory at all) and one without, what dumpbin's
+      #   /directives says and which of its symbols name asan;
+      # - the same for the enet.lib the network tests link now, which vcpkg builds without the sanitizer;
+      # - whether vcpkg builds ENet with a triplet that adds /fsanitize=address (release only: vcpkg's debug flags have /RTC1, which the
+      #   sanitizer can't be used with), what that enet.lib holds, and whether enet_hostile_test and net_close_test pass against it.
+      # It never fails the job: the answers are in this log, whatever they are. The real enet.lib is put back before the tests are built.
+      - name: "Probe: what marks an object compiled with the sanitizer, and ENet built with it"
+        shell: pwsh
+        run: |
+          # Visual Studio set up in this window, the way sanitize.ps1 does it, by running it once
+          & ./tests/takeouts/sanitize.ps1 relief_map_file_test
+          "===== sanitize.ps1 relief_map_file_test gave back $LASTEXITCODE"
+
+          $probe = Join-Path $env:RUNNER_TEMP 'probe2'
+          New-Item -ItemType Directory -Force $probe | Out-Null
+          Set-Content -LiteralPath "$probe/noaccess.cpp" -Value 'int main() { return 1; }'
+          Set-Content -LiteralPath "$probe/heapread.cpp" -Value @(
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            'int main()'
+            '{'
+            '    volatile int past = 16;'
+            '    char *block = static_cast<char *>(std::malloc(16));'
+            '    if (!block) return 2;'
+            '    std::printf("read %d\n", block[past]);'
+            '    std::free(block);'
+            '    return 0;'
+            '}'
+          )
+
+          function Show-Object([string]$what, [string]$file) {
+            "===== $what ($file)"
+            "--- dumpbin /directives:"
+            & dumpbin.exe /nologo /directives $file
+            $symbols = @(& dumpbin.exe /nologo /symbols $file)
+            $asan = @($symbols | Select-String -Pattern 'asan' -SimpleMatch)
+            "--- $($asan.Count) of $($symbols.Count) symbol lines name asan. The first 30:"
+            $asan | Select-Object -First 30 | ForEach-Object { $_.Line }
+          }
+
+          & cl.exe /nologo /c /MT /EHsc /fsanitize=address "/Fo:$probe/sanitized_noaccess.obj" "$probe/noaccess.cpp"
+          & cl.exe /nologo /c /MT /EHsc /fsanitize=address "/Fo:$probe/sanitized_heapread.obj" "$probe/heapread.cpp"
+          & cl.exe /nologo /c /MT /EHsc "/Fo:$probe/plain_heapread.obj" "$probe/heapread.cpp"
+          Show-Object 'compiled with the sanitizer, touching no memory' "$probe/sanitized_noaccess.obj"
+          Show-Object 'compiled with the sanitizer, reading the heap' "$probe/sanitized_heapread.obj"
+          Show-Object 'compiled without the sanitizer' "$probe/plain_heapread.obj"
+
+          $enet = 'vcpkg_installed/x86-windows-static/lib/enet.lib'
+          "===== the objects inside $enet"
+          & lib.exe /nologo /list $enet
+          Show-Object 'enet.lib as the tests link it now, x86-windows-static' $enet
+
+          # A triplet like ours, with the sanitizer added, written for this probe only
+          $triplets = Join-Path $env:RUNNER_TEMP 'probe2-triplets'
+          New-Item -ItemType Directory -Force $triplets | Out-Null
+          $ours = (Resolve-Path -LiteralPath 'vcpkg-overlay-triplets/x86-windows-static.cmake').Path -replace '\\', '/'
+          Set-Content -LiteralPath "$triplets/x86-windows-static-asan.cmake" -Value @(
+            "include(`"$ours`")"
+            'set(VCPKG_BUILD_TYPE release)'
+            'set(VCPKG_C_FLAGS "/fsanitize=address")'
+            'set(VCPKG_CXX_FLAGS "/fsanitize=address")'
+          )
+          "===== the probe's triplet:"
+          Get-Content -LiteralPath "$triplets/x86-windows-static-asan.cmake"
+
+          $installed = Join-Path $env:RUNNER_TEMP 'probe2-installed'
+          & (Join-Path $env:RUNNER_TEMP 'vcpkg/vcpkg.exe') install enet:x86-windows-static-asan --classic --overlay-ports=vcpkg-overlay-ports "--overlay-triplets=$triplets" "--x-install-root=$installed"
+          "===== vcpkg gave back $LASTEXITCODE"
+
+          $sanitizedEnet = Join-Path $installed 'x86-windows-static-asan/lib/enet.lib'
+          if (Test-Path -LiteralPath $sanitizedEnet) {
+            Show-Object 'enet.lib built with the sanitizer triplet' $sanitizedEnet
+
+            # The two network tests against it: it's put where their settings look, in this job only, and the real one put back after
+            Copy-Item -LiteralPath $enet -Destination "$probe/enet-as-it-was.lib"
+            Copy-Item -LiteralPath $sanitizedEnet -Destination $enet -Force
+            foreach ($test in 'enet_hostile_test', 'net_close_test') {
+              "===== $test, against the ENet built with the sanitizer"
+              & ./tests/takeouts/sanitize.ps1 $test
+              "===== sanitize.ps1 gave back $LASTEXITCODE for $test"
+            }
+            Copy-Item -LiteralPath "$probe/enet-as-it-was.lib" -Destination $enet -Force
+          }
+          else {
+            "===== no enet.lib came from the sanitizer triplet. The end of each of vcpkg's logs for it:"
+            Get-ChildItem -Recurse -File -Filter '*.log' (Join-Path $env:RUNNER_TEMP 'vcpkg/buildtrees/enet') -ErrorAction SilentlyContinue | ForEach-Object { "--- $($_.FullName)"; Get-Content -LiteralPath $_.FullName -Tail 40 }
+          }
+          exit 0
+
       - name: Build the tests
         shell: pwsh
         run: ./tests/build.ps1
