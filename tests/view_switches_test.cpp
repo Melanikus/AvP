@@ -631,8 +631,9 @@ static void TheRealGame()
 	std::string const loading = Between(settings, "void ViewSettings_Load()", "void ViewSettings_MenuFrame()");
 
 	Check(Has(loading, "Lighting_FromSavedWord(rendering.c_str(), &choice)"), "the saved choice goes through the strict reader");
-	Check(Has(loading, "Config_GetString(kHeading, kRendering, Lighting_Word(kLightingGouraud))"), "with nothing saved it's Gouraud");
-	Check(Has(loading, "Config_GetBool(kHeading, kShadows, false)"), "shadows off");
+	// What a new file and an old one start with is tests/view_settings_start_test.cpp's to check. Here: the line is read so a new file can be told.
+	Check(Has(loading, "Config_GetString(kHeading, kRendering, \"\")"), "the Rendering line is read with nothing as its default, so a file with no line is known");
+	Check(Has(loading, "Config_GetBool(kHeading, kShadows, true)"), "and with no Shadows line, shadows are on");
 	Check(Has(loading, "Config_GetBool(kHeading, kAutoGenerate, false)"), "and no maps worked out");
 	Check(Has(loading, "textureRelief.SetAutoGenerate(autoGenerate);"), "which the picture code is told");
 	Check(Has(loading, "ViewSwitches_SetAtStart(choice, shadows ? 1 : 0);"), "and the switches and the view are set together");
