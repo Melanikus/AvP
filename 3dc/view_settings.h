@@ -5,10 +5,12 @@
 
 #include "view_keys.h"
 
-// What the page's first three lines are showing. The menu changes these directly when the player presses a key, so ViewSettings_MenuFrame is what notices.
+// What the page's first four lines are showing. The menu changes these directly when the player presses a key, so ViewSettings_MenuFrame is what notices.
 extern int MenuRendering;      // one of the LightingChoice numbers
 extern int MenuShadows;        // 0 or 1
 extern int MenuAutoGenerate;   // 0 or 1
+extern int MenuLampsReal;      // 0 or 1
+extern int MenuLampBeams;      // 0 or 1
 
 // Once the settings file has been read, and before anything looks at how to draw: starts the game the way the player last chose, or the way the game has always looked.
 void ViewSettings_Load();

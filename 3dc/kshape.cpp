@@ -4,6 +4,10 @@
 // AvP port by Barry Duncan.
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   two commented-out calls to DecalWithinFrustum are gone, with the function (see frustum.cpp)
+//   the shoulder lamp's place on the light list carries its own aim, and whether it was a real light is worked out again each frame
+//   other marines' lamps are gathered once a frame, as the lights are chosen, and the walls near their beams are kept as the level is drawn
+//   with lights added per pixel and shadows on, the nearest of other marines' lamps are real lights, ahead of the level's lamps
+//   with lights added per pixel, the player can turn the beams in the air off, and a lamp's pool is left out only where it's a real light
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the thermal-vision blue fade far away uses Rebellion's original factor (4096) again; the 2021 value
 //   overflowed;
@@ -48,6 +52,9 @@
 #include "kshape.h"
 #include "pixel_lights.h"
 #include "shoulder_lamp.h"
+#include "other_lamps.h"
+#include "lamp_pick.h"
+#include "lamp_volume.h"
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "kzsort.h"
@@ -5703,7 +5710,7 @@ struct ToyFoundLight
 {
 	LIGHTBLOCK *light;
 	void const *owner;  // what carries it, or nothing
-	bool comesFirst;    // a flare or one of the player's own lights, which come ahead of any score
+	bool comesFirst;    // a flare, one of the player's own lights, or another marine's lamp that is a real light: these come ahead of any score
 	int order;          // lowest first
 	int distance;       // from the camera
 };
@@ -5870,6 +5877,28 @@ struct LightsLookedAt
 
 static LightsLookedAt lightsThisFrame;
 
+// Other marines' lamps as real lights, this frame: see ConsiderTheOtherLamps. Never in the game's own list of lights: that's what a marine's hit roll and the
+// player's stealth read, so a lamp there would change the game. These only ever go on the list of lights the pictures are drawn with.
+static LIGHTBLOCK otherLampLights[kLampMostReal];
+static float otherLampAims[kLampMostReal][3];
+static int otherLampNumbers[kLampMostReal];              // which of the lamps in other_lamps.h each one is
+static bool otherLampIsALight[kLampMostShown * 2];       // and which of those lamps really got a place on the list
+static int numOtherLampLights = 0;
+
+// Which of those this is, or -1 for any other light
+static int OtherLampLightNumber(const LIGHTBLOCK *light)
+{
+	for (int i = 0; i < numOtherLampLights; i++)
+	{
+		if (light == &otherLampLights[i])
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 // Keeps the nearest lights seen so far, in order, up to as many as can be scored: see KeepTheLightsThatShowMost. A light marked first goes ahead of every other, nearest of those first, and
 // none of the tests below apply to it: a flare is always chosen, near or far. block is what carries the light, or nothing for a
 // light element, which is on no block.
@@ -5970,7 +5999,7 @@ static void ToyConsiderLight(LIGHTBLOCK *light, const DISPLAYBLOCK *block, ToyFo
 
 	found[place].light = light;
 	found[place].owner = block ? ToyOwnerOf(block) : 0;
-	found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));
+	found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block)) || OtherLampLightNumber(light) >= 0;
 	found[place].order = order;
 	found[place].distance = distance;
 }
@@ -6269,7 +6298,7 @@ bool ToyShadows_ShoulderLampIsChosen()
 
 static void ConsiderTheShoulderLamp(ToyFoundLight *found, int *numFound, int most)
 {
-	if (!ToyShadowsLightsByPixel || !ShoulderLamp_CanBeALight() || !Player)
+	if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_CanBeALight() || !Player)
 	{
 		return;
 	}
@@ -6292,6 +6321,258 @@ static void ConsiderTheShoulderLamp(ToyFoundLight *found, int *numFound, int mos
 
 	// Given as the player's, so that it counts even this close to the camera, and so that his own body doesn't throw a shadow from it
 	ToyConsiderLight(&shoulderLampLight, Player, found, numFound, most, &lightsThisFrame.steadyInReach);
+}
+
+// ---- Other marines' lamp beams: see lamp_volume.h
+//
+// Each frame, the lamps shown (other_lamps.h) become beams in the view's numbers, the same numbers the light list and the shadows use. While
+// the level is drawn, each wall a beam could meet is kept, and d3d_render.cpp draws the beams from those at the end of the frame. A frame
+// with no lamp shown keeps no walls and draws nothing, so it's drawn exactly as it was before there were beams.
+
+struct LampBeam
+{
+	float from[3];
+	float aim[3];
+	float strength;
+	int lamp;        // which of the lamps in other_lamps.h it is
+};
+
+// The most walls kept for the beams in one frame. A room seldom has this many near a lamp, and any beyond it are left out: a beam then
+// goes through them.
+static const int kLampBeamMostWalls = 4096;
+
+static LampBeam lampBeams[kLampMostShown];
+static int numLampBeams = 0;
+static LampVolumeTriangle lampBeamWalls[kLampBeamMostWalls];
+static LampVolumeTriangle lampBeamWallsNearOne[kLampBeamMostWalls];   // the kept walls near the beam being made, so its rays test only those
+static int numLampBeamWalls = 0;
+static int lampBeamWallsLeftOut = 0;
+
+// The beams only last a frame. The menus and the intro end their frames the same way a level does, without choosing any lights, so without this
+// they would go on drawing the last level's beams.
+void LampBeams_Forget()
+{
+	numLampBeams = 0;
+	numLampBeamWalls = 0;
+	lampBeamWallsLeftOut = 0;
+	numOtherLampLights = 0;
+	memset(otherLampIsALight, 0, sizeof(otherLampIsALight));
+}
+
+// Where a lamp is and which way it points, in the numbers the light list uses. False if it has no direction to point in.
+static bool OtherLampInView(OtherLamp const *lamp, float *from, float *aim)
+{
+	// A point a metre along its aim, to turn the aim into the view's numbers the same way as the place
+	float const place[3] = { (float)lamp->place.vx, (float)lamp->place.vy, (float)lamp->place.vz };
+	float const ahead[3] = { place[0] + (float)lamp->aim.vx * (1000.0f / 65536.0f), place[1] + (float)lamp->aim.vy * (1000.0f / 65536.0f), place[2] + (float)lamp->aim.vz * (1000.0f / 65536.0f) };
+	float placeInView[3], aheadInView[3];
+
+	TranslatePoint(place, placeInView, toyViewMatrix);
+	TranslatePoint(ahead, aheadInView, toyViewMatrix);
+
+	// The view's numbers have up the other way round from the game's, as the light list does
+	float const way[3] = { aheadInView[0] - placeInView[0], -(aheadInView[1] - placeInView[1]), aheadInView[2] - placeInView[2] };
+	float const length = sqrtf(way[0] * way[0] + way[1] * way[1] + way[2] * way[2]);
+
+	if (!(length > 1.0f))
+	{
+		return false;
+	}
+
+	from[0] = placeInView[0];
+	from[1] = -placeInView[1];
+	from[2] = placeInView[2];
+	aim[0] = way[0] / length;
+	aim[1] = way[1] / length;
+	aim[2] = way[2] / length;
+	return true;
+}
+
+// The shown lamps, as this frame's beams. Called as the lights are chosen, once the view's matrix is this frame's.
+static void LampBeams_ForThisFrame()
+{
+	LampBeams_Forget();
+
+	// Only in the normal view: the vision modes draw their own way, and a beam means nothing in them
+	if (CurrentVisionMode != VISION_MODE_NORMAL)
+	{
+		return;
+	}
+
+	for (int i = 0; i < OtherLamps_Count() && numLampBeams < kLampMostShown; i++)
+	{
+		OtherLamp const *const lamp = OtherLamps_At(i);
+		LampBeam &beam = lampBeams[numLampBeams];
+
+		if (OtherLampInView(lamp, beam.from, beam.aim))
+		{
+			beam.strength = lamp->strength;
+			beam.lamp = i;
+			numLampBeams++;
+		}
+	}
+}
+
+// Keeps the walls of one piece of the level that this frame's beams could meet. Called as each piece is drawn, with its corners already in the
+// view's numbers. Only the level's own walls: marines and other things don't cut a beam yet.
+static void LampBeams_TakeWalls(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr)
+{
+	if (numLampBeams == 0 || !dptr->ObMyModule || gunLayer || DrawingAReflection || ToyShadowsInMirror || (shapePtr->shapeflags & (ShapeFlag_Sprite | ShapeFlag_SpriteR)))
+	{
+		return;
+	}
+
+	int numitems = shapePtr->numitems;
+	int **itemArrayPtr = shapePtr->items;
+
+	while (numitems-- > 0)
+	{
+		POLYHEADER const *const polyPtr = (POLYHEADER *)(*itemArrayPtr++);
+
+		if (polyPtr->PolyFlags & (iflag_notvis | iflag_transparent | iflag_light_corona))
+		{
+			continue;
+		}
+
+		float pts[maxpolypts * 3];
+		int count = 0;
+		int const *vertexNumberPtr = &polyPtr->Poly1stPt;
+		bool pointsAreSafe = true;
+
+		while (*vertexNumberPtr != kTerminationMarker && count < maxpolypts)
+		{
+			// this number comes from a game file, so it's checked before it's used to find a point
+			int const pointNumber = *vertexNumberPtr++;
+
+			if (pointNumber < 0 || pointNumber >= shapePtr->numpoints || pointNumber >= maxrotpts)
+			{
+				pointsAreSafe = false;
+				break;
+			}
+
+			VECTORCH const *const point = &RotatedPts[pointNumber];
+
+			pts[count * 3 + 0] = (float)point->vx;
+			pts[count * 3 + 1] = (float)-point->vy;
+			pts[count * 3 + 2] = (float)point->vz;
+			count++;
+		}
+
+		// A polygon's a fan of triangles from its first corner
+		for (int corner = 1; pointsAreSafe && corner + 1 < count; corner++)
+		{
+			LampVolumeTriangle wall;
+
+			memcpy(wall.a, &pts[0], sizeof(wall.a));
+			memcpy(wall.b, &pts[corner * 3], sizeof(wall.b));
+			memcpy(wall.c, &pts[(corner + 1) * 3], sizeof(wall.c));
+
+			bool nearABeam = false;
+
+			for (int b = 0; b < numLampBeams && !nearABeam; b++)
+			{
+				nearABeam = LampVolume_MayBeHit(wall, lampBeams[b].from, lampBeams[b].aim, kLampVolumeReach);
+			}
+
+			if (!nearABeam)
+			{
+				continue;
+			}
+
+			if (numLampBeamWalls >= kLampBeamMostWalls)
+			{
+				lampBeamWallsLeftOut++;
+				continue;
+			}
+
+			lampBeamWalls[numLampBeamWalls++] = wall;
+		}
+	}
+}
+
+int LampBeams_Count()
+{
+	return numLampBeams;
+}
+
+// Makes beam number which's shape, for drawing: see LampVolume_Build. Says in first which of its triangles to start from, and gives back how many
+// to draw, 0 for none.
+int LampBeams_Make(int which, LampVolumeVertex *vertices, unsigned short *indices, int *first)
+{
+	*first = 0;
+
+	if (which < 0 || which >= numLampBeams)
+	{
+		return 0;
+	}
+
+	LampBeam const &beam = lampBeams[which];
+
+	// A lamp that's a real light on this frame lights the wall for itself, and its pool would light it twice. With lights per pixel, the player can
+	// also turn the beams in the air off on the rendering page. With Gouraud lights the beam is a lamp's only light, so it always shows.
+	bool const air = !ToyShadowsLightsByPixel || ShoulderLamp_BeamsAreWanted();
+	bool const pool = !otherLampIsALight[beam.lamp];
+
+	if (!air && !pool)
+	{
+		return 0;
+	}
+
+	int const wallsNear = LampVolume_KeepNear(lampBeamWalls, numLampBeamWalls, beam.from, beam.aim, kLampVolumeReach, lampBeamWallsNearOne, kLampBeamMostWalls);
+	int const triangles = LampVolume_Build(beam.from, beam.aim, beam.strength, lampBeamWallsNearOne, wallsNear, vertices, indices);
+
+	return LampVolume_Parts(triangles, air, pool, first);
+}
+
+int LampBeams_WallsKept()
+{
+	return numLampBeamWalls;
+}
+
+int LampBeams_WallsLeftOut()
+{
+	return lampBeamWallsLeftOut;
+}
+
+// Puts the nearest of the shown lamps forward as real lights: the user's "real light, with shadows". They come first, so a lamp doesn't lose its place to a lamp on
+// the wall, and they leave the rest of the places to the level. Only with lights added per pixel, which is what draws them, and only with shadow volumes in this
+// view: with none, nothing stops a light, and a lamp would show what's on the other side of a wall.
+static void ConsiderTheOtherLamps(ToyFoundLight *found, int *numFound, int most)
+{
+	if (!ToyShadowsLightsByPixel || !ToyShadows_VolumesInThisView() || !ShoulderLamp_RealLightIsWanted())
+	{
+		return;
+	}
+
+	for (int i = 0; i < OtherLamps_Count() && numOtherLampLights < kLampMostReal; i++)
+	{
+		OtherLamp const *const lamp = OtherLamps_At(i);
+		int const number = numOtherLampLights;
+		float from[3];
+
+		if (!lamp->body || !OtherLampInView(lamp, from, otherLampAims[number]))
+		{
+			continue;
+		}
+
+		LIGHTBLOCK &light = otherLampLights[number];
+
+		memset(&light, 0, sizeof(light));
+		light.LightWorld = lamp->place;
+
+		// Each marine's lamp flickers in its own time. Together, they'd look like one light with a loose wire.
+		light.LightBright = (int)(ShoulderLamp_Flicker((double)timeGetTime() / 1000.0 + (double)(lamp->owner % 64)) * lamp->strength * (float)ONE_FIXED);
+		light.LightRange = kShoulderLampRange;
+		light.RedScale = kShoulderLampRed;
+		light.GreenScale = kShoulderLampGreen;
+		light.BlueScale = kShoulderLampBlue;
+
+		otherLampNumbers[number] = i;
+		numOtherLampLights++;
+
+		// Given as his, so that his own body doesn't throw a shadow from it
+		ToyConsiderLight(&light, lamp->body, found, numFound, most, &lightsThisFrame.steadyInReach);
+	}
 }
 
 // Chooses this frame's lights. view.cpp calls this after every light has been moved, and before anything has been lit. It has to be
@@ -6324,6 +6605,13 @@ void ToyShadows_ChooseLights()
 	toyNumChosen = 0;
 	toyNumLightsByPixel = 0;
 	memset(&lightsThisFrame, 0, sizeof(lightsThisFrame));
+
+	// Whether the shoulder lamp is a real light is worked out again each frame. Once true it used to stay true, and the painted lamp then stood aside for good, even in a view where no real light is drawn.
+	shoulderLampIsChosen = false;
+
+	// Other marines' lamps, whatever the view: see other_lamps.h. NormalFrameTime is the last frame's length, with 65536 for a second.
+	OtherLamps_Gather((float)NormalFrameTime / 65536.0f);
+	LampBeams_ForThisFrame();
 
 	if (!ToyShadowsMode || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
@@ -6365,6 +6653,7 @@ void ToyShadows_ChooseLights()
 	}
 
 	ConsiderTheShoulderLamp(steady, &numSteady, kLightChoiceMostCandidates);
+	ConsiderTheOtherLamps(steady, &numSteady, kLightChoiceMostCandidates);
 
 	LightChoice_KeepTheLargest(&lightChoiceSamples);
 	numSteady = KeepTheLightsThatShowMost(steady, numSteady, mostSteady, &lightsThisFrame.steadyInReach);
@@ -6479,6 +6768,23 @@ void ToyShadows_ChooseLights()
 			{
 				out[8] = 2.0f;
 				shoulderLampIsChosen = true;
+
+				// Aimed where his own lamp is aimed: how far from where he's looking, across and down. The shader works out the rest.
+				out[kToyLightAim] = ShoulderLamp_AimAcross();
+				out[kToyLightAim + 1] = ShoulderLamp_AimDown();
+			}
+
+			int const otherLamp = OtherLampLightNumber(light);
+
+			// Another marine's lamp has the same look, aimed its own way. The 1 says these numbers are a direction, not how far from where the player's looking.
+			if (otherLamp >= 0)
+			{
+				out[8] = 2.0f;
+				out[kToyLightAim] = otherLampAims[otherLamp][0];
+				out[kToyLightAim + 1] = otherLampAims[otherLamp][1];
+				out[kToyLightAim + 2] = otherLampAims[otherLamp][2];
+				out[kToyLightAim + 3] = 1.0f;
+				otherLampIsALight[otherLampNumbers[otherLamp]] = true;
 			}
 		}
 
@@ -7043,6 +7349,9 @@ void ShadowShoot_FindTarget(const float *direction, ShootTarget *target, const v
 
 void ToyShadows_Collect(DISPLAYBLOCK *dptr, SHAPEHEADER *shapePtr, int kind)
 {
+	// The beams' walls first, in any view, before the shadows' own tests leave
+	LampBeams_TakeWalls(dptr, shapePtr);
+
 	if (!ToyShadowsMode || gunLayer || DrawingAReflection || ToyShadowsInMirror || CurrentVisionMode != VISION_MODE_NORMAL)
 	{
 		return;

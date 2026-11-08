@@ -1,3 +1,5 @@
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a state message that sets a flag this version doesn't know is refused, where it used to be quietly ignored
 // The kinds of NPC the host runs and tells the other machines about, apart from aliens, which have always had messages of their own. Written 2026-11-06 by Melanikus for the AvP port.
 //
 // These numbers go over the network, so they mean only what this file says, and don't depend on how the game numbers its behaviours. A number that arrives is treated as hostile:
@@ -24,8 +26,15 @@ enum
 {
 	kNpcFlagFiring = 1,
 	kNpcFlagOnFire = 2,
-	kNpcFlagSequenceLoops = 4
+	kNpcFlagSequenceLoops = 4,
+	kNpcFlagsKnown = kNpcFlagFiring | kNpcFlagOnFire | kNpcFlagSequenceLoops   // 8 was an NPC marine's lamp on one test branch: each machine decides that now
 };
+
+// Whether every flag a state message sets is one this version knows. A flag from another build's meaning would otherwise be quietly ignored.
+static inline bool NpcFlags_AreKnown(int flags)
+{
+	return (flags & ~kNpcFlagsKnown) == 0;
+}
 
 static inline bool NpcKind_IsKnown(int kind)
 {

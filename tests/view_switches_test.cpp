@@ -693,6 +693,23 @@ static void TheRealGame()
 	Check(Has(menuData, "shadowsCanBeOn ? TEXTSTRING_RENDERING_SHADOWS_HELP : TEXTSTRING_RENDERING_SHADOWS_CANT"), "for shadows");
 	Check(Has(menuData, "mapsAreRead ? TEXTSTRING_RENDERING_AUTOGENERATE_HELP : TEXTSTRING_RENDERING_AUTOGENERATE_NOTHING"), "and for maps");
 
+	// Whether lamps cast shadows: the user's choice, a line on this page, on by default
+	Check(Has(settings, "bool const lampsReal = Config_GetBool(kHeading, kLampsReal, true);"), "lamps are real lights unless the player has said otherwise");
+	Check(Has(settings, "ShoulderLamp_SetRealLightWanted(lampsReal);"), "what's saved is what the game starts with");
+	Check(Has(menuFrame, "ShoulderLamp_SetRealLightWanted(lastLampsReal != 0);\n\t\tConfig_SetBool(kHeading, kLampsReal, lastLampsReal != 0);\n\t\tchanged = true;"), "the line takes effect, and it's saved");
+	Check(Has(menuFrame, "RenderingPage_SayWhatLampLineDoes(MenuRendering != kLightingGouraud && MenuShadows != 0);"), "and it says when it does nothing");
+	Check(Has(menuData, "AvPMenu_Rendering[3].HelpString = lampsCanBeReal ? TEXTSTRING_RENDERING_LAMPSREAL_HELP : TEXTSTRING_RENDERING_LAMPSREAL_NOTHING;"), "on its own line");
+	Check(Has(menuData, "{&MenuLampsReal},") && Has(menuData, "static const int kFirstViewKeyElement = 5;"), "which comes before the key lines");
+
+	// Whether other marines' lamps show their beam in the air: the user's choice, the next line, on by default
+	Check(Has(settings, "bool const lampBeams = Config_GetBool(kHeading, kLampBeams, true);"), "beams show unless the player has said otherwise");
+	Check(Has(settings, "static const char kLampBeams[] = \"LampBeams\";"), "under their own word in the settings file");
+	Check(Has(settings, "ShoulderLamp_SetBeamsWanted(lampBeams);"), "what's saved is what the game starts with");
+	Check(Has(menuFrame, "ShoulderLamp_SetBeamsWanted(lastLampBeams != 0);\n\t\tConfig_SetBool(kHeading, kLampBeams, lastLampBeams != 0);\n\t\tchanged = true;"), "the line takes effect, and it's saved");
+	Check(Has(menuFrame, "RenderingPage_SayWhatBeamLineDoes(MenuRendering != kLightingGouraud);"), "and it says when it does nothing: with Gouraud lights the beam always shows");
+	Check(Has(menuData, "AvPMenu_Rendering[4].HelpString = beamsCanBeLeftOut ? TEXTSTRING_RENDERING_LAMPBEAMS_HELP : TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING;"), "on its own line");
+	Check(Has(menuData, "{&MenuLampsReal},\t\t{TEXTSTRING_NO},\t\t\t\tTEXTSTRING_RENDERING_LAMPSREAL_HELP},\n\t{AVPMENU_ELEMENT_TEXTSLIDER,\t{TEXTSTRING_RENDERING_LAMPBEAMS},\t\t{1},\t{&MenuLampBeams},"), "right after the lamps' shadows");
+
 	// the user's names, in the language table's order
 	char const *const labels[] = { "\"Gouraud\"", "\"Per-pixel (flat)\"", "\"Per-pixel + normals\"", "\"Relief map\"" };
 	std::string::size_type last = 0;

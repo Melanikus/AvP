@@ -141,6 +141,9 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\3dc\avp\other_lamps.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\3dc\shoulder_lamp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

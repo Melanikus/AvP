@@ -449,6 +449,7 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
+    <ClCompile Include="..\..\3dc\avp\other_lamps.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />

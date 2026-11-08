@@ -415,6 +415,136 @@
 					"to": "\tSTRATEGYBLOCK const *owner = block ? block->ObStrategyBlock : 0;\n\n\tif (light->LightFlags & LFlag_AbsPos)\n\t{\n\t\treturn kLightFromTheLevel;\n\t}\n\n\tif (owner && owner->I_SBtype == I_BehaviourPlacedLight && owner->SBdataptr)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: lamps are off unless asked for",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "Config_GetBool(kHeading, kLampsReal, true)",
+					"to": "Config_GetBool(kHeading, kLampsReal, false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what's saved isn't used",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\tShoulderLamp_SetRealLightWanted(lampsReal);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line does nothing",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tShoulderLamp_SetRealLightWanted(lastLampsReal != 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line isn't saved",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tConfig_SetBool(kHeading, kLampsReal, lastLampsReal != 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it doesn't say when it does nothing",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\tRenderingPage_SayWhatLampLineDoes(MenuRendering != kLightingGouraud && MenuShadows != 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the key lines start at the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "static const int kFirstViewKeyElement = 5;",
+					"to": "static const int kFirstViewKeyElement = 4;"
+				}
+			]
+		},
+		{
+			"name": "the beams start off",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "bool const lampBeams = Config_GetBool(kHeading, kLampBeams, true);",
+					"to": "bool const lampBeams = Config_GetBool(kHeading, kLampBeams, false);"
+				}
+			]
+		},
+		{
+			"name": "the beam line isn't saved",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tConfig_SetBool(kHeading, kLampBeams, lastLampBeams != 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the beam line doesn't take effect",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\t\tShoulderLamp_SetBeamsWanted(lastLampBeams != 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the saved beams aren't what the game starts with",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "\tShoulderLamp_SetBeamsWanted(lampBeams);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the beam line says it works with Gouraud",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "RenderingPage_SayWhatBeamLineDoes(MenuRendering != kLightingGouraud);",
+					"to": "RenderingPage_SayWhatBeamLineDoes(true);"
+				}
+			]
+		},
+		{
+			"name": "the beam line's help goes on the shadows line",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menu_data.cpp",
+					"from": "AvPMenu_Rendering[4].HelpString = beamsCanBeLeftOut",
+					"to": "AvPMenu_Rendering[3].HelpString = beamsCanBeLeftOut"
+				}
+			]
+		},
+		{
+			"name": "the beam line has the shadows line's word",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "static const char kLampBeams[] = \"LampBeams\";",
+					"to": "static const char kLampBeams[] = \"LampsCastShadows\";"
+				}
+			]
 		}
 	]
 }

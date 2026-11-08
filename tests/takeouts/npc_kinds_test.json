@@ -893,6 +893,121 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "any flag is known",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "return (flags & ~kNpcFlagsKnown) == 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "the looping flag isn't a known flag",
+			"changes": [
+				{
+					"file": "3dc/avp/npc_kinds.h",
+					"from": "kNpcFlagsKnown = kNpcFlagFiring | kNpcFlagOnFire | kNpcFlagSequenceLoops",
+					"to": "kNpcFlagsKnown = kNpcFlagFiring | kNpcFlagOnFire"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flag nobody knows is used",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (!NpcFlags_AreKnown(messagePtr->flags))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joiner decides a lamp for any kind of NPC",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/npc_ghosts.cpp",
+					"from": "if (ghostData->type == I_BehaviourMarine && !NpcGhosts_MarineIsAnAndroid(state->model)",
+					"to": "if (!NpcGhosts_MarineIsAnAndroid(state->model)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's lamp bit holds what the buffer held",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\tmessagePtr->lampOn = ThisPlayersLampShows() ? 1 : 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead player's lamp shows",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "AvP.PlayerType == I_Marine && status && status->IsAlive && ShoulderLamp_IsOn();",
+					"to": "AvP.PlayerType == I_Marine && status && ShoulderLamp_IsOn();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's lamp shows outside the mode that plays as single player",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "return SameAsSinglePlayer() && AvP.PlayerType == I_Marine",
+					"to": "return AvP.PlayerType == I_Marine"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's message saying a lamp is on is used from anyone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "if (messagePtr->lampOn && !(SameAsSinglePlayer() && messagePtr->characterType == NGCT_Marine && messagePtr->IAmAlive))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a dead marine's message saying his lamp is on is used",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": " && messagePtr->characterType == NGCT_Marine && messagePtr->IAmAlive))",
+					"to": " && messagePtr->characterType == NGCT_Marine))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the place a refused player's message gives is written down first",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t// recored the players position, even if we aren't currently playing\n\tint playerIndex = PlayerIdInPlayerList(senderId);\n\tif (playerIndex != NET_IDNOTINPLAYERLIST) {\n\t\tnetGameData.playerData[playerIndex].lastKnownPosition = position;\n\t}\n",
+					"to": ""
+				},
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "\t// A message that says something impossible",
+					"to": "\tint playerIndex = PlayerIdInPlayerList(senderId);\n\tif (playerIndex != NET_IDNOTINPLAYERLIST) {\n\t\tnetGameData.playerData[playerIndex].lastKnownPosition.vx = messagePtr->xPos;\n\t}\n\t// A message that says something impossible"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player's message size isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.h",
+					"from": "static_assert(sizeof(NETMESSAGE_PLAYERSTATE) == 25, \"the messages are sized by hand: see the row in kNetPartRules\");\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

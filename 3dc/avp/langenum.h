@@ -2,6 +2,8 @@
 //   the rendering page's text, after everything language.txt holds
 //   the name of the marine's shoulder lamp key
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the rendering page's two lamp lines: whether lamps cast shadows, and whether their beams show in the air
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the words for choosing a campaign and its difficulty
 //   the names for the new classes, Allow Staff and the sidearm
@@ -1489,6 +1491,12 @@ enum TEXTSTRING_ID
 	TEXTSTRING_AVOPTIONS_ROOMECHO,      // the sound pages' Room echo row, and its help line (REVERB-TOGGLE-1)
 	TEXTSTRING_AVOPTIONS_ROOMECHO_HELP,
 
+	TEXTSTRING_RENDERING_LAMPSREAL,
+	TEXTSTRING_RENDERING_LAMPSREAL_HELP,
+	TEXTSTRING_RENDERING_LAMPSREAL_NOTHING,
+	TEXTSTRING_RENDERING_LAMPBEAMS,
+	TEXTSTRING_RENDERING_LAMPBEAMS_HELP,
+	TEXTSTRING_RENDERING_LAMPBEAMS_NOTHING,
 	MAX_NO_OF_TEXTSTRINGS
 };
 
