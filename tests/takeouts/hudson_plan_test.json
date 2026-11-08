@@ -8555,6 +8555,26 @@
 					"to": "if ($false)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for -alienwayswatch",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($AlienWaysWatch -ge 0) { $alienWaysSwitch += \" -alienwayswatch=$AlienWaysWatch\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script passes any watch place",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($AlienWaysWatch -ge 0 -and (-not $AlienWays -or $AlienWaysWatch -gt 63))",
+					"to": "if ($false)"
+				}
+			]
 		}
 	]
 }

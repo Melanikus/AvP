@@ -1261,6 +1261,8 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Every) { $arguments += \" every=$Every\" }"), "SOURCE: the script can ask for every=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysAim -ge 0) { $alienWaysSwitch += \" -alienwaysaim=$AlienWaysAim\" }"), "SOURCE: and the game's -alienwaysaim=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysAim -ge 0 -and (-not $AlienWays -or $AlienWaysAim -gt 10000))"), "SOURCE: only from 0 to 10000, and only with -AlienWays");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysWatch -ge 0) { $alienWaysSwitch += \" -alienwayswatch=$AlienWaysWatch\" }"), "SOURCE: and the game's -alienwayswatch=");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($AlienWaysWatch -ge 0 -and (-not $AlienWays -or $AlienWaysWatch -gt 63))"), "SOURCE: only from 0 to 63, and only with -AlienWays");
 		Check(Has(watchCode, "		WatchTheOtherAliens(marine, seconds);"), "SOURCE: and follows each of them once a second");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Together -gt 0) { $arguments += \" together=$Together\" }"), "SOURCE: the script can ask for together=");
 		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.cpp"), "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())"), "SOURCE: a host who is out alone starts the level again after dieat=, as single player does");
