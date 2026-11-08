@@ -13,7 +13,8 @@
 #   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
 #   the test's name is checked before its folder is emptied, and anything that isn't one of the repository's tests is refused (AvP Tao 3)
 #   a test that doesn't pass shows everything it and the sanitizer said, because in the automatic checks the folder that keeps it is gone once the check ends
-#   a test whose program doesn't load the sanitizer's own library is refused, because nothing watched it run
+#   every object and library a test's settings name has to have been compiled with the sanitizer, or its code would run unwatched, and the
+#   libraries vcpkg builds are taken from their copy built with it, in vcpkg_installed/x86-windows-static-asan
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -144,8 +145,9 @@ function Show-WhatWasSaid([string]$what, [string[]]$files)
     Write-Host "----- the end of $what"
 }
 
-# The address sanitizer's own library: the part that watches every read and write while a test runs. A program built with the sanitizer
-# loads it, and a program built without it doesn't.
+# The address sanitizer's own library: the part that watches every read and write while a test runs. Any program linked with the
+# sanitizer loads it, even one with none of its code compiled with it (run 42493315111), so loading it proves nothing about what's
+# watched. What does is below: the mark each object compiled with the sanitizer carries.
 $sanitizerLibrary = 'clang_rt.asan_dynamic-i386.dll'
 
 # The address sanitizer's own library has to be beside the program, and it's on the path once Visual Studio is set up
@@ -177,8 +179,157 @@ function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysT
         Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|concrt|vccorlib)[0-9a-z_]*\.dll$' -or $_ -match '^api-ms-win-crt-[0-9a-z-]*\.dll$' })
 }
 
+# SANITIZE-RUN-1: is every part of the test watched? The sanitizer only watches code compiled with it. Every source the test's settings
+# name is compiled by the line below, with /fsanitize=address, and nothing in a test's settings can turn that off. What can come in
+# unwatched is code that was compiled somewhere else: an object (.obj) or a library (.lib) the settings name. So each of those is read
+# before anything is built.
+#
+# THE MARK: the compiler writes three lines into each object it compiles with the sanitizer, among the object's orders to the linker,
+# which dumpbin /directives shows. One of them, below, is the mark. It's there even in an object that reads and writes no memory at all,
+# and in none compiled without the sanitizer (SANITIZE-RUN-1's second probe, run 42494419512, Visual Studio 18's compiler). The
+# sanitizer's own names among an object's symbols, such as ___asan_report_load1, aren't used, because an object that touches no memory
+# has none of them, and would be refused for nothing.
+#
+# WHAT ISN'T READ: Windows' own libraries, named without a folder (user32.lib and the like), are Microsoft's, and only lead to Windows'
+# DLLs. So are those an object names for itself (#pragma comment(lib)), and Microsoft's C runtime, which the sanitizer watches through its
+# own stand-ins for memcpy, malloc and the rest. Microsoft's D3DX, which the shader test loads while it runs, can't be built with it either.
+$sanitizerMark = '/INCLUDE:___you_must_link_with_VCAsan_lib'
+
+# Was this object compiled with the sanitizer? Reads its orders to the linker with dumpbin, into the file given.
+function Test-CompiledWithSanitizer([string]$object, [string]$saysTo)
+{
+    if ((Invoke-Tool 'dumpbin.exe' "/nologo /directives `"$object`"" $repository $saysTo) -ne 0)
+    {
+        throw "dumpbin couldn't read $object"
+    }
+
+    return @(Get-Content -LiteralPath $saysTo | ForEach-Object { $_.Trim() }) -contains $sanitizerMark
+}
+
+# Of the objects inside a library, those compiled without the sanitizer. dumpbin reads a library's orders as one block for each object,
+# without saying which object each block came from, and an object with none has no block at all. So each object is taken out of the
+# library on its own, with lib.exe, and read on its own.
+function Get-UnwatchedMembers([string]$library, [string]$folder)
+{
+    New-Item -ItemType Directory -Force $folder | Out-Null
+    $listed = Join-Path $folder 'members.txt'
+
+    if ((Invoke-Tool 'lib.exe' "/nologo /list `"$library`"" $repository $listed) -ne 0)
+    {
+        throw "lib.exe couldn't list what's inside $library"
+    }
+
+    $members = @(Get-Content -LiteralPath $listed | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($members.Count -eq 0) { throw "$library has no objects in it" }
+
+    $unwatched = [System.Collections.Generic.List[string]]::new()
+
+    for ($i = 0; $i -lt $members.Count; $i++)
+    {
+        $member = Join-Path $folder "member-$i.obj"
+
+        if ((Invoke-Tool 'lib.exe' "/nologo `"/extract:$($members[$i])`" `"/out:$member`" `"$library`"" $repository (Join-Path $folder "member-$i.txt")) -ne 0)
+        {
+            throw "lib.exe couldn't take $($members[$i]) out of $library"
+        }
+
+        if (-not (Test-CompiledWithSanitizer $member (Join-Path $folder "member-$i-directives.txt")))
+        {
+            $unwatched.Add($members[$i])
+        }
+    }
+
+    return $unwatched.ToArray()
+}
+
+# The libraries vcpkg builds, which a test's settings name in vcpkg_installed/x86-windows-static, are taken from their copy built with the
+# sanitizer: vcpkg-overlay-triplets/x86-windows-static-asan.cmake says how it's made, and the automatic checks make it (fetch-test-libraries,
+# sanitized-ports). So the settings are copied into the test's folder, with that one folder changed, and the copy is what's built from.
+# Settings are written with / and no quotes (tests/build.ps1 says how), so the folder's name is found as it's written.
+$ordinaryLibraries = 'vcpkg_installed/x86-windows-static/'
+$sanitizedLibraries = 'vcpkg_installed/x86-windows-static-asan/'
+$settings = [System.IO.File]::ReadAllText((Join-Path $repository "tests\$Test.args"))
+
+if ($settings.Contains($ordinaryLibraries))
+{
+    if (-not (Test-Path -LiteralPath (Join-Path $repository $sanitizedLibraries) -PathType Container))
+    {
+        throw "$Test uses libraries from $ordinaryLibraries, and under the sanitizer it needs their copy built with it, in $sanitizedLibraries, which isn't here. The automatic checks build it: see fetch-test-libraries' sanitized-ports"
+    }
+
+    $settings = $settings.Replace($ordinaryLibraries, $sanitizedLibraries)
+}
+
+$settingsCopy = Join-Path $out 'settings.args'
+[System.IO.File]::WriteAllText($settingsCopy, $settings)
+
+$linked = 0
+
+foreach ($word in @($settings -split '\s+' | Where-Object { $_ }))
+{
+    if ($word -inotmatch '\.(obj|lib)\z')
+    {
+        continue
+    }
+
+    $linked++
+
+    # An order to the linker that names a library, such as /DEFAULTLIB:x.lib, brings in code this doesn't read, so it isn't allowed
+    if ($word.StartsWith('/') -or $word.StartsWith('-'))
+    {
+        Write-Host "$Test's settings give the linker $word, and a library or object named in an order isn't read for the sanitizer's mark. Name it on its own, so it's read"
+        exit 1
+    }
+
+    if (-not $word.Contains('/'))
+    {
+        # Named without a folder: one of Windows' own, which the linker finds in the Windows SDK, on LIB. The first it finds is what it links.
+        $found = @("$env:LIB".Split(';') | Where-Object { $_ } | ForEach-Object { Join-Path $_ $word } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }) | Select-Object -First 1
+
+        if (-not $found -or $found -inotmatch '\\Windows Kits\\')
+        {
+            Write-Host "$Test's settings name $word, which isn't one of Windows' own libraries in the Windows SDK, and a library named without a folder has to be. One of ours is named with its folder, so it's read for the sanitizer's mark"
+            exit 1
+        }
+
+        continue
+    }
+
+    # Named with a folder: one of the repository's, so it has to be inside it, and compiled with the sanitizer
+    $file = [System.IO.Path]::GetFullPath((Join-Path $repository $word))
+
+    if (-not $file.StartsWith($repository.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        throw "$Test's settings name $word, which is outside the repository"
+    }
+
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf))
+    {
+        throw "$Test's settings name $word, which isn't there"
+    }
+
+    if ($word -imatch '\.obj\z')
+    {
+        if (-not (Test-CompiledWithSanitizer $file (Join-Path $out "linked-$linked-directives.txt")))
+        {
+            Write-Host "$Test links $word, which wasn't compiled with the sanitizer, so its code would run unwatched"
+            exit 1
+        }
+    }
+    else
+    {
+        $unwatched = @(Get-UnwatchedMembers $file (Join-Path $out "linked-$linked"))
+
+        if ($unwatched.Count -gt 0)
+        {
+            Write-Host "$Test links $word, whose $($unwatched -join ', ') wasn't compiled with the sanitizer, so its code would run unwatched"
+            exit 1
+        }
+    }
+}
+
 # The test's settings come last, because they can end with /link, and anything after /link goes to the linker
-$built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @tests\$Test.args" $repository (Join-Path $out 'build.txt')
+$built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @`"$settingsCopy`"" $repository (Join-Path $out 'build.txt')
 
 if ($built -ne 0) {
     $buildSaid = Join-Path $out 'build.txt'
@@ -198,15 +349,6 @@ if ($built -ne 0) {
 $runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $repository (Join-Path $out 'imports.txt'))
 if ($runtime.Count -gt 0) {
     Write-Host "$Test, built for the sanitizer, asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)"
-    exit 1
-}
-
-# The test's program has to load the sanitizer's own library, or nothing was watching while it ran, and a pass would prove nothing. A
-# program whose code was compiled without the sanitizer doesn't load it. Nothing in the repository turns the sanitizer off today. This is
-# what makes sure it stays that way, test by test. The list of what the program loads is the one dumpbin wrote just above.
-$loads = @(Get-Content -LiteralPath (Join-Path $out 'imports.txt') | ForEach-Object { $_.Trim() })
-if ($loads -inotcontains $sanitizerLibrary) {
-    Write-Host "$Test wasn't built with the sanitizer: its program doesn't load $sanitizerLibrary, so a pass here would prove nothing"
     exit 1
 }
 

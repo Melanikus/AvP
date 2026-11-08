@@ -91,11 +91,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # The same libraries as the Unit tests job, made the same way, for the tests that link them
-      - name: Fetch the game's shader compiler and ENet
+      # The same libraries as the Unit tests job, for the tests that use them, but ENet is built with the sanitizer here, so its code is
+      # watched too: it's the code that reads what comes in from the network. sanitize.ps1 links the network tests against that copy, and
+      # refuses any test that links an object or a library compiled without the sanitizer. Microsoft's D3DX comes as Microsoft makes it:
+      # it's their program, with no source to build, and the shader test only loads it.
+      - name: Fetch the game's shader compiler, and ENet built with the sanitizer
         uses: ./.github/actions/fetch-test-libraries
         with:
-          ports: dxsdk-d3dx enet
+          ports: dxsdk-d3dx
+          sanitized-ports: enet
 
       # Each test is built and run by sanitize.ps1 in a PowerShell of its own, so nothing one test's run leaves behind reaches the next.
       # Every test of the part is run, even after one fails, and then the step fails, naming each one that didn't pass. sanitize.ps1 gives
@@ -142,10 +146,11 @@ jobs:
   # each of those three cases: it gave no reason of its own, and it set up again on every run. relief_map_file_test is used because it needs
   # nothing from vcpkg.
   #
-  # Three more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). And the gate
-  # is seen to fail, because a check nobody has seen fail proves nothing: broken tests are written here, one that reads past the end of a
-  # block, the same compiled without the sanitizer, and one that fails a check, and sanitize.ps1 must refuse each, with its reason, and
-  # show what each said.
+  # Three more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). It refuses
+  # code compiled without the sanitizer that comes in from outside a test's own build: an object, a library made from one, or a library
+  # named without a folder that isn't Windows' own. And the gate is seen to fail, because a check nobody has seen fail proves nothing:
+  # broken tests are written here, one that reads past the end of a block and one that fails a check, and sanitize.ps1 must refuse each,
+  # with its reason, and show what each said.
   sanitizer-refusals:
     name: The sanitizer script's own refusals
     timeout-minutes: 15
@@ -224,19 +229,36 @@ jobs:
             '}'
           )
 
-          # 4. A test whose code was compiled without the sanitizer. Its program doesn't load the sanitizer's own library, so nothing
-          #    watches it run, and its read past the end would pass. sanitize.ps1 must refuse it, with its reason. Its code is compiled
-          #    here, by the compiler 3 set up in this window, while the window still has it: Run-WithPath puts the path back after its run.
-          #    Then sanitize.ps1 links it, as it does any test.
+          # 4. Code compiled without the sanitizer, coming in from outside the test's own build. It would run unwatched, and its read
+          #    past the end would pass, because linking with the sanitizer brings in the sanitizer's library whatever was compiled with it
+          #    (run 42493315111). sanitize.ps1 must refuse it, before it builds anything, in each way it can come in:
+          #    - an object named in the test's settings;
+          #    - a library named in them, made from that object;
+          #    - a library named without a folder that isn't one of Windows' own, which this doesn't read.
+          #    The object and the library are made here, by the compiler and lib.exe 3 set up in this window, while the window still has
+          #    them: Run-WithPath puts the path back after its run.
           Set-Content -LiteralPath tests/canary_unwatched.cpp -Value $readsPastTheEnd
           $eachSetting = $settings.Split(' ')
           & cl.exe /nologo /c @eachSetting /Fo:tests/canary_unwatched.obj tests/canary_unwatched.cpp
-          if ($LASTEXITCODE -ne 0) { throw "The broken test for check 4 didn't compile (cl gave back $LASTEXITCODE)" }
+          if ($LASTEXITCODE -ne 0) { throw "The broken object for check 4 didn't compile (cl gave back $LASTEXITCODE)" }
+          & lib.exe /nologo /out:tests/canary_unwatched.lib tests/canary_unwatched.obj
+          if ($LASTEXITCODE -ne 0) { throw "The broken library for check 4 wasn't made (lib.exe gave back $LASTEXITCODE)" }
           Set-Content -LiteralPath tests/canary_unwatched_test.args -Value '/MT', 'tests/canary_unwatched.obj'
+          Set-Content -LiteralPath tests/canary_unwatched_lib_test.args -Value '/MT', 'tests/canary_unwatched.lib'
+          Set-Content -LiteralPath tests/canary_unknown_lib_test.args -Value '/MT', 'tests/canary_unwatched.cpp', 'not_a_windows_library.lib'
+
           $result = Run-WithPath $original 'canary_unwatched_test'
           $result.text
-          Check ($result.code -eq 1) "a test whose code was compiled without the sanitizer gives back 1 (it gave back $($result.code))"
-          Check ($result.text -cmatch "canary_unwatched_test wasn't built with the sanitizer: its program doesn't load clang_rt\.asan_dynamic-i386\.dll") 'and it says its program doesn''t load the sanitizer''s library'
+          Check ($result.code -eq 1) "a test linking an object compiled without the sanitizer gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch "canary_unwatched_test links tests/canary_unwatched\.obj, which wasn't compiled with the sanitizer, so its code would run unwatched") 'and it says which object, and why'
+          $result = Run-WithPath $original 'canary_unwatched_lib_test'
+          $result.text
+          Check ($result.code -eq 1) "a test linking a library made from that object gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch "canary_unwatched_lib_test links tests/canary_unwatched\.lib, whose \S*canary_unwatched\.obj wasn't compiled with the sanitizer, so its code would run unwatched") 'and it says which library, which object in it, and why'
+          $result = Run-WithPath $original 'canary_unknown_lib_test'
+          $result.text
+          Check ($result.code -eq 1) "a test naming a library without a folder that isn't Windows' own gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch "canary_unknown_lib_test's settings name not_a_windows_library\.lib, which isn't one of Windows' own libraries in the Windows SDK") 'and it says which library, and why'
 
           # 5. A name that isn't a test's is refused before any folder is touched. Here ".." points at this runner's own temporary folder,
           #    the one the sanitizer's folders are made in, and the old script emptied whatever its name pointed at. So a file is left
