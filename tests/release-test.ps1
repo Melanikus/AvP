@@ -405,6 +405,10 @@ function Make-GoodPackage
     Write-File (Join-Path $package 'shaders/volume.vsh') 'shader two'
     Write-File (Join-Path $packageRepository 'shaders/reliefMain.psh') 'shader one'
     Write-File (Join-Path $packageRepository 'shaders/volume.vsh') 'shader two'
+    # One of our game files, in a folder, as the game folder wants it, with the commit's list naming it
+    Write-File (Join-Path $package 'avp_huds/Ours.rif') 'a model'
+    $modelHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')).Hash.ToLower()
+    Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') "$modelHash  avp_huds/Ours.rif"
     Write-Sums
 }
 
@@ -439,6 +443,27 @@ Expect-Refused 'check-release-package.ps1' (Package-Arguments) "the shader relie
 Make-GoodPackage
 Remove-Item -Recurse -LiteralPath (Join-Path $packageRepository 'shaders')
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit has no shaders' 'no shaders to compare with is refused'
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'the game file avp_huds/Ours.rif is not in the package' 'a missing game file is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'avp_huds/Ours.rif') 'some other model'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "the game file avp_huds/Ours.rif in the package isn't the one this commit lists" 'a different game file is refused'
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $packageRepository 'package-files/SHA256SUMS.txt')
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'this commit lists none of our game files' 'a commit with no list of game files is refused'
+
+foreach ($badLine in @(('0' * 64) + '  ../outside.rif', ('0' * 64) + '  C:/elsewhere.rif', 'not-a-hash  avp_huds/Ours.rif'))
+{
+    Make-GoodPackage
+    Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') $badLine
+    Expect-Refused 'check-release-package.ps1' (Package-Arguments) "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the game folder" "a list line naming somewhere else is refused: $badLine"
+}
 
 Make-GoodPackage
 Write-File (Join-Path $package 'BUILD.txt') 'avpx_main 1111111111111111111111111111111111111111'

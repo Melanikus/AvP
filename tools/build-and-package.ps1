@@ -85,6 +85,41 @@ Copy-Item (Join-Path $release '*.dll') $OutFolder
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
 
+# Our game files, laid out as the game folder wants them (package-files/README.md). package-files/SHA256SUMS.txt lists each one with its
+# hash, and only those go in. Each is checked against its line before it's copied, so a file changed without its line stops the build,
+# and a file in the folder that isn't on the list stops it too, rather than being left out without a word. (Added 2026-11-07.)
+$gameFiles = @(Get-Content -LiteralPath 'package-files\SHA256SUMS.txt' | Where-Object { $_ })
+if ($gameFiles.Count -eq 0) { throw 'package-files/SHA256SUMS.txt lists no game files' }
+$listedNames = @{}
+
+foreach ($line in $gameFiles) {
+    $hash, $name = $line -split '  ', 2
+
+    # A line names a file inside the folder: no drive, no root, and no way out of it with ..
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or -not $name -or $name.Contains(':') -or $name.StartsWith('/') -or $name.StartsWith('\') -or ($name -split '[\\/]') -contains '..') {
+        throw "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the folder: $line"
+    }
+
+    $from = Join-Path 'package-files' $name
+
+    if (-not (Test-Path -LiteralPath $from -PathType Leaf)) { throw "package-files/SHA256SUMS.txt lists $name, and it isn't in package-files" }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $from).Hash.ToLower() -cne $hash) { throw "package-files/$name isn't the file package-files/SHA256SUMS.txt lists" }
+
+    $to = Join-Path $OutFolder $name
+    New-Item -ItemType Directory -Force (Split-Path -Parent $to) | Out-Null
+    Copy-Item -LiteralPath $from -Destination $to
+    $listedNames[($name -replace '\\', '/').ToLower()] = $true
+}
+
+$folder = (Resolve-Path -LiteralPath 'package-files').Path
+
+foreach ($file in @(Get-ChildItem -LiteralPath 'package-files' -Recurse -File)) {
+    $name = $file.FullName.Substring($folder.Length + 1) -replace '\\', '/'
+
+    if ($name -cin 'README.md', 'SHA256SUMS.txt', '.gitattributes') { continue }
+    if (-not $listedNames.ContainsKey($name.ToLower())) { throw "package-files/$name isn't on package-files/SHA256SUMS.txt, so it wouldn't go in the package" }
+}
+
 if (-not (Test-Path (Join-Path $OutFolder 'AvPx.exe'))) { throw 'AvPx.exe was not built' }
 
 # Nothing links to this one: D3DX loads it by name while the game is running, so losing it would give no error here. Without it the game
