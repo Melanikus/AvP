@@ -220,8 +220,38 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways.cpp",
-					"from": "\ttheGuide.Clear();\n\ttoldTurnedAway = false;\n}",
-					"to": "\ttoldTurnedAway = false;\n}"
+					"from": "\ttheGuide.Clear();\n\tstd::fill(std::begin(watched), std::end(watched), Watched());\n",
+					"to": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart stops the map's build",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n}",
+					"to": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n\ttheBuild.Stop();\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart forgets the ways before the old aliens are gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\t\tDestroyAllStrategyBlocks();\n\t\twhile(i--)\n\t\t{\n\t\t\tActiveStBlockList[i] = NULL;\n\t\t}\n\n\t\t// Modified 2026-11-08 by Melanikus for the AvP port:\n\t\t//   the aliens' ways go with the aliens",
+					"to": "\t\tAlienWays_LevelRestarts();\n\t\tDestroyAllStrategyBlocks();\n\t\twhile(i--)\n\t\t{\n\t\t\tActiveStBlockList[i] = NULL;\n\t\t}\n\n\t\t// Modified 2026-11-08 by Melanikus for the AvP port:\n\t\t//   the aliens' ways go with the aliens"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the stuck line's watch list",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n",
+					"to": ""
 				}
 			]
 		}

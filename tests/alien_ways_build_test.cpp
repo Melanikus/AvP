@@ -266,6 +266,7 @@ static void SourceOfTheGame()
 		"SOURCE: a restart forgets the aliens' ways once the aliens are gone, before they're made again");
 	std::string const restarts = Between(ways, "void AlienWays_LevelRestarts()", "\n}\n");
 	Check(Has(restarts, "\ttheGuide.Clear();") && !Has(restarts, "theBuild.Stop();"), "SOURCE: it clears the guide, and keeps the map");
+	Check(Has(restarts, "\tstd::fill(std::begin(watched), std::end(watched), Watched());"), "SOURCE: and the stuck line's watch list, as a remade alien can have an old one's place and name");
 
 	Check(Has(game, "AiPheromoneSystem();\n\n\t// The alien ways, before any alien moves: the log hears how the map's build went, aliens no longer on a way get their usual\n"
 		"\t// gravity back, and the searches for ways carry on. It does nothing without -dev -alienways.\n\tAlienWays_Frame();"),

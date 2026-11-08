@@ -731,8 +731,10 @@ void AlienWays_LevelEnd()
 
 void AlienWays_LevelRestarts()
 {
-	// Every alien, its way and its claims go; the build, the map, the modules' ranges and the doors stay. The log's counts and its caps run
-	// on, since it's the same level, and the stuck line's watch list lets go of the old aliens itself, each frame, as it finds them gone.
+	// Every alien, its way and its claims go, and so does the stuck line's watch list, since a remade alien can have the same place and
+	// name as an old one (Secondary's R-a). The build, the map, the modules' ranges and the doors stay; the log's counts and caps run on,
+	// since it's the same level.
 	theGuide.Clear();
+	std::fill(std::begin(watched), std::end(watched), Watched());
 	toldTurnedAway = false;
 }
