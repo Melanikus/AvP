@@ -87,9 +87,10 @@ try {
         throw "The build does not say it is commit $($run.headSha). Nothing was installed."
     }
 
-    # What goes into the game folder: the program and its libraries, the shaders, and the note of which build this is.
-    $install = @($names | Where-Object { $_ -match '^[^/]+\.(exe|dll)$' -or $_ -eq 'BUILD.txt' -or $_ -like 'shaders/*' })
-    if ($install -notcontains 'AvPx.exe') { throw 'The build has no AvPx.exe. Nothing was installed.' }
+    # What goes into the game folder. A build is laid out as the game folder is: the program, bin/AvP_Classic.exe, and its libraries
+    # in bin, the shaders and our game files at the top, and the note of which build this is. PLAYTEST.md and the rest are for reading.
+    $install = @($names | Where-Object { $_ -match '^bin/[^/]+\.(exe|dll)$' -or $_ -eq 'BUILD.txt' -or $_ -like 'shaders/*' -or $_ -like 'avp_huds/*' -or $_ -like 'MelPyth/*' -or $_ -like 'graphics/*' })
+    if ($install -notcontains 'bin/AvP_Classic.exe') { throw 'The build has no bin/AvP_Classic.exe. Nothing was installed.' }
 
     # Keep a copy of every file about to be replaced, and remember the ones that are new, so a failed install can be undone.
     $backup = '{0}-previous-build-{1}' -f $target, (Get-Date -Format 'yyyyMMdd-HHmmss')

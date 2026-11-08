@@ -46,6 +46,13 @@ each release, with the zip from the draft, before you press Publish.
 - `gh attestation verify <the zip> --repo Melanikus/AvP` asks GitHub whether that file really came out of this repository's workflow.
 - `BUILD.txt` inside the zip names the commit.
 
+## Reading a crash a tester sends
+
+After a crash, the log's crash lines name each place as a program and a distance into it, such as `AvP_Classic.exe+1A2B3C`. Look it up
+in the `AvPx.map` kept with that build: it's the same program, renamed in the package. The build makes `AvPx.exe`, and the package
+carries it as `bin\AvP_Classic.exe`, the name Steam starts. A release keeps its map and symbols in its workflow run's
+**release-symbols** artifact, and a test build in its **symbols** artifact. They're never in the package.
+
 ## What has to be set up on GitHub
 
 The workflow file can't set these up for itself, and each of them is something a commit can't remove. If this project ever moves, set them up

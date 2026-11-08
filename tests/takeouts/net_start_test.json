@@ -2208,6 +2208,36 @@
 					"to": "\t(void)(std::string(\"net: the settings file's \") + name"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a player's class in the game's description is believed as it comes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.playerData[i].characterSubType = NetNumberFitsTable(messagePtr->players[i].characterSubType, NUM_PC_SUBTYPES) ? (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType : NGSCT_General;",
+					"to": "netGameData.playerData[i].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's class in a player's description is believed as it comes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.playerData[id].characterSubType = NetNumberFitsTable(messagePtr->characterSubType, NUM_PC_SUBTYPES) ? (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType : NGSCT_General;",
+					"to": "netGameData.playerData[id].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a player's class when they start again is believed as it comes",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/pldnet.cpp",
+					"from": "netGameData.playerData[playerIndex].characterSubType = NetNumberFitsTable(messagePtr->characterSubType, NUM_PC_SUBTYPES) ? static_cast<NETGAME_SPECIALISTCHARACTERTYPE>(messagePtr->characterSubType) : NGSCT_General;",
+					"to": "netGameData.playerData[playerIndex].characterSubType = static_cast<NETGAME_SPECIALISTCHARACTERTYPE>(messagePtr->characterSubType);"
+				}
+			]
 		}
 	]
 }
