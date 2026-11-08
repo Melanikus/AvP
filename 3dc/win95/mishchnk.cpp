@@ -1,4 +1,9 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a level file's size is read as a 64-bit number, and a file too short to hold a level's heading, or larger than any level the
+//   game can use, is refused before any memory is set aside for it, and the log says why; every read has to get all the bytes it
+//   asked for; the file's size and MD5 sum are worked out from those same reads, for the log (level_file_sum.h); a failed read
+//   gives its memory back
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   the level file's name is kept in text that grows as needed, instead of a fixed 256-byte box, and file
 //   names and other text are copied using their exact measured length; level-editor code was removed
@@ -25,6 +30,8 @@
 #include "hierarchy_chunk.hpp"
 #include "huffman.hpp"
 #include "mbstring.h"
+#include "md5.h"
+#include "logstring.h"
 
 // Class Lockable_Chunk_With_Children functions
 
@@ -132,14 +139,39 @@ File_Chunk::File_Chunk(const char * file_name)
 		return;
 	}
 
-	file_size = GetFileSize(rif_file, NULL);
+	// The file's size, as a 64-bit number, so that a file of 4 GB or more can't pass for a small one. A file too short to hold a
+	// level's heading, or larger than any level the game can use, is refused here, before any memory is set aside for it. That keeps
+	// every size below small enough that adding the spare bytes to it, or taking the heading's bytes from it, always comes out right.
+	// A size that can't be found is -1, which is refused with the files too short.
+	LARGE_INTEGER size_on_disk;
+	long long const bytes_on_disk = GetFileSizeEx(rif_file, &size_on_disk) ? size_on_disk.QuadPart : -1;
 
-	if (!ReadFile(rif_file, id_buffer, 8, &bytes_read, 0))
+	if (!LevelFile_SizeIsUsable(bytes_on_disk))
+	{
+		LogErrorStringC(LevelFile_SizeRefusalLine(file_name, bytes_on_disk).c_str());
+		error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
+		CloseHandle (rif_file);
+		return;
+	}
+
+	file_size = (DWORD)bytes_on_disk;
+
+	// The file's MD5 sum, for the log (level_file_sum.h). Each read below adds what it read, as it reads it, so the sum is of the
+	// very bytes that were loaded. The file was opened for this reader alone (the 0 above lets nobody else open it, to write or
+	// otherwise), so it can't change between the reads.
+	MD5Context sum_so_far;
+	MD5Init(&sum_so_far);
+
+	// Each read has to get every byte it asked for. The size above says they are all there, so getting fewer means the file
+	// isn't what it said it was.
+	if (!ReadFile(rif_file, id_buffer, 8, &bytes_read, 0) || bytes_read != 8)
 	{
 		error_code = CHUNK_FAILED_ON_LOAD;
 		CloseHandle (rif_file);
 		return;
 	}
+
+	MD5Update(&sum_so_far, (md5byte const *)id_buffer, 8);
 
 	/* KJL 16:46:14 19/09/98 - check for a compressed rif */
 	if (!strncmp (id_buffer, COMPRESSED_RIF_IDENTIFIER, 8))
@@ -160,12 +192,16 @@ File_Chunk::File_Chunk(const char * file_name)
 	pointer to the original data. */
 	if (rifIsCompressed)
 	{
-		if (!ReadFile(rif_file, buffer+8, (file_size-8), &bytes_read, 0))
+		if (!ReadFile(rif_file, buffer+8, (file_size-8), &bytes_read, 0) || bytes_read != file_size-8)
 		{
+			delete[] buffer;
 			error_code = CHUNK_FAILED_ON_LOAD;
 			CloseHandle (rif_file);
 			return;
 		}
+
+		// The rest of the file as it is on disk, still packed: the sum is of the file, not of the level unpacked from it
+		MD5Update(&sum_so_far, (md5byte const *)(buffer+8), file_size-8);
 
 		// Every level the game comes with is compressed, so this runs before anything else looks at the file. A decoder that trusted what the
 		// file says could be made to write past the end of its table, or of the memory for the result. This one knows the file's size and checks.
@@ -187,15 +223,20 @@ File_Chunk::File_Chunk(const char * file_name)
 	}
 	else // the normal uncompressed approach:
 	{
-		if (!ReadFile(rif_file, &file_size_from_file, 4, &bytes_read, 0))
+		if (!ReadFile(rif_file, &file_size_from_file, 4, &bytes_read, 0) || bytes_read != 4)
 		{
+			delete[] buffer;
 			error_code = CHUNK_FAILED_ON_LOAD;
 			CloseHandle (rif_file);
 			return;
 		}
 
+		// The 4 bytes just as they were read from the file
+		MD5Update(&sum_so_far, (md5byte const *)&file_size_from_file, 4);
+
 		if (file_size != file_size_from_file)
 		{
+			delete[] buffer;
 			error_code = CHUNK_FAILED_ON_LOAD_NOT_RECOGNISED;
 			CloseHandle (rif_file);
 			return;
@@ -203,14 +244,22 @@ File_Chunk::File_Chunk(const char * file_name)
 
 		memset (buffer, 0, file_size + HUFFMAN_SPARE_BYTES);
 
-		if (!ReadFile(rif_file, buffer, (file_size-12), &bytes_read, 0))
+		if (!ReadFile(rif_file, buffer, (file_size-12), &bytes_read, 0) || bytes_read != file_size-12)
 		{
+			delete[] buffer;
 			error_code = CHUNK_FAILED_ON_LOAD;
 			CloseHandle (rif_file);
 			return;
 		}
+
+		MD5Update(&sum_so_far, (md5byte const *)buffer, file_size-12);
 		buffer_ptr = buffer;
 	}
+
+	// Every byte of the file has now been read, and added to the sum. The size kept is the file's own: for a packed file,
+	// file_size above has become the size of the level unpacked from it.
+	MD5Final(file_sum.md5, &sum_so_far);
+	file_sum.bytes = (unsigned int)bytes_on_disk;
 
 	// Process the RIF
 	// The start of the first chunk
