@@ -673,6 +673,116 @@
 					"to": "netGameData.myCharacterSubType =(NETGAME_SPECIALISTCHARACTERTYPE) (MP_Species-2);"
 				}
 			]
+		},
+		{
+			"name": "the 42 rounds",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kEveryMarineShotgunRounds = 42,",
+					"to": "kEveryMarineShotgunRounds = 41,"
+				}
+			]
+		},
+		{
+			"name": "the most spares a gun counts",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "kMostSpareRounds = 99",
+					"to": "kMostSpareRounds = 100"
+				}
+			]
+		},
+		{
+			"name": "the 42 go past what a gun counts",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "if (sparesNow > kMostSpareRounds - kEveryMarineShotgunRounds)",
+					"to": "if (sparesNow > kMostSpareRounds)"
+				}
+			]
+		},
+		{
+			"name": "the 42 take the place of his own rounds",
+			"changes": [
+				{
+					"file": "3dc/avp/marine_classes.h",
+					"from": "return sparesNow + kEveryMarineShotgunRounds;",
+					"to": "return kEveryMarineShotgunRounds;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shotgun is given as a save loads too",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "if (AvP.PlayerType == I_Marine && LoadGameRequest == SAVELOAD_REQUEST_NONE)",
+					"to": "if (AvP.PlayerType == I_Marine)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the shotgun isn't given",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "\t\tSayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);",
+					"to": "\t\tSayTheShotgunLine = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he doesn't have the gun",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "\tgun->Possessed = 1;",
+					"to": "\tgun->Possessed = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shotgun marine's own rounds are lost",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "gun->PrimaryMagazinesRemaining = EveryMarineShotgun_Spares(gun->PrimaryMagazinesRemaining);",
+					"to": "gun->PrimaryMagazinesRemaining = kEveryMarineShotgunRounds;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line isn't word for word",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "NewOnScreenMessage(\"I like to have this handy, for close encounters\");",
+					"to": "NewOnScreenMessage(\"I like to have this handy\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line goes up every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/inventory.cpp",
+					"from": "\t\tSayTheShotgunLine = 0;\n\t\tNewOnScreenMessage(",
+					"to": "\t\tNewOnScreenMessage("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a load asked of an empty slot stays asked",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "if(!save_slot->SlotUsed)\n\t{\n\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;\n\t}",
+					"to": "if(!save_slot->SlotUsed) return;"
+				}
+			]
 		}
 	]
 }

@@ -84,6 +84,14 @@ static void TestStarts()
 	Check(kClassM79StartEachKind == 15, "an M79 marine starts with 15 of each kind");
 	Check(kSidearmRevolverStartRounds == 50, "a revolver as a sidearm has 50, M5's 10 boxes of 5");
 	Check(kSidearmPistolStartMagazines == 10, "a pistol as a sidearm has 10 magazines, as stock's does");
+
+	// Every marine player has the shotgun too, with 42 spare rounds for it
+	Check(kEveryMarineShotgunRounds == 42, "every marine player has 42 spare rounds for the shotgun");
+	Check(EveryMarineShotgun_Spares(0) == 42, "a marine who had none for it has the 42");
+	Check(EveryMarineShotgun_Spares(10) == 52, "and they go on top of any he has, so a shotgun marine keeps his own");
+	Check(EveryMarineShotgun_Spares(57) == 99, "up to as many as a gun counts");
+	Check(EveryMarineShotgun_Spares(58) == 99, "and no more");
+	Check(EveryMarineShotgun_Spares(99) == 99, "even for one that's full");
 }
 
 static void TestSidearm()
@@ -174,6 +182,20 @@ static void TestWiring()
 	Check(Has(inventory, "weaponID!=WEAPON_MYSTERYGUN && !IsMySidearm(weaponID)"), "the M79 class picks up its gun");
 	Check(Has(inventory, "if (!SameAsSinglePlayer() && ammoID == AMMO_SNIPER)"), "nobody picks up the sniper's ammo in a network game, except the mode that plays as single player");
 	Check(Has(inventory, "if (IsKeptOutOfNetworkGames(weaponID))"), "or its gun");
+
+	const std::string save = ReadSource("3dc/avp/savegame.cpp");
+	const std::string player = ReadSource("3dc/avp/player.cpp");
+	const std::string respawn = ReadSource("3dc/avp/pmove.cpp");
+
+	Check(Has(inventory, "if (AvP.PlayerType == I_Marine && LoadGameRequest == SAVELOAD_REQUEST_NONE)"), "every marine player gets the shotgun as he starts, but not as a save loads");
+	Check(Has(inventory, "\t\tSayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);"), "and then the line goes on the console");
+	Check(inventory.find("SayTheShotgunLine = StartWithTheShotgunToo(playerStatusPtr);") > inventory.find("LoadAllWeapons(PlayerStatusPtr);"), "after the start has loaded his guns, so the 42 are all spares");
+	Check(Has(inventory, "\tgun->Possessed = 1;"), "he has the gun");
+	Check(Has(inventory, "gun->PrimaryMagazinesRemaining = EveryMarineShotgun_Spares(gun->PrimaryMagazinesRemaining);"), "with the 42 added to what he has, as the sum above says");
+	Check(Count(inventory, "NewOnScreenMessage(\"I like to have this handy, for close encounters\");") == 1, "the line is word for word, in one place");
+	Check(Has(inventory, "if (SayTheShotgunLine)\n\t{\n\t\tSayTheShotgunLine = 0;\n\t\tNewOnScreenMessage("), "and it goes once each time he starts");
+	Check(Has(player, "InitialisePlayersInventory(psPtr);") && Has(respawn, "InitialisePlayersInventory(psPtr);"), "a level's start and a start again in a network game both set him up there");
+	Check(Has(save, "if(!save_slot->SlotUsed)\n\t{\n\t\tLoadGameRequest = SAVELOAD_REQUEST_NONE;\n\t\treturn;"), "a load asked of an empty slot is dropped, so later starts aren't taken for a load (LOAD-STALE-1)");
 
 	Check(Has(visible, "objectstatusptr->subType==WEAPON_SONICCANNON||"), "the sniper's gun doesn't appear in a network game");
 	Check(Has(visible, "objectstatusptr->subType==AMMO_SNIPER||"), "nor its ammo");

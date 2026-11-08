@@ -16,6 +16,7 @@
 //   a save from when there were 11 weapon slots keeps its statistics
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
+//   a load asked of an empty slot is dropped, where before it stayed asked, and loaded the next save made in that slot
 #include "3dc.h"
 #include "save_file_write.h"
 #include "inline.h"
@@ -586,7 +587,15 @@ void LoadSavedGame()
 
 	//make sure the slot is being used
 	ScanSaveSlots();
-	if(!save_slot->SlotUsed) return;
+
+	// A quick load with no quick save, or the console's load for an empty slot, asks for a slot with nothing in it. The request is
+	// dropped. Left standing, it would load the next save made in that slot as soon as it was made, and every start of a level
+	// would look like a save loading.
+	if(!save_slot->SlotUsed)
+	{
+		LoadGameRequest = SAVELOAD_REQUEST_NONE;
+		return;
+	}
 
 	///make sure we're on the right level etc.
 	if(!ValidateLevelForLoadGameRequest(save_slot))

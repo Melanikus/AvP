@@ -1,6 +1,7 @@
 // The marine classes a multiplayer game offers beyond stock's, and the sidearm that goes with a class. The classes and how
 // they start are taken from MelPyth M5 by Mupp. Only how it behaves was read from that mod, and this is written new.
 // Written 2026-11-06 by Melanikus for the AvP port.
+// Modified 2026-11-07 by Melanikus for the AvP port: every marine player has the shotgun too, with 42 rounds for it.
 //
 // There's no sniper class: the user wants the sniper rifle kept to single player for now.
 //
@@ -36,6 +37,27 @@ enum
 	kSidearmPistolStartMagazines = 10,
 	kSidearmRevolverStartRounds = 50
 };
+
+// Every marine player has the shotgun too, whatever his class, each time he starts: the user's feature for the first release.
+// He has this many spare rounds for it, beside the ones in the gun. A gun never counts more spares than kMostSpareRounds, the
+// same limit a box he picks up has.
+enum
+{
+	kEveryMarineShotgunRounds = 42,
+	kMostSpareRounds = 99
+};
+
+// His spare rounds for the shotgun once he's been given the 42. They're added to what he has, so a shotgun marine keeps his
+// class's rounds as well. If that comes to more than a gun counts, he has as many as it counts.
+inline int EveryMarineShotgun_Spares(int sparesNow)
+{
+	if (sparesNow > kMostSpareRounds - kEveryMarineShotgunRounds)
+	{
+		return kMostSpareRounds;
+	}
+
+	return sparesNow + kEveryMarineShotgunRounds;
+}
 
 // A marine's sidearm: what he carries beside his class's own gun.
 enum
