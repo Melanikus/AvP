@@ -270,7 +270,8 @@ private:
 		AlienWaysWho target;
 		bool flanker;                       // ...and it's past the first kAlienWaysDirectAliens of them
 
-		bool mapNext;                       // its last search on the grid looked at too many cells, so its next goes to the map
+		bool mapNext;                       // its last search on the grid was refused, found no way or looked at too many cells, so its
+		                                    // next goes to the map
 	};
 
 	int Find(const AlienWaysWho &who) const;

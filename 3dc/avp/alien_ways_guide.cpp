@@ -563,6 +563,17 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 			line.outcome = kAlienWaysOutcomeRefused;
 			line.why = why;
 			AddReport(line);
+
+			// The grid refused it ("no cell near the start", or the goal): the same alien is searched for again at once, on the map, as with no
+			// grid at all. On BAR-01 (2026-11-08) 12 of 68 searches were refused so, three of them for aliens 8 m from the marine, on walls.
+			// The loop comes back to it straight away, as it has waited longest; mapNext is cleared then, so it can't come round again.
+			if (onGrid)
+			{
+				follower.mapNext = true;
+				follower.queued = true;
+				continue;
+			}
+
 			NoNewWay(&follower, follower.last.goal);
 			continue;
 		}
@@ -656,8 +667,9 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 		line.outcome = kAlienWaysOutcomeNoWay;
 		AddReport(line);
 
-		// It looked at too many cells: the same alien is searched for again straight away, on the map (Primary's fallback)
-		if (line.tooFar)
+		// No way on the grid, or it looked at too many cells: the same alien is searched for again straight away, on the map (Primary's
+		// fallback). On BAR-01 one alien's search found no way 7 times running, from cells that don't join its goal's, 125 ms each.
+		if (searchOnGrid)
 		{
 			follower.mapNext = true;
 			follower.queued = true;
