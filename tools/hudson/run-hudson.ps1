@@ -44,6 +44,10 @@ Following a route through the level and pressing what it says, from hudson-route
 
   powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level derelict -Frames 400000 -Rooms 1 -Route derelict
 
+Watching an alien find its way to him, from A to B, filmed, with him holding his fire, and with #109's ways where the build has them (-AlienWays):
+
+  powershell -ExecutionPolicy Bypass -File tools\hudson\run-hudson.ps1 -GameFolder C:\Games\AvP-test -Level derelict -Frames 30000 -Seconds 400 -Rooms 1 -Combat alien -Watch alien -HoldFire -AlienAt m43880,5490,m310070 -StandAt m50790,5490,m267890 -WhileInUse -TimingsDontMatter -AlienWays
+
 What it won't do:
 - Run from a Steam folder. A run is for a test copy of the game, and this script empties folders, so it never goes there. The game refuses as well, unless steam=yes is on its own command line, which is for a run the user starts from Steam. This script doesn't pass that word.
 - Run while the game is already running, or while a compiler is running, because then its timings would mean nothing. -TimingsDontMatter leaves the compiler check out.
@@ -110,6 +114,11 @@ param(
     [string]$Static = '',
     [string]$ShadowSwitches = '',
     [int]$Aliens = 0,
+    [string]$Watch = '',   # alien: in a fight, the camera follows the alien from the side and the log says where it goes. Needs -Combat alien
+    [switch]$HoldFire,     # in a watched fight he never fires, so that the alien reaches him
+    [string]$AlienAt = '', # x,y,z in the level's own mm, where an m stands for a minus sign: the fight's alien is made just above it
+    [string]$StandAt = '', # x,y,z the same way: he stands there
+    [switch]$AlienWays,    # the game's own -alienways: an alien that knows where he is takes the way the alien ways map finds, where that's in the build
     [string]$Exe = 'AvPx.exe',
     [switch]$TimingsDontMatter,
     [switch]$WhileInUse,
@@ -227,8 +236,9 @@ switch ($Static)
 # The game's own switches for trying out shadows, such as -shadowlights=8. Only those, because anything else could change what a run is without its result saying so. run.txt has them.
 if ($ShadowSwitches -and $ShadowSwitches -notmatch '^-shadow[a-z]+(=\d+)?( -shadow[a-z]+(=\d+)?)*$') { Stop-Here "-ShadowSwitches only takes the game's -shadow switches, and $ShadowSwitches isn't" }
 $tryingOut = if ($ShadowSwitches) { " $ShadowSwitches" } else { '' }
+$alienWaysSwitch = if ($AlienWays) { ' -alienways' } else { '' }
 
-$arguments = "-dev -statusoff$staticSwitches$tryingOut -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
+$arguments = "-dev -statusoff$staticSwitches$tryingOut$alienWaysSwitch -hudson level=$Level frames=$Frames seconds=$Seconds idle=$IdleSeconds"
 if ($Rooms -gt 0) { $arguments += " rooms=$Rooms" }
 if ($Views -gt 0) { $arguments += " views=$Views" }
 if ($Hold -gt 0) { $arguments += " hold=$Hold" }
@@ -302,6 +312,10 @@ if ($StrategySeconds -gt 0) { $arguments += " strategyseconds=$StrategySeconds" 
 if ($StrategyLook) { $arguments += " strategylook=$StrategyLook" }
 if ($Combat) { $arguments += " combat=$Combat" }
 if ($Aliens -gt 0) { $arguments += " aliens=$Aliens" }
+if ($Watch) { $arguments += " watch=$Watch" }
+if ($HoldFire) { $arguments += " holdfire=yes" }
+if ($AlienAt) { $arguments += " alienat=$($AlienAt -replace 'm', '-')" }
+if ($StandAt) { $arguments += " standat=$($StandAt -replace 'm', '-')" }
 Write-Host "run-hudson: $exePath $arguments"
 
 # Taken before it starts, so they're of what actually ran.
