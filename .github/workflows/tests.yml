@@ -108,7 +108,12 @@ jobs:
           Check ($result.code -eq 1 -and $result.text -cmatch "zz_refusal_probe_test\.args doesn't ask for /Itests/every_test /FIevery_test\.h") 'without the guard, it is refused, and told why'
 
           Check (-not (Test-Path -LiteralPath (Join-Path $PWD 'tests/zz_refusal_probe_test.args'))) 'and the made-up test is gone again'
+
+          # The step says how it went itself. A PowerShell step on GitHub otherwise ends with the exit code of the last program it ran, and
+          # here that's a build.ps1 that was meant to refuse, so it would fail even with every check above passing.
           if ($failed.Count -gt 0) { throw "build.ps1 didn't refuse as it should: $($failed -join '; ')" }
+          'build.ps1 refused each way, with each reason'
+          exit 0
 
   # Every test again, built with the address sanitizer by tests/takeouts/sanitize.ps1 (card SANITIZE-RUN-1, added 2026-11-08 by Melanikus
   # for the AvP port). The sanitizer watches every read and write, and stops a test at the first one outside what it was given, so it finds
