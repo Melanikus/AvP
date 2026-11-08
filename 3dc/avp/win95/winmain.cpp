@@ -34,6 +34,7 @@
 //   -alienways, with -dev, builds the alien ways map at each level's start, while that's being made and filmed (alien_ways.h)
 //   -alienwaysaim=N, with -dev, says how far along its way an alien aims, in mm, from 0 to 10000; 0 is the aim before the look-ahead
 //   -alienwayswatch=N, with -dev, gives the alien with the guide's place N, from 0 to 63, a line in the log every frame (alien_ways.h)
+//   -alienwaysgrid, with -dev and -alienways, has the aliens search the grid every NPC will share, with the polygon map as the fallback
 
 #include "3dc.h"
 #include "alien_ways.h"
@@ -352,6 +353,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			AlienWaysSwitchedOn = 1;
 			LogString("alien ways: the map is built at each level's start (-alienways)");
+		}
+		// The grid every NPC will share (npc_grid.h) for the aliens' searches, instead of the polygon map, which is still built as the fallback
+		// for when the grid can't be had (#109, #145). It's a way of finding the alien ways, so it needs -alienways too.
+		if (devSwitch("-alienwaysgrid"))
+		{
+			if (AlienWaysSwitchedOn)
+			{
+				AlienWaysGridSwitchedOn = 1;
+				LogString("alien ways: the aliens search the grid, with the polygon map as the fallback (-alienwaysgrid)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwaysgrid needs -alienways too, so it was ignored");
+			}
 		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))

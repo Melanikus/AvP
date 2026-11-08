@@ -37,6 +37,12 @@
 // 1 when -alienways was given with -dev. Set once, at start, by winmain.cpp.
 extern int AlienWaysSwitchedOn;
 
+// 1 when -alienwaysgrid was given too (with -dev and -alienways). Then the aliens search the grid every NPC will share (npc_grid.h) instead
+// of the polygon map. The map is still built, first, and is what they search when the grid can't be had. Each level's build makes the grid
+// right after the map, on the same thread, and the guide is told each frame which one to search (alien_ways_guide.h, UseGrid). Set once,
+// at start, by winmain.cpp.
+extern int AlienWaysGridSwitchedOn;
+
 // How far along its way an alien aims, in mm, so it curves round bends instead of running corner to corner (alien_ways_lookahead.h).
 // kAlienWaysAimAheadMm, 1.5 m, unless -alienwaysaim=N gives another, from 0 to 10000; 0 aims at the way's next point, as before, for a film
 // to compare the two. Set once, at start, by winmain.cpp; the guide is given it at each level's start.
