@@ -64,15 +64,18 @@ static void HostileCheck(bool good, const std::string &what)
 // Skips the bytes a message carries after its command. A count that runs past the end of what came means the packet's reading
 // ends there. It's checked before it's added, so the sum can never pass the end. at + size is already inside the packet.
 // Sends one reliable message on a connection. ENet keeps a packet it takes, and frees it when it's been sent; one it won't take
-// is still ours, so it's freed here.
-static void SendOrFree(ENetPeer *peer, const void *data, size_t size)
+// is still ours, so it's freed here. Says whether ENet took it.
+static bool SendOrFree(ENetPeer *peer, const void *data, size_t size)
 {
 	ENetPacket *const packet = enet_packet_create(data, size, ENET_PACKET_FLAG_RELIABLE);
+	bool const taken = packet != NULL && enet_peer_send(peer, 0, packet) == 0;
 
-	if (packet != NULL && enet_peer_send(peer, 0, packet) < 0)
+	if (packet != NULL && !taken)
 	{
 		enet_packet_destroy(packet);
 	}
+
+	return taken;
 }
 
 static bool SkippedItsBytes(size_t &at, size_t size, size_t length, enet_uint16 carried)
@@ -636,14 +639,16 @@ static void TestHonestMessages()
 
 	int const smallOnes = 500;
 
-	SendOrFree(pair.clientsSide, big.data(), big.size());
+	int refused = SendOrFree(pair.clientsSide, big.data(), big.size()) ? 0 : 1;
 
 	for (int i = 0; i < smallOnes; i++)
 	{
 		std::string const words = "message " + std::to_string(i);
 
-		SendOrFree(pair.clientsSide, words.data(), words.size());
+		refused += SendOrFree(pair.clientsSide, words.data(), words.size()) ? 0 : 1;
 	}
+
+	HostileCheck(refused == 0, "ENet takes all " + std::to_string(smallOnes + 1) + " honest messages to send: " + std::to_string(refused) + " refused");
 
 	std::vector<std::vector<uint8_t>> messages;
 	DWORD const startedAt = GetTickCount();
