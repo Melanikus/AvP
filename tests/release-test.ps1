@@ -244,6 +244,8 @@ function Make-GoodRepository
 {
     Clear-Work
     Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') "# Title`n`nWords.`n`n## What's in the way`n`nNothing.`n"
+    Write-File (Join-Path $work 'tests/assert_limits_allowed.txt') "# Rows marked NOT SAFE YET wait for a fix. This header says so, and doesn't count.`n3dc/a.cpp | assert(i < kMost); | the number is checked before it gets here`n"
+    Write-File (Join-Path $work 'PLAYTEST.md') "# Playing it`n`nEverything here is true today.`n"
     $project = '<Project>'
 
     foreach ($file in $shadowFiles)
@@ -324,6 +326,31 @@ foreach ($case in $blockersRefused)
 Make-GoodRepository
 Remove-Item -LiteralPath (Join-Path $work 'RELEASE-BLOCKERS.md')
 Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'RELEASE-BLOCKERS.md is missing' 'taking the file away stops it'
+
+# --- Asserts still marked not yet safe, and tester notes still pending. Each is refused for its own reason, and a header that only
+# talks about such rows isn't.
+Make-GoodRepository
+Check ((Check-Release $good).Code -eq 0) 'a header that talks about NOT SAFE YET rows, with none under it, is let through'
+
+Make-GoodRepository
+Add-Content -LiteralPath (Join-Path $work 'tests/assert_limits_allowed.txt') -Value '3dc/b.cpp | assert(j < kMost); | NOT SAFE YET: waits for another PR'
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'still marks an assert as not yet safe' 'an assert still marked not yet safe stops it'
+
+Make-GoodRepository
+Remove-Item -LiteralPath (Join-Path $work 'tests/assert_limits_allowed.txt')
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'tests/assert_limits_allowed.txt is missing' 'taking the assert list away stops it'
+
+Make-GoodRepository
+Add-Content -LiteralPath (Join-Path $work 'PLAYTEST.md') -Value 'The mark key works. [PENDING: once it is in.]'
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'PLAYTEST.md still has a line marked [PENDING]' 'tester notes with a pending line stop it'
+
+Make-GoodRepository
+Remove-Item -LiteralPath (Join-Path $work 'PLAYTEST.md')
+Expect-Refused 'check-release.ps1' @('-Version', $good, '-Repository', $work, '-WithoutGitHub') 'PLAYTEST.md is missing' 'taking the tester notes away stops it'
+
+# The real assert list: once every save and network fix is in, nothing in it is marked not yet safe
+$realUnsafe = @(Get-Content (Join-Path $repository 'tests/assert_limits_allowed.txt') | Where-Object { -not $_.StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
+Check ($realUnsafe.Count -eq 0) "the real assert list marks nothing as not yet safe: $($realUnsafe.Count) row(s)"
 
 $realBlockers = Get-Content (Join-Path $repository 'RELEASE-BLOCKERS.md')
 Check ($realBlockers -contains "## What's in the way") "the real file has the heading the script looks for"

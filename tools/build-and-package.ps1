@@ -115,7 +115,13 @@ foreach ($line in $gameFiles) {
 }
 
 # git keeps every one of them as a plain file. A link (mode 120000) would be followed, to whatever it points at.
-foreach ($entry in @(git ls-files -s -- package-files)) {
+# If git can't answer, or answers with less than the folder has to hold (every listed file, and its 3 notes), that's a stop too, not a
+# pass: an empty answer would otherwise look like a folder with nothing wrong in it.
+$entries = @(git ls-files -s -- package-files)
+if ($LASTEXITCODE -ne 0) { throw "git couldn't list package-files (exit $LASTEXITCODE)" }
+if ($entries.Count -lt $gameFiles.Count + 3) { throw "git lists $($entries.Count) entries in package-files, and it has to hold $($gameFiles.Count) game files and 3 notes" }
+
+foreach ($entry in $entries) {
     if ($entry -cnotmatch '^100644 ') { throw "package-files has something git doesn't keep as a plain file: $entry" }
 }
 

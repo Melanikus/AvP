@@ -5,6 +5,8 @@ It refuses unless all of these are true:
 - The version is three plain numbers, such as 1.0.0, or a beta's name: betarelease and the day it's made, such as betarelease20261107, on
   a day the calendar has. It comes from a person typing it into a box, so nothing about it is believed.
 - RELEASE-BLOCKERS.md says nothing is in the way.
+- tests/assert_limits_allowed.txt marks no assert as not yet safe.
+- PLAYTEST.md, the notes testers read, has no line still marked [PENDING].
 - Shadows & Shaders is really here, so that an old commit can't be released by mistake.
 - It's running from avpx_main, on the very tip of it.
 - Every required check passed on this exact commit. A check that was skipped, or never ran, counts as a failure.
@@ -32,7 +34,9 @@ if (-not $Repository)
     $Repository = Split-Path -Parent $PSScriptRoot
 }
 
-# The checks a merge has to pass, the same names as in branch protection and in build.yml. Add a new required check here as well.
+# The checks this commit has to have passed, by the names branch protection and build.yml use. Add a new required check here as well.
+# Take-outs is the one required check that isn't here: it runs only on pull requests, never on a push to avpx_main, so this commit has
+# no Take-outs run of its own to look at. Its result counted when each pull request merged.
 $requiredChecks = 'Snyk Code (SAST)', 'Snyk Open Source (SCA)', 'Snyk on the vcpkg libraries', 'Unit tests', 'Build the game', 'Release checks on Ubuntu'
 
 # What Shadows & Shaders is made of: the shadows, the per-pixel lighting, the relief mapping and the rendering menu. A file being here
@@ -116,6 +120,49 @@ if (-not ($underIt.Count -eq 1 -and $underIt[0].Trim() -ceq 'Nothing.'))
     }
 
     Stop-Release 'RELEASE-BLOCKERS.md still lists something in the way'
+}
+
+# --- Asserts still marked not yet safe. tests/assert_limits_allowed.txt lists every assert on a limit and why it's safe, and a row
+# that says NOT SAFE YET is a known hole waiting for its fix. Its header talks about such rows too, so only rows count: lines that
+# don't start with #. The match is exact, capitals and all. A missing list is a refusal, because nothing would then say they're safe.
+$assertList = Join-Path $Repository 'tests/assert_limits_allowed.txt'
+
+if (-not (Test-Path -LiteralPath $assertList))
+{
+    Stop-Release 'tests/assert_limits_allowed.txt is missing, so nothing says every assert on a limit is safe'
+}
+
+$notYetSafe = @(Get-Content -LiteralPath $assertList | Where-Object { -not $_.StartsWith('#') -and $_.Contains('| NOT SAFE YET') })
+
+if ($notYetSafe.Count -gt 0)
+{
+    foreach ($row in $notYetSafe)
+    {
+        Write-Host "Not yet safe: $row"
+    }
+
+    Stop-Release 'tests/assert_limits_allowed.txt still marks an assert as not yet safe'
+}
+
+# --- The tester notes say what's true. PLAYTEST.md marks a line [PENDING] until what it describes is in, and a release can't ship
+# notes that say something will be true later.
+$notes = Join-Path $Repository 'PLAYTEST.md'
+
+if (-not (Test-Path -LiteralPath $notes))
+{
+    Stop-Release 'PLAYTEST.md is missing, and it is what testers read'
+}
+
+$pending = @(Get-Content -LiteralPath $notes | Where-Object { $_.Contains('[PENDING') })
+
+if ($pending.Count -gt 0)
+{
+    foreach ($line in $pending)
+    {
+        Write-Host "Still pending: $($line.Trim())"
+    }
+
+    Stop-Release 'PLAYTEST.md still has a line marked [PENDING]'
 }
 
 # --- Shadows & Shaders
