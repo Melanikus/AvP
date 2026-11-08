@@ -80,6 +80,7 @@ void      Net_SayLongestGapWhileLoading();
 
 uint32_t  Net_JoinGame();
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
+NetResult Net_ConnectToThisMachine(int level, char *playerName);   // a Hudson run with net= only
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 
 // What a search for games is told about this one, for a game from the co-op campaign page, whose level changes as the host changes its rows.

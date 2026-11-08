@@ -1,5 +1,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the co-op lobby: a game's description says if it has one, and in the lobby nothing is passed on and a silent joiner goes sooner. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   the switches and the two helpers a Hudson run with net= needs. Until the network step, hudson.cpp refuses net=, so nothing here is used yet
 // Copyright (C) 2011 Barry Duncan. All Rights Reserved.
 // The original author of this code can be contacted at: bduncan22@hotmail.com
 
@@ -81,6 +83,11 @@ static ENetPeer     *ServerPeer = NULL;
 static bool net_IsInitialised = false;
 
 static ENetSocket broadcastSocket = ENET_SOCKET_NULL;
+
+// A Hudson run with net= would set these, to keep its two games on this machine's own address and open no socket for finding games. The lines in this file
+// that keep it there aren't written into this network code yet, so hudson.cpp refuses net= before anything opens, and nothing sets these. They come with the network step.
+bool NetLoopbackOnly = false;
+bool NetLoopbackSearch = false;
 
 
 // How long a machine that's stopped answering may go before ENet drops it. Nothing answers ENet while a level loads, and one machine can take much longer than another. ENet's own number was about 5 seconds, which a joiner on a big level can't meet. A machine that never comes back is still dropped when this runs out.
@@ -1028,6 +1035,12 @@ static bool hasAnsweredWhileLoading = false;
 static unsigned int lastAnsweredWhileLoading = 0;
 static unsigned int longestGapWhileLoading = 0;
 
+// For a test run only: the connection, for a test to send something an honest game never would
+ENetHost *HudsonTest_TheConnection()
+{
+	return host;
+}
+
 void Net_KeepAnsweringWhileLoading()
 {
 	if (!host)
@@ -1588,6 +1601,22 @@ NetResult Net_Send(uint32_t messageType, NetID fromID, NetID toID, uint8_t *mess
 	}
 
 	return NET_OK;
+}
+
+// For a Hudson run with net=: join the game on this machine, without looking for one. Nothing calls it until the network step: see NetLoopbackOnly.
+NetResult Net_ConnectToThisMachine(int level, char *playerName)
+{
+	ENetAddress address;
+
+	enet_address_set_host_ip(&address, "127.0.0.1");
+
+	SessionData[0].host = address.host;
+	SessionData[0].port = (uint16_t)netPortNumber;
+	SessionData[0].levelIndex = level;
+	SessionData[0].AllowedToJoin = true;
+	NumberOfSessionsFound = 1;
+
+	return Net_ConnectToSession(0, playerName);
 }
 
 NetResult Net_ConnectToSession(int sessionNumber, char *playerName)
