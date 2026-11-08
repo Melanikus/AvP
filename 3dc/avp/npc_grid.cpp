@@ -173,7 +173,8 @@ struct Pair
 
 NpcGrid::NpcGrid()
 	: searchFrom(kNpcGridNoCell), searchTo(kNpcGridNoCell), searchBody(kNpcGridAlien), searchPrice(1), searchLooks(0), searchMostLooks(0),
-	  searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchShut(nullptr), cutShort(false),
+	searchState(kNpcGridNoWay), searchClaims(nullptr), searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep),
+	  searchClaimMost(kAlienWaysClaimMostPriceFactor), searchShut(nullptr), cutShort(false),
 	  surfaceCells(0), steps(0), rayTests(0), squareTests(0), boxEntries(0), bytesKept(0), bytesBuilding(0), bytesBuildingUsed(0), limits(NpcGrid_UsualLimits(false)),
 	  ready(false), stopAsked(false), looksAtStop(0), stopAtLook(0)
 {
@@ -193,6 +194,7 @@ void NpcGrid::Clear()
 	GiveBack(&wayCells);
 	GiveBack(&way);
 	GiveBack(&wayPointCells);
+	GiveBack(&wayPolygons);
 	searchState = kNpcGridNoWay;
 	searchLooks = 0;
 	searchClaims = nullptr;
@@ -1533,6 +1535,7 @@ NpcGridSearch NpcGrid::BeginCells(uint32_t from, uint32_t to, NpcGridBody body, 
 	wayCells.clear();
 	way.clear();
 	wayPointCells.clear();
+	wayPolygons.clear();
 	cutShort = false;
 	searchLooks = 0;
 	searchFrom = from;
@@ -1556,10 +1559,12 @@ NpcGridSearch NpcGrid::BeginCells(uint32_t from, uint32_t to, NpcGridBody body, 
 }
 
 const char *NpcGrid::StartSearch(AlienWaysXYZ start, AlienWaysXYZ goal, NpcGridBody body, int floorPrice, size_t mostLooks,
-	const AlienWaysClaims *claims, int searcher, const std::vector<uint8_t> *shut)
+	const AlienWaysClaims *claims, int searcher, const std::vector<uint8_t> *shut, double claimStep, double claimMost)
 {
 	searchClaims = claims;
 	searchSearcher = searcher;
+	searchClaimStep = claimStep;
+	searchClaimMost = claimMost;
 	searchShut = shut;
 	searchStart = start;
 	searchGoal = goal;
@@ -1602,7 +1607,7 @@ double NpcGrid::PriceOf(uint32_t cell) const
 
 	if (searchClaims && polygon >= 0)
 	{
-		price *= searchClaims->PriceFactor(polygon, searchSearcher);
+		price *= searchClaims->PriceFactor(polygon, searchSearcher, searchClaimStep, searchClaimMost);
 	}
 
 	return price;
@@ -1729,7 +1734,8 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 					continue;
 				}
 
-				double const step = (di != 0 && dj != 0 ? 1.4142 : 1.0) * kNpcGridCell * price;
+				// A diagonal step is sqrt(2) cells: exactly, so the guess (the straight line between the middles) is never more than it costs
+				double const step = (di != 0 && dj != 0 ? sqrt(2.0) : 1.0) * kNpcGridCell * price;
 				TryMove(goal, b, c, n, cost + step);
 			}
 		}
@@ -1741,7 +1747,8 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 		{
 			uint32_t const n = list[k];
 
-			if (!(flags[n] & bit))
+			// Every link was made by Build between two of its cells, but a number past the cells is turned away all the same
+			if (n >= flags.size() || !(flags[n] & bit))
 			{
 				continue;
 			}
@@ -1774,7 +1781,11 @@ NpcGridSearch NpcGrid::Work(size_t looksAllowed)
 			for (size_t k = 0; k < count; k++)
 			{
 				double b[3];
-				Middle(list[k], b);
+
+				if (!Middle(list[k], b))
+				{
+					continue;   // no cell: the same care as for a link
+				}
 				double const far = sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
 				TryMove(goal, b, c, list[k], cost + far);
 			}
@@ -1809,6 +1820,7 @@ void NpcGrid::MakeWay()
 {
 	way.clear();
 	wayPointCells.clear();
+	wayPolygons.clear();
 	cutShort = false;
 
 	if (wayCells.empty())
@@ -1818,6 +1830,7 @@ void NpcGrid::MakeWay()
 
 	way.push_back(PointAt(wayCells.front(), searchStart.x, searchStart.y, searchStart.z));
 	wayPointCells.push_back(wayCells.front());
+	wayPolygons.push_back(PolygonOf(wayCells.front()));
 
 	for (size_t k = 1; k + 1 < wayCells.size(); k++)
 	{
@@ -1839,6 +1852,7 @@ void NpcGrid::MakeWay()
 
 		way.push_back(PointAt(wayCells[k], b[0], b[1], b[2]));
 		wayPointCells.push_back(wayCells[k]);
+		wayPolygons.push_back(PolygonOf(wayCells[k]));
 
 		// Room is kept for the goal: a longer way is cut short there, and says so
 		if (way.size() + 1 >= kAlienWaysMostWayPoints)
@@ -1850,4 +1864,5 @@ void NpcGrid::MakeWay()
 
 	way.push_back(PointAt(wayCells.back(), searchGoal.x, searchGoal.y, searchGoal.z));
 	wayPointCells.push_back(wayCells.back());
+	wayPolygons.push_back(PolygonOf(wayCells.back()));
 }

@@ -420,6 +420,14 @@ static void Searches()
 	Check(faces, "a point on the floor faces straight up: (0, -32767, 0), as the level stores a facing");
 	Check(grid.WayCells().size() == grid.Way().size() && grid.WayPath().size() >= grid.Way().size() && grid.WayPath().front() == grid.WayCells().front() &&
 		grid.WayPath().back() == grid.WayCells().back(), "a cell for each point of the way, and every cell of it, start to goal");
+	bool polygonsMatch = grid.WayPolygons().size() == grid.Way().size();
+
+	for (size_t k = 0; polygonsMatch && k < grid.WayPolygons().size(); k++)
+	{
+		polygonsMatch = grid.WayPolygons()[k] == grid.PolygonOf(grid.WayCells()[k]) && grid.WayPolygons()[k] >= 0;
+	}
+
+	Check(polygonsMatch, "and the map polygon under each point's cell, as the map's own WayPolygons gives them");
 	int sheet = -1, ci = -1, cj = -1;
 	uint32_t const first = grid.WayPath().front();
 	Check(grid.CellPlace(first, &sheet, &ci, &cj) && grid.CellAt(sheet, ci, cj) == first, "a cell's place on its sheet gives the cell back");
