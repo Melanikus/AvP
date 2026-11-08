@@ -30,6 +30,10 @@
 //   a saved marine has to be on a real path
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   CreateMarineBot gives back the marine it made, and a marine can be told to stand guard here and face a point, or to guard another spot, or to hurry
+//   in a Hudson run a marine has nothing to aim at, unless the run asked for a fight
+//   a run with a fight is told when something hits him
+//   a marine in a Hudson run isn't hurt by a fall
+//   a marine can be told to take no notice of what his squad suspects, and a test can ask what that is. Nobody is told, in a normal game
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   a marine firing with no target no longer works out its aim from numbers nothing set;
 //   a target standing exactly on the marine no longer divides by nothing
@@ -82,6 +86,7 @@
 #include "showcmds.h"
 #include "extents.h"
 #include "user_profile.h"
+#include "hudson.h"
 
 #define ALL_PULSERIFLES 0
 #define MOTIONTRACKERS 0
@@ -138,6 +143,7 @@ static STATE_RETURN_CONDITION Execute_MFS_SentryMode(STRATEGYBLOCK *sbPtr);
 static STATE_RETURN_CONDITION Execute_MNS_Approach(STRATEGYBLOCK *sbPtr);
 static STATE_RETURN_CONDITION Execute_MNS_Avoidance(STRATEGYBLOCK *sbPtr);
 static STATE_RETURN_CONDITION Execute_MNS_Wander(STRATEGYBLOCK *sbPtr);
+static const STRATEGYBLOCK *marineBeingSteered = 0;    // the one marine told where to go by Marine_GuardThisSpot. Nobody, in a normal game
 static STATE_RETURN_CONDITION Execute_MNS_Wait(STRATEGYBLOCK *sbPtr);
 static STATE_RETURN_CONDITION Execute_MNS_DischargeLOSWeapon(STRATEGYBLOCK *sbPtr);
 static STATE_RETURN_CONDITION Execute_MNS_DischargeShotgun(STRATEGYBLOCK *sbPtr);
@@ -1679,6 +1685,73 @@ STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon)
 	return sbPtr;
 }
 
+// Sets him to guard where he stands, facing this point, the way the level file does for a guard it places. Saying it again gives him a new point to face.
+void Marine_GuardAndFace(STRATEGYBLOCK *sbPtr, const VECTORCH *point)
+{
+	MARINE_STATUS_BLOCK *const marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+	if (marineStatus->Mission != MM_Guard)
+	{
+		InitMission(sbPtr, MM_Guard);
+	}
+
+	marineStatus->my_facing_point = *point;
+	marineStatus->gotapoint = 0;
+
+	// Here is his post now. A guard walks back to his post if he's anywhere else, and he may just have been put in a new room
+	marineStatus->my_spot = sbPtr->DynPtr->Position;
+	marineStatus->missionmodule = sbPtr->containingModule ? sbPtr->containingModule->m_aimodule : NULL;
+}
+
+// The one marine who always moves at his combat speed, whatever he's doing. Nobody, in a normal game. A Hudson run can ask for it: see hudson_nav.cpp.
+static const STRATEGYBLOCK *marineWhoHurries = 0;
+
+void Marine_Hurry(STRATEGYBLOCK *sbPtr)
+{
+	marineWhoHurries = sbPtr;
+}
+
+// The one marine who takes no notice of what his squad suspects. Nobody, in a normal game. A Hudson run that's only having him look round asks for it. A marine on
+// guard turns towards anything suspicious ahead of the way he was told, and the squad's suspicion is passed to him again on every frame it lasts. On Invasion
+// something kept it going for a whole run, 2026-11-05, so he stared at one spot from every room and never looked where the tour asked.
+static const STRATEGYBLOCK *marineWhoTakesNoNotice = 0;
+
+// It also clears what he's already worrying about, because that would hold his eyes for ten more seconds, and a tour only waits ten.
+// Anything he sees or hears for himself after this still counts.
+void Marine_TakesNoNoticeOfTheSquad(STRATEGYBLOCK *sbPtr)
+{
+	MARINE_STATUS_BLOCK *const marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+	marineWhoTakesNoNotice = sbPtr;
+	marineStatus->suspicious = 0;
+	marineStatus->previous_suspicion = 0;
+	marineStatus->using_squad_suspicion = 0;
+}
+
+// What he and his squad suspect, and how long each has left to worry about it, for a test's log. A time of 0 means nothing is suspected.
+void Marine_WhatHeAndHisSquadSuspect(const STRATEGYBLOCK *sbPtr, int *hisTime, VECTORCH *hisPoint, int *squadTime, VECTORCH *squadPoint)
+{
+	MARINE_STATUS_BLOCK const *const marineStatus = (const MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+	*hisTime = marineStatus->suspicious;
+	*hisPoint = marineStatus->suspect_point;
+	*squadTime = NpcSquad.Squad_Suspicion;
+	*squadPoint = NpcSquad.squad_suspect_point;
+}
+
+// Gives a marine on guard another spot to guard. One who isn't on his spot walks to it by himself, on his own feet and with his own animations, from room to room if he has to, in Execute_MNS_SentryMode. So
+// saying where the spot is, and which module it's in, is all it takes. Where he was going before is forgotten, so that the way there is worked out from where he is now.
+void Marine_GuardThisSpot(STRATEGYBLOCK *sbPtr, const VECTORCH *spot, AIMODULE *module)
+{
+	MARINE_STATUS_BLOCK *const marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+	marineBeingSteered = sbPtr;
+
+	marineStatus->my_spot = *spot;
+	marineStatus->missionmodule = module;
+	marineStatus->wanderData.currentModule = NPC_NOWANDERMODULE;
+}
+
 /*------------------------Patrick 24/2/97-----------------------------
   Marine/Seal behaviour shell functions
   --------------------------------------------------------------------*/
@@ -2548,6 +2621,7 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 	/* Squad level suspicion? */
 	if (((marineStatusPointer->suspicious==0)||(marineStatusPointer->using_squad_suspicion))
 		&&(NpcSquad.Squad_Suspicion!=0)
+		&&(sbPtr!=marineWhoTakesNoNotice)
 		&&(sbPtr->SBdptr)
 		&&(marineStatusPointer->behaviourState!=MBS_Approaching)
 		&&(marineStatusPointer->behaviourState!=MBS_Firing)
@@ -5589,6 +5663,10 @@ void MarineIsDamaged(STRATEGYBLOCK *sbPtr, DAMAGE_PROFILE *damage, int multiple,
 {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
+
+	if (HudsonWorldIsLive) {
+		Hudson_HeWasHit(sbPtr, damage->Id);
+	}
 
 	LOCALASSERT(sbPtr);
 	LOCALASSERT(sbPtr->containingModule);
@@ -8960,6 +9038,10 @@ static void HandleMovingAnimations(STRATEGYBLOCK *sbPtr)
 			break;
 	}
 
+	if (sbPtr==marineWhoHurries) {
+		style=MMS_Combat;
+	}
+
 	/* Finally... */
 	offset.vx=sbPtr->DynPtr->Position.vx-sbPtr->DynPtr->PrevPosition.vx;
 	offset.vy=sbPtr->DynPtr->Position.vy-sbPtr->DynPtr->PrevPosition.vy;
@@ -9429,7 +9511,8 @@ static STATE_RETURN_CONDITION Execute_MNS_SentryMode(STRATEGYBLOCK *sbPtr) {
 
 	} else {
 		/* Same module, wrong place.  Just go for it.  */
-		NPCGetMovementDirection(sbPtr, &velocityDirection, &(marineStatusPointer->my_spot),&marineStatusPointer->waypointManager);
+		// A marine being steered goes straight where he's told. The level's waypoints would take him to them first, and that can turn him sideways into a wall.
+		NPCGetMovementDirection(sbPtr, &velocityDirection, &(marineStatusPointer->my_spot),(sbPtr==marineBeingSteered) ? NULL : &marineStatusPointer->waypointManager);
 
 	}
 
@@ -11263,6 +11346,12 @@ int Validate_Strategy(STRATEGYBLOCK *target,char *SBname) {
 }
 
 int Marine_TargetFilter(STRATEGYBLOCK *candidate) {
+
+	// The others in a Hudson run aren't running, so they can't fight back, and a marine would just stand there shooting them.
+	// A run that asked for a fight has everyone running, and this is what it's for.
+	if (HudsonMarineIsOn && !HudsonWorldIsLive) {
+		return(0);
+	}
 
 	switch (candidate->I_SBtype) {
 		case I_BehaviourMarinePlayer:
@@ -17753,6 +17842,11 @@ void Marine_UpdateFace(STRATEGYBLOCK *sbPtr) {
 static void	Marine_MirrorSuspectPoint(STRATEGYBLOCK *sbPtr) {
 
 	MARINE_STATUS_BLOCK *marineStatusPointer;
+
+	// A drop shouldn't end a run, or splash blood across what's being looked at
+	if (HudsonMarineIsOn) {
+		return;
+	}
 
 	LOCALASSERT(sbPtr);
 	marineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);
