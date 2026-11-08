@@ -8,7 +8,7 @@ the first time those steps ran would be after the merge.
 It fetches vcpkg at the commit vcpkg.json names, so the libraries can't drift, and builds them from their source if there's no copy
 of them already saved on the machine. The first build on a clean machine takes a while.
 
-What it leaves in -OutFolder: the program, its libraries, the shaders, the notes, and a list of every file's hash.
+What it leaves in -OutFolder: the program, its libraries, the shaders, the notes, each library's licence, and a list of every file's hash.
 
 WHAT GOES ON THE NETWORK, so that nobody is surprised when security software asks: git fetches vcpkg from github.com. vcpkg's bootstrap
 then runs its own scripts\tls12-download.exe to fetch vcpkg.exe from github.com. And vcpkg.exe fetches each library's source and the
@@ -105,6 +105,100 @@ Copy-Item (Join-Path $release 'AvPx.exe') (Join-Path $programFolder 'AvP_Classic
 Copy-Item (Join-Path $release '*.dll') $programFolder
 Copy-Item -Recurse shaders (Join-Path $OutFolder 'shaders')
 Copy-Item PLAYTEST.md, License.txt $OutFolder
+
+# --- Each library's own licence, in the folder licences, copied from the very files the build used. licences/README.txt names each
+# program and library in bin, says what it is and which licences go with it, and, for the ones under the GNU licences, where their
+# source is. The libraries ask for this: a copy of a program has to come with their notices. The build stops if something in bin
+# isn't known here, or if a licence copied here isn't named for anything in bin, so neither a new library nor a moved one can go out
+# without its licence. (LICENCE-NOTICES-1, the user's ruling, 2026-11-08: fixed before the first release.)
+$installed = 'vcpkg_installed\x86-windows\share'
+$licences = [ordered]@{
+    'ENet.txt'          = "$installed\enet\copyright"
+    'SipHash.txt'       = 'vcpkg-overlay-ports\enet\siphash\LICENSE_CC0'
+    'OpenAL-Soft.txt'   = "$installed\openal-soft\copyright"
+    'fmt.txt'           = "$installed\fmt\copyright"
+    'libogg.txt'        = "$installed\libogg\copyright"
+    'libvorbis.txt'     = "$installed\libvorbis\copyright"
+    'PThreads4W.txt'    = "$installed\pthreads\copyright"
+    'PThreads4W-NOTICE.txt'       = "$installed\pthreads\NOTICE"         # installed by our port, for the Apache License's 4(d)
+    'PThreads4W-CONTRIBUTORS.txt' = "$installed\pthreads\CONTRIBUTORS"   # which its NOTICE names
+    'libbinkdec.txt'    = 'dependencies\libbinkdec\COPYING'
+    'LGPL-2.1.txt'      = 'dependencies\libbinkdec\COPYING'   # the GNU Lesser GPL 2.1, the version this project takes OpenAL Soft under
+    'libsmackerdec.txt' = 'dependencies\libsmackerdec\COPYING'
+    'D3DX.txt'          = "$installed\dxsdk-d3dx\copyright"
+}
+
+$licenceFolder = Join-Path $OutFolder 'licences'
+New-Item -ItemType Directory -Force $licenceFolder | Out-Null
+
+foreach ($name in $licences.Keys) {
+    $from = $licences[$name]
+    if (-not (Test-Path -LiteralPath $from -PathType Leaf) -or (Get-Item -LiteralPath $from).Length -eq 0) { throw "$from, the licence for licences/$name, isn't there" }
+    Copy-Item -LiteralPath $from -Destination (Join-Path $licenceFolder $name)
+}
+
+# Where OpenAL Soft's source is. vcpkg's record of what it built (vcpkg.spdx.json) names the place its source came from, and at which
+# version, checked for its shape before it's written down. It's built from this project's own port, vcpkg-overlay-ports/openal-soft,
+# which changes it, so that folder, at this commit, is the rest of its source.
+$record = Get-Content -LiteralPath "$installed\openal-soft\vcpkg.spdx.json" -Raw | ConvertFrom-Json
+$places = @($record.packages | ForEach-Object { "$($_.downloadLocation)" })
+$openalSource = @($places | Where-Object { $_ -cmatch '^git\+https://github\.com/kcat/openal-soft@[0-9A-Za-z._-]+$' })
+if ($openalSource.Count -ne 1) { throw "vcpkg's record of OpenAL Soft doesn't say where its source came from: $($places -join ', ')" }
+$openalVersion = $openalSource[0].Split('@')[1]
+
+# OpenAL Soft's source goes with it, in licences/sources/openal-soft, because it isn't all in this repository: upstream's archive, the very
+# file vcpkg downloaded and checked against the SHA-512 our port names, and our port and triplet, which change it and say how it's built.
+# vcpkg keeps its downloads in its own folder, or where VCPKG_DOWNLOADS says, or, for the copy inside Visual Studio, in the user's own.
+$openalPortFolder = 'vcpkg-overlay-ports\openal-soft'
+$portText = [System.IO.File]::ReadAllText((Join-Path $openalPortFolder 'portfile.cmake'))
+$portSums = @([regex]::Matches($portText, '(?m)^\s*SHA512\s+([0-9a-f]{128})\s*$') | ForEach-Object { $_.Groups[1].Value })
+if ($portSums.Count -ne 1) { throw "vcpkg-overlay-ports/openal-soft/portfile.cmake doesn't name one SHA-512 for OpenAL Soft's source" }
+$downloadFolders = @($env:VCPKG_DOWNLOADS, (Join-Path $vcpkgRoot 'downloads'), $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'vcpkg\downloads' })) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
+$openalArchives = @($downloadFolders | ForEach-Object { Get-ChildItem -LiteralPath $_ -File -Filter 'kcat-openal-soft-*.tar.gz' } | Where-Object { (Get-FileHash -Algorithm SHA512 -LiteralPath $_.FullName).Hash.ToLower() -ceq $portSums[0] } | Select-Object -First 1)
+if ($openalArchives.Count -ne 1) { throw "OpenAL Soft's source archive, with the SHA-512 our port names, isn't in vcpkg's downloads ($($downloadFolders -join ', ')). vcpkg only downloads it when it builds OpenAL Soft, not when it reuses a build it kept, so build once with nothing kept" }
+$openalArchive = $openalArchives[0].Name
+$openalSourceFolder = Join-Path $licenceFolder 'sources\openal-soft'
+New-Item -ItemType Directory -Force (Join-Path $openalSourceFolder 'port') | Out-Null
+Copy-Item -LiteralPath $openalArchives[0].FullName -Destination (Join-Path $openalSourceFolder $openalArchive)
+Copy-Item -Path (Join-Path $openalPortFolder '*') -Destination (Join-Path $openalSourceFolder 'port') -Recurse
+Copy-Item -LiteralPath 'vcpkg-overlay-triplets\x86-windows.cmake' -Destination (Join-Path $openalSourceFolder 'port\triplet-x86-windows.cmake')
+
+# Where this repository is, so our own changes to OpenAL Soft, and our two film libraries, can be found at the very commit this package
+# was built from
+$here = if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) { "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" } else { 'https://github.com/Melanikus/AvP' }
+
+$whatEachIs = @{
+    'avp_classic.exe'    = "the game. Rebellion's and Barry Duncan's terms for it are in License.txt, at the top. Built into it: ENet (licences/ENet.txt, MIT), changed by this project's own patches, which are in its source in vcpkg-overlay-ports/enet, and the reference SipHash that one of them adds (licences/SipHash.txt, CC0)."
+    'openal32.dll'       = "OpenAL Soft $openalVersion (licences/OpenAL-Soft.txt: the GNU Library General Public License, version 2, and then the licences of some of its parts). It may be used under version 2 or any later version, and this project uses it under the GNU Lesser General Public License, version 2.1 (licences/LGPL-2.1.txt). Its source is here with it: upstream's, as vcpkg downloaded and checked it, in licences/sources/openal-soft/$openalArchive, and this project's own changes to it and the settings it's built with in licences/sources/openal-soft/port, which are also at $here/tree/$commit/vcpkg-overlay-ports/openal-soft. You may put your own build of OpenAL Soft in its place."
+    'fmt.dll'            = 'fmt, which OpenAL Soft uses (licences/fmt.txt, MIT).'
+    'ogg.dll'            = 'libogg (licences/libogg.txt, BSD).'
+    'vorbis.dll'         = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'vorbisfile.dll'     = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'vorbisenc.dll'      = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
+    'pthreadvc3.dll'     = 'PThreads4W, built by this project''s own port in vcpkg-overlay-ports/pthreads (licences/PThreads4W.txt, the Apache License 2.0, with its notice in licences/PThreads4W-NOTICE.txt and the contributors that names in licences/PThreads4W-CONTRIBUTORS.txt).'
+    'libbinkdec.dll'     = "libbinkdec, Barry Duncan's player for Bink films (licences/libbinkdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libbinkdec. You may put your own build of it in its place."
+    'libsmackerdec.dll'  = "libsmackerdec, Barry Duncan's player for Smacker films (licences/libsmackerdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libsmackerdec. You may put your own build of it in its place."
+    'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
+    'd3dcompiler_43.dll' = "Microsoft's D3DX shader compiler (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."
+}
+
+$aboutLines = @(foreach ($binary in @(Get-ChildItem -LiteralPath $programFolder -File | Where-Object { $_.Extension -in '.exe', '.dll' } | Sort-Object Name)) {
+    $about = $whatEachIs[$binary.Name.ToLowerInvariant()]
+    if (-not $about) { throw "bin\$($binary.Name) is in the package, and its licence isn't known here. Add it to the licences above, from the file the build used" }
+    "bin/$($binary.Name): $about"
+})
+
+foreach ($name in $licences.Keys) {
+    if (@($aboutLines | Where-Object { $_.Contains("licences/$name") }).Count -eq 0) { throw "licences/$name is copied, and nothing in bin names it. If its library is now inside another one, name it on that one's line" }
+}
+
+$readme = @(
+    "The libraries this game is built with, and each one's licence. Each file in this folder is that library's own licence, copied from the"
+    'files the build used. Each line below names a program or library in bin, says what it is and which licences go with it, and, for the'
+    'ones under the GNU licences, where their source is.'
+    ''
+) + $aboutLines
+[System.IO.File]::WriteAllLines((Join-Path $licenceFolder 'README.txt'), [string[]]$readme)
 
 # Our game files, laid out as the game folder wants them (package-files/README.md). package-files/SHA256SUMS.txt lists each one with its
 # hash, and only those go in. Each is checked against its line before it's copied, so a file changed without its line stops the build,

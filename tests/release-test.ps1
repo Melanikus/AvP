@@ -463,6 +463,10 @@ function Make-GoodPackage
     $modelHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $package 'avp_huds/Ours.rif')).Hash.ToLower()
     Write-File (Join-Path $packageRepository 'package-files/SHA256SUMS.txt') "$modelHash  avp_huds/Ours.rif"
     Write-File (Join-Path $packageRepository 'package-files/avp_huds/Ours.rif') 'a model'
+    # Its licences, with the list of which is whose
+    Write-File (Join-Path $package 'licences/README.txt') "The libraries and their licences.`n`nbin/AvP_Classic.exe: the game, with ENet in it (licences/ENet.txt, MIT).`nbin/D3DCompiler_43.dll: Microsoft's shader compiler (licences/D3DX.txt).`nbin/d3dx9_43.dll: Microsoft's D3DX (licences/D3DX.txt).`n"
+    Write-File (Join-Path $package 'licences/ENet.txt') 'the ENet licence'
+    Write-File (Join-Path $package 'licences/D3DX.txt') 'the D3DX licence'
     Write-Sums
 }
 
@@ -471,6 +475,59 @@ function Package-Arguments { return @('-Package', $package, '-Commit', $commit, 
 Make-GoodPackage
 $result = Run-Script 'check-release-package.ps1' (Package-Arguments)
 Check ($result.Code -eq 0) "a good package passes. It said: $($result.Text)"
+
+# Each program and library in bin comes with its licence (LICENCE-NOTICES-1)
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'licences/README.txt')
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/README.txt is not in the package' 'a package without its list of licences is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/ogg.dll') 'a library'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) "bin/ogg.dll isn't named in licences/README.txt, so its licence wouldn't go with it" 'a library in bin with no licence named is refused'
+
+Make-GoodPackage
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/AvP_Classic.exe: again (licences/ENet.txt).'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'bin/AvP_Classic.exe is named more than once in licences/README.txt' 'and one named twice is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'licences/README.txt') "bin/AvP_Classic.exe: the game, with no licence named.`nbin/D3DCompiler_43.dll: (licences/D3DX.txt)`nbin/d3dx9_43.dll: (licences/D3DX.txt)`n"
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/README.txt names no licence for bin/AvP_Classic.exe' 'a line that names no licence is refused'
+
+Make-GoodPackage
+Remove-Item -LiteralPath (Join-Path $package 'licences/D3DX.txt')
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/D3DX.txt, the licence for bin/' 'a licence that is named but not there is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'licences/ENet.txt') ''
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/ENet.txt, the licence for bin/AvP_Classic.exe, is missing or empty' 'and so is an empty one'
+
+# OpenAL Soft's source goes with it
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt), with no source named.'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/README.txt names no source in licences/sources for bin/OpenAL32.dll' 'OpenAL Soft with no source named is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt). Its source: licences/sources/openal-soft/gone.tar.gz, here.'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/sources/openal-soft/gone.tar.gz, the source licences/README.txt names for bin/OpenAL32.dll, is missing or empty' 'and so is one whose source is not there'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Write-File (Join-Path $package 'licences/sources/openal-soft/openal.tar.gz') 'its source'
+Write-File (Join-Path $package 'licences/sources/openal-soft/port/portfile.cmake') 'how it is built'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt). Its source: licences/sources/openal-soft/openal.tar.gz, and licences/sources/openal-soft/port, here.'
+Write-Sums
+$result = Run-Script 'check-release-package.ps1' (Package-Arguments)
+Check ($result.Code -eq 0) "and with its source there, it passes. It said: $($result.Text)"
 
 foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
 {

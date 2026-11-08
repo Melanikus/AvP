@@ -44,6 +44,12 @@ jobs:
         shell: pwsh
         run: ./tools/build-and-package.ps1 -OutFolder "$env:RUNNER_TEMP\package"
 
+      # The checks a release makes of its package, made of this pull request's package too, so a change to the package or to these checks
+      # is proved here, before a release depends on it
+      - name: Check the package as a release would
+        shell: pwsh
+        run: ./tools/check-release-package.ps1 -Package "$env:RUNNER_TEMP\package" -Commit $env:GITHUB_SHA
+
       # The symbols and map of the game and its two film libraries, to name the place of a crash in this build. They're never in the
       # package. This is open source, so they hold nothing secret, and the folders they name are this machine's.
       - name: Keep the symbols
