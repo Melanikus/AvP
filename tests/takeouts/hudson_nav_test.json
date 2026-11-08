@@ -1,0 +1,678 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "NEXT: a module he has been to counts as new",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (!beenThere[neighbour])",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "NEXT: it gives back the far module, not the first step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return startedWith[neighbour];",
+					"to": "return neighbour;"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a way further on forgets how it started",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "(module == from) ? neighbour : startedWith[module]",
+					"to": "neighbour"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a module can be looked at more than once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "neighbour >= count || startedWith[neighbour] != -1",
+					"to": "neighbour >= count"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a number past the end of the list is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (neighbour < 0 || neighbour >= count || startedWith",
+					"to": "if (neighbour < 0 || startedWith"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a number below zero is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (neighbour < 0 || neighbour >= count || startedWith",
+					"to": "if (neighbour >= count || startedWith"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a start past the end of the list is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (from < 0 || from >= count || beenThere.size() != links.size())",
+					"to": "if (from < 0 || beenThere.size() != links.size())"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a start below zero is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (from < 0 || from >= count || beenThere.size() != links.size())",
+					"to": "if (from >= count || beenThere.size() != links.size())"
+				}
+			]
+		},
+		{
+			"name": "NEXT: a been-there list of the wrong size is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (from < 0 || from >= count || beenThere.size() != links.size())",
+					"to": "if (from < 0 || from >= count)"
+				}
+			]
+		},
+		{
+			"name": "STUCK: walking on does not start the time again",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\t\tHudsonNav_StartProgress(progress, x, y, z);\n\t\treturn false;",
+					"to": "\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "STUCK: height does not count as getting anywhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "dx * dx + dy * dy + dz * dz >= reach",
+					"to": "dx * dx + dz * dz >= reach"
+				}
+			]
+		},
+		{
+			"name": "STUCK: sideways does not count as getting anywhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "dx * dx + dy * dy + dz * dz >= reach",
+					"to": "dy * dy + dz * dz >= reach"
+				}
+			]
+		},
+		{
+			"name": "STUCK: forwards does not count as getting anywhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "dx * dx + dy * dy + dz * dz >= reach",
+					"to": "dx * dx + dy * dy >= reach"
+				}
+			]
+		},
+		{
+			"name": "STUCK: exactly a metre does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "dx * dx + dy * dy + dz * dz >= reach",
+					"to": "dx * dx + dy * dy + dz * dz > reach"
+				}
+			]
+		},
+		{
+			"name": "STUCK: a long way overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "double const dx = (double)x - progress->x;\n\tdouble const dy = (double)y - progress->y;\n\tdouble const dz = (double)z - progress->z;",
+					"to": "int const dx = x - progress->x;\n\tint const dy = y - progress->y;\n\tint const dz = z - progress->z;"
+				}
+			]
+		},
+		{
+			"name": "STUCK: a frame that took less than nothing takes time away",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (frameTime > 0 && progress->timeHere < kHudsonNavStuckAfter)",
+					"to": "if (progress->timeHere < kHudsonNavStuckAfter)"
+				}
+			]
+		},
+		{
+			"name": "STUCK: the time goes on growing after it has said so",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (frameTime > 0 && progress->timeHere < kHudsonNavStuckAfter)",
+					"to": "if (frameTime > 0)"
+				}
+			]
+		},
+		{
+			"name": "STUCK: a very long frame overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "(frameTime < kHudsonNavStuckAfter) ? frameTime : kHudsonNavStuckAfter",
+					"to": "frameTime"
+				}
+			]
+		},
+		{
+			"name": "STUCK: exactly long enough is not stuck",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return progress->timeHere >= kHudsonNavStuckAfter;",
+					"to": "return progress->timeHere > kHudsonNavStuckAfter;"
+				}
+			]
+		},
+		{
+			"name": "SPOT: height counts in full",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "double const y = dy / 4.0;",
+					"to": "double const y = dy;"
+				}
+			]
+		},
+		{
+			"name": "SPOT: a long way overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "double const x = dx;\n\tdouble const y = dy / 4.0;\n\tdouble const z = dz;",
+					"to": "int const x = dx;\n\tint const y = dy / 4;\n\tint const z = dz;"
+				}
+			]
+		},
+		{
+			"name": "SPOT: right at the edge is not on it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "x * x + y * y + z * z <= (double)within",
+					"to": "x * x + y * y + z * z < (double)within"
+				}
+			]
+		},
+		{
+			"name": "SPOT: sideways is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "x * x + y * y + z * z <= (double)within",
+					"to": "y * y + z * z <= (double)within"
+				}
+			]
+		},
+		{
+			"name": "SPOT: forwards is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "x * x + y * y + z * z <= (double)within",
+					"to": "x * x + y * y <= (double)within"
+				}
+			]
+		},
+		{
+			"name": "RAY: nothing hit is read as something",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\tif (!hitSomething)\n\t{\n\t\treturn kHudsonNavRayOpen;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "RAY: a door is read by the way it faces",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\tif (hitADoor)\n\t{\n\t\treturn kHudsonNavRayDoor;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "RAY: exactly flat enough is a slope",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (normalY <= -kHudsonNavFlatFloor)",
+					"to": "if (normalY < -kHudsonNavFlatFloor)"
+				}
+			]
+		},
+		{
+			"name": "RAY: exactly walkable is too steep",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (normalY <= -kHudsonNavWalkable)",
+					"to": "if (normalY < -kHudsonNavWalkable)"
+				}
+			]
+		},
+		{
+			"name": "RAY: too steep is a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (normalY <= -kHudsonNavUpright)",
+					"to": "if (normalY < -kHudsonNavUpright)"
+				}
+			]
+		},
+		{
+			"name": "RAY: a ceiling at the edge is a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "(normalY < kHudsonNavUpright) ? kHudsonNavRayWall : kHudsonNavRayCeiling",
+					"to": "(normalY <= kHudsonNavUpright) ? kHudsonNavRayWall : kHudsonNavRayCeiling"
+				}
+			]
+		},
+		{
+			"name": "RAY: walkable is not the game's number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.h",
+					"from": "int const kHudsonNavWalkable = 30000;",
+					"to": "int const kHudsonNavWalkable = 30001;"
+				}
+			]
+		},
+		{
+			"name": "WORD: a slope is called something else",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "case kHudsonNavRaySlope:     return \"slope\";",
+					"to": "case kHudsonNavRaySlope:     return \"flat\";"
+				}
+			]
+		},
+		{
+			"name": "TURN: below zero comes out wrong",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "int const which = ((eighths % 8) + 8) % 8;",
+					"to": "int const which = (eighths & 7) ^ ((eighths < 0) ? 7 : 0);"
+				}
+			]
+		},
+		{
+			"name": "TURN: more than a full turn runs off the table",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "int const which = ((eighths % 8) + 8) % 8;",
+					"to": "int const which = (eighths < 0) ? eighths + 8 : eighths;"
+				}
+			]
+		},
+		{
+			"name": "TURN: it turns left",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "*turnedX = (int)(((int64_t)x * stays[which] + (int64_t)z * across[which]) / kHudsonNavOneWhole);\n\t*turnedZ = (int)(((int64_t)z * stays[which] - (int64_t)x * across[which]) / kHudsonNavOneWhole);",
+					"to": "*turnedX = (int)(((int64_t)x * stays[which] - (int64_t)z * across[which]) / kHudsonNavOneWhole);\n\t*turnedZ = (int)(((int64_t)z * stays[which] + (int64_t)x * across[which]) / kHudsonNavOneWhole);"
+				}
+			]
+		},
+		{
+			"name": "TURN: a big number overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "*turnedX = (int)(((int64_t)x * stays[which] + (int64_t)z * across[which]) / kHudsonNavOneWhole);",
+					"to": "*turnedX = (x * stays[which] + z * across[which]) / kHudsonNavOneWhole;"
+				}
+			]
+		},
+		{
+			"name": "SPIRAL: a place is tried twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "int const way = (number - 1) % 8;",
+					"to": "int const way = (number - 1) % 4;"
+				}
+			]
+		},
+		{
+			"name": "SPIRAL: it never goes further out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "int const ring = (number - 1) / 8 + 1;",
+					"to": "int const ring = 1;"
+				}
+			]
+		},
+		{
+			"name": "SPIRAL: the middle is not first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\t\t*acrossX = 0;\n\t\t*acrossZ = 0;\n\t\treturn;",
+					"to": "\t\t*acrossX = 1;\n\t\t*acrossZ = 0;\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SPIRAL: below zero runs off the table",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (number <= 0)",
+					"to": "if (number == 0)"
+				}
+			]
+		},
+		{
+			"name": "SPIRAL: fewer rings than it says",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.h",
+					"from": "int const kHudsonNavSpiralPlaces = 129;",
+					"to": "int const kHudsonNavSpiralPlaces = 121;"
+				}
+			]
+		},
+		{
+			"name": "SPOT: the reach it is given is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "(double)within * within",
+					"to": "1800.0 * 1800.0"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: it is not made one length",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "x * kHudsonNavOneWhole / length + 0.5",
+					"to": "x + 0.5"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: forward z is not made one length",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "z * kHudsonNavOneWhole / length + 0.5",
+					"to": "z + 0.5"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: nothing at all is believed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (length <= 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: his right is the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "turn[2] = -forwardX;",
+					"to": "turn[2] = forwardX;"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: his right is not square",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "turn[0] = forwardZ;",
+					"to": "turn[0] = forwardX;"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: he is not upright",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "turn[4] = kHudsonNavOneWhole;",
+					"to": "turn[4] = -kHudsonNavOneWhole;"
+				}
+			]
+		},
+		{
+			"name": "TURN CLEAN: a big number overflows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "double const x = facingX;\n\tdouble const z = facingZ;\n\tdouble const length = sqrt(x * x + z * z);",
+					"to": "int const x = facingX;\n\tint const z = facingZ;\n\tdouble const length = sqrt((double)(x * x + z * z));"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any length of file is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (size > kHudsonNavMostRouteBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any number of steps is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (steps->size() >= kHudsonNavMostRouteSteps)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any length of line is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if ((size_t)(lineEnd - place) > kHudsonNavLongestRouteLine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: lines end only in a newline",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (lineEnd > place && lineEnd[-1] == '\\r')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: comments are read as steps",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (lineEnd == place || *place == '#')",
+					"to": "if (lineEnd == place)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: blank lines are read as steps",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (lineEnd == place || *place == '#')",
+					"to": "if (*place == '#')"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: an unknown word is taken as a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return kHudsonNavRouteUnknownWord;",
+					"to": "step.kind = kHudsonNavStepWalk;"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: a bad place is left at nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return kHudsonNavRouteBadNumber;",
+					"to": "{ }"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any number of digits is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (value > kHudsonNavFurthestPlace)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: a number with a letter after it is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (here < end && *here != ' ')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: a minus sign is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "*number = (int)(negative ? -value : value);",
+					"to": "*number = (int)value;"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: a minus sign alone is taken as nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (here >= end || *here < '0' || *here > '9')",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: a bad name is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (!NameIsGood(rest, lineEnd))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: an empty name is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (length == 0 || length > kHudsonNavLongestStepName)",
+					"to": "if (length > kHudsonNavLongestStepName)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any length of name is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (length == 0 || length > kHudsonNavLongestStepName)",
+					"to": "if (length == 0)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: any character is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "if (!fine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: an empty file is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "return steps->empty() ? kHudsonNavRouteEmpty : 0;",
+					"to": "return 0;"
+				}
+			]
+		},
+		{
+			"name": "ROUTE: the last read is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_plan.cpp",
+					"from": "\tsteps->clear();\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

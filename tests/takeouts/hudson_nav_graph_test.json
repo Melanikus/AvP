@@ -1,0 +1,478 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "GRID: rounding below zero goes the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "(value < 0 && value % kHudsonNavGridStep != 0) ? grid - 1 : grid",
+					"to": "grid"
+				}
+			]
+		},
+		{
+			"name": "NODE: two floors count as one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (abs(nodes[number].y - floorHeight) <= kHudsonNavStepUp)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "NODE: the map has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (nodes.size() >= kHudsonNavMostNodes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "NODE: flat and sloping are not told apart",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (normalY <= -kHudsonNavFlatFloor)\n\t{\n\t\tflatSpots++;",
+					"to": "if (true)\n\t{\n\t\tflatSpots++;"
+				}
+			]
+		},
+		{
+			"name": "STEP: a way stays open once it has been open",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tnodes[number].next[way] = -1;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "STEP: a door way stays a door way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tnodes[number].doors &= (uint8_t)~(1u << way);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "STEP: a wall does not stop him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\t\t\treturn;    // a wall in the way. A surface he can walk on only means the floor's rising\n",
+					"to": "\t\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "STEP: a door stops him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\t\t\tthroughADoor = true;\n",
+					"to": "\t\t\t\treturn;\n"
+				}
+			]
+		},
+		{
+			"name": "STEP: a rising floor stops him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "else if (across.normalY > -kHudsonNavWalkable)",
+					"to": "else"
+				}
+			]
+		},
+		{
+			"name": "STEP: nothing to stand on is a floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\treturn;    // nothing to stand on within reach\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "STEP: any drop will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "kHudsonNavHeadHeight + kHudsonNavMostDrop);\n\n\tif (!down.hit || down.distance > kHudsonNavHeadHeight + kHudsonNavMostDrop)",
+					"to": "kHudsonNavHeadHeight + 100000);\n\n\tif (!down.hit)"
+				}
+			]
+		},
+		{
+			"name": "STEP: too steep can be stood on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\treturn;    // too steep to stand on\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "STEP: a low ceiling is fine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\t\treturn;    // no room for him\n",
+					"to": "\t\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "STEP: a way through a door is not marked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\tnodes[number].doors |= (uint8_t)(1u << way);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "STEP: the step is not joined up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tnodes[number].next[way] = spot;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LOOK: a spot is only looked at once ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (nodes[number].lookedAtIn != searchNumber)",
+					"to": "if (nodes[number].lookedAtIn == 0)"
+				}
+			]
+		},
+		{
+			"name": "SEARCH: the map being full is not noticed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tif (start < 0)\n\t{\n\t\treturn;    // the map is full, and Work will say there's no way\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SEARCH: an old way is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\twaiting = std::priority_queue<Waiting>();\n\tway.clear();\n\talongTheWay = 0;\n\tsearchNumber++;",
+					"to": "\twaiting = std::priority_queue<Waiting>();\n\talongTheWay = 0;\n\tsearchNumber++;"
+				}
+			]
+		},
+		{
+			"name": "WORK: it never stops for the rays",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (raysThisWork > 0 && raysThisWork + kHudsonNavMostRaysForASpot > raysAllowed)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "WORK: no rays means no work",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (raysThisWork > 0 && raysThisWork + kHudsonNavMostRaysForASpot > raysAllowed)",
+					"to": "if (raysThisWork + kHudsonNavMostRaysForASpot > raysAllowed)"
+				}
+			]
+		},
+		{
+			"name": "WORK: it looks at any number of spots",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "while (!waiting.empty() && looks < kHudsonNavMostLooks)",
+					"to": "while (!waiting.empty())"
+				}
+			]
+		},
+		{
+			"name": "WORK: the goal can be on another floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": " && abs(nodes[number].y - toY) <= kHudsonNavGoalHeight)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "WORK: a door costs nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "((nodes[number].doors & (1u << i)) ? kHudsonNavDoorCost : 0)",
+					"to": "0"
+				}
+			]
+		},
+		{
+			"name": "WORK: a longer way replaces a shorter",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (stamp[next] != searchNumber || total < cost[next])",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "WORK: the last search counts in this one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (stamp[next] != searchNumber || total < cost[next])",
+					"to": "if (total < cost[next])"
+				}
+			]
+		},
+		{
+			"name": "WORK: no way gives nothing to go by",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tif (nearest >= 0)\n\t{\n\t\tMakeTheWay(nearest);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "WORK: the way does not end where he is going",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\t\t\tway.push_back(goal);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "WAY: it is the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tstd::reverse(way.begin(), way.end());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "LINE: doors are never counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "&& (doorsCount || !across.door)",
+					"to": "&& !across.door"
+				}
+			]
+		},
+		{
+			"name": "LINE: doors are always counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "&& (doorsCount || !across.door)",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SIGHT: another floor counts as seen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (abs(way[i].y - y) <= kHudsonNavStepUp && WayIsWideEnough",
+					"to": "if (WayIsWideEnough"
+				}
+			]
+		},
+		{
+			"name": "SIGHT: walls do not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "kHudsonNavStepUp && WayIsWideEnough(rays, x, y, z, way[i].x, way[i].z))",
+					"to": "kHudsonNavStepUp)"
+				}
+			]
+		},
+		{
+			"name": "SIGHT: it looks further than it was told",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "(size_t)(mostAhead > 0 ? mostAhead : 0)",
+					"to": "(size_t)1000"
+				}
+			]
+		},
+		{
+			"name": "NEXT: no way still gives a point",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tif (way.empty())\n\t{\n\t\treturn -1;\n\t}\n\n\treturn (int)(std::min)(way.size() - 1, alongTheWay + 1);",
+					"to": "\treturn (int)(std::min)(way.size() - 1, alongTheWay + 1);"
+				}
+			]
+		},
+		{
+			"name": "CLEAR: the map is not cleared",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tnodes.clear();\n\tcolumns.clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "CLEAR: the ray count is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\traysUsed = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "STEP: a slope can be any height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if ((double)rise > length * 2.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "STEP: a flat floor can be as high as a slope",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (down.normalY <= -kHudsonNavFlatFloor)\n\t\t{\n\t\t\tint const halfX",
+					"to": "if (false)\n\t\t{\n\t\t\tint const halfX"
+				}
+			]
+		},
+		{
+			"name": "STEP: any height of step will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (rise > kHudsonNavStepUp)\n\t{\n\t\t// A slope can only",
+					"to": "if (false)\n\t{\n\t\t// A slope can only"
+				}
+			]
+		},
+		{
+			"name": "STAIR: nothing halfway will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (!halfway.hit || halfway.normalY > -kHudsonNavWalkable)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "STAIR: the first half can be any height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (abs(fromY - halfHeight) > kHudsonNavStepUp || abs(halfHeight - floorHeight) > kHudsonNavStepUp)",
+					"to": "if (abs(halfHeight - floorHeight) > kHudsonNavStepUp)"
+				}
+			]
+		},
+		{
+			"name": "STAIR: the second half can be any height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "if (abs(fromY - halfHeight) > kHudsonNavStepUp || abs(halfHeight - floorHeight) > kHudsonNavStepUp)",
+					"to": "if (abs(fromY - halfHeight) > kHudsonNavStepUp)"
+				}
+			]
+		},
+		{
+			"name": "DROP: a drop is no dearer than walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "(acrossY > kHudsonNavStepUp) ? acrossY * kHudsonNavDropCost : 0.0",
+					"to": "0.0"
+				}
+			]
+		},
+		{
+			"name": "WIDE: only his middle counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "for (int side = -1; side <= 1; side += 2)",
+					"to": "for (int side = -1; side < -1; side += 2)"
+				}
+			]
+		},
+		{
+			"name": "WIDE: only one shoulder counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "for (int side = -1; side <= 1; side += 2)",
+					"to": "for (int side = 1; side <= 1; side += 2)"
+				}
+			]
+		},
+		{
+			"name": "WIDE: the line itself is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "\tif (!LineIsClear(rays, fromX, fromY, fromZ, goalX, goalZ, false))\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SIGHT: only his middle counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav_graph.cpp",
+					"from": "WayIsWideEnough(rays, x, y, z, way[i].x, way[i].z)",
+					"to": "LineIsClear(rays, x, y, z, way[i].x, way[i].z, false)"
+				}
+			]
+		}
+	]
+}

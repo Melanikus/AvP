@@ -1,0 +1,989 @@
+{
+	"copy": [
+		"3dc",
+		"tools",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a file of any size is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (text.size() > kCoopMostBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (line.size() > kCoopLongestLine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a blank line is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (line.empty() || line[0] == '#')",
+					"to": "if (!line.empty() && line[0] == '#')"
+				}
+			]
+		},
+		{
+			"name": "a note is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (line.empty() || line[0] == '#')",
+					"to": "if (line.empty())"
+				}
+			]
+		},
+		{
+			"name": "a word on its own is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (space == std::string::npos)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a door line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() != 2)\n",
+					"to": "if (parts.size() < 2)\n"
+				}
+			]
+		},
+		{
+			"name": "any word is a kind of door",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts[1] != \"proximity\" && parts[1] != \"switch\" && parts[1] != \"lift\" && parts[1] != \"platform\")",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a kind of door goes missing: proximity",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "parts[1] != \"proximity\" && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of door goes missing: switch",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "parts[1] != \"switch\" && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of door goes missing: lift",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "parts[1] != \"lift\" && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a kind of door goes missing: platform",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": " && parts[1] != \"platform\"",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a door's name isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_NameIsFine(parts[0]))\n\t\t{\n\t\t\treturn \"that can't be a room's name\";\n\t\t}\n\n\t\tint const room",
+					"to": "int const room"
+				}
+			]
+		},
+		{
+			"name": "a door can be listed twice",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!list->doorKinds[room].empty())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a join line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() != 3)",
+					"to": "if (parts.size() < 3)"
+				}
+			]
+		},
+		{
+			"name": "a way to join goes missing: file",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts[2] == \"file\")",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a way to join goes missing: lift",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "else if (parts[2] == \"lift\")",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a way to join goes missing: touching",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "else if (parts[2] == \"touching\")",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a way to join goes missing: sees",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "else if (parts[2] == \"sees\")",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a join's first name isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_NameIsFine(parts[0]) || !CoopReach_NameIsFine(parts[1]))",
+					"to": "if (!CoopReach_NameIsFine(parts[1]))"
+				}
+			]
+		},
+		{
+			"name": "a join's second name isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_NameIsFine(parts[0]) || !CoopReach_NameIsFine(parts[1]))",
+					"to": "if (!CoopReach_NameIsFine(parts[0]))"
+				}
+			]
+		},
+		{
+			"name": "any number of joins",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (list->joinCount >= kCoopMostJoins)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "any number of rooms",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (list->names.size() >= kCoopMostRooms)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a room can join itself",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (a == b)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a join only works from its first room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "list->joins[b].push_back(toA);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a join only works from its second room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "list->joins[a].push_back(toB);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a lift line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() != 2 && !(isSwitch && parts.size() == 3))",
+					"to": "if (parts.size() < 2)"
+				}
+			]
+		},
+		{
+			"name": "a lift door can say near",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "!(isSwitch && parts.size() == 3)",
+					"to": "!(parts.size() == 3)"
+				}
+			]
+		},
+		{
+			"name": "any third word on a lift line",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() == 3 && parts[2] != \"near\")",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a lift's number isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_ReadLiftNumber(parts[0], &number))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a lift's room isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_NameIsFine(parts[1]))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a lift number of any length",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (word.size() > 3)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a lift number can have letters",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (word[i] < '0' || word[i] > '9')",
+					"to": "if (word[i] < '0')"
+				}
+			]
+		},
+		{
+			"name": "a lift number can have characters below 0",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (word[i] < '0' || word[i] > '9')",
+					"to": "if (word[i] > '9')"
+				}
+			]
+		},
+		{
+			"name": "a lift number can be 0",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (value < 1 || value > kCoopMostLifts)",
+					"to": "if (value > kCoopMostLifts)"
+				}
+			]
+		},
+		{
+			"name": "a lift number can be too high",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (value < 1 || value > kCoopMostLifts)",
+					"to": "if (value < 1)"
+				}
+			]
+		},
+		{
+			"name": "a word nothing uses is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "return \"this file doesn't use that word\";",
+					"to": "return std::string();"
+				}
+			]
+		},
+		{
+			"name": "a lift's door needn't be a door",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (list->doorKinds[door].empty())",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name can be empty",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (name.empty() || name.size() > kCoopLongestName)",
+					"to": "if (name.size() > kCoopLongestName)"
+				}
+			]
+		},
+		{
+			"name": "a name can be any length",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (name.empty() || name.size() > kCoopLongestName)",
+					"to": "if (name.empty())"
+				}
+			]
+		},
+		{
+			"name": "a name can have low characters",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (name[i] < ' ' || name[i] > '~')",
+					"to": "if (name[i] > '~')"
+				}
+			]
+		},
+		{
+			"name": "a name can have high characters",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (name[i] < ' ' || name[i] > '~')",
+					"to": "if (name[i] < ' ')"
+				}
+			]
+		},
+		{
+			"name": "a room line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() != 1)\n\t\t{\n\t\t\treturn \"a room line needs one room\";",
+					"to": "if (false)\n\t\t{\n\t\t\treturn \"a room line needs one room\";"
+				}
+			]
+		},
+		{
+			"name": "a room line's name isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!CoopReach_NameIsFine(parts[0]))\n\t\t{\n\t\t\treturn \"that can't be a room's name\";\n\t\t}\n\n\t\tif (CoopReach_RoomForName(list, parts[0]) < 0)",
+					"to": "if (CoopReach_RoomForName(list, parts[0]) < 0)"
+				}
+			]
+		},
+		{
+			"name": "a room line can make too many rooms",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (CoopReach_RoomForName(list, parts[0]) < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "names ignore case",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "list.numbers.find(name);",
+					"to": "list.numbers.find(name == \"Shed\" ? \"shed\" : name);"
+				}
+			]
+		},
+		{
+			"name": "a Windows line end stays on the line",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "line[line.size() - 1] == '\\r' || line[line.size() - 1] == ' '",
+					"to": "line[line.size() - 1] == ' '"
+				}
+			]
+		},
+		{
+			"name": "spaces stay at a line end",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "line[line.size() - 1] == '\\r' || line[line.size() - 1] == ' '",
+					"to": "line[line.size() - 1] == '\\r'"
+				}
+			]
+		},
+		{
+			"name": "a player number below the list counts as a room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "return room >= 0 && (size_t)room < list.names.size();",
+					"to": "return (size_t)room < list.names.size() || room < 0;"
+				}
+			]
+		},
+		{
+			"name": "a player number past the list counts as a room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "return room >= 0 && (size_t)room < list.names.size();",
+					"to": "return room >= 0;"
+				}
+			]
+		},
+		{
+			"name": "players are ignored",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (CoopReach_IsARoom(list, room))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "only the first player counts",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "for (size_t i = 0; i < playerRooms.size(); i++)",
+					"to": "for (size_t i = 0; i < 1 && i < playerRooms.size(); i++)"
+				}
+			]
+		},
+		{
+			"name": "standing in a room leaves the old way on it",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "reach->cameFrom[room] = -1;\n\t\t\treach->cameBy[room] = -1;\n\t\t\treach->viaNearLift[room] = 0;",
+					"to": "reach->viaNearLift[room] = 0;"
+				}
+			]
+		},
+		{
+			"name": "a shut door is no obstacle",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "bool const isShutDoor = !list.doorKinds[to].empty() && !doorIsOpen[to];",
+					"to": "bool const isShutDoor = false;"
+				}
+			]
+		},
+		{
+			"name": "an open door still stops it",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "bool const isShutDoor = !list.doorKinds[to].empty() && !doorIsOpen[to];",
+					"to": "bool const isShutDoor = !list.doorKinds[to].empty();"
+				}
+			]
+		},
+		{
+			"name": "every room is a shut door",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "bool const isShutDoor = !list.doorKinds[to].empty() && !doorIsOpen[to];",
+					"to": "bool const isShutDoor = !doorIsOpen[to];"
+				}
+			]
+		},
+		{
+			"name": "a guess counts as firm",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (CoopReach_WeaknessOfJoin(join.kind) > weakness)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "touching counts as firm",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "case kCoopJoinTouching: return kCoopFairGuess;",
+					"to": "case kCoopJoinTouching: return kCoopFirm;"
+				}
+			]
+		},
+		{
+			"name": "seeing counts as firm",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "case kCoopJoinSees: return kCoopWeakGuess;",
+					"to": "case kCoopJoinSees: return kCoopFirm;"
+				}
+			]
+		},
+		{
+			"name": "seeing counts the same as touching",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "case kCoopJoinSees: return kCoopWeakGuess;",
+					"to": "case kCoopJoinSees: return kCoopFairGuess;"
+				}
+			]
+		},
+		{
+			"name": "a door opened by a lift counts as firm",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (costOfTheDoor > weakness)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the first way found is kept, however bad",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (weakness < reach->weakest[to])",
+					"to": "if (reach->weakest[to] == kCoopNotReached)"
+				}
+			]
+		},
+		{
+			"name": "rooms are forgotten between calls",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "std::vector<int> toDo;\n",
+					"to": "std::vector<int> toDo;\n\t\tif (playerRooms.size() == 1) { CoopReach_Begin(list, reach); reach->weakest[playerRooms[0]] = kCoopFirm; }\n"
+				}
+			]
+		},
+		{
+			"name": "lifts are never looked at",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (!liftOpenedMore)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a switch only near a room counts as in it",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (liftSwitch.onlyNear && weakness < kCoopFairGuess)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a door opened through a near switch isn't marked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "reach->viaNearLift[to] = isShutDoor && nearSwitchOnly[to];",
+					"to": "reach->viaNearLift[to] = 0;"
+				}
+			]
+		},
+		{
+			"name": "a lift doesn't say its switch was only near",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "nearSwitchOnly[door] = bestIsNear;",
+					"to": "nearSwitchOnly[door] = false;"
+				}
+			]
+		},
+		{
+			"name": "any lift opens the doors, reached or not",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "int weakness = reach->weakest[liftSwitch.room];",
+					"to": "int weakness = kCoopFirm;"
+				}
+			]
+		},
+		{
+			"name": "the worst room wins, not the best",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "reach.weakest[room] < reach.weakest[best]",
+					"to": "reach.weakest[room] > reach.weakest[best]"
+				}
+			]
+		},
+		{
+			"name": "the first room wins, not the best",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "(best < 0 || reach.weakest[room] < reach.weakest[best])",
+					"to": "best < 0"
+				}
+			]
+		},
+		{
+			"name": "a room that was never reached counts",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (room >= 0 && reach.weakest[room] < kCoopNotReached && (best",
+					"to": "if (room >= 0 && (best"
+				}
+			]
+		},
+		{
+			"name": "a near room counts as the room itself",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "answer.onlyNear = room >= 0;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a near room never counts",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "room = CoopReach_BestReached(list, reach, nearRooms);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "guesses aren't listed",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "answer.restsOn = CoopReach_GuessesOnTheWay(list, reach, room);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "only the first guess on the way is listed",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "room = from;\n",
+					"to": "room = -1;\n"
+				}
+			]
+		},
+		{
+			"name": "touching goes unsaid",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (from >= 0 && reach.cameBy[room] == kCoopJoinTouching)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seeing goes unsaid",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "else if (from >= 0 && reach.cameBy[room] == kCoopJoinSees)",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "a near switch goes unsaid",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (reach.viaNearLift[room])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the room itself is named, not the door",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "while (cameFrom[door] >= 0 && reach.weakest[cameFrom[door]] >= kCoopNotReached)",
+					"to": "while (false)"
+				}
+			]
+		},
+		{
+			"name": "rooms the thing is in are not looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "int const number = CoopReach_RoomNumber(list, where[i]);",
+					"to": "int const number = -1;"
+				}
+			]
+		},
+		{
+			"name": "rooms the thing is near are not looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "int const number = CoopReach_RoomNumber(list, nearRooms[i]);",
+					"to": "int const number = -1;"
+				}
+			]
+		},
+		{
+			"name": "the words forget the near room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (answer.onlyNear)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the words forget what it rests on",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "words += (i == 0 ? \", resting on a guess: \" : \"; \") + answer.restsOn[i];",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the words forget the door",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (answer.shutDoor >= 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no route says there is one",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (answer.routeExists)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "a room list has a bad line",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/derelict.rooms",
+					"from": "door DR-VIEWD | proximity",
+					"to": "door DR-VIEWD | wooden"
+				}
+			]
+		},
+		{
+			"name": "a chain names a room not on its list",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion_a.txt",
+					"from": "where shaft02",
+					"to": "where nowhere"
+				}
+			]
+		},
+		{
+			"name": "a step says nothing about where it is",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion_a.txt",
+					"from": "where shaft02\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a chain has a line that means nothing",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion_a.txt",
+					"from": "walk endstrategy",
+					"to": "wander endstrategy"
+				}
+			]
+		},
+		{
+			"name": "a room line has no step after it",
+			"changes": [
+				{
+					"file": "tools/hudson/chains/invasion_a.txt",
+					"from": "end endswitch",
+					"to": "where shaft02"
+				}
+			]
+		},
+		{
+			"name": "a room list is missing",
+			"changes": [
+				{
+					"file": "tests/coop_reach_test.cpp",
+					"from": "path + \".rooms\"",
+					"to": "path + \".nothing\""
+				}
+			]
+		},
+		{
+			"name": "a chain file is missing",
+			"changes": [
+				{
+					"file": "tests/coop_reach_test.cpp",
+					"from": "path + \".txt\"",
+					"to": "path + \".nothing\""
+				}
+			]
+		},
+		{
+			"name": "a locked lift line of any length is read",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (parts.size() != 1)\n\t\t{\n\t\t\treturn \"a locked lift line needs one lift\";",
+					"to": "if (false)\n\t\t{\n\t\t\treturn \"a locked lift line needs one lift\";"
+				}
+			]
+		},
+		{
+			"name": "a locked lift's name isn't checked",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "return \"that can't be a lift's name\";",
+					"to": "return std::string();"
+				}
+			]
+		},
+		{
+			"name": "any number of locked lifts",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "if (list->lockedLifts.size() >= kCoopMostLockedLifts)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a locked lift is forgotten",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "list->lockedLifts.push_back(parts[0]);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a locked lift becomes a room",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "list->lockedLifts.push_back(parts[0]);",
+					"to": "list->lockedLifts.push_back(parts[0]);\n\t\tCoopReach_RoomForName(list, parts[0]);"
+				}
+			]
+		},
+		{
+			"name": "the words only name the first lift",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "for (size_t i = 0; i < list.lockedLifts.size(); i++)",
+					"to": "for (size_t i = 0; i < list.lockedLifts.size() && i < 1; i++)"
+				}
+			]
+		},
+		{
+			"name": "the words stop saying what it means",
+			"changes": [
+				{
+					"file": "3dc/avp/coop_reach.h",
+					"from": "\"depends on a lift that starts locked, so a route doesn't show a player can get there: \"",
+					"to": "\"\""
+				}
+			]
+		}
+	]
+}

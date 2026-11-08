@@ -1,0 +1,7280 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"tools",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the default wall rank is 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->wallRank = 1;",
+					"to": "plan->wallRank = 0;"
+				}
+			]
+		},
+		{
+			"name": "wall= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWall)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an empty wall name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallEmpty;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallEmpty;"
+				}
+			]
+		},
+		{
+			"name": "a long wall name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestWallName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallTooLong;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallTooLong;"
+				}
+			]
+		},
+		{
+			"name": "the longest wall name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestWallName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallTooLong;",
+					"to": "if (valueLength >= kHudsonLongestWallName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallTooLong;"
+				}
+			]
+		},
+		{
+			"name": "any character is allowed in a wall name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;",
+					"to": "if (false)\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;"
+				}
+			]
+		},
+		{
+			"name": "a dot is allowed in a wall name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;",
+					"to": "c == '-' || c == '.'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;"
+				}
+			]
+		},
+		{
+			"name": "a dash is not allowed in a wall name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "c == '_' || c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;",
+					"to": "c == '_'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallCharacter;"
+				}
+			]
+		},
+		{
+			"name": "wallrank= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWallRank)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a wall rank that is not a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedWallRankNotANumber;",
+					"to": "plan->wallRank = 1;"
+				}
+			]
+		},
+		{
+			"name": "wall rank 0 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->wallRank < 1 || plan->wallRank > kHudsonMostWallRank",
+					"to": "plan->wallRank > kHudsonMostWallRank"
+				}
+			]
+		},
+		{
+			"name": "a wall rank past the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->wallRank < 1 || plan->wallRank > kHudsonMostWallRank",
+					"to": "plan->wallRank < 1"
+				}
+			]
+		},
+		{
+			"name": "compare= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenCompare)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "compare= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"relief\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "wall= is let through without rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWall && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "wallrank= is let through without wall=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWallRank && !seenWall)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "compare= is let through without pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->compareRelief && !plan->pictures)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "wallroom= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWallRoom)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "an empty room name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallRoomEmpty;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallRoomEmpty;"
+				}
+			]
+		},
+		{
+			"name": "the longest room name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestWallName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallRoomTooLong;",
+					"to": "if (valueLength >= kHudsonLongestWallName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedWallRoomTooLong;"
+				}
+			]
+		},
+		{
+			"name": "any character is allowed in a room name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallRoomCharacter;",
+					"to": "if (false)\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedWallRoomCharacter;"
+				}
+			]
+		},
+		{
+			"name": "wallroom= is let through without wall=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWallRoom && !seenWall)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the room name is not kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->wallRoom[i] = c;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way of drawing is left out",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t{ \"relief-tilt\",   kHudsonLightingRelief,   false, true,  false },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the flip case does not flip",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ \"relief-flip\",   kHudsonLightingRelief,   true,  false, false }",
+					"to": "{ \"relief-flip\",   kHudsonLightingRelief,   false, false, false }"
+				}
+			]
+		},
+		{
+			"name": "the tilt case does not tilt",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ \"relief-tilt\",   kHudsonLightingRelief,   false, true,  false }",
+					"to": "{ \"relief-tilt\",   kHudsonLightingRelief,   false, false, false }"
+				}
+			]
+		},
+		{
+			"name": "the depth case keeps its depth",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ \"relief-depth0\", kHudsonLightingRelief,   false, false, true  }",
+					"to": "{ \"relief-depth0\", kHudsonLightingRelief,   false, false, false }"
+				}
+			]
+		},
+		{
+			"name": "normals again is really relief",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ \"normals-again\", kHudsonLightingNormals,",
+					"to": "{ \"normals-again\", kHudsonLightingRelief,"
+				}
+			]
+		},
+		{
+			"name": "a number past the end of the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (number < 0 || number >= HudsonPlan_CompareCaseCount())",
+					"to": "if (number < 0)"
+				}
+			]
+		},
+		{
+			"name": "a number before the start of the list is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (number < 0 || number >= HudsonPlan_CompareCaseCount())",
+					"to": "if (number >= HudsonPlan_CompareCaseCount())"
+				}
+			]
+		},
+		{
+			"name": "two corners make a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (count < 3)\n\t{\n\t\treturn false;",
+					"to": "if (count < 0)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a floor counts as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "fabs(faceY) > 0.5 * faceLength",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "it is too strict about leaning",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "fabs(faceY) > 0.5 * faceLength",
+					"to": "fabs(faceY) > 0.4 * faceLength"
+				}
+			]
+		},
+		{
+			"name": "it only looks at leaning one way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "fabs(faceY) > 0.5 * faceLength",
+					"to": "faceY > 0.5 * faceLength"
+				}
+			]
+		},
+		{
+			"name": "facing no way counts as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (faceLength <= 0.0 || levelLength <= 0.0 || ",
+					"to": "if ("
+				}
+			]
+		},
+		{
+			"name": "a narrow polygon counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "wide < kHudsonSmallestWallSide || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a low polygon counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || tall < kHudsonSmallestWallSide",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon exactly wide enough is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "wide < kHudsonSmallestWallSide",
+					"to": "wide <= kHudsonSmallestWallSide"
+				}
+			]
+		},
+		{
+			"name": "a polygon exactly tall enough is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "tall < kHudsonSmallestWallSide",
+					"to": "tall <= kHudsonSmallestWallSide"
+				}
+			]
+		},
+		{
+			"name": "size is only how wide",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "spot->size = wide * tall;",
+					"to": "spot->size = wide;"
+				}
+			]
+		},
+		{
+			"name": "he stands behind the wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "middleZ / count + outZ * kHudsonWallDistance",
+					"to": "middleZ / count - outZ * kHudsonWallDistance"
+				}
+			]
+		},
+		{
+			"name": "he stands off to the side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "middleX / count + outX * kHudsonWallDistance",
+					"to": "middleX / count - outX * kHudsonWallDistance"
+				}
+			]
+		},
+		{
+			"name": "he faces away from the wall",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "spot->towardsZ = (int)floor(-outZ * kHudsonViewDistance + 0.5);",
+					"to": "spot->towardsZ = (int)floor(outZ * kHudsonViewDistance + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "a wall along z is measured wrongly",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "double const along = x * outZ - z * outX;",
+					"to": "double const along = x;"
+				}
+			]
+		},
+		{
+			"name": "a longer name counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return name[i] == 0 || name[i] == '.';",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "a name with an ending does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return name[i] == 0 || name[i] == '.';",
+					"to": "return name[i] == 0;"
+				}
+			]
+		},
+		{
+			"name": "capitals matter",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;",
+					"to": "return c;"
+				}
+			]
+		},
+		{
+			"name": "a backslash is not a folder",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (*c == '/' || *c == '\\\\')",
+					"to": "if (*c == '/')"
+				}
+			]
+		},
+		{
+			"name": "a slash is not a folder",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (*c == '/' || *c == '\\\\')",
+					"to": "if (*c == '\\\\')"
+				}
+			]
+		},
+		{
+			"name": "no name is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!path || !word || !word[0])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the second view is not turned",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ 35, 0 },",
+					"to": "{ 0, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the third view is not a step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ 0, 1000 },",
+					"to": "{ 0, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the fourth view turns the same way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ -35, 0 },",
+					"to": "{ 35, 0 },"
+				}
+			]
+		},
+		{
+			"name": "the fifth view steps the same way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "{ 0, -1000 },",
+					"to": "{ 0, 1000 },"
+				}
+			]
+		},
+		{
+			"name": "the last view is not there",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t{ 0, 2000 }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a view number past the end is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(view < 0 || view >= kHudsonMostViews) ? 0 : view",
+					"to": "(view < 0) ? 0 : view"
+				}
+			]
+		},
+		{
+			"name": "a view number before the start is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(view < 0 || view >= kHudsonMostViews) ? 0 : view",
+					"to": "(view >= kHudsonMostViews) ? 0 : view"
+				}
+			]
+		},
+		{
+			"name": "a step goes the wrong way along x",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*x = (int)floor((double)towardsZ / length * step + 0.5);",
+					"to": "*x = (int)floor(-(double)towardsZ / length * step + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "a step goes the wrong way along z",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*z = (int)floor(-(double)towardsX / length * step + 0.5);",
+					"to": "*z = (int)floor((double)towardsX / length * step + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "a step is not a metre on a slant",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "double const step = (double)HudsonPlan_WallViewStep(view);",
+					"to": "double const step = (double)HudsonPlan_WallViewStep(view) * 1.5;"
+				}
+			]
+		},
+		{
+			"name": "no way to the wall still steps",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (length <= 0.0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "one picture covers the wrong amount",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "wallLength * pictureSize / pictureCoordinatesRange",
+					"to": "wallLength / pictureCoordinatesRange"
+				}
+			]
+		},
+		{
+			"name": "a wall showing none of its picture divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(pictureCoordinatesRange > 0.0) ? ",
+					"to": "(true) ? "
+				}
+			]
+		},
+		{
+			"name": "a wall does not know how wide it is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "spot->wide = wide;",
+					"to": "spot->wide = tall;"
+				}
+			]
+		},
+		{
+			"name": "a wall does not know how tall it is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "spot->tall = tall;",
+					"to": "spot->tall = wide;"
+				}
+			]
+		},
+		{
+			"name": "a turned view has the wrong x",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*x = (int)floor((double)towardsX * cos(turn) + (double)towardsZ * sin(turn) + 0.5);",
+					"to": "*x = (int)floor((double)towardsX * cos(turn) - (double)towardsZ * sin(turn) + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "a turned view has the wrong z",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*z = (int)floor((double)towardsZ * cos(turn) - (double)towardsX * sin(turn) + 0.5);",
+					"to": "*z = (int)floor((double)towardsZ + 0.5);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wall is not looked for",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!ChooseTheWall(&spot))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: with no wall the run goes on",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(\"the level hasn't the wall that was asked for\", kHudsonExitNoSuchWall);\n\t\t\treturn;",
+					"to": "EndTheLevel(\"the level hasn't the wall that was asked for\", kHudsonExitNoSuchWall);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a colour number is read as a texture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "polygon->PolyItemType == I_ZB_GouraudPolygon || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a see-through wall can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(iflag_notvis | iflag_transparent | iflag_txanim)",
+					"to": "(iflag_notvis | iflag_txanim)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wall that is not drawn can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(iflag_notvis | iflag_transparent | iflag_txanim)",
+					"to": "(iflag_transparent | iflag_txanim)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: an animated wall can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(iflag_notvis | iflag_transparent | iflag_txanim)",
+					"to": "(iflag_notvis | iflag_transparent)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture list number is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "listNumber >= (uint32_t)shape->sh_numuvlists || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the picture list length is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " || shape->sh_uvlistlengths[listNumber] < corners",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: walls are not measured",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\t\tMeasureThePicture(shape, polygon, count, &wall);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say what a picture covers",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "So one picture covers about %.0f across and %.0f down",
+					"to": "So %.0f %.0f"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a step out of the level is taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "MODULE *const room = ModuleFromPosition(&place, (MODULE *)0);\n\n\tif (!room)\n",
+					"to": "MODULE *const room = ModuleFromPosition(&place, (MODULE *)0);\n\n\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a step out of the level goes on anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "kHudsonExitNoSuchWall);\n\t\t\treturn;\n\t\t}\n\n\t\tHudsonPlan_WallViewDirection",
+					"to": "kHudsonExitNoSuchWall);\n\t\t}\n\n\t\tHudsonPlan_WallViewDirection"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his room stays behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tmarine->containingModule = room;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player stays behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tMoveThePlayerTo(place);\n\n\treturn true;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: steps add up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "wallStandX + stepX",
+					"to": "marine->DynPtr->Position.vx + stepX"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he is told where to look before he is in place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!StandForThisView(marine))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first place is not kept",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\twallStandX = spot.x;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door can be chosen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "!room->m_mapptr || room->m_sbptr",
+					"to": "!room->m_mapptr"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the texture number is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "!Tex_GetRealSize(texture, &width, &height) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the normal number is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (place < 0 || place > (shape->numitems - 1) * 3)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corner number is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (cornerNumbers[count] < 0 || cornerNumbers[count] >= shape->numpoints)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: corners are not limited",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "count < kMostCornersOfAWall && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he can stand in another room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (ModuleFromPosition(&standHere, (MODULE *)0) == room)",
+					"to": "if (ModuleFromPosition(&standHere, (MODULE *)0))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wall number past the end is used",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if ((int)walls.size() < plan.wallRank)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any room will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(!plan.wallRoom[0] || (room->name && _stricmp(room->name, plan.wallRoom) == 0))",
+					"to": "true"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room with no name is compared",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "room->name && _stricmp(room->name, plan.wallRoom) == 0",
+					"to": "_stricmp(room->name, plan.wallRoom) == 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say each room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "wall number %d is the biggest in room %s",
+					"to": "wall %d %s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the walls are not put in order",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tstd::stable_sort(walls.begin(), walls.end(), ComesFirst);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: moving him forgets the room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tblock->containingModule = ModuleFromPosition(&Player->ObWorld, (MODULE *)0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: moving him forgets the room list",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tAllNewModuleHandler();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lighting is set directly",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ViewSwitches_AskLighting(GameLighting(drawing.lighting, LightingNow));",
+					"to": "LightingNow = GameLighting(drawing.lighting, LightingNow);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the depth skips its limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ReliefDepthNow = ReliefDepth_Clamped(drawing.noDepth ? 0.0f : kReliefDepthAtStart);",
+					"to": "ReliefDepthNow = drawing.noDepth ? 0.0f : kReliefDepthAtStart;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the flip stays from before",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tReliefHeightFlipped = drawing.heightFlipped;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tilt stays from before",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tReliefTiltFlipped = drawing.tiltFlipped;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture can have the wrong name on it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (lightingDrawn != GameLighting(drawing.lighting, lightingDrawn))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture with the wrong name still gets saved",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(\"this machine can't draw one of the ways it was asked to compare\", kHudsonExitModeNotThere);\n\t\t\t\t\treturn;",
+					"to": "EndTheLevel(\"this machine can't draw one of the ways it was asked to compare\", kHudsonExitModeNotThere);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list of ways is run past its end",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (caseNow < HudsonPlan_CompareCaseCount())",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pictures all have the same name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\"room%ld-view%d-%s.png\", roomsReached, viewNow + 1, HudsonPlan_CompareCase(caseNow).name",
+					"to": "\"room1-view%d.png\", viewNow + 1"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: messages stay on the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "if (HudsonRunIsOn && !Hudson_NetIsHostile())\n\t{\n\t\treturn;\n\t}\n\n\tGADGET_NewOnScreenMessage(messagePtr);",
+					"to": "GADGET_NewOnScreenMessage(messagePtr);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses the wall",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " wall=$Wall",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses the wall rank",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " wallrank=$WallRank",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses the wall room",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " wallroom=$WallRoom",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses compare",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " compare=$Compare",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings say where shaders are",
+			"changes": [
+				{
+					"file": "tools/hudson/AliensVsPredator.cfg",
+					"from": "UseTripleBuffering = false",
+					"to": "ShaderPath = shaders/\nUseTripleBuffering = false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the settings work maps out",
+			"changes": [
+				{
+					"file": "tools/hudson/AliensVsPredator.cfg",
+					"from": "AutoGenerateMaps = false",
+					"to": "AutoGenerateMaps = true"
+				}
+			]
+		},
+		{
+			"name": "the default hold is something else",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFrames = kHudsonDefaultHoldFrames;",
+					"to": "plan->holdFrames = 600;"
+				}
+			]
+		},
+		{
+			"name": "hold= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHold)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a hold that is not a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedHoldNotANumber;",
+					"to": "plan->holdFrames = kHudsonDefaultHoldFrames;"
+				}
+			]
+		},
+		{
+			"name": "too short a hold is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFrames < kHudsonFewestHoldFrames || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "too long a hold is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->holdFrames > kHudsonMostHoldFrames",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the shortest hold is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFrames < kHudsonFewestHoldFrames",
+					"to": "plan->holdFrames <= kHudsonFewestHoldFrames"
+				}
+			]
+		},
+		{
+			"name": "the longest hold is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFrames > kHudsonMostHoldFrames",
+					"to": "plan->holdFrames >= kHudsonMostHoldFrames"
+				}
+			]
+		},
+		{
+			"name": "hold= is let through without rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHold && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a picture does not come half way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "else if (plan.pictures && !pictureTakenThisHold && (plan.holdSeconds > 0 ? GetTickCount() - holdStartedAt >= (DWORD)plan.holdSeconds * 500 : framesInThisStage == plan.holdFrames / 2))",
+					"to": "else if (plan.pictures && !pictureTakenThisHold && (plan.holdSeconds > 0 ? GetTickCount() - holdStartedAt >= (DWORD)plan.holdSeconds * 500 : framesInThisStage == 1))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hold ignores what was asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "framesInThisStage >= plan.holdFrames",
+					"to": "framesInThisStage >= 300"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses the hold",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " hold=$Hold",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "machine=shared does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->machineShared = true;",
+					"to": "plan->machineShared = false;"
+				}
+			]
+		},
+		{
+			"name": "machine= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenMachine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "machine= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"alone\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "rooms= has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->rooms > kHudsonMostRooms",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a wall can go with a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWall && plan->rooms > 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "holdseconds= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHoldSeconds)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "holdseconds= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "!ReadNumber(value, valueLength, &plan->holdSeconds)",
+					"to": "(ReadNumber(value, valueLength, &plan->holdSeconds), false)"
+				}
+			]
+		},
+		{
+			"name": "holdseconds= can be 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdSeconds < 1 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "holdseconds= has no top",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->holdSeconds > kHudsonMostHoldSeconds",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "hold= and holdseconds= go together",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHold && seenHoldSeconds)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "holdseconds= goes without rooms",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenHoldSeconds && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenTourFrom)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= can be empty",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedTourFromEmpty;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= can be too long",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedTourFromTooLong;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= takes any character",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedTourFromCharacter;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= goes without a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenTourFrom && plan->rooms < 2)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "tourfrom= is dropped",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->tourFrom[i] = c;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "steam= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSteam)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "steam= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedSteamNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedSteamNotYes;"
+				}
+			]
+		},
+		{
+			"name": "steam=yes does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->steamFolderAllowed = true;",
+					"to": "plan->steamFolderAllowed = false;"
+				}
+			]
+		},
+		{
+			"name": "a Steam folder needs no word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "!refusal && plan.steamFolderAllowed",
+					"to": "!refusal"
+				}
+			]
+		},
+		{
+			"name": "a refused command line gets into a Steam folder",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "!refusal && plan.steamFolderAllowed",
+					"to": "plan.steamFolderAllowed"
+				}
+			]
+		},
+		{
+			"name": "a folder nobody can find is allowed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return folder && (!HudsonPlan_FolderIsRefused(folder)",
+					"to": "return (!HudsonPlan_FolderIsRefused(folder)"
+				}
+			]
+		},
+		{
+			"name": "a test copy is refused like a Steam folder",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(!HudsonPlan_FolderIsRefused(folder) || (",
+					"to": "(false || ("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game stops asking about the folder",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "!HudsonPlan_FolderIsAllowed(exePath, refusalFromReading, plan)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script goes in Steam folders",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($folder -match 'steamapps') { Stop-Here",
+					"to": "if ($false) { Stop-Here"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script asks for a Steam folder",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($WhileInUse) { $arguments += \" machine=shared\" }",
+					"to": "if ($WhileInUse) { $arguments += \" machine=shared steam=yes\" }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a touch ends a shared run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.machineShared)\n\t\t\t{\n\t\t\t\tEndAtOnce(\"someone touched the machine\"",
+					"to": "if (true)\n\t\t\t{\n\t\t\t\tEndAtOnce(\"someone touched the machine\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a touch ends no run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.machineShared)\n\t\t\t{\n\t\t\t\tEndAtOnce(\"someone touched the machine\"",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\tEndAtOnce(\"someone touched the machine\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a touch is not written down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "InterlockedExchange(&machineWasTouched, 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a shared run waits for an idle machine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.machineShared && (!touchKnown ||",
+					"to": "if (true && (!touchKnown ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no run waits for an idle machine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.machineShared && (!touchKnown ||",
+					"to": "if (false && (!touchKnown ||"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say it was shared",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "sound=%s machine=%s touched=%s ended=%s",
+					"to": "sound=%s ended=%s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result has them the wrong way round",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "plan.machineShared ? \"shared\" : \"alone\", machineWasTouched ? \"yes\" : \"no\", howItEnded",
+					"to": "machineWasTouched ? \"yes\" : \"no\", plan.machineShared ? \"shared\" : \"alone\", howItEnded"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run waits for the screen",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const waitsForTheScreen = (plan.machineShared || plan.navModules > 0) && !plan.vsyncOff;",
+					"to": "bool const waitsForTheScreen = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script shares without being told timings do not matter",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($WhileInUse -and -not $TimingsDontMatter) { Stop-Here",
+					"to": "if ($false) { Stop-Here"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses machine=shared",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($WhileInUse) { $arguments += \" machine=shared\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses holdseconds",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " holdseconds=$HoldSeconds",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script loses tourfrom",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": " tourfrom=$TourFrom",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window listens to someone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (HudsonRunIsOn && IsSomeonesHand(message))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: keys are not someone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case WM_KEYDOWN:\n\t\tcase WM_KEYUP:\n\t\tcase WM_SYSKEYDOWN:",
+					"to": "case WM_KEYUP:\n\t\tcase WM_SYSKEYDOWN:"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wheel is not someone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "switch (message)\n\t{\n\t\tcase WM_MOUSEWHEEL:\n\t\tcase WM_CHAR:",
+					"to": "switch (message)\n\t{\n\t\tcase WM_CHAR:"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pointer gets hidden",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case WM_XBUTTONUP:\n\t\tcase WM_SETCURSOR:\n\t\t\treturn true;",
+					"to": "case WM_XBUTTONUP:\n\t\t\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run listens to the mouse",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "if (!HudsonRunIsOn)\n\t{\n\t\t::RegisterRawInputDevices",
+					"to": "if (true)\n\t{\n\t\t::RegisterRawInputDevices"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run reads the pads",
+			"changes": [
+				{
+					"file": "win32/di_func.cpp",
+					"from": "GotXPad = HudsonRunIsOn ? 0 : UpdateControllerState();",
+					"to": "GotXPad = UpdateControllerState();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he can be killed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "made->SBDamageBlock.SB_H_flags.Indestructable = 1;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fall hurts him",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "if (HudsonMarineIsOn) {\n\t\treturn;\n\t}\n\n\tLOCALASSERT(sbPtr);\n\tmarineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);\n\tLOCALASSERT(marineStatusPointer);\n\n\tif (sbPtr->DynPtr->IsInContactWithFloor)",
+					"to": "LOCALASSERT(sbPtr);\n\tmarineStatusPointer = (MARINE_STATUS_BLOCK *)(sbPtr->SBdataptr);\n\tLOCALASSERT(marineStatusPointer);\n\n\tif (sbPtr->DynPtr->IsInContactWithFloor)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he walks back to where he was made",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatus->my_spot = sbPtr->DynPtr->Position;\n\tmarineStatus->missionmodule",
+					"to": ";\n\tmarineStatus->missionmodule"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his post stays in the old room",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatus->missionmodule = sbPtr->containingModule ? sbPtr->containingModule->m_aimodule : NULL;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say why he went",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SayWhyHeHasGone(frame);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any run carries on without him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "plan.rooms > 1 && NextPlaceOnTheTour(&next)",
+					"to": "NextPlaceOnTheTour(&next)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no new marine after one goes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "marineStage = kMarineNotMade;\n\t\t\tviewNow = 0;",
+					"to": "viewNow = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tour is never planned",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "PlanTheTour();\n\n\t\t// Asked to start somewhere",
+					"to": ";\n\n\t\t// Asked to start somewhere"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room he will not settle in ends a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HeCantStayHere(marine, \"he never settled facing the way he was told\");",
+					"to": "EndTheLevel(\"he never settled facing the way he was told\", kHudsonExitMarineStuck);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a room he moves in ends a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HeCantStayHere(marine, \"he moved while he was meant to hold still\");",
+					"to": "EndTheLevel(\"he moved while he was meant to hold still\", kHudsonExitMarineStuck);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the tour stops after the first room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "else if (!MoveHimToTheNextRoom(marine))\n\t\t\t{\n\t\t\t\tmarineStage = kMarineFinished;",
+					"to": "else\n\t\t\t{\n\t\t\t\tmarineStage = kMarineFinished;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a single room carries on as if it were a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.rooms <= 1)\n\t{\n\t\tEndTheLevel(howItEnds, kHudsonExitMarineStuck);\n\t}\n\telse if",
+					"to": "if"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the last room of a tour is a failure",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(\"it finished\", kHudsonExitFinished);\n\t}\n}\n\n// Which of the things",
+					"to": "EndTheLevel(howItEnds, kHudsonExitMarineStuck);\n\t}\n}\n\n// Which of the things"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he skips the middle of the room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "if (FarLoc_IsAPlaceToStand(biggest, &here))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any place on the list will do",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "(!found || distance < nearest)",
+					"to": "(true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he stands in the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_nav.cpp",
+					"from": "here.vy -= kJustAboveTheFloor;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a joined room is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "room >= 0 && room < AIModuleArraySize && !seen[room]",
+					"to": "!seen[room]"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first room is not checked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " || start->m_aimodule->m_index < 0 || start->m_aimodule->m_index >= AIModuleArraySize",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the move counts as him moving",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "marinePlaceLastFrame = place;\n\tMoveThePlayerTo(place);\n\tInterlockedIncrement(&roomsReached);",
+					"to": "MoveThePlayerTo(place);\n\tInterlockedIncrement(&roomsReached);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player stays behind on a tour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "MoveThePlayerTo(place);\n\tInterlockedIncrement(&roomsReached);",
+					"to": "InterlockedIncrement(&roomsReached);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the rooms are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "MoveThePlayerTo(place);\n\tInterlockedIncrement(&roomsReached);",
+					"to": "MoveThePlayerTo(place);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run can be held by its title bar",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case SC_MOVE:\n\t\t\t\t\tcase SC_SIZE:\n",
+					"to": "case SC_SIZE:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run can be held by its edge",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case SC_MOVE:\n\t\t\t\t\tcase SC_SIZE:\n",
+					"to": "case SC_MOVE:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run can open its menu from the keyboard",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case SC_KEYMENU:\n\t\t\t\t\tcase SC_MOUSEMENU:\n",
+					"to": "case SC_MOUSEMENU:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run can open its menu from the mouse",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case SC_KEYMENU:\n\t\t\t\t\tcase SC_MOUSEMENU:\n",
+					"to": "case SC_KEYMENU:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run opens the right button menu",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "case WM_CONTEXTMENU:\n\t\t\tif (HudsonRunIsOn)\n\t\t\t{\n\t\t\t\treturn 0;\n\t\t\t}\n",
+					"to": "case WM_CONTEXTMENU:\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the player is not moved",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\twallStandZ = spot.z;\n\t\tMoveThePlayerTo(place);\n",
+					"to": "\t\twallStandZ = spot.z;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he is not moved for a step",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tmarine->DynPtr->Position = place;\n\tmarine->DynPtr->PrevPosition = place;\n\tmarine->containingModule = room;",
+					"to": "\tmarine->DynPtr->PrevPosition = place;\n\tmarine->containingModule = room;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: his last place stays behind",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tmarine->DynPtr->PrevPosition = place;\n\tmarine->containingModule = room;",
+					"to": "\tmarine->containingModule = room;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a step counts as moving",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tmarine->containingModule = room;\n\tmarinePlaceLastFrame = place;\n\tMoveThePlayerTo(place);",
+					"to": "\tmarine->containingModule = room;\n\tMoveThePlayerTo(place);"
+				}
+			]
+		},
+		{
+			"name": "strategies= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategies)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "strategy= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategy)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "strategylook= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategyLook)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "strategyseconds= may be given twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategySeconds)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "strategies= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"list\"))\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "strategies=list does not ask for the list",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->listStrategies = true;",
+					"to": "plan->listStrategies = false;"
+				}
+			]
+		},
+		{
+			"name": "an empty strategy name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyEmpty;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyEmpty;"
+				}
+			]
+		},
+		{
+			"name": "a strategy name that is too long is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestStrategyName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyTooLong;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyTooLong;"
+				}
+			]
+		},
+		{
+			"name": "any character in a strategy name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedStrategyCharacter;",
+					"to": "c == '-' || true))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedStrategyCharacter;"
+				}
+			]
+		},
+		{
+			"name": "an empty strategylook name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength == 0)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyLookEmpty;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyLookEmpty;"
+				}
+			]
+		},
+		{
+			"name": "a strategylook name that is too long is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestStrategyName)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyLookTooLong;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategyLookTooLong;"
+				}
+			]
+		},
+		{
+			"name": "any character in a strategylook name is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedStrategyLookCharacter;",
+					"to": "c == '-' || true))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedStrategyLookCharacter;"
+				}
+			]
+		},
+		{
+			"name": "strategyseconds= that is no number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!ReadNumber(value, valueLength, &plan->strategySeconds))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategySecondsNotANumber;",
+					"to": "if (!ReadNumber(value, valueLength, &plan->strategySeconds) && false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedStrategySecondsNotANumber;"
+				}
+			]
+		},
+		{
+			"name": "too few strategy seconds are let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->strategySeconds < 1 || plan->strategySeconds > kHudsonMostStrategySeconds)",
+					"to": "if (plan->strategySeconds > kHudsonMostStrategySeconds)"
+				}
+			]
+		},
+		{
+			"name": "too many strategy seconds are let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->strategySeconds < 1 || plan->strategySeconds > kHudsonMostStrategySeconds)",
+					"to": "if (plan->strategySeconds < 1)"
+				}
+			]
+		},
+		{
+			"name": "the default strategy seconds are 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->strategySeconds = kHudsonDefaultStrategySeconds;",
+					"to": "plan->strategySeconds = 0;"
+				}
+			]
+		},
+		{
+			"name": "strategies= goes without rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategies && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "strategy= goes without rooms=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategy && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "strategy= goes with wall=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategy && seenWall)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "strategylook= goes without strategy=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategyLook && !seenStrategy)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "strategyseconds= goes without strategy=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenStrategySeconds && !seenStrategy)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a name in capitals does not match",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (a >= 'a' && a <= 'z')\n\t\t{\n\t\t\ta = (char)(a - 'a' + 'A');",
+					"to": "if (false)\n\t\t{\n\t\t\ta = (char)(a - 'a' + 'A');"
+				}
+			]
+		},
+		{
+			"name": "a word in capitals does not match",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (b >= 'a' && b <= 'z')\n\t\t{\n\t\t\tb = (char)(b - 'a' + 'A');",
+					"to": "if (false)\n\t\t{\n\t\t\tb = (char)(b - 'a' + 'A');"
+				}
+			]
+		},
+		{
+			"name": "a _ does not stand for a space",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (a != b && !(b == '_' && a == ' '))",
+					"to": "if (a != b)"
+				}
+			]
+		},
+		{
+			"name": "a - stands for a space too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (a != b && !(b == '_' && a == ' '))",
+					"to": "if (a != b && !((b == '_' || b == '-') && a == ' '))"
+				}
+			]
+		},
+		{
+			"name": "a word that stops early matches",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return a == b;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game is not refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "EndTheLevel(\"strategies aren't looked at or asked in a network game\", kHudsonExitNetworkGame);",
+					"to": "kHudsonExitNetworkGame;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a strategy word does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if ((plan.strategy[0] || plan.listStrategies) && WatchTheStrategy(frame))",
+					"to": "if (false && WatchTheStrategy(frame))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it is never asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "WatchEveryStrategy(0, false);\n\t\tRequestState(target, 1, 0);",
+					"to": "WatchEveryStrategy(0, false);\n\t\t;"
+				}
+			]
+		},
+		{
+			"name": "two jobs can go together",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(seenStrategy ? 1 : 0) + (plan->combatAlien ? 1 : 0) + ((seenNav || seenRoute) ? 1 : 0) + (plan->rooms > 1 ? 1 : 0) > 1",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "a strategy goes with anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(seenStrategy ? 1 : 0) + ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a fight goes with anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->combatAlien ? 1 : 0) + ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a walk goes with anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "((seenNav || seenRoute) ? 1 : 0) + ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a tour goes with anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " + (plan->rooms > 1 ? 1 : 0) > 1",
+					"to": " > 1"
+				}
+			]
+		},
+		{
+			"name": "nav= can be asked for twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenNav)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "nav= need not be a number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!ReadNumber(value, valueLength, &plan->navModules))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "nav= can be below its range",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->navModules < kHudsonFewestNavModules || plan->navModules > kHudsonMostNavModules",
+					"to": "plan->navModules > kHudsonMostNavModules"
+				}
+			]
+		},
+		{
+			"name": "nav= can be above its range",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->navModules < kHudsonFewestNavModules || plan->navModules > kHudsonMostNavModules",
+					"to": "plan->navModules < kHudsonFewestNavModules"
+				}
+			]
+		},
+		{
+			"name": "nav= can go without one room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenNav && plan->rooms != 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "nav= can go with wall=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenNav && plan->wall[0])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run that was closed looks like one that finished",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!resultIsWritten)\n\t{\n\t\texitCode = kHudsonExitStoppedEarly;",
+					"to": "if (false)\n\t{\n\t\texitCode = kHudsonExitStoppedEarly;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run that was closed still exits 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "exitCode = kHudsonExitStoppedEarly;\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run that was closed says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "WriteResult(\"the game stopped before the run had finished: its window was closed, or the graphics card failed\", exitCode);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "show=yes does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->showWindow = true;",
+					"to": "plan->showWindow = false;"
+				}
+			]
+		},
+		{
+			"name": "show= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenShow)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "show= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedShowNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedShowNotYes;"
+				}
+			]
+		},
+		{
+			"name": "show=yes goes without sharing the machine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->showWindow && !plan->machineShared)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run stays out of the way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "return HudsonRunIsOn && !plan.showWindow;",
+					"to": "return HudsonRunIsOn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run brings its window forward",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!HudsonRunIsOn || !plan.showWindow || !hWndMain)",
+					"to": "if (!HudsonRunIsOn || !hWndMain)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a minimised window stays minimised",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "IsIconic(hWndMain) ? SW_RESTORE : SW_SHOW",
+					"to": "SW_SHOW"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a window on no monitor stays there",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!MonitorFromWindow(hWndMain, MONITOR_DEFAULTTONULL))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window stays on top",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tSetWindowPos(hWndMain, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window is not asked to the front",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SetForegroundWindow(hWndMain);\n}",
+					"to": ";\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window is not brought forward when it opens",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "\tHudson_BringTheWindowForward();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window is not brought forward after loading",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (done == 1)\n\t\t{\n\t\t\tHudson_BringTheWindowForward();\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run says where its window is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.showWindow)\n\t{\n\t\t// It's asked again",
+					"to": "if (true)\n\t{\n\t\t// It's asked again"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: where the window is never gets said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SayWhereTheWindowIs(done);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: where the window is keeps growing over runs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "frame == 1 ? \"w\" : \"a\"",
+					"to": "\"a\""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run does not say it is running",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ended=it hasn't ended: it's running, or it stopped with no chance to say why",
+					"to": "ended=it finished"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask to show the window",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Show) { $arguments += \" show=yes\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "route= can be asked for twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRoute)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "route= can be empty",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedRouteEmpty;",
+					"to": "{ }"
+				}
+			]
+		},
+		{
+			"name": "route= can be too long",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (valueLength > kHudsonLongestRouteName)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "route= can have any character",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedRouteCharacter;",
+					"to": "{ }"
+				}
+			]
+		},
+		{
+			"name": "route= can go without one room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRoute && plan->rooms != 1)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "route= can go with wall=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRoute && plan->wall[0])",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "route= with no nav= does not walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRoute && !seenNav)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "route= with nav= ignores nav=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenRoute && !seenNav)",
+					"to": "if (seenRoute)"
+				}
+			]
+		},
+		{
+			"name": "route= does not count as his one job",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "((seenNav || seenRoute) ? 1 : 0)",
+					"to": "(seenNav ? 1 : 0)"
+				}
+			]
+		},
+		{
+			"name": "pace= can be asked for twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenPace)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "pace= can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedPaceUnknown;",
+					"to": "{ }"
+				}
+			]
+		},
+		{
+			"name": "pace=run does not run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\t\tplan->paceRun = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "pace=walk runs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"walk\"))",
+					"to": "else if (true)"
+				}
+			]
+		},
+		{
+			"name": "pace= can go without walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenPace && !seenNav && !seenRoute)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no new marine after one goes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\tmarineStage = kMarineNotMade;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a walk does not start in the middle of the room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (room && room->m_aimodule && HudsonNav_MiddleOfRoom(room->m_aimodule->m_index, &place, &away))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "framehold= can be asked for twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFrameHold)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "framehold= can be anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedFrameHoldNotOff;",
+					"to": "{ }"
+				}
+			]
+		},
+		{
+			"name": "framehold=off does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t\t\tplan->frameHoldOff = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "framehold= can go without walking",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFrameHold && !seenNav && !seenRoute)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he is never told again which way to face",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (stoodStill && !facing)\n\t\t{\n\t\t\tVECTORCH const point",
+					"to": "if (false)\n\t\t{\n\t\t\tVECTORCH const point"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he is told again from the wrong place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "VECTORCH const point = { place.vx + wantedX, place.vy, place.vz + wantedZ };",
+					"to": "VECTORCH const point = { wantedX, place.vy, wantedZ };"
+				}
+			]
+		},
+		{
+			"name": "size= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSize)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "size= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedSizeUnknown;\n\t\t\t}",
+					"to": "else\n\t\t\t{\n\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "size= does not count as asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->sizeAsked = true;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "1600x900 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->width = 1600;",
+					"to": "plan->width = 1920;"
+				}
+			]
+		},
+		{
+			"name": "1920x1080 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->height = 1080;",
+					"to": "plan->height = 900;"
+				}
+			]
+		},
+		{
+			"name": "a run is the wrong size by default",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->width = kHudsonDefaultWidth;",
+					"to": "plan->width = kHudsonWatchedWidth;"
+				}
+			]
+		},
+		{
+			"name": "a shared run stays small",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!seenSize && plan->machineShared && !plan->pictures)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "every run is big",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!seenSize && plan->machineShared && !plan->pictures)",
+					"to": "if (!seenSize && !plan->pictures)"
+				}
+			]
+		},
+		{
+			"name": "pictures get bigger",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!seenSize && plan->machineShared && !plan->pictures)",
+					"to": "if (!seenSize && plan->machineShared)"
+				}
+			]
+		},
+		{
+			"name": "a size that was asked for gets overruled",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!seenSize && plan->machineShared && !plan->pictures)",
+					"to": "if (plan->machineShared && !plan->pictures)"
+				}
+			]
+		},
+		{
+			"name": "the fit forgets the window frame",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "height + kHudsonRoomForTheWindowsFrame <= screenHeight",
+					"to": "height <= screenHeight"
+				}
+			]
+		},
+		{
+			"name": "the fit forgets the width",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "width <= screenWidth && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a size nobody asked for never gives way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(fits || plan.sizeAsked) ? plan.width : kHudsonDefaultWidth",
+					"to": "plan.width"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the height never gives way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(fits || plan.sizeAsked) ? plan.height : kHudsonDefaultHeight",
+					"to": "plan.height"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game is not told the width",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Config_SetInt(\"[VideoMode]\", \"Width\", width);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game is not told the height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Config_SetInt(\"[VideoMode]\", \"Height\", height);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a size that does not fit is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.sizeAsked && !HudsonPlan_SizeFits(",
+					"to": "if (false && !HudsonPlan_SizeFits("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for a size",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Size) { $arguments += \" size=$Size\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "vision= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenVision)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "vision= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"check\"))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "vision=check does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->vision = true;",
+					"to": "plan->vision = false;"
+				}
+			]
+		},
+		{
+			"name": "vision= goes without rooms",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->vision && plan->rooms == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "vision= goes without pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->vision && plan->lighting != kHudsonLightingPerPixel && plan->lighting != kHudsonLightingNormals && plan->lighting != kHudsonLightingRelief)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "vision= refuses perpixel",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lighting != kHudsonLightingPerPixel && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "vision= refuses normals",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lighting != kHudsonLightingNormals && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "vision= refuses relief",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && plan->lighting != kHudsonLightingRelief)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "vision= goes with compare",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->compareRelief || seenStrategy || plan->combatAlien",
+					"to": "seenStrategy || plan->combatAlien"
+				}
+			]
+		},
+		{
+			"name": "vision= goes with a strategy",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->compareRelief || seenStrategy || plan->combatAlien",
+					"to": "plan->compareRelief || plan->combatAlien"
+				}
+			]
+		},
+		{
+			"name": "vision= goes with a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->combatAlien || seenNav || seenRoute))",
+					"to": "plan->combatAlien || seenRoute))"
+				}
+			]
+		},
+		{
+			"name": "vision= goes with a route",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->combatAlien || seenNav || seenRoute))",
+					"to": "plan->combatAlien || seenNav))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a mirrored frame is judged",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (MirroringActive)\n\t{\n\t\tInterlockedIncrement(&visionMirrored);",
+					"to": "if (false)\n\t{\n\t\tInterlockedIncrement(&visionMirrored);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed read is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "InterlockedIncrement(&visionReadsFailed);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no normal is never said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SayWhatsMissing(\"colour and no normal\", counts.noNormal, view);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no distance is never said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SayWhatsMissing(\"colour and no distance\", counts.noDistance, view);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a grate can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "iflag_transparent | iflag_ignore0 | iflag_notvis",
+					"to": "iflag_transparent | iflag_notvis"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: glass can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "iflag_transparent | iflag_ignore0 | iflag_notvis",
+					"to": "iflag_ignore0 | iflag_notvis"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what is not drawn can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "iflag_transparent | iflag_ignore0 | iflag_notvis",
+					"to": "iflag_transparent | iflag_ignore0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it never looks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (visionIsDue)\n\t{\n\t\tvisionIsDue = false;\n\t\tLookAtThisFrame();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it looks in every run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.vision && !visionTakenThisHold &&",
+					"to": "if (!visionTakenThisHold &&"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it only ever looks once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\tvisionTakenThisHold = false;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Vision) { $arguments += \" vision=$Vision\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: missing pictures crash",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "!toyDepthSurface || !SurfacePictures_Normal() || !SurfacePictures_Colour() || !pictures.Read(d3d.lpD3DDevice, toyDepthSurface)",
+					"to": "!pictures.Read(d3d.lpD3DDevice, toyDepthSurface)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the normal is always read as eight bits",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "pictures.normal.description.Format == D3DFMT_A2R10G10B10, counts);",
+					"to": "false, counts);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every game reads its shaders back",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "void Hudson_SayWhichShaderWasCompiled(const char *path)\n{\n\tif (!HudsonRunIsOn)",
+					"to": "void Hudson_SayWhichShaderWasCompiled(const char *path)\n{\n\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say what was compiled",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "hudson: compiled %s, %lu bytes, check %08X",
+					"to": "hudson: compiled %s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: which shader is said wrongly",
+			"changes": [
+				{
+					"file": "3dc/surface_pictures.cpp",
+					"from": "shaderUsedLast = withRelief ? \"surfaceRelief.psh\" : \"surface.psh\";",
+					"to": "shaderUsedLast = \"surface.psh\";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: which shader is never written down",
+			"changes": [
+				{
+					"file": "3dc/surface_pictures.cpp",
+					"from": "\tshaderUsedLast = withRelief ? \"surfaceRelief.psh\" : \"surface.psh\";\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a compiled shader is not said",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\tHudson_SayWhichShaderWasCompiled(actualPath.c_str());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what a ray found is not sorted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "RayFound const kind = WhatARayFound(target);",
+					"to": "RayFound const kind = kRayFoundAHole;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a model can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (target.isPartOfAModel || target.moduleNumber < 0)",
+					"to": "if (target.moduleNumber < 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: something outside the level can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (target.isPartOfAModel || target.moduleNumber < 0)",
+					"to": "if (target.isPartOfAModel)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door can be a hole",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "target.isMorphing ? kRayFoundADoor : kRayFoundAHole",
+					"to": "kRayFoundAHole"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say what it found",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "vision_no_normal=%ld vision_no_distance=%ld vision_holes=%ld",
+					"to": "vision_no_normal=%ld vision_holes=%ld"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say which shader",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "vision_screen_compared=%ld vision_shader=%s",
+					"to": "vision_screen_compared=%ld"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say what rays agreed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "vision_no_shadows=%ld vision_rays_agree=%ld vision_rays_compared=%ld",
+					"to": "vision_no_shadows=%ld"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say which shader",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "drawn with shaders/%s:",
+					"to": ":"
+				}
+			]
+		},
+		{
+			"name": "break= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenBreak)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "break= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedBreakUnknown;",
+					"to": "else\n\t\t\t{\n\t\t\t\tplan->breakPrisms = true;"
+				}
+			]
+		},
+		{
+			"name": "break=prisms does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->breakPrisms = true;",
+					"to": "plan->breakPrisms = false;"
+				}
+			]
+		},
+		{
+			"name": "break= goes without vision",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->breakPrisms && !plan->vision)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game is not told to break anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonBreaksPrisms = plan.breakPrisms;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a broken run still sends prisms",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (HudsonBreaksPrisms)\n\t{\n\t\treturn result;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: prisms sent are not counted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tvisionShadows.corners += toyNumVerts;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: prisms kept are not counted",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tvisionShadows.corners += numWorldCorners + keptCornersThisPass;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: corners add up over frames",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tvisionShadows.corners = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rays hit his own body",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ShadowShoot_FindTarget(ray, target, marine ? marine->SBdptr : 0);",
+					"to": "ShadowShoot_FindTarget(ray, target);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rays hit the player",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "FindPolygonInLineOfSight_TwoIgnores(&aim, &place, 0, Player, (DISPLAYBLOCK *)alsoIgnore);",
+					"to": "FindPolygonInLineOfSight_TwoIgnores(&aim, &place, 0, 0, (DISPLAYBLOCK *)alsoIgnore);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rays are not checked against the picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const agrees = HudsonVision_RayAgrees(counts.checkDistance[i], target.distance, direction, view.view);",
+					"to": "bool const agrees = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: missing shadows are not said",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (HudsonVision_ShadowsAreMissing(view.shadows))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot break anything",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Break) { $arguments += \" break=$Break\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say what differs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "vision_screen_differs=%ld vision_screen_too_dark=%ld vision_screen_compared=%ld vision_shader",
+					"to": "vision_shader"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: differences are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "differs += view.screen[i].differs ? 1 : 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the screen is read for nothing",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (counts->samples > 0 && SUCCEEDED(d3d.lpD3DDevice->GetBackBuffer",
+					"to": "if (SUCCEEDED(d3d.lpD3DDevice->GetBackBuffer"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any shape of pixel is read",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "finished.Read(d3d.lpD3DDevice, screen) && (finished.description.Format == D3DFMT_X8R8G8B8 || finished.description.Format == D3DFMT_A8R8G8B8)",
+					"to": "finished.Read(d3d.lpD3DDevice, screen)"
+				}
+			]
+		},
+		{
+			"name": "a level name takes any character",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedLevelTooLong;\n\t\t\t}\n\n\t\t\tfor (size_t i = 0; i < valueLength; i++)\n\t\t\t{\n\t\t\t\tchar const c = value[i];\n\n\t\t\t\tif (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))",
+					"to": "return kHudsonRefusedLevelTooLong;\n\t\t\t}\n\n\t\t\tfor (size_t i = 0; i < valueLength; i++)\n\t\t\t{\n\t\t\t\tchar const c = value[i];\n\n\t\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "a level name loses its capitals",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedLevelTooLong;\n\t\t\t}\n\n\t\t\tfor (size_t i = 0; i < valueLength; i++)\n\t\t\t{\n\t\t\t\tchar const c = value[i];\n\n\t\t\t\tif (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))",
+					"to": "return kHudsonRefusedLevelTooLong;\n\t\t\t}\n\n\t\t\tfor (size_t i = 0; i < valueLength; i++)\n\t\t\t{\n\t\t\t\tchar const c = value[i];\n\n\t\t\t\tif (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))"
+				}
+			]
+		},
+		{
+			"name": "a level name loses its hyphens",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(c >= '0' && c <= '9') || c == '_' || c == '-'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedLevelCharacter",
+					"to": "(c >= '0' && c <= '9') || c == '_'))\n\t\t\t\t{\n\t\t\t\t\treturn kHudsonRefusedLevelCharacter"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: only some of the lists are looked in",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "{ MarineEpisodes, PredatorEpisodes, AlienEpisodes, MultiplayerEpisodes, CooperativeEpisodes }",
+					"to": "{ MarineEpisodes, PredatorEpisodes, AlienEpisodes }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a name only has to start the same",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "strcmp(RifNamesForEnvironments[lists[list][episode]], name) == 0",
+					"to": "strncmp(RifNamesForEnvironments[lists[list][episode]], name, strlen(name)) == 0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level not on the lists is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (environment < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level not on the lists gets the wrong reason",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "isn't the exact name of one of the game's own levels\", kHudsonExitNoSuchLevel);",
+					"to": "isn't a level\", kHudsonExitBadArguments);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the marine levels are all that load",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "SetLevelToLoad((enum AVP_ENVIRONMENT_ID)Hudson_Environment());",
+					"to": "SetLevelToLoadForMarine(MarineEpisodeToPlay);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he isn't a marine",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "AvP.PlayerType = Hudson_PlayAsPredator() ? I_Predator : I_Marine;",
+					"to": "AvP.PlayerType = I_Predator;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine is made in no room",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!ModuleFromPosition(&place, (MODULE *)0))\n\t{\n\t\tEndTheLevel(\"the level has put the player in no room",
+					"to": "if (false)\n\t{\n\t\tEndTheLevel(\"the level has put the player in no room"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a tour gives up if the player is nowhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "bool const playerIsNowhere = !start;",
+					"to": "bool const playerIsNowhere = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he is told again every frame",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (abs(place.vx - toldToFaceFrom.vx) > kStillIsWithin || abs(place.vz - toldToFaceFrom.vz) > kStillIsWithin)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: moving along x does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "abs(place.vx - toldToFaceFrom.vx) > kStillIsWithin || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: moving along z does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " || abs(place.vz - toldToFaceFrom.vz) > kStillIsWithin",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: half of the static route is not dropped",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "SurfaceStatic_SetFrame(frameRanges, numFrameRanges / 2);",
+					"to": "SurfaceStatic_SetFrame(frameRanges, numFrameRanges);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game can drop half the route",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tStaticCompareDropsHalf = 0;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a single room can settle for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "plan.rooms > 1 ? kMostMillisecondsToSettleOnATour : kMostMillisecondsToSettle",
+					"to": "plan.rooms > 1 ? kMostMillisecondsToSettleOnATour : 4000000000u"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run stuck settling does not say why",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "SayWhySettlingIsTakingSoLong(marine, frame, stoodStill, facing);\n\t\t\tSayWhereHeIs(\"he won't settle\", frame, marine);",
+					"to": "SayWhereHeIs(\"he won't settle\", frame, marine);"
+				}
+			]
+		},
+		{
+			"name": "bright= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenBright)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "bright= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedBrightNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedBrightNotYes;"
+				}
+			]
+		},
+		{
+			"name": "bright=yes does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->brightWorld = true;",
+					"to": "plan->brightWorld = false;"
+				}
+			]
+		},
+		{
+			"name": "bright= goes without vision",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->brightWorld && !plan->vision)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run is bright",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.brightWorld && AvP.Network == I_No_Network)\n\t{\n\t\tDrawFullBright = 1;",
+					"to": "if (true)\n\t{\n\t\tDrawFullBright = 1;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: no run is bright",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tDrawFullBright = 1;\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a door is held to the picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (target.isMorphing)\n\t\t{\n\t\t\tdoorsCompared++;",
+					"to": "if (false)\n\t\t{\n\t\t\tdoorsCompared++;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a disagreement says nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "a ray and the distance picture disagree at %d %d: the picture says %.0f, and the ray went %d",
+					"to": "a ray and the distance picture disagree"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for brightness",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Bright) { $arguments += \" bright=yes\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: bright in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.brightWorld && AvP.Network == I_No_Network)",
+					"to": "if (plan.brightWorld)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ray that agrees says it disagrees",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!agrees)\n\t\t{\n\t\t\t_snprintf",
+					"to": "if (true)\n\t\t{\n\t\t\t_snprintf"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a ray that finds nothing is not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "which is as far from agreeing as it gets\n\t\t\tcompared++;",
+					"to": "which is as far from agreeing as it gets\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a polygon with two sides counts as a back",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "target.hasPlane && !(target.flags & iflag_no_bfc) && HudsonVision_SeenFromBehind",
+					"to": "target.hasPlane && HudsonVision_SeenFromBehind"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: rays at backs are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "atBacks += atItsBack ? 1 : 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: holes at backs are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (kind == kRayFoundAHole && RayStoppedAtABack(target, direction))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say about backs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "vision_rays_at_backs=%ld vision_holes_at_backs=%ld vision_screen_differs=",
+					"to": "vision_screen_differs="
+				}
+			]
+		},
+		{
+			"name": "record=video does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"video\"))\n\t\t\t{\n\t\t\t\tplan->recordVideo = true;",
+					"to": "else if (WordIs(value, valueLength, \"video\"))\n\t\t\t{\n\t\t\t\tplan->recordVideo = false;"
+				}
+			]
+		},
+		{
+			"name": "record=video also takes pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"video\"))\n\t\t\t{\n\t\t\t\tplan->recordVideo = true;",
+					"to": "else if (WordIs(value, valueLength, \"video\"))\n\t\t\t{\n\t\t\t\tplan->recordVideo = true; plan->pictures = true;"
+				}
+			]
+		},
+		{
+			"name": "record=video is let into a run that measures time",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->recordVideo && !plan->machineShared)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "break=video does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->breakVideo = true;",
+					"to": "plan->breakVideo = false;"
+				}
+			]
+		},
+		{
+			"name": "break=video goes without a film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->breakVideo && !plan->recordVideo)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a film is never taken",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.recordVideo)\n\t{\n\t\tTakeVideoFrame();",
+					"to": "if (false)\n\t{\n\t\tTakeVideoFrame();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run makes a film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.recordVideo)\n\t{\n\t\tTakeVideoFrame();",
+					"to": "if (true)\n\t{\n\t\tTakeVideoFrame();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it comes here outside a run",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (HudsonRunIsOn)\n\t\t{\n\t\t\tHudson_TakePictureIfDue();",
+					"to": "if (true)\n\t\t{\n\t\t\tHudson_TakePictureIfDue();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run ends without finishing the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tFinishTheVideo(&videoFacts);\n",
+					"to": "\t\t;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say what became of the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "video_file=%s video_size=%dx%d video_frames=%ld video_dropped=%ld video_no_frame=%ld video_bytes=%lld video_stopped=%s video_grab_ms_average=%.2f video_grab_ms_worst=%.2f",
+					"to": "video_file=%s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the end of a run waits for ever",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HudsonVideoWriter_Finish(kHudsonVideoFinishWaitMilliseconds);",
+					"to": "HudsonVideoWriter_Finish(INFINITE);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a film with gaps looks clean",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (facts->dropped > 0)\n\t{\n\t\t_snprintf",
+					"to": "if (false)\n\t{\n\t\t_snprintf"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a film that stops does not say why",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "LogErrorString(std::string(\"video: \") + facts.why);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the writer is never told to break",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, kHudsonVideoMostBytes);",
+					"to": "0, kHudsonVideoMostBytes);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a film has no size limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, kHudsonVideoMostBytes);",
+					"to": "plan.breakVideo ? kHudsonVideoBreakAtPicture : 0, 1LL << 62);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every frame is read back",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (HudsonVideoWriter_WantsPictureFor(seconds))",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say what it costs",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Reading a frame back from the card took %.2f ms on average",
+					"to": "Reading a frame back from the card took %.2f ms"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a screen of another size is read into the film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "size.Width != filmSize.Width || size.Height != filmSize.Height || size.Format != filmSize.Format",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the writer can come from beside the game",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "LoadLibraryExA(\"mfplat.dll\", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32)",
+					"to": "LoadLibraryA(\"mfplat.dll\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: its other DLL can too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "LoadLibraryExA(\"mfreadwrite.dll\", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32)",
+					"to": "LoadLibraryA(\"mfreadwrite.dll\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script films a run that measures time",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Record -eq 'video' -and -not ($TimingsDontMatter -and $WhileInUse)) { Stop-Here",
+					"to": "if ($false) { Stop-Here"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script leaves the film behind",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "Move-Item -LiteralPath $film.FullName -Destination $kept",
+					"to": "$null"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script looks for another name",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "-Filter 'hudson-video-*.mp4'",
+					"to": "-Filter 'film-*.mp4'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the film has no fingerprint",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$pictureLines += \"video=$($film.Name) sha256=",
+					"to": "$null = \"video=$($film.Name) sha256="
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a second to end the run does not wait for the first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tWaitForTheResultToBeOnDisk();\n\t\t_snprintf(line, sizeof(line) - 1, \"and_then=",
+					"to": "\t\t_snprintf(line, sizeof(line) - 1, \"and_then="
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game ends from under the result",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\tWaitForTheResultToBeOnDisk();\n\n\t// a second line,",
+					"to": "\t// a second line,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the first to end the run never says it has",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "InterlockedExchange(&resultIsOnDisk, 1);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait for the result has no limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "while (!resultIsOnDisk && GetTickCount() - started < most)",
+					"to": "while (!resultIsOnDisk)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait for the result is shorter than a film can take",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "DWORD const most = kHudsonVideoFinishWaitMilliseconds + 5000;",
+					"to": "DWORD const most = 5000;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a finished film can be said to have stopped",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_video_writer.cpp",
+					"from": "NoteTheSizeOfTheFile();\n\t}",
+					"to": "StopIfThereIsNoRoom();\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the marine told to take no notice still catches the squad's suspicion",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "\t\t&&(sbPtr!=marineWhoTakesNoNotice)\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: telling him doesn't do anything",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineWhoTakesNoNotice = sbPtr;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he goes on worrying about what he already suspected",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatus->suspicious = 0;\n\tmarineStatus->previous_suspicion = 0;",
+					"to": "marineStatus->previous_suspicion = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he goes back to it after losing a target",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatus->previous_suspicion = 0;\n\tmarineStatus->using_squad_suspicion = 0;",
+					"to": "marineStatus->using_squad_suspicion = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he still counts it as the squad's",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "marineStatus->previous_suspicion = 0;\n\tmarineStatus->using_squad_suspicion = 0;",
+					"to": "marineStatus->previous_suspicion = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what he suspects can't be read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "*hisPoint = marineStatus->suspect_point;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the squad suspects can't be read",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_marine.cpp",
+					"from": "*squadPoint = NpcSquad.squad_suspect_point;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fight stops him hearing the squad",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "return !plan.combatAlien && !plan.navModules",
+					"to": "return !plan.navModules"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a walk stops him hearing the squad",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "!plan.navModules && !plan.route[0] && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a strategy stops him hearing the squad",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": " && !plan.strategy[0] && !plan.listStrategies;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every run tells him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (ThisRunOnlyLooksRound())",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a view doesn't tell him",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tMarine_TakesNoNoticeOfTheSquad(marine);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say what the squad suspects",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tSayIfTheSquadSuspectsAnything(marine);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a marine who won't turn doesn't say what he suspects",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Marine_WhatHeAndHisSquadSuspect(marine, &hisTime, &hisPoint, &squadTime, &squadPoint);\n\t_snprintf(line",
+					"to": "hisTime = 0; hisPoint = marine->DynPtr->Position; squadTime = 0; squadPoint = hisPoint;\n\t_snprintf(line"
+				}
+			]
+		},
+		{
+			"name": "lamp= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"off\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedLampUnknown;",
+					"to": "else if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedLampUnknown;"
+				}
+			]
+		},
+		{
+			"name": "lamp= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLamp)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "lamp=on does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampOn = true;",
+					"to": "plan->lampOn = false;"
+				}
+			]
+		},
+		{
+			"name": "lamp=blink does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampBlink = true;",
+					"to": "plan->lampBlink = false;"
+				}
+			]
+		},
+		{
+			"name": "lampkind= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"painted\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "lampkind= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLampKind)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "lampkind=real does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampReal = true;",
+					"to": "plan->lampReal = false;"
+				}
+			]
+		},
+		{
+			"name": "lampat= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"shoulder\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "lampat= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLampAt)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "lampat=wide does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampWide = true;",
+					"to": "plan->lampWide = false;"
+				}
+			]
+		},
+		{
+			"name": "lampat= goes without the real lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->lampWide && !plan->lampReal)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no run has the lamp unless it asks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampOn = plan->machineShared && !plan->vision && !plan->compareRelief && plan->wall[0] == 0;",
+					"to": "plan->lampOn = false;"
+				}
+			]
+		},
+		{
+			"name": "a run that measures time has the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lampOn = plan->machineShared && !plan->vision",
+					"to": "plan->lampOn = !plan->vision"
+				}
+			]
+		},
+		{
+			"name": "a run comparing the screen has the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->machineShared && !plan->vision && !plan->compareRelief",
+					"to": "plan->machineShared && !plan->compareRelief"
+				}
+			]
+		},
+		{
+			"name": "a run judging a wall has the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && plan->wall[0] == 0;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "vision= can have the lamp if it asks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief)",
+					"to": "(plan->lampOn || plan->lampBlink) && plan->compareRelief"
+				}
+			]
+		},
+		{
+			"name": "compare= can have the lamp if it asks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief)",
+					"to": "(plan->lampOn || plan->lampBlink) && plan->vision"
+				}
+			]
+		},
+		{
+			"name": "blinking can spoil a comparison",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->lampOn || plan->lampBlink) && (plan->vision || plan->compareRelief)",
+					"to": "plan->lampOn && (plan->vision || plan->compareRelief)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run does not switch the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\t\tShoulderLamp_Toggle();",
+					"to": "\t\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the real light is never asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ShoulderLamp_SetRealLightWanted(plan.lampReal);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lamp is not moved",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.lampWide)\n\t\t{\n\t\t\tShoulderLamp_SetPlaceFromEyes",
+					"to": "if (false)\n\t\t{\n\t\t\tShoulderLamp_SetPlaceFromEyes"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say about the lamp",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "lamp=%s lamp_kind=%s lamp_at=%s lamp_frames=%ld lamp_real_frames=%ld",
+					"to": "lamp=%s"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask about the lamp",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Lamp) { $arguments += \" lamp=$Lamp\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for the real light",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($LampKind) { $arguments += \" lampkind=$LampKind\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "flare= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedFlareNotYes;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "flare= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFlare)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "flare=yes does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->flareEachHold = true;",
+					"to": "plan->flareEachHold = false;"
+				}
+			]
+		},
+		{
+			"name": "a flare can spoil vision=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->vision || plan->compareRelief))",
+					"to": "if (plan->flareEachHold && (plan->compareRelief))"
+				}
+			]
+		},
+		{
+			"name": "a flare can spoil compare=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->vision || plan->compareRelief))",
+					"to": "if (plan->flareEachHold && (plan->vision))"
+				}
+			]
+		},
+		{
+			"name": "flare= on a run with no rooms",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))",
+					"to": "if (plan->flareEachHold && (plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))"
+				}
+			]
+		},
+		{
+			"name": "flare= in a fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))",
+					"to": "if (plan->flareEachHold && (plan->rooms == 0 || plan->navModules || plan->strategy[0] || plan->listStrategies))"
+				}
+			]
+		},
+		{
+			"name": "flare= on a walk",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))",
+					"to": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->strategy[0] || plan->listStrategies))"
+				}
+			]
+		},
+		{
+			"name": "flare= on a strategy",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))",
+					"to": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->listStrategies))"
+				}
+			]
+		},
+		{
+			"name": "flare= on a run listing strategies",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0] || plan->listStrategies))",
+					"to": "if (plan->flareEachHold && (plan->rooms == 0 || plan->combatAlien || plan->navModules || plan->strategy[0]))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a hold throws no flare",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.flareEachHold)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: anyone can throw one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (AvP.PlayerType == I_Marine)\n\t{\n\t\tThrowAFlare();",
+					"to": "{\n\t\tThrowAFlare();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flare that never went is counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (NumberOfFlaresActive > before)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: flares are not counted",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "flaresThrown++;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say how many flares",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "fprintf(file, \"flares_thrown=%ld\\n\", flaresThrown);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for a flare",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Flare) { $arguments += \" flare=yes\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot move it",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($LampAt) { $arguments += \" lampat=$LampAt\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: pictures with the lamp on get compared",
+			"changes": [
+				{
+					"file": "tools/hudson/compare-pictures.ps1",
+					"from": "-Pattern '(^| )lamp=(on|blink)( |$)'",
+					"to": "-Pattern 'nothing like this'"
+				}
+			]
+		},
+		{
+			"name": "film= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "seenFilm = true;\n\n\t\t\tif (!WordIs(value, valueLength, \"no\"))",
+					"to": "seenFilm = true;\n\n\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "film= can be said twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenFilm)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a film can be asked for and refused at once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->recordVideo && seenFilm)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no run films unless it asks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a run that measures time films",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"to": "if (!seenFilm && !saidOnlyNumbers)"
+				}
+			]
+		},
+		{
+			"name": "record=numbers still films",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"to": "if (plan->machineShared && !seenFilm)"
+				}
+			]
+		},
+		{
+			"name": "film=no still films",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->machineShared && !seenFilm && !saidOnlyNumbers)",
+					"to": "if (plan->machineShared && !saidOnlyNumbers)"
+				}
+			]
+		},
+		{
+			"name": "record=pictures loses its film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "bool const saidOnlyNumbers = seenRecord && !plan->pictures && !plan->recordVideo;",
+					"to": "bool const saidOnlyNumbers = seenRecord && !plan->recordVideo;"
+				}
+			]
+		},
+		{
+			"name": "a run that says nothing about record loses its film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "bool const saidOnlyNumbers = seenRecord && !plan->pictures && !plan->recordVideo;",
+					"to": "bool const saidOnlyNumbers = !plan->pictures && !plan->recordVideo;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not say where the film is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tfprintf(file, \"film=%s\\n\", videoFacts.written > 0 ? (std::string(folder ? folder : \"\") + videoName).c_str() : \"none\");\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result names a film nothing was written to",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "videoFacts.written > 0 ? (std::string(folder",
+					"to": "videoName[0] ? (std::string(folder"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script leaves the old place in the result",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($_ -like 'film=*') { $filmLine } else { $_ }",
+					"to": "if ($_ -like 'film=*') { $_ } else { $_ }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script says a film when there is none",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "else { 'film=none' }",
+					"to": "else { \"film=$filmKept\" }"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot say film=no",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($NoFilm) { $arguments += \" film=no\" }\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the result does not give the shadow lights",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "fprintf(file, \"%s\\n\", shadowLights);",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: it does not say how many frames that is from",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "shadow_light_frames=%d allowed_steady=%d",
+					"to": "allowed_steady=%d shadow_light_frames=%d"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the frames are not counted",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "\tframesNoted++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most steady is not kept",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "mostSteady = (lightsThisFrame.steadyChosen > mostSteady) ? lightsThisFrame.steadyChosen : mostSteady;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the most brief is not kept",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "mostBrief = (lightsThisFrame.briefChosen > mostBrief) ? lightsThisFrame.briefChosen : mostBrief;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the line may not end",
+			"changes": [
+				{
+					"file": "3dc/kshape.cpp",
+					"from": "line[size - 1] = 0;\n}\n\n// Two lines for each report",
+					"to": "}\n\n// Two lines for each report"
+				}
+			]
+		},
+		{
+			"name": "species: only predator",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSpeciesNotPredator;",
+					"to": "plan->playAsPredator = true;"
+				}
+			]
+		},
+		{
+			"name": "species: only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSpecies)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "species: needs a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->playAsPredator || plan->playAsAlien) && plan->gunSlot == 0 && !plan->meets",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "gunalien: only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenGunAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "gunalien: only yes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedGunAlienNotYes;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "gunalien: needs a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->gunAlien && plan->gunSlot == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "gunalien: says so",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->gunAlien = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "class: only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenClass)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "class: shotgun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->classSlider = kClassSliderFirstNew;",
+					"to": "plan->classSlider = 12;"
+				}
+			]
+		},
+		{
+			"name": "class: revolver",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->classSlider = kClassSliderFirstNew + 1;",
+					"to": "plan->classSlider = 11;"
+				}
+			]
+		},
+		{
+			"name": "class: m79",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->classSlider = kClassSliderFirstNew + 2;",
+					"to": "plan->classSlider = 11;"
+				}
+			]
+		},
+		{
+			"name": "class: nothing else",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedClassNotOne;",
+					"to": "plan->classSlider = 11;"
+				}
+			]
+		},
+		{
+			"name": "class: needs a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->classSlider && plan->gunSlot == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "class: not with a Predator",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->classSlider && plan->playAsPredator)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "gunmarine: only once",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenGunMarine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "gunmarine: only yes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedGunMarineNotYes;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "gunmarine: needs a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->gunMarine && plan->gunSlot == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "gunmarine: says so",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->gunMarine = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "species=alien is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"alien\"))",
+					"to": "else if (WordIs(value, valueLength, \"alienx\"))"
+				}
+			]
+		},
+		{
+			"name": "meets= takes anything",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedMeetsNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedMeetsNotYes;"
+				}
+			]
+		},
+		{
+			"name": "meets= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenMeets)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "listplace= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->listPlaceAsked)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;"
+				}
+			]
+		},
+		{
+			"name": "listplace= takes any big number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "|| plan->listPlace > 999",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "listplace= doesn't say what he meets",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->meets = true;\n\t\t}\n\t\telse if (WordIs(place, nameLength, \"gunmarine\"))",
+					"to": "plan->meets = false;\n\t\t}\n\t\telse if (WordIs(place, nameLength, \"gunmarine\"))"
+				}
+			]
+		},
+		{
+			"name": "an alien can try a gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->playAsAlien && plan->gunSlot != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "listplace= goes with species=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->listPlaceAsked && (plan->playAsPredator || plan->playAsAlien))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "listplace= goes with class=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->listPlaceAsked && plan->classSlider)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "listplace= goes with net=",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->listPlaceAsked && plan->netMode != kHudsonNetNone)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "difficulty starts at easy",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->holdFrames = kHudsonDefaultHoldFrames;\n\tplan->difficulty = 1;",
+					"to": "plan->holdFrames = kHudsonDefaultHoldFrames;\n\tplan->difficulty = 0;"
+				}
+			]
+		},
+		{
+			"name": "dieat= takes 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->dieAtSeconds < 1 || plan->dieAtSeconds > 3600",
+					"to": "plan->dieAtSeconds < 0 || plan->dieAtSeconds > 3600"
+				}
+			]
+		},
+		{
+			"name": "dieat= takes any number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->dieAtSeconds < 1 || plan->dieAtSeconds > 3600",
+					"to": "plan->dieAtSeconds < 1"
+				}
+			]
+		},
+		{
+			"name": "dieat= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->dieAtSeconds != 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "difficulty= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenDifficulty)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "easy isn't 0",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->difficulty = 0;\n\t\t\t}\n\t\t\telse if (WordIs(value, valueLength, \"medium\"))",
+					"to": "plan->difficulty = 1;\n\t\t\t}\n\t\t\telse if (WordIs(value, valueLength, \"medium\"))"
+				}
+			]
+		},
+		{
+			"name": "hard isn't 2",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->difficulty = 2;",
+					"to": "plan->difficulty = 3;"
+				}
+			]
+		},
+		{
+			"name": "coopend= isn't allowed in a skirmish from the level row",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked)",
+					"to": "(plan->coopEndSeconds != 0)"
+				}
+			]
+		},
+		{
+			"name": "coopend= is allowed with no network",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(plan->coopEndSeconds != 0 && !plan->listPlaceAsked)",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "levelfilms= takes any answer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"yes\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedLevelFilmsNotYes;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedLevelFilmsNotYes;"
+				}
+			]
+		},
+		{
+			"name": "levelfilms= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLevelFilms)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "levelfilms=yes does nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->levelFilms = true;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "filmskip= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->filmSkipSeconds != 0)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;"
+				}
+			]
+		},
+		{
+			"name": "filmskip= takes nothing as a number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->filmSkipSeconds < 1 || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "filmskip= has no top",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->filmSkipSeconds > 3600",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "filmskip= needs no film",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->filmSkipSeconds != 0 && !plan->levelFilms)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "friendlyfire= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->noFriendlyFire)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;"
+				}
+			]
+		},
+		{
+			"name": "friendlyfire= is ignored",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedFriendlyFireNotOff;\n\t\t\t}\n\n\t\t\tplan->noFriendlyFire = true;",
+					"to": "return kHudsonRefusedFriendlyFireNotOff;\n\t\t\t}\n"
+				}
+			]
+		},
+		{
+			"name": "friendlyfire= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"off\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFriendlyFireNotOff;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedFriendlyFireNotOff;"
+				}
+			]
+		},
+		{
+			"name": "friendlyfire= works without coop",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->noFriendlyFire && !plan->coop)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a run goes as fast as it can unless it asks",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->framesPerSecond = kHudsonDefaultFramesPerSecond;",
+					"to": "plan->framesPerSecond = 0;"
+				}
+			]
+		},
+		{
+			"name": "the rate a run is held to is not 60",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.h",
+					"from": "kHudsonDefaultFramesPerSecond = 60,",
+					"to": "kHudsonDefaultFramesPerSecond = 61,"
+				}
+			]
+		},
+		{
+			"name": "a run cannot ask for no cap by name",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "WordIs(value, valueLength, \"uncapped\")",
+					"to": "WordIs(value, valueLength, \"notaword\")"
+				}
+			]
+		},
+		{
+			"name": "a late frame is never made up",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.h",
+					"from": "return now - next > ticksEachFrame ? now : next;",
+					"to": "return now + ticksEachFrame;"
+				}
+			]
+		},
+		{
+			"name": "a very late frame is made up in a burst",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.h",
+					"from": "return now - next > ticksEachFrame ? now : next;",
+					"to": "return next;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not ask for 60",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "[int]$Fps = 60,",
+					"to": "[int]$Fps = 0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair script does not ask for 60",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "[int]$Fps = 60,",
+					"to": "[int]$Fps = 0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the levels script does not ask for 60",
+			"changes": [
+				{
+					"file": "tools/hudson/run-campaign-levels.ps1",
+					"from": "[int]$Fps = 60,",
+					"to": "[int]$Fps = 0,"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run's record does not say its rate",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "$_ -like 'frames_each_second_asked=*'",
+					"to": "$_ -like 'nothing=*'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a result does not say its rate",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "frames_each_second_asked=%d frames_each_second_reached=%.1f",
+					"to": "frames_asked=%d frames_reached=%.1f"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: frames are not timed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "HoldToTheFrameRate();\n\tNoteHowFastThisFrameWent();",
+					"to": "HoldToTheFrameRate();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a log does not say its rate",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "hudson: frames each second: asked for %d, reached %.1f",
+					"to": "hudson: asked for %d, reached %.1f"
+				}
+			]
+		},
+		{
+			"name": "a kill run can go with no other machine",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "|| plan->netMode == kHudsonNetNone || !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;",
+					"to": "|| !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;"
+				}
+			]
+		},
+		{
+			"name": "a kill run can go without the campaign mode",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "|| plan->netMode == kHudsonNetNone || !plan->coop))\n\t{\n\t\treturn kHudsonRefusedKillWords;",
+					"to": "|| plan->netMode == kHudsonNetNone))\n\t{\n\t\treturn kHudsonRefusedKillWords;"
+				}
+			]
+		},
+		{
+			"name": "a kill run can leave out the place",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->killKind == kHudsonBotFightNone || !plan->killAtSaid || !plan->killerSaid",
+					"to": "plan->killKind == kHudsonBotFightNone || !plan->killerSaid"
+				}
+			]
+		},
+		{
+			"name": "a kill run can leave out the killer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->killKind == kHudsonBotFightNone || !plan->killAtSaid || !plan->killerSaid",
+					"to": "plan->killKind == kHudsonBotFightNone || !plan->killAtSaid"
+				}
+			]
+		},
+		{
+			"name": "a place below zero reads as above it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*parts[i] = below ? -*parts[i] : *parts[i];",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a place can have more than three numbers",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return at == length;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "any killer word is the joiner",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (!WordIs(value, valueLength, \"join\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "any kind can be asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedKillWords;\n\t\t\t}\n\t\t}\n\t\telse if (WordIs(place, nameLength, \"killat\"))",
+					"to": "else if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedKillWords;\n\t\t\t}\n\t\t}\n\t\telse if (WordIs(place, nameLength, \"killat\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not say where to kill",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "killat=$($KillAt -replace 'm', '-') killer=$Killer",
+					"to": "killer=$Killer"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair does not pass the kill on",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "'-KillAt', $KillAt, '-Killer', $Killer",
+					"to": "'-Killer', $Killer"
+				}
+			]
+		},
+		{
+			"name": "another word for look= is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedLookNotYesOrNo;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "look= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLook)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "look= in anything but a pair is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenLook && !aPairOnTheCampaign)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a pair with no campaign does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->netMode != kHudsonNetNone && plan->coop && !plan->coopWalk",
+					"to": "plan->netMode != kHudsonNetNone && !plan->coopWalk"
+				}
+			]
+		},
+		{
+			"name": "a walk does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->coop && !plan->coopWalk && !plan->hostile",
+					"to": "plan->coop && !plan->hostile"
+				}
+			]
+		},
+		{
+			"name": "a hostile test does not count",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "!plan->coopWalk && !plan->hostile;",
+					"to": "!plan->coopWalk;"
+				}
+			]
+		},
+		{
+			"name": "only a pair looks without being asked",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!seenLook && aPairOnTheCampaign)",
+					"to": "if (!seenLook)"
+				}
+			]
+		},
+		{
+			"name": "a fight looks all the time",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lookAllTheTime = aFight;",
+					"to": "plan->lookAllTheTime = false;"
+				}
+			]
+		},
+		{
+			"name": "a pair with no fight has only its smoke test",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->lookAllTheTime = aFight;",
+					"to": "plan->lookAllTheTime = true;"
+				}
+			]
+		},
+		{
+			"name": "the short way round",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (way > 2048)\n\t{\n\t\tway -= 4096;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a look slows as it arrives",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "int step = 1 + size / 8;",
+					"to": "int step = size;"
+				}
+			]
+		},
+		{
+			"name": "a look has a most for each frame",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (step > mostThisFrame)\n\t{\n\t\tstep = mostThisFrame;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a look stops when it arrives",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (step > size)\n\t{\n\t\tstep = size;\n\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not pass look=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Look) { $arguments += \" look=$Look\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair does not pass it on",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($Look) { $words += @('-Look', $Look) }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a fight's aim does not stop the look",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "static void Hudson_FaceThePlace(PLAYER_STATUS *status, VECTORCH const &middle)\n{\n\taimedThisFrame = true;\n",
+					"to": "static void Hudson_FaceThePlace(PLAYER_STATUS *status, VECTORCH const &middle)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the look does not run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Hudson_LookAtWhatMatters(status, me, other);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "another word for screen= is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedScreenWord;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "screen= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenScreen)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "screen=main is read",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->windowOnMainScreen = true;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "windowslot= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWindowSlot)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "windowslot= is a number",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!ReadNumber(value, valueLength, &plan->windowSlot))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "windowsof= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWindowsOf)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "windowsof= has a least",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->windowsTogether < 1 || plan->windowsTogether > 4",
+					"to": "plan->windowsTogether > 4"
+				}
+			]
+		},
+		{
+			"name": "windowsof= has a most",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->windowsTogether < 1 || plan->windowsTogether > 4",
+					"to": "plan->windowsTogether < 1"
+				}
+			]
+		},
+		{
+			"name": "one window is the default",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->windowsTogether = 1;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "the second screen has no parts on the main one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->windowOnMainScreen && (seenWindowSlot || seenWindowsOf))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a slot is below how many there are",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->windowSlot >= plan->windowsTogether)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "two windows sit side by side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "int const across = together > 1 ? 2 : 1;",
+					"to": "int const across = 1;"
+				}
+			]
+		},
+		{
+			"name": "three windows share a grid",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "int const down = together > 2 ? 2 : 1;",
+					"to": "int const down = 1;"
+				}
+			]
+		},
+		{
+			"name": "a window with no size has its whole part",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*width = partWidth;\n\t\t*height = partHeight;\n\t}\n\telse if",
+					"to": "*width = 1;\n\t\t*height = 1;\n\t}\n\telse if"
+				}
+			]
+		},
+		{
+			"name": "a window that fits stays as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (*width > partWidth || *height > partHeight)",
+					"to": "else"
+				}
+			]
+		},
+		{
+			"name": "a window that is too tall is shrunk by its height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*height = partHeight;\n\t\t}\n\t}",
+					"to": "*height = 1;\n\t\t}\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot keep it on the main screen",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Screen -eq 'main') { $arguments += \" screen=main\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the window does not start on the second screen",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "Hudson_PlaceTheWindow(&startLeft, &startTop, &startWidth, &startHeight);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the sizing sends it back",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/win_proj.cpp",
+					"from": "Hudson_PlaceTheWindow(&left, &top, &wide, &tall);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log does not say where it went",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "Hudson_SayWhereTheWindowWent();",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "dying fails the smoke test",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.dead)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a body that never comes fails it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.millisecondsWaiting < kHudsonSmokeMostWaitForABody)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "it waits for a body",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.millisecondsWaiting < kHudsonSmokeMostWaitForABody)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "they look for a while",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.millisecondsSeen < kHudsonSmokeLeastLook)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "facing counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.facing && facts.drawn && facts.wayClear)",
+					"to": "if (facts.drawn && facts.wayClear)"
+				}
+			]
+		},
+		{
+			"name": "being drawn counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.facing && facts.drawn && facts.wayClear)",
+					"to": "if (facts.facing && facts.wayClear)"
+				}
+			]
+		},
+		{
+			"name": "a clear way counts",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.facing && facts.drawn && facts.wayClear)",
+					"to": "if (facts.facing && facts.drawn)"
+				}
+			]
+		},
+		{
+			"name": "it has a limit",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.millisecondsSeen < kHudsonSmokeMostLook)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "it gives what is not true yet some time",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (facts.millisecondsSeen < kHudsonSmokeMostLook)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the smoke test does not hold the steps back",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (Hudson_SmokeTest(status, me, other, now))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: he can die before it",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (plan.netMode != kHudsonNetNone && !smokeIsOver)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a run that never got there passes",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "smoke=failed: the run ended before it was done",
+					"to": "smoke=passed"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: run.txt says nothing for a game that wrote nothing",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "'smoke: failed: this run wrote nothing about it'",
+					"to": "'smoke: passed'"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the record leaves it out",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$lines += \"smoke_$game=$verdict\"",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a failed smoke test is not a failed pair",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($smokeFailed) { exit 111 }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "siege= with no name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeEmpty;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a long siege= name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeTooLong;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a bad letter in siege= is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeCharacter;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "siege= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSiege)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a siege needs a pair",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!aPairOnTheCampaign || plan->botFight != kHudsonBotFightNone",
+					"to": "if (plan->botFight != kHudsonBotFightNone"
+				}
+			]
+		},
+		{
+			"name": "a siege is its own fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!aPairOnTheCampaign || plan->botFight != kHudsonBotFightNone || plan->killKind != kHudsonBotFightNone)",
+					"to": "if (!aPairOnTheCampaign)"
+				}
+			]
+		},
+		{
+			"name": "a siege has no friendly fire",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->noFriendlyFire = true;\n\t}\n\n\tif (seenLook",
+					"to": ";\n\t}\n\n\tif (seenLook"
+				}
+			]
+		},
+		{
+			"name": "the stamp checks a row is long enough",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "width <= 0 || height <= 0 || pitch < width * 4",
+					"to": "width <= 0 || height <= 0"
+				}
+			]
+		},
+		{
+			"name": "the stamp stops at the bottom of a picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "y < down && kFromTheEdge + y < height",
+					"to": "y < down"
+				}
+			]
+		},
+		{
+			"name": "the stamp stops at the side of a picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "x < across && kFromTheEdge + x < width",
+					"to": "x < across"
+				}
+			]
+		},
+		{
+			"name": "the stamp puts the highest figure first",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "for (int right = kFiguresInANumber - 1 - place; right > 0; right--)",
+					"to": "for (int right = place; right > 0; right--)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege does not wait for the smoke test",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Hudson_Siege(status, me, other, now);\n\t}\n\n\tHudson_LookAtWhatMatters",
+					"to": "}\n\n\tHudson_LookAtWhatMatters"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege loads the campaign level",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/env_info.cpp",
+					"from": "Hudson_IsASiege() ? Hudson_Environment() : Campaign_Environment",
+					"to": "Campaign_Environment"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege is not played like a campaign",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/frontend/menus.cpp",
+					"from": "if (Hudson_IsASiege() && netGameData.coopCampaign == kCampaignNone)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not ask for a siege",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Siege) { $arguments += \" siege=$Siege\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair does not pass a siege on",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($Siege) { $words += @('-Siege', $Siege) }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "pictures= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!WordIs(value, valueLength, \"no\"))\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedPicturesWord;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedPicturesWord;"
+				}
+			]
+		},
+		{
+			"name": "pictures=no goes on a run with no network",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (plan->noNetPictures && plan->netMode == kHudsonNetNone)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the word stops no pictures",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!plan.noNetPictures)\n\t{\n\t\tnetPictureIsDue = true;",
+					"to": "if (true)\n\t{\n\t\tnetPictureIsDue = true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot say it",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($NoPictures) { $arguments += \" pictures=no\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair script cannot say it",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($NoPictures) { $words += '-NoPictures' }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a run that didn't ask has everyone die one way",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->deathWay = -1;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "any number is a way of dying",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "|| plan->deathWay < 0 || plan->deathWay > 99)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege fires at what it cannot see",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "&& Hudson_WayIsClear(me, block))",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: enemies are made out of view",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(needsView && !Hudson_WayIsClearTo(me, place, NULL))",
+					"to": "false"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: far enemies stop more being made",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (isHost && room && now >= nextEnemy && close < kMostAtOnce)",
+					"to": "if (isHost && room && now >= nextEnemy && aliens < kMostAtOnce)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host looks away from the body",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (diedAt != 0 && now - diedAt < kLooksAtTheBodyFor)\n\t\t{\n\t\t\tHudson_FaceThePlace(status, whereItWas);",
+					"to": "if (diedAt != 0 && now - diedAt < kLooksAtTheBodyFor)\n\t\t{\n\t\t\t"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joiner looks away from the body",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (ghostWentAt != 0 && now - ghostWentAt < kLooksAtTheBodyFor)\n\t{\n\t\tHudson_FaceThePlace(status, whereItWas);",
+					"to": "if (ghostWentAt != 0 && now - ghostWentAt < kLooksAtTheBodyFor)\n\t{\n\t\t"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: they stop looking before the picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "kLooksAtTheBodyFor = 5500;",
+					"to": "kLooksAtTheBodyFor = 1000;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joiner stands level with the host",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "(isHost ? 0 : kHostBehindTheJoiner)",
+					"to": "0"
+				}
+			]
+		},
+		{
+			"name": "siegefrom= with no name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFromEmpty;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a long siegefrom= name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFromTooLong;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a bad letter in siegefrom= is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFromCharacter;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "siegefrom= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSiegeFrom)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "siegefrom= with no siege is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSiegeFrom && !seenSiege)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not say where enemies come from",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($SiegeFrom) { $arguments += \" siegefrom=$SiegeFrom\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair does not pass that on",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($SiegeFrom) { $words += @('-SiegeFrom', $SiegeFrom) }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Stranded test is not one word",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$SiegeFrom = 'canyon_01'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege does not load the facehugger",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ForceLoad_Hugger = TRUE;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege does not load the sentry gun",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ForceLoad_SentryGun = TRUE;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host makes no guns",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "CreateSentrygun(&place, 0);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the players shoot the friendly marines",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (count == marines)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host takes no later picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (diedAt != 0 && !saidLongAfter && now - diedAt >= kPictureLongAfterTheDeath)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joiner takes no later picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (ghostWentAt != 0 && !saidLongAfter && now - ghostWentAt >= kPictureLongAfterTheDeath)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the host stops the game at the death",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "diedAt = now;\n\t\t\tLogString(\"killnamed: on the host it has died\");",
+					"to": "diedAt = now;\n\t\t\tHudson_AskForAPicture();\n\t\t\tLogString(\"killnamed: on the host it has died\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the joiner stops the game at the death",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "ghostWentAt = now;\n\t}",
+					"to": "ghostWentAt = now;\n\t\tHudson_AskForAPicture();\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the friendly marines are not on guard",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Marine_GuardAndFace(made, &lookingAt);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a predator starts with no cloak",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "predator->CloakStatus = PCLOAK_Activating;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new facehugger never gets a body",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_facehugger.cpp",
+					"from": "sbPtr->maintainVisibility = 1;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "siegefar= with no name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFarEmpty;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a long siegefar= name is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFarTooLong;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "a bad letter in siegefar= is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return kHudsonRefusedSiegeFarCharacter;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "siegefar= twice is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSiegeFar)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;\n\t\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "siegefar= with no siege is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenSiegeFar && !seenSiege)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Stranded test makes xenoborgs in the canyon",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "$SiegeFar = 'canyon_02'",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script does not say where xenoborgs come from",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($SiegeFar) { $arguments += \" siegefar=$SiegeFar\" }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the pair does not pass on where xenoborgs come from",
+			"changes": [
+				{
+					"file": "tools/hudson/run-net-pair.ps1",
+					"from": "if ($SiegeFar) { $words += @('-SiegeFar', $SiegeFar) }",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a blow on a whole thing is not noted",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "GLOBALASSERT(damage);\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);",
+					"to": "GLOBALASSERT(damage);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a blow on a part is not noted",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "frag=NULL;\n\n\t// A test run notes what hit what. Outside one this does nothing.\n\tHudson_NoteDamage(sbPtr, damage->Id);",
+					"to": "frag=NULL;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the note works outside a siege",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!HudsonRunIsOn || !plan.siegeRoom[0] || !target ||",
+					"to": "if (!target ||"
+				}
+			]
+		},
+		{
+			"name": "windowbig= is read twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWindowBig)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;",
+					"to": "if (false)\n\t\t\t{\n\t\t\t\treturn kHudsonRefusedAskedTwice;"
+				}
+			]
+		},
+		{
+			"name": "windowbig= takes any word",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "!ReadNumber(value, valueLength, &plan->windowBig) || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "windowbig= has no least",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->windowBig < 0 || plan->windowBig > 1)",
+					"to": " || plan->windowBig > 1)"
+				}
+			]
+		},
+		{
+			"name": "windowbig= has no most",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->windowBig < 0 || plan->windowBig > 1)",
+					"to": " || plan->windowBig < 0)"
+				}
+			]
+		},
+		{
+			"name": "windowbig= goes with any number of windows",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenWindowBig && plan->windowsTogether != 2)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "windowbig= goes with screen=main",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(seenWindowSlot || seenWindowsOf || seenWindowBig)",
+					"to": "(seenWindowSlot || seenWindowsOf)"
+				}
+			]
+		},
+		{
+			"name": "windowbig= starts as a window",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->windowBig = -1;",
+					"to": "plan->windowBig = 0;"
+				}
+			]
+		},
+		{
+			"name": "the big part is half",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "int const bigWidth = (int)((long long)areaWidth * 3 / 4);",
+					"to": "int const bigWidth = areaWidth / 2;"
+				}
+			]
+		},
+		{
+			"name": "the small part starts where the big one does",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*left = big ? areaLeft : areaLeft + bigWidth;",
+					"to": "*left = areaLeft;"
+				}
+			]
+		},
+		{
+			"name": "the small part is as wide as the big one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*width = big ? bigWidth : areaWidth - bigWidth;",
+					"to": "*width = bigWidth;"
+				}
+			]
+		},
+		{
+			"name": "a part is not the whole height",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "*height = areaHeight;",
+					"to": "*height = areaHeight / 2;"
+				}
+			]
+		},
+		{
+			"name": "2560x1440 is the wrong size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->height = 1440;",
+					"to": "plan->height = 1080;"
+				}
+			]
+		},
+		{
+			"name": "2560x1440 is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "else if (WordIs(value, valueLength, \"2560x1440\"))",
+					"to": "else if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the players fire through their own",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (Hudson_OneOfOursIsInTheWay(me, nearest))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: there is no finale",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Hudson_SiegeTheFinale(me)",
+					"to": "0"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the finale takes every block",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (maxstblocks - NumActiveStBlocks < kBlocksKeptFree)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege xenoborg starts asleep",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "kHudsonBotFightXenoborg)\n\t\t{\n\t\t\tCreateXenoborg(&place, 0);\n\t\t\tHudson_SiegeWakeTheXenoborgAt(place);",
+					"to": "kHudsonBotFightXenoborg)\n\t\t{\n\t\t\tCreateXenoborg(&place, 0);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a siege makes things where there is no floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!LOS_ObjectHitPtr || LOS_Lambda > kLookFromAbove + kLookBelow)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a siege's players can be hurt",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return plan.siegeRoom[0] != 0;",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "every run's players cannot be hurt",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return plan.siegeRoom[0] != 0;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a blow on a whole player lands in a siege",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "if (Hudson_SiegeTurnsAwayHit(sbPtr, damage, multiple))\n\t\t{\n\t\t\treturn;",
+					"to": "if (false)\n\t\t{\n\t\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a blow on a part of a player lands in a siege",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "if (Hudson_SiegeTurnsAwayHit(sbPtr, damage, multiple))\n\t\t{\n\t\t\treturn(NULL);",
+					"to": "if (false)\n\t\t{\n\t\t\treturn(NULL);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: blows are turned away outside a run",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!HudsonRunIsOn || !HudsonPlan_PlayersCannotDie(plan) || !player || !damage)",
+					"to": "if (!player || !damage)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: blows turned away are not logged",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "Hudson_SiegeSayWhatWasTurnedAway();\n",
+					"to": "\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the finale's ring is not put on the floor",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (!Hudson_SiegePutOnTheFloor(&place, me) || !ModuleFromPosition(&place, (MODULE *)0) || Hudson_BotFightRoomAround(&place, me->SBdptr) < kRoomAnNpcNeeds)\n\t\t\t{",
+					"to": "if (!ModuleFromPosition(&place, (MODULE *)0) || Hudson_BotFightRoomAround(&place, me->SBdptr) < kRoomAnNpcNeeds)\n\t\t\t{"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the players fire close past their own",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "if (off < kNearTheLine && off > -kNearTheLine)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a figure that matches none still reads",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (figure < 0)\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a picture too small to hold a clock is read anyway",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "width < kStampFromTheEdge + across || height < kStampFromTheEdge + down || ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the clock is read from the dark side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "(brightness > 127 ? 1 : 0)",
+					"to": "(brightness > 127 ? 0 : 1)"
+				}
+			]
+		},
+		{
+			"name": "empty seconds are not refused as missing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!text || !milliseconds || !text[0])",
+					"to": "if (!text || !milliseconds)"
+				}
+			]
+		},
+		{
+			"name": "a comma in seconds is not named as the trouble",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (strchr(text, ','))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may have any number of figures before the point",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (++figuresBefore > kMostFiguresBeforeThePoint)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may start with the point",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (figuresBefore == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may have any number of figures after the point",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (++figuresAfter > kMostFiguresAfterThePoint)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may end with the point",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (figuresAfter == 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may have anything after them",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "\t// Anything else left, a sign, a space, a letter or a second point, means it isn't a number of seconds\n\tif (*at != 0)",
+					"to": "\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "seconds may be more than an hour",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (total > kMostMilliseconds)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the figures after the point are worth ten times too much",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "long worth = 100;",
+					"to": "long worth = 1000;"
+				}
+			]
+		},
+		{
+			"name": "a picture of no rows fits anywhere",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (rows <= 0 || rowBytes <= 0 || bufferLength <= 0)",
+					"to": "if (rowBytes <= 0 || bufferLength <= 0)"
+				}
+			]
+		},
+		{
+			"name": "rows may be longer than the step between them",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (step < rowBytes)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "rows stored bottom up are checked as if top down",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "long long const lowest = pitch < 0 ? lastRow : firstRow;",
+					"to": "long long const lowest = firstRow;"
+				}
+			]
+		},
+		{
+			"name": "rows may start before their buffer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return lowest >= bufferStart && highest <= bufferStart + bufferLength;",
+					"to": "return highest <= bufferStart + bufferLength;"
+				}
+			]
+		},
+		{
+			"name": "rows may go past the end of their buffer",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return lowest >= bufferStart && highest <= bufferStart + bufferLength;",
+					"to": "return lowest >= bufferStart;"
+				}
+			]
+		},
+		{
+			"name": "a shown part may start left of the picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return left >= 0 && top >= 0 && width > 0",
+					"to": "return top >= 0 && width > 0"
+				}
+			]
+		},
+		{
+			"name": "a shown part may start above the picture",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "return left >= 0 && top >= 0 && width > 0",
+					"to": "return left >= 0 && width > 0"
+				}
+			]
+		},
+		{
+			"name": "a shown part may be of no size",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "width > 0 && height > 0 && width <= frameWidth - left",
+					"to": "width <= frameWidth - left"
+				}
+			]
+		},
+		{
+			"name": "a shown part may go past the right side",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && width <= frameWidth - left && height <= frameHeight - top;",
+					"to": " && height <= frameHeight - top;"
+				}
+			]
+		},
+		{
+			"name": "a shown part may go past the bottom",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " && height <= frameHeight - top;",
+					"to": ";"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: join-films reads seconds with atof again",
+			"changes": [
+				{
+					"file": "tools/hudson/join-films.cpp",
+					"from": "const char *const why = HudsonPlan_ReadFilmSeconds(picture ? argv[3] : argv[2], &milliseconds);",
+					"to": "milliseconds = (long)(atof(picture ? argv[3] : argv[2]) * 1000); const char *const why = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: join-films reads a picture whether its rows fit or not",
+			"changes": [
+				{
+					"file": "tools/hudson/join-films.cpp",
+					"from": "if (fits)",
+					"to": "if (true)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: join-films writes over a file already there",
+			"changes": [
+				{
+					"file": "tools/hudson/join-films.cpp",
+					"from": "return GetFileAttributesW(Wide(path).c_str()) != INVALID_FILE_ATTRIBUTES;",
+					"to": "return false;"
+				}
+			]
+		}
+	]
+}

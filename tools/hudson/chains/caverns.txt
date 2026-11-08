@@ -1,0 +1,20 @@
+# level: caverns   end started by: walk
+# campaign: Predator 5
+# route: routes.js, played forward with doors shutting behind him. The fewest steps found, worked out from the level file. No one has walked it.
+# opens DR-CAVERNC
+where CAVERNC-03
+press swch-CAVED
+# opens DR-CAVERNH
+where CAVERNH-03
+press ALCK-SWCH1
+# opens DR-ALENT shuts DR-CAVERNH
+where ALENT-01
+press ALCK-SWCH3
+where COMM-02
+destroy TANK02
+# opens DR-HIVE02, DR-HIVE01
+where COMM-02
+destroy TANK01
+where FINISH | FINISH-01
+walk END OF LEVEL
+end missioncomplete
