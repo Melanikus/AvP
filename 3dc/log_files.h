@@ -283,6 +283,37 @@ inline const char *LogFiles_LastPart(const char *folder)
 	return last;
 }
 
+// Adds the game's folder, from the folder its program is in. A program in a folder called bin, as the release puts it in the Steam
+// game's bin, has the game's own folder one up, where its levels and shaders are, so that one is added as well.
+inline void LogFiles_PrivateAddGameFolder(LogFiles_Private &p, const char *programFolder)
+{
+	LogFiles_PrivateAddFolder(p, programFolder, "<game folder>");
+
+	char parent[MAX_PATH];
+	size_t length = strlen(programFolder);
+
+	if (length == 0 || length >= sizeof(parent))
+	{
+		return;
+	}
+
+	memcpy(parent, programFolder, length);
+	parent[length] = '\0';
+
+	while (length > 0 && LogFiles_IsSlash(parent[length - 1]))
+	{
+		parent[--length] = '\0';
+	}
+
+	char *const last = (char *)LogFiles_LastPart(parent);
+
+	if (last > parent && _stricmp(last, "bin") == 0)
+	{
+		last[-1] = '\0';
+		LogFiles_PrivateAddFolder(p, parent, "<game folder>");
+	}
+}
+
 // Reads one of Windows' settings for this player (USERPROFILE and the like) into found. Empty if there's no such setting.
 inline const char *LogFiles_Setting(const char *name, char *found, DWORD size)
 {
@@ -316,7 +347,7 @@ inline void LogFiles_PrivateGather(LogFiles_Private &p, const char *saveFolder)
 		if (name > found)
 		{
 			name[-1] = '\0';
-			LogFiles_PrivateAddFolder(p, found, "<game folder>");
+			LogFiles_PrivateAddGameFolder(p, found);
 		}
 	}
 

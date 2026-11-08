@@ -8,6 +8,7 @@ The build has already passed if we get here, so this looks for what a build woul
 - Shaders that aren't the ones in this commit, or that aren't there at all.
 - A package from another commit, or with a list of hashes that doesn't match it.
 - A program in it that isn't the game.
+- One of our game files missing, or not the one this commit lists (package-files/SHA256SUMS.txt).
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Package,
@@ -29,7 +30,9 @@ function Stop-Release([string]$why)
     exit 1
 }
 
-foreach ($needed in 'AvPx.exe', 'D3DCompiler_43.dll', 'd3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
+# The package is laid out as the game folder is: the game in bin as AvP_Classic.exe, the name Steam starts, with the libraries it needs
+# there too, and the notes at the top
+foreach ($needed in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt', 'SHA256SUMS.txt')
 {
     if (-not (Test-Path -LiteralPath (Join-Path $Package $needed)))
     {
@@ -45,11 +48,26 @@ if ($symbols.Count -gt 0)
     Stop-Release "$($symbols[0].Name) is in the package, and a build's symbols stay with the build"
 }
 
-$programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { $_.Name -ne 'AvPx.exe' })
+# The only program is the game, at bin/AvP_Classic.exe. One with that name anywhere else, or any other, is refused.
+$packageRoot = (Resolve-Path -LiteralPath $Package).Path.TrimEnd('\', '/')
+$programs = @(Get-ChildItem -LiteralPath $Package -Recurse -File -Filter '*.exe' | Where-Object { ($_.FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') -cne 'bin/AvP_Classic.exe' })
 
 if ($programs.Count -gt 0)
 {
-    Stop-Release "$($programs[0].Name) is in the package, and the only program in it should be the game"
+    Stop-Release "$($programs[0].FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') is in the package, and the only program in it should be the game, bin/AvP_Classic.exe"
+}
+
+# Nothing else Windows runs may be anywhere in the package but the game's own libraries, directly in bin beside it. The package's top
+# is the game folder, the folder the game starts in, and Windows looks for a library there too.
+$runnable = '.exe', '.dll', '.com', '.scr', '.bat', '.cmd', '.ps1', '.vbs', '.js', '.msi', '.lnk', '.cpl', '.ocx', '.sys'
+$runnableOutsideBin = @(Get-ChildItem -LiteralPath $Package -Recurse -File | Where-Object {
+    $relative = $_.FullName.Substring($packageRoot.Length + 1) -replace '\\', '/'
+    ($runnable -contains $_.Extension.ToLowerInvariant()) -and $relative -cne 'bin/AvP_Classic.exe' -and $relative -notmatch '^bin/[^/]+\.dll$'
+})
+
+if ($runnableOutsideBin.Count -gt 0)
+{
+    Stop-Release "$($runnableOutsideBin[0].FullName.Substring($packageRoot.Length + 1) -replace '\\', '/') is something Windows runs, and only the game and its own libraries, in bin, may be in the package"
 }
 
 if (-not (Get-Content -LiteralPath (Join-Path $Package 'BUILD.txt') -Raw).Contains($Commit))
@@ -78,6 +96,74 @@ foreach ($shader in $shaders)
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $inPackage).Hash -cne (Get-FileHash -Algorithm SHA256 -LiteralPath $shader.FullName).Hash)
     {
         Stop-Release "the shader $($shader.Name) in the package isn't the one in this commit"
+    }
+}
+
+# Our game files: the pictures, models and sounds the game needs that aren't the player's own copy of the game (package-files/README.md).
+# package-files/SHA256SUMS.txt in this commit lists each one with its hash, and every one has to be in the package, byte for byte. A
+# list with nothing on it is a refusal, or a wrong folder would pass. (Added 2026-11-07.)
+$gameFilesList = Join-Path $Repository 'package-files/SHA256SUMS.txt'
+$gameFiles = @(if (Test-Path -LiteralPath $gameFilesList) { Get-Content -LiteralPath $gameFilesList | Where-Object { $_ } })
+
+if ($gameFiles.Count -eq 0)
+{
+    Stop-Release 'this commit lists none of our game files (package-files/SHA256SUMS.txt)'
+}
+
+$listedGameFiles = @{}
+
+foreach ($line in $gameFiles)
+{
+    $hash, $name = $line -split '  ', 2
+
+    # A line names a plain file inside the game folder: parts of letters, digits, _ . - and spaces, between /, each starting with a
+    # letter, a digit or _. So no drive, no root, no way out with .., and nothing PowerShell would read as a wildcard. And it's one of the
+    # game files' own kinds (.rif, .rim, .ffl) in one of their own folders (avp_huds, graphics, MelPyth), so it can't stand for the notes,
+    # a shader or the program.
+    if ($hash -cnotmatch '^[0-9a-f]{64}$' -or "$name" -cnotmatch '^[A-Za-z0-9_][A-Za-z0-9_ .-]*(/[A-Za-z0-9_][A-Za-z0-9_ .-]*)*$' -or "$name" -notmatch '(?i)^(avp_huds|graphics|MelPyth)/.+\.(rif|rim|ffl)$')
+    {
+        Stop-Release "package-files/SHA256SUMS.txt has a line that isn't a hash and a file in the game folder: $line"
+    }
+
+    # The commit's own copy has to be the file the list names, so the list and the folder can't drift apart
+    $inCommit = Join-Path (Join-Path $Repository 'package-files') $name
+
+    if (-not (Test-Path -LiteralPath $inCommit -PathType Leaf) -or (Get-FileHash -Algorithm SHA256 -LiteralPath $inCommit).Hash.ToLower() -cne $hash)
+    {
+        Stop-Release "package-files/$name in this commit isn't the file its list names"
+    }
+
+    $listedGameFiles[$name.ToLower()] = $true
+    $inPackage = Join-Path $Package $name
+
+    if (-not (Test-Path -LiteralPath $inPackage -PathType Leaf))
+    {
+        Stop-Release "the game file $name is not in the package"
+    }
+
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $inPackage).Hash.ToLower() -cne $hash)
+    {
+        Stop-Release "the game file $name in the package isn't the one this commit lists"
+    }
+}
+
+# Nothing else is in the commit's folder, apart from its notes, and nothing in it is a link, which would be followed to wherever it
+# points
+$gameFolder = Join-Path $Repository 'package-files'
+$gameFolderPath = (Resolve-Path -LiteralPath $gameFolder).Path.TrimEnd('\', '/')
+
+foreach ($item in @(Get-ChildItem -LiteralPath $gameFolder -Recurse -Force))
+{
+    $name = $item.FullName.Substring($gameFolderPath.Length + 1) -replace '\\', '/'
+
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    {
+        Stop-Release "package-files/$name is a link, and every game file has to be a plain file"
+    }
+
+    if (-not $item.PSIsContainer -and $name -cnotin 'README.md', 'SHA256SUMS.txt', '.gitattributes' -and -not $listedGameFiles.ContainsKey($name.ToLower()))
+    {
+        Stop-Release "package-files/$name isn't on package-files/SHA256SUMS.txt"
     }
 }
 

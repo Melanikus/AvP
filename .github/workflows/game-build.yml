@@ -61,5 +61,5 @@ jobs:
         run: |
           ./tests/build.ps1 -Only package_test
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          ./tests/try-package.ps1 -Package "$env:RUNNER_TEMP\package" -TestProgram "$env:RUNNER_TEMP\avp-tests\package_test.exe"
+          ./tests/try-package.ps1 -Package "$env:RUNNER_TEMP\package\bin" -TestProgram "$env:RUNNER_TEMP\avp-tests\package_test.exe"
           if ($LASTEXITCODE -ne 0) { exit 1 }

@@ -424,6 +424,21 @@ static void TestLeavingOutThePlayer()
 	CheckLeftOut(p, "temp C:\\Users\\TesterName\\AppData\\Local\\Temp\\avp.tmp", "temp %TEMP%\\avp.tmp", "the longest folder that fits wins");
 	CheckLeftOut(p, "loading D:\\Games\\AvP\\fastfile\\common.ffl", "loading <game folder>\\fastfile\\common.ffl", "the game's own folder is written <game folder>");
 	CheckKept(p, "loading D:\\Games\\AvPx\\common.ffl", "but not a different folder whose name starts the same");
+
+	// A program in the release's bin folder, as the Steam game has it: the game's own folder, one up, counts too
+	LogFiles_Private steam;
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\bin");
+	Check(steam.folderCount == 2, "a program in a folder called bin gives the game folder and the one above it");
+	CheckLeftOut(steam, "shaders D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\shaders\\a.fx, program D:\\Steam\\steamapps\\common\\Aliens versus Predator Classic\\bin\\AvP_Classic.exe", "shaders <game folder>\\shaders\\a.fx, program <game folder>\\AvP_Classic.exe", "so the shaders and levels beside bin are written <game folder> too");
+
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Games\\AvP\\BIN\\");
+	Check(steam.folderCount == 2, "in any capitals, with a slash on the end too");
+
+	LogFiles_PrivateClear(steam);
+	LogFiles_PrivateAddGameFolder(steam, "D:\\Games\\AvP");
+	Check(steam.folderCount == 1, "and a program anywhere else gives only its own folder");
 	CheckLeftOut(p, "\"C:\\Users\\TesterName\" is the folder", "\"%USERPROFILE%\" is the folder", "a folder in quotes ends at the quote");
 	CheckLeftOut(p, "old C:\\Users\\TesterNameOld\\x.txt", "old C:\\Users\\<user>\\x.txt", "a folder that only starts with the player's folder's name doesn't count as theirs, and is someone's own");
 
@@ -467,6 +482,7 @@ static void TestLeavingOutThePlayer()
 	CheckKept(p, "at 19:05:34 the join took 12.5 ms, round trip 180 ms, 3 lost", "times, and how long things took, stay");
 	CheckKept(p, "build: running on Windows 10.0, build 26200", "Windows' version, written as the game writes it, stays");
 	CheckKept(p, "build: version 1.0.0, commit 0123456789abcdef0123456789abcdef01234567", "our own version of three numbers stays, and so does a commit");
+	CheckKept(p, "build: version betarelease20261107, commit 0123456789abcdef0123456789abcdef01234567", "and so does a beta's name");
 	CheckKept(p, "crash: code C0000005 at AvPx.exe+1A2B3C", "a crash line stays");
 	CheckKept(p, "parts 1.2.3.4.5 and 300.1.1.1 and 1.2.3", "numbers with dots that can't be an address stay");
 	CheckKept(p, "Jill joined as a marine; std::string and Class::Function", "a player's own name from the lobby stays, and so do names with :: in them");
@@ -585,6 +601,7 @@ static void TestTheGameUsesIt()
 	std::string const build = ReadSource("tools/build-and-package.ps1");
 	Check(ComesBefore(build, "Out-File -Encoding ascii '3dc\\build_version.h'", "& $msbuild win32\\VS2026\\AvP.sln"), "the build writes the version file before it builds the game");
 	Check(Has(build, "-cmatch '^[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}\\z'"), "and only a version of three numbers goes in it, so the log never takes it for an address");
+	Check(Has(build, "-or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'"), "or a beta's name, betarelease and eight digits, as the release lets through");
 
 	std::string const release = ReadSource(".github/workflows/release.yml");
 	Check(ComesBefore(release, "- name: Build the game and make its package", "VERSION: ${{ inputs.version }}") && ComesBefore(release, "VERSION: ${{ inputs.version }}\n        run: ./tools/build-and-package.ps1", "Refuse a package"), "the release gives the build its version");
