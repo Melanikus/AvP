@@ -287,6 +287,12 @@ static void Cells()
 	Check(grid.NearestCell(150, 0, 150, kNpcGridMarine, 400) == kNpcGridNoCell, "nor anywhere within 400 of it");
 	Check(grid.NearestCell(450, 0, 450, kNpcGridMarine, 10) != kNpcGridNoCell, "but at (450, 0, 450) he does");
 
+	// A point under the floor is behind it: the floor faces up, away from it, so it has no cell there, though one is 200 away. And a point
+	// 400 outside the room's wall is behind that wall's face. A body only ever clings to the side of a surface it's on.
+	Check(grid.NearestCell(1650, 200, 1650, kNpcGridAlien, 400) == kNpcGridNoCell, "a point 200 under the floor has no cell: the floor faces away from it");
+	Check(grid.NearestCell(-400, -1650, 1650, kNpcGridAlien, 500) == kNpcGridNoCell, "nor a point 400 outside the room, behind its wall");
+	Check(grid.NearestCell(1650, -200, 1650, kNpcGridAlien, 400) != kNpcGridNoCell, "while a point 200 above the floor has the floor's cell");
+
 	// Its links reach the walls beside it
 	size_t count = 0;
 	const uint32_t *links = grid.LinksOf(corner, &count);

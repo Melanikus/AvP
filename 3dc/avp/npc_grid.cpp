@@ -366,36 +366,38 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 	double bestFar = static_cast<double>(within);
 	double const point[3] = { x, y, z };
 
+	// How many cells either way the reach covers, at most kNpcGridMostLookRound: an alien's middle can be a metre off its surface, near the
+	// sheet's edge, or over a cell it doesn't fit on, so the cell under it isn't enough
+	int const round = std::min(kNpcGridMostLookRound, std::max(1, static_cast<int>(ceil(bestFar / kNpcGridCell))));
+
 	for (size_t number = 0; number < sheets.size(); number++)
 	{
 		Sheet const &s = sheets[number];
 
-		if (fabs(Dot(point, s.n) - s.d) > bestFar)
+		// Only a surface the point is in front of: a body clings to the side of a surface it's on, so a sheet that faces away from it, such
+		// as a floor seen from under it or the far face of a thin wall, is never its cell, however near
+		double const out = Dot(point, s.n) - s.d;
+
+		if (out < -kNpcGridSideSlack || out > bestFar)
 		{
 			continue;
 		}
 
-		uint32_t const over = CellOver(static_cast<int>(number), x, y, z);
+		// Where the point lies over the sheet's grid: it may be just past the grid's edge, so it's kept as a double until it's clipped
+		double const r[3] = { x - s.n[0] * s.d, y - s.n[1] * s.d, z - s.n[2] * s.d };
+		double const ci = floor(Dot(r, s.u) / kNpcGridCell) - s.i0, cj = floor(Dot(r, s.v) / kNpcGridCell) - s.j0;
 
-		if (over == kNpcGridNoCell)
+		if (ci < -round || cj < -round || ci >= s.w + round || cj >= s.h + round)
 		{
 			continue;
 		}
 
-		// The cell under the point and the ones round it: a point near an edge can be nearer the next cell's middle
-		int const i = static_cast<int>((over - s.first) % s.w), j = static_cast<int>((over - s.first) / s.w);
+		int const i = static_cast<int>(ci), j = static_cast<int>(cj);
 
-		for (int dj = -1; dj <= 1; dj++)
+		for (int J = std::max(0, j - round); J <= std::min(s.h - 1, j + round); J++)
 		{
-			for (int di = -1; di <= 1; di++)
+			for (int I = std::max(0, i - round); I <= std::min(s.w - 1, i + round); I++)
 			{
-				int const I = i + di, J = j + dj;
-
-				if (I < 0 || J < 0 || I >= s.w || J >= s.h)
-				{
-					continue;
-				}
-
 				uint32_t const c = s.first + static_cast<uint32_t>(J) * static_cast<uint32_t>(s.w) + static_cast<uint32_t>(I);
 				double m[3];
 
