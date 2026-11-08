@@ -1,6 +1,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the M79's three grenades have numbers of their own, and so does a thrown staff
 //   NameFromTheLevel and BehaviourIsAnNpcTheHostRuns
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   LevelNameIsAPlacedNpc (#130)
 #ifndef _stratdef_h_
 #define _stratdef_h_ 1
 
@@ -251,6 +253,9 @@ extern const char *NpcNameInTheLevel(const STRATEGYBLOCK *sbPtr);
 
 // Is this kind one that only the host runs in a network game, with everyone else seeing what the host tells them?
 extern bool BehaviourIsAnNpcTheHostRuns(AVP_BEHAVIOUR_TYPE type);
+
+// Is this a name the level gives one of its placed NPCs, made here or not? In object_setup.cpp, which keeps the level's list.
+extern bool LevelNameIsAPlacedNpc(const char *name);
 extern STRATEGYBLOCK * AttachNewStratBlock(struct module* moptr,
 											 struct modulemapblock* momptr,
 											 struct displayblock* dptr);

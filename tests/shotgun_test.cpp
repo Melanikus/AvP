@@ -2,12 +2,15 @@
 //
 // WHAT IT DOESN'T TEST: nothing here fires a shot in the game, or draws the gun. That takes a run with the model file in a test copy.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include "shotgun.h"
 
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
 #include <string>
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -180,12 +183,10 @@ static bool Has(const std::string &text, const char *what)
 	return text.find(what) != std::string::npos;
 }
 
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
-
-	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static void TestJoiningTheGame()

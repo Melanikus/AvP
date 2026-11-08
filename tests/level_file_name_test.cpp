@@ -10,6 +10,8 @@
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It needs no game files. /FC in this test's settings makes __FILE__ the whole path of this file, which is how the
 // source files are found.
 
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   its Between is the shared one in source_slice.h, so a marker that isn't there is a failed check of its own (SOURCE-SLICE-1, #128)
 #include <stdio.h>
 #include <string.h>
 
@@ -18,6 +20,7 @@
 #include <string>
 
 #include "level_file_name.h"
+#include "source_slice.h"
 
 static int checksFailed = 0;
 
@@ -197,19 +200,10 @@ static std::string ReadSourceFile(const char *name)
 	return text;
 }
 
-// The text from one marker up to the next one after it. Empty if either isn't there, so a check looking inside it fails instead of passing on nothing.
+// The text from one marker up to the next (source_slice.h). A marker that isn't there is a failed check of its own, named by the marker.
 static std::string Between(const std::string &text, const char *from, const char *to)
 {
-	std::string::size_type const start = text.find(from);
-
-	if (start == std::string::npos)
-	{
-		return "";
-	}
-
-	std::string::size_type const end = text.find(to, start);
-
-	return (end == std::string::npos) ? "" : text.substr(start, end - start);
+	return SourceSlice(text, from, to, kSliceEndFromTheStart, [](const std::string &why) { Check(false, why.c_str()); });
 }
 
 static bool ComesBefore(const std::string &text, const char *first, const char *second)
