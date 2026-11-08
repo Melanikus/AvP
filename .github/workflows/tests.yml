@@ -142,9 +142,10 @@ jobs:
   # each of those three cases: it gave no reason of its own, and it set up again on every run. relief_map_file_test is used because it needs
   # nothing from vcpkg.
   #
-  # Two more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). And the gate is
-  # seen to fail, because a check nobody has seen fail proves nothing: two broken tests are written here, one that reads past the end of a
-  # block and one that fails a check, and sanitize.ps1 must refuse each, with its reason, and show what each said.
+  # Three more. The script refuses a name that isn't one of the repository's tests before it empties any folder (AvP Tao 3). And the gate
+  # is seen to fail, because a check nobody has seen fail proves nothing: broken tests are written here, one that reads past the end of a
+  # block, the same compiled without the sanitizer, and one that fails a check, and sanitize.ps1 must refuse each, with its reason, and
+  # show what each said.
   sanitizer-refusals:
     name: The sanitizer script's own refusals
     timeout-minutes: 15
@@ -204,7 +205,40 @@ jobs:
           Check ($first -eq 0 -and $second -eq 0 -and $third -eq 0) "three runs from one window all pass (they gave back $first, $second and $third)"
           Check ($env:PATH -ceq $afterFirst) "and the path after the third is the one after the first, $($afterFirst.Length) characters, so the setup was done once"
 
-          # 4. A name that isn't a test's is refused before any folder is touched. Here ".." points at this runner's own temporary folder,
+          # The broken tests that 4 and 6 use are written into this job's own copy of the repository, and never committed. This one reads
+          # one byte past the end of a block it asked for. Without the sanitizer that goes unnoticed: the program carries on and gives
+          # back 0, so only the sanitizer can fail it.
+          $settings = '/std:c++17 /EHsc /MT /W3 /sdl /FC'
+          $readsPastTheEnd = @(
+            '// Written by tests.yml''s sanitizer-refusals job, and never committed: it reads one byte past the end of a 16-byte block, on purpose'
+            '#include <cstdio>'
+            '#include <cstdlib>'
+            'int main()'
+            '{'
+            '    volatile int past = 16;   // volatile, so the compiler can''t see that the read is past the end, and leave it out'
+            '    char *block = static_cast<char *>(std::malloc(16));'
+            '    if (!block) return 2;'
+            '    std::printf("read %d\n", block[past]);'
+            '    std::free(block);'
+            '    return 0;'
+            '}'
+          )
+
+          # 4. A test whose code was compiled without the sanitizer. Its program doesn't load the sanitizer's own library, so nothing
+          #    watches it run, and its read past the end would pass. sanitize.ps1 must refuse it, with its reason. Its code is compiled
+          #    here, by the compiler 3 set up in this window, while the window still has it: Run-WithPath puts the path back after its run.
+          #    Then sanitize.ps1 links it, as it does any test.
+          Set-Content -LiteralPath tests/canary_unwatched.cpp -Value $readsPastTheEnd
+          $eachSetting = $settings.Split(' ')
+          & cl.exe /nologo /c @eachSetting /Fo:tests/canary_unwatched.obj tests/canary_unwatched.cpp
+          if ($LASTEXITCODE -ne 0) { throw "The broken test for check 4 didn't compile (cl gave back $LASTEXITCODE)" }
+          Set-Content -LiteralPath tests/canary_unwatched_test.args -Value '/MT', 'tests/canary_unwatched.obj'
+          $result = Run-WithPath $original 'canary_unwatched_test'
+          $result.text
+          Check ($result.code -eq 1) "a test whose code was compiled without the sanitizer gives back 1 (it gave back $($result.code))"
+          Check ($result.text -cmatch "canary_unwatched_test wasn't built with the sanitizer: its program doesn't load clang_rt\.asan_dynamic-i386\.dll") 'and it says its program doesn''t load the sanitizer''s library'
+
+          # 5. A name that isn't a test's is refused before any folder is touched. Here ".." points at this runner's own temporary folder,
           #    the one the sanitizer's folders are made in, and the old script emptied whatever its name pointed at. So a file is left
           #    there first, and it has to still be there afterwards.
           $marker = Join-Path $env:RUNNER_TEMP 'sanitize-name-marker.txt'
@@ -219,27 +253,11 @@ jobs:
           Check ($result.code -eq 2) "with the name of a test that isn't there, it can't run, and gives back 2 (it gave back $($result.code))"
           Check ($result.text -cmatch "Could not run the sanitizer: there's no test called no_such_test: tests\\no_such_test\.args isn't there") 'and it says there''s no such test'
 
-          # 5. The gate has to be seen to fail. Two broken tests are written into this job's own copy of the repository, and never
-          #    committed. The first reads one byte past the end of a block it asked for: without the sanitizer that goes unnoticed, the
-          #    program carries on and gives back 0, so only the sanitizer can fail it. The second fails one of its own checks, as a test
-          #    does. sanitize.ps1 must give back 1 for each, say why, and show what each said. If either passed, every green part above would
-          #    mean nothing.
-          $settings = '/std:c++17 /EHsc /MT /W3 /sdl /FC'
+          # 6. The gate has to be seen to fail. The read past the end, above, is built the way every test is, and a second broken test
+          #    fails one of its own checks, as a test does. sanitize.ps1 must give back 1 for each, say why, and show what each said. If
+          #    either passed, every green part above would mean nothing.
           Set-Content -LiteralPath tests/canary_overflow_test.args -Value $settings, 'tests/canary_overflow_test.cpp'
-          Set-Content -LiteralPath tests/canary_overflow_test.cpp -Value @(
-            '// Written by tests.yml''s sanitizer-refusals job, and never committed: it reads one byte past the end of a 16-byte block, on purpose'
-            '#include <cstdio>'
-            '#include <cstdlib>'
-            'int main()'
-            '{'
-            '    volatile int past = 16;   // volatile, so the compiler can''t see that the read is past the end, and leave it out'
-            '    char *block = static_cast<char *>(std::malloc(16));'
-            '    if (!block) return 2;'
-            '    std::printf("read %d\n", block[past]);'
-            '    std::free(block);'
-            '    return 0;'
-            '}'
-          )
+          Set-Content -LiteralPath tests/canary_overflow_test.cpp -Value $readsPastTheEnd
           Set-Content -LiteralPath tests/canary_fails_test.args -Value $settings, 'tests/canary_fails_test.cpp'
           Set-Content -LiteralPath tests/canary_fails_test.cpp -Value @(
             '// Written by tests.yml''s sanitizer-refusals job, and never committed: it fails one of its checks, and reads nothing it shouldn''t'

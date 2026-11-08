@@ -13,6 +13,7 @@
 #   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
 #   the test's name is checked before its folder is emptied, and anything that isn't one of the repository's tests is refused (AvP Tao 3)
 #   a test that doesn't pass shows everything it and the sanitizer said, because in the automatic checks the folder that keeps it is gone once the check ends
+#   a test whose program doesn't load the sanitizer's own library is refused, because nothing watched it run
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -143,10 +144,14 @@ function Show-WhatWasSaid([string]$what, [string[]]$files)
     Write-Host "----- the end of $what"
 }
 
+# The address sanitizer's own library: the part that watches every read and write while a test runs. A program built with the sanitizer
+# loads it, and a program built without it doesn't.
+$sanitizerLibrary = 'clang_rt.asan_dynamic-i386.dll'
+
 # The address sanitizer's own library has to be beside the program, and it's on the path once Visual Studio is set up
 function Copy-SanitizerLibrary([string]$to)
 {
-    $library = @($env:PATH -split ';' | Where-Object { $_ } | ForEach-Object { Join-Path $_ 'clang_rt.asan_dynamic-i386.dll' } | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1
+    $library = @($env:PATH -split ';' | Where-Object { $_ } | ForEach-Object { Join-Path $_ $sanitizerLibrary } | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1
 
     if (-not $library) { throw "The address sanitizer's library wasn't found on the path" }
 
@@ -193,6 +198,15 @@ if ($built -ne 0) {
 $runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $repository (Join-Path $out 'imports.txt'))
 if ($runtime.Count -gt 0) {
     Write-Host "$Test, built for the sanitizer, asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)"
+    exit 1
+}
+
+# The test's program has to load the sanitizer's own library, or nothing was watching while it ran, and a pass would prove nothing. A
+# program whose code was compiled without the sanitizer doesn't load it. Nothing in the repository turns the sanitizer off today. This is
+# what makes sure it stays that way, test by test. The list of what the program loads is the one dumpbin wrote just above.
+$loads = @(Get-Content -LiteralPath (Join-Path $out 'imports.txt') | ForEach-Object { $_.Trim() })
+if ($loads -inotcontains $sanitizerLibrary) {
+    Write-Host "$Test wasn't built with the sanitizer: its program doesn't load $sanitizerLibrary, so a pass here would prove nothing"
     exit 1
 }
 
