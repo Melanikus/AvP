@@ -20,12 +20,16 @@
 #include <string.h>
 
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "alien_ways_guide.h"
 
+// One guide is about 280 KB: room for 64 aliens' ways of 256 points each. So every guide here is made with new, never as a function's own
+// local: those go on the stack, which is 1 MB, and one test function here has six. Several guides on the
+// stack overflowed it (the sanitizer job, 2026-11-08). The game keeps its one guide as a global (alien_ways.cpp), never on the stack.
 static int checksFailed = 0;
 
 static void Check(bool good, std::string const &what)
@@ -180,7 +184,8 @@ static AlienWaysGuide &GuidedAlien(AlienWaysGuide &guide, const AlienWaysWho &wh
 static void FirstWay()
 {
 	printf("An alien's first way\n");
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	AlienWaysMap notBuilt;
 	AlienWaysXYZ towards = { 7, 7, 7 };
 
@@ -220,7 +225,8 @@ static void Reaching()
 
 	// The wall's foot, (0, 0, 500), is where the way steps up onto the wall. Near it, an alien still on the floor hasn't made that step: it
 	// keeps heading for the foot, so it runs into the wall and climbs. Once it's on the wall (its down is -x), the step is made.
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	Check(guide.Steer(&map, Ask(Alien(1), Beside(300, -500, 500), kGoal, 13), &towards) && Same(towards, kOntoTheWall),
 		"near the foot of the wall but still on the floor, the step onto the wall isn't made: it heads for the foot");
@@ -229,7 +235,8 @@ static void Reaching()
 	Check(guide.Steer(&map, upTheWall, &towards) && Same(towards, kUpTheWall), "on the wall, 300 mm off it and 500 mm up, it is: the next point is 1.5 m up the wall");
 
 	// Coming off the wall needs nothing of the kind. Along the wall's foot, 650 mm from where the way comes off it isn't reached, and 550 mm is.
-	AlienWaysGuide across;
+	const std::unique_ptr<AlienWaysGuide> acrossRoom(new AlienWaysGuide);
+	AlienWaysGuide &across = *acrossRoom;
 	GuidedAlien(across, Alien(1));
 	AlienWaysAsk alongTheWall = Ask(Alien(1), Beside(0, 0, 8350), kGoal, 13);
 	alongTheWall.down = IntoTheWall();
@@ -239,7 +246,8 @@ static void Reaching()
 
 	// Up from the surface it's on, an alien may be as far as 1.5 m from a point on it. The goal is on the floor of tile 9: first the alien is
 	// put on the way's last stretch, near the goal.
-	AlienWaysGuide high;
+	const std::unique_ptr<AlienWaysGuide> highRoom(new AlienWaysGuide);
+	AlienWaysGuide &high = *highRoom;
 	GuidedAlien(high, Alien(1));
 	Check(high.Steer(&map, Ask(Alien(1), Beside(300, 0, 9150), kGoal, 13), &towards) && Same(towards, kGoal), "on the last stretch, it heads for the goal");
 	Check(high.Steer(&map, Ask(Alien(1), { 1000, -1600, 9500 }, kGoal, 13), &towards) && Same(towards, kGoal), "1.6 m above the goal isn't reaching it");
@@ -247,19 +255,22 @@ static void Reaching()
 
 	// An alien clinging to the left wall has the wall as its down (-x). 900 mm out from the wall is then its height off the surface, which is
 	// allowed, not 900 mm across it, which wouldn't be.
-	AlienWaysGuide onTheWall;
+	const std::unique_ptr<AlienWaysGuide> onTheWallRoom(new AlienWaysGuide);
+	AlienWaysGuide &onTheWall = *onTheWallRoom;
 	GuidedAlien(onTheWall, Alien(1));
 	AlienWaysAsk climbing = Ask(Alien(1), Beside(900, 0, 500), kGoal, 13);
 	climbing.down = IntoTheWall();
 	Check(onTheWall.Steer(&map, climbing, &towards) && Same(towards, kUpTheWall), "with the wall as its down, 900 mm out from the wall's foot is reaching it");
-	AlienWaysGuide onTheFloor;
+	const std::unique_ptr<AlienWaysGuide> onTheFloorRoom(new AlienWaysGuide);
+	AlienWaysGuide &onTheFloor = *onTheFloorRoom;
 	GuidedAlien(onTheFloor, Alien(1));
 	Check(onTheFloor.Steer(&map, Ask(Alien(1), Beside(900, 0, 500), kGoal, 13), &towards) && Same(towards, kOntoTheWall),
 		"with the floor as its down, the same spot is 900 mm across, and isn't");
 
 	// The last point reached means the way is used up, and it asks again
 	// Along the way, up the wall and back down: at the goal, it's used up
-	AlienWaysGuide end;
+	const std::unique_ptr<AlienWaysGuide> endRoom(new AlienWaysGuide);
+	AlienWaysGuide &end = *endRoom;
 	GuidedAlien(end, Alien(1));
 	AlienWaysAsk alongHigh = Ask(Alien(1), Beside(0, -1500, 600), kGoal, 13);
 	alongHigh.down = IntoTheWall();
@@ -279,7 +290,8 @@ static void TakenUpWhereItIs()
 
 	// The way was searched from the start, but by the time it comes the alien is halfway along the wall, at head height, clinging to it. It's
 	// more than 4.5 m from the way's first stretch, which would be "off the way", but on the stretch along the wall, so it takes the way up there.
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	AlienWaysAsk halfway = Ask(Alien(1), Beside(0, -1500, 5000), kGoal, 13);
 	halfway.down = IntoTheWall();
@@ -292,7 +304,8 @@ static void OffTheWay()
 	printf("Off the way\n");
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 
@@ -310,7 +323,8 @@ static void Stuck()
 	printf("No headway\n");
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 
 	// It stays where it is, 1 m from the wall's foot, frame after frame: 100 ms a frame. Being found stuck is a report of its own.
@@ -372,7 +386,8 @@ static void AskingAgain()
 	const AlienWaysReport *reports = nullptr;
 
 	// The goal moves 2,999 mm: nothing new. Then 3,001 mm: a new search, and it's followed on the old way till that comes.
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, { 1000, 0, 9500 - 2999 }, 13), &towards), "a goal that moves 2,999 mm keeps its way");
 	Frame(guide, map, 16);
@@ -384,7 +399,8 @@ static void AskingAgain()
 		"and gets a new search, to where the goal is now");
 
 	// A way 2 s old is searched again, while the alien makes headway along it
-	AlienWaysGuide old;
+	const std::unique_ptr<AlienWaysGuide> oldRoom(new AlienWaysGuide);
+	AlienWaysGuide &old = *oldRoom;
 	GuidedAlien(old, Alien(1));
 	size_t searches = 0;
 	int searchedAt = -1;
@@ -417,7 +433,8 @@ static void FailedRenewal()
 	const AlienWaysReport *reports = nullptr;
 
 	// The goal goes 40 m away, past any polygon. Its search can't start, but the alien keeps the way it has.
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	AlienWaysXYZ const nowhere = { 1000, 0, 50000 };
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, nowhere, 13), &towards), "the goal moves to where there's no polygon: the alien is still guided");
@@ -435,7 +452,8 @@ static void LetGo()
 	AlienWaysXYZ towards;
 	AlienWaysWho lapsed[kAlienWaysMostFollowers];
 
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 	guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Check(Frame(guide, map, 16, lapsed) == 0, "an alien steered this frame isn't let go");
@@ -445,20 +463,23 @@ static void LetGo()
 	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "asking again, it starts again from nothing");
 
 	// One that was never steered along a way isn't named: nothing turned its gravity off
-	AlienWaysGuide never;
+	const std::unique_ptr<AlienWaysGuide> neverRoom(new AlienWaysGuide);
+	AlienWaysGuide &never = *neverRoom;
 	never.Steer(&map, Ask(Alien(2), kStart, kGoal, 13), &towards);
 	Frame(never, map, 16, lapsed);
 	Check(Frame(never, map, 16, lapsed) == 0, "an alien that asked but was never guided isn't named when it's let go");
 
 	// Nor one whose last steer gave back no: the game's own code has set its gravity already
-	AlienWaysGuide stopped;
+	const std::unique_ptr<AlienWaysGuide> stoppedRoom(new AlienWaysGuide);
+	AlienWaysGuide &stopped = *stoppedRoom;
 	GuidedAlien(stopped, Alien(3));
 	stopped.Steer(&map, Ask(Alien(3), { 1000, -3000, -2500 }, kGoal, 13), &towards);
 	Frame(stopped, map, 16, lapsed);
 	Check(Frame(stopped, map, 16, lapsed) == 0, "nor one whose last steer said no");
 
 	// Clear forgets everything
-	AlienWaysGuide cleared;
+	const std::unique_ptr<AlienWaysGuide> clearedRoom(new AlienWaysGuide);
+	AlienWaysGuide &cleared = *clearedRoom;
 	GuidedAlien(cleared, Alien(4));
 	cleared.Steer(&map, Ask(Alien(4), kStart, kGoal, 13), &towards);
 	cleared.Clear();
@@ -473,7 +494,8 @@ static void WhoIsWho()
 	printf("Who is who\n");
 	AlienWaysMap &map = CorridorMap();
 	AlienWaysXYZ towards;
-	AlienWaysGuide guide;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
 	GuidedAlien(guide, Alien(1));
 
 	// A new alien kept where the old one was has another name, so it isn't given the old one's way
@@ -484,7 +506,8 @@ static void WhoIsWho()
 		"one kept in the same place with another name is someone else, with no way yet");
 
 	// Room for 64. The 65th is steered by the game's own code, and that's counted.
-	AlienWaysGuide full;
+	const std::unique_ptr<AlienWaysGuide> fullRoom(new AlienWaysGuide);
+	AlienWaysGuide &full = *fullRoom;
 
 	for (int n = 0; n < static_cast<int>(kAlienWaysMostFollowers); n++)
 	{
@@ -503,7 +526,8 @@ static void Allowance()
 	const AlienWaysReport *reports = nullptr;
 
 	// Two ask in one frame: with the usual allowance both are found in the next
-	AlienWaysGuide two;
+	const std::unique_ptr<AlienWaysGuide> twoRoom(new AlienWaysGuide);
+	AlienWaysGuide &two = *twoRoom;
 	two.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	two.Steer(&map, Ask(Alien(2), { 1000, 0, 1500 }, kGoal, 13), &towards);
 	Frame(two, map, 16);
@@ -511,7 +535,8 @@ static void Allowance()
 		"two aliens' searches both end in one frame, within its 500 polygons");
 
 	// With 1 polygon a frame, a search takes several frames, and ends with the same way as one done at once
-	AlienWaysGuide slow;
+	const std::unique_ptr<AlienWaysGuide> slowRoom(new AlienWaysGuide);
+	AlienWaysGuide &slow = *slowRoom;
 	slow.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	int frames = 0;
 	size_t ended = 0;
@@ -529,7 +554,8 @@ static void Allowance()
 	Check(ended == 1 && reports[0].points == 6 && Near(reports[0].wallMm, 11500.0, 0.5), "and ends with the same way as one done at once");
 
 	// A search for an alien that's let go part way is dropped, so another alien in its place never gets its way
-	AlienWaysGuide dropped;
+	const std::unique_ptr<AlienWaysGuide> droppedRoom(new AlienWaysGuide);
+	AlienWaysGuide &dropped = *droppedRoom;
 	dropped.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards);
 	Frame(dropped, map, 16, nullptr, 1);
 	Frame(dropped, map, 16, nullptr, 1);
@@ -556,7 +582,8 @@ static void NoBetterThanToday()
 	// A corridor with no walls: the only way is all floor, which the game's own code does as well, so it's left to it
 	AlienWaysMap floorOnly;
 	floorOnly.Build(Corridor(false));
-	AlienWaysGuide flat;
+	const std::unique_ptr<AlienWaysGuide> flatRoom(new AlienWaysGuide);
+	AlienWaysGuide &flat = *flatRoom;
 	flat.Steer(&floorOnly, Ask(Alien(1), kStart, kGoal, 10), &towards);
 	Frame(flat, floorOnly, 16);
 	Check(ReportsOf(flat, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeAllFloor && Near(reports[0].floorMm, 9000.0, 0.5),
@@ -571,7 +598,8 @@ static void NoBetterThanToday()
 	AlienWaysMap apart;
 	apart.Build({ Polygon({ { 0, 0, 0 }, { 1000, 0, 0 }, { 1000, 0, 1000 }, { 0, 0, 1000 } }, kUp),
 		Polygon({ { 6000, 0, 0 }, { 7000, 0, 0 }, { 7000, 0, 1000 }, { 6000, 0, 1000 } }, kUp) });
-	AlienWaysGuide islands;
+	const std::unique_ptr<AlienWaysGuide> islandsRoom(new AlienWaysGuide);
+	AlienWaysGuide &islands = *islandsRoom;
 	islands.Steer(&apart, Ask(Alien(1), { 500, 0, 500 }, { 6500, 0, 500 }, 2), &towards);
 	Frame(islands, apart, 16);
 	Check(ReportsOf(islands, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeNoWay, "between two places no way joins, the report says so");
@@ -588,13 +616,15 @@ static void StartsOnItsOwnKind()
 
 	// 300 mm out from the left wall and 200 mm above tile 5: the floor's box is the nearer, 200 mm against 300
 	AlienWaysXYZ const low = { 300, -200, 5500 };
-	AlienWaysGuide standing;
+	const std::unique_ptr<AlienWaysGuide> standingRoom(new AlienWaysGuide);
+	AlienWaysGuide &standing = *standingRoom;
 	standing.Steer(&map, Ask(Alien(1), low, kGoal, 13), &towards);
 	Frame(standing, map, 16);
 	Check(ReportsOf(standing, &reports) == 1 && reports[0].fromKind == kAlienWaysFloor && !reports[0].toTheTarget,
 		"an alien standing on the floor starts its search on the floor, and the report says the goal wasn't the target itself");
 
-	AlienWaysGuide clinging;
+	const std::unique_ptr<AlienWaysGuide> clingingRoom(new AlienWaysGuide);
+	AlienWaysGuide &clinging = *clingingRoom;
 	AlienWaysAsk onTheWall = Ask(Alien(1), low, kGoal, 13);
 	onTheWall.down = AlienWaysXYZ{ -65536, 0, 0 };
 	clinging.Steer(&map, onTheWall, &towards);
@@ -602,14 +632,16 @@ static void StartsOnItsOwnKind()
 	Check(ReportsOf(clinging, &reports) == 1 && reports[0].fromKind == kAlienWaysWall, "one clinging low on the wall starts on the wall, though the floor is nearer");
 
 	// Upside down on the floor, with no ceiling within 2 m: it starts on the nearest polygon of any kind
-	AlienWaysGuide nothingNear;
+	const std::unique_ptr<AlienWaysGuide> nothingNearRoom(new AlienWaysGuide);
+	AlienWaysGuide &nothingNear = *nothingNearRoom;
 	AlienWaysAsk upsideDown = Ask(Alien(1), { 1000, 0, 5500 }, kGoal, 13);
 	upsideDown.down = AlienWaysXYZ{ 0, -65536, 0 };
 	nothingNear.Steer(&map, upsideDown, &towards);
 	Frame(nothingNear, map, 16);
 	Check(ReportsOf(nothingNear, &reports) == 1 && reports[0].fromKind == kAlienWaysFloor, "with none of its own kind within 2 m, it starts on the nearest of any kind");
 
-	AlienWaysGuide toTheTarget;
+	const std::unique_ptr<AlienWaysGuide> toTheTargetRoom(new AlienWaysGuide);
+	AlienWaysGuide &toTheTarget = *toTheTargetRoom;
 	AlienWaysAsk toIt = Ask(Alien(1), kStart, kGoal, 13);
 	toIt.goalIsTheTarget = true;
 	toTheTarget.Steer(&map, toIt, &towards);
