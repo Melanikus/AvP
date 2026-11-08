@@ -1,5 +1,6 @@
 // Which build of the game is running, for the top of the log. Written 2026-11-07 by Melanikus for the AvP port. build_identity.h says why.
 #include "build_identity.h"
+#include "beta_build.h"
 #include "md5.h"
 
 #include <windows.h>
@@ -130,4 +131,9 @@ std::string BuildIdentity_Windows()
 std::string BuildIdentity_Lines()
 {
 	return std::string("build: version ") + AVP_RELEASE_VERSION + ", commit " + AVP_RELEASE_COMMIT + "\n" + Fingerprint() + "\n" + BuildIdentity_Windows();
+}
+
+bool BuildIdentity_IsABeta()
+{
+	return BetaBuild_VersionIsABeta(AVP_RELEASE_VERSION);
 }

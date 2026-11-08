@@ -1,4 +1,6 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the debug and cheat commands are there in a beta, for testers, and using them doesn't count as cheating (see beta_build.h)
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the LIGHTING and SHADOWS commands
 // Modified 2026-11-06 by Melanikus for the AvP port:
@@ -13,6 +15,7 @@
 //   only a host can restart a network game
 #include "3dc.h"
 #include "console_command.hpp"
+#include "build_identity.h"
 #include "strutil.h"
 #include "fmvCutscenes.h"
 #include "view_switches.h"
@@ -392,9 +395,11 @@ void CreateGameSpecificConsoleCommands(void)
 	bool IsACheat = false;
 	#endif
 	
+	// In a beta these are there for testers, without DebuggingCommandsActive, which would also stop saving, statistics and the next
+	// level's unlock: see beta_build.h. The 11 commands.
 	#ifndef AVP_DEBUG_VERSION // allow debug commands without -debug
 	#ifndef AVP_DEBUG_FOR_FOX // allow debug commands without -debug
-	if (DebuggingCommandsActive)
+	if (DebuggingCommandsActive || BuildIdentity_IsABeta())
 	#endif
 	#endif
 	{

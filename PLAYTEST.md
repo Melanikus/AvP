@@ -93,15 +93,18 @@ pieces. If a game stalls only over a VPN, try without it.
   that moment as `mark-1.png` beside the log, and adds a line to the log: the time, the level, where you were and which way you
   faced, your species, health and weapon, and in a network game each connection's round trip. No names or addresses. It marks
   at most once a second, and keeps the newest 20 pictures. Tell us the mark's number when you describe what you saw.
-  If you've given F2 to one of your controls, F2 does that instead and marks nothing. [PENDING: the mark key is in train 3.]
+  If you've given F2 to one of your controls, F2 does that instead and marks nothing.
 - **The M5 guns:**
-  - **In single player or the co-op campaign, as a marine:** open the console (the key under Esc, left of 1) and type
-    `GIVEALLWEAPONS`, in capitals. It gives every marine gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest.
-    It's the only way to get the sniper rifle for now: no level places one yet. [PENDING: the console's debug commands are
-    being turned on for beta builds. Until that's in, this needs `-debug` in the game's Steam launch options, and this line
-    is rewritten to match what ships.]
-  - **In other multiplayer games:** a marine picks the shotgun, revolver or M79 class. There's no sniper rifle there.
+  - **As a marine:** open the console (the key under Esc, left of 1) and type `GIVEALLWEAPONS`, in capitals. It gives every marine
+    gun: the shotgun, the sniper rifle, the revolver, the M79 and the rest. In single player and the co-op campaign it's the only
+    way to get the sniper rifle for now, since no level places one yet. Other multiplayer games leave the sniper rifle out.
+  - **In other multiplayer games,** a marine can also pick the shotgun, revolver or M79 class.
   - **The Predator's staff:** the host turns **Allow Staff** on, in a multiplayer game that isn't co-op.
+- **The console's test commands are on in this beta,** typed in capitals, and using them doesn't stop you saving, unlocking levels
+  or finishing a campaign. Among them: `GIVEALLWEAPONS`, `GOD` (can't be killed), `GIMME_CHARGE` (a Predator's field charge),
+  `SHOWFPS`, `SHOWPOLYCOUNT`, `LIGHT`, `WIREFRAMEMODE 0` to `3` and `MOTIONTRACKERSPEED`. `MARINEBOT`, `PREDOBOT`, `XENOBORG`,
+  `ALIENBOT`, `PREDALIENBOT` and `PRAETORIANBOT` make an enemy in front of you in single player. A network game refuses all six,
+  and `TIMESCALE`, because each would change everyone's game.
 - **Send the log folder** when you're done, as below.
 
 ## 5. Logs: please send them
@@ -110,7 +113,8 @@ They're in `Documents\My Games\Aliens versus Predator`.
 - **`avp_log.txt` is this run.** `avp_log.1.txt` to `avp_log.5.txt` are the five runs before it, newest first.
 - **After a crash,** start the game again, then send `avp_log.1.txt`: that's the run that crashed. Two kinds of crash end the game
   before it can write anything, so a log with no crash line can still be a crash. Tell us what happened when you send it.
-- **A map that won't load** also writes `<map name>_errorlog.txt` beside the map. [PENDING: once LEVELLOG-1 is in.]
+- **A map that won't load,** or one that loads with something left out, also writes `<map name>_errorlog.txt` beside the map. If
+  the game can't write in that folder, the file goes in `Documents\My Games\Aliens versus Predator` instead, and the log says where.
 - **What to send:** the log, what you did, and for a co-op problem the logs from every machine. If a joiner is dropped while a
   level loads, the line to look for is "the longest gap between answers".
 
