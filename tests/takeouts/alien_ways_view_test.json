@@ -124,6 +124,46 @@
 					"to": "default:\n\t\treturn kAlienWaysViewCeiling;"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: the ways are drawn in a network game",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)",
+					"to": "if (!AlienWaysSwitchedOn)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the ways are never drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "if (toyFinalFlush && AlienWaysSwitchedOn)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the point each alien is heading for is never marked",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "shown[i].count, shown[i].heading, &ends);",
+					"to": "shown[i].count, -1, &ends);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a network game doesn't say the ways aren't drawn",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "LogString(\"alien ways view: this is a network game, so the aliens' ways aren't drawn\");",
+					"to": "/* nothing in the log */"
+				}
+			]
 		}
 	]
 }

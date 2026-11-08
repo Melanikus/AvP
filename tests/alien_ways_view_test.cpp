@@ -14,6 +14,8 @@
 #include "alien_ways_view.h"
 
 #include <climits>
+#include <fstream>
+#include <sstream>
 #include <stdio.h>
 #include <string>
 #include <vector>
@@ -24,6 +26,48 @@ static void Check(bool good, const std::string &what)
 {
 	printf("%s  %s\n", good ? "ok    " : "FAILED", what.c_str());
 	checksFailed += good ? 0 : 1;
+}
+
+static std::string ReadSourceFile(char const *name)
+{
+	// /FC in this test's settings makes __FILE__ the whole path of this file, so everything else can be found from it
+	std::string path = __FILE__;
+	std::string::size_type const tests = path.rfind("tests");
+
+	if (tests == std::string::npos)
+	{
+		return "";
+	}
+
+	std::ifstream file((path.substr(0, tests) + name).c_str(), std::ios::binary);
+	std::stringstream all;
+	all << file.rdbuf();
+
+	// Files here may have Windows' line ends, and what's looked for is written with plain ones
+	std::string text = all.str(), plain;
+
+	for (char const c : text)
+	{
+		if (c != '\r')
+		{
+			plain += c;
+		}
+	}
+
+	return plain;
+}
+
+static bool Has(const std::string &text, const char *what)
+{
+	return text.find(what) != std::string::npos;
+}
+
+static std::string Between(const std::string &text, const char *from, const char *to)
+{
+	std::string::size_type const start = text.find(from);
+	std::string::size_type const end = start == std::string::npos ? start : text.find(to, start);
+
+	return (start == std::string::npos || end == std::string::npos) ? std::string() : text.substr(start, end - start);
 }
 
 static const float kSame[12] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0 };   // a camera at the level's 0, looking down the level's z
@@ -138,6 +182,30 @@ static void TestTheLimits()
 	Check(AlienWaysView_AddWay(kSame, kWay, 3, 2, &ends) == 0, "and with no room for a whole line, nothing more is added");
 }
 
+// The game's own files, read as text: the view is drawn where and when it should be, and never in a network game
+static void TestJoiningTheGame()
+{
+	std::string const render = ReadSourceFile("3dc/d3d_render.cpp");
+	std::string const ways = ReadSourceFile("3dc/avp/alien_ways.h");
+
+	Check(!render.empty() && !ways.empty(), "the game's files are there to read");
+
+	std::string const draw = Between(render, "static void DrawAlienWays()\n{", "\n}\n");
+	Check(Has(draw, "if (!AlienWaysSwitchedOn || AvP.Network != I_No_Network)\n\t{\n\t\treturn;"), "the view is only drawn with the developer switch that makes the ways, and never in a network game");
+	Check(Has(draw, "size_t const count = AlienWays_WaysToShow(shown, kMostShown);"), "it draws the ways the alien ways code gives it, on the game's thread");
+	Check(Has(draw, "AlienWaysView_AddWay(ViewMatrix, shown[i].points, shown[i].count, shown[i].heading, &ends);"), "through this frame's view, with the point each alien is heading for");
+	Check(Has(draw, "device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);") && Has(draw, "device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);"), "tested against the level's depth, so a wall hides a way behind it, and leaving the depth as it was");
+	Check(Has(draw, "asItWas->Apply();") && Has(draw, "D3DPT_LINELIST"), "drawn as lines, with the card put back as it was");
+
+	Check(Has(render, "if (toyFinalFlush && AlienWaysSwitchedOn)\n\t{\n\t\tDrawAlienWays();"), "in the frame's last drawing, when the whole level is in the depth buffer");
+
+	std::string const network = Between(render, "static void KeepDeveloperToolsOutOfNetworkGames()\n{", "\n}\n");
+	Check(Has(network, "LogString(\"alien ways view: this is a network game, so the aliens' ways aren't drawn\");"), "a network game says once in the log that the ways aren't drawn");
+
+	Check(Has(ways, "struct AlienWaysShown\n{\n\tconst AlienWaysPoint *points;\n\tint count;\n\tint heading;\n};") && Has(ways, "size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);"), "the alien ways code gives the ways in the shape the view reads");
+	Check(Has(ReadSourceFile("win32/VS2026/AvP.vcxproj"), "3dc\\avp\\alien_ways_view.cpp"), "and the game builds the view");
+}
+
 int main()
 {
 	puts("1. the lines");
@@ -146,6 +214,8 @@ int main()
 	TestTheView();
 	puts("3. the limits");
 	TestTheLimits();
+	puts("4. joining the game");
+	TestJoiningTheGame();
 
 	printf("%s\n", checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 
