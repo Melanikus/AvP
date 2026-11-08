@@ -56,6 +56,9 @@
 //   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 //   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
 //   (net_stats.h)
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a host's log says when it starts answering searches, or that it can't, when the first search question comes, and every minute how
+//   many came and were answered, never from which address (net_search_log.h)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -70,6 +73,7 @@
 #include "net_host.h"
 #include "net_close.h"
 #include "net_stats.h"
+#include "net_search_log.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -387,6 +391,10 @@ static bool OpenDiscoverySocket()
 	return true;
 }
 
+// The host's count of the search questions it hears, for the log: see net_search_log.h. Only a host opens it.
+static NetSearchLog searchLog = {};
+static_assert(kNetSearchPort == broadcastPort, "net_search_log.h's lines name the port a search asks on");
+
 static void CloseDiscoverySocket()
 {
 	if (ENET_SOCKET_NULL != broadcastSocket)
@@ -649,7 +657,17 @@ NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_
 			}
 
 			// Others find the game through this. Without it, the game goes on, and anyone who has its address can still join.
-			OpenDiscoverySocket();
+			// The log says which, and from then on what the search port hears (net_search_log.h).
+			if (OpenDiscoverySocket())
+			{
+				char line[160];
+				NetSearchLog_Opened(&searchLog, enet_time_get(), line, sizeof(line));
+				LogString(line);
+			}
+			else
+			{
+				LogString("net: this game can't answer searches: UDP port " + std::to_string(broadcastPort) + " couldn't be opened, so a search won't find it");
+			}
 
 			// create session
 			char *levelName = GetCustomMultiplayerLevelName(level, gameStyle);
@@ -729,6 +747,17 @@ void Net_Disconnect()
 	ServerPeer = NULL;
 
 	sessionCheckTimer = 0;
+
+	// A host's search counts for the whole game, before the port closes (net_search_log.h)
+	{
+		char line[320];
+
+		if (NetSearchLog_Closed(&searchLog, enet_time_get(), line, sizeof(line)))
+		{
+			LogString(line);
+		}
+	}
+
 	CloseDiscoverySocket();
 
 	// The game has closed, and the list was only for this game
@@ -801,6 +830,16 @@ static void Net_CheckForSessionRequest()
 		return;
 	}
 
+	// Every minute, how many questions came and how many were answered (net_search_log.h)
+	{
+		char line[320];
+
+		if (NetSearchLog_Minute(&searchLog, enet_time_get(), line, sizeof(line)))
+		{
+			LogString(line);
+		}
+	}
+
 	enet_uint32 events = ENET_SOCKET_WAIT_RECEIVE;
 
 	while (enet_socket_wait(broadcastSocket, &events, 0) >= 0 && events)
@@ -817,6 +856,7 @@ static void Net_CheckForSessionRequest()
 		}
 		if (len > 0) {
 			Con_PrintDebugMessage("Got a packet of some sort..");
+			NetSearchLog_Packet(&searchLog);
 		}
 		// Only a question as big as its answer: see kSearchQuestionBytes. An older game's question, a header alone, gets nothing.
 		if (len == (int)kSearchQuestionBytes)
@@ -833,35 +873,53 @@ static void Net_CheckForSessionRequest()
 				continue;
 			}
 
-			if (NETSYS_REQUEST_SESSION_INFO == header.messageType && NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond))
+			if (NETSYS_REQUEST_SESSION_INFO != header.messageType)
 			{
-				MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
-
-				header.marker = kMarker;
-				header.isSystemMessage = true;
-				header.messageType = NETSYS_SESSION_INFO;
-				ws.PutBytes(&header, sizeof(header));
-				ws.PutBytes(&netSession, sizeof(SessionDescription));
-
-				buf.dataLength = ws.GetBytesWritten();
-				buf.data = packetBuffer;
-
-					int ret = enet_socket_send(broadcastSocket, &addr, &buf, 1);
-					if (0 == ret) {
-						// blocking - wait 1 second then try again (for a maximum of 5 seconds)
-//						Sleep(1000);
-						return;
-					}
-					else if (0 > ret) {
-						Con_PrintError("Couldn't send session details");
-						return;
-					}
-					else {
-						Con_PrintDebugMessage("Sent session details");
-						return;
-					}
-//				}
+				continue;
 			}
+
+			// A question for this game's description. What happens to it is counted for the log, never with its address: the first one
+			// gets a line of its own (net_search_log.h).
+			char line[200];
+
+			if (!(NetAddressHasRoom(sessionAskers, sizeof(sessionAskers) / sizeof(sessionAskers[0]), addr.host, enet_time_get(), kMostSessionAnswersToOneAddressEachSecond) && NetThisSecondHasRoom(enet_time_get(), &secondStarted, &answersThisSecond, kMostSessionAnswersEachSecond)))
+			{
+				if (NetSearchLog_Question(&searchLog, kNetSearchTooMany, enet_time_get(), line, sizeof(line)))
+				{
+					LogString(line);
+				}
+
+				continue;
+			}
+
+			MemoryWriteStream ws(packetBuffer, kPacketBufferSize);
+
+			header.marker = kMarker;
+			header.isSystemMessage = true;
+			header.messageType = NETSYS_SESSION_INFO;
+			ws.PutBytes(&header, sizeof(header));
+			ws.PutBytes(&netSession, sizeof(SessionDescription));
+
+			buf.dataLength = ws.GetBytesWritten();
+			buf.data = packetBuffer;
+
+			// 0 means the network can't take it now, and below 0 that it failed: either way the asker gets no answer this time, and the
+			// rest wait for the next frame, as before
+			int const ret = enet_socket_send(broadcastSocket, &addr, &buf, 1);
+
+			if (NetSearchLog_Question(&searchLog, ret > 0 ? kNetSearchAnswered : kNetSearchNotSent, enet_time_get(), line, sizeof(line)))
+			{
+				LogString(line);
+			}
+
+			if (0 > ret) {
+				Con_PrintError("Couldn't send session details");
+			}
+			else if (ret > 0) {
+				Con_PrintDebugMessage("Sent session details");
+			}
+
+			return;
 		}
 	}
 }

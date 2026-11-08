@@ -1,0 +1,218 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "the opening line doesn't name the port",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "answers searches on UDP port %u from now\", kNetSearchPort);",
+					"to": "answers searches from now\");"
+				}
+			]
+		},
+		{
+			"name": "a packet is counted before the game answers searches",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "inline void NetSearchLog_Packet(NetSearchLog *log)\n{\n\tif (!log->open)\n\t{\n\t\treturn;\n\t}\n",
+					"to": "inline void NetSearchLog_Packet(NetSearchLog *log)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "a question is counted and written before the game answers searches",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\tif (!log->open)\n\t{\n\t\treturn false;\n\t}\n\n\tNetSearchCounts *const both",
+					"to": "\tNetSearchCounts *const both"
+				}
+			]
+		},
+		{
+			"name": "every question gets a line of its own",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\tlog->firstQuestionSaid = true;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a question turned away for asking too often is counted as not sent",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "outcome == kNetSearchTooMany ? &counts->tooMany : &counts->notSent",
+					"to": "outcome == kNetSearchTooMany ? &counts->notSent : &counts->tooMany"
+				}
+			]
+		},
+		{
+			"name": "the minute line waits a moment past the minute",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "now - log->lastLineAt < kNetSearchEveryMilliseconds)",
+					"to": "now - log->lastLineAt <= kNetSearchEveryMilliseconds)"
+				}
+			]
+		},
+		{
+			"name": "the minute's counts don't start again",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\tlog->lastLineAt = now;\n\tNetSearchLog_Zero(&log->sinceLastLine);\n",
+					"to": "\tlog->lastLineAt = now;\n"
+				}
+			]
+		},
+		{
+			"name": "the closing line can come twice",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\tlog->open = false;\n\treturn true;",
+					"to": "\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "a count goes round to 0",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\tif (*count != ~0ull)\n\t{\n\t\t(*count)++;\n\t}",
+					"to": "\t(*count)++;"
+				}
+			]
+		},
+		{
+			"name": "seconds are written without their tenths",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "came %.1f s after",
+					"to": "came %.0f s after"
+				}
+			]
+		},
+		{
+			"name": "the network's clock going round stops the minute line",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "if (!log->open || now - log->lastLineAt < kNetSearchEveryMilliseconds)",
+					"to": "if (!log->open || now < log->lastLineAt || now - log->lastLineAt < kNetSearchEveryMilliseconds)"
+				}
+			]
+		},
+		{
+			"name": "the longest line doesn't fit its buffer",
+			"changes": [
+				{
+					"file": "3dc/net_search_log.h",
+					"from": "\"%s: %llu packets on the search port, %llu of them questions;",
+					"to": "\"%s: %llu packets that came to the search port of this machine, from anywhere at all, counted one by one since the line before this one, %llu of them questions;"
+				}
+			]
+		},
+		{
+			"name": "a host counts even when its search port didn't open",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tif (OpenDiscoverySocket())\n\t\t\t{\n\t\t\t\tchar line[160];",
+					"to": "\t\t\tOpenDiscoverySocket();\n\t\t\tif (true)\n\t\t\t{\n\t\t\t\tchar line[160];"
+				}
+			]
+		},
+		{
+			"name": "a host that can't open its search port doesn't say so",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": " couldn't be opened, so a search won't find it\");",
+					"to": " couldn't be opened\");"
+				}
+			]
+		},
+		{
+			"name": "a packet on the port isn't counted",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\tNetSearchLog_Packet(&searchLog);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a question turned away is counted as answered",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetSearchLog_Question(&searchLog, kNetSearchTooMany, enet_time_get(), line, sizeof(line))",
+					"to": "NetSearchLog_Question(&searchLog, kNetSearchAnswered, enet_time_get(), line, sizeof(line))"
+				}
+			]
+		},
+		{
+			"name": "a question is counted as answered even when its answer wasn't sent",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "ret > 0 ? kNetSearchAnswered : kNetSearchNotSent",
+					"to": "kNetSearchAnswered"
+				}
+			]
+		},
+		{
+			"name": "the count is given the asker's address",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "NetSearchLog_Question(&searchLog, ret > 0 ? kNetSearchAnswered : kNetSearchNotSent, enet_time_get(), line, sizeof(line))",
+					"to": "NetSearchLog_Question(&searchLog, ret > 0 ? kNetSearchAnswered : kNetSearchNotSent, addr.host, line, sizeof(line))"
+				}
+			]
+		},
+		{
+			"name": "the minute line is never asked for",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "if (NetSearchLog_Minute(&searchLog, enet_time_get(), line, sizeof(line)))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the search port closes before the closing line",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t// A host's search counts for the whole game, before the port closes (net_search_log.h)\n",
+					"to": "\tCloseDiscoverySocket();\n\n\t// A host's search counts for the whole game, before the port closes (net_search_log.h)\n"
+				}
+			]
+		},
+		{
+			"name": "networking.cpp doesn't check the header names the same port",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "static_assert(kNetSearchPort == broadcastPort, \"net_search_log.h's lines name the port a search asks on\");\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
