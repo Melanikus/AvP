@@ -1,5 +1,7 @@
 // See alien_ways.h. Written 2026-11-08 by Melanikus for the AvP port.
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   with -alienwaysgrid, the build makes the grid (npc_grid.h) after the map, the guide searches it, and the log says how both went (#109, #145)
+// Modified 2026-11-08 by Melanikus for the AvP port:
 //   an alien found stuck has its state, its last frames' states, its speed, gravity and body's down, its obstruction count, its module and
 //   the game's own goal for it in the log, and an alien let go has its state (alien_ways_stuck.h). One function finds a live alien by who it is.
 // Modified 2026-11-08 by Melanikus for the AvP port:
@@ -27,6 +29,7 @@
 #include "alien_ways_guide.h"
 #include "alien_ways_level.h"
 #include "alien_ways_stuck.h"
+#include "npc_grid.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -40,6 +43,7 @@
 extern int NormalFrameTime;
 
 int AlienWaysSwitchedOn = 0;
+int AlienWaysGridSwitchedOn = 0;
 int AlienWaysAimAheadMm = kAlienWaysAimAheadMm;
 int AlienWaysWatchPlace = -1;
 
@@ -310,6 +314,10 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 	const char *const startedOn = line.fromKind == kAlienWaysFloor ? " on the floor" : (line.fromKind == kAlienWaysWall ? " on a wall" : (line.fromKind == kAlienWaysCeiling ? " on the ceiling" : ""));
 	std::string const where = "from " + Metres(line.from) + startedOn + " to " + Metres(line.to) + (line.toTheTarget ? " (its target)" : " (on the way to its target)");
 
+	// A search on the grid looks at cells, and one on the map at polygons. The line is otherwise word for word the same, so Third's reader
+	// reads both.
+	const char *const looked = line.onGrid ? "cells" : "polygons";
+
 	// What the game says about an alien found stuck, after the line's first part (alien_ways_stuck.h)
 	std::string details;
 
@@ -318,14 +326,20 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 		case kAlienWaysOutcomeFound:
 		case kAlienWaysOutcomeAllFloor:
 			snprintf(text, sizeof(text), "alien ways: alien %u %s: %s%d points, %.1f m of floor, %.1f m of wall, %.1f m of ceiling%s. "
-				"Searched in %d frame%s, %.2f ms, %d polygons looked at, %lld ms after it asked",
+				"Searched in %d frame%s, %.2f ms, %d %s looked at, %lld ms after it asked",
 				static_cast<unsigned>(line.follower), where.c_str(),
 				line.outcome == kAlienWaysOutcomeAllFloor ? "a way all on the floor, so the game steers it as always: " : "a way of ",
 				line.points, line.floorMm / 1000.0, line.wallMm / 1000.0, line.ceilingMm / 1000.0, line.cutShort ? ", cut short there" : "",
-				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, line.waitedMs);
+				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, looked, line.waitedMs);
 
 			// What it cost, whether it's a flanker's, and which way it comes into the goal from, so a film can tell a flanker from the rest
-			details += (line.flanker ? ". A flanker's way" : ". A direct way") + std::string(", costing ") + std::to_string(static_cast<long long>(line.cost));
+			// The grid gives no cost yet (-1), so a way found on it has none in its line
+			details += line.flanker ? ". A flanker's way" : ". A direct way";
+
+			if (line.cost >= 0)
+			{
+				details += ", costing " + std::to_string(static_cast<long long>(line.cost));
+			}
 
 			if (line.arrivalDegrees >= 0)
 			{
@@ -335,8 +349,10 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 			break;
 
 		case kAlienWaysOutcomeNoWay:
-			snprintf(text, sizeof(text), "alien ways: alien %u %s: no way joins up. Searched in %d frame%s, %.2f ms, %d polygons looked at",
-				static_cast<unsigned>(line.follower), where.c_str(), line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks);
+			// A grid search that looked at as many cells as it may and stopped says so, so a film can tell it from a way that isn't there
+			snprintf(text, sizeof(text), "alien ways: alien %u %s: no way joins up%s. Searched in %d frame%s, %.2f ms, %d %s looked at",
+				static_cast<unsigned>(line.follower), where.c_str(), line.tooFar ? ": the search stopped without reaching the goal" : "",
+				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, looked);
 			break;
 
 		case kAlienWaysOutcomeNoPolygon:
@@ -368,7 +384,7 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 
 	if ((line.outcome == kAlienWaysOutcomeFound || line.outcome == kAlienWaysOutcomeAllFloor) && line.polygonCount > 0)
 	{
-		polygons = ". Polygons:";
+		polygons = line.onGrid ? ". Cells:" : ". Polygons:";
 
 		for (int p = 0; p < line.polygonCount && p < static_cast<int>(kAlienWaysMostWayPoints); p++)
 		{
@@ -410,8 +426,12 @@ void AlienWays_LevelStart()
 		return;
 	}
 
-	theBuild.Start(std::move(polygons));
+	// With -alienwaysgrid the build makes the grid right after the map, on the same thread. The map is the fallback if the grid is refused.
+	theBuild.Start(std::move(polygons), AlienWaysGridSwitchedOn != 0);
 	told = false;
+
+	LogString(AlienWaysGridSwitchedOn ? "alien ways: this level's aliens search the grid, with the polygon map as the fallback"
+		: "alien ways: this level's aliens search the polygon map");
 }
 
 // Once the build has finished, the log hears how it went, once
@@ -443,6 +463,27 @@ static void TellHowTheBuildWent()
 	{
 		const char *const why = theBuild.Why();
 		LogErrorString("alien ways: no map, after " + std::to_string(theBuild.Milliseconds()) + " ms " + where + ": " + (why ? why : "no reason given"));
+	}
+
+	// The grid, when -alienwaysgrid asked for it: ready, with its size, or why not, and what the aliens search instead
+	if (theBuild.GridWanted())
+	{
+		NpcGrid *const grid = theBuild.Grid();
+
+		if (grid)
+		{
+			char size[64];
+			snprintf(size, sizeof(size), "%.1f MB kept", static_cast<double>(grid->BytesKept()) / (1024.0 * 1024.0));
+			LogString("alien ways: the grid is ready after " + std::to_string(theBuild.GridMilliseconds()) + " ms, after the map: "
+				+ std::to_string(static_cast<long long>(grid->Sheets())) + " sheets, " + std::to_string(static_cast<long long>(grid->SurfaceCells())) + " cells on the surface, "
+				+ std::to_string(static_cast<long long>(grid->Links())) + " links, " + size);
+		}
+		else
+		{
+			const char *const why = theBuild.GridWhy();
+			LogErrorString("alien ways: no grid, after " + std::to_string(theBuild.GridMilliseconds()) + " ms: " + (why ? why : "no reason given")
+				+ (state == kAlienWaysReady ? ". Aliens search the polygon map." : ". There's no map either, so aliens move as they always have."));
+		}
 	}
 }
 
@@ -487,6 +528,8 @@ void AlienWays_Frame()
 	// Every alien that stopped being guided since the last frame gets its usual gravity back, before any alien moves this frame. The log says
 	// what state it left for, up to kAlienWaysMostLetGoLines times a level.
 	AlienWaysWho lapsed[kAlienWaysMostFollowers];
+	// The grid, once it's ready and was asked for; nothing means the map (-alienwaysgrid)
+	theGuide.UseGrid(theBuild.Grid());
 	size_t const lapsedCount = theGuide.Frame(ReadyMap(), stepMs, kAlienWaysLooksPerFrame, lapsed, kAlienWaysMostFollowers);
 
 	size_t letGoCount = lapsedCount;
