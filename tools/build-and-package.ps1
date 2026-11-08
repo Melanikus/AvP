@@ -67,7 +67,7 @@ Set-Content -Encoding Ascii -Path '3dc\build_commit.h' -Value "#define AVP_BUILD
 # --- The libraries, with vcpkg run here and not from inside the build. MSBuild reads everything vcpkg prints, and fails the build if a line
 # looks like an error, even when vcpkg recovers. On the first run on a runner, one download mirror failed, vcpkg got the file from another and
 # finished with success, and the build still stopped. vcpkg's own answer is the one that counts.
-& (Join-Path $vcpkgRoot 'vcpkg.exe') install --triplet x86-windows --x-install-root="$(Join-Path $repository 'vcpkg_installed')" --x-wait-for-lock --disable-metrics
+& (Join-Path $vcpkgRoot 'vcpkg.exe') install --triplet x86-windows-static --x-install-root="$(Join-Path $repository 'vcpkg_installed')" --x-wait-for-lock --disable-metrics
 if ($LASTEXITCODE -ne 0) { throw 'The libraries did not build' }
 
 # --- The game. The libraries are already there, in the folder the project looks in, so the project doesn't need to install them again.
