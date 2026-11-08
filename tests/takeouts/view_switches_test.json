@@ -31,8 +31,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "return devSwitch(name) ? strstr(command_line, name) : 0;",
-					"to": "return strstr(command_line, name);"
+					"from": "return devSwitch(name) ? CommandLineFindSwitch(command_line, name) : 0;",
+					"to": "return CommandLineFindSwitch(command_line, name);"
 				}
 			]
 		},
@@ -51,7 +51,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "strstr(command_line, \"-shadowsoff\")",
+					"from": "CommandLineHasWord(command_line, \"-shadowsoff\")",
 					"to": "devSwitch(\"-shadowsoff\")"
 				}
 			]
@@ -341,7 +341,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/win95/winmain.cpp",
-					"from": "strstr(command_line, \"-shadowambient\")",
+					"from": "CommandLineHasWord(command_line, \"-shadowambient\")",
 					"to": "devSwitch(\"-shadowambient\")"
 				}
 			]

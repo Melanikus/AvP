@@ -1,0 +1,303 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "-n is used in a network game",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (networkGame)\n\t{\n\t\treturn kLevelSwitchNetworkGame;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "-n is used while a saved game loads",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (loadingASave)\n\t{\n\t\treturn kLevelSwitchLoadingASave;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "in a network game, what's wrong with the name is said instead",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "\tif (networkGame)\n\t{\n\t\treturn kLevelSwitchNetworkGame;\n\t}\n\n\tif (loadingASave)",
+					"to": "\tif (loadingASave)"
+				},
+				{
+					"file": "3dc/level_switch.h",
+					"from": "\tsize_t const length = strlen(name);",
+					"to": "\tif (networkGame)\n\t{\n\t\treturn kLevelSwitchNetworkGame;\n\t}\n\n\tsize_t const length = strlen(name);"
+				}
+			]
+		},
+		{
+			"name": "nothing after -n is let through to the rule",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (after == kWordAfterNothing)\n\t{\n\t\treturn kLevelSwitchNoName;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a name too long is let through to the rule",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (after == kWordAfterTooLong)\n\t{\n\t\treturn kLevelSwitchTooLong;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "another switch after -n is taken for a level's name",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (name[0] == '-')\n\t{\n\t\treturn kLevelSwitchAnotherSwitch;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the rule for a map's name is never asked, so ../ and devices get through",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (!CustomMapName_IsSafe(mapName, sizeof(name) - (size_t)(mapName - name)))\n\t{\n\t\treturn kLevelSwitchBreaksTheRule;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Custom/ in front of a name breaks the rule",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "LevelSwitch_StartsWithCustomFolder(name) ? name + kLevelSwitchCustomFolderLetters : name",
+					"to": "name"
+				}
+			]
+		},
+		{
+			"name": "any seven letters pass for Custom/, so the rule only sees what follows them",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (CustomMapName_Upper(name[i]) != CustomMapName_Upper(kLevelSwitchCustomFolder[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Custom/ is only known in the capitals it's written with",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "CustomMapName_Upper(name[i]) != CustomMapName_Upper(kLevelSwitchCustomFolder[i])",
+					"to": "name[i] != kLevelSwitchCustomFolder[i]"
+				}
+			]
+		},
+		{
+			"name": "a name is put in out even when it doesn't fit",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (!out || length + 1 > room)\n\t{\n\t\treturn kLevelSwitchTooLong;\n\t}\n",
+					"to": "if (!out)\n\t{\n\t\treturn kLevelSwitchTooLong;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "what was in out is left there on a refusal",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "if (out && room > 0)\n\t{\n\t\tout[0] = 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the save's refusal says the network game's words",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "case kLevelSwitchLoadingASave: return \"a saved game is being loaded, and it goes back onto the level it was saved on\";",
+					"to": "case kLevelSwitchLoadingASave: return \"this is a network game, where every machine has to load the level the host chose\";"
+				}
+			]
+		},
+		{
+			"name": "a refusal has no words for the log",
+			"changes": [
+				{
+					"file": "3dc/level_switch.h",
+					"from": "case kLevelSwitchNoName: return \"no level's name follows it\";",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -n is used in a network game",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "bool const networkGame = AvP.Network != I_No_Network;",
+					"to": "bool const networkGame = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -n is used while a saved game loads",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "bool const loadingASave = LoadGameRequest != SAVELOAD_REQUEST_NONE;",
+					"to": "bool const loadingASave = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a refusal isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "LogString(std::string(\"level: -n is ignored: \") + LevelSwitch_Why(answer) + \". Loading \" + LevelName + \".\");",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the name -n gives is never loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "strcpy_s(LevelName, sizeof(LevelName), named);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -w is found inside a longer word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "CommandLineHasWord(command_line, \"-w\")",
+					"to": "strstr(command_line, \"-w\")"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one of -l's letters loads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\t{ 'q', &ForceLoad_Queen, \"the queen\" },\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a letter asked for with -l doesn't load its kind",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "*each.load = TRUE;",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a word that only looks like -l isn't said in the log",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (int const notRead = CommandLineLoadWordsNotRead(command_line))",
+					"to": "if (int const notRead = 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -n's level is never marked, so the game saves on it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "PlayingLevelFromSwitch = (answer == kLevelSwitchUseIt);",
+					"to": "PlayingLevelFromSwitch = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -server is found inside a longer word, such as a level's name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (CommandLineHasWord(command_line, \"-server\"))",
+					"to": "if (strstr(command_line, \"-server\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a developer switch is found inside a longer word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (!CommandLineFindSwitch(command_line, name))",
+					"to": "if (!strstr(command_line, name))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -ip takes a word longer than the address it's copied into",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "char address[15 + 1];",
+					"to": "char address[100];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -staticcomparedrop on its own compares nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tStaticSurfaceCompare = 1;\n\t\t}\n\t\textern int KeptPrismsOff;",
+					"to": "\t\t}\n\t\textern int KeptPrismsOff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game saves on -n's level",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif (PlayingLevelFromSwitch)\n\t{\n\t\tNewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));\n\t\tLogString(\"save: not saved, because this level is the one -n named, and a save would name the level the menus chose instead\");\n\t\treturn FALSE;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a load on -n's level goes onto that level",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif (PlayingLevelFromSwitch)\n\t{\n\t\tLogString(\"save: the save's own level is loaded first, because this level is the one -n named\");\n\t\treturn FALSE;\n\t}\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}
