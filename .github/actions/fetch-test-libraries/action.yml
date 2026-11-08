@@ -9,12 +9,14 @@
 # because the take-out runner copies those files into its copy of the code.
 #
 # Modified 2026-11-08 by Melanikus for the AvP port:
-#   the libraries are built with the game's static triplet, x86-windows-static, so they carry the C runtime inside them (STATIC-1)
-#   the sanitizer's run of the tests can ask for some built with the address sanitizer as well, with the triplet
-#   x86-windows-static-asan, into vcpkg_installed/x86-windows-static-asan (SANITIZE-RUN-1)
+#   the sanitizer's run of the tests can ask for some built with the address sanitizer as well, with the triplet x86-windows-asan, into
+#   vcpkg_installed/x86-windows-asan (SANITIZE-RUN-1)
+#   for a day the libraries were built with a static triplet, with the C runtime inside them (STATIC-1). That's undone: Bitdefender
+#   flagged the game built that way (#111), and the user ruled static linking out (STATIC-UNDO-1, #125). They're built with the game's
+#   x86-windows again
 
 name: Fetch the libraries the tests use
-description: Builds the named vcpkg ports for x86-windows-static into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports
+description: Builds the named vcpkg ports for x86-windows into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports
 
 inputs:
   ports:
@@ -57,11 +59,10 @@ runs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         # With --classic, vcpkg doesn't read vcpkg-configuration.json, so our triplet is named here too: the libraries are built as the
-        # game's are. x86-windows-static (vcpkg-overlay-triplets) builds them static, with the C runtime inside, and keeps as DLLs only
-        # what it names: Microsoft's D3DX, and OpenAL Soft, which no test links
+        # game's are, with x86-windows (vcpkg-overlay-triplets)
         #
-        # The sanitized ports are built a second time with x86-windows-static-asan, which is x86-windows-static plus the address sanitizer
-        # (that file says why), into their own folder, vcpkg_installed/x86-windows-static-asan. tests/takeouts/sanitize.ps1 links them.
-        $wanted = @($ports | ForEach-Object { "$($_):x86-windows-static" }) + @($sanitizedPorts | ForEach-Object { "$($_):x86-windows-static-asan" })
+        # The sanitized ports are built a second time with x86-windows-asan, which is x86-windows plus the address sanitizer (that file
+        # says why), into their own folder, vcpkg_installed/x86-windows-asan. tests/takeouts/sanitize.ps1 links them.
+        $wanted = @($ports | ForEach-Object { "$($_):x86-windows" }) + @($sanitizedPorts | ForEach-Object { "$($_):x86-windows-asan" })
         & (Join-Path $root 'vcpkg.exe') install @wanted --classic --overlay-ports=vcpkg-overlay-ports --overlay-triplets=vcpkg-overlay-triplets --x-install-root=vcpkg_installed
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

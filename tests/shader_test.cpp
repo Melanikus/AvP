@@ -10,9 +10,6 @@
 // it's running. Building the game fetches it, and so does tests.yml, and this has to run from the top of the repository.
 //
 // A .fxh file isn't a shader. It's included by others, so it's checked as part of each one that includes it.
-//
-// Modified 2026-11-08 by Melanikus for the AvP port:
-//   Microsoft's libraries are looked for in the folder of the game's static triplet, x86-windows-static (STATIC-1)
 
 #include <windows.h>
 #include <unknwn.h>
@@ -23,9 +20,8 @@
 
 #include "shader_model.h"
 
-// Where the build puts Microsoft's libraries, for the 32-bit game. The game's triplet builds everything else into the program, but keeps
-// these two as DLLs, as Microsoft ships them. D3DX loads the second one itself, by name, while it's running.
-static char const *const LibraryFolder = "vcpkg_installed\\x86-windows-static\\bin";
+// Where the build puts Microsoft's libraries, for the 32-bit game. D3DX loads the second one itself, by name, while it's running.
+static char const *const LibraryFolder = "vcpkg_installed\\x86-windows\\bin";
 static char const *const CompilerLibrary = "D3DCompiler_43.dll";
 static char const *const D3DXLibrary = "D3DX9_43.dll";
 
