@@ -1,9 +1,13 @@
-
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   Normalise, Normalise2d, FNormalise and FNormalise2d leave a vector with no direction as a vector of nothing, where they used to
+//   divide by its length of 0 and give back -2147483648 or "not a number" in every part (NORMALISE-ZERO-1). Their sums are in
+//   normalise.h, unchanged for every other vector
 #include "3dc.h"
 
 #include <math.h>
 
 #include "inline.h"
+#include "normalise.h"
 #include "module.h"
 #include "strategy_def.h"
 #include "gamedef.h"
@@ -185,80 +189,32 @@ void MakeNormal(VECTORCH *v1, VECTORCH *v2, VECTORCH *v3, VECTORCH *v4)
 
 /*
 
- Normalise a vector.
-
- The returned vector is a fixed point unit vector.
-
- WARNING!
-
- The vector must be no larger than 2<<14 because of the square root.
- Because this is an integer function, small components produce errors.
-
- e.g.
-
- (100,100,0)
-
- m=141 (141.42)
-
- nx = 100 * ONE_FIXED / m = 46,479
- ny = 100 * ONE_FIXED / m = 46,479
- nz = 0
-
- New m ought to be 65,536 but in fact is 65,731 i.e. 0.29% too large.
+ Normalise a vector: the same direction, one unit long. For whole numbers that's 65536 long, the game's fixed point one; for floats,
+ 1.0. The sums are in normalise.h, where a test can try them. A vector of nothing has no direction and stays a vector of nothing:
+ normalise.h says why, and what these used to give back for it.
 
 */
 
 void Normalise(VECTORCH *nvector)
 {
-	VECTORCHF n;
-	float m;
-
-	n.vx = nvector->vx;
-	n.vy = nvector->vy;
-	n.vz = nvector->vz;
-
-	m = 65536.0f / sqrt((n.vx * n.vx) + (n.vy * n.vy) + (n.vz * n.vz));
-
-	f2i(nvector->vx, (n.vx * m) );
-	f2i(nvector->vy, (n.vy * m) );
-	f2i(nvector->vz, (n.vz * m) );
+	Normalise_Whole3(&nvector->vx, &nvector->vy, &nvector->vz);
 }
 
 
 void Normalise2d(VECTOR2D *nvector)
 {
-	VECTOR2DF n;
-	float m;
-
-	n.vx = nvector->vx;
-	n.vy = nvector->vy;
-
-	m = sqrt((n.vx * n.vx) + (n.vy * n.vy));
-
-	nvector->vx = (n.vx * ONE_FIXED) / m;
-	nvector->vy = (n.vy * ONE_FIXED) / m;
+	Normalise_Whole2(&nvector->vx, &nvector->vy);
 }
 
 
 void FNormalise(VECTORCHF *n)
 {
-	float m;
-
-	m = sqrt((n->vx * n->vx) + (n->vy * n->vy) + (n->vz * n->vz));
-
-	n->vx /= m;
-	n->vy /= m;
-	n->vz /= m;
+	Normalise_Float3(&n->vx, &n->vy, &n->vz);
 }
 
 void FNormalise2d(VECTOR2DF *n)
 {
-	float m;
-
-	m = sqrt((n->vx * n->vx) + (n->vy * n->vy));
-
-	n->vx /= m;
-	n->vy /= m;
+	Normalise_Float2(&n->vx, &n->vy);
 }
 
 
