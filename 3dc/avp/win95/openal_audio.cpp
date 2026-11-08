@@ -10,6 +10,10 @@
 //   a level's room echo setting is checked against the list of echo settings before the list is read;
 //   a sound whose sample has been unloaded while it played counts as stopped, instead of being read through a pointer that's gone;
 //   a sound stream that failed to start can be let go of, and waiting on one that's stopping ends
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the sound streams (AudioStream) moved, as they were, to openal_stream.cpp, so a test can build them on their own, and GetALFormat
+//   to openal_shared.h, which both files share. What a stream needs of the sound system's state is given by three small functions at
+//   the end of this file
 
 #ifdef USE_OPENAL
 
@@ -79,8 +83,6 @@ static uint32_t	nOutputChannels = 0;
 static DWORD	channelMask = 0;
 static uint32_t	SoundMinBufferFree = 0;
 static bool		soundEnabled = false;
-
-static DWORD kQuantum = 1000 / 60;
 
 // make common
 struct SoundConfigTag SoundConfig;
@@ -1246,34 +1248,6 @@ static bool AllocateWavData(int soundNum, uint32_t nAudioBytes)
 	return GameSounds[soundNum].audioBuffer != NULL;
 }
 
-inline ALenum GetALFormat(uint16_t bitsPerSample, uint16_t nChannels)
-{
-	ALenum alFormat = 0;
-
-	if (bitsPerSample == 8)
-	{
-		if (nChannels == 1) {
-			alFormat = AL_FORMAT_MONO8;
-		}
-		else if (nChannels == 2) {
-			alFormat = AL_FORMAT_STEREO8;
-		}
-	}
-	else if (bitsPerSample == 16)
-	{
-		if (nChannels == 1) {
-			alFormat = AL_FORMAT_MONO16;
-		}
-		else if (nChannels == 2) {
-			alFormat = AL_FORMAT_STEREO16;
-		}
-	}
-	else {
-		assert(1==0);
-	}
-	return alFormat;
-}
-
 int LoadWavFile(int soundNum, const std::string &fileName)
 {
 	// try open the file
@@ -1710,286 +1684,20 @@ void UpdateSoundFrequencies()
 	}
 }
 
-AudioStream::AudioStream()
+// What a sound stream needs of the sound system's own state, for openal_stream.cpp, where the streams are (openal_shared.h)
+bool OpenAL_SoundIsOn()
 {
-	_source = NULL;
-	_bufferSize    = 0;
-	_bufferCount   = 0;
-	_currentBuffer = 0;
-	_nChannels   = 0;
-	_rate = 0;
-	_bytesPerSample      = 0;
-	_totalBytesPlayed    = 0;
-	_totalSamplesWritten = 0;
-	_isPaused  = false;
-	_isPlaying = false;
-	_buffers  = NULL;
-	_dataBuffers = NULL;
-	_format = 0;
-	_volume = 0;
-	_threadStarted = false;
-	_mutexMade = false;
+	return soundEnabled;
 }
 
-bool AudioStream::Init(uint32_t nChannels, uint32_t rate, uint32_t bitsPerSample, uint32_t bufferSize, uint32_t nBuffers)
+sndSource *OpenAL_FindFreeSource()
 {
-	if (!soundEnabled) {
-		return false;
-	}
-
-	_format = GetALFormat(bitsPerSample, nChannels);
-
-	// allocate space for n AL buffers
-	_buffers = new(std::nothrow) ALuint[nBuffers];
-	if (NULL == _buffers) {
-		Con_PrintError("Out of memory trying to create streaming audio AL buffer(s)");
-		return false;
-	}
-
-	// allocate space where actual audio data goes
-	_dataBuffers = new(std::nothrow) uint8_t[bufferSize * nBuffers];
-	if (NULL == _dataBuffers) {
-		Con_PrintError("Out of memory trying to create streaming audio data buffer");
-		return false;
-	}
-
-	// clear OpenAL errors
-	alGetError();
-
-	alGenBuffers(nBuffers, _buffers);
-	AlCheckError();
-	_bufferCount = nBuffers;
-
-	_source = FindFreeSource();
-	if (!_source) {
-		Con_PrintError("No free sources available for streaming audio");
-		return false;
-	}
-/*
-	alSourcei (_source->_alSource, AL_LOOPING,         AL_FALSE);
-	alSource3f(_source->_alSource, AL_POSITION,        0.0f, 0.0f, 0.0f);
-	alSource3f(_source->_alSource, AL_VELOCITY,        0.0f, 0.0f, 0.0f);
-	alSource3f(_source->_alSource, AL_DIRECTION,       0.0f, 0.0f, 0.0f);
-	alSourcef (_source->_alSource, AL_ROLLOFF_FACTOR,  0.0f);
-	alSourcei (_source->_alSource, AL_SOURCE_RELATIVE, AL_TRUE);
-*/
-	_bytesPerSample = bitsPerSample / 8;
-	_nChannels = nChannels;
-	_rate = rate;
-	_bufferSize  = bufferSize;
-	_bufferCount = nBuffers;
-
-	// set this to true for threads to run
-	_isPlaying = true;
-
-	for (uint32_t i = 0; i < nBuffers; i++) {
-		_freeBufferQueue.push_back(_buffers[i]);
-	}
-
-	// the lock has to exist before the thread that uses it starts
-	if (pthread_mutex_init(&_bufferMutex, NULL) != 0) {
-		return false;
-	}
-	_mutexMade = true;
-
-	if (pthread_create(&_playbackThread, NULL, CheckProcessedBuffers, static_cast<void*>(this)) != 0) {
-		return false;
-	}
-	_threadStarted = true;
-
-	return true;
+	return FindFreeSource();
 }
 
-uint32_t AudioStream::WriteData(uint8_t *audioData, uint32_t size)
+float OpenAL_StreamGain(uint32_t volume)
 {
-	assert (audioData);
-	assert (size == _bufferSize);
-
-	// clear OpenAL errors
-	alGetError();
-
-	if (_freeBufferQueue.size()) {
-
-		pthread_mutex_lock(&_bufferMutex);
-
-		ALuint buffer = _freeBufferQueue.front();
-		_freeBufferQueue.pop_front();
-
-		memcpy(&_dataBuffers[_currentBuffer * _bufferSize], audioData, size);
-
-		alBufferData(buffer, _format, &_dataBuffers[_currentBuffer * _bufferSize], size, _rate);
-		AlCheckError();
-
-		// queue it
-		alSourceQueueBuffers(_source->_alSource, 1, &buffer);
-		AlCheckError();
-
-		pthread_mutex_unlock(&_bufferMutex);
-	}
-
-	_currentBuffer++;
-	_currentBuffer %= _bufferCount;
-
-	// size in bytes divided by bytes per sample divided by the number of channels
-	_totalSamplesWritten += ((size / _bytesPerSample) / _nChannels);
-
-	return size;
-}
-
-// Waits until there's room for more sound, or until the stream is stopped. There may never be room after that.
-void AudioStream::WaitForFreeBuffer()
-{
-	while (_freeBufferQueue.size() == 0 && _isPlaying) {
-		Sleep(20);
-	}
-}
-
-void *CheckProcessedBuffers(void *args)
-{
-	AudioStream *stream = static_cast<AudioStream*>(args);
-
-	while (stream->_isPlaying)
-	{
-		if (!stream->_isPaused)
-		{
-			// clear OpenAL errors
-			alGetError();
-
-			ALint nProcessed;
-			alGetSourcei(stream->_source->_alSource, AL_BUFFERS_PROCESSED, &nProcessed);
-			AlCheckError();
-
-			if (nProcessed && (stream->_freeBufferQueue.size() < stream->_bufferCount))
-			{
-				pthread_mutex_lock(&stream->_bufferMutex);
-
-				ALuint buffer;
-				alSourceUnqueueBuffers(stream->_source->_alSource, 1, &buffer);
-				AlCheckError();
-
-				stream->_freeBufferQueue.push_back(buffer);
-				stream->_totalBytesPlayed += stream->_bufferSize;
-
-				pthread_mutex_unlock(&stream->_bufferMutex);
-			}
-			else {
-				// wait and try again
-				::Sleep(kQuantum);
-			}
-		}
-	}
-
-	return 0;
-}
-
-uint32_t AudioStream::GetBufferSize()
-{
-	return _bufferSize;
-}
-
-uint32_t AudioStream::GetNumFreeBuffers()
-{
-	return _freeBufferQueue.size();
-}
-
-uint64_t AudioStream::GetNumSamplesPlayed()
-{
-	return ((_totalBytesPlayed / _bytesPerSample) / _nChannels);
-}
-
-uint64_t AudioStream::GetNumSamplesWritten()
-{
-	return _totalSamplesWritten;
-}
-
-uint32_t AudioStream::GetWritableBufferSize()
-{
-	return _bufferSize * _freeBufferQueue.size();
-}
-
-int32_t AudioStream::SetVolume(uint32_t volume)
-{
-	if (!_source)
-	{
-		return AUDIOSTREAM_OK;
-	}
-
-	alSourcef(_source->_alSource, AL_GAIN, VolumeToGain((volume > (uint32_t)VOLUME_MAX) ? VOLUME_MAX + 1 : (int)volume));
-	alGetError();
-
-	return 1;
-}
-
-uint32_t AudioStream::GetVolume()
-{
-	return _volume;
-}
-
-int32_t AudioStream::SetPan(uint32_t pan)
-{
-	// todo: implement this function
-	return AUDIOSTREAM_OK;
-}
-
-int32_t AudioStream::Stop()
-{
-	_isPlaying = false;
-
-	// a stream that couldn't start has nothing to stop
-	if (_source)
-	{
-		alSourceStop(_source->_alSource);
-		alGetError();
-	}
-
-	return AUDIOSTREAM_OK;
-}
-
-int32_t AudioStream::Play()
-{
-	if (!_source)
-	{
-		return AUDIOSTREAM_OK;
-	}
-
-	alSourcePlay(_source->_alSource);
-	AlCheckError();
-	_isPaused = false;
-
-	return AUDIOSTREAM_OK;
-}
-
-AudioStream::~AudioStream()
-{
-	Stop();
-
-	// Init can stop at any step, so this only lets go of what it got as far as making
-	if (_threadStarted)
-	{
-		pthread_join(_playbackThread, NULL);
-	}
-
-	if (_mutexMade)
-	{
-		pthread_mutex_destroy(&_bufferMutex);
-	}
-
-	if (_source)
-	{
-		alSourcei(_source->_alSource, AL_BUFFER, NULL);
-
-		_source->_isFree = true;
-		_source = NULL;
-	}
-
-	if (_buffers && _bufferCount)
-	{
-		alDeleteBuffers(_bufferCount, _buffers);
-	}
-
-	// clear the new-ed memory
-	delete[] _buffers;
-	delete[] _dataBuffers;
+	return VolumeToGain((volume > (uint32_t)VOLUME_MAX) ? VOLUME_MAX + 1 : (int)volume);
 }
 
 #endif // #ifdef USE_OPENAL
