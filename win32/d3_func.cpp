@@ -37,13 +37,16 @@
 
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   the settings file can't say where shaders come from
+//   in a Hudson run, the log says which pixel shader file was compiled
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the marine's shoulder lamp has a shader of its own, and a way of blending that brightens what's already there
 //   the painted lamp's glint has a shader of its own
+//   the log says where a Hudson run's window went
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
 #include "d3_func.h"
+#include "hudson.h"
 #include "surface_normals.h"
 #include "shadow_volumes_card.h"
 #include "frame_timing.h"
@@ -1562,6 +1565,8 @@ bool R_CreatePixelShader(const std::string &fileName, r_PixelShader &pixelShader
 	// no longer need pCode
 	pCode->Release();
 
+	Hudson_SayWhichShaderWasCompiled(actualPath.c_str());
+
 	// now find out how many constant registers our shader uses
 	D3DXCONSTANTTABLE_DESC constantTableDesc;
 	pixelShader.constantTable->GetDesc(&constantTableDesc);
@@ -2471,6 +2476,7 @@ bool InitialiseDirect3D()
 
 	// resize the win32 window to match our d3d backbuffer size
 	ChangeWindowsSize(d3dpp.BackBufferWidth, d3dpp.BackBufferHeight);
+	Hudson_SayWhereTheWindowWent();
 
 	d3dpp.BackBufferCount = 1;
 
