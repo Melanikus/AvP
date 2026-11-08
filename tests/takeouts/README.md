@@ -50,7 +50,13 @@ that line does on a card needs a run of the game.
 
     tests/takeouts/sanitize.ps1 relief_map_file_test
 
-A test only sees what it looks for, and this sees the rest. It's slower, so it isn't part of the ordinary run. Run it after changing anything that handles a file.
+A test only sees what it looks for, and this sees the rest. Every pull request runs it on every test, in the Tests check's "Tests under the address
+sanitizer", split across four machines because it's slower than the ordinary run, and a test that doesn't pass under it stops the merge. Run it here
+too, after changing anything that handles a file, to find out before the pull request does.
+
+Each test is run from a window of its own there. Run several from one window here and that's fine too: Visual Studio's setup is done once, and the
+script stops and says why if the setup didn't give it the compiler. A test built for the sanitizer has the C runtime built in, as every test does,
+but the sanitizer's own library uses the runtime's DLLs while it runs, so a pass under the sanitizer says nothing about running without them.
 
 ## What these don't cover
 

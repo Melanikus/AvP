@@ -66,6 +66,153 @@ jobs:
         shell: pwsh
         run: ./tests/release-test.ps1
 
+  # Every test again, built with the address sanitizer by tests/takeouts/sanitize.ps1 (card SANITIZE-RUN-1, added 2026-11-08 by Melanikus
+  # for the AvP port). The sanitizer watches every read and write, and stops a test at the first one outside what it was given, so it finds
+  # what a test doesn't look for. A crash or a memory bug is a security bug here (AvP Tao #1), so a test that doesn't pass under it stops the
+  # merge, the same as one that fails above. It's slower than the ordinary run, so the tests are shared out between four machines: in name
+  # order, the first test to part 1, the second to part 2, and so on, round again. A new test joins a part with no change to this file.
+  #
+  # The sanitizer's own library uses the C runtime's DLLs while a test runs, so a pass here says nothing about running without them. The
+  # Unit tests job above is the one that shows that. sanitize.ps1 says why, beside its own check.
+  sanitizer:
+    name: Tests under the address sanitizer, part ${{ matrix.part }} of 4
+    # A test that hangs fails here, as above
+    timeout-minutes: 30
+    runs-on: windows-2025-vs2026   # pinned: the same machine as the Unit tests job
+    strategy:
+      fail-fast: false   # one part failing doesn't stop the others, so a run shows every test that needs work
+      matrix:
+        part: [1, 2, 3, 4]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The same libraries as the Unit tests job, made the same way, for the tests that link them
+      - name: Fetch the game's shader compiler and ENet
+        uses: ./.github/actions/fetch-test-libraries
+        with:
+          ports: dxsdk-d3dx enet
+
+      # Each test is built and run by sanitize.ps1 in a PowerShell of its own, so nothing one test's run leaves behind reaches the next.
+      # Every test of the part is run, even after one fails, and then the step fails, naming each one that didn't pass. sanitize.ps1 gives
+      # back 1 when the test failed or the sanitizer stopped it, and 2 when it couldn't be run at all, and its own lines say why.
+      - name: Run this part's tests under the sanitizer
+        shell: pwsh
+        env:
+          PART: ${{ matrix.part }}
+          PARTS: 4
+        run: |
+          # In name order, compared letter by letter, so all four machines share them out the same way
+          $names = [string[]]@(Get-ChildItem -LiteralPath tests -Filter '*.args' -File | ForEach-Object { $_.BaseName })
+          [Array]::Sort($names, [StringComparer]::Ordinal)
+
+          # With no tests at all this fails, so a wrong folder can't pass as "every test passed"
+          if ($names.Count -eq 0) { throw 'No tests were found' }
+
+          $part = [int]$env:PART
+          $parts = [int]$env:PARTS
+          $mine = @(for ($i = $part - 1; $i -lt $names.Count; $i += $parts) { $names[$i] })
+          "Part $part of ${parts}: $($mine.Count) of the $($names.Count) tests: $($mine -join ', ')"
+
+          $pwsh = Join-Path $PSHOME 'pwsh.exe'
+          $notPassed = [System.Collections.Generic.List[string]]::new()
+
+          foreach ($test in $mine) {
+            "===== $test"
+            & $pwsh -NoProfile -NonInteractive -File ./tests/takeouts/sanitize.ps1 $test
+            if ($LASTEXITCODE -ne 0) { $notPassed.Add("$test (sanitize.ps1 gave back $LASTEXITCODE)") }
+          }
+
+          if ($notPassed.Count -gt 0) { throw "$($notPassed.Count) of this part's $($mine.Count) tests didn't pass under the sanitizer: $($notPassed -join ', '). Each one's own lines above say why" }
+          "All $($mine.Count) of this part's tests pass under the address sanitizer"
+
+  # sanitize.ps1's own refusals, made to happen on purpose, each checked for its reason. SANITIZE-RUN-1's probe ran it four times from one
+  # window, and by the third the path was too long for Visual Studio's setup, which failed with nothing but a line from Windows. Now the
+  # setup is done once in a window, and the script stops, saying why, when the setup can't be done or didn't finish. The old script fails
+  # each of the three cases: it gave no reason of its own, and it set up again on every run. relief_map_file_test is used because it needs
+  # nothing from vcpkg.
+  sanitizer-refusals:
+    name: The sanitizer script's own refusals
+    timeout-minutes: 15
+    runs-on: windows-2025-vs2026   # pinned: the same machine as the jobs above
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Make sanitize.ps1 refuse, and check each reason
+        shell: pwsh
+        run: |
+          $original = $env:PATH
+          $pwsh = Join-Path $PSHOME 'pwsh.exe'
+          $failed = [System.Collections.Generic.List[string]]::new()
+          function Check([bool]$ok, [string]$what) { if ($ok) { "ok      $what" } else { "FAILED  $what"; $failed.Add($what) } }
+
+          # Runs sanitize.ps1 in a PowerShell of its own, started with the path given, and gives back its exit code and all it said. The
+          # step's own path is put back straight after, whatever happens.
+          function Run-WithPath([string]$path) {
+            $said = Join-Path $env:RUNNER_TEMP 'refusal-said.txt'
+            $errors = Join-Path $env:RUNNER_TEMP 'refusal-errors.txt'
+            $env:PATH = $path
+            try { $run = Start-Process -FilePath $pwsh -ArgumentList '-NoProfile -NonInteractive -File tests/takeouts/sanitize.ps1 relief_map_file_test' -NoNewWindow -Wait -PassThru -RedirectStandardOutput $said -RedirectStandardError $errors }
+            finally { $env:PATH = $original }
+            @{ code = $run.ExitCode; text = "$(Get-Content -Raw -LiteralPath $said)$(Get-Content -Raw -LiteralPath $errors)" }
+          }
+
+          # 1. A path already too long for the setup to add to: this machine's own path, doubled and more until it's past 8,191 characters
+          $long = $original
+          while ($long.Length -le 8191) { $long = "$long;$original" }
+          $result = Run-WithPath $long
+          $result.text
+          Check ($result.code -eq 2) "with a path of $($long.Length) characters, it can't run, and gives back 2 (it gave back $($result.code))"
+          Check ($result.text -cmatch "Could not run the sanitizer: the path is \d+ characters, and Visual Studio's setup can't add to a path longer than 8191") 'and it says the path is too long for the setup, before trying it'
+
+          # 2. A path short enough for the setup to start, and too long for it to finish: this machine's own path, made up to 8,000
+          #    characters with folders that aren't there. The setup's own lines take it past 8,191 part way, as in the probe.
+          $near = $original
+          for ($n = 0; $near.Length -lt 8000; $n++) { $near = "$near;C:\not-a-folder-$n" }
+          $result = Run-WithPath $near
+          $result.text
+          Check ($result.code -eq 2) "with a path of $($near.Length) characters, it can't run, and gives back 2 (it gave back $($result.code))"
+          Check ($result.text -cmatch "Could not run the sanitizer: Visual Studio's setup didn't finish: .+ The path is now \d+ characters") 'and it says the setup didn''t finish, what it left out, and how long the path is'
+
+          # 3. Three runs from one window, as the probe did: each passes, and the path after the third is the path after the first, so the
+          #    setup was done once and nothing piles up. The old script added to the path on every run.
+          $env:PATH = $original
+          & ./tests/takeouts/sanitize.ps1 relief_map_file_test
+          $first = $LASTEXITCODE
+          $afterFirst = $env:PATH
+          & ./tests/takeouts/sanitize.ps1 relief_map_file_test
+          $second = $LASTEXITCODE
+          & ./tests/takeouts/sanitize.ps1 relief_map_file_test
+          $third = $LASTEXITCODE
+          Check ($first -eq 0 -and $second -eq 0 -and $third -eq 0) "three runs from one window all pass (they gave back $first, $second and $third)"
+          Check ($env:PATH -ceq $afterFirst) "and the path after the third is the one after the first, $($afterFirst.Length) characters, so the setup was done once"
+
+          if ($failed.Count -gt 0) { throw "$($failed.Count) of the sanitizer script's own checks failed: $($failed -join '; ')" }
+          "Each of the sanitizer script's refusals happens, with its reason, and a window set up once stays as it was"
+
+  # One job with one name, to make a required check of. It passes only if every part passed, and the script's own refusals happened.
+  sanitizer-result:
+    name: Tests under the address sanitizer
+    needs: [sanitizer, sanitizer-refusals]
+    if: always()
+    runs-on: ubuntu-24.04   # pinned, as above
+    timeout-minutes: 5
+    steps:
+      - name: Say how it went
+        env:
+          PARTS: ${{ needs.sanitizer.result }}
+          REFUSALS: ${{ needs.sanitizer-refusals.result }}
+        run: |
+          echo "The tests under the sanitizer: $PARTS. The sanitizer script's own refusals: $REFUSALS."
+          if [ "$PARTS" != "success" ]; then echo "At least one test didn't pass under the sanitizer. The failed part's own job says which, and why."; exit 1; fi
+          if [ "$REFUSALS" != "success" ]; then echo "One of sanitize.ps1's own refusals didn't happen as it should. That job says which."; exit 1; fi
+          echo "Every test passes under the address sanitizer"
+
   # A release's first job runs on this machine, not on the Windows one above, so pull requests try its checks here too. Otherwise their first real run here
   # would be the day of a release. tools/check-new-functions.ps1 reads the real code as well and says what it found, but only the test's own rows can fail
   # this: a function can land in one pull request and its caller in the next. The job's last step is a quick look at the code for the one form Snyk Code

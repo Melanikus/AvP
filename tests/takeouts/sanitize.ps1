@@ -10,6 +10,7 @@
 #
 # Modified 2026-11-08 by Melanikus for the AvP port:
 #   the test is built with the C runtime inside it (/MT), the same as every test, and refused if it comes out asking Windows for it as a DLL (STATIC-1)
+#   Visual Studio's setup is done once in a window, not again on every run, and this stops, saying why, if the setup didn't give the compiler (SANITIZE-RUN-1)
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -29,9 +30,84 @@ if (-not $visualStudio) { throw 'Visual Studio with the C++ tools was not found'
 # Visual Studio's own PowerShell module sets the compiler up in this window, the way its setup batch file does in a command window, so nothing has to be written to disk to run it.
 # The antivirus distrusts a script that writes another to run, and took one of ours. The setup looks for vswhere on the path, so that goes on first. -arch=x86 builds 32-bit programs,
 # the same as the game.
-$env:PATH = "$(Split-Path -Parent $vswhere);$env:PATH"
-Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
-Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+#
+# Once in a window is enough, and more does harm. Each time, the setup puts Visual Studio's folders at the front of the path again. It's run
+# by Windows' command interpreter, which can't read a line longer than 8,191 characters, and the setup adds to the path one line at a time.
+# Once the path is long enough, each of those lines fails, saying only "The input line is too long", and the window carries on with whatever
+# it had before. A run of four tests from one window got there on the third test (SANITIZE-RUN-1's probe, 2026-11-08). That time the
+# window still had the second test's setup, so nothing went wrong, but nothing would have said so if it had. So:
+# - if this window already has this Visual Studio's 32-bit compiler set up, it isn't set up again;
+# - if the path is already too long for the setup, this stops and says so;
+# - after the setup, this checks that it really gave the compiler, and stops, saying what's missing, if it didn't.
+$commandLineLimit = 8191
+
+# What a finished setup leaves in the window: VCToolsInstallDir naming a compiler inside this Visual Studio, that compiler's 32-bit cl.exe
+# and dumpbin.exe found first on the path (the ones made to run on a 64-bit Windows, as -host_arch=amd64 asks), and its own 32-bit
+# libraries and headers in LIB and INCLUDE. Gives back what's missing, or nothing when it's all there.
+function Get-SetUpProblem([string]$visualStudio)
+{
+    $tools = "$env:VCToolsInstallDir".TrimEnd('\')
+
+    if (-not $tools -or -not $tools.StartsWith($visualStudio.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase))
+    {
+        return "VCToolsInstallDir doesn't name a compiler inside $visualStudio"
+    }
+
+    $programFolder = Join-Path $tools 'bin\Hostx64\x86'
+
+    foreach ($program in 'cl.exe', 'dumpbin.exe')
+    {
+        $found = Get-Command $program -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+
+        if (-not $found -or (Split-Path -Parent $found.Source) -ine $programFolder)
+        {
+            return "the $program found first on the path isn't the 32-bit one in $programFolder"
+        }
+    }
+
+    foreach ($wanted in @(@{ name = 'LIB'; folder = (Join-Path $tools 'lib\x86') }, @{ name = 'INCLUDE'; folder = (Join-Path $tools 'include') }))
+    {
+        $folders = @("$([Environment]::GetEnvironmentVariable($wanted.name))".Split(';') | ForEach-Object { $_.TrimEnd('\') })
+
+        if ($folders -inotcontains $wanted.folder)
+        {
+            return "$($wanted.name) doesn't have $($wanted.folder)"
+        }
+    }
+
+    return ''
+}
+
+if (Get-SetUpProblem $visualStudio)
+{
+    if ($env:PATH.Length -gt $commandLineLimit)
+    {
+        throw "the path is $($env:PATH.Length) characters, and Visual Studio's setup can't add to a path longer than $commandLineLimit, because Windows' command interpreter, which runs it, can't read the line. Start this from a window with a shorter path"
+    }
+
+    $vswhereFolder = Split-Path -Parent $vswhere
+
+    if (@($env:PATH.Split(';') | Where-Object { $_.TrimEnd('\') -ieq $vswhereFolder }).Count -eq 0)
+    {
+        $env:PATH = "$vswhereFolder;$env:PATH"
+    }
+
+    try
+    {
+        Import-Module (Join-Path $visualStudio 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+        Enter-VsDevShell -VsInstallPath $visualStudio -SkipAutomaticLocation -DevCmdArguments '-arch=x86 -host_arch=amd64 -no_logo' | Out-Null
+        $problem = Get-SetUpProblem $visualStudio
+    }
+    catch
+    {
+        $problem = "it said: $_"
+    }
+
+    if ($problem)
+    {
+        throw "Visual Studio's setup didn't finish: $problem. The path is now $($env:PATH.Length) characters. The setup adds to it a line at a time, and Windows' command interpreter can't read a line longer than $commandLineLimit, so a long path stops the setup part way"
+    }
+}
 
 # Runs one of the compiler's programs in a folder and gives back its exit code. What it says goes in a file, and anything it says as an error in that file's .errors. It's started this way,
 # and not by its name on its own, because Windows PowerShell takes anything a program writes as an error as the script failing.
@@ -89,6 +165,12 @@ if ($built -ne 0) {
 
 # STATIC-1: built the same as every test, with the C runtime inside it. The sanitizer's own library is a DLL, and that one is allowed:
 # it's Microsoft's, it's only for this check, and it never goes out with the game.
+#
+# That library itself asks Windows for the C runtime's DLLs: VCRUNTIME140.dll and six api-ms-win-crt- names, read with dumpbin from Visual
+# Studio 18's compiler 14.51.36231 (SANITIZE-RUN-1's probe, 2026-11-08). So while a test built for the sanitizer runs, the runtime IS
+# loaded as DLLs, through the sanitizer's library. What this check shows is only that the test's own code has the runtime built in. A
+# pass here never means a program runs without the Visual C++ runtime installed. tests/build.ps1's same check, on the ordinary build of
+# each test, is the one that shows that.
 $runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $repository (Join-Path $out 'imports.txt'))
 if ($runtime.Count -gt 0) {
     Write-Host "$Test, built for the sanitizer, asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)"
