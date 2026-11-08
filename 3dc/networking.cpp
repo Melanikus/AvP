@@ -31,6 +31,8 @@
 //   a system message with no server to send it to fails, and leaving a game forgets the server
 //   a message with no network game running fails, where it used to hand ENet an empty pointer
 //   nothing is opened on the network when the game starts: the socket for finding games is opened when a player asks for the list, or hosts, and closed when that's over
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   Net_DescribeConnections says each connection's number and round trip, never its address, for a tester's mark (mark_key.cpp)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -1092,4 +1094,44 @@ static NetResult Net_CreateSession(const char *sessionName, const char *levelNam
 NetResult Net_UpdateSessionDescForLobbiedGame(uint16_t gameStyle, uint16_t level)
 {
 	return NET_OK;
+}
+
+// Each connection, by number and round trip, for a tester's mark (networking.h). The number is its place in ENet's list, the same one the
+// screen names when a player joins, and never an address.
+void Net_DescribeConnections(char *words, size_t size)
+{
+	if (size == 0)
+	{
+		return;
+	}
+
+	words[0] = '\0';
+
+	if (!host || AvP.Network == I_No_Network)
+	{
+		return;
+	}
+
+	size_t used = 0;
+
+	for (size_t i = 0; i < host->peerCount && used + 1 < size; i++)
+	{
+		ENetPeer const &peer = host->peers[i];
+
+		if (peer.state != ENET_PEER_STATE_CONNECTED)
+		{
+			continue;
+		}
+
+		int const added = _snprintf(words + used, size - 1 - used, "%sconnection %u at %u ms", used ? ", " : "", (unsigned)i + 1, (unsigned)peer.roundTripTime);
+
+		if (added < 0)
+		{
+			break;
+		}
+
+		used += (size_t)added;
+	}
+
+	words[used < size ? used : size - 1] = '\0';
 }

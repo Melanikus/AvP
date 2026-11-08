@@ -67,6 +67,11 @@ NetResult Net_ConnectToSession(int sessionNumber, char *playerName);
 NetResult Net_HostGame(char *playerName, char *sessionName, int species, uint16_t gameStyle, uint16_t level);
 int       Net_ConnectingToLobbiedGame(char *playerName);
 
+// For a tester's mark (mark_key.cpp): each connection this machine has, by number, with its round trip, such as
+// "connection 1 at 45 ms, connection 2 at 120 ms". Never an address. words has room for size characters and always ends with a 0;
+// it's empty out of a network game.
+void      Net_DescribeConnections(char *words, size_t size);
+
 extern NetID AvPNetID;
 
 static const int kMarker = 'xPvA'; // AvPx

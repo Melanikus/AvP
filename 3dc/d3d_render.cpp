@@ -41,6 +41,7 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   error messages name this file by hand, from the top of the repository, instead of with __FILE__, which put the whole folder
 //   it was built in, with the name of whoever built it, into the game
+//   a tester's mark has its picture taken once the frame is drawn, before it's shown (mark_key.h)
 #include "console.h"
 #include "OnScreenKeyboard.h"
 #include "TextureManager.h"
@@ -89,6 +90,7 @@
 #include "shadow_reach.h"
 #include "frame_timing.h"
 #include "shadow_debug.h"
+#include "mark_key.h"
 #include "shadow_tuning.h"
 #include "texture_relief.h"
 #include "view_switches.h"
@@ -2857,6 +2859,7 @@ void ThisFramesRenderingHasFinished()
 
 		FrameTiming_EndFrame();
 		ShadowCapture_EndFrame(d3d.lpD3DDevice, toyFrame);
+		Mark_EndFrame(d3d.lpD3DDevice);
 	}
 
 	// The game goes on whether or not this frame could be drawn, so what's below happens either way

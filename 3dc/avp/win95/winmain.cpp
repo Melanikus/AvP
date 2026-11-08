@@ -19,9 +19,11 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the log starts with which build this is: its version and commit, the program file's size and fingerprint, and which Windows
 //   it runs on (build_identity.h)
+//   F2 marks the moment for a tester, with a line in the log and a picture of the screen (mark_key.h)
 
 #include "3dc.h"
 #include "build_identity.h"
+#include "mark_key.h"
 #include "texture_relief.h"
 #include "view_settings.h"
 #include "view_switches.h"
@@ -871,6 +873,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 							// Do screen shot here so that text and hud graphics aren't shown
 							MaintainHUD();
+
+							// A tester's mark: noted now, and its picture taken when this frame is drawn
+							Mark_ReadKey();
 
 							FlushTextprintBuffer();
 

@@ -46,11 +46,14 @@ struct ENetPeer
 	ENetAddress address;
 	void *data;
 	ENetPeerState state;
+	enet_uint32 roundTripTime;   // for a tester's mark (Net_DescribeConnections)
 };
 
 struct ENetHost
 {
 	size_t maximumPacketSize;
+	ENetPeer *peers;             // for a tester's mark too
+	size_t peerCount;
 };
 
 struct ENetEvent
