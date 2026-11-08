@@ -352,6 +352,19 @@ static void TestTheMarineSeenByAnAlien()
 	      "and stops there, so his details aren't read as another player's stand-in's");
 }
 
+// A ghost's data block is new memory: it's cleared so no field holds what was there before, and that has to wait until the block is
+// known to be there, or clearing it is the first thing to go wrong
+static void TestTheGhostJustMade()
+{
+	puts("A ghost that has just been made:");
+
+	std::string const ghosts = ReadSourceFile("3dc/avp/win95/pldghost.cpp");
+	std::string const made = "NETGHOSTDATABLOCK *ghostData = (NETGHOSTDATABLOCK*)AllocateMem(sizeof(NETGHOSTDATABLOCK));";
+
+	Check(Has(ghosts, made + "\n\t\tif(!ghostData)\n"), "its block is checked as soon as it's asked for");
+	Check(ComesBefore(ghosts, made + "\n\t\tif(!ghostData)\n", "memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));"), "and only then cleared");
+}
+
 int main()
 {
 	TestTheXenoborg();
@@ -360,6 +373,7 @@ int main()
 	TestTheHalfMadeNpc();
 	TestTheWeaponFromAFile();
 	TestTheCharacterWithNoModel();
+	TestTheGhostJustMade();
 	TestTheEmptyModule();
 	TestTheDeadQueen();
 	TestTheQueenWithNoRoomToBeDrawn();
