@@ -73,9 +73,6 @@ jobs:
   # order, the first test to part 1, the second to part 2, and so on, round again. A new test joins a part with no change to this file.
   # GitHub numbers the parts and counts them (strategy.job-index and strategy.job-total), so the list of parts below can be made longer or
   # shorter and no test is ever left out.
-  #
-  # The sanitizer's own library uses the C runtime's DLLs while a test runs, so a pass here says nothing about running without them. The
-  # Unit tests job above is the one that shows that. sanitize.ps1 says why, beside its own check.
   sanitizer:
     name: Tests under the address sanitizer, part ${{ matrix.part }} of ${{ strategy.job-total }}
     # A test that hangs fails here, as above
@@ -213,7 +210,7 @@ jobs:
           # The broken tests that 4 and 6 use are written into this job's own copy of the repository, and never committed. This one reads
           # one byte past the end of a block it asked for. Without the sanitizer that goes unnoticed: the program carries on and gives
           # back 0, so only the sanitizer can fail it.
-          $settings = '/std:c++17 /EHsc /MT /W3 /sdl /FC'
+          $settings = '/std:c++17 /EHsc /MD /W3 /sdl /FC'
           $readsPastTheEnd = @(
             '// Written by tests.yml''s sanitizer-refusals job, and never committed: it reads one byte past the end of a 16-byte block, on purpose'
             '#include <cstdio>'
@@ -244,9 +241,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "The broken object for check 4 didn't compile (cl gave back $LASTEXITCODE)" }
           & lib.exe /nologo /out:tests/canary_unwatched.lib tests/canary_unwatched.obj
           if ($LASTEXITCODE -ne 0) { throw "The broken library for check 4 wasn't made (lib.exe gave back $LASTEXITCODE)" }
-          Set-Content -LiteralPath tests/canary_unwatched_test.args -Value '/MT', 'tests/canary_unwatched.obj'
-          Set-Content -LiteralPath tests/canary_unwatched_lib_test.args -Value '/MT', 'tests/canary_unwatched.lib'
-          Set-Content -LiteralPath tests/canary_unknown_lib_test.args -Value '/MT', 'tests/canary_unwatched.cpp', 'not_a_windows_library.lib'
+          Set-Content -LiteralPath tests/canary_unwatched_test.args -Value '/MD', 'tests/canary_unwatched.obj'
+          Set-Content -LiteralPath tests/canary_unwatched_lib_test.args -Value '/MD', 'tests/canary_unwatched.lib'
+          Set-Content -LiteralPath tests/canary_unknown_lib_test.args -Value '/MD', 'tests/canary_unwatched.cpp', 'not_a_windows_library.lib'
 
           $result = Run-WithPath $original 'canary_unwatched_test'
           $result.text
