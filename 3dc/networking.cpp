@@ -47,6 +47,8 @@
 //   the log says when our ENet has told an older version of the game no
 //   leaving a network game sends what's still waiting and closes each connection with the other end told, instead of throwing it
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
+//   every 10 seconds the log says each connection's round trip, loss and resends, by number, and when one starts or stops struggling
+//   (net_stats.h)
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -59,6 +61,7 @@
 #include "net_checks.h"
 #include "net_host.h"
 #include "net_close.h"
+#include "net_stats.h"
 #include <assert.h>
 #include "MemoryStream.h"
 
@@ -795,6 +798,83 @@ static void LogDroppedMessage(const char *why)
 
 // Our ENet (patch 006) tells an older version of the game no as soon as it asks to join, without a place or an event, and
 // counts it. This puts that in the log, so a host can see why that player never got in.
+// THE NETWORK'S NUMBERS IN THE LOG (net_stats.h): about once a second, whether a connection has started or stopped struggling, and every
+// 10 seconds its round trip, loss and resends, and the bytes in and out. Connections are named by their number, never their address.
+static_assert(kNetStatsLossScale == ENET_PEER_PACKET_LOSS_SCALE, "net_stats.h reads ENet's loss as a share of the same whole");
+
+static ENetHost *netStatsHost = NULL;               // the host these numbers are for: a new game's host starts them again
+static unsigned int netStatsLastLook = 0;
+static unsigned int netStatsLastLines = 0;
+static unsigned int netStatsBytesIn = 0;
+static unsigned int netStatsBytesOut = 0;
+static bool netStatsStruggling[kMostClients + 1];
+
+static void LogConnectionNumbers()
+{
+	unsigned int const now = enet_time_get();
+
+	if (host != netStatsHost)
+	{
+		netStatsHost = host;
+		netStatsLastLook = now;
+		netStatsLastLines = now;
+		netStatsBytesIn = host->totalReceivedData;
+		netStatsBytesOut = host->totalSentData;
+
+		for (size_t i = 0; i <= kMostClients; i++)
+		{
+			netStatsStruggling[i] = false;
+		}
+
+		return;
+	}
+
+	if (now - netStatsLastLook < 1000)
+	{
+		return;
+	}
+
+	netStatsLastLook = now;
+	bool const linesDue = now - netStatsLastLines >= kNetStatsEveryMilliseconds;
+	char words[200];
+
+	for (size_t i = 0; i < host->peerCount && i <= kMostClients; i++)
+	{
+		ENetPeer const &peer = host->peers[i];
+
+		if (peer.state != ENET_PEER_STATE_CONNECTED)
+		{
+			netStatsStruggling[i] = false;
+			continue;
+		}
+
+		NetStats_Connection const numbers = { peer.roundTripTime, peer.roundTripTimeVariance, peer.packetLoss, peer.packetsLost, peer.packetsSent };
+		bool struggling = false;
+
+		if (NetStats_Change((int)i + 1, netStatsStruggling[i], numbers, &struggling, words, sizeof(words)))
+		{
+			LogString(words);
+		}
+
+		netStatsStruggling[i] = struggling;
+
+		if (linesDue)
+		{
+			NetStats_ConnectionLine((int)i + 1, numbers, words, sizeof(words));
+			LogString(words);
+		}
+	}
+
+	if (linesDue)
+	{
+		NetStats_BytesLine(host->totalReceivedData, netStatsBytesIn, host->totalSentData, netStatsBytesOut, now - netStatsLastLines, words, sizeof(words));
+		LogString(words);
+		netStatsLastLines = now;
+		netStatsBytesIn = host->totalReceivedData;
+		netStatsBytesOut = host->totalSentData;
+	}
+}
+
 static void LogOlderVersionsToldNo()
 {
 	static unsigned long long toldNo = 0;
@@ -907,6 +987,8 @@ void Net_ServiceNetwork()
 	if (host)
 	{
 		enet_host_service(host, NULL, 0);
+
+		LogConnectionNumbers();
 
 		// also check for session data requests
 		if (AvP.Network == I_Host) {
