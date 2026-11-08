@@ -10,6 +10,8 @@
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   a save whose file can't be written says so on the screen and doesn't cost a save, where before a release build said nothing and took one
 //   a save that can't be written whole leaves the old one as it was, where before a full disk destroyed it and still said GAME SAVED
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
 #include "3dc.h"
 #include "save_file_write.h"
 #include "inline.h"
@@ -48,6 +50,7 @@
 #include <assert.h>
 #include "logString.h"
 #include "utilities.h"
+#include "custom_maps.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -361,6 +364,13 @@ static BOOL SaveGameAllowed()
 	//player must be alive , and not face hugged
 	if(!playerStatusPtr->IsAlive) return FALSE;
 	if(playerStatusPtr->MyFaceHugger) return FALSE;
+
+	// A save names its level by campaign and episode, so one made on a custom map would load a stock level instead
+	if (CustomMaps_Playing())
+	{
+		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));
+		return FALSE;
+	}
 
 	//cheating?
 	if(DebuggingCommandsActive || CheatMode_Active!=CHEATMODE_NONACTIVE)

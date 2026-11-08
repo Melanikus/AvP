@@ -359,6 +359,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\frontend\menu_data.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\menu_gfx.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\mp_config.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\frontend\custom_maps.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\frontend\user_profile.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\gadgets\console_command.cpp" />
@@ -619,6 +620,9 @@
     <ClInclude Include="..\..\3dc\avp\win95\frontend\menu_data.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\menu_gfx.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\mp_config.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\frontend\custom_maps.h" />
+    <ClInclude Include="..\..\3dc\custom_map_name.h" />
+    <ClInclude Include="..\..\3dc\level_kind.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\user_profile.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\console_command.hpp" />

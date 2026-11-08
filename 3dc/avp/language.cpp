@@ -10,6 +10,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the name of the marine's shoulder lamp key comes from here too
 //   the text of the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the words of the single player Custom maps page. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -62,6 +64,15 @@ static char OurTextStrings[][200] =
 	"That key can't be used: another line here has it. This line still has its old key.",
 	"That key can't be used: it's one of your controls. This line still has its old key.",
 	"One of your controls has this key too. The control wins, so this line does nothing for that species. Choose another key here, or change the control.",
+	"Custom maps",
+	"Play a map someone has made for single player. The maps in avp_rifs/Custom that are made for single player are listed here.",
+	"Map",
+	"Which map. A map's own picture shows above, if it comes with one.",
+	"None found",
+	"Play as",
+	"Who you play. A map made for one of them may not suit the others.",
+	"How hard the map is.",
+	"Start the map. Finishing it unlocks nothing and counts towards no campaign. You can't save on a custom map yet.",
 };
 
 static_assert(sizeof(OurTextStrings) / sizeof(OurTextStrings[0]) == MAX_NO_OF_TEXTSTRINGS - TEXTSTRING_RENDERING_TITLE, "one line of text for each of our ids in langenum.h");

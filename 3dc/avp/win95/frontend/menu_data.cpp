@@ -3,6 +3,8 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the marine's controls page has the shoulder lamp
 //   the rendering page's lines for choosing a key
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the single player Custom maps page, and the way to it. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 #include "3dc.h"
 #include "module.h"
 #include "inline.h"
@@ -39,6 +41,12 @@ int MP_LevelNumber=0;
 int AlienEpisodeToPlay;
 int MarineEpisodeToPlay;
 int PredatorEpisodeToPlay;
+
+// The Custom maps page's choices: which map (a place in CustomMaps_Name's list), who plays it (0 marine, 1 predator, 2 alien, as the
+// words TEXTSTRING_MULTIPLAYER_MARINE on come), and how hard (0 easy, 1 medium, 2 hard)
+int CustomMapToPlay = 0;
+int CustomMapSpecies = 0;
+int CustomMapDifficulty = 1;
 int UserProfileNumber = -1;	/* set to -1 for first time into game */
 
 extern CONTROL_METHODS PlayerControlMethods;
@@ -160,6 +168,7 @@ static AVPMENU_ELEMENT AvPMenu_ExitGame[] =
 	{AVPMENU_ELEMENT_GOTOMENU_GFX,	{/*AVPMENUGFX_ALIEN_LOGO*/0},		{AVPMENU_ALIENLEVELS},{0},{0},		TEXTSTRING_MAINMENU_SINGLEPLAYER_ALIEN},
 	{AVPMENU_ELEMENT_GOTOMENU_GFX,	{/*AVPMENUGFX_MARINE_LOGO*/0},		{AVPMENU_MARINELEVELS},{0},{0},		TEXTSTRING_MAINMENU_SINGLEPLAYER_MARINE},
 	{AVPMENU_ELEMENT_GOTOMENU_GFX,	{/*AVPMENUGFX_PREDATOR_LOGO*/0},	{AVPMENU_PREDATORLEVELS},{0},{0},	TEXTSTRING_MAINMENU_SINGLEPLAYER_PREDATOR},
+	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_CUSTOMMAPS_TITLE},	{AVPMENU_CUSTOMMAPS},{0},{0},		TEXTSTRING_CUSTOMMAPS_TITLE_HELP},
 //	{AVPMENU_ELEMENT_GOTOMENU,		{TEXTSTRING_MAINMENU_TITLE},	{AVPMENU_MAIN}},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
@@ -325,6 +334,16 @@ static AVPMENU_ELEMENT AvPMenu_UserProfileDelete[] =
 {
 	{AVPMENU_ELEMENT_GOTOMENU,				{TEXTSTRING_NO},	{AVPMENU_USERPROFILESELECT}, {0}, {0}, TEXTSTRING_USERPROFILE_DELETE_HELP},
 	{AVPMENU_ELEMENT_USERPROFILE_DELETE,	{TEXTSTRING_YES}, {0}, {0}, {0}, TEXTSTRING_USERPROFILE_DELETE_HELP},
+	{AVPMENU_ELEMENT_ENDOFMENU}
+};
+
+// The Custom maps page. The map row's list and its last place are filled in as the page opens (SetupNewMenu in menus.cpp).
+static AVPMENU_ELEMENT AvPMenu_CustomMaps[] =
+{
+	{AVPMENU_ELEMENT_TEXTSLIDER_POINTER,	{TEXTSTRING_CUSTOMMAPS_MAP},		{0},	{&CustomMapToPlay},		{0},								TEXTSTRING_CUSTOMMAPS_MAP_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,			{TEXTSTRING_CUSTOMMAPS_SPECIES},	{2},	{&CustomMapSpecies},		{TEXTSTRING_MULTIPLAYER_MARINE},	TEXTSTRING_CUSTOMMAPS_SPECIES_HELP},
+	{AVPMENU_ELEMENT_TEXTSLIDER,			{TEXTSTRING_DIFFICULTY_LEVEL},		{2},	{&CustomMapDifficulty},	{TEXTSTRING_DIFFICULTY_EASY},		TEXTSTRING_CUSTOMMAPS_DIFFICULTY_HELP},
+	{AVPMENU_ELEMENT_CUSTOMMAP_START,		{TEXTSTRING_LEVELSELECT_START},		{0},	{0},						{0},								TEXTSTRING_CUSTOMMAPS_START_HELP},
 	{AVPMENU_ELEMENT_ENDOFMENU}
 };
 
@@ -948,7 +967,13 @@ AVPMENU AvPMenusData[]=
 
 	// AVPMENU_INGAMERENDERING
 	{AVPMENU_FONT_SMALL,	TEXTSTRING_RENDERING_TITLE,			AvPMenu_Rendering,					AVPMENU_INGAMEAVOPTIONS, 0},
+
+	// AVPMENU_CUSTOMMAPS
+	{AVPMENU_FONT_SMALL,	TEXTSTRING_CUSTOMMAPS_TITLE,			AvPMenu_CustomMaps,					AVPMENU_SINGLEPLAYER, 0},
 };
+
+// One entry above for each page, in the order of AVPMENU_ID, which is how a page is found
+static_assert(sizeof(AvPMenusData) / sizeof(AvPMenusData[0]) == AVPMENU_CUSTOMMAPS + 1, "AvPMenusData needs one entry for each AVPMENU_ID, in order");
 
 extern void MakeSelectSessionMenu(void)
 {

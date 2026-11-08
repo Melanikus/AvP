@@ -11,6 +11,9 @@
 //   the rendering page's lines for choosing a key, which can refuse one, and the controls pages show a key that's also on that page
 //   a client whose host has gone goes back to the main menus
 //   a network game's loading screen has all five of its lines, where some could be left unset
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the single player Custom maps page: its list, its picture and its Start row. A finished custom map goes back to that page, and
+//   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a save slot whose species, episode or difficulty is not one the game can write looks like an empty slot.
 //   the log says when a save slot is listed as empty because its numbers are wrong
@@ -27,6 +30,7 @@
 #include "menus.h"
 #include "view_settings.h"
 #include "env_info.h"
+#include "custom_maps.h"
 #include "io.h"
 #include "hud_Layout.h"
 #include "user_profile.h"
@@ -50,6 +54,7 @@
 #include "d3d_render.h"
 #include "OnScreenKeyboard.h"
 #include "logString.h"
+#include <vector>
 #include "profile_checks.h"
 
 #if defined(_MSC_VER)
@@ -116,6 +121,18 @@ static void SetupNewMenu(enum AVPMENU_ID menuID);
 static void RenderMenu(void);
 static void RenderBriefingScreenInfo(void);
 static void RenderEpisodeSelectMenu(void);
+static void RenderCustomMapPicture(void);
+
+// How far down a page a picture starts: below the title, a few pixels clear of the tails of letters like "p"
+static const int kMenuPictureTop = 106;
+
+extern int CustomMapToPlay;
+extern int CustomMapSpecies;
+extern int CustomMapDifficulty;
+extern texID_t MISSING_TEXTURE; // d3_func.cpp: what a picture that can't be read gives back
+
+// The names the Custom maps page's map row shows, as the row wants them: the list's own names, or one line saying there are none
+static std::vector<char *> customMapRowNames;
 static void RenderKeyConfigurationMenu(void);
 static void RenderUserProfileSelectMenu(void);
 static void RenderLoadGameMenu(void);
@@ -327,8 +344,17 @@ int AvP_MainMenus(void)
 
 	if (AvP.LevelCompleted && CheatMode_Active == CHEATMODE_NONACTIVE && !DebuggingCommandsActive)
 	{
-		HandlePostGameFMVs();
-		OkayToPlayNextEpisode();
+		if (CustomMaps_Playing())
+		{
+			// A custom map has no film after it, and no place in a campaign: the episode numbers still name the last stock level, so
+			// using them here would play that level's film and mark it done. It goes back to its own page instead.
+			SetupNewMenu(AVPMENU_CUSTOMMAPS);
+		}
+		else
+		{
+			HandlePostGameFMVs();
+			OkayToPlayNextEpisode();
+		}
 		AvP.LevelCompleted = 0;
 		AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
 	}
@@ -350,6 +376,9 @@ int AvP_MainMenus(void)
 	}
 
 	CheatMode_Active = CHEATMODE_NONACTIVE;
+
+	// Whatever was played has ended and been dealt with above, so nothing is being played now
+	CustomMaps_SetPlaying(false);
 
 	TimeStampedMessage("starting general menus");
 
@@ -865,6 +894,45 @@ static void SetupNewMenu(enum AVPMENU_ID menuID)
 		{
 			break;
 		}
+
+		case AVPMENU_CUSTOMMAPS:
+		{
+			// Found afresh each time the page opens, so a map added while the game runs shows up
+			CustomMaps_Find();
+
+			customMapRowNames.clear();
+
+			for (int i = 0; i < CustomMaps_Count(); i++)
+			{
+				customMapRowNames.push_back(const_cast<char *>(CustomMaps_Name(i)));
+			}
+
+			if (customMapRowNames.empty())
+			{
+				customMapRowNames.push_back(GetTextString(TEXTSTRING_CUSTOMMAPS_NONE));
+			}
+
+			AVPMENU_ELEMENT *const mapRow = &AvPMenus.MenuElements[0];
+			mapRow->TextSliderStringPointer = customMapRowNames.data();
+			mapRow->MaxSliderValue = (int)customMapRowNames.size() - 1;
+
+			// The last choice stays, if it's still one of them
+			if (CustomMapToPlay < 0 || CustomMapToPlay > mapRow->MaxSliderValue)
+			{
+				CustomMapToPlay = 0;
+			}
+
+			if (CustomMapSpecies < 0 || CustomMapSpecies > 2)
+			{
+				CustomMapSpecies = 0;
+			}
+
+			if (CustomMapDifficulty < 0 || CustomMapDifficulty > 2)
+			{
+				CustomMapDifficulty = 1;
+			}
+			break;
+		}
 	
 		case AVPMENU_MARINELEVELS:
 		{
@@ -1258,6 +1326,23 @@ static void RenderMenu(void)
 	{
 		char *textPtr = GetTextString(AvPMenusData[AvPMenus.CurrentMenu].MenuTitle);
 		RenderMenuText(textPtr, MENU_CENTREX, 70, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
+
+		if (AvPMenus.CurrentMenu == AVPMENU_CUSTOMMAPS)
+		{
+			RenderCustomMapPicture();
+		}
+	}
+}
+
+// The chosen custom map's own picture, under the title. A map with none shows nothing there. custom_maps.cpp keeps a picture
+// small enough to fit above the rows.
+static void RenderCustomMapPicture(void)
+{
+	texID_t const picture = CustomMaps_Picture(CustomMapToPlay);
+
+	if (picture != MISSING_TEXTURE)
+	{
+		DrawAvPMenuGfx(picture, MENU_CENTREX, kMenuPictureTop, ONE_FIXED, AVPMENUFORMAT_CENTREJUSTIFIED);
 	}
 }
 
@@ -2747,6 +2832,19 @@ static void InteractWithMenuElement(enum AVPMENU_ELEMENT_INTERACTION_ID interact
 			}
 			break;
 		}
+		case AVPMENU_ELEMENT_CUSTOMMAP_START:
+		{
+			// With no map found, there's nothing to start
+			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT && CustomMaps_SetLevelToLoad(CustomMapToPlay))
+			{
+				AvP.PlayerType = CustomMapSpecies == 1 ? I_Predator : CustomMapSpecies == 2 ? I_Alien : I_Marine;
+				AvP.Difficulty = CustomMapDifficulty == 0 ? I_Easy : CustomMapDifficulty == 2 ? I_Hard : I_Medium;
+				CustomMaps_SetPlaying(true);
+				CustomMaps_ForgetPictures();
+				AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+			}
+			break;
+		}
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
 		{
 			if (interactionID == AVPMENU_ELEMENT_INTERACTION_SELECT)
@@ -3316,6 +3414,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 		case AVPMENU_ELEMENT_STARTLEVELWITHCHEAT:
 		case AVPMENU_ELEMENT_SAVEMPCONFIG:
 		case AVPMENU_ELEMENT_DIFFICULTYLEVEL:
+		case AVPMENU_ELEMENT_CUSTOMMAP_START:
 		case AVPMENU_ELEMENT_JOINLOBBIED:
 		case AVPMENU_ELEMENT_CONNECTIONCHOICE :
 		case AVPMENU_ELEMENT_USERPROFILE_DELETE:
