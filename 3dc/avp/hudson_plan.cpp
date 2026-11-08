@@ -208,7 +208,7 @@ const char *const kHudsonRefusedFollowName = "follow= is a name from the level: 
 const char *const kHudsonRefusedWalkPlaceNotThreeNumbers = "walkfrom=, walkto= and lookat= are three whole numbers with commas between them, x,y,z in mm, as the level has them";
 const char *const kHudsonRefusedWalkNeedsBoth = "walkfrom= and walkto= go together: one says where he starts, the other where he walks to";
 const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks once he has walked, so it needs walkfrom= and walkto=";
-const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or more than one room";
+const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or rooms=: with rooms= the camera goes to a marine who isn't the player";
 
 static bool IsSpace(char c)
 {
@@ -2383,7 +2383,8 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedWatchFromWithoutWatch;
 	}
 
-	// A walk is the player walking, so it needs both ends, and nothing else moving him or the camera
+	// A walk is the player walking, so it needs both ends, and nothing else moving him or the camera. rooms= of any number hands the camera to a marine and makes the
+	// player only a watcher, who can walk into nothing: on 2026-11-08 a walk run with rooms=1 looked round its room and ended before the walk began.
 	if (seenWalkFrom != seenWalkTo)
 	{
 		return kHudsonRefusedWalkNeedsBoth;
@@ -2397,7 +2398,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 		return kHudsonRefusedLookAtWithoutWalk;
 	}
 
-	if (plan->walkSaid && (plan->combatAlien || seenStrategy || seenNav || seenRoute || plan->rooms > 1))
+	if (plan->walkSaid && (plan->combatAlien || seenStrategy || seenNav || seenRoute || plan->rooms > 0))
 	{
 		return kHudsonRefusedWalkNotAlone;
 	}

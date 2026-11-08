@@ -4840,7 +4840,7 @@ void Hudson_TakePictureIfDue()
 	{
 		_snprintf(name, sizeof(name) - 1, "combat-%s.png", fightPictureName);
 	}
-	else if (plan.walkSaid)
+	else if (plan.walkSaid && walkPictureName[0])
 	{
 		_snprintf(name, sizeof(name) - 1, "walk-%s.png", walkPictureName);
 	}

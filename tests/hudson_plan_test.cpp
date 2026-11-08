@@ -812,20 +812,21 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 follow=hug/ger", kHudsonRefusedFollowName);
 	Refused("-hudson level=a frames=1 rooms=1 follow=hugger1 follow=hugger1", kHudsonRefusedAskedTwice);
 	// #126: a walk, as a player walks, through a walk-in switch, and where he looks once he's there
-	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 dieat=5 walkfrom=-45280,5363,8000 walkto=-45280,5363,11000 lookat=-51005,4671,17506", &plan) == 0 && plan.walkSaid && plan.lookAtSaid
+	Check(HudsonPlan_Read("-hudson level=a frames=1 dieat=5 walkfrom=-45280,5363,8000 walkto=-45280,5363,11000 lookat=-51005,4671,17506", &plan) == 0 && plan.walkSaid && plan.lookAtSaid
 		&& plan.walkFromX == -45280 && plan.walkFromY == 5363 && plan.walkFromZ == 8000 && plan.walkToX == -45280 && plan.walkToY == 5363 && plan.walkToZ == 11000
 		&& plan.lookAtX == -51005 && plan.lookAtY == 4671 && plan.lookAtZ == 17506 && plan.dieAtSeconds == 5, "a walk from one place to another, and a place to look at after it, in the level's own millimetres");
-	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6", &plan) == 0 && plan.walkSaid && !plan.lookAtSaid, "a walk doesn't need a place to look at");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 walkfrom=1,2,3 walkto=4,5,6", &plan) == 0 && plan.walkSaid && !plan.lookAtSaid, "a walk doesn't need a place to look at");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1", &plan) == 0 && !plan.walkSaid && !plan.lookAtSaid, "and a run that doesn't say has no walk");
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3", kHudsonRefusedWalkNeedsBoth);
-	Refused("-hudson level=a frames=1 rooms=1 walkto=1,2,3", kHudsonRefusedWalkNeedsBoth);
-	Refused("-hudson level=a frames=1 rooms=1 lookat=1,2,3", kHudsonRefusedLookAtWithoutWalk);
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2 walkto=1,2,3", kHudsonRefusedWalkPlaceNotThreeNumbers);
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=1,2,3,4", kHudsonRefusedWalkPlaceNotThreeNumbers);
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6 lookat=x,y,z", kHudsonRefusedWalkPlaceNotThreeNumbers);
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedAskedTwice);
-	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6 walkto=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 walkfrom=1,2,3", kHudsonRefusedWalkNeedsBoth);
+	Refused("-hudson level=a frames=1 walkto=1,2,3", kHudsonRefusedWalkNeedsBoth);
+	Refused("-hudson level=a frames=1 lookat=1,2,3", kHudsonRefusedLookAtWithoutWalk);
+	Refused("-hudson level=a frames=1 walkfrom=1,2 walkto=1,2,3", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 walkfrom=1,2,3 walkto=1,2,3,4", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 walkfrom=1,2,3 walkto=4,5,6 lookat=x,y,z", kHudsonRefusedWalkPlaceNotThreeNumbers);
+	Refused("-hudson level=a frames=1 walkfrom=1,2,3 walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedAskedTwice);
+	Refused("-hudson level=a frames=1 walkfrom=1,2,3 walkto=4,5,6 walkto=4,5,6", kHudsonRefusedAskedTwice);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedWalkNotAlone);
+	Refused("-hudson level=a frames=1 rooms=1 walkfrom=1,2,3 walkto=4,5,6", kHudsonRefusedWalkNotAlone);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien standat=1,2,3 standat=1,2,3", kHudsonRefusedAskedTwice);
 
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien", &plan) == 0 && plan.combatAliens == 1, "one alien unless it says");
@@ -1198,7 +1199,7 @@ static void TestTheRealGame()
 		Check(Has(watchCode, "if (plan.walkSaid && plan.dieAtSeconds != 0)\n\t{\n\t\twalkMayStartAt = GetTickCount() + 3000;"), "SOURCE: and after the restart with it");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"2s\");"), "SOURCE: a picture 2 seconds after he gets there");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "_snprintf(walkPictureName, sizeof(walkPictureName) - 1, \"5s\");"), "SOURCE: and 5");
-		Check(Has(watchCode, "_snprintf(name, sizeof(name) - 1, \"walk-%s.png\", walkPictureName);"), "SOURCE: named for the walk");
+		Check(Has(watchCode, "else if (plan.walkSaid && walkPictureName[0])\n\t{\n\t\t_snprintf(name, sizeof(name) - 1, \"walk-%s.png\", walkPictureName);"), "SOURCE: named for the walk, and only the walk's");
 		Check(Has(Between(watchCode, "static void WalkHim(PLAYER_STATUS *status)", "\n}\n"), "EndTheLevel(\"the walk is done, and he has looked\", kHudsonExitFinished);"), "SOURCE: and then the run ends");
 		Check(Has(watchCode, "if (!plan.walkSaid)\n\t\t\t{\n\t\t\t\tendAfterLookingAt"), "SOURCE: meets= doesn't end a walk's run before the walk");
 		Check(Has(ReadSourceFile("3dc/avp/hudson_strategies.cpp"), "\t\tcase I_BehaviourFaceHugger:\n\t\t{\n\t\t\tstatic const char *const states[] = { \"approaching\", \"attacking\", \"waiting\", \"avoiding\", \"dying\", \"floating\", \"jumping\", \"about to jump\" };"), "SOURCE: a facehugger's state is said in words");

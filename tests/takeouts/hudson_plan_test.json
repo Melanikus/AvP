@@ -8155,6 +8155,26 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a walk goes with a room's views",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || plan->rooms > 0))",
+					"to": "))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every picture of a walk run is called a walk's",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\telse if (plan.walkSaid && walkPictureName[0])",
+					"to": "\telse if (plan.walkSaid)"
+				}
+			]
 		}
 	]
 }
