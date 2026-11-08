@@ -1430,6 +1430,10 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	}
 	#endif
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: the target this frame's way heads for, when the alien knows where its target is.
+	// See below, where it's kept, and the call to AlienWays_Steer that it's given to.
+	STRATEGYBLOCK *huntedTarget = 0;
+
 	/* should we change to approach state? */
 	if(AlienHasPathToTarget(sbPtr))
 	{
@@ -1447,6 +1451,15 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 		alienStatusPointer->BehaviourState = ABS_Hunt;
 		alienStatusPointer->NearStateTimer = ALIEN_NEARWAITTIME;
 		InitWaypointManager(&alienStatusPointer->waypointManager);
+
+		// Modified 2026-11-08 by Melanikus for the AvP port:
+		//   the target is kept here, before it's let go just below, so that this frame's way heads where Hunt's does. The 1999 code
+		//   sends an alien that knows where its target is back and forth between Hunt and Wander, one frame each, and Hunt's way is given
+		//   the target (AlienNearState_Hunt). Without this, the two frames asked for different places, the target and the wander point,
+		//   and the way changed its mind every frame, so hunting aliens never got anywhere (Fifth's reading of Sixth's 5-alien film).
+		//   It's only used during this frame: the game checks each frame, before any state runs, that an alien's target is still the
+		//   same live thing (Validate_Target in bh_alien.cpp), and AlienIsAwareOfTarget is never true of no target at all.
+		huntedTarget = alienStatusPointer->Target;
 	}
 
 	/* Try to reaquire target? */
@@ -1479,12 +1492,14 @@ static void AlienNearState_Wander(STRATEGYBLOCK *sbPtr)
 	//   ceilings to that point, when the alien ways map has one for it, as one coming for its target does (AlienNearState_Approach). The
 	//   point is the way into a module next to this one, picked above, so the way changes only how it gets there, never where. Without a
 	//   way, without a point, or within that distance of it, it's steered as it always was. Either way the direction goes through the same
-	//   checks below. There's no target while wandering (it was let go above), so none is given. On a way it crawls: see the start of
-	//   this state.
+	//   checks below. On a way it crawls: see the start of this state.
+	// Modified again, 2026-11-08: an alien that knows where its target is, and is going back to Hunt (above), gives its way that target,
+	//   as Hunt does, so its way heads for the target itself when the target's module can be seen from the alien's, and for the wander
+	//   point otherwise, the same in both of its frames. Any other wandering alien has let its target go, and gives none.
 	if ((alienStatusPointer->Type == AT_Standard) && AlienIsAbleToClimb(sbPtr)
 		&& (alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)
 		&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)
-		&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
+		&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))
 	{
 		/* Stick to whatever it's touching, and go along it towards the way's next point */
 		dynPtr->UseStandardGravity=0;

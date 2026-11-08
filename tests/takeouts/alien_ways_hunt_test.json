@@ -99,18 +99,18 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(dynPtr->Position), &velocityDirection))"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(dynPtr->Position), &velocityDirection))"
 				}
 			]
 		},
 		{
-			"name": "SOURCE: a wandering alien asks with a target, so the way could go to the target instead of the point",
+			"name": "SOURCE: a wandering alien going back to Hunt asks with no target, so its two frames head for different places",
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, alienStatusPointer->Target,"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget,",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0,"
 				}
 			]
 		},
@@ -139,8 +139,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& AlienWays_Steer(sbPtr, 0"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget"
 				}
 			]
 		},
@@ -149,8 +149,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=1;"
 				}
 			]
 		},
@@ -159,8 +159,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);"
 				}
 			]
 		},
@@ -169,8 +169,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity=1;"
 				}
 			]
 		},
@@ -179,8 +179,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/bh_near.cpp",
-					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
-					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, 0, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
+					"from": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);",
+					"to": "(alienStatusPointer->wanderData.currentModule != NPC_NOWANDERMODULE)\n\t\t&& (VectorDistance(&(dynPtr->Position), &(alienStatusPointer->wanderData.worldPosition)) > ALIEN_ATTACKDISTANCE_MIN)\n\t\t&& AlienWays_Steer(sbPtr, huntedTarget, &(alienStatusPointer->wanderData.worldPosition), &velocityDirection))\n\t{\n\t\t/* Stick to whatever it's touching, and go along it towards the way's next point */\n\t\tdynPtr->UseStandardGravity=0;\n\t}\n\telse\n\t{\n\t\tNPCGetMovementDirection(sbPtr, &velocityDirection, &(alienStatusPointer->wanderData.worldPosition),&alienStatusPointer->waypointManager);\n\t}\n\tNPCSetVelocity(sbPtr, &velocityDirection, alienStatusPointer->MaxSpeed);\n\tdynPtr->UseStandardGravity = 1;"
 				}
 			]
 		},
@@ -231,6 +231,26 @@
 					"file": "3dc/avp/bh_near.cpp",
 					"from": "\t\tif (redo) {\n\t\t\tStartAlienMovementSequence(sbPtr);\n\t\t}\n\t}\n\n\t/* Update sequence! */\n\tAlienHandleMovingAnimation(sbPtr);\n\n\t/* Do something else? */",
 					"to": "\t}\n\n\t/* Update sequence! */\n\tAlienHandleMovingAnimation(sbPtr);\n\n\t/* Do something else? */"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a wandering alien keeps its target only after it's let it go, so it's always none",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\thuntedTarget = alienStatusPointer->Target;\n\t}\n\n\t/* Try to reaquire target? */\n\talienStatusPointer->Target=NULL;\n",
+					"to": "\t}\n\n\t/* Try to reaquire target? */\n\talienStatusPointer->Target=NULL;\n\thuntedTarget = alienStatusPointer->Target;\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: every wandering alien gives its target, whether it knows where that is or not",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_near.cpp",
+					"from": "\t\thuntedTarget = alienStatusPointer->Target;\n\t}\n\n\t/* Try to reaquire target? */\n",
+					"to": "\t}\n\n\thuntedTarget = alienStatusPointer->Target;\n\n\t/* Try to reaquire target? */\n"
 				}
 			]
 		}
