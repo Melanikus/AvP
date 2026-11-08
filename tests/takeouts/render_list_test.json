@@ -1,0 +1,529 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "the water mesh is said to need fewer index numbers than it writes",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "return 1350;",
+					"to": "return 1344;"
+				}
+			]
+		},
+		{
+			"name": "fewer than three corners are said to need index numbers",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (numVerts < 3)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a shape is said to need one triangle more than it has",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "return (numVerts - 2) * 3;",
+					"to": "return (numVerts - 1) * 3;"
+				}
+			]
+		},
+		{
+			"name": "a triangle is wound the other way",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "AddIndices(indexArray, 0,2,1, 3);",
+					"to": "AddIndices(indexArray, 0,1,2, 3);"
+				}
+			]
+		},
+		{
+			"name": "a four-cornered shape's second triangle is wound the other way",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "AddIndices(indexArray, 0,2,3, 4);",
+					"to": "AddIndices(indexArray, 0,3,2, 4);"
+				}
+			]
+		},
+		{
+			"name": "a five-cornered shape's middle triangle is wound the other way",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "AddIndices(indexArray, 1,3,4, 5);",
+					"to": "AddIndices(indexArray, 1,4,3, 5);"
+				}
+			]
+		},
+		{
+			"name": "a shape of six or more corners loses a triangle",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "for (uint32_t i = numVerts - 2; i >= 1; i--)",
+					"to": "for (uint32_t i = numVerts - 2; i >= 2; i--)"
+				}
+			]
+		},
+		{
+			"name": "a triangle's second corner is its third",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "indexArray[iCount+1] = (vCount - (n) + (b));",
+					"to": "indexArray[iCount+1] = (vCount - (n) + (c));"
+				}
+			]
+		},
+		{
+			"name": "a triangle counts as two index numbers",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "(**ib).SetSize(iCount + 3);",
+					"to": "(**ib).SetSize(iCount + 2);"
+				}
+			]
+		},
+		{
+			"name": "triangles are written past the end of their room",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (iCount > (**ib).GetCapacity() || 3 > (**ib).GetCapacity() - iCount)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a count of index numbers past the room wraps round to room for a triangle",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (iCount > (**ib).GetCapacity() || 3 > (**ib).GetCapacity() - iCount)",
+					"to": "if (3 > (**ib).GetCapacity() - iCount)"
+				}
+			]
+		},
+		{
+			"name": "a command is never kept",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tset_commandType (Items[listIndex].sortKey, commandType);\n\tlistIndex++;",
+					"to": "\tset_commandType (Items[listIndex].sortKey, commandType);"
+				}
+			]
+		},
+		{
+			"name": "a count of corners past the room wraps round to a lot of room",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (vertexSize > vertexRoom || numVerts > vertexRoom - vertexSize)",
+					"to": "if (numVerts > vertexRoom - vertexSize)"
+				}
+			]
+		},
+		{
+			"name": "the room for index numbers is never asked about",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (indexSize > indexRoom || numIndices > indexRoom - indexSize)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a count of index numbers past the room wraps round to a lot of room",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (indexSize > indexRoom || numIndices > indexRoom - indexSize)",
+					"to": "if (numIndices > indexRoom - indexSize)"
+				}
+			]
+		},
+		{
+			"name": "asking about a shape leaves its index numbers out",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "return Check(numVerts, GetNumIndices(numVerts));",
+					"to": "return Check(numVerts, 0);"
+				}
+			]
+		},
+		{
+			"name": "being full is said every time",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (leftOutBecauseFull == 0) {",
+					"to": "if (true) {"
+				}
+			]
+		},
+		{
+			"name": "shapes left out for being full are not counted",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tleftOutBecauseFull++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a list with only its index numbers closed says yes",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (!BuffersExist() || !(**vb)._isLocked || !(**ib)._isLocked)",
+					"to": "if (!BuffersExist() || !(**vb)._isLocked)"
+				}
+			]
+		},
+		{
+			"name": "a list with only its corners closed says yes",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (!BuffersExist() || !(**vb)._isLocked || !(**ib)._isLocked)",
+					"to": "if (!BuffersExist() || !(**ib)._isLocked)"
+				}
+			]
+		},
+		{
+			"name": "being closed is said every time",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (leftOutBecauseClosed == 0) {",
+					"to": "if (true) {"
+				}
+			]
+		},
+		{
+			"name": "shapes left out for being closed are not counted",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tleftOutBecauseClosed++;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shape is taken without asking if there is room",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (!Check(numVerts))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "shapes that could join never do",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "(Items[listIndex-1].sortKey == Items[listIndex].sortKey))",
+					"to": "(false))"
+				}
+			]
+		},
+		{
+			"name": "a shape's index numbers are said to end a triangle too late",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "Items[listIndex].indexEnd = (**ib).GetSize() + numIndices;",
+					"to": "Items[listIndex].indexEnd = (**ib).GetSize() + numIndices + 3;"
+				}
+			]
+		},
+		{
+			"name": "the corners of a shape are never counted",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "(**vb).SetSize(currentSize + numVerts);",
+					"to": "(**vb).SetSize(currentSize);"
+				}
+			]
+		},
+		{
+			"name": "shapes are drawn from the wrong index number",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "R_DrawIndexedPrimitive(baseIndexValue, 0, (**vb).GetSize(), it->indexStart, numPrimitives);",
+					"to": "R_DrawIndexedPrimitive(baseIndexValue, 0, (**vb).GetSize(), it->indexStart + 3, numPrimitives);"
+				}
+			]
+		},
+		{
+			"name": "a command to stop depth writes is never carried out",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t\t\t\tChangeZWriteEnable(ZWRITE_DISABLED);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a list with no description of its corners draws anyway",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (!BuffersExist() || !*decl)",
+					"to": "if (!BuffersExist())"
+				}
+			]
+		},
+		{
+			"name": "the next frame starts with the last one's corners still counted",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\t(**vb).SetSize(0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "how full a list got is never said",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\tReportHowFullItGot();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the same quarter is said again",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "\t\tquartersReported = quarters;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "only the corners count towards how full a list is",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "(vertexQuarters > indexQuarters) ? vertexQuarters : indexQuarters;",
+					"to": "vertexQuarters;"
+				}
+			]
+		},
+		{
+			"name": "an empty list says how full it is",
+			"changes": [
+				{
+					"file": "3dc/RenderList.cpp",
+					"from": "if (quarters > quartersReported)",
+					"to": "if (quarters >= quartersReported)"
+				}
+			]
+		},
+		{
+			"name": "a new corner buffer starts with whatever number was in its memory",
+			"changes": [
+				{
+					"file": "3dc/VertexBuffer.h",
+					"from": "_isLocked(false),\n\t\t\t_nVerts(0)",
+					"to": "_isLocked(false)"
+				}
+			]
+		},
+		{
+			"name": "a new index buffer starts with whatever number was in its memory",
+			"changes": [
+				{
+					"file": "3dc/IndexBuffer.h",
+					"from": "_isLocked(false),\n\t\t\t_nIndices(0)",
+					"to": "_isLocked(false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the list doesn't say its answer can't be thrown away",
+			"changes": [
+				{
+					"file": "3dc/RenderList.h",
+					"from": "[[nodiscard]] bool AddItem(",
+					"to": "bool AddItem("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: one of the builds lets the answer be thrown away",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "<AdditionalOptions> /J /we4834</AdditionalOptions>",
+					"to": "<AdditionalOptions> /J</AdditionalOptions>"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the water ignores a no from its list",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (!mainList->AddItem(kNumMeshVerts, currentWaterTexture, TRANSLUCENCY_NORMAL)) {\n\t\treturn;\n\t}",
+					"to": "\tif (!mainList->AddItem(kNumMeshVerts, currentWaterTexture, TRANSLUCENCY_NORMAL)) {\n\t}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the lock-on triangle doesn't make room first",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t// responsible for drawing predators lock on triangle, for one\n\tif (!mainList->Check(RenderPolygon.NumberOfVertices)) {\n\t\tFlushLists();\n\t}\n",
+					"to": "\t// responsible for drawing predators lock on triangle, for one\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: coronas are written before particles",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tDrawParticles();\n\t\tDrawCoronas();\n\t}\n\n\tProcessorStageClock clock(kProcessorLocks);",
+					"to": "\t\tDrawCoronas();\n\t\tDrawParticles();\n\t}\n\n\tProcessorStageClock clock(kProcessorLocks);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flush doesn't check the frame is open",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "static void FlushLists()\n{\n\tif (!frameIsOpen)\n\t{\n\t\treturn;\n\t}\n\n",
+					"to": "static void FlushLists()\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame that couldn't be drawn leaves one list full",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tdecalList->Reset();\n\t\tweaponList->Reset();\n",
+					"to": "\t\tdecalList->Reset();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame that couldn't be drawn keeps what it collected for shadows",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tToyForgetCasters();\n\t}\n\telse\n\t{\n\t\tframeIsOpen = false;",
+					"to": "\t}\n\telse\n\t{\n\t\tframeIsOpen = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame that couldn't be drawn leaves before the end of the function",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\t\tToyForgetCasters();\n\t}\n\telse\n\t{\n\t\tframeIsOpen = false;",
+					"to": "\t\tToyForgetCasters();\n\t\treturn;\n\t}\n\telse\n\t{\n\t\tframeIsOpen = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the start of a frame says it is open before it has started",
+			"changes": [
+				{
+					"file": "3dc/d3d_render.cpp",
+					"from": "\tif (R_BeginScene())\n\t{\n\t\tFrameTiming_StartFrame(d3d.lpD3DDevice);\n\t\tframeIsOpen = true;\n",
+					"to": "\tframeIsOpen = true;\n\tif (R_BeginScene())\n\t{\n\t\tFrameTiming_StartFrame(d3d.lpD3DDevice);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait for a lost graphics card asks it only once",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t\t\t// The answer changes as the wait goes on, so it has to be asked again each time round\n\t\t\tLastError = d3d.lpD3DDevice->TestCooperativeLevel();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait for a lost graphics card goes on after the game is closed",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t\t\tif (!bRunning)\n\t\t\t{\n\t\t\t\treturn false;\n\t\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the wait for a lost graphics card says it is lost every time round",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t\t\t\tif (!saidLost)\n\t\t\t\t{\n\t\t\t\t\tLogDebugString(\"D3D device lost\");\n\t\t\t\t\tsaidLost = true;\n\t\t\t\t}",
+					"to": "\t\t\t\tLogDebugString(\"D3D device lost\");"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: what the wait let go of is made again in two places",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t\t\t\t// It came back by itself, and only needs what was let go of above. That's done below.\n\t\t\t\tbreak;",
+					"to": "\t\t\t\tCreateVolatileResources();\n\t\t\t\tbreak;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame stopped by a failed clear leaves its scene open",
+			"changes": [
+				{
+					"file": "win32/d3_func.cpp",
+					"from": "\t\tR_EndScene();\n\t\treturn false;\n\t}\n\n\tsaidClearFailed = false;",
+					"to": "\t\treturn false;\n\t}\n\n\tsaidClearFailed = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: being closed doesn't end the wait for the game to become active",
+			"changes": [
+				{
+					"file": "3dc/win95/win_func.cpp",
+					"from": "while (!bActive && bRunning);",
+					"to": "while (!bActive);"
+				}
+			]
+		}
+	]
+}
