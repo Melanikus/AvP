@@ -45,6 +45,8 @@ runs:
         & (Join-Path $root 'bootstrap-vcpkg.bat') -disableMetrics
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+        # With --classic, vcpkg doesn't read vcpkg-configuration.json, so our triplet is named here too: the libraries are built as the
+        # game's are
         $wanted = @($ports | ForEach-Object { "$($_):x86-windows" })
-        & (Join-Path $root 'vcpkg.exe') install @wanted --classic --overlay-ports=vcpkg-overlay-ports --x-install-root=vcpkg_installed
+        & (Join-Path $root 'vcpkg.exe') install @wanted --classic --overlay-ports=vcpkg-overlay-ports --overlay-triplets=vcpkg-overlay-triplets --x-install-root=vcpkg_installed
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

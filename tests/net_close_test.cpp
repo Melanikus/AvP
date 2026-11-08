@@ -31,7 +31,8 @@
 
 static int checksFailed = 0;
 
-static void Check(bool good, const std::string &what)
+// Called CloseCheck, not Check: Snyk Code joins functions with the same name and signature across files, and many tests have a Check
+static void CloseCheck(bool good, const std::string &what)
 {
 	printf("%s  %s\n", good ? "ok    " : "FAILED", what.c_str());
 	fflush(stdout);
@@ -81,11 +82,11 @@ static ENetHost *MakeHostOnThisMachine()
 
 	if (host && enet_socket_get_address(host->socket, &bound) == 0)
 	{
-		Check(IsOnThisMachine(bound, "a host's socket is on"), "the socket is on 127.0.0.1 only");
+		CloseCheck(IsOnThisMachine(bound, "a host's socket is on"), "the socket is on 127.0.0.1 only");
 	}
 	else
 	{
-		Check(false, "the socket's own address can be read back");
+		CloseCheck(false, "the socket's own address can be read back");
 	}
 
 	return host;
@@ -118,7 +119,7 @@ static bool MakePair(Pair *pair)
 		return false;
 	}
 
-	Check(IsOnThisMachine(pair->leaversConnection->address, "the connection goes to"), "and the connection goes to 127.0.0.1 only");
+	CloseCheck(IsOnThisMachine(pair->leaversConnection->address, "the connection goes to"), "and the connection goes to 127.0.0.1 only");
 
 	DWORD const startedAt = GetTickCount();
 	bool otherHasIt = false;
@@ -147,7 +148,15 @@ static void SendTheLastWord(Pair const &pair)
 {
 	ENetPacket *const packet = enet_packet_create(kLastWord, sizeof(kLastWord), ENET_PACKET_FLAG_RELIABLE);
 
-	enet_peer_send(pair.leaversConnection, 0, packet);
+	// ENet keeps a packet it takes, and frees it when it's been sent. One it won't take is still ours, so it's freed here.
+	bool const taken = packet != NULL && enet_peer_send(pair.leaversConnection, 0, packet) == 0;
+
+	if (packet != NULL && !taken)
+	{
+		enet_packet_destroy(packet);
+	}
+
+	CloseCheck(taken, "ENet takes the last word to send");
 }
 
 // The other end reads whatever has come, for up to forMilliseconds or until the goodbye
@@ -193,14 +202,14 @@ static void TestDestroyingAtOnce()
 {
 	Pair pair;
 
-	Check(MakePair(&pair), "two ENet hosts on this machine connect");
+	CloseCheck(MakePair(&pair), "two ENet hosts on this machine connect");
 	SendTheLastWord(pair);
 	enet_host_destroy(pair.leaver);
 	Sleep(kSlowFrame);
 
 	Seen const seen = WatchTheOtherEnd(pair.other, 1000);
 
-	Check(!seen.gotTheMessage, "destroying the host at once, as the game did, loses the last message");
+	CloseCheck(!seen.gotTheMessage, "destroying the host at once, as the game did, loses the last message");
 	enet_host_destroy(pair.other);
 }
 
@@ -208,7 +217,7 @@ static void TestClosingAtOnce()
 {
 	Pair pair;
 
-	Check(MakePair(&pair), "two ENet hosts connect again");
+	CloseCheck(MakePair(&pair), "two ENet hosts connect again");
 	SendTheLastWord(pair);
 	enet_host_flush(pair.leaver);
 	enet_peer_disconnect_now(pair.leaversConnection, 0);
@@ -217,7 +226,7 @@ static void TestClosingAtOnce()
 
 	Seen const seen = WatchTheOtherEnd(pair.other, 1000);
 
-	Check(seen.gotTheGoodbye && !seen.gotTheMessage, "closing at once sends the goodbye, and the last message arriving with it is thrown away");
+	CloseCheck(seen.gotTheGoodbye && !seen.gotTheMessage, "closing at once sends the goodbye, and the last message arriving with it is thrown away");
 	enet_host_destroy(pair.other);
 }
 
@@ -225,7 +234,7 @@ static void TestClosingAfterWhatsWaiting()
 {
 	Pair pair;
 
-	Check(MakePair(&pair), "two ENet hosts connect for the proper way");
+	CloseCheck(MakePair(&pair), "two ENet hosts connect for the proper way");
 	SendTheLastWord(pair);
 
 	// The leaver waits for the other end, so it closes on its own thread while the other end is slow to look
@@ -241,8 +250,8 @@ static void TestClosingAfterWhatsWaiting()
 	Seen const seen = WatchTheOtherEnd(pair.other, 3000);
 
 	leaving.join();
-	Check(seen.gotTheMessage && seen.gotTheGoodbye && seen.messageCameFirst, "closing after what's waiting: the last message arrives, and then the goodbye");
-	Check(stillClosing == 0, "and the leaver heard the other end answer, so nothing was still closing");
+	CloseCheck(seen.gotTheMessage && seen.gotTheGoodbye && seen.messageCameFirst, "closing after what's waiting: the last message arrives, and then the goodbye");
+	CloseCheck(stillClosing == 0, "and the leaver heard the other end answer, so nothing was still closing");
 	enet_host_destroy(pair.other);
 }
 
@@ -250,15 +259,15 @@ static void TestAnEndThatNeverAnswers()
 {
 	Pair pair;
 
-	Check(MakePair(&pair), "two ENet hosts connect, and then one stops looking");
+	CloseCheck(MakePair(&pair), "two ENet hosts connect, and then one stops looking");
 	SendTheLastWord(pair);
 
 	DWORD const startedAt = GetTickCount();
 	int const stillClosing = Net_CloseConnectionsAfterWhatsWaiting(pair.leaver, 300);
 	DWORD const took = GetTickCount() - startedAt;
 
-	Check(stillClosing == 1, "a connection whose other end never answers is still closing when the wait ends");
-	Check(took >= 300 && took < 300 + 500, "and the wait was as long as asked, not longer: " + std::to_string(took) + " ms");
+	CloseCheck(stillClosing == 1, "a connection whose other end never answers is still closing when the wait ends");
+	CloseCheck(took >= 300 && took < 300 + 500, "and the wait was as long as asked, not longer: " + std::to_string(took) + " ms");
 	enet_host_destroy(pair.leaver);
 	enet_host_destroy(pair.other);
 }
@@ -267,13 +276,13 @@ static void TestNothingToClose()
 {
 	ENetHost *const alone = MakeHostOnThisMachine();
 
-	Check(alone != NULL, "an ENet host with no connections");
+	CloseCheck(alone != NULL, "an ENet host with no connections");
 
 	DWORD const startedAt = GetTickCount();
 
-	Check(Net_CloseConnectionsAfterWhatsWaiting(alone, 3000) == 0 && GetTickCount() - startedAt < 100, "has nothing to close, and doesn't wait");
+	CloseCheck(Net_CloseConnectionsAfterWhatsWaiting(alone, 3000) == 0 && GetTickCount() - startedAt < 100, "has nothing to close, and doesn't wait");
 	enet_host_destroy(alone);
-	Check(Net_CloseConnectionsAfterWhatsWaiting(NULL, 3000) == 0, "and no host at all is nothing to close");
+	CloseCheck(Net_CloseConnectionsAfterWhatsWaiting(NULL, 3000) == 0, "and no host at all is nothing to close");
 }
 
 int main()
