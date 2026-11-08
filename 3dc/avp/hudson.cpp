@@ -365,6 +365,8 @@ static LONG visionViews = 0, visionReadsFailed = 0, visionMirrored = 0, visionNo
 
 // The fight. The ones another thread can read are for the result line, which can be written from there.
 static char alienName[SB_NAME_LENGTH] = { 0 };
+static char otherAlienNames[kHudsonMostTogether - 1][SB_NAME_LENGTH];   // together=: the aliens made with the first one. See "WATCHING AN ALIEN"
+static int otherAliensMade = 0;
 
 // What a watched fight has found so far: see "WATCHING AN ALIEN", further down.
 enum WatchSurface
@@ -3510,6 +3512,8 @@ static void SayWhatTheWatchFound(const char *how)
 // Every frame of a watched fight, while the alien's alive. Counts how far it went on each kind of surface on its way to him, says once a second where it is,
 // and ends the run a few seconds after its first blow lands. Only the way there is counted: its lunges while it attacks him aren't part of it. True once it
 // has ended the run, so that nothing else is done with this frame.
+static void WatchTheOtherAliens(const STRATEGYBLOCK *marine, int seconds);   // together=: below, with the others' making
+
 static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alien, LONG frame)
 {
 	DWORD const now = GetTickCount();
@@ -3546,6 +3550,9 @@ static bool WatchTheAlien(const STRATEGYBLOCK *marine, const STRATEGYBLOCK *alie
 			HeightAboveWhatsBelow(alien), AlienAnimationWord(status->HModelController.Sequence_Type), status->HModelController.Sub_Sequence, status->IAmCrouched,
 			Approximate3dMagnitude(&apart), marine->DynPtr->Position.vy);
 		LogString(line);
+
+		// together=: the others, straight after the first
+		WatchTheOtherAliens(marine, seconds);
 
 		// record=pictures: one a second, so that a person can see what the line says, without a film
 		if (plan.pictures)
@@ -3725,6 +3732,77 @@ static void LookFromHisEyesAtTheAlien(const STRATEGYBLOCK *marine, VECTORCH *pla
 	MakeMatrixFromDirection(&look, turn);
 }
 
+// together=: the other aliens of a watched fight, made at the same moment as the first, round it on the same floor: 2 m to each side, in front, behind,
+// and then on the corners. One that would be in no room isn't made, and the log says so, so the count made is always in the log. Each is followed once a
+// second (see WatchTheOtherAliens), and its first blow on him ends the run as the first one's does, because a blow is a blow whoever lands it.
+static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)
+{
+	static const int kApart = 2000;   // mm, along the floor
+	static const int offsets[kHudsonMostTogether - 1][2] = { { kApart, 0 }, { -kApart, 0 }, { 0, kApart }, { 0, -kApart }, { kApart, kApart }, { -kApart, kApart }, { kApart, -kApart } };
+	char line[200] = { 0 };
+
+	otherAliensMade = 0;
+
+	for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)
+	{
+		VECTORCH spot = { first.vx + offsets[i][0], first.vy, first.vz + offsets[i][1] };
+
+		if (!ModuleFromPosition(&spot, (MODULE *)0))
+		{
+			_snprintf(line, sizeof(line) - 1, "hudson: together: the alien for %d %d %d isn't made, because that place isn't in any of this level's rooms", spot.vx, spot.vy, spot.vz);
+			LogString(line);
+			continue;
+		}
+
+		CreateAlienBot(&spot, 0);
+
+		STRATEGYBLOCK const *const made = TheAlienJustMadeAt(spot);
+
+		if (!made)
+		{
+			_snprintf(line, sizeof(line) - 1, "hudson: together: the alien for %d %d %d couldn't be made", spot.vx, spot.vy, spot.vz);
+			LogString(line);
+			continue;
+		}
+
+		memcpy(otherAlienNames[otherAliensMade], made->SBname, SB_NAME_LENGTH);
+		otherAliensMade++;
+		_snprintf(line, sizeof(line) - 1, "hudson: together: alien %d of %d is made at frame %ld, at %d %d %d", otherAliensMade + 1, plan.watchTogether, frame, spot.vx, spot.vy, spot.vz);
+		LogString(line);
+	}
+
+	_snprintf(line, sizeof(line) - 1, "hudson: together: %d of the %d aliens asked for are made", otherAliensMade + 1, plan.watchTogether);
+	LogString(line);
+}
+
+// together=: once a second, where each of the other aliens is and what it's doing, in the same words as the first one's line, so that a reader can
+// set them side by side. The first one is alien 1, in the line before these.
+static void WatchTheOtherAliens(const STRATEGYBLOCK *marine, int seconds)
+{
+	char line[400] = { 0 };
+
+	for (int i = 0; i < otherAliensMade; i++)
+	{
+		STRATEGYBLOCK const *const other = FindSBWithName(otherAlienNames[i]);
+
+		if (!other || other->I_SBtype != I_BehaviourAlien || !other->DynPtr)
+		{
+			_snprintf(line, sizeof(line) - 1, "hudson: watch: second %d: alien %d is gone", seconds, i + 2);
+			LogString(line);
+			continue;
+		}
+
+		VECTORCH const here = other->DynPtr->Position;
+		VECTORCH apart = { marine->DynPtr->Position.vx - here.vx, marine->DynPtr->Position.vy - here.vy, marine->DynPtr->Position.vz - here.vz };
+		ALIEN_STATUS_BLOCK const *const status = (const ALIEN_STATUS_BLOCK *)other->SBdataptr;
+
+		_snprintf(line, sizeof(line) - 1, "hudson: watch: second %d: alien %d is at %d %d %d, %s, on %s, on %s gravity, %d mm above what's below it, %d mm from him", seconds, i + 2,
+			here.vx, here.vy, here.vz, AlienStateWord((int)status->BehaviourState), kWatchSurfaceWords[SurfaceItsOn(other->DynPtr)], other->DynPtr->UseStandardGravity ? "standard" : "surface",
+			HeightAboveWhatsBelow(other), Approximate3dMagnitude(&apart));
+		LogString(line);
+	}
+}
+
 static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)
 {
 	VECTORCH spot;
@@ -3779,6 +3857,11 @@ static void MakeTheAlien(STRATEGYBLOCK *marine, LONG frame)
 	if (plan.watchAlien)
 	{
 		WatchTheAlienStarts(marine, alien, frame);
+	}
+
+	if (plan.watchTogether > 1)
+	{
+		MakeTheOtherAliens(spot, frame);
 	}
 }
 

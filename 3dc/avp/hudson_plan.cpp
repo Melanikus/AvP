@@ -208,6 +208,8 @@ const char *const kHudsonRefusedFollowName = "follow= is a name from the level: 
 const char *const kHudsonRefusedWalkPlaceNotThreeNumbers = "walkfrom=, walkto= and lookat= are three whole numbers with commas between them, x,y,z in mm, as the level has them";
 const char *const kHudsonRefusedWalkNeedsBoth = "walkfrom= and walkto= go together: one says where he starts, the other where he walks to";
 const char *const kHudsonRefusedLookAtWithoutWalk = "lookat= is where he looks once he has walked, so it needs walkfrom= and walkto=";
+const char *const kHudsonRefusedTogetherNotANumber = "together= is how many aliens at once, from 2 to 8";
+const char *const kHudsonRefusedTogetherWithoutWatch = "together= is how many aliens a watched fight has at once, so it needs watch=alien";
 const char *const kHudsonRefusedWalkNotAlone = "walkfrom= has the player walk, so it doesn't go with combat=, strategy=, nav=, route= or rooms=: with rooms= the camera goes to a marine who isn't the player";
 
 static bool IsSpace(char c)
@@ -383,7 +385,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 
 	bool seenWall = false, seenWallRank = false, seenWallRoom = false, seenCompare = false, seenCombat = false, seenAliens = false;
 	bool seenWatch = false, seenHoldFire = false, seenAlienAt = false, seenStandAt = false, seenWatchFrom = false;
-	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false;
+	bool seenLampSize = false, seenFollow = false, seenWalkFrom = false, seenWalkTo = false, seenLookAt = false, seenTogether = false;
 	bool seenLevel = false, seenFrames = false, seenSeconds = false, seenIdle = false, seenRooms = false, seenViews = false, seenLighting = false, seenShadows = false, seenRecord = false;
 	const char *place = commandLine ? FindHudsonWord(commandLine) : 0;
 
@@ -918,6 +920,20 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 			}
 
 			plan->watchAlien = true;
+		}
+		else if (WordIs(place, nameLength, "together"))
+		{
+			if (seenTogether)
+			{
+				return kHudsonRefusedAskedTwice;
+			}
+
+			seenTogether = true;
+
+			if (!ReadNumber(value, valueLength, &plan->watchTogether) || plan->watchTogether < 2 || plan->watchTogether > kHudsonMostTogether)
+			{
+				return kHudsonRefusedTogetherNotANumber;
+			}
 		}
 		else if (WordIs(place, nameLength, "watchfrom"))
 		{
@@ -2369,7 +2385,7 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	}
 
 	// Watching an alien is a fight he doesn't take part in, so each of these only means something in a fight
-	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom) && !plan->combatAlien)
+	if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien)
 	{
 		return kHudsonRefusedWatchWordsWithoutCombat;
 	}
@@ -2377,6 +2393,11 @@ const char *HudsonPlan_Read(const char *commandLine, HudsonPlan *plan)
 	if (plan->holdFire && !plan->watchAlien)
 	{
 		return kHudsonRefusedHoldFireWithoutWatch;
+	}
+
+	if (seenTogether && !plan->watchAlien)
+	{
+		return kHudsonRefusedTogetherWithoutWatch;
 	}
 
 	if (seenWatchFrom && !plan->watchAlien)

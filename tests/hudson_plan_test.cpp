@@ -785,6 +785,17 @@ static void TestWallPlans()
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watchfrom=side", kHudsonRefusedWatchFromWithoutWatch);
 	Refused("-hudson level=a frames=1 rooms=1 watchfrom=eyes", kHudsonRefusedWatchWordsWithoutCombat);
 	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien watchfrom=eyes watchfrom=side", kHudsonRefusedAskedTwice);
+	// together=: a watched fight with several aliens at once
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=5", &plan) == 0 && plan.watchTogether == 5, "together=5 has five aliens at once");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=8", &plan) == 0 && plan.watchTogether == 8, "and eight is the most");
+	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 combat=alien watch=alien", &plan) == 0 && plan.watchTogether == 0, "a run that doesn't say has one");
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=1", kHudsonRefusedTogetherNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=9", kHudsonRefusedTogetherNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=x", kHudsonRefusedTogetherNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=", kHudsonRefusedTogetherNotANumber);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien together=3", kHudsonRefusedTogetherWithoutWatch);
+	Refused("-hudson level=a frames=1 rooms=1 together=3", kHudsonRefusedWatchWordsWithoutCombat);
+	Refused("-hudson level=a frames=1 rooms=1 combat=alien watch=alien together=3 together=3", kHudsonRefusedAskedTwice);
 	// The user's alien films have the lamp on at the biggest spot it has: lampsize=
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.35", &plan) == 0 && plan.lampOn && plan.lampSizeHundredths == 35, "lampsize=0.35 is the most the spot goes to");
 	Check(HudsonPlan_Read("-hudson level=a frames=1 rooms=1 lamp=on lampsize=0.05", &plan) == 0 && plan.lampSizeHundredths == 5, "and 0.05 the least");
@@ -1207,6 +1218,11 @@ static void TestTheRealGame()
 		Check(Has(ReadSourceFile("3dc/avp/hudson_strategies.cpp"), "\t\tcase I_BehaviourFaceHugger:\n\t\t{\n\t\t\tstatic const char *const states[] = { \"approaching\", \"attacking\", \"waiting\", \"avoiding\", \"dying\", \"floating\", \"jumping\", \"about to jump\" };"), "SOURCE: a facehugger's state is said in words");
 		Check(Has(ReadSourceFile("3dc/avp/bh_facehugger.h"), "\tFHNS_Approach,\n\tFHNS_Attack,\n\tFHNS_Wait,\n\tFHNS_Avoidance,\n\tFHNS_Dying,\n\tFHNS_Floating,\n\tFHNS_Jumping,\n\tFHNS_AboutToJump,"), "SOURCE: in the order the game has them");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($LampSize) { $arguments += \" lampsize=$LampSize\" }"), "SOURCE: the script can ask for lampsize=");
+		Check(Has(watchCode, "if (plan.watchTogether > 1)\n\t{\n\t\tMakeTheOtherAliens(spot, frame);"), "SOURCE: together= makes the others with the first");
+		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)", "\n}\n"), "if (!ModuleFromPosition(&spot, (MODULE *)0))"), "SOURCE: only where there's a room");
+		Check(Has(Between(watchCode, "static void MakeTheOtherAliens(const VECTORCH &first, LONG frame)", "\n}\n"), "for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)"), "SOURCE: and never more than there are names for");
+		Check(Has(watchCode, "		WatchTheOtherAliens(marine, seconds);"), "SOURCE: and follows each of them once a second");
+		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Together -gt 0) { $arguments += \" together=$Together\" }"), "SOURCE: the script can ask for together=");
 		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.cpp"), "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())"), "SOURCE: a host who is out alone starts the level again after dieat=, as single player does");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($Follow) { $arguments += \" follow=$Follow\" }"), "SOURCE: and follow=");
 		Check(Has(ReadSourceFile("tools/hudson/run-hudson.ps1"), "if ($WalkFrom) { $arguments += \" walkfrom=$($WalkFrom -replace 'm', '-')\" }"), "SOURCE: and a walk");

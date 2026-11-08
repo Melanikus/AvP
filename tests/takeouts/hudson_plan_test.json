@@ -7411,7 +7411,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom) && !plan->combatAlien)",
+					"from": "if ((seenWatch || seenHoldFire || seenAlienAt || seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien)",
 					"to": "if (false)"
 				}
 			]
@@ -7561,8 +7561,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson_plan.cpp",
-					"from": "seenStandAt || seenWatchFrom) && !plan->combatAlien",
-					"to": "seenStandAt) && !plan->combatAlien"
+					"from": "seenStandAt || seenWatchFrom || seenTogether) && !plan->combatAlien",
+					"to": "seenStandAt || seenTogether) && !plan->combatAlien"
 				}
 			]
 		},
@@ -7621,8 +7621,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/hudson.cpp",
-					"from": "\tNormalise(&look);\n\tMakeMatrixFromDirection(&look, turn);\n}\n\nstatic void MakeTheAlien(",
-					"to": "\tNormalise(&look);\n}\n\nstatic void MakeTheAlien("
+					"from": "\tNormalise(&look);\n\tMakeMatrixFromDirection(&look, turn);\n}\n\n// together=: the other aliens",
+					"to": "\tNormalise(&look);\n}\n\n// together=: the other aliens"
 				}
 			]
 		},
@@ -8193,6 +8193,116 @@
 					"file": "3dc/avp/win95/pldnet.cpp",
 					"from": "if (DebouncedGotAnyKey || timeIsUp || Hudson_PressesAKeyAfterHeDied())",
 					"to": "if (DebouncedGotAnyKey || timeIsUp)"
+				}
+			]
+		},
+		{
+			"name": "together= reads nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (!ReadNumber(value, valueLength, &plan->watchTogether) || plan->watchTogether < 2 || plan->watchTogether > kHudsonMostTogether)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "together= takes one",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->watchTogether < 2 || plan->watchTogether > kHudsonMostTogether",
+					"to": "plan->watchTogether < 1 || plan->watchTogether > kHudsonMostTogether"
+				}
+			]
+		},
+		{
+			"name": "together= takes more than there are names for",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "plan->watchTogether < 2 || plan->watchTogether > kHudsonMostTogether",
+					"to": "plan->watchTogether < 2"
+				}
+			]
+		},
+		{
+			"name": "together= goes without watching",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenTogether && !plan->watchAlien)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "together= goes without a fight",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": " || seenWatchFrom || seenTogether) && !plan->combatAlien",
+					"to": " || seenWatchFrom) && !plan->combatAlien"
+				}
+			]
+		},
+		{
+			"name": "together= can be asked twice",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson_plan.cpp",
+					"from": "if (seenTogether)\n",
+					"to": "if (false)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: together= makes no others",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tMakeTheOtherAliens(spot, frame);",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others are made outside the rooms too",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tif (!ModuleFromPosition(&spot, (MODULE *)0))\n\t\t{\n\t\t\t_snprintf(line, sizeof(line) - 1, \"hudson: together:",
+					"to": "\t\tif (false)\n\t\t{\n\t\t\t_snprintf(line, sizeof(line) - 1, \"hudson: together:"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others run past their names",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "for (int i = 0; i < plan.watchTogether - 1 && i < kHudsonMostTogether - 1; i++)",
+					"to": "for (int i = 0; i < plan.watchTogether - 1; i++)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the others are never followed",
+			"changes": [
+				{
+					"file": "3dc/avp/hudson.cpp",
+					"from": "\t\tWatchTheOtherAliens(marine, seconds);",
+					"to": "\t\t;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the script cannot ask for together=",
+			"changes": [
+				{
+					"file": "tools/hudson/run-hudson.ps1",
+					"from": "if ($Together -gt 0) { $arguments += \" together=$Together\" }\n",
+					"to": ""
 				}
 			]
 		}
