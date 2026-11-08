@@ -95,6 +95,14 @@ void AlienWays_Frame()
 	}
 }
 
+// NOT WRITTEN YET: it gives back nothing until the hook that makes aliens follow ways is in. It's here so the developer view can be written against it.
+size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most)
+{
+	(void)out;
+	(void)most;
+	return 0;
+}
+
 void AlienWays_LevelEnd()
 {
 	if (theBuild.State() == kAlienWaysBuilding)

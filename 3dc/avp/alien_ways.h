@@ -21,11 +21,28 @@
 #ifndef ALIEN_WAYS_H
 #define ALIEN_WAYS_H
 
+#include <stddef.h>
+
+#include "alien_ways_map.h"
+
 // 1 when -alienways was given with -dev. Set once, at start, by winmain.cpp.
 extern int AlienWaysSwitchedOn;
 
 void AlienWays_LevelStart();
 void AlienWays_Frame();
 void AlienWays_LevelEnd();
+
+// One alien's way, for the developer view to draw (alien_ways_view.h): its points from where it started to where it's going, each one's kind
+// saying what the way is on from there to the next, and which point the alien is heading for now.
+struct AlienWaysShown
+{
+	const AlienWaysPoint *points;
+	int count;
+	int heading;
+};
+
+// Fills out with up to most of the ways aliens are following now, and gives back how many. Only on the game's thread. The points are good until
+// the next AlienWays_Frame, so they're drawn in the same frame and never kept. Gives back 0 while there's no map.
+size_t AlienWays_WaysToShow(AlienWaysShown *out, size_t most);
 
 #endif
