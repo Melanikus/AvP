@@ -429,8 +429,8 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 // The links (or falls) from one cell: the run of it in a list sorted by the cell they're from
 static const uint32_t *RunOf(const std::vector<uint32_t> &from, const std::vector<uint32_t> &to, uint32_t cell, size_t *count)
 {
-	std::vector<uint32_t>::const_iterator const first = std::lower_bound(from.begin(), from.end(), cell);
-	std::vector<uint32_t>::const_iterator const end = std::upper_bound(first, from.end(), cell);
+	const auto first = std::lower_bound(from.begin(), from.end(), cell);
+	const auto end = std::upper_bound(first, from.end(), cell);
 	*count = static_cast<size_t>(end - first);
 	return *count ? &to[static_cast<size_t>(first - from.begin())] : nullptr;
 }
@@ -933,8 +933,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		static std::pair<size_t, size_t> In(const std::vector<BoxEntry> &boxes, uint64_t key)
 		{
 			BoxEntry const low = { key, 0 }, high = { key, 0xFFFFFFFFu };
-			std::vector<BoxEntry>::const_iterator const a = std::lower_bound(boxes.begin(), boxes.end(), low);
-			std::vector<BoxEntry>::const_iterator const b = std::upper_bound(a, boxes.end(), high);
+			const auto a = std::lower_bound(boxes.begin(), boxes.end(), low);
+			const auto b = std::upper_bound(a, boxes.end(), high);
 			return std::make_pair(static_cast<size_t>(a - boxes.begin()), static_cast<size_t>(b - boxes.begin()));
 		}
 	};
@@ -1352,8 +1352,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		static std::pair<size_t, size_t> Of(const std::vector<std::pair<uint64_t, uint32_t> > &places, uint64_t key)
 		{
 			std::pair<uint64_t, uint32_t> const low(key, 0), high(key, 0xFFFFFFFFu);
-			std::vector<std::pair<uint64_t, uint32_t> >::const_iterator const a = std::lower_bound(places.begin(), places.end(), low);
-			std::vector<std::pair<uint64_t, uint32_t> >::const_iterator const b = std::upper_bound(a, places.end(), high);
+			const auto a = std::lower_bound(places.begin(), places.end(), low);
+			const auto b = std::upper_bound(a, places.end(), high);
 			return std::make_pair(static_cast<size_t>(a - places.begin()), static_cast<size_t>(b - places.begin()));
 		}
 	};
@@ -1632,7 +1632,7 @@ bool NpcGrid::ShutOff(uint32_t cell) const
 // Tries one move of the search, to cell n at a new cost
 void NpcGrid::TryMove(const double goalAt[3], const double at[3], uint32_t c, uint32_t n, double newCost)
 {
-	std::unordered_map<uint32_t, Seen>::iterator const found = seen.find(n);
+	const auto found = seen.find(n);
 
 	if ((found != seen.end() && (found->second.done || found->second.cost <= newCost)) || ShutOff(n))
 	{
