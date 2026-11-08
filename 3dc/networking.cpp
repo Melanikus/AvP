@@ -50,6 +50,7 @@
 //   all away (see net_close.h), and a client says in the log when the host's connection closes
 //   a search's question is as big as its answer, and a host answers no other size, so an answer is never bigger than its question
 //   the settings file's port and speeds are checked, and one the game can't use is put back to the game's own, with a log line
+//   the screen says which connection a joining player is, never their address or port
 
 #include "3dc.h"
 #include "enet\enet.h"
@@ -1247,11 +1248,10 @@ NetResult Net_Receive(uint8_t *messageData, size_t &dataSize)
 						messagesUsed[eEvent.peer - host->peers] = 0;
 					}
 
-					char ipaddr[32];
-					enet_address_get_host_ip(&eEvent.peer->address, ipaddr, sizeof(ipaddr));
-
+					// Which connection it is, by number, and never the other machine's address or port: players stream and share pictures of
+					// their screens, and an address there would tell anyone watching where that player is (the user's ruling: no IPs)
 					std::stringstream sstream;
-					sstream << "Enet got a connection from " << ipaddr << ":" << eEvent.peer->address.port;
+					sstream << "A player is joining (connection " << (eEvent.peer - host->peers) + 1 << ")";
 					NewOnScreenMessage((char*)sstream.str().c_str());
 
 					// A connection that has only just been made hasn't been let in yet, whoever had this place in ENet's list before

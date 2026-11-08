@@ -2238,6 +2238,36 @@
 					"to": "netGameData.playerData[playerIndex].characterSubType = static_cast<NETGAME_SPECIALISTCHARACTERTYPE>(messagePtr->characterSubType);"
 				}
 			]
+		},
+		{
+			"name": "the screen shows a joining player's address and port",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "\t\t\t\t\tstd::stringstream sstream;\n\t\t\t\t\tsstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \")\";\n",
+					"to": "\t\t\t\t\tchar ipaddr[32];\n\t\t\t\t\tenet_address_get_host_ip(&eEvent.peer->address, ipaddr, sizeof(ipaddr));\n\n\t\t\t\t\tstd::stringstream sstream;\n\t\t\t\t\tsstream << \"Enet got a connection from \" << ipaddr << \":\" << eEvent.peer->address.port;\n"
+				}
+			]
+		},
+		{
+			"name": "the screen shows only the port",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "sstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \")\";",
+					"to": "sstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \", port \" << eEvent.peer->address.port << \")\";"
+				}
+			]
+		},
+		{
+			"name": "the screen doesn't say which connection",
+			"changes": [
+				{
+					"file": "3dc/networking.cpp",
+					"from": "sstream << \"A player is joining (connection \" << (eEvent.peer - host->peers) + 1 << \")\";",
+					"to": "sstream << \"A player is joining\";"
+				}
+			]
 		}
 	]
 }
