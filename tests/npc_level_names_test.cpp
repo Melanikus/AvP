@@ -57,6 +57,18 @@ int main()
 	Check(NpcLevelNames_Add(&list, none, network) && list.count == 1, "an NPC with no name in the level isn't kept");
 	Check(NpcLevelNames_NetworkNameFor(&list, none) == 0, "and asking for no name finds nothing");
 
+	// The list never keeps an entry with no name, but the lookup doesn't count on that. It answers no name with nothing even when the list
+	// somehow holds such an entry, so a name that's all zeros is never taken for an NPC's.
+	{
+		int const before = list.count;
+
+		memset(list.names[list.count].level, 0, kNpcNameLength);
+		memcpy(list.names[list.count].network, network, kNpcNameLength);
+		list.count++;
+		Check(NpcLevelNames_NetworkNameFor(&list, none) == 0, "even in a list that holds an entry with no name");
+		list.count = before;
+	}
+
 	puts("a name that's the same as its new one");
 	NpcLevelNames_Clear(&list);
 	NpcLevelNames_Add(&list, level, level);
