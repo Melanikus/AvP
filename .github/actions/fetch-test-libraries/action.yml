@@ -7,9 +7,12 @@
 #
 # tests.yml uses this before it builds every test. takeouts.yml uses it before a list whose test names vcpkg_installed in its settings,
 # because the take-out runner copies those files into its copy of the code.
+#
+# Modified 2026-11-08 by Melanikus for the AvP port:
+#   the libraries are built with the game's static triplet, x86-windows-static, so they carry the C runtime inside them (STATIC-1)
 
 name: Fetch the libraries the tests use
-description: Builds the named vcpkg ports for x86-windows into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports
+description: Builds the named vcpkg ports for x86-windows-static into vcpkg_installed, at the baseline vcpkg.json names, with our own patched ports
 
 inputs:
   ports:
@@ -46,7 +49,8 @@ runs:
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         # With --classic, vcpkg doesn't read vcpkg-configuration.json, so our triplet is named here too: the libraries are built as the
-        # game's are
-        $wanted = @($ports | ForEach-Object { "$($_):x86-windows" })
+        # game's are. x86-windows-static (vcpkg-overlay-triplets) builds them static, with the C runtime inside, and keeps as DLLs only
+        # what it names: Microsoft's D3DX, and OpenAL Soft, which no test links
+        $wanted = @($ports | ForEach-Object { "$($_):x86-windows-static" })
         & (Join-Path $root 'vcpkg.exe') install @wanted --classic --overlay-ports=vcpkg-overlay-ports --overlay-triplets=vcpkg-overlay-triplets --x-install-root=vcpkg_installed
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
