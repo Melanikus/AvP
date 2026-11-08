@@ -40,7 +40,6 @@ void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock
 // that line is how a test with real saves shows that a check is too strict. check is a fixed piece of text naming it. A block the wrong size isn't counted: that's the game's own test, as old as the game.
 void Save_StartCountingRefusals();
 void Save_NoteRefused(const char *check);
-int Save_RefusalsBy(const char *check);
 
 // The line for the log, cut short if it doesn't fit.
 void Save_DescribeRefusals(char *words, int size);

@@ -53,19 +53,6 @@ void Save_NoteRefused(const char *check)
 	numChecksRefusing++;
 }
 
-int Save_RefusalsBy(const char *check)
-{
-	for (int i = 0; i < numChecksRefusing; i++)
-	{
-		if (strcmp(refusingChecks[i], check) == 0)
-		{
-			return refusalCounts[i];
-		}
-	}
-
-	return 0;
-}
-
 void Save_DescribeRefusals(char *words, int size)
 {
 	int total = refusalsWithNoPlace;
