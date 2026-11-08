@@ -34,6 +34,14 @@
 #include "huffman.hpp"
 #include "md5.h"
 
+// This test is built with the standard library's own bounds checks on (/D_MSVC_STL_HARDENING=1 in tests/custom_maps_test.args). With
+// them, looking past the end of the list of maps stops the program at once. Without them, it reads whatever happens to be in memory
+// there, and "a number past the end of the list has none" can pass by luck. That's how take-out row 16, which takes out the list's own
+// bounds check, went unnoticed on GitHub's machine (#124). So the test refuses to build without the checks, as texture_relief_test does.
+#if !defined(_MSVC_STL_HARDENING_VECTOR) || !_MSVC_STL_HARDENING_VECTOR
+#error "custom_maps_test needs the standard library's bounds checks: build it with /D_MSVC_STL_HARDENING=1"
+#endif
+
 static int checksFailed = 0;
 
 static void Check(bool good, const std::string &what)

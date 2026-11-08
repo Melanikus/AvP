@@ -299,7 +299,7 @@
 			"name": "SOURCE: stopping a stream that never started",
 			"changes": [
 				{
-					"file": "3dc/avp/win95/openal_audio.cpp",
+					"file": "3dc/avp/win95/openal_stream.cpp",
 					"from": "\tif (_source)\n\t{\n\t\talSourceStop(_source->_alSource);\n\t\talGetError();\n\t}",
 					"to": "\talSourceStop(_source->_alSource);\n\talGetError();"
 				}
@@ -309,7 +309,7 @@
 			"name": "SOURCE: letting go waits for a thread that never started",
 			"changes": [
 				{
-					"file": "3dc/avp/win95/openal_audio.cpp",
+					"file": "3dc/avp/win95/openal_stream.cpp",
 					"from": "\tif (_threadStarted)\n",
 					"to": "\tif (true)\n"
 				}
@@ -319,9 +319,9 @@
 			"name": "SOURCE: waiting on a stopped stream never ends",
 			"changes": [
 				{
-					"file": "3dc/avp/win95/openal_audio.cpp",
-					"from": "while (_freeBufferQueue.size() == 0 && _isPlaying)",
-					"to": "while (_freeBufferQueue.size() == 0)"
+					"file": "3dc/avp/win95/openal_stream.cpp",
+					"from": "while (CountFreeBuffers() == 0 && _isPlaying)",
+					"to": "while (CountFreeBuffers() == 0)"
 				}
 			]
 		},

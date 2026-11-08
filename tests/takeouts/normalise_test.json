@@ -1,0 +1,108 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a whole-number vector of nothing is divided by its length",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "\tif (*x == 0 && *y == 0 && *z == 0)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a flat vector of nothing is divided by its length",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "\tif (*x == 0 && *y == 0)\n\t{\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the answer is rounded, where it was always cut",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "\t*x = (int)ax;\n",
+					"to": "\t*x = (int)(ax + 0.5f);\n"
+				}
+			]
+		},
+		{
+			"name": "a float vector with no length is divided anyway",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "\tif (!Normalise_LengthIsReal(m))\n\t{\n\t\t*x = 0.0f;\n\t\t*y = 0.0f;\n\t\t*z = 0.0f;\n",
+					"to": "\tif (false)\n\t{\n\t\t*x = 0.0f;\n\t\t*y = 0.0f;\n\t\t*z = 0.0f;\n"
+				}
+			]
+		},
+		{
+			"name": "a flat float vector with no length is divided anyway",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "\tif (!Normalise_LengthIsReal(m))\n\t{\n\t\t*x = 0.0f;\n\t\t*y = 0.0f;\n\t\treturn;",
+					"to": "\tif (false)\n\t{\n\t\t*x = 0.0f;\n\t\t*y = 0.0f;\n\t\treturn;"
+				}
+			]
+		},
+		{
+			"name": "infinity counts as a length",
+			"changes": [
+				{
+					"file": "3dc/win95/normalise.h",
+					"from": "return length > 0.0f && length <= FLT_MAX;",
+					"to": "return length > 0.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: Normalise goes back to its own sums",
+			"changes": [
+				{
+					"file": "3dc/win95/plspecfn.cpp",
+					"from": "\tNormalise_Whole3(&nvector->vx, &nvector->vy, &nvector->vz);\n",
+					"to": "\tfloat const m = 65536.0f / sqrt((float)nvector->vx * nvector->vx + (float)nvector->vy * nvector->vy + (float)nvector->vz * nvector->vz);\n\tnvector->vx = (int)(nvector->vx * m);\n\tnvector->vy = (int)(nvector->vy * m);\n\tnvector->vz = (int)(nvector->vz * m);\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: MakeMatrixFromDirection makes a matrix from nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/weapons.cpp",
+					"from": "\tif (directionPtr->vx == 0 && directionPtr->vy == 0 && directionPtr->vz == 0)\n\t{\n\t\textern MATRIXCH IdentityMatrix;\n\t\t*matrixPtr = IdentityMatrix;\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: MatrixFromZVector makes a matrix from nothing",
+			"changes": [
+				{
+					"file": "3dc/maths.cpp",
+					"from": "\tif (v->vx == 0 && v->vy == 0 && v->vz == 0)\n\t{\n\t\t*m = IdentityMatrix;\n\t\treturn;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a vector straight up gets a side of nothing again",
+			"changes": [
+				{
+					"file": "3dc/maths.cpp",
+					"from": "\t\tXVector.vx = ONE_FIXED;\n\t\tXVector.vy = 0;\n\t\tXVector.vz = 0;\n",
+					"to": "\t\tXVector.vx = 0;\n\t\tXVector.vy = 0;\n\t\tXVector.vz = 0;\n\t\tNormalise(&XVector);\n"
+				}
+			]
+		}
+	]
+}

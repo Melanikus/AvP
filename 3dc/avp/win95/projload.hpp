@@ -1,8 +1,12 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   a handle can be asked for the size and MD5 sum of the file it was loaded from (level_file_sum.h)
+
 #ifndef _projload_hpp
 #define _projload_hpp 1
 
 #include "chunk_load.h"
 #include "hmodel.h"
+#include "level_file_sum.h"
 
 #include "hierarchy_chunk.hpp"
 
@@ -119,6 +123,10 @@ extern int load_precompiled_shapes();
 void avp_undo_rif_load(RIFFHANDLE h);
 RIFFHANDLE avp_load_rif (const char * fname);
 RIFFHANDLE avp_load_rif_non_env (const char * fname);
+
+// The size and MD5 sum of the file a handle was loaded from, as the loader worked them out from its own reads (level_file_sum.h).
+// Both are 0 for a handle that holds no file.
+LevelFileSum avp_rif_file_sum (RIFFHANDLE h);
 
 void DeallocateModules();
 

@@ -3,7 +3,8 @@
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   it also checks how a marine's glow is chosen when you play the alien
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   and that facehuggers and the queen glow in the alien colour
+//   and that facehuggers and the queen glow in the alien colour;
+//   and that an alien coming for its target checks it has one before it reads where it is
 //
 // WHAT IT TESTS
 //
@@ -387,6 +388,22 @@ static void TestTheGhostJustMade()
 	Check(ComesBefore(ghosts, made + "\n\t\tif(!ghostData)\n", "memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));"), "and only then cleared");
 }
 
+// An alien coming for its target (AlienNearState_Approach) can find it has none, and then it goes hunting. It used to measure how far
+// away the target was first, through the empty pointer, which crashed the game. Only a running game with an alien that has lost its
+// target reaches these lines, so this reads the source.
+static void TestTheAlienWithNoTarget()
+{
+	puts("An alien coming for a target it no longer has:");
+
+	std::string const approach = Between(ReadSourceFile("3dc/avp/bh_near.cpp"), "static void AlienNearState_Approach(STRATEGYBLOCK *sbPtr)\n{", "/* Update sequence! */");
+	std::string const check = "if (alienStatusPointer->Target==NULL) {";
+	std::string const read = "alienStatusPointer->Target->DynPtr";
+
+	Check(Has(approach, check), "it checks it has a target");
+	Check(Has(approach, read), "and measures how far away it is, at the start");
+	Check(ComesBefore(approach, check, read), "but only after the check, so an alien with none never reads through the empty pointer");
+}
+
 int main()
 {
 	TestTheXenoborg();
@@ -401,6 +418,7 @@ int main()
 	TestTheQueenWithNoRoomToBeDrawn();
 	TestTheMarineSeenByAnAlien();
 	TestTheAliensSeenByAnAlien();
+	TestTheAlienWithNoTarget();
 
 	puts(checksFailed ? "SOME CHECKS FAILED" : "All checks passed");
 	return checksFailed ? 1 : 0;
