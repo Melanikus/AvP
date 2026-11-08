@@ -208,6 +208,10 @@ static void FirstWay()
 	Check(map.Ready(), "the corridor's map is built");
 	Check(!guide.Steer(&map, Ask(Alien(1), kStart, kGoal, 13), &towards), "an alien's first ask has no way yet: the game's own code steers it this frame");
 	Check(!guide.Guided(Alien(1)), "so it isn't guided");
+	size_t notYetSlots[4];
+	AlienWaysXYZ notYetPlaces[4];
+	int notYetKinds[4];
+	Check(guide.GuidedPlaces(notYetSlots, notYetPlaces, notYetKinds, 4) == 0, "nor given a place in the once-a-second line, which is for guided aliens only");
 
 	Check(Frame(guide, map, 16) == 0, "the next frame lets nothing go");
 	const AlienWaysReport *reports = nullptr;
@@ -555,6 +559,17 @@ static void FoundAnywhere()
 	Frame(guide, map, 16);
 	Check(ReportsOf(guide, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeFound,
 		"an alien and a goal whose modules have no polygons at all still get a way, from the polygons of the whole map");
+
+	// Upside down as well, with no ceiling within 2 m: nothing of its own kind is near anywhere, so the last place looked is the whole map, any kind
+	const std::unique_ptr<AlienWaysGuide> upsideDownRoom(new AlienWaysGuide);
+	AlienWaysGuide &upsideDownGuide = *upsideDownRoom;
+	AlienWaysAsk lostUpsideDown = lost;
+	lostUpsideDown.at = AlienWaysXYZ{ 1000, 0, 5500 };
+	lostUpsideDown.down = AlienWaysXYZ{ 0, -65536, 0 };
+	upsideDownGuide.Steer(&map, lostUpsideDown, &towards);
+	Frame(upsideDownGuide, map, 16);
+	Check(ReportsOf(upsideDownGuide, &reports) == 1 && reports[0].outcome != kAlienWaysOutcomeNoPolygon && reports[0].fromKind == kAlienWaysFloor,
+		"and one upside down, with its module empty and no ceiling within 2 m, starts on the nearest polygon of any kind in the whole map");
 }
 
 static void LetGo()
@@ -919,6 +934,17 @@ static void StartsOnItsOwnKind()
 	clinging.Steer(&map, onTheWall, &towards);
 	Frame(clinging, map, 16);
 	Check(ReportsOf(clinging, &reports) == 1 && reports[0].fromKind == kAlienWaysWall, "one clinging low on the wall starts on the wall, though the floor is nearer");
+
+	// The same, but its module holds only the floor (polygons 0 to 9): its own module comes first, whatever the kind, before a wall of another
+	const std::unique_ptr<AlienWaysGuide> moduleFirstRoom(new AlienWaysGuide);
+	AlienWaysGuide &moduleFirst = *moduleFirstRoom;
+	AlienWaysAsk floorModule = Ask(Alien(1), low, kGoal, 13);
+	floorModule.down = AlienWaysXYZ{ -65536, 0, 0 };
+	floorModule.atPolygons = AlienWaysRange{ 0, 10 };
+	moduleFirst.Steer(&map, floorModule, &towards);
+	Frame(moduleFirst, map, 16);
+	Check(ReportsOf(moduleFirst, &reports) == 1 && reports[0].fromKind == kAlienWaysFloor,
+		"one clinging low on the wall, whose module holds only the floor, starts on its module's floor, not on a wall that's no part of it");
 
 	// Upside down on the floor, with no ceiling within 2 m: it starts on the nearest polygon of any kind
 	const std::unique_ptr<AlienWaysGuide> nothingNearRoom(new AlienWaysGuide);
