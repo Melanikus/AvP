@@ -7,6 +7,9 @@
 #   tests/takeouts/sanitize.ps1 <test>              for example: tests/takeouts/sanitize.ps1 relief_map_file_test
 #
 # The program lands in a folder called AvP-test-out next to the repository, or under $env:RUNNER_TEMP in the automatic checks.
+#
+# Modified 2026-11-08 by Melanikus for the AvP port:
+#   the test is built with the C runtime inside it (/MT), the same as every test, and refused if it comes out asking Windows for it as a DLL (STATIC-1)
 
 param([Parameter(Mandatory = $true)][string]$Test)
 
@@ -56,12 +59,39 @@ function Copy-SanitizerLibrary([string]$to)
     Copy-Item -LiteralPath $library -Destination $to -Force
 }
 
+# STATIC-1: the tests are built with the C runtime inside them (/MT), the same as the game, so a test needs no Visual C++ install to run,
+# and can't pass only because the machine it runs on happens to have one. This asks Visual Studio's dumpbin which DLLs a program asks
+# Windows for, and gives back those that are the C runtime's: vcruntime, msvcp, ucrtbase, and the api-ms-win-crt- names Windows uses for
+# ucrtbase. An empty answer means the program carries its own. The same function is in tests/build.ps1 and tests/takeouts/run.ps1.
+function Get-CRuntimeLibraries([string]$program, [string]$folder, [string]$saysTo)
+{
+    if ((Invoke-Tool 'dumpbin.exe' "/nologo /dependents `"$program`"" $folder $saysTo) -ne 0)
+    {
+        # What dumpbin said goes into the message, because the folder can be emptied before anyone looks, by the next build or by an
+        # antivirus program holding the new program
+        $said = @(Get-Content -LiteralPath $saysTo, "$saysTo.errors" -ErrorAction SilentlyContinue | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ' / '
+        throw "dumpbin couldn't read $program`: $said"
+    }
+
+    # dumpbin writes each DLL's name on a line of its own, under "Image has the following dependencies", and the same for any it loads later
+    return @(Get-Content -LiteralPath $saysTo | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|concrt|vccorlib)[0-9a-z_]*\.dll$' -or $_ -match '^api-ms-win-crt-[0-9a-z-]*\.dll$' })
+}
+
 # The test's settings come last, because they can end with /link, and anything after /link goes to the linker
 $built = Invoke-Tool 'cl.exe' "/nologo /Zi /fsanitize=address `"/Fe:$out\t.exe`" `"/Fo:$out/`" `"/Fd:$out/`" @tests\$Test.args" $repository (Join-Path $out 'build.txt')
 
 if ($built -ne 0) {
     Write-Host "$Test didn't build:"
     Get-Content (Join-Path $out 'build.txt') -TotalCount 10
+    exit 1
+}
+
+# STATIC-1: built the same as every test, with the C runtime inside it. The sanitizer's own library is a DLL, and that one is allowed:
+# it's Microsoft's, it's only for this check, and it never goes out with the game.
+$runtime = @(Get-CRuntimeLibraries (Join-Path $out 't.exe') $repository (Join-Path $out 'imports.txt'))
+if ($runtime.Count -gt 0) {
+    Write-Host "$Test, built for the sanitizer, asks Windows for the C runtime's DLLs: $($runtime -join ', '). A test carries its own (/MT), the same as the game (STATIC-1)"
     exit 1
 }
 
