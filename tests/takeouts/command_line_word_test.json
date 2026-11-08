@@ -1,0 +1,208 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a word inside a longer one counts, at its start",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "bool const startsClean = found == commandLine || found[-1] == ' ' || found[-1] == '\\t';",
+					"to": "bool const startsClean = true;"
+				}
+			]
+		},
+		{
+			"name": "a word inside a longer one counts, at its end",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "bool const endsClean = after == 0 || after == ' ' || after == '\\t';",
+					"to": "bool const endsClean = true;"
+				}
+			]
+		},
+		{
+			"name": "a tab doesn't part words",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "return c == ' ' || c == '\\t';",
+					"to": "return c == ' ';"
+				}
+			]
+		},
+		{
+			"name": "only one space in front of a word is passed over",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "\twhile (CommandLineIsGap(*place))\n\t{\n\t\tplace++;\n\t}\n",
+					"to": "\tif (CommandLineIsGap(*place))\n\t{\n\t\tplace++;\n\t}\n"
+				}
+			]
+		},
+		{
+			"name": "a word runs on past a space",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "while (*place != 0 && !CommandLineIsGap(*place))",
+					"to": "while (*place != 0)"
+				}
+			]
+		},
+		{
+			"name": "a word is taken for a longer one it starts",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "strlen(word) == length && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the word after any word is taken for the switch's",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (!CommandLineWordIs(start, length, theSwitch))",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a switch with nothing after it is taken for no switch",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "return kWordAfterNothing;",
+					"to": "return kWordAfterNoSwitch;"
+				}
+			]
+		},
+		{
+			"name": "a word one letter too long for its room is let in, with no room for its end marker",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (!out || length + 1 > room)",
+					"to": "if (!out || length > room)"
+				}
+			]
+		},
+		{
+			"name": "what was in out is left there when no word is found",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (out && room > 0)\n\t{\n\t\tout[0] = 0;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "an end marker passes for one of -l's letters",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (start[i] == 0 || !strchr(kCommandLineLoadLetters, start[i]))",
+					"to": "if (!strchr(kCommandLineLoadLetters, start[i]))"
+				}
+			]
+		},
+		{
+			"name": "any letters after -l are read, so a longer switch starting -l is taken for it",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (start[i] == 0 || !strchr(kCommandLineLoadLetters, start[i]))\n\t\t{\n\t\t\treturn false;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a word starting with any other letter after its - is taken for -l",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "start[0] != '-' || start[1] != 'l'",
+					"to": "start[0] != '-'"
+				}
+			]
+		},
+		{
+			"name": "-l on its own asks for nothing",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "(length == 2) ? (letter == 'a')",
+					"to": "(length == 2) ? false"
+				}
+			]
+		},
+		{
+			"name": "a word that only looks like -l asks for kinds too",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "if (!CommandLineIsLoadWord(start, length))\n\t\t{\n\t\t\tcontinue;\n\t\t}",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a real -l is counted as a word that isn't read",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "start[1] == 'l' && !CommandLineIsLoadWord(start, length)",
+					"to": "start[1] == 'l'"
+				}
+			]
+		},
+		{
+			"name": "a word that doesn't start -l is counted as an -l that isn't read",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "length >= 2 && start[0] == '-' && start[1] == 'l' && ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a plain switch is found at the start of a longer word",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "CommandLineWordIs(start, length, name)",
+					"to": "strncmp(start, name, nameLength) == 0"
+				}
+			]
+		},
+		{
+			"name": "a switch with a number has to be the whole word, so it's never found",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "takesAValue ? strncmp(start, name, nameLength) == 0 : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every switch is taken to have a number after it",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "bool const takesAValue = name[nameLength - 1] == '=';",
+					"to": "bool const takesAValue = true;"
+				}
+			]
+		}
+	]
+}

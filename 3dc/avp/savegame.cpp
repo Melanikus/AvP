@@ -16,6 +16,9 @@
 //   a save from when there were 11 weapon slots keeps its statistics
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   no saving on a custom map: a save names its level by campaign and episode, so loading one would start a stock level
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   no saving on a level the -n switch named either, for the same reason, and a load while one is played loads the save's own level
+//   first (SAVE-LEVEL-1)
 #include "3dc.h"
 #include "save_file_write.h"
 #include "inline.h"
@@ -55,6 +58,7 @@
 #include "logString.h"
 #include "utilities.h"
 #include "custom_maps.h"
+#include "level_switch.h"
 
 extern void NewOnScreenMessage(char *messagePtr);
 extern BOOL GetFilenameForSaveSlot(int i, char *filenamePtr);
@@ -380,6 +384,14 @@ static BOOL SaveGameAllowed()
 		return FALSE;
 	}
 
+	// The same for a level the -n switch named: the save would name the level the menus chose, and later load onto that map (SAVE-LEVEL-1)
+	if (PlayingLevelFromSwitch)
+	{
+		NewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));
+		LogString("save: not saved, because this level is the one -n named, and a save would name the level the menus chose instead");
+		return FALSE;
+	}
+
 	//cheating?
 	if(DebuggingCommandsActive || CheatMode_Active!=CHEATMODE_NONACTIVE)
 	{
@@ -544,7 +556,15 @@ BOOL ValidateLevelForLoadGameRequest(SAVE_SLOT_HEADER* save_slot)
 
 	//probably need to reload if in cheat mode
 	if(CheatMode_Active!=CHEATMODE_NONACTIVE) return FALSE;
-	
+
+	// A level the -n switch named isn't the level the save's campaign and episode name, so the save's own level is loaded first. The
+	// load goes back through the menus, and -n is ignored while a save loads (SAVE-LEVEL-1).
+	if (PlayingLevelFromSwitch)
+	{
+		LogString("save: the save's own level is loaded first, because this level is the one -n named");
+		return FALSE;
+	}
+
 	switch(save_slot->Species)
 	{
 		case I_Marine :
