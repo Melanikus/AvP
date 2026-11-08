@@ -28,6 +28,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   a saved dynamics block is put back through Save_RestoreDynamics, which keeps out what a save must not set.
 //   a saved marine has to be on a real path
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   an NPC marine turns his shoulder lamp on in dark places, and off again once it's been clearly light twice in a row, deciding every couple of seconds
 // Modified 2026-11-05 by Melanikus for the AvP port:
 //   CreateMarineBot gives back the marine it made, and a marine can be told to stand guard here and face a point, or to guard another spot, or to hurry
 //   in a Hudson run a marine has nothing to aim at, unless the run asked for a fight
@@ -87,6 +89,9 @@
 #include "extents.h"
 #include "user_profile.h"
 #include "hudson.h"
+#include "lamp_pick.h"
+
+extern int LightIntensityAtPoint(VECTORCH *pointPtr);   // kshape.cpp
 
 #define ALL_PULSERIFLES 0
 #define MOTIONTRACKERS 0
@@ -1436,6 +1441,11 @@ STRATEGYBLOCK *CreateMarineBot(VECTORCH *Position, int weapon)
 	{
 		SECTION *root_section;
 		MARINE_STATUS_BLOCK *marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// New memory holds whatever was there before, and nothing else sets this: his lamp starts off
+		marineStatus->lampOn = 0;
+		marineStatus->lampDecideIn = 0;
+		marineStatus->lampLightTimes = 0;
 		GLOBALASSERT(marineStatus);
 
 		NPC_InitMovementData(&(marineStatus->moveData));
@@ -1809,6 +1819,11 @@ void InitMarineBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 	{
 		SECTION *root_section;
 		MARINE_STATUS_BLOCK *marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// New memory holds whatever was there before, and nothing else sets this: his lamp starts off
+		marineStatus->lampOn = 0;
+		marineStatus->lampDecideIn = 0;
+		marineStatus->lampLightTimes = 0;
 		GLOBALASSERT(marineStatus);
 
 		NPC_InitMovementData(&(marineStatus->moveData));
@@ -2157,6 +2172,11 @@ void CreateMarineDynamic(STRATEGYBLOCK *Generator, MARINE_NPC_WEAPONS weapon_for
 	{
 		SECTION *root_section;
 		MARINE_STATUS_BLOCK *marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;
+
+		// New memory holds whatever was there before, and nothing else sets this: his lamp starts off
+		marineStatus->lampOn = 0;
+		marineStatus->lampDecideIn = 0;
+		marineStatus->lampLightTimes = 0;
 		GLOBALASSERT(marineStatus);
 
 		NPC_InitMovementData(&(marineStatus->moveData));
@@ -2545,6 +2565,23 @@ void MarineBehaviour(STRATEGYBLOCK *sbPtr)
 		LOCALASSERT(ModuleCurrVisArray[(sbPtr->containingModule->m_index)]);
 	} else {
 		marineIsNear=0;
+	}
+
+	// His lamp, by the user's rule for NPC marines: only in dark places. This machine decides for the marines it runs, and every other machine
+	// decides for its copies of them (NpcGhosts_ApplyState), because the lamp is only a look. Only a real marine, not an android, and only one near
+	// enough to be seen, because the light where he stands is only worked out for those. Every couple of seconds, not every frame: see
+	// LampPick_MarineWantsItOn in lamp_pick.h. He's firing while his gun's flash shows, which panic fire has too.
+	if (marineIsNear && marineStatusPointer->My_Weapon->ARealMarine && marineStatusPointer->behaviourState != MBS_Dying
+		&& (AvP.Network == I_No_Network || AvP.NetworkAIServer))
+	{
+		marineStatusPointer->lampDecideIn -= NormalFrameTime;
+
+		if (marineStatusPointer->lampDecideIn <= 0)
+		{
+			marineStatusPointer->lampDecideIn = (int)(kLampDecideEverySeconds * ONE_FIXED);
+			marineStatusPointer->lampOn = LampPick_MarineWantsItOn(marineStatusPointer->lampOn != 0, LightIntensityAtPoint(&sbPtr->DynPtr->Position),
+				marineStatusPointer->myGunFlash != NULL, &marineStatusPointer->lampLightTimes) ? 1 : 0;
+		}
 	}
 
 	if (ShowSlack) {

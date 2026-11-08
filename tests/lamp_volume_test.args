@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /sdl /FC
+/DNDEBUG
+/I3dc
+tests/lamp_volume_test.cpp

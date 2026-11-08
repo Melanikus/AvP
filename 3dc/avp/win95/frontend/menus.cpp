@@ -43,6 +43,8 @@
 //   a run can ask for a level's own films
 //   a gun= run with class= starts a skirmish, and a gun= run with species=predator plays as a Predator
 //   a run with net= starts as a host or a client on this machine, without the multiplayer pages
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the Room echo row on the sound pages is saved when it changes, the same way the rendering page's rows are (REVERB-TOGGLE-1)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -93,6 +95,7 @@
 
 // extern functions
 void ChangeWindowsSize(uint32_t width, uint32_t height);
+extern void Reverb_MenuFrame();   // openal_audio.cpp: saves the Room echo row when it has changed
 extern bool IDemandSelect();
 extern void MakeSelectSessionMenu(void);
 extern void MakeInGameMenu(void);
@@ -802,6 +805,7 @@ int AvP_MainMenus(void)
 		SoundSys_Management();
 		UpdateGammaSettings();
 		ViewSettings_MenuFrame();
+		Reverb_MenuFrame();
 
 		CheckForLoadGame();
 
@@ -984,6 +988,7 @@ extern int AvP_InGameMenus(void)
 		AvP_UpdateMenus();
 		UpdateGammaSettings();
 		ViewSettings_MenuFrame();
+		Reverb_MenuFrame();
 
 		return 1;
 	}

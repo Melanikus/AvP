@@ -1,0 +1,21 @@
+Microsoft Visual C++ runtime
+
+The files in bin named vcruntime140.dll and msvcp140*.dll are part of Microsoft's Visual C++ runtime. They are Microsoft's, not this
+project's, and they are copied unchanged, still carrying Microsoft's signature, from the redistributable folder of the Visual Studio that
+built the game (VC\Redist\MSVC\<version>\x86\Microsoft.VC<toolset>.CRT). licences/README.txt names each one and its version.
+
+The game and its libraries are built to use the runtime from these DLLs (the /MD switch), and carrying them beside the game means nobody has
+to install Microsoft's Visual C++ Redistributable to play. The other part of the runtime, the Universal C runtime, is part of Windows 10
+and 11 and isn't carried.
+
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+Microsoft allows a program built with Visual Studio to carry these files, as "Distributable Code", under the licence terms of the Visual
+Studio that built it. Those terms, and Microsoft's own list of the files a program may carry, are Microsoft's to give:
+
+- Visual Studio's licence terms: https://visualstudio.microsoft.com/license-terms/
+- Redistributing Visual C++ files: https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
+- Microsoft's installer for the same runtime, the Visual C++ Redistributable:
+  https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist
+
+Written 2026-11-08 by Melanikus for the AvP port (card STATIC-UNDO-1, issue #125).

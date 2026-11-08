@@ -601,8 +601,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));",
-					"to": "found[place].comesFirst = block == Player;"
+					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block)) || OtherLampLightNumber(light) >= 0;",
+					"to": "found[place].comesFirst = block == Player || OtherLampLightNumber(light) >= 0;"
 				}
 			]
 		},
@@ -611,8 +611,8 @@
 			"changes": [
 				{
 					"file": "3dc/kshape.cpp",
-					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block));",
-					"to": "found[place].comesFirst = block && ToyBlockIsFlare(block);"
+					"from": "found[place].comesFirst = block == Player || (block && ToyBlockIsFlare(block)) || OtherLampLightNumber(light) >= 0;",
+					"to": "found[place].comesFirst = (block && ToyBlockIsFlare(block)) || OtherLampLightNumber(light) >= 0;"
 				}
 			]
 		},

@@ -32,8 +32,7 @@
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
-    <!-- How vcpkg builds the libraries: vcpkg-overlay-triplets/x86-windows-static.cmake, with the C runtime inside them, as the game has it -->
-    <VcpkgTriplet Condition="'$(Platform)'=='Win32'">x86-windows-static</VcpkgTriplet>
+    <VcpkgTriplet Condition="'$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgAutoLink>false</VcpkgAutoLink>
     <VcpkgConfiguration Condition="'$(Configuration)'=='Debug'">Debug</VcpkgConfiguration>
     <VcpkgConfiguration Condition="'$(Configuration)'=='Release'">Release</VcpkgConfiguration>
@@ -97,17 +96,18 @@
       <AdditionalOptions>/MP /J /we4834 %(AdditionalOptions)</AdditionalOptions>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\3dc;..\..\3dc\avp;..\..\3dc\video;..\;..\..\3dc\avp\support;..\..\3dc\avp\win95;..\..\3dc\avp\win95\frontend;..\..\3dc\avp\win95\gadgets;..\..\3dc\include;..\..\3dc\win95;..\..\win32;..\..\dependencies\libbinkdec\include;..\..\dependencies\libsmackerdec\include;$(VcpkgInstalledDir)$(VcpkgTriplet)\include\dxsdk-d3dx;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- __PTW32_STATIC_LIB: PThreads4W is linked into the game as a static library, and this is the switch it was built with -->
-      <PreprocessorDefinitions>D3D_DEBUG_INFO;USE_D3D9;USE_OPENAL;_DEBUG;AVP_DEBUG_VERSION;_CRT_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0602;__PTW32_STATIC_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>D3D_DEBUG_INFO;USE_D3D9;USE_OPENAL;_DEBUG;AVP_DEBUG_VERSION;_CRT_SECURE_NO_WARNINGS;_WIN32_WINNT=0x0602;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>false</MinimalRebuild>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <!-- /sdl: treats the compiler warnings most likely to be security bugs as errors, and adds checks at run time. -->
       <SDLCheck>true</SDLCheck>
       <SmallerTypeCheck>false</SmallerTypeCheck>
-      <!-- /MTd: Microsoft's C and C++ runtime is built into the game, with its debug checks, so nothing has to be installed for it. Every
-           library linked in is built the same way (the x86-windows-static triplet), or the link stops with LNK2038. -->
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <!-- /MDd: Microsoft's C and C++ runtime, with its debug checks, comes from Microsoft's own DLLs (vcruntime140d.dll, msvcp140d.dll and
+           ucrtbased.dll, which come with Visual Studio). Every library linked in is built the same way (the x86-windows triplet), or the
+           link stops with LNK2038. It was built into the game (/MTd) for a while, until Bitdefender flagged that build and the user ruled
+           it out (#111, card STATIC-UNDO-1, #125). -->
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <FloatingPointModel>Precise</FloatingPointModel>
@@ -179,8 +179,7 @@
       <OmitFramePointers>true</OmitFramePointers>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <AdditionalIncludeDirectories>..\..\3dc;..\..\3dc\video;..\..\3dc\avp;..\..\3dc\avp\support;..\..\3dc\avp\win95;..\..\3dc\avp\win95\frontend;..\..\3dc\avp\win95\gadgets;..\..\3dc\include;..\..\3dc\win95;..\..\win32;..\..\dependencies\libbinkdec\include;..\..\dependencies\libsmackerdec\include;$(VcpkgInstalledDir)$(VcpkgTriplet)\include\dxsdk-d3dx;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- __PTW32_STATIC_LIB: PThreads4W is linked into the game as a static library, and this is the switch it was built with -->
-      <PreprocessorDefinitions>USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;_CRT_SECURE_NO_DEPRECATE;_WIN32_WINNT=0x0602;_SECURE_SCL=0;_HAS_ITERATOR_DEBUGGING=0;__PTW32_STATIC_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_D3D9;_WINDOWS;USE_OPENAL;NDEBUG;_CRT_SECURE_NO_DEPRECATE;_WIN32_WINNT=0x0602;_SECURE_SCL=0;_HAS_ITERATOR_DEBUGGING=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
@@ -189,9 +188,11 @@
       <!-- Control Flow Guard: a call through a pointer may only land on the start of a real function. Release only, because
            the Debug build uses Edit and Continue, which cannot be combined with it. -->
       <ControlFlowGuard>Guard</ControlFlowGuard>
-      <!-- /MT: Microsoft's C and C++ runtime is built into the game, so a player doesn't have to install the Visual C++ Redistributable.
-           Every library linked in is built the same way (the x86-windows-static triplet), or the link stops with LNK2038. -->
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <!-- /MD: Microsoft's C and C++ runtime comes from Microsoft's own DLLs: vcruntime140.dll and msvcp140.dll, and the Universal C
+           runtime, which is part of Windows 10 and 11. Every library linked in is built the same way (the x86-windows triplet), or the
+           link stops with LNK2038. It was built into the game (/MT) for a while, until Bitdefender flagged that build and the user ruled
+           it out (#111, card STATIC-UNDO-1, #125). -->
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <StructMemberAlignment>Default</StructMemberAlignment>
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
@@ -401,6 +402,7 @@
     <ClCompile Include="..\..\3dc\avp\win95\npcsetup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\object_setup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\openal_audio.cpp" />
+    <ClCompile Include="..\..\3dc\avp\win95\openal_stream.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\path_chunk.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\platsup.cpp" />
     <ClCompile Include="..\..\3dc\avp\win95\pldghost.cpp" />
@@ -458,6 +460,7 @@
     <ClCompile Include="..\..\3dc\RenderList.cpp" />
     <ClCompile Include="..\..\3dc\surface_normals.cpp" />
     <ClCompile Include="..\..\3dc\shoulder_lamp.cpp" />
+    <ClCompile Include="..\..\3dc\avp\other_lamps.cpp" />
     <ClCompile Include="..\..\3dc\surface_pictures.cpp" />
     <ClCompile Include="..\..\3dc\surface_static.cpp" />
     <ClCompile Include="..\..\3dc\static_scene.cpp" />
@@ -472,6 +475,7 @@
     <ClCompile Include="..\..\3dc\shadow_debug.cpp" />
     <ClCompile Include="..\..\3dc\view_settings.cpp" />
     <ClCompile Include="..\..\3dc\view_keys.cpp" />
+    <ClCompile Include="..\..\3dc\hud_scale.cpp" />
     <ClCompile Include="..\..\3dc\shadow_shoot.cpp" />
     <ClCompile Include="..\..\3dc\static_frame.cpp" />
     <ClCompile Include="..\..\3dc\shadow_volumes.cpp" />
@@ -608,6 +612,7 @@
     <ClInclude Include="..\..\3dc\avp\paintball.h" />
     <ClInclude Include="..\..\3dc\avp\particle.h" />
     <ClInclude Include="..\..\3dc\avp\pfarlocs.h" />
+    <ClInclude Include="..\..\3dc\avp\ai_module_door.h" />
     <ClInclude Include="..\..\3dc\avp\pheromone.h" />
     <ClInclude Include="..\..\3dc\avp\player.h" />
     <ClInclude Include="..\..\3dc\avp\pmove.h" />
@@ -679,7 +684,9 @@
     <ClInclude Include="..\..\3dc\coop_lobby.h" />
     <ClInclude Include="..\..\3dc\custom_map_name.h" />
     <ClInclude Include="..\..\3dc\level_switch.h" />
+    <ClInclude Include="..\..\3dc\reverb_choice.h" />
     <ClInclude Include="..\..\3dc\level_kind.h" />
+    <ClInclude Include="..\..\3dc\level_file_sum.h" />
     <ClInclude Include="..\..\3dc\avp\win95\frontend\user_profile.h" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\alien_hud_gadget.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\gadgets\console_command.hpp" />
@@ -715,6 +722,7 @@
     <ClInclude Include="..\..\3dc\avp\win95\progress_bar.h" />
     <ClInclude Include="..\..\3dc\avp\win95\projload.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\psndplat.h" />
+    <ClInclude Include="..\..\3dc\avp\win95\openal_shared.h" />
     <ClInclude Include="..\..\3dc\avp\win95\screenshot.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\strategy_chunk.hpp" />
     <ClInclude Include="..\..\3dc\avp\win95\system.h" />

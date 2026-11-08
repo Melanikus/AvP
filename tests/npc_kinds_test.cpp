@@ -325,6 +325,28 @@ int main()
 	Check(ReadSourceFile("3dc/avp/win95/pldghost.cpp").find("memset(ghostData, 0, sizeof(NETGHOSTDATABLOCK));") != std::string::npos, "and a ghost");
 	Check(ReadSourceFile("3dc/avp/strategy_def.cpp").find("sptr->SBflags.placed_in_the_level = 0;") != std::string::npos, "and a block used again isn't still marked as placed in the level");
 
+	// The flags a state message may set: 1, 2 and 4. 8 was an NPC marine's lamp on one test branch; each machine decides that for itself now.
+	Check(kNpcFlagsKnown == 7, "the flags known are 1, 2 and 4");
+	Check(NpcFlags_AreKnown(0) && NpcFlags_AreKnown(7), "no flags, or all three, are known");
+	Check(!NpcFlags_AreKnown(8) && !NpcFlags_AreKnown(16) && !NpcFlags_AreKnown(255) && !NpcFlags_AreKnown(7 | 128), "and any other bit isn't, the lamp's old 8 included");
+	{
+		std::string const net = ReadSourceFile("3dc/avp/win95/pldnet.cpp");
+		std::string const ghosts = ReadSourceFile("3dc/avp/win95/npc_ghosts.cpp");
+		std::string const marine = ReadSourceFile("3dc/avp/bh_marine.cpp");
+
+		Check(Has(net, "if (!NpcFlags_AreKnown(messagePtr->flags))"), "SOURCE: a state message with a flag nobody knows is refused");
+		Check(ComesBefore(net, "if (!NpcFlags_AreKnown(messagePtr->flags))", "NpcGhosts_ApplyState(sbPtr, messagePtr, &position, &orientation);"), "SOURCE: before anything in it is used");
+		Check(!Has(ghosts, "kNpcFlagLampOn") && !Has(ReadSourceFile("3dc/avp/npc_kinds.h"), "kNpcFlagLampOn"), "SOURCE: nothing about an NPC marine's lamp crosses the network");
+		Check(Has(ghosts, "if (ghostData->type == I_BehaviourMarine && !NpcGhosts_MarineIsAnAndroid(state->model)"), "SOURCE: each machine decides it for the NPC marines it shows, and only for a marine");
+		Check(Between(marine, "MARINE_STATUS_BLOCK *marineStatus = (MARINE_STATUS_BLOCK *)sbPtr->SBdataptr;", "marineStatus->lampOn = 0;").size() < 200, "SOURCE: a marine's lamp starts off");
+		Check(Has(net, "messagePtr->lampOn = ThisPlayersLampShows() ? 1 : 0;"), "SOURCE: a player's lamp bit is always written");
+		Check(Has(net, "return SameAsSinglePlayer() && AvP.PlayerType == I_Marine && status && status->IsAlive && ShoulderLamp_IsOn();"), "SOURCE: and only says on for a live marine, in the mode that plays as single player");
+		Check(Has(net, "if (messagePtr->lampOn && !(SameAsSinglePlayer() && messagePtr->characterType == NGCT_Marine && messagePtr->IAmAlive))"), "SOURCE: a player's message saying a lamp is on, from anyone who can't have one, is refused");
+		Check(ComesBefore(net, "a player's message said his lamp is on, and he can't have one, so none of it was used", "netGameData.playerData[playerIndex].lastKnownPosition = position;"), "SOURCE: whole, before even the place it gives is written down");
+		Check(Has(net, "ghostData->lampOn = (messagePtr->lampOn && ghostData->type == I_BehaviourMarinePlayer) ? 1 : 0;"), "SOURCE: and a player's ghost only stores it");
+		Check(Has(ReadSourceFile("3dc/avp/win95/pldnet.h"), "static_assert(sizeof(NETMESSAGE_PLAYERSTATE) == 25,"), "SOURCE: and the player's message didn't grow");
+	}
+
 	if (checksFailed)
 	{
 		printf("FAILED: %d checks\n", checksFailed);

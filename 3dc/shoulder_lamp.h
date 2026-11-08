@@ -5,7 +5,7 @@
 // WHAT IT IS, WITH LIGHTS ADDED PER PIXEL: a real light, on the list of the frame's chosen lights, beside his eyes at his right shoulder and aimed at the middle of the screen. It lights each wall's real colour in a cone, so a pitch-dark room lights up, and it throws real
 // shadows, through the same shadow volumes as any other light. ConsiderTheShoulderLamp in kshape.cpp puts it on the list, and its shape is at the top of shaders/lightShapes.fxh. It only shows where it lands, so there's no beam to see in the air.
 //
-// WHAT IT IS OTHERWISE, AND FOR NOW BY DEFAULT: a picture effect, in two parts. shaders/shoulderLamp.psh lights a soft round spot in the middle of the finished picture. It brightens what's there, and adds each wall's own colour from the surface pictures, so that it lights a dark room. And a long
+// WHAT IT IS OTHERWISE: a picture effect, in two parts. shaders/shoulderLamp.psh lights a soft round spot in the middle of the finished picture. It brightens what's there, and adds each wall's own colour from the surface pictures, so that it lights a dark room. And a long
 // soft cone leads into the spot from the right of the screen, which is only a faint haze and lights nothing, or looking through it would be night vision. In the three per-pixel modes the game has drawn the surface pictures anyway. In Gouraud nothing else does, so while the lamp is on they're drawn just
 // for it, which costs one more drawing of the solid polygons, off the screen, and nothing with the lamp off. That shader says why the cone looks the way it does.
 //
@@ -38,8 +38,14 @@ long ShoulderLamp_FramesDrawn();
 // Could it be a real light on the coming frame? It's chosen before the frame is lit, and asked for after, so this goes by what the last frame was told about who the player is.
 bool ShoulderLamp_CanBeALight();
 
-// The real light stays off until it's asked for, while its look is being settled, and the painted version is all that shows.
+// Whether lamps are real lights, wherever they can be: the player's choice on the rendering page. See view_settings.cpp.
 void ShoulderLamp_SetRealLightWanted(bool wanted);
+bool ShoulderLamp_RealLightIsWanted();
+
+// Whether other marines' lamps show their beam in the air when lights are drawn per pixel: the player's choice on the rendering page, on unless they say
+// otherwise. With Gouraud lights the beam is a lamp's only light, so it always shows. See LampBeams_Make in kshape.cpp.
+void ShoulderLamp_SetBeamsWanted(bool wanted);
+bool ShoulderLamp_BeamsAreWanted();
 
 // Where the real lamp is from his eyes, in millimetres: across to his right, up, and ahead. See kShoulderLampAcross.
 const float *ShoulderLamp_PlaceFromEyes();

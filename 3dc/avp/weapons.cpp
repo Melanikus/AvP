@@ -23,6 +23,8 @@
 //   Next Weapon and Previous Weapon use one search, in weapon_slots.h, in place of four copies of it
 //   a marine out of ammunition falls back to the new guns too
 //   the reload key loses nothing: see weapon_reload.h
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   MakeMatrixFromDirection gives back the matrix that turns nothing for a direction of nothing (NORMALISE-ZERO-1)
 /*KJL******************************************************************
 * weapon.c - this is home to the weapon state machine and related fns *
 ******************************************************************KJL*/
@@ -2645,7 +2647,16 @@ void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr)
 {
 	VECTORCH XVector;
 	VECTORCH YVector;
-    
+
+	// A direction of nothing points nowhere, so there's no matrix to make from it: the one that turns nothing is given back. Below, it
+	// would have made a matrix with two rows of nothing, which flattens whatever's drawn with it. See normalise.h.
+	if (directionPtr->vx == 0 && directionPtr->vy == 0 && directionPtr->vz == 0)
+	{
+		extern MATRIXCH IdentityMatrix;
+		*matrixPtr = IdentityMatrix;
+		return;
+	}
+
    	if (directionPtr->vx==0)
 	{
 		XVector.vx = 65536;

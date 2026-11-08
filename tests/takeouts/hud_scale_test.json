@@ -1,0 +1,329 @@
+{
+	"copy": [
+		"3dc",
+		"win32",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a height below 1 row is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (screenHeight < 1)\n\t{\n\t\tscreenHeight = 1;",
+					"to": "if (false)\n\t{\n\t\tscreenHeight = 1;"
+				}
+			]
+		},
+		{
+			"name": "a height past the tallest is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (screenHeight > kHUDTallestScreen)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "the usual size is the whole of height / 480, not the old 1280 by 1024 HUD",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.h",
+					"from": "static const int kHUDUsualSize = 61440;",
+					"to": "static const int kHUDUsualSize = 65536;"
+				}
+			]
+		},
+		{
+			"name": "the player's size is left out of the scale",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "* kHUDUsualSize * size) / (480LL * 100)",
+					"to": "* kHUDUsualSize * 100) / (480LL * 100)"
+				}
+			]
+		},
+		{
+			"name": "a size below the smallest is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (number < kHUDSizeSmallest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a size above the largest is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (number > kHUDSizeLargest)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a size between steps is always rounded down",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "+ kHUDSizeStep / 2) / kHUDSizeStep",
+					"to": ") / kHUDSizeStep"
+				}
+			]
+		},
+		{
+			"name": "a slider place before the first is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (place < 0)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a slider place after the last is used as it is",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (place > kHUDSizeSliderPlaces)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "no word at all is read anyway",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (!word)\n\t{\n\t\treturn false;",
+					"to": "if (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "a character that isn't a digit is read as one",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (*character < '0' || *character > '9' || digits == 3)",
+					"to": "if (digits == 3)"
+				}
+			]
+		},
+		{
+			"name": "a word of four digits or more is read as a number",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "|| *character > '9' || digits == 3)",
+					"to": "|| *character > '9')"
+				}
+			]
+		},
+		{
+			"name": "an empty word is read as the number 0",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (digits == 0)\n\t{\n\t\treturn false;\n\t}",
+					"to": "if (false)\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a word with a 0 in front isn't written back",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "return number == *size && word[0] != '0';",
+					"to": "return number == *size;"
+				}
+			]
+		},
+		{
+			"name": "a word that had to be brought to a size isn't written back",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "return number == *size && word[0] != '0';",
+					"to": "return word[0] != '0';"
+				}
+			]
+		},
+		{
+			"name": "the alien's bar is the screen's whole width, not 4:3",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "long long fullLength = static_cast<long long>(screenHeight) * 4 / 3;",
+					"to": "long long fullLength = screenWidth;"
+				}
+			]
+		},
+		{
+			"name": "the alien's bar can be wider than the screen",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (fullLength > screenWidth)",
+					"to": "if (false)"
+				}
+			]
+		},
+		{
+			"name": "a screen or a bar of nothing is still worked out, and divides by nothing",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "if (fullLength <= 0 || fullThickness <= 0)",
+					"to": "if (fullLength < 0 || fullThickness < 0)"
+				}
+			]
+		},
+		{
+			"name": "a health over 100, or below nothing, makes the bar longer than the whole bar",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "(health >= 100) ? fullLength : fullLength * health / 100",
+					"to": "fullLength * health / 100"
+				}
+			]
+		},
+		{
+			"name": "the alien's bar doesn't get thinner as it gets shorter",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "bar.thickness = static_cast<int>(length * fullThickness / fullLength);",
+					"to": "bar.thickness = static_cast<int>(fullThickness);"
+				}
+			]
+		},
+		{
+			"name": "a shorter alien bar doesn't move down to the whole bar's middle line",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "screenHeight - fullThickness + inset * fullThickness / fullLength",
+					"to": "screenHeight - fullThickness"
+				}
+			]
+		},
+		{
+			"name": "the alien's bar isn't centred",
+			"changes": [
+				{
+					"file": "3dc/hud_scale.cpp",
+					"from": "bar.left = static_cast<int>((screenWidth - length) / 2);",
+					"to": "bar.left = 0;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a frame doesn't ask whether the screen or the HUD size has changed",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "HUD_FollowTheScreen(false);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's start doesn't set the scale, so the alien and Predator have none",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "HUD_FollowTheScreen(true);",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: any frame sets the scale again, even with nothing changed",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "if (!evenIfUnchanged && !somethingIsNew)",
+					"to": "if (!evenIfUnchanged)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a new screen width alone isn't a change",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "bool const somethingIsNew = width != widthBefore || height != heightBefore || size != sizeBefore;",
+					"to": "bool const somethingIsNew = height != heightBefore || size != sizeBefore;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log doesn't say the HUD's new size",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "if (somethingIsNew)\n\t{\n\t\tLogString(",
+					"to": "if (false)\n\t{\n\t\tLogString("
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the motion tracker keeps a scale of its own",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "MotionTrackerScale = HUDScaleFactor;",
+					"to": "MotionTrackerScale = ONE_FIXED;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the gunsight stays at 13 pixels",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/d3d_hud.cpp",
+					"from": "imageDesc.Scale  = HUDScaleFactor;",
+					"to": "imageDesc.Scale  = ONE_FIXED;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the Predator works out its own scale from the screen's width",
+			"changes": [
+				{
+					"file": "3dc/avp/hud.cpp",
+					"from": "int scale = HUDScaleFactor;",
+					"to": "int scale = DIV_FIXED(ScreenDescriptorBlock.SDB_Width,640);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log repeats what the settings file said",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "so it's \" + std::to_string(hudSize));",
+					"to": "so it's \" + hudSizeWord);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the slider's place is used as a size, without the rules",
+			"changes": [
+				{
+					"file": "3dc/view_settings.cpp",
+					"from": "hudSize = HUDSize_AtSliderPlace(MenuHUDSize);",
+					"to": "hudSize = MenuHUDSize;"
+				}
+			]
+		}
+	]
+}

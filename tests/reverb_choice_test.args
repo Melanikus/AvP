@@ -1,0 +1,4 @@
+/std:c++17 /EHsc /MD /J /W3 /FC
+/DNDEBUG /D_CRT_SECURE_NO_DEPRECATE
+/I3dc
+tests/reverb_choice_test.cpp

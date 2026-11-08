@@ -8,9 +8,8 @@ static bool lampIsAskedFor = false;
 static long framesDrawn = 0;
 static long framesAsARealLight = 0;
 static bool playerCouldHaveALamp = false;
-// Nothing in the game asks for the real light, so the lamp is the painted version. Only a Hudson run can ask for it, through
-// ShoulderLamp_SetRealLightWanted, to try its look.
 static bool realLightIsWanted = false;
+static bool beamsAreWanted = true;
 
 // The robot arm. See ShoulderLamp_FollowTheView.
 static bool aimIsKnown = false;
@@ -82,6 +81,21 @@ bool ShoulderLamp_CanBeALight()
 void ShoulderLamp_SetRealLightWanted(bool wanted)
 {
 	realLightIsWanted = wanted;
+}
+
+bool ShoulderLamp_RealLightIsWanted()
+{
+	return realLightIsWanted;
+}
+
+void ShoulderLamp_SetBeamsWanted(bool wanted)
+{
+	beamsAreWanted = wanted;
+}
+
+bool ShoulderLamp_BeamsAreWanted()
+{
+	return beamsAreWanted;
 }
 
 const float *ShoulderLamp_PlaceFromEyes()

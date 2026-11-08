@@ -2,6 +2,7 @@
 //   how many marine classes there are (NUM_PC_SUBTYPES) is checked against the list of them when the game is built
 //   the game description carries who the loading screen is waiting for
 //   the co-op lobby: two new messages, the host's rows, and what the pages ask. Credit: Melanikus and Bobblen (the co-op campaign system follows Bobblen's avp-forever, rewritten)
+//   whether a marine's shoulder lamp is on goes to the other machines in a bit the message already had free
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   the new guns' settings are in the game description, so a joiner uses the host's
 //   in the same-as-single-player mode, a level starts for everyone together, with two new messages
@@ -578,7 +579,11 @@ typedef struct netmessage_playerstate
 	int velocity_z: 10; //in 10's of cm/second
 #endif
 	unsigned int landingNoise: 1;
+	unsigned int lampOn: 1;   // his shoulder lamp is on, in the mode that plays as single player. Always 0 in any other
 } NETMESSAGE_PLAYERSTATE;
+
+// The lamp's bit went in a part that had room, so the message didn't grow. If it ever does, the sizes in kNetPartRules and the version need a look.
+static_assert(sizeof(NETMESSAGE_PLAYERSTATE) == 25, "the messages are sized by hand: see the row in kNetPartRules");
 
 typedef struct netmessage_playerstate_minimal
 {

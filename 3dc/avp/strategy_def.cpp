@@ -4,6 +4,10 @@
 // Modified 2026-11-06 by Melanikus for the AvP port:
 //   in a network game a placed NPC can still be found by the name it has in the level: see npc_level_names.h
 //   a level with no block left to carry something over goes on
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   the list of placed NPCs' names is emptied whenever every strategy block is destroyed, so after a restart in a network game a switch finds the
+//   NPC it's aimed at again. It used to be emptied only when the program started (#126)
+//   a lookup by name follows the list of placed NPCs' names once at most, to the live blocks only (#131)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -279,7 +283,26 @@ void InitialiseSBValues(STRATEGYBLOCK* sptr)
 }
 
 
-/* 
+// The live strategy block with this name, or nothing
+static STRATEGYBLOCK *FindLiveSBWithName(char const *id_name)
+{
+	int stratblock = NumActiveStBlocks;
+
+	while(--stratblock >= 0)
+	{
+		STRATEGYBLOCK* sbptr = ActiveStBlockList[stratblock];
+		GLOBALASSERT(sbptr);
+
+		if(NAME_ISEQUAL(sbptr->SBname, id_name))
+		{
+			return sbptr;
+		}
+	}
+
+	return NULL;
+}
+
+/*
 RWH - function to search thgough the list of active
 strat blocks and return the pointer
 */
@@ -287,9 +310,8 @@ strat blocks and return the pointer
 
 STRATEGYBLOCK* FindSBWithName(char* id_name)
 {
-	int stratblock = NumActiveStBlocks;
 	int i;
-	GLOBALASSERT(stratblock);
+	GLOBALASSERT(NumActiveStBlocks);
 
 	if(!id_name)
 		return NULL;
@@ -304,34 +326,10 @@ STRATEGYBLOCK* FindSBWithName(char* id_name)
 		return NULL;
 	}
 
-	while(--stratblock >= 0)
-	{
-		STRATEGYBLOCK* sbptr = ActiveStBlockList[stratblock];
-		GLOBALASSERT(sbptr);
-
-		if(sbptr->SBname)
-		{
-			if(NAME_ISEQUAL(sbptr->SBname, id_name))
-			{
-				return((sbptr));
-			}
-		}
-	}
-	// A placed NPC has a different name in a network game, so anything aimed at it by the name in the level looks here.
-	// The new name it gets back can't be a name in this list that leads anywhere else, so this goes round once at most.
-	if (AvP.Network != I_No_Network)
-	{
-		char const *const newName = NpcLevelNames_NetworkNameFor(&TheNpcLevelNames, id_name);
-
-		if (newName)
-		{
-			return FindSBWithName(const_cast<char *>(newName));
-		}
-	}
-
-	// we have to return null for lifts - so that
-	// we know that the lift is outside the env
-	return(NULL);
+	// A placed NPC has a different name in a network game, so anything aimed at it by its name in the level is sent on to its new one.
+	// npc_level_names.h does that, and reads the list once at most, so this always ends, whatever names a level file holds.
+	// Nothing found is nothing: a lift, for one, needs that, to know a station is outside this environment.
+	return NpcLevelNames_FindByLevelName(&TheNpcLevelNames, id_name, AvP.Network != I_No_Network, FindLiveSBWithName);
 }
 
 void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName)
@@ -352,7 +350,7 @@ void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName)
 
 	if (!NpcLevelNames_Add(&TheNpcLevelNames, levelName, sbPtr->SBname))
 	{
-		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again.");
+		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again until the level starts again.");
 	}
 }
 
@@ -784,6 +782,11 @@ void DestroyAllStrategyBlocks(void)
 			DeallocateStrategyBlock(&FreeStBlockData[i]);
 		}
 	}
+
+	// Every NPC the list of level names leads to is gone now. A level's end and a restart both come here, and a restart makes the NPCs again
+	// with new names. A pair left from before would be found first (NpcLevelNames_NetworkNameFor), and send a switch to a name nothing has
+	// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).
+	NpcLevelNames_Clear(&TheNpcLevelNames);
 
 }
 

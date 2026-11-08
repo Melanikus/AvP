@@ -1,7 +1,7 @@
 {
   "name": "avpx",
   "version-string": "0",
-  "description": "Third-party libraries for the AvPx Windows build (x86-windows-static: the C runtime and every library built in, except OpenAL Soft and Microsoft's D3DX, which stay DLLs; see vcpkg-overlay-triplets). Barry Duncan's libbinkdec and libsmackerdec are vendored source in dependencies/.",
+  "description": "Third-party libraries for the AvPx Windows build (x86-windows). Barry Duncan's libbinkdec and libsmackerdec are vendored source in dependencies/.",
   "dependencies": [
     "dxsdk-d3dx",
     "enet",
