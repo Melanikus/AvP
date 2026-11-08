@@ -5042,6 +5042,10 @@ void LoadStrategy_PredatorDisc(SAVE_BLOCK_STRATEGY_HEADER* header)
 	COPY_NAME(behav->Prev_Damaged_SBname,block->Prev_Damaged_SBname);
 	behav->Target = FindSBWithName(behav->Target_SBname);
 
+	//the target's name comes from the save file, and can be anything in the level's. The disc homes on where its target is, so a
+	//target with no place in the world (no dynamics and nothing on screen, such as a placed sound) is no target: it flies free
+	if(behav->Target && !behav->Target->DynPtr && !behav->Target->SBdptr) behav->Target = NULL;
+
 //strategy block stuff
 	Save_RestoreDynamics(sbPtr->DynPtr, &block->dynamics);
 	sbPtr->integrity = block->integrity;

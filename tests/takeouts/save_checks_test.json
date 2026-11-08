@@ -964,6 +964,16 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "SOURCE: a saved disc keeps a target with no place in the world",
+			"changes": [
+				{
+					"file": "3dc/avp/bh_weapon.cpp",
+					"from": "\tif(behav->Target && !behav->Target->DynPtr && !behav->Target->SBdptr) behav->Target = NULL;\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }
