@@ -14,6 +14,8 @@
 // Modified 2026-11-04 by Melanikus for the AvP port:
 //   the fading of a scrolling menu's rows has room for any number of rows, however many profiles a player has;
 //   a profile can't give the difficulty menu more rows than it has, and a profile's or save's date text stays inside its box
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -48,6 +50,7 @@
 #include "OnScreenKeyboard.h"
 #include "logString.h"
 #include "profile_checks.h"
+#include "address_box.h"
 
 #if defined(_MSC_VER)
 #define stricmp		_stricmp
@@ -1947,6 +1950,21 @@ static void RenderLoadGameMenu(void)
 	}
 }
 
+// What a text field shows: its own text, except the join page's address box, which shows a dot for each character unless Tab is
+// held (address_box.h). The address itself is left as it is.
+static char *TextFieldShows(AVPMENU_ELEMENT *elementPtr)
+{
+	static char shown[64];   // the box takes 15 characters (MAX_IPADDRESS_LENGTH, menu_data.cpp), and a longer one is cut short
+
+	if (elementPtr->TextPtr != IPAddressString)
+	{
+		return elementPtr->TextPtr;
+	}
+
+	AddressBox_TextToDraw(IPAddressString, KeyboardInput[KEY_TAB] != 0, shown, sizeof(shown));
+	return shown;
+}
+
 static void RenderHelpString()
 {
 	AVPMENU_ELEMENT *elementPtr = &AvPMenus.MenuElements[AvPMenus.CurrentlySelectedElement];
@@ -1961,7 +1979,18 @@ static void RenderHelpString()
 		area.top    = 420;
 		area.bottom = 480;//ScreenDescriptorBlock.SDB_Height; // bjd MENU
 
-		RenderSmallFontString_Wrapped(GetTextString(elementPtr->HelpString), &area,BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		// The address box's help also says how to see the address (address_box.h)
+		if (elementPtr->TextPtr == IPAddressString)
+		{
+			static char help[512];
+			_snprintf(help, sizeof(help) - 1, "%s %s", GetTextString(elementPtr->HelpString), kAddressBoxHelp);
+			help[sizeof(help) - 1] = '\0';
+			RenderSmallFontString_Wrapped(help, &area, BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		}
+		else
+		{
+			RenderSmallFontString_Wrapped(GetTextString(elementPtr->HelpString), &area,BRIGHTNESS_OF_HIGHLIGHTED_ELEMENT, 0, 0);
+		}
 	}
 }
 
@@ -3453,7 +3482,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				if (AvPMenus.UserEnteringText && e==AvPMenus.CurrentlySelectedElement)
 				{
 					int b = GetSin(CloakingPhase&4095);
-					int x = RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness/2,AVPMENUFORMAT_CENTREJUSTIFIED);
+					int x = RenderText(TextFieldShows(elementPtr),MENU_CENTREX,y,elementPtr->Brightness/2,AVPMENUFORMAT_CENTREJUSTIFIED);
 					x = RenderText("I",x,y,MUL_FIXED(b,b),AVPMENUFORMAT_CENTREJUSTIFIED);
 
 					//work out how much space was left over
@@ -3464,7 +3493,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				}
 				else
 				{
-					RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
+					RenderText(TextFieldShows(elementPtr),MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);
 				}
 			}
 			else
@@ -3474,7 +3503,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				if (AvPMenus.UserEnteringText && e==AvPMenus.CurrentlySelectedElement)
 				{
 					int b = GetSin(CloakingPhase&4095);
-					int x = RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness/2,AVPMENUFORMAT_LEFTJUSTIFIED);
+					int x = RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness/2,AVPMENUFORMAT_LEFTJUSTIFIED);
 					x = RenderText("I",x,y,MUL_FIXED(b,b),AVPMENUFORMAT_LEFTJUSTIFIED);
 					
 					//work out how much space was left over
@@ -3485,7 +3514,7 @@ static void RenderMenuElement(AVPMENU_ELEMENT *elementPtr, int e, int y)
 				}
 				else
 				{
-					RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
+					RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);
 				}
 			}
 			break;

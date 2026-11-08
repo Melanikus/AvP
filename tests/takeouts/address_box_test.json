@@ -1,0 +1,27 @@
+{
+  "copy": ["3dc", "tests"],
+  "rows": [
+    { "name": "the box shows the address with Tab not held",
+      "changes": [{ "file": "3dc/avp/win95/frontend/address_box.h", "from": "shown[i] = tabIsHeld ? address[i] : '.';", "to": "shown[i] = address[i];" }] },
+    { "name": "holding Tab doesn't show the address",
+      "changes": [{ "file": "3dc/avp/win95/frontend/address_box.h", "from": "shown[i] = tabIsHeld ? address[i] : '.';", "to": "shown[i] = '.';" }] },
+    { "name": "a small space is written past",
+      "changes": [{ "file": "3dc/avp/win95/frontend/address_box.h", "from": "while (address && address[i] && i + 1 < size)", "to": "while (address && address[i] && i < size)" }] },
+    { "name": "no address at all is read anyway",
+      "changes": [{ "file": "3dc/avp/win95/frontend/address_box.h", "from": "while (address && address[i] && i + 1 < size)", "to": "while (address[i] && i + 1 < size)" }] },
+    { "name": "the help line doesn't name the key",
+      "changes": [{ "file": "3dc/avp/win95/frontend/address_box.h", "from": "hold Tab to see it.", "to": "hold a key to see it." }] },
+    { "name": "SOURCE: the box shows its address while it's typed",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "int x = RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,", "to": "int x = RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING," }] },
+    { "name": "SOURCE: the box shows its address when it isn't being typed in",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "RenderText(TextFieldShows(elementPtr),MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);", "to": "RenderText(elementPtr->TextPtr,MENU_CENTREX+MENU_ELEMENT_SPACING,y,elementPtr->Brightness,AVPMENUFORMAT_LEFTJUSTIFIED);" }] },
+    { "name": "SOURCE: a box with no label shows its text as it is",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "RenderText(TextFieldShows(elementPtr),MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);", "to": "RenderText(elementPtr->TextPtr,MENU_CENTREX,y,elementPtr->Brightness,AVPMENUFORMAT_CENTREJUSTIFIED);" }] },
+    { "name": "SOURCE: every box shows its text as it is",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "if (elementPtr->TextPtr != IPAddressString)", "to": "if (true)" }] },
+    { "name": "SOURCE: the address shows without Tab",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "KeyboardInput[KEY_TAB] != 0", "to": "true" }] },
+    { "name": "SOURCE: the help line doesn't say how to see the address",
+      "changes": [{ "file": "3dc/avp/win95/frontend/menus.cpp", "from": "if (elementPtr->TextPtr == IPAddressString)\n\t\t{\n\t\t\tstatic char help[512];", "to": "if (false)\n\t\t{\n\t\t\tstatic char help[512];" }] }
+  ]
+}
