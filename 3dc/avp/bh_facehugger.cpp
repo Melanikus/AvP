@@ -211,6 +211,35 @@ void InitFacehuggerBehaviour(void* bhdata, STRATEGYBLOCK *sbPtr)
 
 }
 
+// Makes a new facehugger during a level, which the game itself never does: they're only ever placed in a level's file. It starts on its feet and walking, and doesn't float in a tube until something wakes it. Everything has to be done
+// before its set-up, which can take this block away again. Its name comes from there too. The loader is what turns maintainVisibility on for what's placed in a level, and without it this would never get a body.
+void CreateFacehugger(VECTORCH *Position)
+{
+	MODULE *const room = ModuleFromPosition(Position, (MODULE *)0);
+
+	if (!room)
+	{
+		return;
+	}
+
+	STRATEGYBLOCK *const sbPtr = CreateActiveStrategyBlock();
+
+	if (!sbPtr)
+	{
+		return;
+	}
+
+	TOOLS_DATA_FACEHUGGER toolsData;
+
+	InitialiseSBValues(sbPtr);
+	sbPtr->I_SBtype = I_BehaviourFaceHugger;
+	sbPtr->maintainVisibility = 1;
+	sbPtr->containingModule = room;
+	memset(&toolsData, 0, sizeof(toolsData));
+	toolsData.position = *Position;
+	InitFacehuggerBehaviour(&toolsData, sbPtr);
+}
+
 void FacehuggerBehaviour(STRATEGYBLOCK *sbPtr)
 {
 	FACEHUGGER_STATUS_BLOCK *facehuggerStatusPointer;
