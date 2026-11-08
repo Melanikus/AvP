@@ -7,9 +7,12 @@
 //   what the game says while a level loads goes in the level's own log, beside it, when the level can't be loaded or has things
 //   refused (level_log.h)
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   a lift into another environment builds that environment's alien ways map, and a level's end stops the build and lets the map go
+//   (alien_ways.h);
 //   the log says which level file was loaded, with its size and MD5 sum (level_file_sum.h)
 
 #include "3dc.h"
+#include "alien_ways.h"
 #include "level_file_sum.h"
 #include "level_log.h"
 #include "texture_relief.h"
@@ -242,6 +245,10 @@ void RestartLevel()
 			ActiveStBlockList[i] = NULL;
 		}
 
+		// Modified 2026-11-08 by Melanikus for the AvP port:
+		//   the aliens' ways go with the aliens; the alien ways map stays, as the level's shape does (alien_ways.h)
+		AlienWays_LevelRestarts();
+
 		i = maxobjects;
 		InitialiseObjectBlocks();
 		while (i --)
@@ -449,6 +456,7 @@ void IntegrateNewEnvironment()
 	InitObjectVisibilities();
 	InitPheromoneSystem();
 	BuildFarModuleLocs();
+	AlienWays_LevelStart();
 	InitHive();
 
 	AssignAllSBNames();
@@ -565,6 +573,8 @@ int Destroy_CurrentEnvironment(void)
 	//Deallocate memory for all shapes and hierarchy animations
 	DeallocateSoundsAndPoolAllocatedMemory();
 	
+	// The alien ways map's build only ever reads its own copy of the level, so it can be stopped here. It's waited for before anything goes.
+	AlienWays_LevelEnd();
 	KillFarModuleLocs();
 	TimeStampedMessage("After KillFarModuleLocs");
 	CleanUpPheromoneSystem();

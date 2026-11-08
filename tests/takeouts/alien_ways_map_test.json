@@ -1,0 +1,798 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a polygon of fewer than 3 corners is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.corners < 3 || p.corners > kAlienWaysMostCorners)",
+					"to": "if (p.corners < 2 || p.corners > kAlienWaysMostCorners)"
+				}
+			]
+		},
+		{
+			"name": "a polygon of more than 8 corners is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.corners < 3 || p.corners > kAlienWaysMostCorners)",
+					"to": "if (p.corners < 3 || p.corners > kAlienWaysMostCorners + 1)"
+				}
+			]
+		},
+		{
+			"name": "a facing that isn't a number is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (!(p.up >= -1.0f && p.up <= 1.0f))",
+					"to": "if (p.up < -1.0f || p.up > 1.0f)"
+				}
+			]
+		},
+		{
+			"name": "one polygon more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (kept == limits.mostPolygons)",
+					"to": "if (kept == limits.mostPolygons + 1)"
+				}
+			]
+		},
+		{
+			"name": "one corner more than the most in one place is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (j - i > limits.mostCornersInOnePlace)",
+					"to": "if (j - i > limits.mostCornersInOnePlace + 1)"
+				}
+			]
+		},
+		{
+			"name": "one edge step more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (steps + 1 > limits.mostEdgeSteps - edgeSteps)",
+					"to": "if (steps > limits.mostEdgeSteps - edgeSteps)"
+				}
+			]
+		},
+		{
+			"name": "one corner test more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (cornerTests >= limits.mostCornerTests)",
+					"to": "if (cornerTests > limits.mostCornerTests)"
+				}
+			]
+		},
+		{
+			"name": "one join more than the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (joins > limits.mostJoins)",
+					"to": "if (joins > limits.mostJoins + 1)"
+				}
+			]
+		},
+		{
+			"name": "the ceilings in bytes let one byte more through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (*total > most || bytes > most - *total)",
+					"to": "if (*total > most || bytes > most - *total + 1)"
+				}
+			]
+		},
+		{
+			"name": "the memory for more touches isn't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (!Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding) ||",
+					"to": "if (false && !Count(more * sizeof(Touch), &bytesBuilding, limits.mostBytesBuilding) ||"
+				}
+			]
+		},
+		{
+			"name": "a stop asked for is never seen",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "return stopAsked.load();",
+					"to": "return false;"
+				}
+			]
+		},
+		{
+			"name": "a floor bigger than 5,000 square metres is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "(highX - lowX) * (highZ - lowZ) > kAlienWaysMostFlatArea",
+					"to": "(highX - lowX) * (highZ - lowZ) > kAlienWaysMostFlatArea * 2"
+				}
+			]
+		},
+		{
+			"name": "a wall taller than 50 m is kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "highY - lowY > kAlienWaysMostWallHeight",
+					"to": "highY - lowY > kAlienWaysMostWallHeight * 2"
+				}
+			]
+		},
+		{
+			"name": "a corner just over 64 km out counts as in",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "return v < -kAlienWaysMostCoordinate || v > kAlienWaysMostCoordinate;",
+					"to": "return v < -kAlienWaysMostCoordinate - 1 || v > kAlienWaysMostCoordinate + 1;"
+				}
+			]
+		},
+		{
+			"name": "a corner 11 mm away counts as touching",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (DistanceToEdge(a, b, c) > kAlienWaysTouch)",
+					"to": "if (DistanceToEdge(a, b, c) > kAlienWaysTouch + 2)"
+				}
+			]
+		},
+		{
+			"name": "a polygon's own corners count as touching it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (e->polygon == polygon)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}",
+					"to": "if (false)\n\t\t\t\t{\n\t\t\t\t\tcontinue;\n\t\t\t\t}"
+				}
+			]
+		},
+		{
+			"name": "the nearest point is taken off the end of a stretch",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tt = std::max(0.0, std::min(1.0, t));\n\t\tAlienWaysXYZ out",
+					"to": "\t\tAlienWaysXYZ out"
+				}
+			]
+		},
+		{
+			"name": "the floor costs the same as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\treturn static_cast<double>(price);",
+					"to": "\t\treturn 1.0;"
+				}
+			]
+		},
+		{
+			"name": "the goal is never reached from its own polygon",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tif (node == toNode)\n\t\t{\n\t\t\tRelax(goalNode, here + CostAcross(node, at, goalAt), goalAt, node);\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way is never cut short",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "size_t const keep = std::min(points, kAlienWaysMostWayPoints);",
+					"to": "size_t const keep = points;"
+				}
+			]
+		},
+		{
+			"name": "the marks of old searches aren't cleared when the number goes round",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tstd::fill(stamp.begin(), stamp.end(), 0);\n\t\tstd::fill(closed.begin(), closed.end(), 0);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon past the last can be searched from",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (fromPolygon < 0 || toPolygon < 0 || fromPolygon >= onTheMap || toPolygon >= onTheMap)",
+					"to": "if (fromPolygon < 0 || toPolygon < 0 || fromPolygon > onTheMap || toPolygon > onTheMap)"
+				}
+			]
+		},
+		{
+			"name": "a floor price of 0 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (floorPrice < 1 || floorPrice > kAlienWaysMostFloorPrice)",
+					"to": "if (floorPrice < 0 || floorPrice > kAlienWaysMostFloorPrice)"
+				}
+			]
+		},
+		{
+			"name": "a floor price over 1000 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (floorPrice < 1 || floorPrice > kAlienWaysMostFloorPrice)",
+					"to": "if (floorPrice < 1 || floorPrice > kAlienWaysMostFloorPrice + 1)"
+				}
+			]
+		},
+		{
+			"name": "a start far out along x is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (FarOut(start.x) || FarOut(start.y)",
+					"to": "if ((false && FarOut(start.x)) || FarOut(start.y)"
+				}
+			]
+		},
+		{
+			"name": "exactly the floor angle counts as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (up >= kAlienWaysFloorFacing)",
+					"to": "if (up > kAlienWaysFloorFacing)"
+				}
+			]
+		},
+		{
+			"name": "exactly the floor angle down counts as a wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (up <= -kAlienWaysFloorFacing)",
+					"to": "if (up < -kAlienWaysFloorFacing)"
+				}
+			]
+		},
+		{
+			"name": "the facing worked out from corners comes out upside down",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "return static_cast<float>(-ny / size);",
+					"to": "return static_cast<float>(ny / size);"
+				}
+			]
+		},
+		{
+			"name": "a facing worked out from corners in a line is a number divided by 0",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (size <= 0.0)\n\t{\n\t\treturn 0.0f;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a refused build keeps what it made",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (why)\n\t{\n\t\t// Nothing at all is kept from a map that couldn't be made\n\t\tLetGo();\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "Clear forgets the stop asked for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tLetGo();\n\tstopAsked.store(false);",
+					"to": "\tLetGo();"
+				}
+			]
+		},
+		{
+			"name": "a game polygon of 9 corners is added",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (corners > kAlienWaysMostCorners)\n\t{\n\t\treturn kAlienWaysLeftOutTooManyCorners;",
+					"to": "\tif (corners > kAlienWaysMostCorners + 1)\n\t{\n\t\treturn kAlienWaysLeftOutTooManyCorners;"
+				}
+			]
+		},
+		{
+			"name": "a game polygon of 2 corners is added",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (corners < 3)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;",
+					"to": "\tif (corners < 2)\n\t{\n\t\treturn kAlienWaysLeftOutTooFewCorners;"
+				}
+			]
+		},
+		{
+			"name": "a corner is placed in int, where a crafted level's numbers wrap round to a place inside 64 km (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tx += place.x;\n\ty += place.y;\n\tz += place.z;",
+					"to": "\tx = static_cast<int>(x + place.x);\n\ty = static_cast<int>(y + place.y);\n\tz = static_cast<int>(z + place.z);"
+				}
+			]
+		},
+		{
+			"name": "a corner more than 64 km out is kept (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (x < -most || x > most || y < -most || y > most || z < -most || z > most)\n\t{\n\t\treturn false;\n\t}",
+					"to": "\tif (false)\n\t{\n\t\treturn false;\n\t}"
+				}
+			]
+		},
+		{
+			"name": "a corner isn't turned with its object",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (turn)\n\t{\n\t\tx = TimesFixed(turn->m11",
+					"to": "\tif (false)\n\t{\n\t\tx = TimesFixed(turn->m11"
+				}
+			]
+		},
+		{
+			"name": "a turned facing isn't turned",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "long long const y = turn ? TimesFixed(turn->m12, facing.x) + TimesFixed(turn->m22, facing.y) + TimesFixed(turn->m32, facing.z) : facing.y;",
+					"to": "long long const y = facing.y;"
+				}
+			]
+		},
+		{
+			"name": "a facing isn't kept from -1 to 1",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "return static_cast<float>(up > 1.0 ? 1.0 : (up < -1.0 ? -1.0 : up));",
+					"to": "return static_cast<float>(up);"
+				}
+			]
+		},
+		{
+			"name": "of two boxes as near, the one given first wins",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (best < 0 || distance < bestDistance || toMiddle < bestToMiddle)",
+					"to": "if (best < 0 || distance < bestDistance)"
+				}
+			]
+		},
+		{
+			"name": "a polygon's box is only its first corner",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tlow.x = std::min(low.x, p.x[c]); low.y = std::min(low.y, p.y[c]); low.z = std::min(low.z, p.z[c]);\n\t\t\thigh.x = std::max(high.x, p.x[c]); high.y = std::max(high.y, p.y[c]); high.z = std::max(high.z, p.z[c]);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the nearest polygon is looked for past the end of the list (the program stops at the read)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tendGiven = std::min(endGiven, mapNumber.size());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "how near the polygon found is isn't said",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (howFar && best >= 0)\n\t{\n\t\t*howFar = bestDistance;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the guess counts the rest of the way at the floor's price, so it can guess too much (Third)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt));",
+					"to": "guess[node] = costHere + (node == static_cast<int>(Polygons()) ? 0.0 : Distance(at, goalAt) * price);"
+				}
+			]
+		},
+		{
+			"name": "the top of the touches' copy isn't checked against the building ceiling (F3)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": " || old > limits.mostBytesBuilding - bytesBuilding)",
+					"to": ")"
+				}
+			]
+		},
+		{
+			"name": "the top of the touches' copy isn't kept as the most the build needed (F3)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\t\tbytesBuildingTop = std::max(bytesBuildingTop, bytesBuilding + old);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way along walls runs along their foot: crossings from wall to wall aren't lifted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\tcross = LiftedOn(stretchA[joinStretch[k]], stretchB[joinStretch[k]], cross);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a crossing is lifted above the top of a short wall",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "double const t = std::max(0.0, std::min(1.0, (static_cast<double>(wanted) - a.y) / (static_cast<double>(b.y) - a.y)));",
+					"to": "double const t = (static_cast<double>(wanted) - a.y) / (static_cast<double>(b.y) - a.y);"
+				}
+			]
+		},
+		{
+			"name": "a way drops to the floor for no length at a corner, to dodge a climb",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tlength = std::max(length, static_cast<double>(kAlienWaysLeastFloorStep));\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way on a wall runs along its foot: no point on a wall is lifted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (p.y > wanted)\n\t{\n\t\tp.y = static_cast<int>(wanted);\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the climb up a wall is left out of the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tif (upIsNew)\n\t\t{\n\t\t\tpoints[count++] = up;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the way down a wall is left out of the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tif (downIsNew)\n\t\t{\n\t\t\tpoints[count++] = down;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a shut door is walked through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tif (other != toNode && doorShutInSearch[doorOf[other]] != 0)\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "the goal's own polygon is kept off when its door is shut",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
+					"to": "if (doorShutInSearch[doorOf[other]] != 0)"
+				}
+			]
+		},
+		{
+			"name": "a search reads the doors as they are now, not as they were when it started",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (other != toNode && doorShutInSearch[doorOf[other]] != 0)",
+					"to": "if (other != toNode && doorShut[doorOf[other]] != 0)"
+				}
+			]
+		},
+		{
+			"name": "a search never takes the doors as they are when it starts",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tstd::copy(doorShut.begin(), doorShut.end(), doorShutInSearch.begin());\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "door 0, no door, can be shut",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (door > 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;",
+					"to": "if (door >= 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "a door one past the map's last can be set",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (door > 0 && door < static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;",
+					"to": "if (door > 0 && door <= static_cast<int>(doorShut.size()))\n\t{\n\t\tdoorShut[door] = shut ? 1 : 0;"
+				}
+			]
+		},
+		{
+			"name": "a door below 0 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < -1 || p.door > kAlienWaysMostDoors)"
+				}
+			]
+		},
+		{
+			"name": "a door past the most is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < 0 || p.door > kAlienWaysMostDoors + 1)"
+				}
+			]
+		},
+		{
+			"name": "the most doors itself is refused",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "if (p.door < 0 || p.door > kAlienWaysMostDoors)",
+					"to": "if (p.door < 0 || p.door >= kAlienWaysMostDoors)"
+				}
+			]
+		},
+		{
+			"name": "the doors aren't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\thighestDoor = std::max(highestDoor, p.door);\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a polygon's door isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tdoorOf.push_back(p.door);\n",
+					"to": "\t\tdoorOf.push_back(0);\n"
+				}
+			]
+		},
+		{
+			"name": "a way's points don't say which polygon they're on",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\t\twayPolygons[place] = node;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a search's prices don't count the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tdouble const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher, searchClaimStep, searchClaimMost) : 1.0;\n",
+					"to": "\tdouble const claimed = 1.0;\n"
+				}
+			]
+		},
+		{
+			"name": "a search counts the searcher's own claims against it",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "searchClaims->PriceFactor(node, searchSearcher, searchClaimStep",
+					"to": "searchClaims->PriceFactor(node, -1, searchClaimStep"
+				}
+			]
+		},
+		{
+			"name": "a search keeps the last search's claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaims = claims;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way round an outside corner gets no stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (from < 0 || to < 0 || kind[from] != kAlienWaysWall || kind[to] != kAlienWaysWall)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "the inside of a room's corner gets a stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (!(toBehindFrom < -kAlienWaysTouch && fromBehindTo < -kAlienWaysTouch))\n",
+					"to": "\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "walls whose facings aren't known get a stand-off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tif (ax * ax + ay * ay + az * az < 0.5 || bx * bx + by * by + bz * bz < 0.5)\n\t{\n\t\treturn false;",
+					"to": "\tif (false)\n\t{\n\t\treturn false;"
+				}
+			]
+		},
+		{
+			"name": "the stand-off isn't counted among the way's points",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\treturn count + (standOff ? 1 : 0);",
+					"to": "\treturn count;"
+				}
+			]
+		},
+		{
+			"name": "a facing that isn't a number from -1 to 1 is let through",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\t\tif (!(p.facing[c] >= -1.0f && p.facing[c] <= 1.0f))\n",
+					"to": "\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "a polygon's facing isn't kept",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "facing.push_back(Facing{ static_cast<int16_t>(lround(p.facing[0] * 32767.0f))",
+					"to": "facing.push_back(Facing{ static_cast<int16_t>(0 * lround(p.facing[0] * 32767.0f))"
+				}
+			]
+		},
+		{
+			"name": "a facing is turned the wrong way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\t\tparts[2] = TimesFixed(turn->m13, facing.x) + TimesFixed(turn->m23, facing.y) + TimesFixed(turn->m33, facing.z);",
+					"to": "\t\tparts[2] = TimesFixed(turn->m31, facing.x) + TimesFixed(turn->m32, facing.y) + TimesFixed(turn->m33, facing.z);"
+				}
+			]
+		},
+		{
+			"name": "a way's points don't carry their polygon's facing",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "KindOf(node), { facing[node].x, facing[node].y, facing[node].z } };",
+					"to": "KindOf(node), { 0, 0, 0 } };"
+				}
+			]
+		},
+		{
+			"name": "a search takes no step of its own for the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaimStep = claimStep >= 0.0 && claimStep <= 10.0 ? claimStep : kAlienWaysClaimPriceStep;\n",
+					"to": "\tsearchClaimStep = kAlienWaysClaimPriceStep;\n"
+				}
+			]
+		},
+		{
+			"name": "a search takes no most of its own for the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaimMost = claimMost >= 1.0 && claimMost <= 10.0 ? claimMost : kAlienWaysClaimMostPriceFactor;\n",
+					"to": "\tsearchClaimMost = kAlienWaysClaimMostPriceFactor;\n"
+				}
+			]
+		},
+		{
+			"name": "a search takes a step below 0 as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "searchClaimStep = claimStep >= 0.0 && claimStep",
+					"to": "searchClaimStep = claimStep >= -10.0 && claimStep"
+				}
+			]
+		},
+		{
+			"name": "the claims ignore the searcher's own step",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "(std::min)(1.0 + step * others, most)",
+					"to": "(std::min)(1.0 + kAlienWaysClaimPriceStep * others, most)"
+				}
+			]
+		},
+		{
+			"name": "a search's cost is said for a search with no way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "return state == kAlienWaysFound && !cost.empty() ? cost[Polygons()] : -1.0;",
+					"to": "return !cost.empty() ? cost[Polygons()] : -1.0;"
+				}
+			]
+		}
+	]
+}

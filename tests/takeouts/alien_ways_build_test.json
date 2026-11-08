@@ -1,0 +1,259 @@
+{
+	"copy": [
+		"3dc",
+		"tests",
+		"win32"
+	],
+	"rows": [
+		{
+			"name": "Stop keeps the map",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\t// Clear also forgets the stop, ready for the next build\n\tmap.Clear();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the build always takes a thread, even when told it can't have one",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\tif (!noThreadForATest)\n",
+					"to": "\tif (true)\n"
+				}
+			]
+		},
+		{
+			"name": "a build on its own thread says it wasn't",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "\t\t\townThread = true;",
+					"to": "\t\t\townThread = false;"
+				}
+			]
+		},
+		{
+			"name": "a refused build says it's ready",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "state.store(said ? kAlienWaysRefused : kAlienWaysReady, std::memory_order_release);",
+					"to": "state.store(kAlienWaysReady, std::memory_order_release);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a game's start doesn't build the map",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tAlienWays_LevelStart();\n\tInitHive();",
+					"to": "\tInitHive();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a lift into another environment doesn't build the map",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tBuildFarModuleLocs();\n\tAlienWays_LevelStart();\n",
+					"to": "\tBuildFarModuleLocs();\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's end doesn't stop the build",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\tAlienWays_LevelEnd();\n\tKillFarModuleLocs();",
+					"to": "\tKillFarModuleLocs();"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the log never hears how the build went",
+			"changes": [
+				{
+					"file": "3dc/avp/game.cpp",
+					"from": "\tAlienWays_Frame();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -alienways works without -dev",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (devSwitch(\"-alienways\"))",
+					"to": "if (CommandLineHasWord(command_line, \"-alienways\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map is built on a machine that doesn't run the aliens",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "return AvP.Network == I_No_Network || AvP.NetworkAIServer;",
+					"to": "return true;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the map is built with the switch off",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tif (!AlienWaysSwitchedOn)\n\t{\n\t\treturn false;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a level's start keeps what the last level left",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\t// Whatever was left of the last level goes first\n\tAlienWays_LevelEnd();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game's project leaves out the build",
+			"changes": [
+				{
+					"file": "win32/VS2026/AvP.vcxproj",
+					"from": "    <ClCompile Include=\"..\\..\\3dc\\avp\\alien_ways_build.cpp\" />\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "the program stops when a build is let go while running: it no longer waits for its thread (F5)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "AlienWaysBuild::~AlienWaysBuild()\n{\n\tStop();",
+					"to": "AlienWaysBuild::~AlienWaysBuild()\n{\n"
+				}
+			]
+		},
+		{
+			"name": "the program stops when a build is started while another runs: Start no longer stops the last one first (F5)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_build.cpp",
+					"from": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n\tStop();\n",
+					"to": "void AlienWaysBuild::Start(std::vector<AlienWaysPolygon> &&given)\n{\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the listing reads past a polygon's record (F2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "while (count < kAlienWaysRecordCorners && corners[count] >= 0)",
+					"to": "while (count <= kAlienWaysMostCorners && corners[count] >= 0)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a polygon with no end to its corners is kept (F2)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\tif (count == kAlienWaysRecordCorners)\n\t\t{\n\t\t\tlisting->counts->noEnd++;\n\t\t\tcontinue;\n\t\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a corner is summed in int again (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "\t\t\tif (!AlienWays_PlaceCorner(corner, turning, where, &placed))",
+					"to": "\t\t\tplaced = AlienWaysXYZ{ MUL_FIXED(65536, corner.x) + where.x, corner.y + where.y, corner.z + where.z };\n\t\t\tif (false)"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a facing is worked out in int again (F1)",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "up = AlienWays_TurnedUp(AlienWaysXYZ{ stored.vx, stored.vy, stored.vz }, turning);",
+					"to": "up = static_cast<float>(-stored.vy) / 65536.0f;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the listing doesn't say which scene is loaded",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_level.cpp",
+					"from": "extern SCENE Global_Scene;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the aliens' ways",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\t\tAlienWays_LevelRestarts();\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the guide as it was",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\ttheGuide.Clear();\n\tstd::fill(std::begin(watched), std::end(watched), Watched());\n",
+					"to": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart stops the map's build",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n}",
+					"to": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n\ttoldTurnedAway = false;\n\ttheBuild.Stop();\n}"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart forgets the ways before the old aliens are gone",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/system.cpp",
+					"from": "\t\tDestroyAllStrategyBlocks();\n\t\twhile(i--)\n\t\t{\n\t\t\tActiveStBlockList[i] = NULL;\n\t\t}\n\n\t\t// Modified 2026-11-08 by Melanikus for the AvP port:\n\t\t//   the aliens' ways go with the aliens",
+					"to": "\t\tAlienWays_LevelRestarts();\n\t\tDestroyAllStrategyBlocks();\n\t\twhile(i--)\n\t\t{\n\t\t\tActiveStBlockList[i] = NULL;\n\t\t}\n\n\t\t// Modified 2026-11-08 by Melanikus for the AvP port:\n\t\t//   the aliens' ways go with the aliens"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a restart keeps the stuck line's watch list",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\tstd::fill(std::begin(watched), std::end(watched), Watched());\n",
+					"to": ""
+				}
+			]
+		}
+	]
+}

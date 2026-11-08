@@ -31,8 +31,12 @@
 //   same letters in it isn't taken for a switch; -ip refuses a word too long to be an address, instead of cutting it short
 //   -staticcomparedrop turns the comparing on itself, as it did when -staticcompare was found inside it
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
+//   -alienways, with -dev, builds the alien ways map at each level's start, while that's being made and filmed (alien_ways.h)
+//   -alienwaysaim=N, with -dev, says how far along its way an alien aims, in mm, from 0 to 10000; 0 is the aim before the look-ahead
+//   -alienwayswatch=N, with -dev, gives the alien with the guide's place N, from 0 to 63, a line in the log every frame (alien_ways.h)
 
 #include "3dc.h"
+#include "alien_ways.h"
 #include "build_identity.h"
 #include "mark_key.h"
 #include "texture_relief.h"
@@ -342,6 +346,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		{
 			ShadowLightsByNearest = 1;
 		}
+		// The map aliens will find their way along walls and ceilings by ("For Aliens, Floor is lava", #109). A developer's switch while it's
+		// being built and filmed; when it ships it's always on, with no setting (alien_ways.h).
+		if (devSwitch("-alienways"))
+		{
+			AlienWaysSwitchedOn = 1;
+			LogString("alien ways: the map is built at each level's start (-alienways)");
+		}
 		extern int ShadowFlickerOn;
 		if (devSwitch("-shadowflicker"))
 		{
@@ -432,6 +443,46 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			else
 			{
 				LogString("shadows: -shadowbiassteps needs a number from 1 to 64, so it was ignored");
+			}
+		}
+		// How far along its way an alien aims, so it curves round bends (alien_ways.h). Anything but a whole number from 0 to 10000 leaves it
+		// at 1.5 m; 0 aims at the way's next point, as before, so a film can compare the two.
+		char const *aimSwitch = devNumber("-alienwaysaim=");
+		if (aimSwitch)
+		{
+			char const *number = aimSwitch + strlen("-alienwaysaim=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 0 && asked <= kAlienWaysAimMostAheadMm)
+			{
+				AlienWaysAimAheadMm = (int)asked;
+				LogString("alien ways: an alien aims " + std::to_string(asked) + " mm along its way (-alienwaysaim)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwaysaim needs a whole number from 0 to 10000, so it was ignored");
+			}
+		}
+		// One alien, by the guide's place for it, gets a line in the log every frame: what its state did, whether its way steered it, its grip
+		// and the marine scent round it (alien_ways.h). Off unless asked. Anything but a whole number from 0 to 63 leaves it off.
+		char const *watchSwitch = devNumber("-alienwayswatch=");
+		if (watchSwitch)
+		{
+			char const *number = watchSwitch + strlen("-alienwayswatch=");
+			char *afterNumber = 0;
+			long const asked = strtol(number, &afterNumber, 10);
+			bool const wholeNumber = *number >= '0' && *number <= '9' && (*afterNumber == 0 || *afterNumber == ' ' || *afterNumber == '\t');
+
+			if (wholeNumber && asked >= 0 && asked <= kAlienWaysMostWatchPlace)
+			{
+				AlienWaysWatchPlace = (int)asked;
+				LogString("alien ways: the alien with the guide's place " + std::to_string(asked) + " is watched every frame (-alienwayswatch)");
+			}
+			else
+			{
+				LogString("alien ways: -alienwayswatch needs a whole number from 0 to 63, so it was ignored");
 			}
 		}
 		extern int KeptSnap;

@@ -1,0 +1,865 @@
+// See alien_ways_guide.h. Written 2026-11-08 by Melanikus for the AvP port.
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   Drive keeps an alien going along its way on a frame its state didn't ask, without counting as asking (#109)
+#include "alien_ways_guide.h"
+
+#include <float.h>
+#include <math.h>
+
+#include <algorithm>
+#include <chrono>
+
+namespace
+{
+	double Distance(AlienWaysXYZ a, AlienWaysXYZ b)
+	{
+		double const dx = static_cast<double>(a.x) - b.x, dy = static_cast<double>(a.y) - b.y, dz = static_cast<double>(a.z) - b.z;
+		return sqrt(dx * dx + dy * dy + dz * dz);
+	}
+
+	double Distance(AlienWaysXYZ a, const AlienWaysPoint &b)
+	{
+		AlienWaysXYZ const there = { b.x, b.y, b.z };
+		return Distance(a, there);
+	}
+
+	// How far p is from the straight stretch from a to b
+	double DistanceToStretch(AlienWaysXYZ p, const AlienWaysPoint &a, const AlienWaysPoint &b)
+	{
+		double const abx = static_cast<double>(b.x) - a.x, aby = static_cast<double>(b.y) - a.y, abz = static_cast<double>(b.z) - a.z;
+		double const apx = static_cast<double>(p.x) - a.x, apy = static_cast<double>(p.y) - a.y, apz = static_cast<double>(p.z) - a.z;
+		double const length = abx * abx + aby * aby + abz * abz;
+		double t = length > 0.0 ? (apx * abx + apy * aby + apz * abz) / length : 0.0;
+		t = std::max(0.0, std::min(1.0, t));
+		double const dx = apx - t * abx, dy = apy - t * aby, dz = apz - t * abz;
+		return sqrt(dx * dx + dy * dy + dz * dz);
+	}
+
+	// Whether an alien at at, with down its down, has reached point. Across the surface it's on, it has to be within kAlienWaysReached. Up and
+	// down from the surface, it may be as far as kAlienWaysBodyHeight, because the game keeps an alien's position at its middle, not its feet,
+	// and the way's points are on the surfaces themselves.
+	bool Reached(AlienWaysXYZ at, AlienWaysXYZ down, const AlienWaysPoint &point)
+	{
+		double const dx = static_cast<double>(point.x) - at.x, dy = static_cast<double>(point.y) - at.y, dz = static_cast<double>(point.z) - at.z;
+		double const downLength = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+		double const along = downLength > 0.0 ? (dx * down.x + dy * down.y + dz * down.z) / downLength : 0.0;
+		double const acrossSquared = std::max(0.0, dx * dx + dy * dy + dz * dz - along * along);
+		return acrossSquared <= static_cast<double>(kAlienWaysReached) * kAlienWaysReached && fabs(along) <= kAlienWaysBodyHeight;
+	}
+
+	bool SameWho(const AlienWaysWho &a, const AlienWaysWho &b)
+	{
+		return a.place == b.place && a.name == b.name;
+	}
+
+	// The polygon nearest to point among the ranges given, of the kind given or of any kind if it's -1, or -1 if none is within
+	// kAlienWaysNearEnough
+	int NearestIn(const AlienWaysMap &map, AlienWaysXYZ point, const AlienWaysRange *ranges, int rangeCount, int kind)
+	{
+		int best = -1;
+		double bestFar = DBL_MAX;
+
+		for (int r = 0; r < rangeCount; r++)
+		{
+			double howFar = DBL_MAX;
+			int const found = map.NearestPolygonOfKind(point, ranges[r].first, ranges[r].end, kAlienWaysNearEnough, &howFar, kind);
+
+			if (found >= 0 && howFar < bestFar)
+			{
+				best = found;
+				bestFar = howFar;
+			}
+		}
+
+		return best;
+	}
+
+	// The kind of surface an alien is standing on, from which way is down for it: down is +y on a floor, -y on a ceiling, and across on a wall.
+	// The line between them is the map's own, kAlienWaysFloorFacing. With no down given, -1: any kind.
+	int KindUnder(AlienWaysXYZ down)
+	{
+		double const length = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+
+		if (!(length > 0.0))
+		{
+			return -1;
+		}
+
+		double const downY = down.y / length;
+		return downY >= kAlienWaysFloorFacing ? kAlienWaysFloor : (downY <= -kAlienWaysFloorFacing ? kAlienWaysCeiling : kAlienWaysWall);
+	}
+}
+
+// Whether the alien is on the kind of surface a point needs. Where a way steps from one kind of surface to another, up or down, the step
+// counts as made only once the alien is on the new surface, by its down. Until then it keeps heading for the point where the two meet, which
+// is on the surface it's on, so it goes along that surface to the corner, touches the new one, and the game's own climbing turns it onto it.
+// Without this:
+// - stepping up, an alien on the floor heads straight for a point up the wall, the game steers it only along the floor, and it walks beside
+//   the wall without ever touching it;
+// - stepping down, an alien on a wall heads straight for a point out across the floor. The game steers it only along the wall, so if that
+//   point is straight out from it, nothing of the direction is left: the film on Genshd1 found one stuck on a leaning wall, 0.9 m up, heading
+//   for a goal 3 m out from it.
+static bool OnTheKindNeeded(const AlienWaysPoint *points, int heading, AlienWaysXYZ down)
+{
+	if (heading < 1)
+	{
+		return true;
+	}
+
+	return AlienWays_StepMade(points[heading - 1], points[heading], down);
+}
+
+bool AlienWays_StepMade(const AlienWaysPoint &from, const AlienWaysPoint &onto, AlienWaysXYZ down)
+{
+	// One surface: there's no step to make (alien_ways_map.h; the aim asks the same, so it never looks past a step not made here)
+	if (AlienWays_SameSurface(from, onto))
+	{
+		return true;
+	}
+
+	double const ox = onto.facing[0], oy = onto.facing[1], oz = onto.facing[2];
+	double const oLength = sqrt(ox * ox + oy * oy + oz * oz);
+	double const pi = 3.14159265358979323846;
+
+	// Both facings known, and another plane: the step is made once the alien clings to the new polygon
+	if (AlienWays_FacingKnown(from) && AlienWays_FacingKnown(onto))
+	{
+		double const dLength = sqrt(static_cast<double>(down.x) * down.x + static_cast<double>(down.y) * down.y + static_cast<double>(down.z) * down.z);
+
+		if (!(dLength > 0.0))
+		{
+			return false;
+		}
+
+		// Down points into the surface the alien clings to, and a facing points out of it: on the new polygon, the two point opposite ways
+		double const on = -(down.x * ox + down.y * oy + down.z * oz) / (dLength * oLength);
+		return on >= cos(kAlienWaysOnThePlaneDegrees * pi / 180.0);
+	}
+
+	// Either facing not known, and the kinds differ: made once the alien is on the new kind, by its down
+	return KindUnder(down) == static_cast<int>(onto.kind);
+}
+
+bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool open)
+{
+	switch (kind)
+	{
+		case kAlienWaysProximityDoor:
+			return !locked;
+		case kAlienWaysLiftDoor:
+		case kAlienWaysSwitchDoor:
+			return open;
+	}
+
+	// Not one of the kinds: taken as shut, so no way is planned through it
+	return false;
+}
+
+AlienWaysGuide::AlienWaysGuide()
+	: aimAheadMm(0)
+{
+	Clear();
+}
+
+void AlienWaysGuide::Clear()
+{
+	now = 0;
+	turnedAway = 0;
+	searching = -1;
+	reportsRead = true;
+	searchFrom = searchGoal = AlienWaysXYZ{ 0, 0, 0 };
+	searchToTheTarget = false;
+	searchFromKind = -1;
+	searchAskedAt = searchMicroseconds = 0;
+	searchFrames = 0;
+	searchFlanker = false;
+	reportCount = 0;
+	missedCount = 0;
+	claims.Clear();
+	claimsTried = claimsOn = false;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
+	{
+		followers[f].used = false;
+		followers[f].steered = false;
+		followers[f].steeredAt = 0;
+		followers[f].guided = false;
+		followers[f].queued = false;
+		followers[f].count = 0;
+		followers[f].ranked = false;
+		followers[f].flanker = false;
+	}
+}
+
+int AlienWaysGuide::Find(const AlienWaysWho &who) const
+{
+	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
+	{
+		if (followers[f].used && SameWho(followers[f].who, who))
+		{
+			return static_cast<int>(f);
+		}
+	}
+
+	return -1;
+}
+
+int AlienWaysGuide::Take(const AlienWaysWho &who)
+{
+	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
+	{
+		Follower &follower = followers[f];
+
+		if (!follower.used)
+		{
+			follower.used = true;
+			follower.who = who;
+			follower.steered = false;
+			follower.guided = false;
+			follower.queued = false;
+			follower.askedAt = 0;
+			follower.restUntil = 0;
+			follower.count = 0;
+			follower.heading = 0;
+			follower.fresh = false;
+			follower.ranked = false;
+			follower.flanker = false;
+			return static_cast<int>(f);
+		}
+	}
+
+	turnedAway++;
+	return -1;
+}
+
+void AlienWaysGuide::DropTheWay(Follower *follower)
+{
+	// Its way's claims go with it, so the others' searches no longer pay to go round it
+	claims.Remove(static_cast<int>(follower - followers));
+	follower->count = 0;
+	follower->heading = 0;
+}
+
+// Frees an alien's place: its way, its search if one is running, and everything the guide knew about it
+void AlienWaysGuide::LetGo(int f)
+{
+	Follower &follower = followers[f];
+
+	if (searching == f)
+	{
+		searching = -1;
+	}
+
+	follower.ranked = false;
+	follower.used = false;
+	follower.guided = false;
+	follower.queued = false;
+	DropTheWay(&follower);
+}
+
+bool AlienWaysGuide::Forget(const AlienWaysWho &who)
+{
+	int const f = Find(who);
+
+	if (f < 0)
+	{
+		return false;
+	}
+
+	bool const wasGuided = followers[f].guided;
+	LetGo(f);
+	return wasGuided;
+}
+
+bool AlienWaysGuide::Guided(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && followers[f].guided;
+}
+
+bool AlienWaysGuide::GuidedThisFrame(const AlienWaysWho &who) const
+{
+	int const f = Find(who);
+	return f >= 0 && followers[f].steered && followers[f].guided;
+}
+
+size_t AlienWaysGuide::GuidedPlaces(size_t *slots, AlienWaysXYZ *at, int *kinds, size_t most) const
+{
+	size_t found = 0;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers && found < most; f++)
+	{
+		Follower const &follower = followers[f];
+
+		if (follower.used && follower.guided)
+		{
+			slots[found] = f;
+			at[found] = follower.last.at;
+			kinds[found] = KindUnder(follower.last.down);
+			found++;
+		}
+	}
+
+	return found;
+}
+
+size_t AlienWaysGuide::Shown(const AlienWaysPoint **points, int *counts, int *headings, size_t most) const
+{
+	size_t shown = 0;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers && shown < most; f++)
+	{
+		Follower const &follower = followers[f];
+
+		if (follower.used && follower.guided && follower.count > 0)
+		{
+			points[shown] = follower.points;
+			counts[shown] = follower.count;
+			headings[shown] = follower.heading;
+			shown++;
+		}
+	}
+
+	return shown;
+}
+
+void AlienWaysGuide::AddReport(const AlienWaysReport &line)
+{
+	if (reportCount < kAlienWaysMostFollowers)
+	{
+		report[reportCount] = line;
+		reportCount++;
+	}
+}
+
+size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, AlienWaysWho *lapsed, size_t mostLapsed)
+{
+	// The reports of the last frame have been read. Those Steer added since, of aliens found stuck, stay, and this frame's searches go after.
+	if (reportsRead)
+	{
+		reportCount = 0;
+	}
+
+	reportsRead = true;
+	now += std::max(0, stepMs);
+
+	// Every alien nothing has asked about for kAlienWaysForgetAfter is let go. If it was being guided, the game is told, to give it its
+	// gravity back. One that has missed only a frame or a few is kept, way and all, and named in missed.
+	size_t lapsedCount = 0;
+	missedCount = 0;
+
+	for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
+	{
+		Follower &follower = followers[f];
+
+		if (!follower.used)
+		{
+			continue;
+		}
+
+		if (follower.steered)
+		{
+			follower.steered = false;
+			continue;
+		}
+
+		if (now - follower.steeredAt < kAlienWaysForgetAfter)
+		{
+			missed[missedCount] = follower.who;
+			missedCount++;
+			continue;
+		}
+
+		if (follower.guided && lapsedCount < mostLapsed)
+		{
+			lapsed[lapsedCount] = follower.who;
+			lapsedCount++;
+		}
+
+		LetGo(static_cast<int>(f));
+	}
+
+	if (!map || !map->Ready())
+	{
+		searching = -1;
+		return lapsedCount;
+	}
+
+	// The claims, once a level, the first frame there's a map. Tried only once: if there's no memory for them, the searches go without.
+	if (!claimsTried)
+	{
+		claimsTried = true;
+		claimsOn = claims.Reset(map->Polygons());
+	}
+
+	// The searches, one at a time, first asked first served, inside the frame's allowance
+	int left = std::max(0, looksAllowed);
+
+	while (left > 0)
+	{
+		if (searching < 0)
+		{
+			StartNext(map);
+
+			if (searching < 0)
+			{
+				break;
+			}
+		}
+
+		int const before = map->LastSearchLooks();
+		auto const started = std::chrono::steady_clock::now();
+		const AlienWaysSearch result = map->Work(left);
+		searchMicroseconds += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started).count();
+		searchFrames++;
+
+		// Work never looks at more than it's allowed. At least 1 comes off, so this loop always ends.
+		left -= std::max(1, map->LastSearchLooks() - before);
+
+		if (result == kAlienWaysSearching)
+		{
+			break;
+		}
+
+		Finish(map, result);
+	}
+
+	return lapsedCount;
+}
+
+// Starts the search for whichever alien has waited longest, if any has. One whose polygons can't be found, or whose search is refused, is told
+// so in the log, and left to the game's own code for a while before it asks again.
+void AlienWaysGuide::StartNext(AlienWaysMap *map)
+{
+	while (searching < 0)
+	{
+		int next = -1;
+
+		for (size_t f = 0; f < kAlienWaysMostFollowers; f++)
+		{
+			Follower const &follower = followers[f];
+
+			if (follower.used && follower.queued && (next < 0 || follower.askedAt < followers[next].askedAt))
+			{
+				next = static_cast<int>(f);
+			}
+		}
+
+		if (next < 0)
+		{
+			return;
+		}
+
+		Follower &follower = followers[next];
+		follower.queued = false;
+
+		AlienWaysReport line = {};
+		line.follower = static_cast<size_t>(next);
+		line.who = follower.who;
+		line.from = follower.last.at;
+		line.to = follower.last.goal;
+		line.toTheTarget = follower.last.goalIsTheTarget;
+		line.waitedMs = now - follower.askedAt;
+
+		// It starts on a polygon of the kind it's standing on: an alien low on a wall starts on the wall, not the floor just below it.
+		// If there's none of that kind near, the nearest of any kind. Its own module's polygons are looked through first. If none of them is
+		// near, every polygon of the map is, the same two ways: what it stands on can be a still object, which is no module's, or a
+		// neighbouring module's floor.
+		AlienWaysRange const everywhere = { 0, map->PolygonsGiven() };
+		int from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, KindUnder(follower.last.down));
+
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &follower.last.atPolygons, 1, -1);
+		}
+
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &everywhere, 1, KindUnder(follower.last.down));
+		}
+
+		if (from < 0)
+		{
+			from = NearestIn(*map, follower.last.at, &everywhere, 1, -1);
+		}
+
+		// The goal's polygon: in the two modules it's looked for in first, then anywhere. At Third's 5-alien spot (2026-11-08) every way to
+		// the target was refused, because no polygon of the target's own room, nor of the alien's, was within 2 m of where it stood.
+		int to = NearestIn(*map, follower.last.goal, follower.last.goalPolygons, 2, -1);
+
+		if (to < 0)
+		{
+			to = NearestIn(*map, follower.last.goal, &everywhere, 1, -1);
+		}
+
+		line.fromKind = from >= 0 ? static_cast<int>(map->KindOf(from)) : -1;
+		line.toKind = to >= 0 ? static_cast<int>(map->KindOf(to)) : -1;
+
+		if (from < 0 || to < 0)
+		{
+			line.outcome = kAlienWaysOutcomeNoPolygon;
+			AddReport(line);
+			NoNewWay(&follower, follower.last.goal);
+			continue;
+		}
+
+		// Its place among the aliens coming for the same target, taken at its first search for that target and kept while it's coming for
+		// it. Past the first kAlienWaysDirectAliens it's a flanker: the others' claims weigh more for it, and it may go further round (FLANKERS).
+		if (!follower.last.hasTarget)
+		{
+			follower.ranked = false;
+			follower.flanker = false;
+		}
+		else if (!follower.ranked || !SameWho(follower.target, follower.last.target))
+		{
+			int before = 0;
+
+			for (size_t g = 0; g < kAlienWaysMostFollowers; g++)
+			{
+				if (static_cast<int>(g) != next && followers[g].used && followers[g].ranked && SameWho(followers[g].target, follower.last.target))
+				{
+					before++;
+				}
+			}
+
+			follower.ranked = true;
+			follower.target = follower.last.target;
+			follower.flanker = before >= kAlienWaysDirectAliens;
+		}
+
+		bool const flanker = follower.ranked && follower.flanker;
+		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
+			flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
+
+		if (why)
+		{
+			line.outcome = kAlienWaysOutcomeRefused;
+			line.why = why;
+			AddReport(line);
+			NoNewWay(&follower, follower.last.goal);
+			continue;
+		}
+
+		searching = next;
+		searchFrom = follower.last.at;
+		searchGoal = follower.last.goal;
+		searchToTheTarget = follower.last.goalIsTheTarget;
+		searchFromKind = line.fromKind;
+		searchAskedAt = follower.askedAt;
+		searchMicroseconds = 0;
+		searchFrames = 0;
+		searchFlanker = flanker;
+	}
+}
+
+// The search has ended: the alien it was for gets the way, or is told there's none
+void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
+{
+	Follower &follower = followers[searching];
+	AlienWaysReport line = {};
+	line.follower = static_cast<size_t>(searching);
+	line.who = follower.who;
+	line.from = searchFrom;
+	line.to = searchGoal;
+	line.toTheTarget = searchToTheTarget;
+	line.fromKind = searchFromKind;
+	line.frames = searchFrames;
+	line.waitedMs = now - searchAskedAt;
+	line.microseconds = searchMicroseconds;
+	line.looks = map->LastSearchLooks();
+	line.flanker = searchFlanker;
+	line.cost = map->LastSearchCost();
+	line.arrivalDegrees = -1;
+	searching = -1;
+
+	if (result != kAlienWaysFound || map->Way().size() < 2)
+	{
+		line.outcome = kAlienWaysOutcomeNoWay;
+		AddReport(line);
+		NoNewWay(&follower, searchGoal);
+		return;
+	}
+
+	std::vector<AlienWaysPoint> const &way = map->Way();
+	size_t const count = std::min(way.size(), kAlienWaysMostWayPoints);
+
+	// Where it comes into its goal from, seen from above: from the goal towards the last point of the way that isn't straight above or below it
+	for (size_t p = way.size() - 1; p > 0 && line.arrivalDegrees < 0; p--)
+	{
+		double const dx = static_cast<double>(way[p - 1].x) - way.back().x, dz = static_cast<double>(way[p - 1].z) - way.back().z;
+
+		if (dx * dx + dz * dz > 0.0)
+		{
+			double degrees = atan2(dz, dx) * 180.0 / 3.14159265358979323846;
+			line.arrivalDegrees = static_cast<int>(lround(degrees < 0.0 ? degrees + 360.0 : degrees)) % 360;
+		}
+	}
+
+	for (size_t p = 0; p + 1 < count; p++)
+	{
+		double const length = Distance(AlienWaysXYZ{ way[p].x, way[p].y, way[p].z }, way[p + 1]);
+
+		switch (way[p].kind)
+		{
+			case kAlienWaysFloor: line.floorMm += length; break;
+			case kAlienWaysWall: line.wallMm += length; break;
+			case kAlienWaysCeiling: line.ceilingMm += length; break;
+		}
+	}
+
+	line.points = static_cast<int>(count);
+	line.cutShort = map->WayCutShort();
+
+	// The polygons the way is on, each once in a row: a wall's climb, along and down are three points on one polygon
+	std::vector<int> const &onPolygons = map->WayPolygons();
+
+	for (size_t p = 0; p < onPolygons.size() && p < count; p++)
+	{
+		if (line.polygonCount == 0 || line.polygons[line.polygonCount - 1] != onPolygons[p])
+		{
+			line.polygons[line.polygonCount++] = onPolygons[p];
+		}
+	}
+
+	// A way that never leaves the floor is no better than the game's own steering, which curves at its target and climbs any wall it touches.
+	// That's where the alien and its target are on one big floor polygon, which the map can't leave and come back to (one way onto each polygon).
+	// The alien is on the floor then, so dropping the way it had lets nothing fall.
+	// But not a way to the target itself: the game's own hunting can flip between Hunt and Wander every frame and never close in, as one alien
+	// did a metre from the marine at Third's 5-alien spot (2026-11-08). That way is followed, all floor as it is, for the last metres.
+	if (!searchToTheTarget && line.wallMm <= 0.0 && line.ceilingMm <= 0.0)
+	{
+		line.outcome = kAlienWaysOutcomeAllFloor;
+		AddReport(line);
+		DropTheWay(&follower);
+		follower.restUntil = now + kAlienWaysAskAgainAfter;
+		return;
+	}
+
+	for (size_t p = 0; p < count; p++)
+	{
+		follower.points[p] = way[p];
+	}
+
+	follower.count = static_cast<int>(count);
+	follower.heading = 1;
+	follower.fresh = true;
+	follower.wayAt = now;
+	follower.wayGoal = searchGoal;
+	follower.nearest = DBL_MAX;
+	follower.headwayAt = now;
+
+	// The way's claims, in place of the old way's, so the other aliens' searches pay more where it goes
+	if (claimsOn)
+	{
+		std::vector<int> const &onPolygons = map->WayPolygons();
+		std::vector<int> const &firstJoins = map->FirstJoins();
+		std::vector<int> const &joinOthers = map->JoinOthers();
+		claims.Add(static_cast<int>(line.follower), onPolygons.data(), onPolygons.size(), firstJoins.data(), firstJoins.size(), joinOthers.data(), joinOthers.size());
+	}
+
+	line.outcome = kAlienWaysOutcomeFound;
+	AddReport(line);
+}
+
+// A search gave no new way. An alien that's following one already keeps it, so a failed renewal never drops it off a wall, and it asks again
+// in kAlienWaysAskAgainAfter. The goal it failed for counts as the way's goal, so a goal that can't be reached isn't searched for every frame.
+// An alien with no way is left to the game's own code till then.
+void AlienWaysGuide::NoNewWay(Follower *follower, AlienWaysXYZ goal)
+{
+	if (follower->count > 0)
+	{
+		follower->wayAt = now;
+		follower->wayGoal = goal;
+		return;
+	}
+
+	follower->restUntil = now + kAlienWaysAskAgainAfter;
+}
+
+bool AlienWaysGuide::Steer(const AlienWaysMap *map, const AlienWaysAsk &ask, AlienWaysXYZ *towards)
+{
+	if (!map || !map->Ready())
+	{
+		return false;
+	}
+
+	int f = Find(ask.who);
+
+	if (f < 0)
+	{
+		f = Take(ask.who);
+
+		if (f < 0)
+		{
+			return false;
+		}
+	}
+
+	Follower &follower = followers[f];
+	follower.steered = true;
+	follower.steeredAt = now;
+	follower.guided = false;
+	follower.last = ask;
+
+	if (now < follower.restUntil)
+	{
+		return false;
+	}
+
+	// A new way starts where the alien was when its search began. It may have gone on since, so it takes the way up at the stretch nearest to
+	// where it is now, not at the first one, which could be behind it by now and make it look off the way.
+	if (follower.count > 0 && follower.fresh)
+	{
+		follower.fresh = false;
+		double nearestStretch = DBL_MAX;
+
+		for (int k = 1; k < follower.count; k++)
+		{
+			double const howFar = DistanceToStretch(ask.at, follower.points[k - 1], follower.points[k]);
+
+			if (howFar < nearestStretch)
+			{
+				nearestStretch = howFar;
+				follower.heading = k;
+			}
+		}
+
+		// Unless that stretch starts with a step from one surface to another that the alien hasn't made, onto a wall from the floor, say, or
+		// down off one: then it heads for that step first, so it reaches the corner and turns onto the new surface, rather than heading for a
+		// point on a surface it isn't on
+		if (follower.heading > 1 && !OnTheKindNeeded(follower.points, follower.heading - 1, ask.down))
+		{
+			follower.heading--;
+		}
+	}
+
+	if (follower.count > 0)
+	{
+		// Past every point it's reached. The last one reached means the way's used up.
+		while (follower.heading < follower.count && Reached(ask.at, ask.down, follower.points[follower.heading]) && OnTheKindNeeded(follower.points, follower.heading, ask.down))
+		{
+			follower.heading++;
+			follower.nearest = DBL_MAX;
+			follower.headwayAt = now;
+		}
+
+		if (follower.heading >= follower.count)
+		{
+			DropTheWay(&follower);
+		}
+	}
+
+	if (follower.count > 0 && DistanceToStretch(ask.at, follower.points[follower.heading - 1], follower.points[follower.heading]) > kAlienWaysOffTheWay)
+	{
+		DropTheWay(&follower);
+	}
+
+	if (follower.count > 0)
+	{
+		double const toNext = Distance(ask.at, follower.points[follower.heading]);
+
+		if (toNext + kAlienWaysHeadway <= follower.nearest)
+		{
+			follower.nearest = toNext;
+			follower.headwayAt = now;
+		}
+		else if (now - follower.headwayAt >= kAlienWaysNoHeadwayFor)
+		{
+			// Stuck: the game's own code has it for a while, and nothing is asked till then. The log hears of it, with where it was heading.
+			if (reportsRead)
+			{
+				reportCount = 0;
+				reportsRead = false;
+			}
+
+			AlienWaysReport line = {};
+			line.outcome = kAlienWaysOutcomeStuck;
+			line.follower = static_cast<size_t>(f);
+			line.who = follower.who;
+			line.from = ask.at;
+			line.to = AlienWaysXYZ{ follower.points[follower.heading].x, follower.points[follower.heading].y, follower.points[follower.heading].z };
+			line.fromKind = KindUnder(ask.down);
+			line.toTheTarget = ask.goalIsTheTarget;
+			AddReport(line);
+			DropTheWay(&follower);
+			follower.queued = false;
+			follower.restUntil = now + kAlienWaysRestAfterStuck;
+			return false;
+		}
+	}
+
+	bool const wantsASearch = follower.count == 0 || now - follower.wayAt >= kAlienWaysAskAgainAfter || Distance(ask.goal, follower.wayGoal) > kAlienWaysGoalMoved;
+
+	if (wantsASearch && !follower.queued && searching != f)
+	{
+		follower.queued = true;
+		follower.askedAt = now;
+	}
+
+	if (follower.count == 0)
+	{
+		return false;
+	}
+
+	// It aims a little further along the way than the next point, so it curves round bends (alien_ways_lookahead.h), but never past a step
+	// onto another kind of surface it hasn't made, nor round a sharp bend. With the setting at 0, or a way it can't use, it's the next point.
+	AlienWaysPoint const &next = follower.points[follower.heading];
+	AlienWaysXYZ aim = { next.x, next.y, next.z };
+	AlienWays_AimAlong(follower.points, follower.count, follower.heading, ask.at, aimAheadMm, &aim);
+	*towards = aim;
+	follower.guided = true;
+	return true;
+}
+
+// Modified 2026-11-08 by Melanikus for the AvP port: Drive, for a frame the alien's state didn't ask (alien_ways_guide.h).
+bool AlienWaysGuide::Drive(const AlienWaysMap *map, const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ down, AlienWaysXYZ *towards)
+{
+	if (!map || !map->Ready() || !towards)
+	{
+		return false;
+	}
+
+	int const f = Find(who);
+
+	if (f < 0)
+	{
+		return false;
+	}
+
+	Follower &follower = followers[f];
+
+	// Only on a frame Steer wasn't asked, and with a way it has taken up. Nothing here touches steered or steeredAt, so Drive never makes it
+	// look asked. Two things need no test of their own: Frame lets an alien go once half a second has passed since it was asked, so one found
+	// here is always within that; and one resting after being stuck has no way, because being found stuck drops it.
+	if (follower.steered || follower.count <= 0 || follower.fresh)
+	{
+		return false;
+	}
+
+	// Past every point it has reached, as Steer goes, so it heads on rather than back at a point it's already at
+	while (follower.heading < follower.count && Reached(at, down, follower.points[follower.heading]) && OnTheKindNeeded(follower.points, follower.heading, down))
+	{
+		follower.heading++;
+		follower.nearest = DBL_MAX;
+		follower.headwayAt = now;
+	}
+
+	// Used up, or off the way: the next Steer drops it. Until then the game steers it as it always did.
+	if (follower.heading >= follower.count || follower.heading < 1)
+	{
+		return false;
+	}
+
+	double const offTheWayBy = DistanceToStretch(at, follower.points[follower.heading - 1], follower.points[follower.heading]);
+
+	if (offTheWayBy > kAlienWaysOffTheWay)
+	{
+		return false;
+	}
+
+	AlienWaysPoint const &next = follower.points[follower.heading];
+	AlienWaysXYZ aim = { next.x, next.y, next.z };
+	AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);
+	*towards = aim;
+	return true;
+}
