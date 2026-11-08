@@ -1,4 +1,7 @@
 // AvP port by Barry Duncan.
+// Modified 2026-11-07 by Melanikus for the AvP port:
+//   a player's class number from the network has to be one there is, or it's taken as the general one, as the character type beside
+//   it already was
 // Modified 2026-11-03 by Melanikus for the AvP port:
 //   chat lines, multiplayer console messages and the lives, score and time texts are written with
 //   size limits, so no name, chat line or language-file text can run past the end of its buffer;
@@ -5911,7 +5914,7 @@ static void ProcessNetMsg_GameDescription(NETMESSAGE_GAMEDESCRIPTION *messagePtr
 			netGameData.playerData[i].playerId = messagePtr->players[i].playerId;
 			// The message has room to say 3, which is no kind of player, and scores look things up by this
 			netGameData.playerData[i].characterType = NetNumberFitsTable(messagePtr->players[i].characterType, NGCT_AI_Alien) ? (NETGAME_CHARACTERTYPE)messagePtr->players[i].characterType : NGCT_Marine;
-			netGameData.playerData[i].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType;
+			netGameData.playerData[i].characterSubType = NetNumberFitsTable(messagePtr->players[i].characterSubType, NUM_PC_SUBTYPES) ? (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->players[i].characterSubType : NGSCT_General;
 			netGameData.playerData[i].startFlag = messagePtr->players[i].startFlag;
 		}
 
@@ -6124,7 +6127,7 @@ static void ProcessNetMsg_PlayerDescription(NETMESSAGE_PLAYERDESCRIPTION *messag
 		}
 
 		netGameData.playerData[id].characterType = (NETGAME_CHARACTERTYPE)messagePtr->characterType;
-		netGameData.playerData[id].characterSubType = (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType;
+		netGameData.playerData[id].characterSubType = NetNumberFitsTable(messagePtr->characterSubType, NUM_PC_SUBTYPES) ? (NETGAME_SPECIALISTCHARACTERTYPE)messagePtr->characterSubType : NGSCT_General;
 
 		if (netGameData.myGameState == NGS_Playing)
 		{
@@ -6215,7 +6218,7 @@ static void ProcessNetMsg_PlayerState(NETMESSAGE_PLAYERSTATE *messagePtr, NetID 
 	// check the player type
 	// the value in the netgamedata should be set to next character type
 	netGameData.playerData[playerIndex].characterType = static_cast<NETGAME_CHARACTERTYPE>(messagePtr->nextCharacterType);
-	netGameData.playerData[playerIndex].characterSubType = static_cast<NETGAME_SPECIALISTCHARACTERTYPE>(messagePtr->characterSubType);
+	netGameData.playerData[playerIndex].characterSubType = NetNumberFitsTable(messagePtr->characterSubType, NUM_PC_SUBTYPES) ? static_cast<NETGAME_SPECIALISTCHARACTERTYPE>(messagePtr->characterSubType) : NGSCT_General;
 
 	if (sbPtr)
 	{
