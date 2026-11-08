@@ -323,6 +323,15 @@ static void TellHowASearchWent(const AlienWaysReport &line)
 				line.outcome == kAlienWaysOutcomeAllFloor ? "a way all on the floor, so the game steers it as always: " : "a way of ",
 				line.points, line.floorMm / 1000.0, line.wallMm / 1000.0, line.ceilingMm / 1000.0, line.cutShort ? ", cut short there" : "",
 				line.frames, line.frames == 1 ? "" : "s", line.microseconds / 1000.0, line.looks, line.waitedMs);
+
+			// What it cost, whether it's a flanker's, and which way it comes into the goal from, so a film can tell a flanker from the rest
+			details += (line.flanker ? ". A flanker's way" : ". A direct way") + std::string(", costing ") + std::to_string(static_cast<long long>(line.cost));
+
+			if (line.arrivalDegrees >= 0)
+			{
+				details += ", coming in from " + std::to_string(line.arrivalDegrees) + " degrees";
+			}
+
 			break;
 
 		case kAlienWaysOutcomeNoWay:
@@ -621,6 +630,10 @@ bool AlienWays_Steer(STRATEGYBLOCK *alien, STRATEGYBLOCK *target, const VECTORCH
 	ask.goalPolygons[0] = ask.atPolygons;
 	ask.goalPolygons[1] = PolygonsOf(target ? target->containingModule : 0);
 	ask.goalIsTheTarget = false;
+
+	// Which target it's coming for, so the aliens coming for one can be counted, and the ones past the first few made flankers
+	ask.hasTarget = target != 0;
+	ask.target = target ? WhoIs(target) : AlienWaysWho{ 0, 0 };
 
 	// A point on the way to the target is the way into a neighbouring module, as a rule: its polygons are looked for in the module it's in,
 	// found from where it is by the game's own search (ModuleFromPosition, pvisible.cpp), starting from the alien's

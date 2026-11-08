@@ -271,11 +271,13 @@ public:
 
 	// Starts a search for a way from start, on polygon fromPolygon, to goal, on polygon toPolygon, with the floor at floorPrice times a wall's
 	// price. It gives back nothing if it started, or why not, in words. A search that's running is dropped.
-	// With claims, each polygon also costs claims->PriceFactor(polygon, searcher) times as much: more where other aliens' ways are (lanes,
-	// #138). claims has to stay as it is made until the search ends; its counts can change in the meantime. Never less than 1, so the
-	// search's guess stays a lower bound, and never more than 1.5, so a way is never more than half as dear again as the cheapest.
+	// With claims, each polygon also costs claims->PriceFactor(polygon, searcher, claimStep, claimMost) times as much: more where other
+	// aliens' ways are (lanes, #138). claims has to stay as it is made until the search ends; its counts can change in the meantime. Never
+	// less than 1, so the search's guess stays a lower bound, and never more than claimMost, so a way is never dearer than claimMost times
+	// the cheapest: 1.5 for most aliens, 2.5 for a flanker (alien_ways_guide.h).
 	const char *StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
-		const AlienWaysClaims *claims = nullptr, int searcher = -1);
+		const AlienWaysClaims *claims = nullptr, int searcher = -1, double claimStep = kAlienWaysClaimPriceStep,
+		double claimMost = kAlienWaysClaimMostPriceFactor);
 
 	// Carries on, looking at up to this many polygons, and says how it stands. Asked again after it's ended, it gives the same answer.
 	AlienWaysSearch Work(int polygonsAllowed);
@@ -297,6 +299,9 @@ public:
 	bool WayCutShort() const { return cutShort; }
 
 	int LastSearchLooks() const { return looks; }
+
+	// What the way the last search found cost, by the search's own prices (floor and claims included), or -1 if it found none
+	double LastSearchCost() const { return state == kAlienWaysFound && !cost.empty() ? cost[Polygons()] : -1.0; }
 
 	// So a test can try what happens when the search number goes all the way round. Nothing else calls this.
 	void SetSearchNumberForATest(uint32_t number) { searchNumber = number; }
@@ -383,6 +388,7 @@ private:
 	int fromNode, toNode, price;
 	const AlienWaysClaims *searchClaims;   // the claims the search prices by, or none
 	int searchSearcher;                    // and whose search it is, so its own claims don't count
+	double searchClaimStep, searchClaimMost;   // and how much each claim weighs for this searcher, and the most a polygon can cost it
 	AlienWaysXYZ goalAt;
 	int looks;
 	bool cutShort;

@@ -639,7 +639,7 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "\tdouble const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher) : 1.0;\n",
+					"from": "\tdouble const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher, searchClaimStep, searchClaimMost) : 1.0;\n",
 					"to": "\tdouble const claimed = 1.0;\n"
 				}
 			]
@@ -649,8 +649,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_map.cpp",
-					"from": "searchClaims->PriceFactor(node, searchSearcher)",
-					"to": "searchClaims->PriceFactor(node, -1)"
+					"from": "searchClaims->PriceFactor(node, searchSearcher, searchClaimStep",
+					"to": "searchClaims->PriceFactor(node, -1, searchClaimStep"
 				}
 			]
 		},
@@ -741,6 +741,56 @@
 					"file": "3dc/avp/alien_ways_map.cpp",
 					"from": "KindOf(node), { facing[node].x, facing[node].y, facing[node].z } };",
 					"to": "KindOf(node), { 0, 0, 0 } };"
+				}
+			]
+		},
+		{
+			"name": "a search takes no step of its own for the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaimStep = claimStep >= 0.0 && claimStep <= 10.0 ? claimStep : kAlienWaysClaimPriceStep;\n",
+					"to": "\tsearchClaimStep = kAlienWaysClaimPriceStep;\n"
+				}
+			]
+		},
+		{
+			"name": "a search takes no most of its own for the claims",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "\tsearchClaimMost = claimMost >= 1.0 && claimMost <= 10.0 ? claimMost : kAlienWaysClaimMostPriceFactor;\n",
+					"to": "\tsearchClaimMost = kAlienWaysClaimMostPriceFactor;\n"
+				}
+			]
+		},
+		{
+			"name": "a search takes a step below 0 as it is",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.cpp",
+					"from": "searchClaimStep = claimStep >= 0.0 && claimStep",
+					"to": "searchClaimStep = claimStep >= -10.0 && claimStep"
+				}
+			]
+		},
+		{
+			"name": "the claims ignore the searcher's own step",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_claims.h",
+					"from": "(std::min)(1.0 + step * others, most)",
+					"to": "(std::min)(1.0 + kAlienWaysClaimPriceStep * others, most)"
+				}
+			]
+		},
+		{
+			"name": "a search's cost is said for a search with no way",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_map.h",
+					"from": "return state == kAlienWaysFound && !cost.empty() ? cost[Polygons()] : -1.0;",
+					"to": "return !cost.empty() ? cost[Polygons()] : -1.0;"
 				}
 			]
 		}

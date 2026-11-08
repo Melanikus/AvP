@@ -79,8 +79,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_claims.h",
-					"from": "return (std::min)(1.0 + kAlienWaysClaimPriceStep * others, kAlienWaysClaimMostPriceFactor);",
-					"to": "return 1.0 + kAlienWaysClaimPriceStep * others;"
+					"from": "return (std::max)(1.0, (std::min)(1.0 + step * others, most));",
+					"to": "return (std::max)(1.0, 1.0 + step * others);"
 				}
 			]
 		},

@@ -255,9 +255,16 @@ public:
 	// but never more than kAlienWaysClaimMostPriceFactor. A searcher that isn't an alien's number counts every claim.
 	double PriceFactor(int polygon, int searcher) const
 	{
+		return PriceFactor(polygon, searcher, kAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);
+	}
+
+	// The same, with this searcher's own step for each claim and its own most: a flanker's are bigger, so it goes round the others' ways
+	// (the user's rule, 2026-11-08: the 4th alien on a target and on are "long route sneaking" ones, up to 2.5 times). Never below 1.
+	double PriceFactor(int polygon, int searcher, double step, double most) const
+	{
 		int const others = (std::max)(0, ClaimsOn(polygon) - OwnClaimOn(searcher, polygon));
 
-		return (std::min)(1.0 + kAlienWaysClaimPriceStep * others, kAlienWaysClaimMostPriceFactor);
+		return (std::max)(1.0, (std::min)(1.0 + step * others, most));
 	}
 
 private:

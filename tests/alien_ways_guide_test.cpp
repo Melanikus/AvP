@@ -131,6 +131,17 @@ static AlienWaysAsk Ask(const AlienWaysWho &who, AlienWaysXYZ at, AlienWaysXYZ g
 	ask.goalPolygons[0] = ask.atPolygons;
 	ask.goalPolygons[1] = AlienWaysRange{ 0, 0 };
 	ask.goalIsTheTarget = false;
+	ask.hasTarget = false;
+	ask.target = AlienWaysWho{ 0, 0 };
+	return ask;
+}
+
+// The same, coming for a target, as a hunting alien does: the aliens coming for one target are counted for the flankers
+static AlienWaysAsk AskFor(const AlienWaysWho &who, const AlienWaysWho &target)
+{
+	AlienWaysAsk ask = Ask(who, kStart, kGoal, 13);
+	ask.hasTarget = true;
+	ask.target = target;
 	return ask;
 }
 
@@ -482,6 +493,49 @@ static void FailedRenewal()
 	Check(guide.Steer(&map, Ask(Alien(1), kStart, nowhere, 13), &towards) && Same(towards, kOntoTheWall), "it keeps the way it had, so nothing lets go of a wall");
 	Frame(guide, map, 16);
 	Check(ReportsOf(guide, &reports) == 0, "and the goal it failed for isn't searched for again in the next frame");
+}
+
+// Flankers (the user's rule): the first three aliens coming for one target search as usual, and the 4th is a flanker. One coming for another
+// target is counted with that target's aliens, not these. And every report of a way found says what it cost and where it came in from.
+static void Flankers()
+{
+	printf("Flankers\n");
+	AlienWaysMap &map = CorridorMap();
+	AlienWaysXYZ towards;
+	const AlienWaysReport *reports = nullptr;
+	const std::unique_ptr<AlienWaysGuide> guideRoom(new AlienWaysGuide);
+	AlienWaysGuide &guide = *guideRoom;
+	AlienWaysWho const marine = Alien(90), otherMarine = Alien(91);
+	bool flankers[5] = {};
+	bool reported[5] = {};
+
+	// One alien at a time: each asks, and its search ends in the next frame. The ones before it are kept asking, so they stay on their ways.
+	for (int n = 1; n <= 5; n++)
+	{
+		for (int before = 1; before < n; before++)
+		{
+			guide.Steer(&map, AskFor(Alien(before), before == 5 ? otherMarine : marine), &towards);
+		}
+
+		guide.Steer(&map, AskFor(Alien(n), n == 5 ? otherMarine : marine), &towards);
+		Frame(guide, map, 16);
+
+		if (ReportsOf(guide, &reports) == 1 && reports[0].outcome == kAlienWaysOutcomeFound)
+		{
+			reported[n - 1] = true;
+			flankers[n - 1] = reports[0].flanker;
+		}
+
+		if (n == 1)
+		{
+			Check(reported[0] && reports[0].cost > 0.0 && reports[0].arrivalDegrees == (kWallX == 0 ? 207 : 333),
+				"a way found says what it cost, and the way it comes into its goal from, seen from above");
+		}
+	}
+
+	Check(reported[0] && reported[1] && reported[2] && !flankers[0] && !flankers[1] && !flankers[2], "the first three aliens coming for one target search as usual");
+	Check(reported[3] && flankers[3], "the 4th coming for it is a flanker");
+	Check(reported[4] && !flankers[4], "one coming for another target is the first for that one, not a flanker");
 }
 
 // Where neither the alien's module nor the goal's has a polygon near, the whole map is looked through. At Third's 5-alien spot (2026-11-08)
@@ -1087,6 +1141,12 @@ static void SourceOfTheGame()
 	std::string const guideSource = ReadSourceFile("3dc/avp/alien_ways_guide.cpp");
 	Check(Has(Between(guideSource, "static bool OnTheKindNeeded(", "bool AlienWays_StepMade("), "\treturn AlienWays_StepMade(points[heading - 1], points[heading], down);"),
 		"SOURCE: the guide counts a step as made by AlienWays_StepMade");
+
+	// A flanker's search goes with a flanker's step and most (the map test tries what those do), and the game says which target each is for
+	Check(Has(guideSource, "flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);"),
+		"SOURCE: a flanker searches with a flanker's step and most");
+	Check(Has(ways, "\task.hasTarget = target != 0;\n\task.target = target ? WhoIs(target) : AlienWaysWho{ 0, 0 };"),
+		"SOURCE: the game tells the guide which target an alien is coming for");
 	Check(!level.empty(), "SOURCE: the level's lister can be read");
 	Check(ComesBefore(frame, "AlienWaysLevel_ReadDoors(theDoors, ReadyMap());", "theGuide.Frame(ReadyMap()"),
 		"SOURCE: each frame the map hears about the doors before the searches carry on");
@@ -1144,6 +1204,7 @@ int main()
 	AskingAgain();
 	FailedRenewal();
 	FoundAnywhere();
+	Flankers();
 	LetGo();
 	GuidedThisFrame();
 	KeptThroughAGap();

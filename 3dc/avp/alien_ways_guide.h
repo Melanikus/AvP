@@ -69,6 +69,15 @@ int const kAlienWaysNoHeadwayFor = 1500;          // ...and with none for this m
 int const kAlienWaysRestAfterStuck = 3000;        // ...and the game's own code steers it for this many ms before it asks again
 int const kAlienWaysForgetAfter = 500;            // ms: an alien nothing has asked about for this long is let go. Shorter gaps keep it.
 
+// FLANKERS (the user's rule, 2026-11-08: "1 in 3, up to 2.5x", "the 4th and 5th are long route sneaking bastards"). The first aliens on one
+// target go the direct way, with the other aliens' claims at their usual weight and a polygon at most 1.5 times its price. Every alien after
+// them is a flanker: the others' claims weigh three times as much for it, and a polygon can cost it up to 2.5 times, so it comes round by
+// another way where the level has one. An alien's place in that order is its place among the aliens with the same target when its first
+// search for it started, and it keeps it while that's its target.
+int const kAlienWaysDirectAliens = 3;
+double const kAlienWaysFlankerClaimStep = 3.0 * kAlienWaysClaimPriceStep;
+double const kAlienWaysFlankerMostPriceFactor = 2.5;
+
 // The kinds of door the game has (ModuleIsADoor, in pfarlocs.cpp), and whether one lets an alien through now. It's the rule the game's own
 // routes for aliens follow (AIModuleAdmitsPheromones, in pheromone.cpp), which is why a hunting alien never plans through a locked door:
 // - a proximity door opens by itself for an alien that comes near it, so it lets one through unless it's locked, open yet or not;
@@ -106,6 +115,8 @@ struct AlienWaysAsk
 	AlienWaysXYZ goal;              // where it's going
 	AlienWaysRange goalPolygons[2]; // where to look for the polygon the goal's on: the alien's module and the target's. The nearer wins.
 	bool goalIsTheTarget;           // the goal is the target itself, not a point on the way to it: only so the log can say which
+	bool hasTarget;                 // it's coming for a target, whether or not the goal is the target itself...
+	AlienWaysWho target;            // ...and which: the aliens coming for one target are counted, for the flankers (kAlienWaysDirectAliens)
 };
 
 // How one search went, for the log
@@ -138,6 +149,10 @@ struct AlienWaysReport
 	double floorMm, wallMm, ceilingMm;
 	int polygons[kAlienWaysMostWayPoints];   // the map polygons the way is on, in order, each once in a row, for measuring how ways stack
 	int polygonCount;
+	bool flanker;                   // the search was a flanker's (kAlienWaysDirectAliens)
+	double cost;                    // what the way found cost, by the search's own prices, or -1
+	int arrivalDegrees;             // for a way found: the way it comes into its goal from, seen from above, in degrees (0 is from +x, 90 from
+	                                // +z), so a film can tell whether a flanker came from another side; -1 if it can't be told
 };
 
 class AlienWaysGuide
@@ -226,6 +241,10 @@ private:
 		double nearest;                     // the nearest the alien has been to the point it's heading for
 		long long headwayAt;                // when it last got kAlienWaysHeadway nearer
 		AlienWaysPoint points[kAlienWaysMostWayPoints];
+
+		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
+		AlienWaysWho target;
+		bool flanker;                       // ...and it's past the first kAlienWaysDirectAliens of them
 	};
 
 	int Find(const AlienWaysWho &who) const;
@@ -248,6 +267,7 @@ private:
 	int searchFromKind;
 	long long searchAskedAt, searchMicroseconds;
 	int searchFrames;
+	bool searchFlanker;                 // the search running is a flanker's
 
 	AlienWaysReport report[kAlienWaysMostFollowers];
 	size_t reportCount;

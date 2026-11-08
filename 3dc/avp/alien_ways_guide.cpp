@@ -171,6 +171,7 @@ void AlienWaysGuide::Clear()
 	searchFromKind = -1;
 	searchAskedAt = searchMicroseconds = 0;
 	searchFrames = 0;
+	searchFlanker = false;
 	reportCount = 0;
 	missedCount = 0;
 	claims.Clear();
@@ -184,6 +185,8 @@ void AlienWaysGuide::Clear()
 		followers[f].guided = false;
 		followers[f].queued = false;
 		followers[f].count = 0;
+		followers[f].ranked = false;
+		followers[f].flanker = false;
 	}
 }
 
@@ -218,6 +221,8 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.count = 0;
 			follower.heading = 0;
 			follower.fresh = false;
+			follower.ranked = false;
+			follower.flanker = false;
 			return static_cast<int>(f);
 		}
 	}
@@ -244,6 +249,7 @@ void AlienWaysGuide::LetGo(int f)
 		searching = -1;
 	}
 
+	follower.ranked = false;
 	follower.used = false;
 	follower.guided = false;
 	follower.queued = false;
@@ -496,7 +502,33 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 			continue;
 		}
 
-		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next);
+		// Its place among the aliens coming for the same target, taken at its first search for that target and kept while it's coming for
+		// it. Past the first kAlienWaysDirectAliens it's a flanker: the others' claims weigh more for it, and it may go further round (FLANKERS).
+		if (!follower.last.hasTarget)
+		{
+			follower.ranked = false;
+			follower.flanker = false;
+		}
+		else if (!follower.ranked || !SameWho(follower.target, follower.last.target))
+		{
+			int before = 0;
+
+			for (size_t g = 0; g < kAlienWaysMostFollowers; g++)
+			{
+				if (static_cast<int>(g) != next && followers[g].used && followers[g].ranked && SameWho(followers[g].target, follower.last.target))
+				{
+					before++;
+				}
+			}
+
+			follower.ranked = true;
+			follower.target = follower.last.target;
+			follower.flanker = before >= kAlienWaysDirectAliens;
+		}
+
+		bool const flanker = follower.ranked && follower.flanker;
+		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
+			flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
 
 		if (why)
 		{
@@ -515,6 +547,7 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		searchAskedAt = follower.askedAt;
 		searchMicroseconds = 0;
 		searchFrames = 0;
+		searchFlanker = flanker;
 	}
 }
 
@@ -533,6 +566,9 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	line.waitedMs = now - searchAskedAt;
 	line.microseconds = searchMicroseconds;
 	line.looks = map->LastSearchLooks();
+	line.flanker = searchFlanker;
+	line.cost = map->LastSearchCost();
+	line.arrivalDegrees = -1;
 	searching = -1;
 
 	if (result != kAlienWaysFound || map->Way().size() < 2)
@@ -545,6 +581,18 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 
 	std::vector<AlienWaysPoint> const &way = map->Way();
 	size_t const count = std::min(way.size(), kAlienWaysMostWayPoints);
+
+	// Where it comes into its goal from, seen from above: from the goal towards the last point of the way that isn't straight above or below it
+	for (size_t p = way.size() - 1; p > 0 && line.arrivalDegrees < 0; p--)
+	{
+		double const dx = static_cast<double>(way[p - 1].x) - way.back().x, dz = static_cast<double>(way[p - 1].z) - way.back().z;
+
+		if (dx * dx + dz * dz > 0.0)
+		{
+			double degrees = atan2(dz, dx) * 180.0 / 3.14159265358979323846;
+			line.arrivalDegrees = static_cast<int>(lround(degrees < 0.0 ? degrees + 360.0 : degrees)) % 360;
+		}
+	}
 
 	for (size_t p = 0; p + 1 < count; p++)
 	{

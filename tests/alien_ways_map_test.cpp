@@ -838,6 +838,30 @@ static void Claims()
 	Check(map.StartSearch(0, start, 9, goal, 10, &claims, 0) == nullptr && map.Work(1000000) == kAlienWaysFound && map.Way().size() >= 2
 		&& map.Way()[1].x == wallX, "alien 0, whose own claims they are, goes up the same wall as before");
 	Check(SearchAll(map, 0, start, 9, goal, 10) == kAlienWaysFound && map.Way()[1].x == wallX, "and a search with no claims, as before");
+
+	// A searcher's own step and most (a flanker's, alien_ways_guide.h: 0.375 a claim, at most 2.5). Two aliens claim every polygon, so each
+	// carries 4 claims, and every polygon costs a third searcher the same times its price: the way's the same, and only its cost changes.
+	// As usual: 1 + 0.125 x 4 = 1.5; as a flanker: 1 + 0.375 x 4 = 2.5.
+	double const plain = map.LastSearchCost();
+	int everything[13];
+
+	for (int p = 0; p < 13; p++)
+	{
+		everything[p] = p;
+	}
+
+	AlienWaysClaims all;
+	all.Reset(map.Polygons());
+	all.Add(0, everything, 13, map.FirstJoins().data(), map.FirstJoins().size(), map.JoinOthers().data(), map.JoinOthers().size());
+	all.Add(1, everything, 13, map.FirstJoins().data(), map.FirstJoins().size(), map.JoinOthers().data(), map.JoinOthers().size());
+	Check(plain > 0.0 && map.StartSearch(0, start, 9, goal, 10, &all, 2) == nullptr && map.Work(1000000) == kAlienWaysFound
+		&& Near(map.LastSearchCost() / plain, 1.5, 1e-9), "with every polygon claimed by two others, a usual search pays 1.5 times as much");
+	Check(map.StartSearch(0, start, 9, goal, 10, &all, 2, 0.375, 2.5) == nullptr && map.Work(1000000) == kAlienWaysFound
+		&& Near(map.LastSearchCost() / plain, 2.5, 1e-9), "and a flanker, with its own step and most, 2.5 times");
+	Check(map.StartSearch(0, start, 9, goal, 10, &all, 2, -1.0, 0.5) == nullptr && map.Work(1000000) == kAlienWaysFound
+		&& Near(map.LastSearchCost() / plain, 1.5, 1e-9), "a step below 0 and a most below 1 are taken as the usual ones");
+	map.StartSearch(0, start, 9, goal, 10);
+	Check(map.LastSearchCost() < 0.0, "a search that hasn't found a way has no cost to say");
 }
 
 static void BuiltAgain()

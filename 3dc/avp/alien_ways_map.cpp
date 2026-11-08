@@ -276,7 +276,7 @@ AlienWaysAdded AlienWays_AddPolygon(const int *x, const int *y, const int *z, in
 AlienWaysMap::AlienWaysMap()
 	: ready(false), limits(AlienWays_UsualLimits()), stopAsked(false), stopAtLook(0), stopLooks(0), leftOut(0), bytesKept(0), bytesBuilding(0), bytesBuildingTop(0), bytesBuildingUsed(0),
 	  edgeSteps(0), cornerTests(0), heapSize(0), searchNumber(0), state(kAlienWaysNoWay), fromNode(-1), toNode(-1), price(1), searchClaims(nullptr),
-	  searchSearcher(-1), looks(0), cutShort(false)
+	  searchSearcher(-1), searchClaimStep(kAlienWaysClaimPriceStep), searchClaimMost(kAlienWaysClaimMostPriceFactor), looks(0), cutShort(false)
 {
 	goalAt.x = goalAt.y = goalAt.z = 0;
 }
@@ -1088,8 +1088,9 @@ double AlienWaysMap::CostAcross(int node, AlienWaysXYZ from, AlienWaysXYZ to) co
 		length = std::max(length, static_cast<double>(kAlienWaysLeastFloorStep));
 	}
 
-	// Dearer where other aliens' ways are, by the claims the search was started with (lanes, #138): from 1 to 1.5 times
-	double const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher) : 1.0;
+	// Dearer where other aliens' ways are, by the claims the search was started with (lanes, #138): from 1 to the searcher's most, 1.5 times
+	// for most aliens and 2.5 for a flanker
+	double const claimed = searchClaims ? searchClaims->PriceFactor(node, searchSearcher, searchClaimStep, searchClaimMost) : 1.0;
 	return length * PriceOf(node) * claimed;
 }
 
@@ -1105,7 +1106,7 @@ double AlienWaysMap::PriceOf(int node) const
 }
 
 const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int toPolygon, AlienWaysXYZ goal, int floorPrice,
-	const AlienWaysClaims *claims, int searcher)
+	const AlienWaysClaims *claims, int searcher, double claimStep, double claimMost)
 {
 	if (!ready)
 	{
@@ -1148,6 +1149,11 @@ const char *AlienWaysMap::StartSearch(int fromPolygon, AlienWaysXYZ start, int t
 	price = floorPrice;
 	searchClaims = claims;
 	searchSearcher = searcher;
+
+	// A step or most that isn't a number, or would make a polygon cheaper, is taken as the usual (a guide's own numbers come here, but the
+	// map checks what it's given)
+	searchClaimStep = claimStep >= 0.0 && claimStep <= 10.0 ? claimStep : kAlienWaysClaimPriceStep;
+	searchClaimMost = claimMost >= 1.0 && claimMost <= 10.0 ? claimMost : kAlienWaysClaimMostPriceFactor;
 
 	// The doors as they are now, for the whole of this search. Both lists were made the same length when the map was built.
 	std::copy(doorShut.begin(), doorShut.end(), doorShutInSearch.begin());

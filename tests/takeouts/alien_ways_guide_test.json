@@ -1040,8 +1040,8 @@
 			"changes": [
 				{
 					"file": "3dc/avp/alien_ways_guide.cpp",
-					"from": "claimsOn ? &claims : nullptr, next);",
-					"to": "nullptr, next);"
+					"from": "claimsOn ? &claims : nullptr, next,",
+					"to": "nullptr, next,"
 				}
 			]
 		},
@@ -1232,6 +1232,76 @@
 					"file": "3dc/avp/alien_ways_guide.cpp",
 					"from": "AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);\n\t*towards = aim;\n\treturn true;",
 					"to": "AlienWays_AimAlong(follower.points, follower.count, follower.heading, at, aimAheadMm, &aim);\n\t*towards = aim;\n\tfollower.steered = true;\n\tfollower.steeredAt = now;\n\tfollower.guided = true;\n\treturn true;"
+				}
+			]
+		},
+		{
+			"name": "every alien coming for a target searches as usual, none as a flanker",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tfollower.flanker = before >= kAlienWaysDirectAliens;\n",
+					"to": "\t\t\tfollower.flanker = false;\n"
+				}
+			]
+		},
+		{
+			"name": "the aliens coming for a target aren't counted",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\t\tif (static_cast<int>(g) != next && followers[g].used && followers[g].ranked && SameWho(followers[g].target, follower.last.target))\n",
+					"to": "\t\t\t\tif (false)\n"
+				}
+			]
+		},
+		{
+			"name": "aliens coming for another target count too",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": " && followers[g].ranked && SameWho(followers[g].target, follower.last.target))\n",
+					"to": " && followers[g].ranked)\n"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a flanker searches with the usual step and most",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);",
+					"to": "kAlienWaysClaimPriceStep, kAlienWaysClaimMostPriceFactor);"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game never says which target an alien is coming for",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways.cpp",
+					"from": "\task.hasTarget = target != 0;\n",
+					"to": "\task.hasTarget = false;\n"
+				}
+			]
+		},
+		{
+			"name": "a way found doesn't say where it came in from",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\t\t\tline.arrivalDegrees = static_cast<int>(lround(degrees < 0.0 ? degrees + 360.0 : degrees)) % 360;\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "a way found doesn't say what it cost",
+			"changes": [
+				{
+					"file": "3dc/avp/alien_ways_guide.cpp",
+					"from": "\tline.cost = map->LastSearchCost();\n",
+					"to": ""
 				}
 			]
 		}
