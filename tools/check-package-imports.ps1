@@ -23,7 +23,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Part of Windows itself, from Windows 8 on, which is what PLAYTEST.md asks for. bcrypt.dll is Windows' own cryptography library, there
+# Part of Windows itself, on Windows 10 and 11, which is what PLAYTEST.md asks for. bcrypt.dll is Windows' own cryptography library, there
 # since Windows Vista: the game links it because ENet's host_secret.c (vcpkg-overlay-ports/enet, for patch 006) asks it for random
 # numbers with BCryptGenRandom.
 $partOfWindows = @(

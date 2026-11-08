@@ -4,7 +4,7 @@
 Custom maps page and the in-game co-op pages. Read "Stay safe" before you play, and please send us your logs.
 
 ## What you need
-- Windows 8 or later.
+- Windows 10 or 11.
 - Your own copy of **Aliens versus Predator Classic 2000** from **Steam**. The game's data isn't in this download, and we
   don't distribute it.
 
