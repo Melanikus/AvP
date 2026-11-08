@@ -16,6 +16,10 @@
 //   removed the switched-off code for a lift in another level file
 //   a moving object's sound with an unknown number is skipped, instead of using a pointer that was never set
 //   a module with more lights than can be shown is logged, where an assert stood before
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   code that could never run is taken out (#135): the xenoborg morph room's two leftovers here, a template and a flag nothing used; a
+//   proximity door's "no lock" (the lock is gone); and a lift station's environment and facing, which only the lift's change of
+//   environment read
 #ifdef DAVEW
 	#define DB_LEVEL 1
 #else
@@ -54,7 +58,6 @@
 #include "bh_xeno.h"
 #include "bh_binary_switch.h"
 #include "bh_link_switch.h"
-#include "bh_spcl.h"
 #include "bh_agun.h"
 #include "bh_lift.h"
 #include "bh_light_fx.h"
@@ -120,9 +123,6 @@ static List <BehaviourBlockData*> Behav_List;
 static List <LocationGroupDieRoll*> DieRoll_List;
 
 const char * light_set_name = "NORMALLT";
-
-BOOL Xenoborg_Morph_Thingy = 0;
-XENO_MORPH_ROOM_TOOLS_TEMPLATE xmrtt;
 
 
 extern char* Rif_Sound_Directory;
@@ -1947,7 +1947,6 @@ static void add_prox_door (Object_Chunk * ob, int shp1, int shp2, MODULE * mod,A
 
 	PROX_DOOR_TOOLS_TEMPLATE * pdtt =(PROX_DOOR_TOOLS_TEMPLATE *) PoolAllocateMem(sizeof(PROX_DOOR_TOOLS_TEMPLATE));
 
-	pdtt->has_lock_target = FALSE;
 	pdtt->door_opening_speed=1<<16;
 	pdtt->door_closing_speed=1<<17;
 	if(asc)
@@ -2063,8 +2062,6 @@ static void add_lift_object (Object_Chunk * ob, int list_pos, MODULE * mod, AVP_
 	*((ObjectID *)ltt->lift_door_name) = ls->AssocDoor;
 	*((ObjectID *)ltt->lift_floor_switch_name) = ls->AssocFloorSwitch;
 
-	ltt->environment = AvP.CurrentEnv;
-	
 	ltt->num_floor = ls->Floor;
 
 	*((ObjectID *)ltt->control_sb_name)=ControlID;
@@ -2077,8 +2074,6 @@ static void add_lift_object (Object_Chunk * ob, int list_pos, MODULE * mod, AVP_
 	
 	*((int *)ltt->my_module.mref_name) = *((int *)mod->m_name);
 	*((ObjectID *)ltt->nameID) = ob->object_data.ID;
-	
-	ltt->orient=ls->Facing;
 
 	AddToBehaviourList(ob->object_data.o_name,ob->object_data.ID, I_BehaviourLift, (void*)ltt,list_pos);
 	

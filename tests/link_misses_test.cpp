@@ -189,9 +189,10 @@ static void TestTheGameUsesIt()
 		"a new name is written, and so is a full list, once");
 
 	std::string const assign = Between(types, "void AssignAllSBNames()\n{", "\n}\n");
-	Check(Count(assign, "FindLinkTarget(sbptr, ") == 22, "every one of the 22 links a level makes is looked up that way (" + std::to_string(Count(assign, "FindLinkTarget(sbptr, ")) + " there)");
-	Check(Count(assign, "FindSBWithName(") == 2 && Has(assign, "my_sb = FindSBWithName(curr_stn->my_sb_name);") && Has(assign, "xmrd->DoorToRoom = FindSBWithName(xmrd->doorID);"),
-		"and the only two that aren't are a lift's own module and the morph room nothing makes");
+	// 21 since #135 took out a proximity door's lock target and the xenoborg morph room, neither of which could ever be made
+	Check(Count(assign, "FindLinkTarget(sbptr, ") == 21, "every one of the 21 links a level makes is looked up that way (" + std::to_string(Count(assign, "FindLinkTarget(sbptr, ")) + " there)");
+	Check(Count(assign, "FindSBWithName(") == 1 && Has(assign, "my_sb = FindSBWithName(curr_stn->my_sb_name);"),
+		"and the only one that isn't is a lift's own module");
 	Check(Has(assign, "if (linksToNpcsNotMadeHere > 0)\n\t{\n\t\tLogString(LinkMisses_NpcsNotMadeHereLine(linksToNpcsNotMadeHere));"), "the links to NPCs not made here are said in one line");
 
 	std::string const ends = Between(types, "void LinkMisses_LevelEnds(void)", "\n}\n");

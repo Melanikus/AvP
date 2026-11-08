@@ -1,3 +1,5 @@
+// Modified 2026-11-08 by Melanikus for the AvP port:
+//   UpdateWeaponShape's declaration goes with it (#135)
 /*KJL***********************************************************************
 * WEAPONS.H                                                                *
 * 			- this file contains prototypes for the functions in weapons.c *
@@ -58,13 +60,6 @@ extern void MakeMatrixFromDirection(VECTORCH *directionPtr, MATRIXCH *matrixPtr)
 * The output matrix is the OrientMat an object would have if it were pointing in  * 
 * in the given direction.                                                         *
 ******************************************************************************KJL*/
-
-
-
-extern void UpdateWeaponShape(void);
-/*KJL**********************************************
-* Call UpdateWeaponShape on changing environment. *
-**********************************************KJL*/
 
 extern void GrabWeaponShape(PLAYER_WEAPON_DATA *weaponPtr);
 void HandleWeaponImpact(VECTORCH *positionPtr, STRATEGYBLOCK *sbPtr, enum AMMO_ID AmmoID, VECTORCH *directionPtr, int multiple, SECTION_DATA *this_section_data);
