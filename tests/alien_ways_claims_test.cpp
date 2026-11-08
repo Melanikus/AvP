@@ -178,6 +178,30 @@ static void TheLimits()
 		Check(tinyMap.NumbersLeftOut() == 97, "and each place past it is counted as left out");
 	}
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: places before the list, and a pair as long as an int can say (Secondary's C-a)
+	{
+		// The list sits just after five places holding a real polygon's number, 2, so reading before the list's start would claim polygon 2
+		int const guardedList[] = { 2, 2, 2, 2, 2, 1, 0 };
+		int const *const joinOthers = guardedList + 5;
+		int const firstJoins[] = { -5, 2, 2, 2 };    // polygon 0's joins are places -5 to 1: five before the list, then its two
+		AlienWaysClaims tinyMap;
+		tinyMap.Reset(3);
+		std::vector<int> const wayZero = { 0 };
+		Check(tinyMap.Add(0, wayZero.data(), 1, firstJoins, 4, joinOthers, 2) == kAlienWaysClaimsAdded && tinyMap.ClaimsOn(1) == 1 && tinyMap.ClaimsOn(2) == 0, "places before the start of the join list are never read");
+		Check(tinyMap.NumbersLeftOut() == 5, "and each is counted as left out");
+	}
+
+	{
+		// A pair from a list nobody could trust, running to the largest int: counted in one go, where one at a time would take seconds
+		int const firstJoins[] = { 0, 2147483647, 2147483647, 2147483647 };
+		int const joinOthers[] = { 1, 0 };
+		AlienWaysClaims tinyMap;
+		tinyMap.Reset(3);
+		std::vector<int> const wayZero = { 0 };
+		Check(tinyMap.Add(0, wayZero.data(), 1, firstJoins, 4, joinOthers, 2) == kAlienWaysClaimsAdded && tinyMap.ClaimsOn(1) == 1, "a pair as long as an int can say still claims what's in the list");
+		Check(tinyMap.NumbersLeftOut() == 2147483645u, "and counts the 2,147,483,645 places past the list's end as left out");
+	}
+
 	{
 		int const joinOthers[] = { 7, -2 };          // neighbours that aren't polygons of the map
 		int *const othersAtTheWall = reinterpret_cast<int *>(MemoryEndingAtAWall(sizeof(joinOthers)));

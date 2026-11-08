@@ -162,16 +162,24 @@ public:
 				continue;
 			}
 
-			int const from = firstJoin[polygon], to = firstJoin[polygon + 1];
+			// Modified 2026-11-08 by Melanikus for the AvP port: the places outside the join list are counted all at once (Secondary's C-a).
+			// Its neighbours are the places from firstJoin[polygon] up to firstJoin[polygon + 1]. A pair from a list nobody checked could name
+			// places anywhere, two thousand million of them, and going through those one by one would take seconds. So only the places inside
+			// joinOther are looked at, and the ones before its start and past its end are counted as left out in one go each: the same count,
+			// in the same order, as one at a time.
+			long long const from = firstJoin[polygon], to = firstJoin[polygon + 1];
+			long long const listEnd = static_cast<long long>(joinOtherCount);
+			long long const firstInside = (std::max)(from, 0LL), endInside = (std::min)(to, listEnd);
 
-			for (int k = from; k < to && !cutShort; k++)
+			if (to <= from)
 			{
-				if (k < 0 || static_cast<size_t>(k) >= joinOtherCount)
-				{
-					ignored++;
-					continue;
-				}
+				continue;
+			}
 
+			ignored += static_cast<size_t>((std::max)(0LL, (std::min)(to, 0LL) - from));
+
+			for (long long k = firstInside; k < endInside && !cutShort; k++)
+			{
 				int const beside = joinOther[k];
 
 				if (beside < 0 || beside >= polygons)
@@ -181,6 +189,12 @@ public:
 				}
 
 				cutShort = !Hold(held, beside, kAlienWaysClaimBesideTheWay);
+			}
+
+			// The places past its end come after the ones inside it, so they're only counted if the alien wasn't full by then
+			if (!cutShort)
+			{
+				ignored += static_cast<size_t>((std::max)(0LL, to - (std::max)(from, listEnd)));
 			}
 		}
 
