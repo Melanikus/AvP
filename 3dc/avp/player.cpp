@@ -2056,12 +2056,6 @@ void SaveStrategy_Player(STRATEGYBLOCK* sbPtr)
 	Guns_SaveOwnStates();
 }
 
-// Can this number from a save be used to pick the player's weapon? It has to be a slot, and the slot has to hold a weapon.
-static bool SavedSlotHoldsAWeapon(const PLAYER_STATUS *playerStatusPtr, int slot)
-{
-	return slot >= 0 && slot < MAX_NO_OF_WEAPON_SLOTS && playerStatusPtr->WeaponSlot[slot].WeaponIDNumber != NULL_WEAPON;
-}
-
 // Can this number from a save be used to pick the player's weapon? It has to be a slot, and the slot has to hold a weapon. The rest of the
 // game looks a slot's weapon up in TemplateWeapon without asking, and that table holds the functions that fire it.
 static bool SavedSlotHoldsAWeapon(const PLAYER_STATUS *playerStatusPtr, int slot)
