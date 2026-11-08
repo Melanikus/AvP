@@ -85,8 +85,10 @@ uint8_t const kNpcGridCoveredOnly = 16;       // its middle isn't, but a floor p
 
 uint32_t const kNpcGridNoCell = 0xFFFFFFFFu;
 int const kNpcGridMostLookRound = 5;          // NearestCell looks at most this many cells either way on a sheet: 11 x 11, the reach
-int const kNpcGridReach = 1500;
-int const kNpcGridSideSlack = 10;           // how far behind a surface a point can be and still count as in front of it: a point right on it              // how far from a cell a search's start or goal can be: an alien's middle is up to a metre off its surface
+int const kNpcGridReach = 1500;              // how far from a cell a search's start or goal can be: an alien's middle is up to a metre off its surface
+int const kNpcGridSideSlack = 300;           // how far behind a sheet's plane a point can be and still count as in front of it: one cell. A body
+                                             // stands right on its floor, and a sheet's plane is an average of polygons up to kNpcGridSamePlane
+                                             // apart, so a body on the floor can be a little behind it. A body under a floor is metres behind.
 
 // THE LIMITS. What the stock levels need is in brackets: the most on any of the 63, measured by the node copy (npc-grid.js), whose steps are
 // this code's. A level made to take more is refused, and the game moves its NPCs as before.

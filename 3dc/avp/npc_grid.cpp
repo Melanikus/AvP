@@ -366,6 +366,12 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 	double bestFar = static_cast<double>(within);
 	double const point[3] = { x, y, z };
 
+	// A point that isn't a number, or is endless, is nowhere: no test below could be trusted with it (Tao 3)
+	if (!(fabs(x) < 1e12 && fabs(y) < 1e12 && fabs(z) < 1e12) || !(bestFar >= 0.0))
+	{
+		return kNpcGridNoCell;
+	}
+
 	// How many cells either way the reach covers, at most kNpcGridMostLookRound: an alien's middle can be a metre off its surface, near the
 	// sheet's edge, or over a cell it doesn't fit on, so the cell under it isn't enough
 	int const round = std::min(kNpcGridMostLookRound, std::max(1, static_cast<int>(ceil(bestFar / kNpcGridCell))));
@@ -378,7 +384,7 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 		// as a floor seen from under it or the far face of a thin wall, is never its cell, however near
 		double const out = Dot(point, s.n) - s.d;
 
-		if (out < -kNpcGridSideSlack || out > bestFar)
+		if (!(out >= -kNpcGridSideSlack && out <= bestFar))
 		{
 			continue;
 		}
@@ -387,7 +393,7 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 		double const r[3] = { x - s.n[0] * s.d, y - s.n[1] * s.d, z - s.n[2] * s.d };
 		double const ci = floor(Dot(r, s.u) / kNpcGridCell) - s.i0, cj = floor(Dot(r, s.v) / kNpcGridCell) - s.j0;
 
-		if (ci < -round || cj < -round || ci >= s.w + round || cj >= s.h + round)
+		if (!(ci >= -round && cj >= -round && ci < s.w + round && cj < s.h + round))
 		{
 			continue;
 		}
@@ -423,8 +429,8 @@ uint32_t NpcGrid::NearestCell(double x, double y, double z, NpcGridBody body, in
 // The links (or falls) from one cell: the run of it in a list sorted by the cell they're from
 static const uint32_t *RunOf(const std::vector<uint32_t> &from, const std::vector<uint32_t> &to, uint32_t cell, size_t *count)
 {
-	std::vector<uint32_t>::const_iterator const first = std::lower_bound(from.begin(), from.end(), cell);
-	std::vector<uint32_t>::const_iterator const end = std::upper_bound(first, from.end(), cell);
+	const auto first = std::lower_bound(from.begin(), from.end(), cell);
+	const auto end = std::upper_bound(first, from.end(), cell);
 	*count = static_cast<size_t>(end - first);
 	return *count ? &to[static_cast<size_t>(first - from.begin())] : nullptr;
 }
@@ -927,8 +933,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		static std::pair<size_t, size_t> In(const std::vector<BoxEntry> &boxes, uint64_t key)
 		{
 			BoxEntry const low = { key, 0 }, high = { key, 0xFFFFFFFFu };
-			std::vector<BoxEntry>::const_iterator const a = std::lower_bound(boxes.begin(), boxes.end(), low);
-			std::vector<BoxEntry>::const_iterator const b = std::upper_bound(a, boxes.end(), high);
+			const auto a = std::lower_bound(boxes.begin(), boxes.end(), low);
+			const auto b = std::upper_bound(a, boxes.end(), high);
 			return std::make_pair(static_cast<size_t>(a - boxes.begin()), static_cast<size_t>(b - boxes.begin()));
 		}
 	};
@@ -1346,8 +1352,8 @@ const char *NpcGrid::Build(const std::vector<AlienWaysPolygon> &polygons, const 
 		static std::pair<size_t, size_t> Of(const std::vector<std::pair<uint64_t, uint32_t> > &places, uint64_t key)
 		{
 			std::pair<uint64_t, uint32_t> const low(key, 0), high(key, 0xFFFFFFFFu);
-			std::vector<std::pair<uint64_t, uint32_t> >::const_iterator const a = std::lower_bound(places.begin(), places.end(), low);
-			std::vector<std::pair<uint64_t, uint32_t> >::const_iterator const b = std::upper_bound(a, places.end(), high);
+			const auto a = std::lower_bound(places.begin(), places.end(), low);
+			const auto b = std::upper_bound(a, places.end(), high);
 			return std::make_pair(static_cast<size_t>(a - places.begin()), static_cast<size_t>(b - places.begin()));
 		}
 	};
@@ -1626,7 +1632,7 @@ bool NpcGrid::ShutOff(uint32_t cell) const
 // Tries one move of the search, to cell n at a new cost
 void NpcGrid::TryMove(const double goalAt[3], const double at[3], uint32_t c, uint32_t n, double newCost)
 {
-	std::unordered_map<uint32_t, Seen>::iterator const found = seen.find(n);
+	const auto found = seen.find(n);
 
 	if ((found != seen.end() && (found->second.done || found->second.cost <= newCost)) || ShutOff(n))
 	{

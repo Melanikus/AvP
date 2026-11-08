@@ -289,9 +289,13 @@ static void Cells()
 
 	// A point under the floor is behind it: the floor faces up, away from it, so it has no cell there, though one is 200 away. And a point
 	// 400 outside the room's wall is behind that wall's face. A body only ever clings to the side of a surface it's on.
-	Check(grid.NearestCell(1650, 200, 1650, kNpcGridAlien, 400) == kNpcGridNoCell, "a point 200 under the floor has no cell: the floor faces away from it");
-	Check(grid.NearestCell(-400, -1650, 1650, kNpcGridAlien, 500) == kNpcGridNoCell, "nor a point 400 outside the room, behind its wall");
-	Check(grid.NearestCell(1650, -200, 1650, kNpcGridAlien, 400) != kNpcGridNoCell, "while a point 200 above the floor has the floor's cell");
+	Check(grid.NearestCell(1650, 500, 1650, kNpcGridAlien, 600) == kNpcGridNoCell, "a point 500 under the floor has no cell: the floor faces away from it");
+	Check(grid.NearestCell(-700, -1650, 1650, kNpcGridAlien, 800) == kNpcGridNoCell, "nor a point 700 outside the room, behind its wall");
+	Check(grid.NearestCell(1650, 200, 1650, kNpcGridAlien, 400) != kNpcGridNoCell,
+		"but a point 200 under it still has the floor's cell: a body stands right on its floor, so up to a cell behind counts (kNpcGridSideSlack)");
+	Check(grid.NearestCell(1650, -200, 1650, kNpcGridAlien, 400) != kNpcGridNoCell, "and so does a point 200 above it");
+	Check(grid.NearestCell(nan(""), 0, 0, kNpcGridAlien, 400) == kNpcGridNoCell && grid.NearestCell(0, HUGE_VAL, 0, kNpcGridAlien, 400) == kNpcGridNoCell,
+		"a point that isn't a number, or is endless, has no cell");
 
 	// Its links reach the walls beside it
 	size_t count = 0;
@@ -366,6 +370,13 @@ static void Searches()
 		"a marine's way from positions is found");
 	Check(grid.Way().size() >= 3 && grid.Way().size() * 2 <= grid.WayPath().size(),
 		"pulled straight, it has a turn or two, not a point for each cell (" + Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
+
+	// At a slant across open floor, well clear of the pillar: the search's cells go diagonally, then straight, but a marine fits all along the
+	// straight line between the two, so pulled straight it's that line, the start and the goal and nothing between
+	AlienWaysXYZ const slantFrom = { 450, 0, 450 }, slantTo = { 5550, 0, 2250 };
+	Check(grid.StartSearch(slantFrom, slantTo, kNpcGridMarine, 1, 100000) == nullptr && grid.Work(static_cast<size_t>(-1)) == kNpcGridFound &&
+		grid.Way().size() == 2 && grid.WayPath().size() > 2, "a way at a slant across open floor is one straight line, start to goal (" +
+		Number(grid.Way().size()) + " points for " + Number(grid.WayPath().size()) + " cells)");
 
 	// The same with too few looks
 	Check(grid.Search(from, to, kNpcGridMarine, 1, 3, &way, &looks) == kNpcGridTooFar && way.empty() && looks == 3,
@@ -793,6 +804,33 @@ static void Sheets()
 	}
 }
 
+// One wall, 3 m square, at x = 0 from z 0 to 3000, facing +x, and nothing else
+static void Reach()
+{
+	printf("Looking round for a cell\n");
+	std::vector<AlienWaysPolygon> world(1, WallAtX(0, 0, 3000, -3000, 0, 1));
+	AlienWaysMap map;
+	NpcGrid grid;
+	const char *why;
+
+	if (!Build(world, &map, &grid, &why))
+	{
+		Check(false, "the wall builds");
+		return;
+	}
+
+	// A point 500 out from the wall and 600 past its end (z 3600). Seen onto the wall's plane it's two cells past the wall's grid, so neither
+	// the cell under it nor any of the 3 x 3 round it is there; but the wall's last column of cells, at z 2850, is 901 away (500 out and
+	// 750 along), inside the reach.
+	uint32_t const c = grid.NearestCell(500, -1650, 3600, kNpcGridAlien, 1500);
+	double m[3] = { 0.0, 0.0, 0.0 };
+	Check(c != kNpcGridNoCell && grid.Middle(c, m) && m[0] == 0 && m[1] == -1650 && m[2] == 2850,
+		"a point two cells past a wall's end finds the wall's nearest cell, further than the 3 x 3 round it reaches");
+
+	// 1000 past the end, the nearest cell is 500 out and 1150 along: 1254 away, more than the reach of 1200 given here
+	Check(grid.NearestCell(500, -1650, 4000, kNpcGridAlien, 1200) == kNpcGridNoCell, "and one further than the reach finds none");
+}
+
 // What a refused build leaves: nothing
 static bool KeptNothing(NpcGrid const &grid)
 {
@@ -1007,6 +1045,7 @@ int main()
 	Cells();
 	Sheets();
 	Searches();
+	Reach();
 	Steps();
 	Falls();
 	Slopes();
