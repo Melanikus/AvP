@@ -34,6 +34,15 @@
 //   plays no stock level's film and marks no stock level done. Credit: Melanikus and Bobblen (the custom single-player maps follow Bobblen's avp-forever, rewritten)
 // Modified 2026-11-07 by Melanikus for the AvP port:
 //   the join page's address box shows a dot for each character unless Tab is held, and its help line says so (address_box.h)
+// Modified 2026-11-04 by Melanikus for the AvP port:
+//   with -dev -hudson, a run skips the menus and starts its marine level
+// Modified 2026-11-05 by Melanikus for the AvP port:
+//   a run loads and lets go of the menu pictures as the menus do, so that it plays with what a player has loaded
+//   a run can load any built-in level, by the name on the game's own list
+// Modified 2026-11-06 by Melanikus for the AvP port:
+//   a run can ask for a level's own films
+//   a gun= run with class= starts a skirmish, and a gun= run with species=predator plays as a Predator
+//   a run with net= starts as a host or a client on this machine, without the multiplayer pages
 #include "3dc.h"
 #include "inline.h"
 #include "module.h"
@@ -71,6 +80,7 @@
 #include "d3d_render.h"
 #include "OnScreenKeyboard.h"
 #include "logString.h"
+#include "hudson.h"
 #include <vector>
 #include "profile_checks.h"
 #include "address_box.h"
@@ -353,11 +363,331 @@ static void StartTheCoopCampaign(void)
 	}
 }
 
+// A run has nobody to choose anything, so this does what choosing a marine level from the menus does, with a new player's settings. The second time it's asked, the level has ended, and false ends the game.
+// A run with net= is one of two games on this machine. This is what the multiplayer pages would do, with their answers already filled in. See AVPMENU_ELEMENT_STARTMPGAME and AVPMENU_ELEMENT_JOINMPGAME.
+// Everything is on this machine's own address: see NetLoopbackOnly in networking.cpp. If it can't get as far as starting a level, the run ends here, and its result says how far it got.
+static void StartNetworkGameForHudsonRun(void)
+{
+	extern int MultiplayerEpisodeForEnvironment(int environment);
+
+	int const onTheList = MultiplayerEpisodeForEnvironment(Hudson_Environment());
+	int const level = onTheList >= 0 ? onTheList : 0;
+
+	SetDefaultMultiplayerConfig();
+	netGameData.gameType = NGT_Individual;
+	netGameData.coopCampaign = kCampaignNone;
+	netGameData.coopCampaignLevel = 0;
+
+	// coop=yes: the campaign this level is on, from this level on, as a host's menu would choose
+	if (Hudson_NetIsHost() && Hudson_NetIsCampaign())
+	{
+		netGameData.coopDifficulty = Hudson_Difficulty();
+		Campaign_ChooseRollNumber();
+		Campaign_FindEnvironment(Hudson_Environment(), &netGameData.coopCampaign, &netGameData.coopCampaignLevel);
+
+		// A siege can be on any of the game's levels, and every kind of NPC only reaches another machine in a game that plays like a campaign. This is the level SetLevelToLoadForCampaign loads instead.
+		if (Hudson_IsASiege() && netGameData.coopCampaign == kCampaignNone)
+		{
+			netGameData.coopCampaign = kCampaignMarine;
+			netGameData.coopCampaignLevel = 0;
+		}
+
+		netGameData.gameType = NGT_Coop;
+		netGameData.disableFriendlyFire = Hudson_NoFriendlyFire();
+	}
+
+	// hostile=yes and no campaign: a species game, the only kind that keeps the species scores one of the bad messages aims at
+	if (Hudson_NetIsHost() && Hudson_NetIsHostile() && !Hudson_NetIsCampaign())
+	{
+		netGameData.gameType = NGT_CoopDeathmatch;
+		LogString("hostile: this is a species game");
+	}
+
+	netGameData.levelNumber = level;
+	MP_Species = 0;
+	strcpy(MP_PlayerName, Hudson_NetIsHost() ? "HOST" : "JOIN");
+	strcpy(MP_SessionName, "HUDSON");
+
+	if (Hudson_NetIsHost())
+	{
+		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, netGameData.gameType, level) == NET_FAIL)
+		{
+			Hudson_NetStopBecause("the host couldn't open its port on this machine");
+			return;
+		}
+
+		Hudson_NetSay("the host has its port open, and it's loading its level");
+	}
+	else
+	{
+		// The other game may still be loading, and it only answers once it's playing. Each try waits for 3 seconds.
+		int const mostTries = 20;
+		bool connected = false;
+
+		// typed=yes: the way a player does who has typed an address. The address is this machine's own, and that's the only place it can go: the first independent read of this code found this page did nothing.
+		if (Hudson_NetIsTyped())
+		{
+			DWORD const startedLooking = GetTickCount();
+			bool found = false;
+
+			strcpy(IPAddressString, "127.0.0.1");
+			Hudson_NetSay("the joiner is searching for a game at the address it was given");
+
+			while (!found && GetTickCount() - startedLooking < 60000)
+			{
+				int selection = 0;
+
+				CheckForWindowsMessages();
+				Net_FindAvPSessions();
+				Net_UpdateSessionList(selection);
+				found = NumberOfSessionsFound > 0;
+				Sleep(50);
+			}
+
+			if (!found)
+			{
+				Hudson_NetStopBecause("a search for a typed address found no game");
+				return;
+			}
+
+			Hudson_NetSay("the search found the game");
+			connected = Net_ConnectToSession(0, MP_PlayerName) != NET_FAIL;
+		}
+
+		for (int tryNumber = 0; tryNumber < mostTries && !connected; tryNumber++)
+		{
+			CheckForWindowsMessages();
+			connected = Net_ConnectToThisMachine(level, MP_PlayerName) != NET_FAIL;
+		}
+
+		if (!connected)
+		{
+			Hudson_NetStopBecause("the client got no answer from the host");
+			return;
+		}
+
+		Hudson_NetSay("the client has connected and asked to join, and it's waiting for the host to say who it is");
+
+		DWORD const mostMilliseconds = 20000;
+		DWORD const startedWaiting = GetTickCount();
+
+		while (netGameData.needGameDescription && GetTickCount() - startedWaiting < mostMilliseconds)
+		{
+			CheckForWindowsMessages();
+			MinimalNetCollectMessages();
+			Sleep(10);
+		}
+
+		if (netGameData.needGameDescription)
+		{
+			Hudson_NetStopBecause("the client connected, and the host never told it who it is");
+			return;
+		}
+
+		// hostile=yes: a level one past the end of the list for the game type the host has just said. A host's answer to a search can name this in a real game, and a joiner comes here through the menu instead. This asks what the menu asks, and it has to say no.
+		if (Hudson_NetIsHostile())
+		{
+			int const realLevel = netGameData.levelNumber;
+
+			netGameData.levelNumber = netGameData.gameType == NGT_Coop ? NumCoopLevels : NumMultiplayerLevels;
+			LogString("hostile: row 0: B9 a host's level one past the end of its list, as the menu would ask it");
+			Net_HostsLevelIsOnItsList();
+			netGameData.levelNumber = realLevel;
+		}
+
+		Hudson_NetSay("the client has been told who it is, and it's loading its level");
+		netGameData.myStartFlag = 1;
+	}
+
+	if (netGameData.coopCampaign != kCampaignNone)
+	{
+		SetLevelToLoadForCampaign();
+	}
+	else
+	{
+		SetLevelToLoadForMultiplayer(level);
+	}
+
+	SetBriefingTextForMultiplayer();
+	AvP.PlayerType = I_Marine;
+	Coop_TakeCampaignSpecies();
+	Campaign_SetDifficulty();
+}
+
+// custommap=: the Custom maps page, as a player would see it with this map chosen, for two seconds, and a picture of it
+static void ShowTheCustomMapsPageForHudsonRun(void)
+{
+	int const framesToShow = 120;
+
+	LoadAllAvPMenuGfx();
+	AvPMenus.MenusState = MENUSSTATE_MAINMENUS;
+	SetupNewMenu(AVPMENU_CUSTOMMAPS);
+	CustomMapToPlay = Hudson_CustomMapPlace();
+
+	LogString(std::string("hudson: custommap: the page lists ") + std::to_string(CustomMaps_Count()) + " maps");
+
+	for (int map = 0; map < CustomMaps_Count(); map++)
+	{
+		LogString(std::string("hudson: custommap: on the list: ") + CustomMaps_Name(map));
+	}
+
+	for (int frame = 0; frame < framesToShow && bRunning; frame++)
+	{
+		CheckForWindowsMessages();
+		ThisFramesRenderingHasBegun();
+		DrawMainMenusBackdrop();
+		ReadUserInput();
+		AvP_UpdateMenus();
+		FrameCounterHandler();
+		ThisFramesRenderingHasFinished();
+
+		if (frame == framesToShow - 1)
+		{
+			Hudson_SaveThePage("custom-maps-page.png");
+		}
+
+		FlipBuffers();
+		Sleep(SKIP_TICKS);
+	}
+
+	// The page's own Start row, pressed the way a player does
+	for (int row = 0; row < AvPMenus.NumberOfElementsInMenu; row++)
+	{
+		if (AvPMenus.MenuElements[row].ElementID == AVPMENU_ELEMENT_CUSTOMMAP_START)
+		{
+			AvPMenus.CurrentlySelectedElement = row;
+		}
+	}
+
+	InteractWithMenuElement(AVPMENU_ELEMENT_INTERACTION_SELECT);
+	LogString(std::string("hudson: custommap: Start was pressed, and this run plays ") + LevelName);
+
+	ReleaseAllAvPMenuGfx();
+}
+
+static int StartLevelForHudsonRun(void)
+{
+	static bool levelStarted = false;
+
+	if (levelStarted)
+	{
+		return 0;
+	}
+
+	levelStarted = true;
+
+	LoadDefaultPrimaryConfigs();
+	TimeScale = ONE_FIXED;
+
+	// What the menus do before any level. Letting them go keeps the small font and the sliders loaded for the in-game menus, and the level's briefing text is drawn with that font. Without this, a run's
+	// frames and its texture memory wouldn't be a player's. Neither of these makes a sound.
+	LoadAllAvPMenuGfx();
+	ReleaseAllAvPMenuGfx();
+
+	// the run's own folder has no profiles, so the first is the "New Profile" entry, with its default settings
+	ExamineSavedUserProfiles();
+	UserProfileNumber = 0;
+	UserProfilePtr = GetFirstUserProfile();
+	GetSettingsFromUserProfile();
+
+	CheatMode_Active = CHEATMODE_NONACTIVE;
+	LoadGameRequest = SAVELOAD_REQUEST_NONE;
+	AvP.LevelCompleted = 0;
+
+	if (Hudson_NetIsOn())
+	{
+		StartNetworkGameForHudsonRun();
+	}
+	else
+	{
+		AvP.PlayerType = Hudson_PlayAsPredator() ? I_Predator : I_Marine;
+
+		if (Hudson_PlayAsAlien())
+		{
+			AvP.PlayerType = I_Alien;
+		}
+
+		AvP.Difficulty = (I_HARDANUFF)Hudson_Difficulty();
+		MarineEpisodeToPlay = Hudson_MarineEpisode();
+		SetLevelToLoad((enum AVP_ENVIRONMENT_ID)Hudson_Environment());
+		SetBriefingTextForEpisode(MarineEpisodeToPlay, AvP.PlayerType);
+
+		if (Hudson_CustomMapPlace() >= 0)
+		{
+			ShowTheCustomMapsPageForHudsonRun();
+		}
+
+	}
+
+	// listplace=: what the skirmish page does with that place on its level row
+	if (Hudson_ListPlace() >= 0)
+	{
+		netGameData.skirmishMode = TRUE;
+		SetDefaultMultiplayerConfig();
+		netGameData.gameType = NGT_Coop;
+		netGameData.levelNumber = Hudson_ListPlace();
+		netGameData.coopDifficulty = Hudson_Difficulty();
+		BuildMultiplayerLevelNameArray();
+		Campaign_SetFromLevelRow();
+		Campaign_SetDifficulty();
+		Campaign_ChooseRollNumber();
+		GetNextAllowedSpecies(&MP_Species, TRUE);
+		LogString(std::string("hudson: the level row reads ") + CoopLevelNames[netGameData.levelNumber]);
+
+		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, netGameData.levelNumber) != NET_OK)
+		{
+			LogErrorString("listplace: the skirmish couldn't start, so this run isn't one");
+		}
+
+		SetLevelToLoadForThisNetworkGame();
+		SetBriefingTextForMultiplayer();
+	}
+
+	// A gun run with class= is a skirmish, the game's multiplayer for one, as the menus would start it. It opens no network
+	// socket: Net_HostGame skips that when skirmishMode is on.
+	if (Hudson_ClassSlider())
+	{
+		netGameData.skirmishMode = TRUE;
+		SetDefaultMultiplayerConfig();
+		netGameData.gameType = NGT_Coop;
+		netGameData.levelNumber = 0;
+		MP_Species = Hudson_ClassSlider();
+
+		if (Net_HostGame(MP_PlayerName, MP_SessionName, MP_Species, NGT_Coop, 0) != NET_OK)
+		{
+			LogErrorString("class: the skirmish couldn't start, so this run isn't one");
+		}
+	}
+
+	AvPMenus.MenusState = MENUSSTATE_STARTGAME;
+
+	Hudson_SetTheMode();
+
+	// A run skips a level's opening film unless it's asked for one. This is the call the menus make.
+	if (Hudson_PlaysLevelFilms())
+	{
+		HandlePreGameFMVs();
+	}
+
+	return 1;
+}
+
 int AvP_MainMenus(void)
 {
 	if (Coop_LevelChangeIsDue())
 	{
 		return StartNextCampaignLevel();
+	}
+
+	// custommap= with coopend=: the map is finished, so the game's own way back to the menus runs, below, with nothing changed but the intro
+	if (HudsonRunIsOn && !Hudson_CustomMapHasEnded())
+	{
+		return StartLevelForHudsonRun();
+	}
+
+	if (HudsonRunIsOn)
+	{
+		DebuggingCommandsActive = 0;
 	}
 
 	LoadDefaultPrimaryConfigs();
@@ -388,7 +718,7 @@ int AvP_MainMenus(void)
 
 	ResetFrameCounter();
 
-	if (!LobbiedGame)	// Edmond
+	if (!LobbiedGame && !HudsonRunIsOn)	// Edmond
 		PlayIntroSequence();
 
 	if (VideoModeNotAvailable)
@@ -476,6 +806,12 @@ int AvP_MainMenus(void)
 		CheckForLoadGame();
 
 		ThisFramesRenderingHasFinished();
+
+		if (HudsonRunIsOn)
+		{
+			Hudson_LooksForThePageAfterAMap(AvPMenus.CurrentMenu == AVPMENU_CUSTOMMAPS);
+		}
+
 		FlipBuffers();
 
 		nextGameTick += SKIP_TICKS;
@@ -564,7 +900,7 @@ void HandlePostGameFMVs(void)
 static bool KeepTheNetworkGoing(void)
 {
 	Net_ServiceNetwork();
-	return true;
+	return Hudson_FilmGoesOn();
 }
 
 static void PlayFilmWithTheNetworkGoing(const char *film)
@@ -574,7 +910,9 @@ static void PlayFilmWithTheNetworkGoing(const char *film)
 		WhileAFilmPlays = KeepTheNetworkGoing;
 	}
 
+	Hudson_FilmStarts(film);
 	PlayFMV(film);
+	Hudson_FilmEnded();
 	WhileAFilmPlays = 0;
 }
 
@@ -601,6 +939,11 @@ void HandlePreGameFMVs(void)
 // The film single player shows when its last basic level is finished, for a campaign going on past it.
 static void PlayFilmAfterCampaignLevel(int finishedLevel)
 {
+	if (HudsonRunIsOn && !Hudson_PlaysLevelFilms())
+	{
+		return;
+	}
+
 	if (netGameData.coopCampaign == kCampaignMarine && finishedLevel == MAX_NO_OF_BASIC_MARINE_EPISODES - 1)
 	{
 		PlayFilmWithTheNetworkGoing("FMVs/marineoutro.bik");
