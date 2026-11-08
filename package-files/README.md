@@ -14,19 +14,19 @@ line shows in the pull request that changes it. `.gitattributes` stops git chang
 
 ## Where they came from
 
-They're from MelPyth M5, the user's own mod for the game (about 2004 to 2007). CREDIT: the wording of the credit here is the
-user's to decide.
+They're from **MelPyth M5**, by Melanikus and **Astro_Muppet** (Mupp), who was its coder. Every RIF and 3D model in M5 was made by hand
+by Melanikus in 3ds Max R3, as its modeller and animator.
 
-**The user's files, unchanged** (their hashes match the M5 files the user gave us):
+**Melanikus's files, unchanged** (their hashes match the M5 files Melanikus gave us):
 
 - `avp_huds/MelPyth_MarHUD.RIF`, `avp_huds/Staff_Hud.RIF`, `avp_huds/StaffPickup.RIF`
 - 15 pictures in `graphics/MelPyth/HUDs/Marine/`. `SYMBOLS.RIM` is in capitals, as the game asks for it.
 
-**Ours, made from the user's files** by the tools on the co-op branch:
+**Ours, made from Melanikus's files** by the tools on the co-op branch:
 
 - `avp_huds/MelPyth_MarWep.rif`: the pulse rifle with its counter, the cudgel and the pistols.
-- `avp_huds/ShotgunPickup.rif`: the user's file, without `girl.rim` and its 6 polygons, by the user's ruling.
-- `MelPyth/fastfile/common.ffl`: only the user's 4 new sounds. The game's own sounds come from the player's copy.
+- `avp_huds/ShotgunPickup.rif`: Melanikus's file, without `girl.rim` and its 6 polygons, by Melanikus's ruling.
+- `MelPyth/fastfile/common.ffl`: only the 4 new sounds from M5. The game's own sounds come from the player's copy.
 
 ## How they were checked
 
