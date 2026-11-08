@@ -74,6 +74,7 @@ FADT stands for Far Alien Door Type*/
 
 /* prototypes */
 void BuildFarModuleLocs(void);
+int FarLoc_IsAPlaceToStand(MODULE *module, VECTORCH *place);
 void KillFarModuleLocs(void);
 MODULEDOORTYPE ModuleIsADoor(MODULE* target);
 MODULEDOORTYPE AIModuleIsADoor(AIMODULE* target);

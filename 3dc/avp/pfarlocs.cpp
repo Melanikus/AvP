@@ -76,6 +76,33 @@ static FILE *logfile;
   initialised for this environment.
 ----------------------------------------------------------------*/
 
+/* The test the game makes for the places in its own lists, for one place that isn't listed. Give it a place in the world, and it looks straight down
+and up through the room's polygons there. If there's a floor with room to stand on it, it gives back 1 and puts the floor's height in place->vy. */
+int FarLoc_IsAPlaceToStand(MODULE *module, VECTORCH *place)
+{
+	FARVALIDATEDLOCATION location;
+
+	location.position.vx = place->vx - module->m_world.vx;
+	location.position.vy = 0;
+	location.position.vz = place->vz - module->m_world.vz;
+	location.valid = 1;
+
+	GetFarLocHeight(&location, module);
+
+	if (location.valid)
+	{
+		FarLocVolumeTest(&location, module);
+	}
+
+	if (!location.valid)
+	{
+		return 0;
+	}
+
+	place->vy = location.position.vy + module->m_world.vy;
+	return 1;
+}
+
 void BuildFarModuleLocs(void)
 {
 	MODULE **moduleListPointer;	
