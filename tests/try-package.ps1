@@ -121,7 +121,7 @@ Expect-Refused (Run-Imports) 'needs ogg.dll' 'with a library taken out, that lib
 
 New-Copy
 Remove-Item -LiteralPath (Join-Path $work 'd3dx9_43.dll')
-Expect-Refused (Run-Imports) 'AvPx.exe needs d3dx9_43.dll' "with D3DX taken out, it's named, whatever this machine has"
+Expect-Refused (Run-Imports) 'AvP_Classic.exe needs d3dx9_43.dll' "with D3DX taken out, it's named, whatever this machine has"
 
 # --- Microsoft's two files, which we can't build from source, so all we can check is Microsoft's signature on them
 New-Copy
@@ -164,8 +164,8 @@ Add-ToTheEnd 'libsmackerdec.dll' ([byte[]](@(0x41) + [System.Text.Encoding]::Uni
 Expect-Refused (Run-Imports) 'names a folder: C:\Users\someone' 'and as UTF-16 starting on an odd byte'
 
 New-Copy
-Add-ToTheEnd 'AvPx.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
-Expect-Refused (Run-Imports) 'AvPx.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
+Add-ToTheEnd 'AvP_Classic.exe' ([System.Text.Encoding]::ASCII.GetBytes("D:\a\AvP\AvP\vcpkg_installed\x86-windows\bin\ogg.pdb`0"))
+Expect-Refused (Run-Imports) 'AvP_Classic.exe, as plain text, names a folder: D:\a\AvP' "the game naming a .pdb in a build runner's folder is refused"
 
 New-Copy
 Add-ToTheEnd 'libsmackerdec.dll' ([System.Text.Encoding]::ASCII.GetBytes("see https://github.com/Melanikus/AvP and ogg.pdb`0"))
