@@ -1,7 +1,7 @@
 // The test for 3dc/command_line_word.h, which reads the switches on the command line as whole words. Written 2026-11-04 by Melanikus for
 // the AvP port.
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   the word after a switch, and the -l switch (LEVEL-SWITCH-1)
+//   finding a switch, the word after a switch, and the -l switch (LEVEL-SWITCH-1, SWITCH-WORDS-1)
 //
 // tests/build.ps1 compiles this, and the program gives back a non-zero result if any check failed. It uses no files, no graphics card
 // and none of the game.
@@ -50,9 +50,37 @@ static void WholeWords()
 	Check(!CommandLineHasWord("-dev", 0), "no word at all");
 	Check(!CommandLineHasWord("-dev", ""), "an empty word isn't on any line");
 
-	// -w is read this way now (winmain.cpp)
+	// Every plain switch is read this way now (winmain.cpp)
 	Check(CommandLineHasWord("-dev -w", "-w"), "-w as a word");
 	Check(!CommandLineHasWord("-windowed", "-w"), "a switch starting -w isn't -w");
+	Check(!CommandLineHasWord("-n arena-server", "-server"), "a level's name ending -server doesn't start a server");
+}
+
+// Where CommandLineFindSwitch says the switch is, counted from the start of the line, or -1 if it says it isn't there
+static int FoundAt(const char *line, const char *name)
+{
+	const char *const found = CommandLineFindSwitch(line, name);
+	return found ? (int)(found - line) : -1;
+}
+
+static void Switches()
+{
+	Check(FoundAt("-dev -shadowlights=12", "-shadowlights=") == 5, "a switch with its number after its '='");
+	Check(FoundAt("-shadowlights=", "-shadowlights=") == 0, "with no number: what's after it is for the caller to check");
+	Check(FoundAt("-shadowlights=1 -shadowlights=2", "-shadowlights=") == 0, "only the first one counts");
+	Check(FoundAt("x-shadowlights=12", "-shadowlights=") == -1, "it has to start its word");
+	Check(FoundAt("-shadowlights", "-shadowlights=") == -1, "a word that stops short of the '=' isn't it");
+	Check(FoundAt("-shadow -lights=", "-shadowlights=") == -1, "and a match never runs on into the next word");
+
+	Check(FoundAt("-w -keptsnap", "-keptsnap") == 3, "a plain switch as a word");
+	Check(FoundAt("-keptsnapfar", "-keptsnap") == -1, "a plain switch isn't the start of a longer one");
+	Check(FoundAt("-keptsnapfar", "-keptsnapfar") == 0, "and the longer one is itself");
+	Check(FoundAt("-staticcomparedrop", "-staticcompare") == -1, "-staticcompare isn't inside -staticcomparedrop");
+	Check(FoundAt("-shadowlights=12", "-shadowlights") == -1, "a plain name isn't the start of one with a number");
+
+	Check(FoundAt(0, "-dev") == -1, "no line at all");
+	Check(FoundAt("-dev", 0) == -1, "no name at all");
+	Check(FoundAt("-dev", "") == -1, "an empty name isn't on any line");
 }
 
 static void WordByWord()
@@ -162,6 +190,7 @@ static void TheLoadSwitch()
 int main()
 {
 	WholeWords();
+	Switches();
 	WordByWord();
 	TheWordAfter();
 	TheLoadSwitch();

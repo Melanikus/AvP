@@ -223,16 +223,34 @@ static void SourceOfTheGame()
 		"SOURCE: it's asked for every level, after the menus have chosen and before the level is loaded");
 	Check(!Has(winmain, "\"-n %"), "SOURCE: the old way of reading -n is gone");
 
-	// The short switches are whole words, or gone
-	char const *const shortSwitches[] = { "-l", "-m", "-n", "-w", "-s" };
+	// -n's level is marked as it starts, so that the game doesn't save on it
+	Check(Has(winmain, "PlayingLevelFromSwitch = (answer == kLevelSwitchUseIt);") && ComesBefore(winmain, "PlayingLevelFromSwitch = (answer", "LoadRifFile();"),
+		"SOURCE: whether this level is -n's is set for every level, before it's loaded");
 
-	for (char const *name : shortSwitches)
-	{
-		Check(!Has(winmain, std::string("strstr(command_line, \"") + name + "\")"), std::string("SOURCE: ") + name + " isn't looked for inside other words");
-	}
-
-	Check(!Has(winmain, "strstr(strpos, \"-l\")") && !Has(winmain, "\"-s%d\"") && !Has(winmain, "level_to_load"), "SOURCE: the old -l and -s are gone");
+	// Every switch is a whole word, or gone (SWITCH-WORDS-1)
+	Check(!Has(winmain, "strstr(") && !Has(winmain, "sscanf("), "SOURCE: no switch is looked for inside other words, or read with sscanf");
+	Check(!Has(winmain, "\"-s%d\"") && !Has(winmain, "level_to_load"), "SOURCE: the old -s is gone");
 	Check(Has(winmain, "if (CommandLineHasWord(command_line, \"-w\"))\n\t{\n\t\tWindowMode = WindowModeSubWindow;"), "SOURCE: -w is read as a word");
+	Check(Has(winmain, "if (CommandLineHasWord(command_line, \"-server\"))") && Has(winmain, "else if (CommandLineHasWord(command_line, \"-client\"))"),
+		"SOURCE: so are -server and -client, which start a network game");
+	Check(Has(winmain, "if (!CommandLineFindSwitch(command_line, name))") && Has(winmain, "return devSwitch(name) ? CommandLineFindSwitch(command_line, name) : 0;"),
+		"SOURCE: and the developer switches, with and without a number");
+
+	// -ip's word has to fit the 16 bytes of CommandLineIPAddressString (menu_data.cpp), because it's copied there whole
+	Check(Has(winmain, "char address[15 + 1];\n\t\tconst CommandLineWordAfterAnswer asked = CommandLineWordAfter(command_line, \"-ip\", address, sizeof(address));"),
+		"SOURCE: -ip reads a word no longer than the address it's copied into");
+	Check(Has(ReadSourceFile("3dc/avp/win95/frontend/menu_data.cpp"), "#define MAX_IPADDRESS_LENGTH 15\n") , "SOURCE: which holds 15 letters and its end marker");
+
+	// -staticcomparedrop still turns the comparing on, as it did when -staticcompare was found inside it
+	Check(Has(Between(winmain, "if (devSwitch(\"-staticcomparedrop\"))", "extern int KeptPrismsOff;"), "StaticSurfaceCompare = 1;"), "SOURCE: -staticcomparedrop compares, as before");
+
+	// The save side of -n (SAVE-LEVEL-1)
+	std::string const saves = ReadSourceFile("3dc/avp/savegame.cpp");
+	std::string const allowed = Between(saves, "if (CustomMaps_Playing())", "//cheating?");
+	std::string const validate = Between(saves, "BOOL ValidateLevelForLoadGameRequest(", "void LoadSavedGame()");
+	Check(Has(allowed, "if (PlayingLevelFromSwitch)\n\t{\n\t\tNewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));\n\t\tLogString("), "SOURCE: no saving on -n's level, said on the screen and in the log");
+	Check(Has(validate, "if (PlayingLevelFromSwitch)\n\t{\n\t\tLogString(\"save: the save's own level is loaded first, because this level is the one -n named\");\n\t\treturn FALSE;\n\t}"),
+		"SOURCE: a load on -n's level loads the save's own level first");
 
 	// -l: every letter has its kind, and nothing else is in the table
 	std::string const table = Between(winmain, "LoadLetter const loadLetters[] = {", "};");

@@ -25,8 +25,11 @@
 //   F2 marks the moment for a tester, with a line in the log and a picture of the screen (mark_key.h)
 //   as a co-op game ends, why it ended is noted before it's wiped, for the page after it
 // Modified 2026-11-08 by Melanikus for the AvP port:
-//   -n is ignored in a network game and while a saved game loads, and its name has to keep to the rule for a map's name (level_switch.h)
-//   -l, -n and -w are read as whole words, so a longer switch that starts with the same letters isn't taken for them
+//   -n is ignored in a network game and while a saved game loads, and its name has to keep to the rule for a map's name (level_switch.h);
+//   the level it names is marked, so that the game doesn't save on it
+//   every switch is read as a whole word (one with a number after its '=' as a word that starts with its name), so a longer word with the
+//   same letters in it isn't taken for a switch; -ip refuses a word too long to be an address, instead of cutting it short
+//   -staticcomparedrop turns the comparing on itself, as it did when -staticcompare was found inside it
 //   -m and the Debug build's -s are gone: neither changed anything (-m asked for what's always on, and nothing read -s's number)
 
 #include "3dc.h"
@@ -105,6 +108,9 @@ BOOL KeepMainRifFile = FALSE;
 
 // The name of the level to load. MAX_PATH (260) bytes leaves room for "Custom/" and any custom level's file name.
 char LevelName[MAX_PATH] = {"predbit6"};
+
+// Whether the level being played is one -n named, in place of the level the menus chose. Set as each level starts (level_switch.h).
+bool PlayingLevelFromSwitch = false;
 
 int VideoModeNotAvailable = 0;
 int QuickStartMultiplayer = 1;
@@ -199,7 +205,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	LogString(BuildIdentity_Lines());
 
 	char *command_line = lpCmdLine;
-	char *instr = 0;
 
 #ifdef _ALLOC_CONSOLE
 	AllocConsole();
@@ -277,7 +282,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 	}
 
 	// not -norelief, for the same reason as -shadowsoff below
-	if (strstr(command_line, "-reliefoff"))
+	if (CommandLineHasWord(command_line, "-reliefoff"))
 	{
 		textureRelief.TurnOff();
 
@@ -297,10 +302,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			LogString("shadows: the developer tools are on (-dev)");
 		}
 
-		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't
+		// says whether a developer tool's switch is on, and if it was asked for without -dev, says why it isn't. A switch is a whole word, or
+		// for one with a number after its '=', a word that starts with its name (CommandLineFindSwitch).
 		auto const devSwitch = [&](const char *name)
 		{
-			if (!strstr(command_line, name))
+			if (!CommandLineFindSwitch(command_line, name))
 			{
 				return false;
 			}
@@ -314,20 +320,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		// the same for one that's followed by a number: it gives back where the switch is, or nothing if it wasn't asked for or there's no -dev
 		auto const devNumber = [&](const char *name) -> const char *
 		{
-			return devSwitch(name) ? strstr(command_line, name) : 0;
+			return devSwitch(name) ? CommandLineFindSwitch(command_line, name) : 0;
 		};
 
 		extern int ToyShadowsMode;
 		// -shadowsoff, not -noshadows, because the level name switch -n used to take any word starting with -n. It reads only the
 		// whole word now (LEVEL-SWITCH-1), but the names stay as they are, so that launch options already written keep working.
-		if (strstr(command_line, "-shadowsoff"))
+		if (CommandLineHasWord(command_line, "-shadowsoff"))
 		{
 			ToyShadowsMode = 0;
 			ShadowVolumesOn = 0;
 			LightingNow = kLightingGouraud;
 		}
 		// Like SHADOWAMBIENT, this only changes what this player's own screen draws, so it needs no -dev. See light_choice.h.
-		if (strstr(command_line, "-shadowambient"))
+		if (CommandLineHasWord(command_line, "-shadowambient"))
 		{
 			ShadowAmbientOn = 1;
 		}
@@ -348,7 +354,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			LogString("shadows: F9 sends a ray through the crosshair and logs what it goes through, F10 stops that polygon casting, and F5 undoes that (-shadowshoot)");
 		}
 		extern int ShadowStatusOn;
-		if (strstr(command_line, "-statusoff"))
+		if (CommandLineHasWord(command_line, "-statusoff"))
 		{
 			ShadowStatusOn = 0;
 		}
@@ -386,6 +392,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		if (devSwitch("-staticcomparedrop"))
 		{
 			StaticCompareDropsHalf = 1;
+
+			// It only acts while the routes are compared. When switches were found anywhere in a word, -staticcompare was found inside
+			// this one and turned the comparing on, so this still does that.
+			StaticSurfaceCompare = 1;
 		}
 		extern int KeptPrismsOff;
 		// not -nokeptprisms, for the same reason as -shadowsoff
@@ -425,7 +435,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			}
 		}
 		extern int KeptSnap;
-		// the longer word first, because the shorter one is inside it
+		// if both are given, -keptsnapfar wins, as it always has
 		if (devSwitch("-keptsnapfar"))
 		{
 			KeptSnap = 2;
@@ -550,19 +560,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		LogString(ShadowsEvenGap ? "shadows: each corner works out where its shadow starts (-shadowevengap)" : "shadows: one gap for a whole polygon");
 	}
 
-	if (strstr(command_line, "-intro"))	{
+	if (CommandLineHasWord(command_line, "-intro"))	{
 		WeWantAnIntro();
 	}
 
-	if (strstr(command_line, "-qm"))
+	if (CommandLineHasWord(command_line, "-qm"))
 	{
 		QuickStartMultiplayer = 1;
 	}
-	else if (strstr(command_line, "-qa"))
+	else if (CommandLineHasWord(command_line, "-qa"))
 	{
 		QuickStartMultiplayer = 2;
 	}
-	else if (strstr(command_line, "-qp"))
+	else if (CommandLineHasWord(command_line, "-qp"))
 	{
 		QuickStartMultiplayer = 3;
 	}
@@ -571,7 +581,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		QuickStartMultiplayer = 0;
 	}
 
-	if (strstr(command_line, "-keeprif"))
+	if (CommandLineHasWord(command_line, "-keeprif"))
 	{
 		KeepMainRifFile = TRUE;
 	}
@@ -586,7 +596,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 		WindowMode = WindowModeSubWindow;
 	}
 
-	if (strstr(command_line, "-dontgrabmouse"))
+	if (CommandLineHasWord(command_line, "-dontgrabmouse"))
 	{
 		// the mouse is let go, whatever the lines above say
 		UseMouseCentreing = FALSE;
@@ -599,7 +609,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 
 //	#endif //AVP_DEBUG_VERSION
 
-	if (strstr(command_line, "-server"))
+	// -server and -client start a network game straight away, so they have to be the words themselves: a level's name given to -n may
+	// hold a '-', and a name like arena-server mustn't open a game to the network (SWITCH-WORDS-1)
+	if (CommandLineHasWord(command_line, "-server"))
 	{
 		//game has been launched by mplayer , we best humour it
 		LobbiedGame = LobbiedGame_Server;
@@ -609,7 +621,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			exit(0x6364);
 		}
 	}
-	else if (strstr(command_line, "-client"))
+	else if (CommandLineHasWord(command_line, "-client"))
 	{
 		//ditto
 		LobbiedGame = LobbiedGame_Client;
@@ -619,19 +631,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			exit(0x6364);
 		}
 	}
-	else if (strstr(command_line, "-debug"))
+	else if (CommandLineHasWord(command_line, "-debug"))
 	{
 		DebuggingCommandsActive = 1;
 	}
 
-	if (instr = strstr(command_line, "-ip"))
+	// -ip <address> fills in the address on the page for joining a game. It's outside input, so a word too long to be an address is
+	// refused whole, not cut short: an address cut short could be another address.
 	{
-		// buffer starts empty, in case nothing follows "-ip"; %99s stops after 99 characters, which leaves room for
-		// the end marker, so a long command line cannot run past the end of buffer
-		char buffer[100] = "";
-		sscanf(instr, "-ip %99s", buffer);
-		strncpy(CommandLineIPAddressString,buffer,15);
-		CommandLineIPAddressString[15] = 0;
+		// CommandLineIPAddressString holds 15 letters and its end marker (MAX_IPADDRESS_LENGTH, in menu_data.cpp)
+		char address[15 + 1];
+		const CommandLineWordAfterAnswer asked = CommandLineWordAfter(command_line, "-ip", address, sizeof(address));
+
+		if (asked == kWordAfterFound)
+		{
+			memcpy(CommandLineIPAddressString, address, strlen(address) + 1);
+		}
+		else if (asked == kWordAfterNothing)
+		{
+			LogString("command line: -ip is ignored: no address follows it");
+		}
+		else if (asked == kWordAfterTooLong)
+		{
+			LogString("command line: -ip is ignored: what follows it is longer than an address can be");
+		}
 	}
 
 	#if PLAY_INTRO//(MARINE_DEMO||ALIEN_DEMO||PREDATOR_DEMO)
@@ -748,6 +771,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLin
 			bool const networkGame = AvP.Network != I_No_Network;
 			bool const loadingASave = LoadGameRequest != SAVELOAD_REQUEST_NONE;
 			const LevelSwitchAnswer answer = LevelSwitch_Read(command_line, networkGame, loadingASave, named, sizeof(named));
+
+			PlayingLevelFromSwitch = (answer == kLevelSwitchUseIt);
 
 			if (answer == kLevelSwitchUseIt)
 			{

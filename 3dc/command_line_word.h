@@ -87,6 +87,38 @@ inline bool CommandLineWordIs(const char *start, size_t length, const char *word
 	return start && word && strlen(word) == length && memcmp(start, word, length) == 0;
 }
 
+// Finds a switch on the command line and gives back where its word starts, or 0 if it isn't there. Only the first time it's there
+// counts. A switch whose name ends in '=' has its value straight after it, as -shadowlights=12 does, so its word only has to start with
+// the name. Any other switch's word has to be the name itself.
+inline const char *CommandLineFindSwitch(const char *commandLine, const char *name)
+{
+	if (!name || !*name)
+	{
+		return 0;
+	}
+
+	size_t const nameLength = strlen(name);
+	bool const takesAValue = name[nameLength - 1] == '=';
+
+	const char *at = commandLine;
+	const char *start = 0;
+	size_t length = 0;
+
+	while (CommandLineNextWord(&at, &start, &length))
+	{
+		// strncmp stops at the line's end marker, so it never reads past the line. A switch's name has no spaces or tabs in it, so a
+		// name that matches is always inside this one word.
+		bool const found = takesAValue ? strncmp(start, name, nameLength) == 0 : CommandLineWordIs(start, length, name);
+
+		if (found)
+		{
+			return start;
+		}
+	}
+
+	return 0;
+}
+
 // What CommandLineWordAfter found
 enum CommandLineWordAfterAnswer
 {

@@ -173,6 +173,36 @@
 					"to": ""
 				}
 			]
+		},
+		{
+			"name": "a plain switch is found at the start of a longer word",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "CommandLineWordIs(start, length, name)",
+					"to": "strncmp(start, name, nameLength) == 0"
+				}
+			]
+		},
+		{
+			"name": "a switch with a number has to be the whole word, so it's never found",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "takesAValue ? strncmp(start, name, nameLength) == 0 : ",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "every switch is taken to have a number after it",
+			"changes": [
+				{
+					"file": "3dc/command_line_word.h",
+					"from": "bool const takesAValue = name[nameLength - 1] == '=';",
+					"to": "bool const takesAValue = true;"
+				}
+			]
 		}
 	]
 }

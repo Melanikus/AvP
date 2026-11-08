@@ -167,7 +167,7 @@ static void TestTheGamesFiles()
 	Check(Has(Between(cheats, guard, "\"GOD\""), guard), "and GOD");
 
 	// The flag stops saving, statistics, the films after a level and the next level's unlock. A beta mustn't set it.
-	Check(TimesIn(winmain, "DebuggingCommandsActive = 1;") == 1 && Has(winmain, "else if (strstr(command_line, \"-debug\"))\n\t{\n\t\tDebuggingCommandsActive = 1;"),
+	Check(TimesIn(winmain, "DebuggingCommandsActive = 1;") == 1 && Has(winmain, "else if (CommandLineHasWord(command_line, \"-debug\"))\n\t{\n\t\tDebuggingCommandsActive = 1;"),
 		"the flag that counts as cheating is still only set by -debug");
 	Check(!Has(commands, "DebuggingCommandsActive = ") && !Has(variables, "DebuggingCommandsActive = ") && !Has(cheats, "DebuggingCommandsActive = ")
 		&& !Has(identity, "DebuggingCommandsActive"), "and nothing a beta runs sets it");

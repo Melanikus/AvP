@@ -228,6 +228,76 @@
 					"to": "if (int const notRead = 0)"
 				}
 			]
+		},
+		{
+			"name": "SOURCE: -n's level is never marked, so the game saves on it",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "PlayingLevelFromSwitch = (answer == kLevelSwitchUseIt);",
+					"to": "PlayingLevelFromSwitch = false;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -server is found inside a longer word, such as a level's name",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (CommandLineHasWord(command_line, \"-server\"))",
+					"to": "if (strstr(command_line, \"-server\"))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a developer switch is found inside a longer word",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "if (!CommandLineFindSwitch(command_line, name))",
+					"to": "if (!strstr(command_line, name))"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -ip takes a word longer than the address it's copied into",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "char address[15 + 1];",
+					"to": "char address[100];"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: -staticcomparedrop on its own compares nothing",
+			"changes": [
+				{
+					"file": "3dc/avp/win95/winmain.cpp",
+					"from": "\t\t\tStaticSurfaceCompare = 1;\n\t\t}\n\t\textern int KeptPrismsOff;",
+					"to": "\t\t}\n\t\textern int KeptPrismsOff;"
+				}
+			]
+		},
+		{
+			"name": "SOURCE: the game saves on -n's level",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif (PlayingLevelFromSwitch)\n\t{\n\t\tNewOnScreenMessage(GetTextString(TEXTSTRING_SAVEGAME_NOTALLOWED));\n\t\tLogString(\"save: not saved, because this level is the one -n named, and a save would name the level the menus chose instead\");\n\t\treturn FALSE;\n\t}\n",
+					"to": ""
+				}
+			]
+		},
+		{
+			"name": "SOURCE: a load on -n's level goes onto that level",
+			"changes": [
+				{
+					"file": "3dc/avp/savegame.cpp",
+					"from": "\tif (PlayingLevelFromSwitch)\n\t{\n\t\tLogString(\"save: the save's own level is loaded first, because this level is the one -n named\");\n\t\treturn FALSE;\n\t}\n",
+					"to": ""
+				}
+			]
 		}
 	]
 }

@@ -6,8 +6,11 @@
 // - in a network game. Every machine there has to be on the level the host chose. The messages that come over the network name things
 //   on the host's level, so a machine on another level would read them against the wrong map. The first beta tester had -n in their
 //   launch options, chose Derelict on the co-op page, and was taken to Colony, with nothing to say so.
-// - while a saved game is being loaded. A save goes back onto the level it was saved on, which the menus have already chosen. (A save
-//   says only which level of a campaign it is, so the game couldn't tell it had been put onto another map. See SAVE-LEVEL-1.)
+// - while a saved game is being loaded. A save goes back onto the level it was saved on, which the menus have already chosen.
+//
+// A save says only which level of a campaign it is, never which map it was made on (SAVE-LEVEL-1). The level -n names isn't the
+// campaign's level, so while it's played the game doesn't save (a save made then would later go onto the campaign's map), and a load
+// during it loads the save's own level first. savegame.cpp does both, from PlayingLevelFromSwitch below.
 //
 // The name comes from outside the game (Tao 3), and the game makes a file's path from it (avp_rifs/<name>.rif), so it has to keep to
 // the rule for a custom map's name in 3dc/custom_map_name.h: no '/', '\', ':' or '.', which could reach outside the folder, no names
@@ -21,6 +24,9 @@
 
 #include "command_line_word.h"
 #include "custom_map_name.h"
+
+// Whether the level being played is one -n named, in place of the level the menus chose. winmain.cpp sets it as each level starts.
+extern bool PlayingLevelFromSwitch;
 
 // What LevelSwitch_Read decided
 enum LevelSwitchAnswer
