@@ -36,6 +36,11 @@ bool Save_NumberIsInRange(int number, int lowest, int highest);
 // Puts a saved dynamics block over an object's own, keeping out what a save must not set. live can be empty, and then nothing happens.
 void Save_RestoreDynamics(struct dynamicsblock *live, const struct dynamicsblock *saved);
 
+// A target a loader found by a name from the save: kept only if it has a place in the world (its dynamics), which the NPC or the disc
+// reads every frame it has a target. The name can be anything in the level's, such as a placed sound's, which has none. Nothing goes in,
+// nothing comes out; a target with no place is counted as refused.
+struct strategyblock *Save_TargetWithAPlace(struct strategyblock *found);
+
 // WHAT WAS REFUSED: a game the player really saved has to load exactly as it did, so on a real save, every check has to pass. These count the ones that don't, for one line in the log at the end of each load, and
 // that line is how a test with real saves shows that a check is too strict. check is a fixed piece of text naming it. A block the wrong size isn't counted: that's the game's own test, as old as the game.
 void Save_StartCountingRefusals();
