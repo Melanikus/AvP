@@ -5,6 +5,8 @@
 //   in a network game a placed NPC can still be found by the name it has in the level: see npc_level_names.h
 //   a level with no block left to carry something over goes on
 // Modified 2026-11-08 by Melanikus for the AvP port:
+//   the list of placed NPCs' names is emptied whenever every strategy block is destroyed, so after a restart in a network game a switch finds the
+//   NPC it's aimed at again. It used to be emptied only when the program started (#126)
 //   a new name's number passes over any number something alive still has, so when the count goes round no two live things share an id
 //   (see sb_name_numbers.h, #139)
 #include "3dc.h"
@@ -350,7 +352,7 @@ void NameFromTheLevel(STRATEGYBLOCK *sbPtr, const char *levelName)
 
 	if (!NpcLevelNames_Add(&TheNpcLevelNames, levelName, sbPtr->SBname))
 	{
-		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again.");
+		LogString("A level has more placed NPCs than the list of their names holds, so a switch aimed at one of the others won't find it. This isn't logged again until the level starts again.");
 	}
 }
 
@@ -782,6 +784,11 @@ void DestroyAllStrategyBlocks(void)
 			DeallocateStrategyBlock(&FreeStBlockData[i]);
 		}
 	}
+
+	// Every NPC the list of level names leads to is gone now. A level's end and a restart both come here, and a restart makes the NPCs again
+	// with new names. A pair left from before would be found first (NpcLevelNames_NetworkNameFor), and send a switch to a name nothing has
+	// any more: in a co-op game, the facehugger a switch wakes would never wake (#126).
+	NpcLevelNames_Clear(&TheNpcLevelNames);
 
 }
 
