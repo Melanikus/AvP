@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <!-- Modified 2026-11-03 by Melanikus for the AvP port: derived from ../VS2010/binkdec_dynamic.vcxproj (keeps its BK/SM-P settings: NDEBUG and ASLR for Release, the .def exports); toolset v145 (VS 2026), Windows SDK 10.0, output into the solution's $(Platform)\$(Configuration)\ folder -->
-<!-- Modified 2026-11-08 by Melanikus for the AvP port: the C runtime is built into the DLL (/MT, /MTd), as it is into the game (card STATIC-1) -->
+<!-- Modified 2026-11-08 by Melanikus for the AvP port: the C runtime comes from Microsoft's DLLs (/MD, /MDd), written out rather than left to the default, as the game's does (card STATIC-UNDO-1, #125) -->
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -60,9 +60,9 @@
       <SmallerTypeCheck>false</SmallerTypeCheck>
       <RuntimeTypeInfo>true</RuntimeTypeInfo>
       <SDLCheck>true</SDLCheck>
-      <!-- /MTd: the C runtime is built into this DLL, as it is into the game, so nothing has to be installed for it. The game and this DLL
-           each keep their own memory: the game passes its own buffers in, and the decoder frees what it made when it's closed. -->
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <!-- /MDd: the C runtime comes from Microsoft's own debug DLLs, as the game's does. The game and this DLL each keep their own memory:
+           the game passes its own buffers in, and the decoder frees what it made when it's closed. -->
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -85,9 +85,9 @@
       <SDLCheck>true</SDLCheck>
       <!-- /Zi: the compiler writes what the .pdb needs. It changes nothing in the code it makes. -->
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <!-- /MT: the C runtime is built into this DLL, as it is into the game, so nothing has to be installed for it. The game and this DLL
-           each keep their own memory: the game passes its own buffers in, and the decoder frees what it made when it's closed. -->
-      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <!-- /MD: the C runtime comes from Microsoft's own DLLs, as the game's does. The game and this DLL each keep their own memory: the game
+           passes its own buffers in, and the decoder frees what it made when it's closed. -->
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     </ClCompile>
     <Link>
       <!-- Symbols: a .pdb and a .map beside the library, so the place of a crash can be named. They stay with the build and are
