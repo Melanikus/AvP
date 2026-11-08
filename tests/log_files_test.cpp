@@ -206,13 +206,42 @@ static void SomewhereInThisProgram()
 {
 }
 
+// This program's own file name, with no folder, as Windows gives it. It isn't always log_files_test.exe: the take-outs build the test
+// under a name of their own.
+static std::string ThisProgramsName()
+{
+	char path[MAX_PATH];
+	DWORD const length = ::GetModuleFileNameA(NULL, path, sizeof(path));
+
+	if (length == 0 || length >= sizeof(path))
+	{
+		return "";
+	}
+
+	char const *name = path;
+
+	for (char const *c = path; *c; c++)
+	{
+		if (*c == '\\' || *c == '/')
+		{
+			name = c + 1;
+		}
+	}
+
+	return name;
+}
+
 static void TestCrashLines()
 {
 	printf("What a crash writes:\n");
 
+	std::string const name = ThisProgramsName();
+	std::string const inThisProgram = name + "+";
+	Check(!name.empty(), "this program knows its own file name");
+
 	char place[MAX_PATH + 32];
 	LogFiles_DescribePlace((const void *)&SomewhereInThisProgram, place, sizeof(place));
-	Check(strncmp(place, "log_files_test.exe+", 19) == 0, "an address in this program is its file name and a distance into it");
+	Check(std::string(place).compare(0, inThisProgram.size(), inThisProgram) == 0, "an address in this program is its file name and a distance into it");
 	Check(strchr(place, '\\') == NULL && strchr(place, '/') == NULL, "with no folder, which would hold the player's Windows user name");
 
 	LogFiles_DescribePlace((const void *)8, place, sizeof(place));
@@ -228,13 +257,14 @@ static void TestCrashLines()
 	char words[8192];
 	LogFiles_DescribeCrash(0xC0000005, (const void *)&SomewhereInThisProgram, places, 40, words, sizeof(words));
 	std::string const text = words;
-	Check(text.compare(0, 37, "crash: code C0000005 at log_files_tes") == 0, "the first line names the kind of crash and where it was");
-	Check(Has(text, "\r\ncrash: on the stack: log_files_test.exe+"), "the second line has the places on the stack");
+	std::string const firstLine = "crash: code C0000005 at " + inThisProgram;
+	Check(text.compare(0, firstLine.size(), firstLine) == 0, "the first line names the kind of crash and where it was");
+	Check(Has(text, ("\r\ncrash: on the stack: " + inThisProgram).c_str()), "the second line has the places on the stack");
 	Check(text.size() >= 2 && text.compare(text.size() - 2, 2, "\r\n") == 0, "and the lines end properly");
 
 	int named = 0;
 
-	for (size_t at = text.find("log_files_test.exe+"); at != std::string::npos; at = text.find("log_files_test.exe+", at + 1))
+	for (size_t at = text.find(inThisProgram); at != std::string::npos; at = text.find(inThisProgram, at + 1))
 	{
 		named++;
 	}
@@ -486,7 +516,7 @@ static void TestGatheringOnThisMachine()
 	Check(fromNames == "by <user> on <computer>" || (strlen(user) < kLogFilesNamesGoEverywhereFrom && fromNames.find(computer) == std::string::npos), "the user name and the computer name are found and left out");
 
 	std::string const fromProgram = LogFiles_LeaveOutThePlayer(std::string(program), p);
-	Check(fromProgram == "<game folder>\\log_files_test.exe", "the game's own folder is found from where the program is");
+	Check(fromProgram == "<game folder>\\" + ThisProgramsName(), "the game's own folder is found from where the program is");
 
 	std::string const header = BuildIdentity_Lines();
 	Check(LogFiles_LeaveOutThePlayer(header, p) == header, "the lines at the top of the log come through whole");
