@@ -1,0 +1,48 @@
+{
+	"copy": [
+		"3dc",
+		"tests"
+	],
+	"rows": [
+		{
+			"name": "a coordinate that is not a real number gives an arrow anyway",
+			"changes": [
+				{
+					"file": "3dc/surface_tangent.cpp",
+					"from": "if (!(length >= 0.000001 && length <= 1.0e30))",
+					"to": "if (length < 0.000001)"
+				}
+			]
+		},
+		{
+			"name": "U is worked out the way V is",
+			"changes": [
+				{
+					"file": "3dc/surface_tangent.cpp",
+					"from": "alongU[axis] = (side1[axis] * v2 - side2[axis] * v1) / area;",
+					"to": "alongU[axis] = (side2[axis] * u1 - side1[axis] * u2) / area;"
+				}
+			]
+		},
+		{
+			"name": "the arrow is not made a unit long",
+			"changes": [
+				{
+					"file": "3dc/surface_tangent.cpp",
+					"from": "tangent->x = (float)(alongU[0] / length);",
+					"to": "tangent->x = (float)(alongU[0]);"
+				}
+			]
+		},
+		{
+			"name": "V always comes back on the same side",
+			"changes": [
+				{
+					"file": "3dc/surface_tangent.cpp",
+					"from": "tangent->flip = (crossX * alongV[0] + crossY * alongV[1] + crossZ * alongV[2] < 0.0) ? -1.0f : 1.0f;",
+					"to": "tangent->flip = 1.0f;"
+				}
+			]
+		}
+	]
+}
