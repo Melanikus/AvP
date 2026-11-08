@@ -39,6 +39,10 @@
 #include "alien_ways_map.h"
 #include "alien_ways_lookahead.h"
 
+#include <vector>
+
+class NpcGrid;
+
 // Who an alien is, in two numbers the game picks. The game uses where the alien is kept and its name, so a new alien kept where a dead one was
 // is never taken for it.
 struct AlienWaysWho
@@ -57,6 +61,16 @@ struct AlienWaysRange
 int const kAlienWaysFloorPrice = 10;              // the floor costs 10 times as much as a wall or a ceiling. Step 2c's knee.
 size_t const kAlienWaysMostFollowers = 64;        // aliens with a way at once. One more is steered by the game's own code.
 int const kAlienWaysLooksPerFrame = 500;          // polygons all the searches may look at in one frame, between them
+
+// Modified 2026-11-08 by Melanikus for the AvP port: the same for the grid (npc_grid.h, -alienwaysgrid; #145, for #109).
+// Cells all the searches may look at in one frame, between them, and the most one search may look at in all before it gives up. A cell is
+// a lot smaller than a polygon, so there are many more of them. Primary's first guesses, for the first film to measure (each search's line
+// in the log says how many cells it looked at, in how many frames and how many ms):
+// - a look is about 1 microsecond in C++, so 5,000 a frame is about 5 ms;
+// - a search holds about 60 bytes for each cell it sees, a few for each one it looks at, so 200,000 looks can hold about 35 MB while it runs,
+//   on top of the grid. A search that would look at more stops there, and that alien's next search goes to the polygon map.
+int const kAlienWaysGridLooksPerFrame = 5000;
+int const kAlienWaysGridMostLooks = 200000;
 int const kAlienWaysNearEnough = 2000;            // mm: how far an alien, or its goal, can be from a polygon and still start on it. An alien
                                                   // starts on the nearest polygon of the kind it's standing on, by its down, if there's one that near.
 int const kAlienWaysReached = 600;                // mm across the surface the alien is on: a point that near has been reached...
@@ -153,6 +167,9 @@ struct AlienWaysReport
 	double cost;                    // what the way found cost, by the search's own prices, or -1
 	int arrivalDegrees;             // for a way found: the way it comes into its goal from, seen from above, in degrees (0 is from +x, 90 from
 	                                // +z), so a film can tell whether a flanker came from another side; -1 if it can't be told
+	bool onGrid;                    // the search was the grid's (UseGrid): looks are cells, cost is -1, and polygons holds the cell of each
+	                                // point of the way instead
+	bool tooFar;                    // on the grid: it looked at kAlienWaysGridMostLooks cells without reaching the goal (outcome NoWay)
 };
 
 class AlienWaysGuide
@@ -160,8 +177,15 @@ class AlienWaysGuide
 public:
 	AlienWaysGuide();
 
-	// Forgets every alien, every way and the search. At a level's start and end.
+	// Forgets every alien, every way and the search. At a level's start and end. The grid too: UseGrid hands it again.
 	void Clear();
+
+	// Modified 2026-11-08 by Melanikus for the AvP port: searching the grid (#145, for #109).
+	// Which grid to search (npc_grid.h), or nothing for the polygon map. Asked once a frame, before Frame. While there's a grid, every search
+	// goes to it, finding the cells under the alien and its goal itself, inside kAlienWaysGridLooksPerFrame cells a frame; the map is still
+	// needed, ready, for its doors and its joins, which the claims use. A search running when the grid changes is dropped, and its alien asks
+	// again.
+	void UseGrid(NpcGrid *grid);
 
 	// Once a frame, before any alien moves, with how long the last frame took. Every alien that was guided last frame and wasn't steered since
 	// is let go and written into lapsed, up to mostLapsed of them, so the game can give each its usual gravity back. It gives back how many.
@@ -245,6 +269,8 @@ private:
 		bool ranked;                        // it has a place among the aliens coming for target (FLANKERS, above)...
 		AlienWaysWho target;
 		bool flanker;                       // ...and it's past the first kAlienWaysDirectAliens of them
+
+		bool mapNext;                       // its last search on the grid looked at too many cells, so its next goes to the map
 	};
 
 	int Find(const AlienWaysWho &who) const;
@@ -253,6 +279,8 @@ private:
 	void DropTheWay(Follower *follower);
 	void StartNext(AlienWaysMap *map);
 	void Finish(AlienWaysMap *map, AlienWaysSearch result);
+	AlienWaysSearch WorkOnGrid(int looksAllowed);
+	const std::vector<uint8_t> *ShutForTheGrid(const AlienWaysMap &map);
 	void NoNewWay(Follower *follower, AlienWaysXYZ goal);
 	void AddReport(const AlienWaysReport &line);
 
@@ -268,6 +296,15 @@ private:
 	long long searchAskedAt, searchMicroseconds;
 	int searchFrames;
 	bool searchFlanker;                 // the search running is a flanker's
+
+	// The grid (UseGrid), whether the search running is on it, whether it gave up for looking at too many cells, the doors shut when it
+	// started, a byte for each map polygon (ShutForTheGrid: it has to stay as it is until the search ends), and a found way's map polygons,
+	// each once in a row, for its claims
+	NpcGrid *grid;
+	bool searchOnGrid;
+	bool searchTooFar;
+	std::vector<uint8_t> gridShut;
+	std::vector<int> gridWayPolygons;
 
 	AlienWaysReport report[kAlienWaysMostFollowers];
 	size_t reportCount;

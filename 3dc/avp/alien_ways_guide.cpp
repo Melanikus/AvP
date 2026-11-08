@@ -1,7 +1,9 @@
 // See alien_ways_guide.h. Written 2026-11-08 by Melanikus for the AvP port.
 // Modified 2026-11-08 by Melanikus for the AvP port:
 //   Drive keeps an alien going along its way on a frame its state didn't ask, without counting as asking (#109)
+//   the searches go to the grid while the game hands one over (UseGrid; #145, for #109)
 #include "alien_ways_guide.h"
+#include "npc_grid.h"
 
 #include <float.h>
 #include <math.h>
@@ -156,7 +158,7 @@ bool AlienWays_DoorLetsAnAlienThrough(AlienWaysDoorKind kind, bool locked, bool 
 }
 
 AlienWaysGuide::AlienWaysGuide()
-	: aimAheadMm(0)
+	: grid(nullptr), searchOnGrid(false), searchTooFar(false), aimAheadMm(0)
 {
 	Clear();
 }
@@ -173,6 +175,9 @@ void AlienWaysGuide::Clear()
 	searchAskedAt = searchMicroseconds = 0;
 	searchFrames = 0;
 	searchFlanker = false;
+	grid = nullptr;
+	searchOnGrid = false;
+	searchTooFar = false;
 	reportCount = 0;
 	missedCount = 0;
 	claims.Clear();
@@ -188,6 +193,7 @@ void AlienWaysGuide::Clear()
 		followers[f].count = 0;
 		followers[f].ranked = false;
 		followers[f].flanker = false;
+		followers[f].mapNext = false;
 	}
 }
 
@@ -224,6 +230,7 @@ int AlienWaysGuide::Take(const AlienWaysWho &who)
 			follower.fresh = false;
 			follower.ranked = false;
 			follower.flanker = false;
+			follower.mapNext = false;
 			return static_cast<int>(f);
 		}
 	}
@@ -392,8 +399,8 @@ size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, Al
 		claimsOn = claims.Reset(map->Polygons());
 	}
 
-	// The searches, one at a time, first asked first served, inside the frame's allowance
-	int left = std::max(0, looksAllowed);
+	// The searches, one at a time, first asked first served, inside the frame's allowance: in cells on the grid, in polygons on the map
+	int left = std::max(0, grid ? kAlienWaysGridLooksPerFrame : looksAllowed);
 
 	while (left > 0)
 	{
@@ -407,14 +414,15 @@ size_t AlienWaysGuide::Frame(AlienWaysMap *map, int stepMs, int looksAllowed, Al
 			}
 		}
 
-		int const before = map->LastSearchLooks();
+		int const before = searchOnGrid ? static_cast<int>(grid->LastSearchLooks()) : map->LastSearchLooks();
 		auto const started = std::chrono::steady_clock::now();
-		const AlienWaysSearch result = map->Work(left);
+		const AlienWaysSearch result = searchOnGrid ? WorkOnGrid(left) : map->Work(std::min(left, std::max(0, looksAllowed)));
 		searchMicroseconds += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started).count();
 		searchFrames++;
 
 		// Work never looks at more than it's allowed. At least 1 comes off, so this loop always ends.
-		left -= std::max(1, map->LastSearchLooks() - before);
+		int const after = searchOnGrid ? static_cast<int>(grid->LastSearchLooks()) : map->LastSearchLooks();
+		left -= std::max(1, after - before);
 
 		if (result == kAlienWaysSearching)
 		{
@@ -495,7 +503,13 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		line.fromKind = from >= 0 ? static_cast<int>(map->KindOf(from)) : -1;
 		line.toKind = to >= 0 ? static_cast<int>(map->KindOf(to)) : -1;
 
-		if (from < 0 || to < 0)
+		// On the grid, unless its last search there looked at too many cells: then this one goes to the map, as with no grid at all
+		// (Primary's fallback). On the grid the polygons above only name, in the log, what the alien and its goal are on: the grid finds
+		// the cells under them itself, within kNpcGridReach, and says so if it can't.
+		bool const onGrid = grid && !follower.mapNext;
+		follower.mapNext = false;
+
+		if (!onGrid && (from < 0 || to < 0))
 		{
 			line.outcome = kAlienWaysOutcomeNoPolygon;
 			AddReport(line);
@@ -528,8 +542,21 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		}
 
 		bool const flanker = follower.ranked && follower.flanker;
-		const char *const why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
-			flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
+		const char *why = nullptr;
+
+		if (onGrid)
+		{
+			why = grid->StartSearch(follower.last.at, follower.last.goal, kNpcGridAlien, kAlienWaysFloorPrice, kAlienWaysGridMostLooks,
+				claimsOn ? &claims : nullptr, next, ShutForTheGrid(*map),
+				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
+		}
+		else
+		{
+			why = map->StartSearch(from, follower.last.at, to, follower.last.goal, kAlienWaysFloorPrice, claimsOn ? &claims : nullptr, next,
+				flanker ? kAlienWaysFlankerClaimStep : kAlienWaysClaimPriceStep, flanker ? kAlienWaysFlankerMostPriceFactor : kAlienWaysClaimMostPriceFactor);
+		}
+
+		line.onGrid = onGrid;
 
 		if (why)
 		{
@@ -549,7 +576,55 @@ void AlienWaysGuide::StartNext(AlienWaysMap *map)
 		searchMicroseconds = 0;
 		searchFrames = 0;
 		searchFlanker = flanker;
+		searchOnGrid = onGrid;
+		searchTooFar = false;
 	}
+}
+
+void AlienWaysGuide::UseGrid(NpcGrid *to)
+{
+	if (to != grid && searching >= 0)
+	{
+		followers[searching].queued = true;
+		searching = -1;
+	}
+
+	grid = to;
+}
+
+// One go at the grid's search, inside the frame's allowance, said as the map's search says it. Looking at too many cells counts as no way,
+// and the line says which it was.
+AlienWaysSearch AlienWaysGuide::WorkOnGrid(int looksAllowed)
+{
+	NpcGridSearch const result = grid->Work(static_cast<size_t>(std::max(0, looksAllowed)));
+	searchTooFar = result == kNpcGridTooFar;
+
+	if (result == kNpcGridSearching)
+	{
+		return kAlienWaysSearching;
+	}
+
+	return result == kNpcGridFound ? kAlienWaysFound : kAlienWaysNoWay;
+}
+
+// The doors shut now, as the grid's search takes them: a byte for each polygon of the map, not 0 where that polygon is part of a door that's
+// shut. The map keeps whether a door is shut by the door's number (Secondary's catch), so each polygon's door is looked up. Made when a search
+// starts, and kept untouched until the next one starts, as the grid needs. Nothing on a level with no doors.
+const std::vector<uint8_t> *AlienWaysGuide::ShutForTheGrid(const AlienWaysMap &map)
+{
+	if (map.Doors() <= 0)
+	{
+		return nullptr;
+	}
+
+	gridShut.assign(map.Polygons(), 0);
+
+	for (size_t p = 0; p < gridShut.size(); p++)
+	{
+		gridShut[p] = map.DoorShut(map.DoorOf(static_cast<int>(p))) ? 1 : 0;
+	}
+
+	return &gridShut;
 }
 
 // The search has ended: the alien it was for gets the way, or is told there's none
@@ -566,21 +641,33 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	line.frames = searchFrames;
 	line.waitedMs = now - searchAskedAt;
 	line.microseconds = searchMicroseconds;
-	line.looks = map->LastSearchLooks();
+	line.looks = searchOnGrid ? static_cast<int>(grid->LastSearchLooks()) : map->LastSearchLooks();
 	line.flanker = searchFlanker;
-	line.cost = map->LastSearchCost();
+	line.cost = searchOnGrid ? -1.0 : map->LastSearchCost();
 	line.arrivalDegrees = -1;
+	line.onGrid = searchOnGrid;
+	line.tooFar = searchOnGrid && searchTooFar;
 	searching = -1;
 
-	if (result != kAlienWaysFound || map->Way().size() < 2)
+	std::vector<AlienWaysPoint> const &way = searchOnGrid ? grid->Way() : map->Way();
+
+	if (result != kAlienWaysFound || way.size() < 2)
 	{
 		line.outcome = kAlienWaysOutcomeNoWay;
 		AddReport(line);
+
+		// It looked at too many cells: the same alien is searched for again straight away, on the map (Primary's fallback)
+		if (line.tooFar)
+		{
+			follower.mapNext = true;
+			follower.queued = true;
+			return;
+		}
+
 		NoNewWay(&follower, searchGoal);
 		return;
 	}
 
-	std::vector<AlienWaysPoint> const &way = map->Way();
 	size_t const count = std::min(way.size(), kAlienWaysMostWayPoints);
 
 	// Where it comes into its goal from, seen from above: from the goal towards the last point of the way that isn't straight above or below it
@@ -608,16 +695,41 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	}
 
 	line.points = static_cast<int>(count);
-	line.cutShort = map->WayCutShort();
+	line.cutShort = searchOnGrid ? grid->WayCutShort() : map->WayCutShort();
 
-	// The polygons the way is on, each once in a row: a wall's climb, along and down are three points on one polygon
-	std::vector<int> const &onPolygons = map->WayPolygons();
-
-	for (size_t p = 0; p < onPolygons.size() && p < count; p++)
+	// The polygons the way is on, each once in a row: a wall's climb, along and down are three points on one polygon. On the grid, the map
+	// polygon under every cell of the way, each once in a row, for the claims; and for the line, the cell of each point (Third's reader).
+	if (searchOnGrid)
 	{
-		if (line.polygonCount == 0 || line.polygons[line.polygonCount - 1] != onPolygons[p])
+		gridWayPolygons.clear();
+
+		for (uint32_t const cell : grid->WayPath())
 		{
-			line.polygons[line.polygonCount++] = onPolygons[p];
+			int const polygon = grid->PolygonOf(cell);
+
+			if (polygon >= 0 && (gridWayPolygons.empty() || gridWayPolygons.back() != polygon))
+			{
+				gridWayPolygons.push_back(polygon);
+			}
+		}
+
+		std::vector<uint32_t> const &cells = grid->WayCells();
+
+		for (size_t p = 0; p < cells.size() && p < count; p++)
+		{
+			line.polygons[line.polygonCount++] = static_cast<int>(cells[p]);
+		}
+	}
+	else
+	{
+		std::vector<int> const &onPolygons = map->WayPolygons();
+
+		for (size_t p = 0; p < onPolygons.size() && p < count; p++)
+		{
+			if (line.polygonCount == 0 || line.polygons[line.polygonCount - 1] != onPolygons[p])
+			{
+				line.polygons[line.polygonCount++] = onPolygons[p];
+			}
 		}
 	}
 
@@ -651,7 +763,7 @@ void AlienWaysGuide::Finish(AlienWaysMap *map, AlienWaysSearch result)
 	// The way's claims, in place of the old way's, so the other aliens' searches pay more where it goes
 	if (claimsOn)
 	{
-		std::vector<int> const &onPolygons = map->WayPolygons();
+		std::vector<int> const &onPolygons = searchOnGrid ? gridWayPolygons : map->WayPolygons();
 		std::vector<int> const &firstJoins = map->FirstJoins();
 		std::vector<int> const &joinOthers = map->JoinOthers();
 		claims.Add(static_cast<int>(line.follower), onPolygons.data(), onPolygons.size(), firstJoins.data(), firstJoins.size(), joinOthers.data(), joinOthers.size());

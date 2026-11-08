@@ -298,6 +298,10 @@ public:
 	// Whether a door is shut now, as the game last said. False for a number that isn't one of the map's doors.
 	bool DoorShut(int door) const;
 
+	// Modified 2026-11-08 by Melanikus for the AvP port: which door a polygon is part of, for the grid's search (#145, for #109).
+	// The door a polygon of the map is part of, from 1, or 0 for none, and for a number that isn't one of the map's polygons.
+	int DoorOf(int polygon) const { return polygon >= 0 && static_cast<size_t>(polygon) < doorOf.size() ? doorOf[polygon] : 0; }
+
 	// Starts a search for a way from start, on polygon fromPolygon, to goal, on polygon toPolygon, with the floor at floorPrice times a wall's
 	// price. It gives back nothing if it started, or why not, in words. A search that's running is dropped.
 	// With claims, each polygon also costs claims->PriceFactor(polygon, searcher, claimStep, claimMost) times as much: more where other
