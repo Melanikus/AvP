@@ -95,16 +95,34 @@ static void TestWhatIsABeta()
 {
 	puts("Which builds are a beta:");
 
-	Check(BetaBuild_VersionIsABeta("betarelease20261107"), "betarelease and eight digits is a beta");
+	// What tools/check-release.ps1 lets through as a beta
+	Check(BetaBuild_VersionIsABeta("1.0.0-beta.0"), "a version's first beta is a beta");
+	Check(BetaBuild_VersionIsABeta("1.0.0-beta.1") && BetaBuild_VersionIsABeta("1.0.0-beta.10"), "and so are the ones after it");
+	Check(BetaBuild_VersionIsABeta("1.0.0-beta.9999"), "up to the last a version can have, with four digits");
+	Check(BetaBuild_VersionIsABeta("0.0.1-beta.0") && BetaBuild_VersionIsABeta("10.20.30-beta.7"), "of any version");
+	Check(BetaBuild_VersionIsABeta("123456.0.0-beta.0"), "even one with six digits in a number");
+
+	// What isn't
 	Check(!BetaBuild_VersionIsABeta("1.2.3"), "a numbered release isn't");
 	Check(!BetaBuild_VersionIsABeta("a test build, not a release"), "a pull request's test build isn't");
 	Check(!BetaBuild_VersionIsABeta("not known (not built by tools/build-and-package.ps1)"), "and a build made any other way isn't");
-	Check(!BetaBuild_VersionIsABeta("betarelease2026110"), "seven digits isn't");
-	Check(!BetaBuild_VersionIsABeta("betarelease202611070"), "and nine isn't");
-	Check(!BetaBuild_VersionIsABeta("betarelease2026110x"), "a letter among the digits isn't");
-	Check(!BetaBuild_VersionIsABeta("Betarelease20261107"), "nor a capital where there's none");
-	Check(!BetaBuild_VersionIsABeta("betarelease"), "the word with no day isn't");
-	Check(!BetaBuild_VersionIsABeta("beta"), "and a text shorter than the word stops at its end");
+	Check(!BetaBuild_VersionIsABeta("betarelease20261107"), "the old way of naming a beta, betarelease and its day, isn't any more");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta.01"), "a beta's number with a 0 in front isn't, or the same beta could be written two ways");
+	Check(!BetaBuild_VersionIsABeta("01.0.0-beta.0"), "and nor is a release number with one");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta."), "a beta with no number isn't");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta.10000"), "five digits in a beta's number isn't");
+	Check(!BetaBuild_VersionIsABeta("1234567.0.0-beta.0"), "and seven in a release number isn't");
+	Check(!BetaBuild_VersionIsABeta("v1.0.0-beta.0"), "a v in the version isn't, because only the tag has one");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta.0x") && !BetaBuild_VersionIsABeta("1.0.0-beta.0 ") && !BetaBuild_VersionIsABeta("1.0.0-beta.0\n"),
+		"anything after the number isn't");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta.1.2"), "nor is a second number after it");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-Beta.0"), "a capital where there's none isn't");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta0") && !BetaBuild_VersionIsABeta("1.0.0.beta.0"), "and nor is -beta. written any other way");
+	Check(!BetaBuild_VersionIsABeta("1,0,0-beta.0"), "the numbers need dots between them, not anything else");
+	Check(!BetaBuild_VersionIsABeta("1.0-beta.0") && !BetaBuild_VersionIsABeta("1.0.0.0-beta.0"), "and there have to be three of them, not two or four");
+	Check(!BetaBuild_VersionIsABeta("1..0-beta.0") && !BetaBuild_VersionIsABeta("-beta.0"), "and none of them can be missing");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-beta.-1"), "a beta's number can't be below 0");
+	Check(!BetaBuild_VersionIsABeta("1.0.0-be"), "a text that ends early stops at its end");
 	Check(!BetaBuild_VersionIsABeta(""), "an empty version isn't");
 	Check(!BetaBuild_VersionIsABeta(0), "and nor is no version at all");
 }

@@ -2,8 +2,9 @@
 Says whether this commit may be released. release.yml runs this before it builds anything, and a refusal stops the whole release.
 
 It refuses unless all of these are true:
-- The version is three plain numbers, such as 1.0.0, or a beta's name: betarelease and the day it's made, such as betarelease20261107, on
-  a day the calendar has. It comes from a person typing it into a box, so nothing about it is believed.
+- The version is three plain numbers, such as 1.0.0, or a beta of a version: its three numbers, then -beta. and the beta's number, such as
+  1.0.0-beta.0. It comes from a person typing it into a box, so nothing about it is believed, and each wrong way of writing it is refused
+  with its own reason.
 - RELEASE-BLOCKERS.md says nothing is in the way.
 - tests/assert_limits_allowed.txt marks no assert as not yet safe.
 - PLAYTEST.md, the notes testers read, has no line still marked [PENDING].
@@ -12,18 +13,27 @@ It refuses unless all of these are true:
 - Every required check passed on this exact commit. A check that was skipped, or never ran, counts as a failure.
 - No code scanning alert is open.
 - The version hasn't been used.
+- A beta's number is the next one: one more than the highest beta of that version, or 0 for its first. A number is never used twice,
+  gone back to or skipped (the user's ruling, 2026-11-08). The tags and releases on GitHub say which there are.
+- A beta's version hasn't been released yet: a beta comes before its version, never after.
 
 -WithoutGitHub leaves out everything that has to ask GitHub, for tests/release-test.ps1, which runs with no network. release.yml
-never uses it, and that test fails if it ever does.
+never uses it, and that test fails if it ever does. With it, -ExistingTags can stand in for the tags and releases GitHub would list,
+names with spaces between, so that test can try a beta's number. -ExistingTags is refused without -WithoutGitHub: a real release only
+ever counts what GitHub says.
 
-THE TAG: a version's tag is v and its numbers, such as v1.0.0. A beta's tag is its name, with no v. A beta is a pre-release. Once the
+THE TAG: a version's tag is v and the version, such as v1.0.0, and a beta's too, such as v1.0.0-beta.0. A beta is a pre-release. Once the
 version is checked, this writes both into the file GitHub gives a step for its outputs, when there is one, so that release.yml's last
 job, which runs no code from the repository, uses the same tag without working it out again.
+
+Before 2026-11-08 a beta was named betarelease and its day, such as betarelease20261107, which allowed one a day. That beta is still on
+the releases page under its name, and nothing here lets that name through again.
 #>
 param(
     [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Version,
     [string]$Repository = '',
-    [switch]$WithoutGitHub
+    [switch]$WithoutGitHub,
+    [string]$ExistingTags
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,30 +73,127 @@ function Stop-Release([string]$why)
     exit 1
 }
 
+if ($ExistingTags -and -not $WithoutGitHub)
+{
+    Stop-Release '-ExistingTags is only for tests/release-test.ps1, with -WithoutGitHub. A release counts the tags and releases GitHub has'
+}
+
 # --- The version. \z and not $, because $ would let a line break through at the end. [0-9] and not \d, because \d takes digits from
-# every alphabet there is. -cnotmatch, so a capital letter is something else. It becomes a tag and part of a file name, so anything else
+# every alphabet there is. -cmatch, so a capital letter is something else. It becomes a tag and part of a file name, so anything else
 # in it could mean something to whatever reads those.
-$isBeta = $Version -cmatch '^betarelease[0-9]{8}\z'
+#
+# Each number is 0, or digits that don't start with 0, so that one version can't be written two ways (1.0.0 and 01.0.0) and have its
+# betas counted twice. The three numbers have at most 6 digits each, and a beta's number at most 4. These two forms are written the same,
+# letter for letter, in release.yml and tools/build-and-package.ps1, and tests/release-test.ps1 checks they still are. 3dc/beta_build.h
+# reads a beta the same way in C++, for the game.
+$isBeta = $Version -cmatch '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})-beta\.(0|[1-9][0-9]{0,3})\z'
 
-if (-not $isBeta -and $Version -cnotmatch '^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}\z')
+if (-not $isBeta -and $Version -cnotmatch '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\z')
 {
-    Stop-Release "the version has to be three plain numbers, such as 1.0.0, or a beta's name, such as betarelease20261107"
-}
-
-# A beta's eight numbers are the day it's made, as year, month and day, so they have to be a day the calendar has: not the 32nd, not the
-# 13th month, and the 29th of February only in a leap year
-if ($isBeta)
-{
-    $day = [datetime]::MinValue
-
-    if (-not [datetime]::TryParseExact($Version.Substring('betarelease'.Length), 'yyyyMMdd', [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$day))
+    # Refused whatever it is. These only choose which reason to give, so that whoever typed it knows what to change.
+    if ($Version -cmatch '^[vV]')
     {
-        Stop-Release "a beta's name is betarelease and the day it's made, as year, month and day, and $($Version.Substring('betarelease'.Length)) isn't a day"
+        Stop-Release 'the version is written without a v in front, because the tag adds one: 1.0.0-beta.0 is tagged v1.0.0-beta.0'
     }
+
+    if ($Version -match '^betarelease')
+    {
+        Stop-Release 'betarelease and a day is the old way of naming a beta, which allowed only one a day. A beta is now its version, -beta. and the next number, such as 1.0.0-beta.0'
+    }
+
+    if ($Version -cmatch '^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?\z')
+    {
+        if ($Version -cmatch '(^|\.)0[0-9]')
+        {
+            Stop-Release 'a number in the version starts with 0, such as 01 or beta.01. Each is written with no 0 in front, so that one version or beta cannot be written two ways and counted twice'
+        }
+
+        Stop-Release "a number in the version is too long: each of the three has at most 6 digits, and a beta's number at most 4, so beta.9999 is a version's last"
+    }
+
+    if ($Version -cmatch '^[0-9]+\.[0-9]+\.[0-9]+-beta\.\z')
+    {
+        Stop-Release "the beta's number is missing after -beta.: a version's first beta is -beta.0"
+    }
+
+    Stop-Release 'the version has to be three plain numbers, such as 1.0.0, or a beta of a version: its numbers, -beta. and the beta''s number, such as 1.0.0-beta.0'
 }
+
+# The version the beta leads up to, and the beta's number. The form above has already made sure of what's on each side of the first -.
+$release = if ($isBeta) { $Version.Substring(0, $Version.IndexOf('-')) } else { $Version }
+$betaNumber = if ($isBeta) { [int]$Version.Substring($Version.LastIndexOf('.') + 1) } else { -1 }
 
 # Its tag, and whether it's a pre-release: see THE TAG at the top. They're only handed on at the end, once everything has passed.
-$tag = if ($isBeta) { $Version } else { "v$Version" }
+$tag = "v$Version"
+
+# --- Has this tag been used, and is a beta's number the next one? $names is every tag and release there is, with or without refs/tags/ in
+# front. Only this version's betas count towards a beta's number, and they're counted as numbers, so beta.10 comes after beta.9.
+function Stop-IfTheNumberIsTaken([string[]]$names)
+{
+    $names = @($names | ForEach-Object { $_ -creplace '^refs/tags/', '' })
+
+    if ($names -ccontains $tag)
+    {
+        Stop-Release "$tag has already been used"
+    }
+
+    if (-not $isBeta)
+    {
+        return
+    }
+
+    # A beta comes before the version it leads up to, never after it (PO, for the user, 2026-11-08)
+    if ($names -ccontains "v$release")
+    {
+        $parts = $release.Split('.')
+        Stop-Release "v$release is already released, so a beta of it would come after it. The next betas are of a newer version, such as $($parts[0]).$($parts[1]).$([int]$parts[2] + 1)-beta.0"
+    }
+
+    $start = "v$release-beta."
+    $highest = -1
+
+    foreach ($name in $names)
+    {
+        if (-not $name.StartsWith($start, [System.StringComparison]::Ordinal))
+        {
+            continue
+        }
+
+        # One that starts like a beta of this version but isn't written the way this script writes them can't be counted. It's refused,
+        # rather than guessed at, until someone finds out where it came from.
+        $number = $name.Substring($start.Length)
+
+        if ($number -cnotmatch '^(0|[1-9][0-9]{0,3})\z')
+        {
+            Stop-Release "$name is already there, and it isn't written the way a beta is, so the next beta of $release can't be worked out. Find out where it came from first"
+        }
+
+        if ([int]$number -gt $highest)
+        {
+            $highest = [int]$number
+        }
+    }
+
+    if ($highest -eq 9999)
+    {
+        Stop-Release "$release-beta.9999 was the last beta $release can have, so the next beta has to be of a new version"
+    }
+
+    if ($betaNumber -lt $highest)
+    {
+        Stop-Release "a beta's number never goes back: $release-beta.$highest is already there, so the next is $release-beta.$($highest + 1)"
+    }
+
+    if ($betaNumber -gt $highest + 1)
+    {
+        if ($highest -lt 0)
+        {
+            Stop-Release "a beta's number is never skipped: $release has no beta yet, so its first is $release-beta.0"
+        }
+
+        Stop-Release "a beta's number is never skipped: the last beta of $release is $release-beta.$highest, so the next is $release-beta.$($highest + 1)"
+    }
+}
 
 # --- What's still in the way. Anything at all under the heading counts, however it's written, except the one word that says there's
 # nothing. An empty list isn't taken to mean that, because a file cut short by a mistake would look the same.
@@ -184,6 +291,12 @@ foreach ($file in $shadowsAndShaders)
 
 if ($WithoutGitHub)
 {
+    # Only tests/release-test.ps1 gives these: see the top
+    if ($ExistingTags)
+    {
+        Stop-IfTheNumberIsTaken @($ExistingTags -split ' ' | Where-Object { $_ -ne '' })
+    }
+
     Write-Host 'Everything that can be checked without GitHub is in order.'
     exit 0
 }
@@ -248,17 +361,23 @@ if ($alerts.Count -gt 0)
     Stop-Release "$($alerts.Count) code scanning alerts are open"
 }
 
-$tags = @(gh api "repos/$repositoryName/git/matching-refs/tags/$tag" --jq '.[].ref')
+# Every tag starting v and this version, which is the version's own and all its betas', and every release. This job can't see a release
+# that's still a draft, and a draft has no tag until it's published: release.yml's last job, which can, refuses a tag a draft already has.
+$tags = @(gh api --paginate "repos/$repositoryName/git/matching-refs/tags/v$release" --jq '.[].ref')
 
 if ($LASTEXITCODE -ne 0)
 {
     Stop-Release 'GitHub would not say which tags there are'
 }
 
-if ($tags -ccontains "refs/tags/$tag")
+$releases = @(gh api --paginate "repos/$repositoryName/releases?per_page=100" --jq '.[].tag_name')
+
+if ($LASTEXITCODE -ne 0)
 {
-    Stop-Release "$tag has already been used"
+    Stop-Release 'GitHub would not give the list of releases'
 }
+
+Stop-IfTheNumberIsTaken ($tags + $releases)
 
 # For release.yml's last job: the tag, and whether it's a pre-release. Written without a byte-order mark, which GitHub would read as part of
 # the first name, whichever PowerShell runs this.

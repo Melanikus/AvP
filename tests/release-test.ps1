@@ -2,11 +2,13 @@
 Tests the release checks, with no network and nothing built. The Unit tests check runs this.
 
 Two parts:
-- tools/check-release.ps1, tools/check-no-hudson.ps1, tools/check-release-package.ps1 and tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each. Each one
+- tools/check-release.ps1, tools/check-no-hudson.ps1, tools/check-release-package.ps1 and tools/check-new-functions.ps1 are run for real, on made-up folders with something wrong in each,
+  and tools/check-virustotal.ps1 on made-up answers from VirusTotal. Each one
   has to refuse for the reason it's meant to, not just refuse: a later check could otherwise hide a missing one.
 - .github/workflows/release.yml can't run here, so it's read, to prove each check is there and comes before anything is made.
 
-What this can't prove: that GitHub will do what the workflow asks. The first real run is what proves that.
+What this can't prove: that GitHub will do what the workflow asks, or that VirusTotal answers the way the made-up answers here are written
+(from its API's documentation). The first real run is what proves those.
 
 -OnlyNewFunctions runs only the part about tools/check-new-functions.ps1. tests.yml runs that on Ubuntu, the machine the release runs that
 check on, so that its first real run there isn't a release.
@@ -276,35 +278,104 @@ $otherAlphabet = -join [char[]](0x0661, 0x002E, 0x0662, 0x002E, 0x0663)
 $emptyVersion = & $powershell -NoProfile -ExecutionPolicy Bypass -Command "& '$(Join-Path $repository 'tools/check-release.ps1')' -Version '' -Repository '$work' -WithoutGitHub; exit `$LASTEXITCODE" 2>&1 | ForEach-Object { "$_" }
 Check ($LASTEXITCODE -ne 0 -and ($emptyVersion -join ' ').Contains('REFUSED: the version has to be three plain numbers')) "an empty version is refused. It said: $emptyVersion"
 
-foreach ($bad in '1', '1.2', '1.2.3.4', 'v1.0.0', '1.0.0-rc1', ' 1.0.0', '1.0.0 ', "1.0.0`n", '1.0.0;x', '1..0', 'a.b.c', '../1.0.0', $tooManyDigits, $otherAlphabet)
+function Expect-VersionRefused([string]$version, [string]$reason, [string]$what)
 {
-    Expect-Refused 'check-release.ps1' @('-Version', $bad, '-Repository', $work, '-WithoutGitHub') 'the version has to be three plain numbers' "the version [$bad] is refused"
+    Expect-Refused 'check-release.ps1' @('-Version', $version, '-Repository', $work, '-WithoutGitHub') $reason "the version [$version] is refused $what"
 }
 
-foreach ($fine in '1.0.0', '0.0.1', '10.20.30')
+foreach ($bad in '1', '1.2', '1.2.3.4', '1.0.0-rc1', ' 1.0.0', '1.0.0 ', "1.0.0`n", '1.0.0;x', '1..0', 'a.b.c', '../1.0.0', $otherAlphabet)
+{
+    Expect-VersionRefused $bad 'the version has to be three plain numbers' 'for its shape'
+}
+
+foreach ($withAV in 'v1.0.0', 'V1.0.0')
+{
+    Expect-VersionRefused $withAV 'written without a v in front' 'because the tag adds the v'
+}
+
+foreach ($zeroInFront in '01.0.0', '1.00.0', '1.0.01', '00.0.0')
+{
+    Expect-VersionRefused $zeroInFront 'a number in the version starts with 0' 'because 01 would be a second way of writing 1'
+}
+
+Expect-VersionRefused $tooManyDigits 'a number in the version is too long' 'for its length'
+
+foreach ($fine in '1.0.0', '0.0.1', '0.0.0', '10.20.30', '123456.654321.100000')
 {
     Check ((Check-Release $fine).Code -eq 0) "the version $fine is taken"
 }
 
-# --- A beta's name: betarelease and the day it's made, as year, month and day. Anything else is refused, and each refusal says which rule.
-$otherDigits = 'betarelease' + (-join [char[]](0x0662, 0x0660, 0x0662, 0x0666, 0x0661, 0x0661, 0x0660, 0x0667))
-
-foreach ($bad in '20261107', '20261332', 'betarelease2026110', 'betarelease202611070', 'betarelease20261107x', 'betarelease20261107; x', 'betarelease20261107;x',
-    'BetaRelease20261107', 'BETARELEASE20261107', 'betaRelease20261107', ' betarelease20261107', 'betarelease20261107 ', "betarelease20261107`n",
-    'betarelease', 'beta20261107', 'betarelease-20261107', 'vbetarelease20261107', '../betarelease20261107', $otherDigits)
+# --- A beta: the version it leads up to, then -beta. and its number. Each wrong way of writing one is refused, and each refusal says which
+# rule it broke.
+foreach ($bad in '1.0.0-Beta.0', '1.0.0-BETA.0', '1.0.0-beta0', '1.0.0.beta.0', '1.0.0-beta.0x', '1.0.0-beta.0 ', "1.0.0-beta.0`n", '1.0.0-beta.0;x',
+    '1.0.0-beta.1.2', '1.0.0-beta.-1', '1.0.0-beta.+1', '1.0.0-beta', '1.0.0-', '-beta.0', '1.0-beta.0', '1.0.0.0-beta.0', ' 1.0.0-beta.0',
+    '../1.0.0-beta.0', '1.0.0-alpha.0', ('1.0.0-beta.' + [char]0x0661))
 {
-    Expect-Refused 'check-release.ps1' @('-Version', $bad, '-Repository', $work, '-WithoutGitHub') 'the version has to be three plain numbers' "the beta name [$bad] is refused for its shape"
+    Expect-VersionRefused $bad 'the version has to be three plain numbers' 'for its shape'
 }
 
-foreach ($notADay in 'betarelease20261332', 'betarelease20261301', 'betarelease20261100', 'betarelease20261131', 'betarelease20230229', 'betarelease00000101')
+Expect-VersionRefused 'v1.0.0-beta.0' 'written without a v in front' 'because the tag adds the v'
+Expect-VersionRefused '1.0.0-beta.' "the beta's number is missing after -beta." 'for the missing number'
+
+foreach ($zeroInFront in '1.0.0-beta.01', '1.0.0-beta.00', '01.0.0-beta.0')
 {
-    Expect-Refused 'check-release.ps1' @('-Version', $notADay, '-Repository', $work, '-WithoutGitHub') "isn't a day" "the beta name [$notADay] is refused, because its day isn't one"
+    Expect-VersionRefused $zeroInFront 'a number in the version starts with 0' 'because it would be a second way of writing the same beta'
 }
 
-foreach ($fine in 'betarelease20261107', 'betarelease20240229', 'betarelease20261231', 'betarelease20270101')
+foreach ($tooLong in '1.0.0-beta.10000', '1234567.0.0-beta.0')
 {
-    Check ((Check-Release $fine).Code -eq 0) "the beta name $fine is taken"
+    Expect-VersionRefused $tooLong 'a number in the version is too long' 'for its length'
 }
+
+# The old way of naming a beta, betarelease and its day, isn't taken any more, however it's written
+foreach ($oldName in 'betarelease20261107', 'BetaRelease20261107', 'betarelease20261332', 'betarelease')
+{
+    Expect-VersionRefused $oldName 'the old way of naming a beta' 'as the old way of naming a beta'
+}
+
+foreach ($fine in '1.0.0-beta.0', '1.0.0-beta.1', '1.0.0-beta.10', '1.0.0-beta.9999', '0.0.1-beta.0', '123456.654321.0-beta.7')
+{
+    Check ((Check-Release $fine).Code -eq 0) "the beta $fine is taken"
+}
+
+# --- A beta's number is the next one. -ExistingTags stands in for the tags and releases GitHub would list: see check-release.ps1's top.
+function Check-Beta([string]$version, [string]$tags) { return Run-Script 'check-release.ps1' @('-Version', $version, '-Repository', $work, '-WithoutGitHub', '-ExistingTags', $tags) }
+
+function Expect-BetaRefused([string]$version, [string]$tags, [string]$reason, [string]$what)
+{
+    Expect-Refused 'check-release.ps1' @('-Version', $version, '-Repository', $work, '-WithoutGitHub', '-ExistingTags', $tags) $reason "$version, with $tags there already, is refused $what"
+}
+
+$result = Check-Beta '1.0.0-beta.0' 'betarelease20261107 v0.9.0 v0.9.0-beta.4 v1.0.1-beta.2 v10.0.0-beta.7'
+Check ($result.Code -eq 0) "a version's first beta is 0: the old beta name and other versions' betas don't count. It said: $($result.Text)"
+$result = Check-Beta '1.0.0-beta.1' 'refs/tags/v1.0.0-beta.0'
+Check ($result.Code -eq 0) "the next is one more, read from a tag as GitHub writes one. It said: $($result.Text)"
+$result = Check-Beta '1.0.0-beta.11' 'v1.0.0-beta.9 v1.0.0-beta.10'
+Check ($result.Code -eq 0) "betas are counted as numbers, so beta.10 comes after beta.9. It said: $($result.Text)"
+$result = Check-Beta '1.0.0' 'v1.0.0-beta.0 v1.0.0-beta.1'
+Check ($result.Code -eq 0) "a version can be released after its betas. It said: $($result.Text)"
+
+Expect-BetaRefused '1.0.0-beta.1' 'v1.0.0-beta.0 v1.0.0-beta.1' 'v1.0.0-beta.1 has already been used' 'because it has been used'
+Expect-BetaRefused '1.0.0-beta.0' 'refs/tags/v1.0.0-beta.0' 'v1.0.0-beta.0 has already been used' 'when the tag that used it is written as GitHub writes one'
+Expect-BetaRefused '1.0.0-beta.1' 'betarelease20261107 v1.0.1-beta.0' 'has no beta yet, so its first is 1.0.0-beta.0' 'because a first beta that is not 0 skips one'
+Expect-BetaRefused '1.0.0-beta.3' 'v1.0.0-beta.0 v1.0.0-beta.1' 'the next is 1.0.0-beta.2' 'because it skips a number'
+Expect-BetaRefused '1.0.0-beta.10' 'v1.0.0-beta.10 v1.0.0-beta.9' 'v1.0.0-beta.10 has already been used' 'whichever order the list is in'
+Expect-BetaRefused '1.0.0-beta.0' 'v1.0.0-beta.1' 'never goes back' 'because a number below the highest goes back'
+Expect-BetaRefused '1.0.0-beta.9998' 'v1.0.0-beta.9999' 'was the last beta 1.0.0 can have' 'because a version has no more than 10,000 betas'
+Expect-BetaRefused '1.0.0' 'v1.0.0-beta.0 v1.0.0' 'v1.0.0 has already been used' 'because the version has been released'
+Expect-BetaRefused '1.0.0-beta.1' 'v1.0.0-beta.0 v1.0.0' 'v1.0.0 is already released, so a beta of it would come after it' 'because a beta never comes after its version'
+Expect-BetaRefused '1.0.0-beta.0' 'refs/tags/v1.0.0' 'v1.0.0 is already released' 'even when the version had no betas'
+$result = Check-Beta '1.0.1-beta.0' 'v1.0.0-beta.0 v1.0.0'
+Check ($result.Code -eq 0) "and the next version's betas start again at 0. It said: $($result.Text)"
+
+# A tag that starts like a beta of this version but isn't written as one can't be counted, so it isn't guessed at
+foreach ($stray in 'v1.0.0-beta.01', 'v1.0.0-beta.x', 'v1.0.0-beta.1.1', 'v1.0.0-beta.', 'v1.0.0-beta.10000')
+{
+    Expect-BetaRefused '1.0.0-beta.1' "v1.0.0-beta.0 $stray" "$stray is already there, and it isn't written the way a beta is" 'because a tag it cannot count is there'
+}
+
+# Only tests may hand in a list, and only with -WithoutGitHub: a real release counts what GitHub has
+Expect-Refused 'check-release.ps1' @('-Version', '1.0.0-beta.0', '-Repository', $work, '-ExistingTags', 'v0.9.0') '-ExistingTags is only for tests/release-test.ps1' 'a list of tags without -WithoutGitHub is refused'
 
 # --- The list of what's in the way
 function Write-Blockers([string]$text) { Write-File (Join-Path $work 'RELEASE-BLOCKERS.md') $text }
@@ -662,7 +733,117 @@ Check ((Run-AsAStep 'check-no-hudson.ps1' @('-Repository', $work)) -eq 1) 'and i
 
 Remove-Item -Force -LiteralPath $stepFile
 
-foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tests/release-test.ps1')
+# --- VirusTotal's answers, made up. tools/check-virustotal.ps1 never goes on the network, so each answer it can get is tried here as a file.
+# Each refusal has to give its own reason; a good answer has to give back exactly the ANSWER: line the scan job reads.
+Clear-Work
+$sha = 'ab' * 32
+$answerFile = Join-Path $work 'answer.json'
+$goodCounts = '"malicious": 0, "suspicious": 0, "undetected": 58, "harmless": 0, "timeout": 1, "confirmed-timeout": 0, "failure": 0, "type-unsupported": 12'
+$analysisId = 'OTFiMDcwMjVmYTM1MmQ2ZjA5YTM4NmU5ZTNlNjk4YmE6MTc2MjYwMDAwMA=='
+
+# Answers as VirusTotal writes them, with HASH, ID, COUNTS and STATUS put in by each test
+$lookupTemplate = '{ "data": { "type": "file", "id": "ID", "attributes": { "sha256": "HASH", "last_analysis_date": 1762600000, "last_analysis_stats": { COUNTS }, "names": ["AvP.zip"] } } }'
+$uploadTemplate = '{ "data": { "type": "analysis", "id": "ID", "links": { "self": "https://www.virustotal.com/api/v3/analyses/ID" } } }'
+$analysisTemplate = '{ "data": { "type": "analysis", "id": "ID", "attributes": { "status": "STATUS", "stats": { COUNTS }, "date": 1762600000 } }, "meta": { "file_info": { "sha256": "HASH", "size": 1234 } } }'
+
+function Lookup-Text([string]$counts = $goodCounts, [string]$id = $sha, [string]$hash = $sha) { return $lookupTemplate.Replace('COUNTS', $counts).Replace('ID', $id).Replace('HASH', $hash) }
+function Upload-Text([string]$id = $analysisId) { return $uploadTemplate.Replace('ID', $id) }
+function Analysis-Text([string]$status = 'completed', [string]$counts = $goodCounts, [string]$id = $analysisId, [string]$hash = $sha) { return $analysisTemplate.Replace('COUNTS', $counts).Replace('STATUS', $status).Replace('ID', $id).Replace('HASH', $hash) }
+
+function Virustotal-Arguments([string]$kind) { return @('-Answer', $answerFile, '-Kind', $kind, '-Sha256', $sha) + $(if ($kind -ceq 'analysis') { @('-AnalysisId', $analysisId) } else { @() }) }
+
+function Expect-Answer([string]$kind, [string]$text, [string]$answer, [string]$what)
+{
+    Write-File $answerFile $text
+    $result = Run-Script 'check-virustotal.ps1' (Virustotal-Arguments $kind)
+    $said = @($result.Text -split "`n" | Where-Object { $_.StartsWith('ANSWER: ') })
+    Check ($result.Code -eq 0 -and $said.Count -eq 1 -and $said[0] -ceq "ANSWER: $answer") "$what. It said: $($result.Text)"
+    return $result
+}
+
+function Expect-AnswerRefused([string]$kind, [string]$text, [string]$reason, [string]$what)
+{
+    Write-File $answerFile $text
+    Expect-Refused 'check-virustotal.ps1' (Virustotal-Arguments $kind) $reason $what
+}
+
+# What VirusTotal already knows about the file
+$result = Expect-Answer 'lookup' (Lookup-Text) 'counted 0 0 58' 'a finished analysis of a file VirusTotal knows is counted'
+Check ($result.Text.Contains("0 of 58 scanners flagged it") -and $result.Text.Contains("https://www.virustotal.com/gui/file/$sha")) "and the log says what it found, with the report's link. It said: $($result.Text)"
+$result = Expect-Answer 'lookup' (Lookup-Text '"malicious": 2, "suspicious": 1, "undetected": 55, "harmless": 0') 'counted 2 1 58' 'a flagged file is counted, not refused, so the draft can say so'
+Check ($result.Text.Contains('3 of 58 scanners flagged it (2 malicious, 1 suspicious')) "and the log says how many flagged it, and how. It said: $($result.Text)"
+Expect-Answer 'lookup' (Lookup-Text).Replace('"last_analysis_date": 1762600000, ', '') 'not-analysed' 'a file with no finished analysis is sent again' | Out-Null
+Expect-Answer 'lookup' (Lookup-Text '"malicious": 0, "suspicious": 0, "undetected": 10, "harmless": 9') 'not-analysed' 'and so is one only 19 scanners answered about' | Out-Null
+Expect-AnswerRefused 'lookup' (Lookup-Text -id ('cd' * 32)) 'about a different file' 'an answer about another file is refused'
+Expect-AnswerRefused 'lookup' (Lookup-Text -hash ('cd' * 32)) 'about a different file' 'and so is one whose own hash is another file''s'
+Expect-AnswerRefused 'lookup' (Lookup-Text).Replace('"type": "file"', '"type": "url"') "something that isn't a file" 'and one about something that is not a file'
+Expect-AnswerRefused 'lookup' (Lookup-Text).Replace('1762600000', '"yesterday"') "last_analysis_date isn't a time" 'a time that is not a number is refused'
+Expect-AnswerRefused 'lookup' (Lookup-Text).Replace('1762600000', '99999999999999') "last_analysis_date isn't a time" 'and so is one past the year 9999'
+
+# Answers that aren't JSON, or not the shape VirusTotal's are
+Expect-AnswerRefused 'lookup' 'not an answer at all' "isn't JSON" 'text that is not JSON is refused'
+Expect-AnswerRefused 'lookup' ((Lookup-Text).TrimEnd('}') + '}, }') "isn't JSON" 'and so is JSON with a comma left at the end'
+Expect-AnswerRefused 'lookup' ("// a note`n" + (Lookup-Text)) "isn't JSON" 'and JSON with a comment in it'
+Expect-AnswerRefused 'lookup' ((Lookup-Text) + ' {}') "isn't JSON" 'and JSON with more after its end'
+Expect-AnswerRefused 'lookup' '[1, 2]' "the whole answer isn't an object" 'a list where an object should be is refused'
+Expect-AnswerRefused 'lookup' '{}' 'has no data' 'an answer with no data is refused'
+Expect-AnswerRefused 'lookup' '{ "data": "file" }' "data isn't an object" 'and so is one whose data is not an object'
+Expect-AnswerRefused 'lookup' ('{ "data": {}, ' + (Lookup-Text).Substring(1)) 'has data more than once' 'a part that is there twice is refused, because the two could say different things'
+Expect-AnswerRefused 'lookup' '' "VirusTotal's answer is empty" 'an empty answer is refused'
+Expect-AnswerRefused 'lookup' (' ' * 5000001) 'far more than an answer about one file' 'and one too big to be an answer is not even read'
+
+foreach ($badCount in '"3"', '1.5', '-1', '1001', '1e2', 'true', 'null', '[0]')
+{
+    Expect-AnswerRefused 'lookup' (Lookup-Text $goodCounts.Replace('"malicious": 0', "`"malicious`": $badCount")) "count of malicious in data.attributes.last_analysis_stats isn't a whole number from 0 to 1000" "a count of $badCount is refused"
+}
+
+Expect-AnswerRefused 'lookup' (Lookup-Text ($goodCounts + ', "sneaky": 0')) "a kind this doesn't know" 'a kind of count this does not know is refused, as it could be a verdict missed'
+Expect-AnswerRefused 'lookup' (Lookup-Text ($goodCounts + ', "Malicious": 0')) "a kind this doesn't know" 'and a known kind written with a capital is one it does not know'
+Expect-AnswerRefused 'lookup' (Lookup-Text $goodCounts.Replace('"malicious": 0, ', '')) 'no count of malicious' 'a missing count of malicious is refused'
+Expect-AnswerRefused 'lookup' (Lookup-Text ('"malicious": 3, ' + $goodCounts)) 'have malicious more than once' 'a count that is there twice is refused, so a 0 after it cannot hide it'
+
+# The upload, and the analysis it starts
+Expect-Answer 'upload' (Upload-Text) "analysis $analysisId" 'the upload gives the number of its analysis' | Out-Null
+Expect-AnswerRefused 'upload' (Upload-Text '../files/x') "the analysis number in VirusTotal's answer isn't one" 'a number with anything else in it is refused, as it goes into an address'
+Expect-AnswerRefused 'upload' (Upload-Text).Replace('"type": "analysis"', '"type": "file"') "isn't an analysis" 'and an answer to the upload that is not an analysis'
+
+Expect-Answer 'analysis' (Analysis-Text 'queued') 'waiting' 'an analysis that is waiting to start is waited for' | Out-Null
+Expect-Answer 'analysis' (Analysis-Text 'in-progress') 'waiting' 'and so is one that is going' | Out-Null
+Expect-Answer 'analysis' (Analysis-Text) 'counted 0 0 58' 'a finished analysis is counted' | Out-Null
+Expect-Answer 'analysis' (Analysis-Text -counts '"malicious": 1, "suspicious": 0, "undetected": 57, "harmless": 0') 'counted 1 0 58' 'and so is a flagged one' | Out-Null
+Expect-AnswerRefused 'analysis' (Analysis-Text -hash ('cd' * 32)) 'of a different file' 'an analysis of another file is refused'
+Expect-AnswerRefused 'analysis' (Analysis-Text -id 'QW5vdGhlcg==') 'a different analysis' 'and so is an answer about another analysis'
+Expect-AnswerRefused 'analysis' (Analysis-Text -counts '"malicious": 0, "suspicious": 0, "undetected": 19, "harmless": 0') 'only 19 scanners gave an answer about the zip, fewer than the 20' 'a finished analysis with too few scanners is refused'
+Expect-AnswerRefused 'analysis' (Analysis-Text 'done') "in a state this doesn't know" 'an analysis in a state this does not know is refused'
+
+# Nothing VirusTotal wrote is printed: GitHub takes a line starting :: as an order
+Write-File $answerFile (Analysis-Text '::warning::taken over')
+$result = Run-Script 'check-virustotal.ps1' (Virustotal-Arguments 'analysis')
+Check ($result.Code -ne 0 -and -not $result.Text.Contains('::')) "a state written as an order to GitHub is refused, and not printed. It said: $($result.Text)"
+Write-File $answerFile (Lookup-Text ($goodCounts + ', "::error::x": 0'))
+$result = Run-Script 'check-virustotal.ps1' (Virustotal-Arguments 'lookup')
+Check ($result.Code -ne 0 -and -not $result.Text.Contains('::')) "and so is a kind of count written as one. It said: $($result.Text)"
+
+# What it's told by the scan job
+Expect-Refused 'check-virustotal.ps1' @('-Answer', $answerFile, '-Kind', 'lookup', '-Sha256', $sha.ToUpperInvariant()) 'has to be a SHA-256, 64 small letters and digits' 'a hash to check against that is not written as one is refused'
+Expect-Refused 'check-virustotal.ps1' @('-Answer', $answerFile, '-Kind', 'other', '-Sha256', $sha) '-Kind has to be lookup, upload or analysis' 'and so is a kind of answer it does not know'
+Expect-Refused 'check-virustotal.ps1' @('-Answer', $answerFile, '-Kind', 'analysis', '-Sha256', $sha) "the number the upload gave, and that's missing" 'an analysis is not checked without the number the upload gave'
+Expect-Refused 'check-virustotal.ps1' @('-Answer', (Join-Path $work 'gone.json'), '-Kind', 'lookup', '-Sha256', $sha) 'there is no saved answer to read' 'and nor is an answer that is not there'
+
+# The zip, before it's sent
+$zip = Join-Path $work 'AvP-1.0.0-beta.0-windows-x86.zip'
+Write-File $zip 'a zip'
+$zipHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+$result = Run-Script 'check-virustotal.ps1' @('-Package', $zip, '-Sha256', $zipHash)
+Check ($result.Code -eq 0 -and $result.Text.Contains('ANSWER: ready')) "the zip the build made may be sent. It said: $($result.Text)"
+Expect-Refused 'check-virustotal.ps1' @('-Package', $zip, '-Sha256', $sha) 'the zip is not the one the build made' 'a zip that is not the one the build made is refused'
+Expect-Refused 'check-virustotal.ps1' @('-Package', (Join-Path $work 'gone.zip'), '-Sha256', $zipHash) 'the zip to send is not there' 'and so is one that is not there'
+$big = [System.IO.File]::Create((Join-Path $work 'big.zip'))
+$big.SetLength(32000001)
+$big.Dispose()
+Expect-Refused 'check-virustotal.ps1' @('-Package', (Join-Path $work 'big.zip'), '-Sha256', $zipHash) 'VirusTotal takes at most 32000000 in one upload' 'a zip too big for one upload is refused'
+
+foreach ($name in 'tools/check-release.ps1', 'tools/check-no-hudson.ps1', 'tools/check-release-package.ps1', 'tools/check-new-functions.ps1', 'tools/check-virustotal.ps1', 'tests/release-test.ps1')
 {
     $lastWords = @(Get-Content (Join-Path $repository $name) | Where-Object { $_.Trim() -ne '' }) | Select-Object -Last 1
     Check ($lastWords -ceq 'exit 0') "$name ends by saying exit 0, so that nothing it ran earlier can decide"
@@ -679,10 +860,10 @@ function Check-Order([string]$text, [string]$first, [string]$second, [string]$wh
 }
 
 $withoutComments = (($workflow -split "`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
-$jobs = [regex]::Split($withoutComments, '(?m)^  (?=(?:check|build|publish):\n)')
+$jobs = [regex]::Split($withoutComments, '(?m)^  (?=(?:check|build|scan|publish):\n)')
 
-Check ($jobs.Count -eq 4) 'the workflow has the three jobs, and no others'
-$top = $jobs[0]; $checkJob = $jobs[1]; $buildJob = $jobs[2]; $publishJob = $jobs[3]
+Check ($jobs.Count -eq 5) 'the workflow has the four jobs, and no others'
+$top = $jobs[0]; $checkJob = $jobs[1]; $buildJob = $jobs[2]; $scanJob = $jobs[3]; $publishJob = $jobs[4]
 
 Check ($top -match '(?m)^on:\n  workflow_dispatch:\n') 'it starts by hand'
 Check ($top -notmatch '(?m)^\s+(push|pull_request|pull_request_target|schedule|release|workflow_run|repository_dispatch):') 'and in no other way, because a tag could point at a commit with the checks taken out'
@@ -694,7 +875,8 @@ Check ($checkJob -match 'run: \./tools/check-new-functions\.ps1\n') 'and refuses
 Check ($checkJob -match '(?m)^          fetch-depth: 0\b') 'with the history it needs to compare'
 Check (-not $withoutComments.Contains('-WithoutGitHub')) 'and never leaves out the ones that ask GitHub'
 Check ($buildJob -match '(?m)^    needs: check$') 'the build needs the checks to have passed'
-Check ($publishJob -match '(?m)^    needs: \[check, build\](\s+#[^\n]*)?$') 'and the draft needs the build, so it comes after the checks too, and the checks for its tag'
+Check ($scanJob -match '(?m)^    needs: build$') 'the scan needs the package'
+Check ($publishJob -match '(?m)^    needs: \[check, build, scan\](\s+#[^\n]*)?$') 'and the draft needs the build and the scan, so it comes after the checks too, and the checks for its tag'
 Check-Order $buildJob 'tools/build-and-package.ps1' 'tools/check-release-package.ps1' 'the package is checked after it is made'
 Check-Order $buildJob 'tools/check-release-package.ps1' 'actions/upload-artifact' 'and before it goes anywhere'
 Check ($publishJob -match '(?m)^    environment: release\s') 'the draft waits for the owner'
@@ -709,16 +891,52 @@ Check (-not $publishJob.Contains('actions/checkout') -and -not $publishJob.Conta
 
 # A beta: its tag comes from the checks, is looked at again before it's used, and makes a pre-release that's still a draft
 Check ($checkJob -match '(?m)^        id: refuse$' -and $checkJob.Contains('tag: ${{ steps.refuse.outputs.tag }}') -and $checkJob.Contains('prerelease: ${{ steps.refuse.outputs.prerelease }}')) 'the checks hand on the tag and whether it is a pre-release'
-Check ($checkScript.Contains('$tag = if ($isBeta) { $Version } else { "v$Version" }')) "a beta's tag is its name, and a version's is v and its numbers"
-Check ($checkScript.Contains('[datetime]::TryParseExact(') -and $checkScript.Contains("'yyyyMMdd'")) "a beta's day has to be one the calendar has"
+Check ($checkScript.Contains('$tag = "v$Version"')) "a version's tag is v and the version, and a beta's too"
 Check ($publishJob.Contains('TAG: ${{ needs.check.outputs.tag }}') -and -not $publishJob.Contains('$tag = "v$env:VERSION"')) 'the draft uses the tag the checks made, through the environment'
-Check ($publishJob.Contains("if (`$env:TAG -cne `$(if (`$isBeta) { `$env:VERSION } else { `"v`$env:VERSION`" })) { throw")) 'and looks at it again before anything uses it'
+Check ($publishJob.Contains('if ($env:TAG -cne "v$env:VERSION") { throw')) 'and looks at it again before anything uses it'
+
+# The two forms a version can take are one rule, so they're written the same, letter for letter, in each place that lets a version through
+$releaseForm = '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\z'
+$betaForm = '^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})-beta\.(0|[1-9][0-9]{0,3})\z'
+$buildScript = Get-Content -Raw (Join-Path $repository 'tools/build-and-package.ps1')
+
+foreach ($place in @(@{ Name = 'tools/check-release.ps1'; Text = $checkScript }, @{ Name = "release.yml's last job"; Text = $publishJob }, @{ Name = 'tools/build-and-package.ps1'; Text = $buildScript }))
+{
+    Check ($place.Text.Contains("-cmatch '$betaForm'") -and ($place.Text.Contains("-cmatch '$releaseForm'") -or $place.Text.Contains("-cnotmatch '$releaseForm'"))) "$($place.Name) lets a version through in the same two forms"
+    Check (-not $place.Text.Contains('betarelease[0-9]')) "and no longer lets a beta through named the old way"
+}
+
+# A beta's number is counted from what GitHub has: every tag of the version, and every release
+Check ($checkScript.Contains('git/matching-refs/tags/v$release"') -and $checkScript.Contains("releases?per_page=100`" --jq '.[].tag_name'") -and $checkScript.Contains('Stop-IfTheNumberIsTaken ($tags + $releases)')) "a beta's number is counted from the tags and releases GitHub has"
+Check (-not $withoutComments.Contains('-ExistingTags')) 'and the workflow never hands it a list of its own'
 Check ($publishJob.Contains("if (`$preRelease) { `$alsoSay += '--prerelease' }") -and $publishJob.Contains('@alsoSay')) 'only a beta is made a pre-release'
 Check ($publishJob.Contains('if ($made.isPrerelease -ne $preRelease) { throw')) 'and the draft is checked for it'
 Check ($publishJob.Contains('if ($releases -ccontains $env:TAG) { throw')) 'a tag already used, even by a draft, is refused'
 
 Check ($publishJob -match '(?m)^      contents: write\s') 'the last job can write'
-Check (-not $checkJob.Contains('write') -and -not $buildJob.Contains(': write')) 'and the other two can not'
+Check (-not $checkJob.Contains('write') -and -not $buildJob.Contains(': write') -and -not ($scanJob -cmatch ':\s*write\b')) 'and the other three can not'
+
+# --- VirusTotal: the scan, read as text. tools/check-virustotal.ps1 is tried above; this is the step around it, which can only run for real.
+$virustotalScript = Get-Content -Raw (Join-Path $repository 'tools/check-virustotal.ps1')
+Check ($scanJob -match '(?m)^    environment: release\s') "the scan runs under the release environment, the only place the key can be read"
+Check ($scanJob -match '(?m)^    permissions:\n      contents: read( +#[^\n]*)?\n    outputs:') 'and it can only read the code'
+Check ($scanJob.Contains('actions/checkout@') -and $scanJob.Contains('persist-credentials: false')) 'it has the code, for the checker, and leaves no token behind'
+$secretUses = @([regex]::Matches($withoutComments, 'secrets\.[A-Za-z_]+') | ForEach-Object { $_.Value })
+Check ($secretUses.Count -eq 1 -and $scanJob.Contains('          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}')) 'the VirusTotal key is the only secret, and only the scan step has it, as a setting'
+Check-Order $scanJob 'Remove-Item Env:VIRUSTOTAL_API_KEY' '& pwsh -NoProfile -File ./tools/check-virustotal.ps1' 'the key is taken out of the environment before any program starts, so none can read it'
+Check ([regex]::Matches($scanJob, '\$key\b').Count -eq 3 -and $scanJob.Contains("`$headers = @{ 'x-apikey' = `$key }")) 'and it goes nowhere but the header'
+Check ($scanJob.Contains('MaximumRedirection = 0')) 'a redirect is not followed, so the header cannot go anywhere else'
+$addresses = @([regex]::Matches($scanJob, 'https?://[^\s"/]+') | ForEach-Object { $_.Value } | Sort-Object -Unique)
+Check ($addresses.Count -eq 1 -and $addresses[0] -ceq 'https://www.virustotal.com') "it asks VirusTotal and nothing else. It names: $addresses"
+Check (-not $scanJob.Contains('ConvertFrom-Json') -and -not $scanJob.Contains('Get-Content $answers') -and -not $scanJob.Contains('Get-Content "$answers')) 'it never reads an answer itself: only the checker does'
+Check-Order $scanJob "Ask-Checker @('-Package', `$zip)" "Ask-VirusTotal 'Post' 'files'" 'the zip is checked before it is sent'
+Check ($scanJob.Contains("if (`$status -eq 404) {") -and $scanJob.Contains("while (`$answer -ceq 'waiting')") -and $scanJob.Contains('AddMinutes(20)')) 'it sends the zip only when VirusTotal does not know it, and waits for the analysis, for a while'
+
+$fewest = [regex]::Match($virustotalScript, '(?m)^\$fewestScanners = ([0-9]+)\r?$').Groups[1].Value
+Check ($fewest.Length -gt 0 -and $publishJob.Contains("[int]`$env:SCAN_ANSWERED -lt $fewest) { throw")) 'the draft asks for as many scanners as the checker does'
+Check ($publishJob.Contains('if ($env:SCAN_SHA256 -cne $wanted) { throw')) 'and checks the scan was of this very zip'
+Check-Order $publishJob 'gh release create' 'if ($flagged -gt 0) { throw' 'a flagged zip still gets its draft, and then the run ends red'
+Check ($publishJob.Contains('$first = if ($flagged -gt 0) { @("**$warning**", '''') }')) "and the draft's text starts by saying so"
 
 foreach ($other in Get-ChildItem (Join-Path $repository '.github/workflows') -Filter '*.yml' | Where-Object { $_.Name -ne 'release.yml' })
 {
@@ -730,12 +948,12 @@ foreach ($match in [regex]::Matches($withoutComments, '(?m)^\s*(?:- )?uses:\s*(\
     Check ($match.Groups[1].Value -cmatch '^[a-z-]+/[a-z-]+@[0-9a-f]{40}$') "$($match.Groups[1].Value) is pinned to a full commit hash"
 }
 
-Check ($withoutComments.Split("`n").Where({ $_ -match 'actions/checkout@' }).Count -eq 2) 'two jobs check out the code'
-Check ([regex]::Matches($withoutComments, 'persist-credentials: false').Count -eq 2) 'and neither leaves its token behind for the build to find'
+Check ($withoutComments.Split("`n").Where({ $_ -match 'actions/checkout@' }).Count -eq 3) 'three jobs check out the code'
+Check ([regex]::Matches($withoutComments, 'persist-credentials: false').Count -eq 3) 'and none leaves its token behind for what runs after to find'
 
 $inputUses = @([regex]::Matches($withoutComments, '.*\$\{\{\s*inputs\.[^\n]*') | ForEach-Object { $_.Value.Trim() })
 Check ($inputUses.Count -ge 1 -and @($inputUses | Where-Object { $_ -cne 'VERSION: ${{ inputs.version }}' }).Count -eq 0) 'what a person typed only ever reaches a command as a setting, so it can never be run as part of one'
-Check (-not $withoutComments.Contains('secrets.')) 'it uses no secret but the job''s own token'
+Check (@($secretUses | Where-Object { $_ -cne 'secrets.VIRUSTOTAL_API_KEY' }).Count -eq 0) 'it uses no other secret but the job''s own token'
 
 # --- The list of required checks is the same as the test build's
 $buildWorkflow = Get-Content -Raw (Join-Path $repository '.github/workflows/build.yml')

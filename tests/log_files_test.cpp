@@ -482,7 +482,8 @@ static void TestLeavingOutThePlayer()
 	CheckKept(p, "at 19:05:34 the join took 12.5 ms, round trip 180 ms, 3 lost", "times, and how long things took, stay");
 	CheckKept(p, "build: running on Windows 10.0, build 26200", "Windows' version, written as the game writes it, stays");
 	CheckKept(p, "build: version 1.0.0, commit 0123456789abcdef0123456789abcdef01234567", "our own version of three numbers stays, and so does a commit");
-	CheckKept(p, "build: version betarelease20261107, commit 0123456789abcdef0123456789abcdef01234567", "and so does a beta's name");
+	CheckKept(p, "build: version 1.0.0-beta.0, commit 0123456789abcdef0123456789abcdef01234567", "and so does a beta's version");
+	CheckKept(p, "build: version 123456.0.0-beta.9999, commit 0123456789abcdef0123456789abcdef01234567", "even the longest one there can be");
 	CheckKept(p, "crash: code C0000005 at AvPx.exe+1A2B3C", "a crash line stays");
 	CheckKept(p, "parts 1.2.3.4.5 and 300.1.1.1 and 1.2.3", "numbers with dots that can't be an address stay");
 	CheckKept(p, "Jill joined as a marine; std::string and Class::Function", "a player's own name from the lobby stays, and so do names with :: in them");
@@ -600,8 +601,9 @@ static void TestTheGameUsesIt()
 
 	std::string const build = ReadSource("tools/build-and-package.ps1");
 	Check(ComesBefore(build, "Out-File -Encoding ascii '3dc\\build_version.h'", "& $msbuild win32\\VS2026\\AvP.sln"), "the build writes the version file before it builds the game");
-	Check(Has(build, "-cmatch '^[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}\\z'"), "and only a version of three numbers goes in it, so the log never takes it for an address");
-	Check(Has(build, "-or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'"), "or a beta's name, betarelease and eight digits, as the release lets through");
+	Check(Has(build, "-cmatch '^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\z'"), "and only a version of three numbers goes in it, so the log never takes it for an address");
+	Check(Has(build, "-or $env:VERSION -cmatch '^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})-beta\\.(0|[1-9][0-9]{0,3})\\z'"),
+		"or a beta, those and -beta. and its number, as the release lets through");
 
 	std::string const release = ReadSource(".github/workflows/release.yml");
 	Check(ComesBefore(release, "- name: Build the game and make its package", "VERSION: ${{ inputs.version }}") && ComesBefore(release, "VERSION: ${{ inputs.version }}\n        run: ./tools/build-and-package.ps1", "Refuse a package"), "the release gives the build its version");

@@ -114,7 +114,7 @@
     { "name": "SOURCE: the log doesn't start with which build it is",
       "changes": [{ "file": "3dc/avp/win95/winmain.cpp", "from": "LogString(BuildIdentity_Lines());", "to": "" }] },
     { "name": "SOURCE: any version goes into the build's version file",
-      "changes": [{ "file": "tools/build-and-package.ps1", "from": "-cmatch '^[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}\\z'", "to": "-match '^[0-9A-Za-z.\\-]{1,32}$'" }] },
+      "changes": [{ "file": "tools/build-and-package.ps1", "from": "-cmatch '^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\z'", "to": "-match '^[0-9A-Za-z.\\-]{1,32}$'" }] },
     { "name": "SOURCE: the release doesn't give the build its version",
       "changes": [{ "file": ".github/workflows/release.yml", "from": "          VERSION: ${{ inputs.version }}\n        run: ./tools/build-and-package.ps1", "to": "        run: ./tools/build-and-package.ps1" }] },
 
@@ -124,8 +124,8 @@
       "changes": [{ "file": "3dc/build_identity.cpp", "from": "MD5Update(&md5, piece, read);", "to": "MD5Update(&md5, piece, read / 2);" }] },
     { "name": "the first line doesn't say it's the version",
       "changes": [{ "file": "3dc/build_identity.cpp", "from": "std::string(\"build: version \")", "to": "std::string(\"build: \")" }] },
-    { "name": "SOURCE: a beta's name isn't written as the version",
-      "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^betarelease[0-9]{8}\\z'", "to": "" }] },
+    { "name": "SOURCE: a beta's version isn't written as the version",
+      "changes": [{ "file": "tools/build-and-package.ps1", "from": " -or $env:VERSION -cmatch '^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})-beta\\.(0|[1-9][0-9]{0,3})\\z'", "to": "" }] },
     { "name": "a program in bin doesn't make the folder above it the game folder",
       "changes": [{ "file": "3dc/log_files.h", "from": "if (last > parent && _stricmp(last, \"bin\") == 0)", "to": "if (false)" }] }
   ]
