@@ -54,7 +54,7 @@ Your **game folder** is `steamapps\common\Aliens versus Predator Classic`, insid
    | `MelPyth\fastfile` | `common.ffl`, the new guns' sounds |
    | `graphics\MelPyth\HUDs\Marine` | the 15 pictures (`.rim`) |
    | the game folder itself | `PLAYTEST.md` (this guide), `License.txt`, `BUILD.txt` and `SHA256SUMS.txt` |
-   | `licences` | each library's own licence, and `README.txt`, which says which is whose and where the source of the ones under the GNU licences is |
+   | `licences` | each library's own licence, `README.txt`, which says which is whose and where the source of the ones under the GNU licences is, and in `licences\sources` the source of OpenAL Soft |
 
    `bin\d3dx9_43.dll` and `bin\D3DCompiler_43.dll` are Microsoft's D3DX. Using them means accepting Microsoft's licence terms for
    them, in `licences\D3DX.txt`.

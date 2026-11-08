@@ -120,7 +120,10 @@ $licences = [ordered]@{
     'libogg.txt'        = "$installed\libogg\copyright"
     'libvorbis.txt'     = "$installed\libvorbis\copyright"
     'PThreads4W.txt'    = "$installed\pthreads\copyright"
+    'PThreads4W-NOTICE.txt'       = "$installed\pthreads\NOTICE"         # installed by our port, for the Apache License's 4(d)
+    'PThreads4W-CONTRIBUTORS.txt' = "$installed\pthreads\CONTRIBUTORS"   # which its NOTICE names
     'libbinkdec.txt'    = 'dependencies\libbinkdec\COPYING'
+    'LGPL-2.1.txt'      = 'dependencies\libbinkdec\COPYING'   # the GNU Lesser GPL 2.1, the version this project takes OpenAL Soft under
     'libsmackerdec.txt' = 'dependencies\libsmackerdec\COPYING'
     'D3DX.txt'          = "$installed\dxsdk-d3dx\copyright"
 }
@@ -143,19 +146,36 @@ $openalSource = @($places | Where-Object { $_ -cmatch '^git\+https://github\.com
 if ($openalSource.Count -ne 1) { throw "vcpkg's record of OpenAL Soft doesn't say where its source came from: $($places -join ', ')" }
 $openalVersion = $openalSource[0].Split('@')[1]
 
+# OpenAL Soft's source goes with it, in licences/sources/openal-soft, because it isn't all in this repository: upstream's archive, the very
+# file vcpkg downloaded and checked against the SHA-512 our port names, and our port and triplet, which change it and say how it's built.
+# vcpkg keeps its downloads in its own folder, or where VCPKG_DOWNLOADS says, or, for the copy inside Visual Studio, in the user's own.
+$openalPortFolder = 'vcpkg-overlay-ports\openal-soft'
+$portText = [System.IO.File]::ReadAllText((Join-Path $openalPortFolder 'portfile.cmake'))
+$portSums = @([regex]::Matches($portText, '(?m)^\s*SHA512\s+([0-9a-f]{128})\s*$') | ForEach-Object { $_.Groups[1].Value })
+if ($portSums.Count -ne 1) { throw "vcpkg-overlay-ports/openal-soft/portfile.cmake doesn't name one SHA-512 for OpenAL Soft's source" }
+$downloadFolders = @($env:VCPKG_DOWNLOADS, (Join-Path $vcpkgRoot 'downloads'), $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'vcpkg\downloads' })) | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Container) }
+$openalArchives = @($downloadFolders | ForEach-Object { Get-ChildItem -LiteralPath $_ -File -Filter 'kcat-openal-soft-*.tar.gz' } | Where-Object { (Get-FileHash -Algorithm SHA512 -LiteralPath $_.FullName).Hash.ToLower() -ceq $portSums[0] } | Select-Object -First 1)
+if ($openalArchives.Count -ne 1) { throw "OpenAL Soft's source archive, with the SHA-512 our port names, isn't in vcpkg's downloads ($($downloadFolders -join ', ')). vcpkg only downloads it when it builds OpenAL Soft, not when it reuses a build it kept, so build once with nothing kept" }
+$openalArchive = $openalArchives[0].Name
+$openalSourceFolder = Join-Path $licenceFolder 'sources\openal-soft'
+New-Item -ItemType Directory -Force (Join-Path $openalSourceFolder 'port') | Out-Null
+Copy-Item -LiteralPath $openalArchives[0].FullName -Destination (Join-Path $openalSourceFolder $openalArchive)
+Copy-Item -Path (Join-Path $openalPortFolder '*') -Destination (Join-Path $openalSourceFolder 'port') -Recurse
+Copy-Item -LiteralPath 'vcpkg-overlay-triplets\x86-windows.cmake' -Destination (Join-Path $openalSourceFolder 'port\triplet-x86-windows.cmake')
+
 # Where this repository is, so our own changes to OpenAL Soft, and our two film libraries, can be found at the very commit this package
 # was built from
 $here = if ($env:GITHUB_SERVER_URL -and $env:GITHUB_REPOSITORY) { "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY" } else { 'https://github.com/Melanikus/AvP' }
 
 $whatEachIs = @{
     'avp_classic.exe'    = "the game. Rebellion's and Barry Duncan's terms for it are in License.txt, at the top. Built into it: ENet (licences/ENet.txt, MIT), changed by this project's own patches, which are in its source in vcpkg-overlay-ports/enet, and the reference SipHash that one of them adds (licences/SipHash.txt, CC0)."
-    'openal32.dll'       = "OpenAL Soft $openalVersion (licences/OpenAL-Soft.txt: the GNU Library General Public License, version 2, and then the licences of some of its parts). Its source: https://github.com/kcat/openal-soft at $openalVersion, with this project's own changes, which are in $here/tree/$commit/vcpkg-overlay-ports/openal-soft. You may put your own build of OpenAL Soft in its place."
+    'openal32.dll'       = "OpenAL Soft $openalVersion (licences/OpenAL-Soft.txt: the GNU Library General Public License, version 2, and then the licences of some of its parts). It may be used under version 2 or any later version, and this project uses it under the GNU Lesser General Public License, version 2.1 (licences/LGPL-2.1.txt). Its source is here with it: upstream's, as vcpkg downloaded and checked it, in licences/sources/openal-soft/$openalArchive, and this project's own changes to it and the settings it's built with in licences/sources/openal-soft/port, which are also at $here/tree/$commit/vcpkg-overlay-ports/openal-soft. You may put your own build of OpenAL Soft in its place."
     'fmt.dll'            = 'fmt, which OpenAL Soft uses (licences/fmt.txt, MIT).'
     'ogg.dll'            = 'libogg (licences/libogg.txt, BSD).'
     'vorbis.dll'         = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
     'vorbisfile.dll'     = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
     'vorbisenc.dll'      = 'libvorbis, changed by this project''s own patches in vcpkg-overlay-ports/libvorbis (licences/libvorbis.txt, BSD).'
-    'pthreadvc3.dll'     = 'PThreads4W, built by this project''s own port in vcpkg-overlay-ports/pthreads (licences/PThreads4W.txt, the Apache License 2.0).'
+    'pthreadvc3.dll'     = 'PThreads4W, built by this project''s own port in vcpkg-overlay-ports/pthreads (licences/PThreads4W.txt, the Apache License 2.0, with its notice in licences/PThreads4W-NOTICE.txt and the contributors that names in licences/PThreads4W-CONTRIBUTORS.txt).'
     'libbinkdec.dll'     = "libbinkdec, Barry Duncan's player for Bink films (licences/libbinkdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libbinkdec. You may put your own build of it in its place."
     'libsmackerdec.dll'  = "libsmackerdec, Barry Duncan's player for Smacker films (licences/libsmackerdec.txt, the GNU Lesser General Public License). Its source: $here/tree/$commit/dependencies/libsmackerdec. You may put your own build of it in its place."
     'd3dx9_43.dll'       = "Microsoft's D3DX (licences/D3DX.txt, Microsoft's licence terms for it). Using this file means accepting those terms."

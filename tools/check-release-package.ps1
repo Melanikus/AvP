@@ -248,6 +248,26 @@ foreach ($binary in @(Get-ChildItem -LiteralPath (Join-Path $Package 'bin') -Fil
             Stop-Release "$licence, the licence for bin/$($binary.Name), is missing or empty"
         }
     }
+
+    # A source the line says is in the package has to be there. OpenAL Soft's isn't all in this repository, so its line has to name one.
+    $sources = @([regex]::Matches($line[0], 'licences/sources/[A-Za-z0-9_-][A-Za-z0-9_./-]*[A-Za-z0-9_-]') | ForEach-Object { $_.Value })
+
+    if ($binary.Name -ieq 'OpenAL32.dll' -and $sources.Count -eq 0)
+    {
+        Stop-Release "licences/README.txt names no source in licences/sources for bin/OpenAL32.dll, and its source isn't all in this repository"
+    }
+
+    foreach ($source in $sources)
+    {
+        $sourcePath = Join-Path $Package $source
+        $there = -not $source.Contains('..') -and (((Test-Path -LiteralPath $sourcePath -PathType Leaf) -and (Get-Item -LiteralPath $sourcePath).Length -gt 0) -or
+            ((Test-Path -LiteralPath $sourcePath -PathType Container) -and @(Get-ChildItem -LiteralPath $sourcePath -Recurse -File).Count -gt 0))
+
+        if (-not $there)
+        {
+            Stop-Release "$source, the source licences/README.txt names for bin/$($binary.Name), is missing or empty"
+        }
+    }
 }
 
 Write-Host 'The package has everything it should, and it matches this commit.'

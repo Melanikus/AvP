@@ -507,6 +507,28 @@ Write-File (Join-Path $package 'licences/ENet.txt') ''
 Write-Sums
 Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/ENet.txt, the licence for bin/AvP_Classic.exe, is missing or empty' 'and so is an empty one'
 
+# OpenAL Soft's source goes with it
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt), with no source named.'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/README.txt names no source in licences/sources for bin/OpenAL32.dll' 'OpenAL Soft with no source named is refused'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt). Its source: licences/sources/openal-soft/gone.tar.gz, here.'
+Write-Sums
+Expect-Refused 'check-release-package.ps1' (Package-Arguments) 'licences/sources/openal-soft/gone.tar.gz, the source licences/README.txt names for bin/OpenAL32.dll, is missing or empty' 'and so is one whose source is not there'
+
+Make-GoodPackage
+Write-File (Join-Path $package 'bin/OpenAL32.dll') 'a library'
+Write-File (Join-Path $package 'licences/sources/openal-soft/openal.tar.gz') 'its source'
+Write-File (Join-Path $package 'licences/sources/openal-soft/port/portfile.cmake') 'how it is built'
+Add-Content -LiteralPath (Join-Path $package 'licences/README.txt') -Value 'bin/OpenAL32.dll: OpenAL Soft (licences/D3DX.txt). Its source: licences/sources/openal-soft/openal.tar.gz, and licences/sources/openal-soft/port, here.'
+Write-Sums
+$result = Run-Script 'check-release-package.ps1' (Package-Arguments)
+Check ($result.Code -eq 0) "and with its source there, it passes. It said: $($result.Text)"
+
 foreach ($name in 'bin/AvP_Classic.exe', 'bin/D3DCompiler_43.dll', 'bin/d3dx9_43.dll', 'License.txt', 'PLAYTEST.md', 'BUILD.txt')
 {
     Make-GoodPackage

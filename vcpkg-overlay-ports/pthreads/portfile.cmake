@@ -75,6 +75,9 @@ file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper-pthreads.cmake" DEST
 file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper-pthreads-windows.cmake" DESTINATION "${CURRENT_PACKAGES_DIR}/share/PThreads_windows" RENAME vcpkg-cmake-wrapper.cmake)
 
 file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+# Added 2026-11-08 by Melanikus for the AvP port: PThreads4W has a NOTICE file, which names the file CONTRIBUTORS, and the Apache
+# License (4(d)) asks that a copy of the program carries what it says. Both go beside the licence, where the game's package takes them.
+file(INSTALL "${SOURCE_PATH}/NOTICE" "${SOURCE_PATH}/CONTRIBUTORS" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
 file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
